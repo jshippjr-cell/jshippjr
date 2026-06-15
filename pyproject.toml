@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chordential-oia"
+version = "0.1.0"
+description = "Opportunity Intelligence Agent for Chordential - finds and ranks opportunities Chordential can win."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [{ name = "Chordential" }]
+keywords = ["music", "opportunities", "rfp", "procurement", "scoring", "agent"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+chordential-oia = "chordential_oia.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
