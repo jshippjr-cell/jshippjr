@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Talent Roster{% endblock %}
+{% block heading %}Talent Roster{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <h1 class="detail-title">Talent Roster</h1>
+    <div class="muted">Music creators we can staff onto won work — matched on profile &amp; credits, gated by demo-reel review.</div>
+  </div>
+  <div class="brief-actions">
+    <a class="btn primary" href="/talent/new">+ Add talent</a>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">On roster</div><div class="kpi-value">{{ counts.total }}</div><div class="kpi-sub">creators</div></div>
+  <div class="kpi accent-won"><div class="kpi-label">Matchable</div><div class="kpi-value">{{ counts.matchable }}</div><div class="kpi-sub">approved + skilled</div></div>
+  <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-value">{{ counts.approved }}</div><div class="kpi-sub">reel reviewed</div></div>
+  <div class="kpi accent-review"><div class="kpi-label">Pending review</div><div class="kpi-value">{{ counts.pending }}</div><div class="kpi-sub">awaiting your look</div></div>
+</div>
+
+<form class="filterbar" method="get" action="/talent">
+  <select name="discipline" onchange="this.form.submit()">
+    <option value="">All disciplines</option>
+    {% for d in disciplines %}<option value="{{ d.value }}" {{ 'selected' if active.discipline==d.value }}>{{ d.label }}</option>{% endfor %}
+  </select>
+  <select name="review" onchange="this.form.submit()">
+    <option value="">Any review state</option>
+    {% for s in review_states %}<option value="{{ s }}" {{ 'selected' if active.review==s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="invite" onchange="this.form.submit()">
+    <option value="">Any funnel stage</option>
+    {% for s in invite_states %}<option value="{{ s }}" {{ 'selected' if active.invite==s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <noscript><button class="btn" type="submit">Filter</button></noscript>
+</form>
+
+<div class="spotlight-grid">
+  {% for c in cards %}
+  <a class="spot-card talent-card" href="/talent/{{ c.t.id }}">
+    <div class="pill-row">
+      <span class="pill rev-{{ c.t.review_status.value|lower }}">{{ c.t.review_status.value }}</span>
+      <span class="pill inv-{{ c.t.invite_status.value|lower }}">{{ c.t.invite_status.value }}</span>
+      {% if c.t.matchable %}<span class="pill sv-door">✓ Matchable</span>{% endif %}
+    </div>
+    <div class="spot-need">{{ c.t.name }}</div>
+    <div class="muted small">{{ c.t.discipline_labels|join(' · ') or 'No disciplines set' }}</div>
+    {% if c.t.location %}<div class="muted small">{{ c.t.location }}</div>{% endif %}
+    <div class="mini-meter"><div class="mini-fill" style="width: {{ c.completeness }}%"></div></div>
+    <div class="muted small">{{ c.completeness }}% profile complete</div>
+  </a>
+  {% else %}
+  <p class="muted">No talent on the roster yet. <a class="link" href="/talent/new">Add the first creator →</a></p>
+  {% endfor %}
+</div>
+{% endblock %}

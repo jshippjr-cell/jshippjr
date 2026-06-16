@@ -18,8 +18,9 @@ import sqlite3
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
-from ..models import BuyerType, BuyerValue, MusicRequirement, Opportunity
+from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
 from ..strategic import assess_strategic_value
+from ..talent import InviteStatus, ReviewStatus, Talent
 from .evaluate import evaluate
 
 DEFAULT_DB_PATH = os.environ.get("CHORDENTIAL_DB", "chordential.db")
@@ -79,6 +80,20 @@ CREATE TABLE IF NOT EXISTS outreach_events (
     direction TEXT,
     note TEXT
 );
+
+CREATE TABLE IF NOT EXISTS talent (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT,
+    disciplines TEXT,            -- JSON list of MusicDiscipline values
+    credits TEXT DEFAULT '',
+    location TEXT,
+    demo_reel_url TEXT,
+    review_status TEXT DEFAULT 'Pending',
+    invite_status TEXT DEFAULT 'Prospect',
+    notes TEXT DEFAULT '',
+    created_at TEXT
+);
 """
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
@@ -121,6 +136,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             opp_id INTEGER NOT NULL,
             created_at TEXT, channel TEXT, direction TEXT, note TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS talent (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL, email TEXT, disciplines TEXT,
+            credits TEXT DEFAULT '', location TEXT, demo_reel_url TEXT,
+            review_status TEXT DEFAULT 'Pending',
+            invite_status TEXT DEFAULT 'Prospect',
+            notes TEXT DEFAULT '', created_at TEXT
         )"""
     )
     conn.commit()
@@ -412,6 +437,126 @@ def buyer_contacts(conn: sqlite3.Connection, client: str) -> List[sqlite3.Row]:
            ORDER BY contact_name""",
         (client,),
     ).fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# Talent (supply side)
+# --------------------------------------------------------------------------- #
+REVIEW_STATES = [s.value for s in ReviewStatus]
+INVITE_STATES = [s.value for s in InviteStatus]
+
+
+def _disciplines_from_json(raw: Optional[str]) -> List[MusicDiscipline]:
+    out: List[MusicDiscipline] = []
+    for v in (json.loads(raw) if raw else []):
+        try:
+            out.append(MusicDiscipline(v))
+        except ValueError:
+            continue
+    return out
+
+
+def talent_from_row(row: sqlite3.Row) -> Talent:
+    return Talent(
+        id=row["id"],
+        name=row["name"],
+        email=row["email"],
+        disciplines=_disciplines_from_json(row["disciplines"]),
+        credits=row["credits"] or "",
+        location=row["location"],
+        demo_reel_url=row["demo_reel_url"],
+        review_status=_enum(row["review_status"], ReviewStatus, ReviewStatus.PENDING),
+        invite_status=_enum(row["invite_status"], InviteStatus, InviteStatus.PROSPECT),
+        notes=row["notes"] or "",
+    )
+
+
+def insert_talent(conn: sqlite3.Connection, t: Talent) -> int:
+    cur = conn.execute(
+        """INSERT INTO talent
+           (name, email, disciplines, credits, location, demo_reel_url,
+            review_status, invite_status, notes, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            t.name, t.email, json.dumps([d.value for d in t.disciplines]),
+            t.credits, t.location, t.demo_reel_url,
+            t.review_status.value, t.invite_status.value, t.notes,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_talent(
+    conn: sqlite3.Connection,
+    discipline: Optional[str] = None,
+    review: Optional[str] = None,
+    invite: Optional[str] = None,
+) -> List[sqlite3.Row]:
+    clauses, params = [], []
+    if discipline:
+        clauses.append("disciplines LIKE ?")
+        params.append(f'%"{discipline}"%')
+    if review:
+        clauses.append("review_status = ?")
+        params.append(review)
+    if invite:
+        clauses.append("invite_status = ?")
+        params.append(invite)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return conn.execute(
+        f"SELECT * FROM talent{where} ORDER BY name ASC", params
+    ).fetchall()
+
+
+def get_talent(conn: sqlite3.Connection, talent_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM talent WHERE id = ?", (talent_id,)).fetchone()
+
+
+def update_talent_review(conn: sqlite3.Connection, talent_id: int, review_status: str) -> None:
+    if review_status not in REVIEW_STATES:
+        raise ValueError(f"Unknown review status {review_status!r}")
+    conn.execute(
+        "UPDATE talent SET review_status = ? WHERE id = ?", (review_status, talent_id)
+    )
+    conn.commit()
+
+
+def update_talent_invite(conn: sqlite3.Connection, talent_id: int, invite_status: str) -> None:
+    if invite_status not in INVITE_STATES:
+        raise ValueError(f"Unknown invite status {invite_status!r}")
+    conn.execute(
+        "UPDATE talent SET invite_status = ? WHERE id = ?", (invite_status, talent_id)
+    )
+    conn.commit()
+
+
+def update_talent_profile(
+    conn: sqlite3.Connection,
+    talent_id: int,
+    name: str,
+    email: str,
+    disciplines: List[str],
+    credits: str,
+    location: str,
+    demo_reel_url: str,
+    notes: str,
+) -> None:
+    valid = [d for d in disciplines if d in {m.value for m in MusicDiscipline}]
+    conn.execute(
+        """UPDATE talent SET name=?, email=?, disciplines=?, credits=?, location=?,
+           demo_reel_url=?, notes=? WHERE id=?""",
+        (
+            name, email or None, json.dumps(valid), credits, location or None,
+            demo_reel_url or None, notes, talent_id,
+        ),
+    )
+    conn.commit()
+
+
+def talent_count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM talent").fetchone()[0]
 
 
 def distinct_values(conn: sqlite3.Connection, column: str) -> List[str]:

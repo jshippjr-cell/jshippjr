@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ t.name }}{% endblock %}
+{% block heading %}<a class="crumb" href="/talent">Talent</a> / {{ t.name }}{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <div class="pill-row">
+      <span class="pill rev-{{ t.review_status.value|lower }}">{{ t.review_status.value }} review</span>
+      <span class="pill inv-{{ t.invite_status.value|lower }}">{{ t.invite_status.value }}</span>
+      {% if t.matchable %}<span class="pill sv-door">✓ Matchable</span>{% endif %}
+    </div>
+    <h1 class="detail-title">{{ t.name }}</h1>
+    <div class="muted">{{ t.discipline_labels|join(' · ') or 'No disciplines set' }}{% if t.location %} · {{ t.location }}{% endif %}</div>
+  </div>
+  <div class="detail-fit">
+    <div class="big-num">{{ completeness }}%</div>
+    <div class="muted">profile complete</div>
+  </div>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Demo-reel review <span class="muted">— your quality gate</span></h2></div>
+    {% if t.demo_reel_url %}
+    <p><a class="btn" href="{{ t.demo_reel_url }}" target="_blank" rel="noopener">▶ Open demo reel ↗</a></p>
+    {% else %}
+    <p class="muted small">No demo-reel link submitted yet.</p>
+    {% endif %}
+    <form class="stack" method="post" action="/talent/{{ t.id }}/review">
+      <label>Your review</label>
+      <div class="status-buttons">
+        {% for s in review_states %}
+        <button class="btn pill-btn rev-{{ s|lower }} {{ 'is-current' if t.review_status.value==s }}" name="review_status" value="{{ s }}">{{ s }}</button>
+        {% endfor %}
+      </div>
+    </form>
+    <p class="muted small">A creator becomes <strong>Matchable</strong> only after you approve their reel and they have at least one discipline.</p>
+
+    <div class="card-head" style="margin-top:18px"><h2>Recruiting funnel</h2></div>
+    <form class="stack" method="post" action="/talent/{{ t.id }}/invite">
+      <div class="status-buttons">
+        {% for s in invite_states %}
+        <button class="btn pill-btn inv-{{ s|lower }} {{ 'is-current' if t.invite_status.value==s }}" name="invite_status" value="{{ s }}">{{ s }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Profile</h2></div>
+    <table class="kv">
+      <tr><td>Credits</td><td>{{ t.credits or '—' }}</td></tr>
+      <tr><td>Email</td><td>{{ t.email or '—' }}</td></tr>
+      <tr><td>Location</td><td>{{ t.location or '—' }}</td></tr>
+      <tr><td>Notes</td><td>{{ t.notes or '—' }}</td></tr>
+    </table>
+
+    <details class="edit-block">
+      <summary class="btn">Edit profile</summary>
+      <form class="stack" method="post" action="/talent/{{ t.id }}">
+        <label>Name</label>
+        <input type="text" name="name" required value="{{ t.name }}">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ t.email or '' }}">
+        <label>Disciplines</label>
+        <div class="check-grid">
+          {% for d in disciplines %}
+          <label class="check"><input type="checkbox" name="disciplines" value="{{ d.value }}" {{ 'checked' if d in t.disciplines }}> {{ d.label }}</label>
+          {% endfor %}
+        </div>
+        <label>Credits</label>
+        <textarea name="credits" rows="3">{{ t.credits }}</textarea>
+        <label>Location</label>
+        <input type="text" name="location" value="{{ t.location or '' }}">
+        <label>Demo reel link</label>
+        <input type="url" name="demo_reel_url" value="{{ t.demo_reel_url or '' }}">
+        <label>Notes</label>
+        <textarea name="notes" rows="2">{{ t.notes }}</textarea>
+        <button class="btn primary" type="submit">Save profile</button>
+      </form>
+    </details>
+  </section>
+</div>
+{% endblock %}

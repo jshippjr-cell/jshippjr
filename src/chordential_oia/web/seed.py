@@ -12,9 +12,44 @@ import sqlite3
 from typing import List
 
 from ..intake import parse_email_path
-from ..models import Opportunity
+from ..models import MusicDiscipline, Opportunity
 from ..sources import AVAILABLE_SOURCES
+from ..talent import InviteStatus, ReviewStatus, Talent
 from . import db
+
+# A small starter roster so the supply side isn't empty on first run, and so the
+# matcher (next cycle) has real profiles to rank. Mix of disciplines, review
+# states, and funnel stages.
+_TALENT_SEED = [
+    Talent(
+        name="Maya Okafor", email="maya@okaforsound.com",
+        disciplines=[MusicDiscipline.COMPOSITION, MusicDiscipline.ARRANGEMENT],
+        credits="Composer on 2 national auto spots; orchestral arranger for a Netflix doc.",
+        location="Los Angeles, CA", demo_reel_url="https://example.com/reels/maya-okafor",
+        review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.JOINED,
+    ),
+    Talent(
+        name="Devin Park", email="devin@parkaudio.io",
+        disciplines=[MusicDiscipline.SOUND_DESIGN, MusicDiscipline.COMPOSITION],
+        credits="Sound designer for indie games; hybrid score for a brand campaign.",
+        location="Brooklyn, NY", demo_reel_url="https://example.com/reels/devin-park",
+        review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.INVITED,
+    ),
+    Talent(
+        name="Sofia Marin", email="sofia@marinmusic.com",
+        disciplines=[MusicDiscipline.SONIC_BRANDING, MusicDiscipline.COMPOSITION],
+        credits="Sonic logo for a fintech launch; mnemonic system for a retail brand.",
+        location="Austin, TX", demo_reel_url="https://example.com/reels/sofia-marin",
+        review_status=ReviewStatus.PENDING, invite_status=InviteStatus.PROSPECT,
+    ),
+    Talent(
+        name="Theo Nguyen",
+        disciplines=[MusicDiscipline.SUPERVISION],
+        credits="Music supervisor; cleared sync for branded content and trailers.",
+        location="Remote", review_status=ReviewStatus.PENDING,
+        invite_status=InviteStatus.PROSPECT,
+    ),
+]
 
 _SAMPLES_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
@@ -43,6 +78,16 @@ def seed(conn: sqlite3.Connection) -> int:
             db.insert_opportunity(conn, opp)
             added += 1
     return added
+
+
+def seed_talent(conn: sqlite3.Connection) -> int:
+    """Populate the starter talent roster if it's empty. Returns the number added."""
+    db.init_db(conn)
+    if db.talent_count(conn) > 0:
+        return 0
+    for t in _TALENT_SEED:
+        db.insert_talent(conn, t)
+    return len(_TALENT_SEED)
 
 
 def reset_and_seed(db_path: str = db.DEFAULT_DB_PATH) -> int:

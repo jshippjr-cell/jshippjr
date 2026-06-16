@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -27,6 +27,7 @@ from ..models import BuyerValue, MusicDiscipline
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
+from ..talent import Talent, profile_completeness
 from . import db, seed
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
     count = conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0]
     if count == 0:
         seed.seed(conn)
+    seed.seed_talent(conn)
     conn.close()
     yield
 
@@ -479,6 +481,131 @@ def buyer_profile(request: Request, client: str):
         request, "buyer.html", nav="buyers", summary=summary, rows=rows,
         rel=rel, contacts=contacts, last_contacted=touch["last_contacted"],
     )
+
+
+# --------------------------------------------------------------------------- #
+# Talent (supply side) — roster, profile, demo-reel review, invite funnel
+# --------------------------------------------------------------------------- #
+# Disciplines offered in talent forms (exclude the disqualified NON_CRAFT bucket).
+FORM_DISCIPLINES = [d for d in MusicDiscipline if d is not MusicDiscipline.NON_CRAFT]
+
+
+@app.get("/talent", response_class=HTMLResponse)
+def talent_roster(
+    request: Request,
+    discipline: Optional[str] = None,
+    review: Optional[str] = None,
+    invite: Optional[str] = None,
+):
+    conn = db.connect()
+    try:
+        rows = db.list_talent(conn, discipline=discipline, review=review, invite=invite)
+        talents = [db.talent_from_row(r) for r in rows]
+    finally:
+        conn.close()
+    cards = [{"t": t, "completeness": profile_completeness(t)} for t in talents]
+    counts = {
+        "total": len(cards),
+        "approved": sum(1 for c in cards if c["t"].is_approved),
+        "pending": sum(1 for c in cards if c["t"].review_status.value == "Pending"),
+        "matchable": sum(1 for c in cards if c["t"].matchable),
+    }
+    active = {"discipline": discipline or "", "review": review or "", "invite": invite or ""}
+    return render(
+        request, "talent_roster.html", nav="talent", cards=cards, counts=counts,
+        disciplines=FORM_DISCIPLINES, review_states=db.REVIEW_STATES,
+        invite_states=db.INVITE_STATES, active=active,
+    )
+
+
+@app.get("/talent/new", response_class=HTMLResponse)
+def talent_new(request: Request):
+    return render(
+        request, "talent_form.html", nav="talent", talent=None, disciplines=FORM_DISCIPLINES
+    )
+
+
+@app.post("/talent")
+def talent_create(
+    name: str = Form(...),
+    email: str = Form(""),
+    disciplines: List[str] = Form([]),
+    credits: str = Form(""),
+    location: str = Form(""),
+    demo_reel_url: str = Form(""),
+    notes: str = Form(""),
+):
+    valid = [MusicDiscipline(d) for d in disciplines if d in {m.value for m in MusicDiscipline}]
+    t = Talent(
+        name=name.strip(), email=email.strip() or None, disciplines=valid,
+        credits=credits.strip(), location=location.strip() or None,
+        demo_reel_url=demo_reel_url.strip() or None, notes=notes.strip(),
+    )
+    conn = db.connect()
+    try:
+        new_id = db.insert_talent(conn, t)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{new_id}", status_code=303)
+
+
+@app.get("/talent/{talent_id}", response_class=HTMLResponse)
+def talent_detail(request: Request, talent_id: int):
+    conn = db.connect()
+    try:
+        row = db.get_talent(conn, talent_id)
+        if row is None:
+            return HTMLResponse("Talent not found", status_code=404)
+        t = db.talent_from_row(row)
+    finally:
+        conn.close()
+    return render(
+        request, "talent_detail.html", nav="talent", t=t,
+        completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
+        review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
+    )
+
+
+@app.post("/talent/{talent_id}")
+def talent_edit(
+    talent_id: int,
+    name: str = Form(...),
+    email: str = Form(""),
+    disciplines: List[str] = Form([]),
+    credits: str = Form(""),
+    location: str = Form(""),
+    demo_reel_url: str = Form(""),
+    notes: str = Form(""),
+):
+    conn = db.connect()
+    try:
+        db.update_talent_profile(
+            conn, talent_id, name.strip(), email, disciplines, credits.strip(),
+            location, demo_reel_url, notes.strip(),
+        )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+@app.post("/talent/{talent_id}/review")
+def talent_review(talent_id: int, review_status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.update_talent_review(conn, talent_id, review_status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+@app.post("/talent/{talent_id}/invite")
+def talent_invite(talent_id: int, invite_status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.update_talent_invite(conn, talent_id, invite_status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}", status_code=303)
 
 
 def main() -> None:  # console entry point

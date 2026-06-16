@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Add talent{% endblock %}
+{% block heading %}<a class="crumb" href="/talent">Talent</a> / Add{% endblock %}
+{% block content %}
+
+<section class="card" style="max-width:640px">
+  <div class="card-head"><h2>Add a creator</h2></div>
+  <form class="stack" method="post" action="/talent">
+    <label>Name</label>
+    <input type="text" name="name" required placeholder="e.g. Maya Okafor">
+    <label>Email</label>
+    <input type="email" name="email" placeholder="name@studio.com">
+    <label>Disciplines (craft)</label>
+    <div class="check-grid">
+      {% for d in disciplines %}
+      <label class="check"><input type="checkbox" name="disciplines" value="{{ d.value }}"> {{ d.label }}</label>
+      {% endfor %}
+    </div>
+    <label>Credits (notable past work)</label>
+    <textarea name="credits" rows="3" placeholder="Composer on 2 national auto spots; orchestral arranger for a doc…"></textarea>
+    <label>Location</label>
+    <input type="text" name="location" placeholder="Los Angeles, CA / Remote">
+    <label>Demo reel link</label>
+    <input type="url" name="demo_reel_url" placeholder="https://… (you'll review this before they're matchable)">
+    <label>Notes</label>
+    <textarea name="notes" rows="2" placeholder="How we found them, who referred, etc."></textarea>
+    <button class="btn primary" type="submit">Add to roster</button>
+  </form>
+</section>
+{% endblock %}

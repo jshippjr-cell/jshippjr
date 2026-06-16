@@ -187,6 +187,60 @@ def test_relationship_reflects_outreach_and_wins(client):
     assert "Client" in client.get("/buyers").text
 
 
+def test_talent_roster_seeds_and_renders(client):
+    r = client.get("/talent")
+    assert r.status_code == 200
+    assert "Talent Roster" in r.text
+    assert "Maya Okafor" in r.text  # seeded creator
+
+
+def test_talent_roster_filters(client):
+    # Filter to approved creators only — should not error and should narrow.
+    assert client.get("/talent", params={"review": "Approved"}).status_code == 200
+    assert client.get("/talent", params={"discipline": "composition"}).status_code == 200
+
+
+def test_add_talent_and_view_detail(client):
+    r = client.post("/talent", data={
+        "name": "Riley Composer", "email": "riley@x.com",
+        "disciplines": ["composition", "sound_design"],
+        "credits": "Scored two shorts", "location": "Chicago",
+        "demo_reel_url": "https://example.com/riley"},
+        follow_redirects=True)
+    assert r.status_code == 200
+    assert "Riley Composer" in r.text
+    assert "Scored two shorts" in r.text
+
+
+def test_demo_reel_review_gate_controls_matchable(client):
+    # Add a creator with a discipline; pending => not matchable; approve => matchable.
+    create = client.post("/talent", data={
+        "name": "Gate Test", "disciplines": ["composition"],
+        "demo_reel_url": "https://example.com/gate"}, follow_redirects=True)
+    import re
+    # The redirect lands on /talent/{id}; recover the id from the roster link.
+    roster = client.get("/talent").text
+    m = re.search(r'/talent/(\d+)"[^>]*>\s*(?:<[^>]+>\s*)*', roster)
+    # Find this talent's id by posting review and re-reading; simplest: search detail pages.
+    # Approve via the most recently added — locate by name on a detail page scan.
+    # Pull id from the create response URL chain instead:
+    assert "Gate Test" in create.text
+    tid = int(re.search(r'/talent/(\d+)/review', create.text).group(1))
+    assert "✓ Matchable" not in client.get(f"/talent/{tid}").text
+    client.post(f"/talent/{tid}/review", data={"review_status": "Approved"},
+                follow_redirects=True)
+    assert "✓ Matchable" in client.get(f"/talent/{tid}").text
+
+
+def test_invite_funnel_updates(client):
+    create = client.post("/talent", data={"name": "Funnel Test"}, follow_redirects=True)
+    import re
+    tid = int(re.search(r'/talent/(\d+)/invite', create.text).group(1))
+    client.post(f"/talent/{tid}/invite", data={"invite_status": "Invited"},
+                follow_redirects=True)
+    assert "Invited" in client.get(f"/talent/{tid}").text
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3
