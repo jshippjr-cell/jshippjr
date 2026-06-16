@@ -21,6 +21,7 @@ from .models import (
     Tier,
     WinProbability,
 )
+from .estimation import Estimate, EstimationEngine, build_estimate
 from .strategic import StrategicValue, assess_strategic_value
 from .intake import parse_alert_email, parse_email_path
 from .qualification import (
@@ -42,6 +43,9 @@ __all__ = [
     "Confidence",
     "StrategicValue",
     "assess_strategic_value",
+    "Estimate",
+    "EstimationEngine",
+    "build_estimate",
     "MusicDiscipline",
     "MusicRequirement",
     "Opportunity",

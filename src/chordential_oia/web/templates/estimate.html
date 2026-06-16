@@ -13,7 +13,7 @@
 <div class="banner">Phase 1 — Expert priors (uncalibrated). Calibrates on Chordential actuals as deals close.</div>
 
 <div class="kpi-grid three">
-  <div class="kpi"><div class="kpi-label">Estimated cost</div><div class="kpi-value">{{ est.estimated_cost|money }}</div><div class="kpi-sub">labor × complexity</div></div>
+  <div class="kpi"><div class="kpi-label">Estimated cost</div><div class="kpi-value">{{ est.estimated_cost|money }}</div><div class="kpi-sub">band {{ est.cost_low|money }}–{{ est.cost_high|money }} (±{{ est.band_spread_pct|round|int }}%)</div></div>
   <div class="kpi accent-pursue"><div class="kpi-label">Suggested price</div><div class="kpi-value">{{ est.suggested_price|money }}</div><div class="kpi-sub">at {{ est.expected_margin_pct|pct }} target margin</div></div>
   <div class="kpi"><div class="kpi-label">Disclosed budget</div><div class="kpi-value">{{ est.disclosed_budget or '—' }}</div><div class="kpi-sub">{{ 'buyer-stated' if est.disclosed_budget else 'not disclosed' }}</div></div>
 </div>
