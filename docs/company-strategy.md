@@ -250,8 +250,11 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
 1. **GTM sequence — APPROVED: A→B→C (dogfood-first).** Model A is run as
    deliberate data manufacturing: capture qualification labels, estimation
    actuals, and win/loss on every internal job.
-2. **Fundraising — APPROVED: bootstrap to a data moat**, then raise on proven
-   traction. No premature raise on a niche-TAM SaaS thesis.
+2. **Fundraising — APPROVED: keep it lean / not raising (for now).** Run as a
+   profitable, software-leveraged services business; no outside capital and no
+   raise process at this stage. Revisit only from a position of proven traction
+   and a real data moat. This is firmer than "bootstrap then raise": the default
+   is self-funded, capital-disciplined growth.
 3. **Alert bias — APPROVED: precision-biased.** Alert only on high-confidence,
    Chordential-shaped opportunities; retain full recall in the DB as "Watch."
 4. **Proposal drafting — APPROVED: gate full auto-drafts behind human "pursue."**
@@ -265,6 +268,9 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
   existing Rank engine. These produce the proprietary data moat.
 - **No premature scale:** ~6 clean automated sources max; email-alert intake +
   manual for the rest; no mass scraping; no live agent swarm.
+- **Capital discipline is now a hard constraint** (not raising): every operating
+  dollar — especially LLM spend — must justify itself against won revenue. This
+  reinforces the gated-proposal and precision-alert decisions.
 - **Win/loss capture is mandatory** from day one — it is the moat, not a metric.
 - **Internal-first product:** the first "customer" is Chordential's own studio;
   every feature must raise Chordential's win rate before it is sold to anyone.
