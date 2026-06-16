@@ -242,3 +242,29 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
    (cost-safe), or auto-draft all A/B leads?
 5. **Estimation seed:** will you provide real past-project actuals to train the
    estimator?
+
+---
+
+## CEO DECISIONS — Ratified by Jon Shipp, 2026-06-16
+
+1. **GTM sequence — APPROVED: A→B→C (dogfood-first).** Model A is run as
+   deliberate data manufacturing: capture qualification labels, estimation
+   actuals, and win/loss on every internal job.
+2. **Fundraising — APPROVED: bootstrap to a data moat**, then raise on proven
+   traction. No premature raise on a niche-TAM SaaS thesis.
+3. **Alert bias — APPROVED: precision-biased.** Alert only on high-confidence,
+   Chordential-shaped opportunities; retain full recall in the DB as "Watch."
+4. **Proposal drafting — APPROVED: gate full auto-drafts behind human "pursue."**
+   Always produce the cheap brief + estimate; spend on full proposals only after
+   a human commits.
+5. **Estimation seed — OPEN.** Pending: Jon to provide real past-project actuals
+   (hours/cost/margin) to train the estimator and avoid cold-start error.
+
+### What these lock in
+- **Build priority:** Qualify → Estimate → Prepare (gated), on top of the
+  existing Rank engine. These produce the proprietary data moat.
+- **No premature scale:** ~6 clean automated sources max; email-alert intake +
+  manual for the rest; no mass scraping; no live agent swarm.
+- **Win/loss capture is mandatory** from day one — it is the moat, not a metric.
+- **Internal-first product:** the first "customer" is Chordential's own studio;
+  every feature must raise Chordential's win rate before it is sold to anyone.
