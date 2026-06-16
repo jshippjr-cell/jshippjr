@@ -73,3 +73,11 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** matchable-only; primary discipline outranks secondary; credits overlap raises + explains score; deterministic; route renders ranked candidates; no assignment path.
 - **QA (independent QA agent):** 119 tests pass; gate (Pending excluded, Approve includes) verified over HTTP; primary>secondary and credits-overlap verified numerically; deterministic ordering; clean tree. All acceptance, no defects. Screenshot verified.
 - **Status:** ✅ published.
+
+### Cycle 7 — 2026-06-16 — Projects + Assignment (Jon's decision surface)
+- **Roadmap stage:** Supply side → **Identify required labor + Assign**. Implements the CEO directive (recorded this session): the app scopes roles + ranks creators and lays out both sides; **Jon assigns via an explicit action — nothing auto-assigns.**
+- **Council:** COO wanted a won opp to carry the estimator's roles into a project; Creative Director wanted both-sides context on the page; CTO used projects + assignments tables and reused the Cycle 6 matcher; assign/unassign are explicit POSTs.
+- **Build:** `db.py` projects + assignments tables (migration-safe) + CRUD; `/projects` directory; POST `/opportunity/{id}/project` (spin up from Won, deduped); `/project/{id}` decision page (roles, per-role Assign from ranked matches, recommended-creators panel); explicit assign/unassign/status; "Spin up project" button on Won opps; Projects nav.
+- **Acceptance:** project from Won opp (no dup); per-role assign/unassign explicit; ranked candidates shown; project status toggle; migration-safe.
+- **QA (independent QA agent):** 123 tests pass; **no-auto-assign directive verified behaviorally AND by code path** (`add_assignment` called only from the assign handler); assign/unassign end-to-end; dedup; migration; clean tree. 16/16 checks, no defects. Screenshot verified.
+- **Status:** ✅ published.
