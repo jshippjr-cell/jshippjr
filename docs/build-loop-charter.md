@@ -49,3 +49,11 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** plan assembles from existing engines (no LLM); contact + next action persist; events log and stamp last-contacted; follow-ups surface on the dashboard; old databases migrate without data loss; full suite green.
 - **QA:** 91 tests pass; outreach + outreach.txt routes 200; screenshots of the Outreach tab and the dashboard follow-up queue verified; migration test green.
 - **Status:** ✅ published.
+
+### Cycle 4 — 2026-06-16 — Buyer Graph (buyer relationship intelligence)
+- **Roadmap stage:** Demand side → **Buyer Graph** (the moat asset; built on the Outreach layer's contacts + touch log).
+- **Council:** CMO + Creative Director + COO argued the relationship — not the single pursuit — is the moat and must be browsable with a next-best-action; CTO scoped it to deterministic aggregation over existing data (no new infra/LLM); CEO approved.
+- **Build:** new `web/buyer_intel.py` — deterministic `BuyerRelationship` (stage Cold/Warming/Engaged/Client, 0-100 score, signals, next-best-action); `db.py` aggregations (`all_buyers`, `buyer_touch_summary`, `buyer_contacts`); new `/buyers` directory ranked by relationship then strategic value + "Buyer Graph" nav; buyer profile relationship panel + known-contacts list.
+- **Acceptance:** deterministic engine with correct stage rules; directory + profile render and rank; relationship reflects outreach + wins; built only from existing data; full suite green.
+- **QA (independent QA agent):** 101 tests pass; engine stage/boundary/determinism checks pass; `/buyers` + buyer profile 200 with expected content; end-to-end (contact → touch → Won ⇒ "Client") verified; clean working tree. 5/5 acceptance, no defects. Screenshots of the directory + profile verified.
+- **Status:** ✅ published.
