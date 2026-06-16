@@ -291,6 +291,17 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
 - **Internal-first product:** the first "customer" is Chordential's own studio;
   every feature must raise Chordential's win rate before it is sold to anyone.
 
+### Org update — CMO formalized (2026-06-16)
+The CMO is now a standing executive with **feature-veto authority** (CEO override)
+and a **Marketing Council** (Brand Strategist · Demand-Gen Manager · Competitive
+Intelligence Analyst · Content Strategist). Every feature must pass the CMO gate —
+*who is this for, what pain, severe enough to pay, how solved today* — before
+build. The former "RFP Intelligence Agent" / "Estimation Agent" seats are renamed
+**RFP Intelligence Director** / **Estimation Director**. Charter:
+`docs/cmo-charter.md`; first work product: `docs/cmo-positioning-brief.md`
+(positioning = *Music Opportunity Intelligence → the OS for commercial music
+procurement*; proposes the **Strategic-Value lens**).
+
 ---
 
 ## Estimation Engine — Hybrid Model Spec (CEO-directed, 2026-06-16)
