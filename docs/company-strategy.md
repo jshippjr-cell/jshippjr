@@ -280,6 +280,8 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
 - **Build priority:** Qualify → Estimate → Prepare (gated), on top of the
   existing Rank engine. **Qualification accuracy is the #1 objective**; estimation
   ships approximate and self-improves. These produce the proprietary data moat.
+  Qualification layer is fully specced in **`docs/qualification-spec.md`** (the
+  next build target).
 - **No premature scale:** ~6 clean automated sources max; email-alert intake +
   manual for the rest; no mass scraping; no live agent swarm.
 - **Capital discipline is now a hard constraint** (not raising): every operating
