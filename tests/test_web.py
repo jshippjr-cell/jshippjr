@@ -95,6 +95,90 @@ def test_missing_opportunity_404(client):
     assert client.get("/opportunity/99999").status_code == 404
 
 
+def test_outreach_page_and_text(client):
+    r = client.get("/opportunity/1/outreach")
+    assert r.status_code == 200
+    assert "Recommended cadence" in r.text
+    txt = client.get("/opportunity/1/outreach.txt")
+    assert txt.status_code == 200
+    assert "OUTREACH PLAN" in txt.text
+
+
+def test_outreach_contact_and_followup_persist(client):
+    r = client.post(
+        "/opportunity/1/outreach",
+        data={
+            "contact_name": "Dana Reyes",
+            "contact_email": "dana@acme.com",
+            "contact_role": "Creative Director",
+            "next_action": "Send intro email + reel",
+            "next_action_due": "2020-01-01",  # in the past -> due now
+        },
+        follow_redirects=True,
+    )
+    assert r.status_code == 200
+    page = client.get("/opportunity/1/outreach").text
+    assert "Dana Reyes" in page
+    assert "dana@acme.com" in page
+    # A past-due next action surfaces on the dashboard follow-up queue.
+    dash = client.get("/").text
+    assert "Follow-ups due" in dash
+    assert "Send intro email + reel" in dash
+
+
+def test_outreach_event_logs_and_stamps_contact(client):
+    client.post(
+        "/opportunity/2/outreach/event",
+        data={"channel": "Email", "direction": "Sent", "note": "Sent intro + reel"},
+        follow_redirects=True,
+    )
+    page = client.get("/opportunity/2/outreach").text
+    assert "Sent intro + reel" in page
+    assert "Last contacted" in page  # last_contacted stamped
+
+
+def test_outreach_event_ignores_empty_note(client):
+    client.post(
+        "/opportunity/3/outreach/event",
+        data={"channel": "Email", "direction": "Sent", "note": "   "},
+        follow_redirects=True,
+    )
+    page = client.get("/opportunity/3/outreach").text
+    assert "No touches logged yet" in page
+
+
+def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
+    """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
+    import sqlite3
+
+    db_file = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_file)
+    conn.execute(
+        """CREATE TABLE opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client TEXT NOT NULL, need TEXT NOT NULL, status TEXT DEFAULT 'New'
+        )"""
+    )
+    conn.execute("INSERT INTO opportunities (client, need) VALUES ('Legacy Co','Old need')")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("CHORDENTIAL_DB", str(db_file))
+    import importlib
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    conn = db_mod.connect()
+    db_mod.init_db(conn)  # should ALTER in the new columns + events table
+    # Pre-existing row survives and gains the new (NULL) outreach fields.
+    row = conn.execute("SELECT * FROM opportunities WHERE client='Legacy Co'").fetchone()
+    assert row["need"] == "Old need"
+    assert "next_action_due" in row.keys()
+    db_mod.update_outreach(conn, row["id"], next_action="Call", next_action_due="2020-01-01")
+    db_mod.add_outreach_event(conn, row["id"], "Email", "Sent", "hello")
+    assert len(db_mod.list_outreach_events(conn, row["id"])) == 1
+    conn.close()
+
+
 def test_strategic_value_on_detail_and_sort(client):
     # Detail page surfaces the CMO Strategic-Value lens.
     detail = client.get("/opportunity/1").text

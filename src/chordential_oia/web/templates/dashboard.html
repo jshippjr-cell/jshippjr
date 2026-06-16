@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, strat_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
 {% block title %}Executive Summary{% endblock %}
 {% block heading %}Executive Summary{% endblock %}
 {% block content %}
@@ -49,6 +49,26 @@
     </a>
     {% endfor %}
   </div>
+</section>
+{% endif %}
+
+{% if followups %}
+<section class="card" id="followups">
+  <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
+  <table class="table compact">
+    <thead><tr><th>Due</th><th>Next action</th><th>Opportunity</th><th>Buyer</th><th></th></tr></thead>
+    <tbody>
+      {% for r in followups %}
+      <tr>
+        <td class="muted">{{ r['next_action_due'] }}</td>
+        <td>{{ r['next_action'] or '—' }}</td>
+        <td><a class="strong" href="/opportunity/{{ r['id'] }}/outreach">{{ r['need'] }}</a></td>
+        <td class="muted">{{ r['client'] }}</td>
+        <td>{{ status_pill(r['status']) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endif %}
 

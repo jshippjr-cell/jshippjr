@@ -23,6 +23,7 @@ from .models import (
 )
 from .estimation import Estimate, EstimationEngine, build_estimate
 from .prepare import PursuitBrief, build_pursuit_brief
+from .outreach import OutreachPlan, OutreachStep, build_outreach_plan
 from .strategic import StrategicValue, assess_strategic_value
 from .intake import parse_alert_email, parse_email_path
 from .qualification import (
@@ -49,6 +50,9 @@ __all__ = [
     "build_estimate",
     "PursuitBrief",
     "build_pursuit_brief",
+    "OutreachPlan",
+    "OutreachStep",
+    "build_outreach_plan",
     "MusicDiscipline",
     "MusicRequirement",
     "Opportunity",

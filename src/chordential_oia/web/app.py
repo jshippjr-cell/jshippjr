@@ -25,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..models import BuyerValue, MusicDiscipline
 from ..prepare import build_pursuit_brief
+from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from . import db, seed
 from .estimate import build_estimate
@@ -104,11 +105,12 @@ def dashboard(request: Request):
         top = db.list_opportunities(conn, action="Pursue", order_by="alignment")[:6]
         review = db.list_opportunities(conn, action="Review", order_by="alignment")[:5]
         spotlight = db.strategic_spotlight(conn)
+        followups = db.followups_due(conn)
     finally:
         conn.close()
     return render(
         request, "dashboard.html", nav="dashboard", metrics=metrics, top=top,
-        review=review, spotlight=spotlight,
+        review=review, spotlight=spotlight, followups=followups,
     )
 
 
@@ -271,6 +273,82 @@ def brief_text(opp_id: int):
     finally:
         conn.close()
     return PlainTextResponse(brief.render_text())
+
+
+def _outreach_for(conn, opp_id: int):
+    """Load an opportunity and assemble its outreach plan (None if missing)."""
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None, None, None
+    qual, scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    strategic = assess_strategic_value(opp)
+    plan = build_outreach_plan(opp, qual, scored, est, strategic)
+    return row, opp, plan
+
+
+@app.get("/opportunity/{opp_id}/outreach", response_class=HTMLResponse)
+def outreach_page(request: Request, opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, plan = _outreach_for(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        events = db.list_outreach_events(conn, opp_id)
+    finally:
+        conn.close()
+    return render(
+        request, "outreach.html", nav="inbox", row=row, opp=opp, plan=plan, events=events
+    )
+
+
+@app.get("/opportunity/{opp_id}/outreach.txt", response_class=PlainTextResponse)
+def outreach_text(opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, plan = _outreach_for(conn, opp_id)
+        if row is None:
+            return PlainTextResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    return PlainTextResponse(plan.render_text())
+
+
+@app.post("/opportunity/{opp_id}/outreach")
+def set_outreach(
+    opp_id: int,
+    contact_name: str = Form(""),
+    contact_email: str = Form(""),
+    contact_role: str = Form(""),
+    next_action: str = Form(""),
+    next_action_due: str = Form(""),
+):
+    conn = db.connect()
+    try:
+        db.update_outreach(
+            conn, opp_id, contact_name, contact_email, contact_role,
+            next_action, next_action_due,
+        )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/outreach", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/outreach/event")
+def add_outreach_event(
+    opp_id: int,
+    channel: str = Form("Email"),
+    direction: str = Form("Sent"),
+    note: str = Form(""),
+):
+    conn = db.connect()
+    try:
+        if note.strip():
+            db.add_outreach_event(conn, opp_id, channel, direction, note.strip())
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/outreach", status_code=303)
 
 
 @app.post("/opportunity/{opp_id}/status")

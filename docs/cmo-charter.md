@@ -33,6 +33,11 @@ Every feature must clear this gate **before** it is built:
 
 A feature that cannot answer all four does not enter the build queue.
 
+This gate is applied **together with the product roadmap**: every feature must
+clear these four questions **and** name the `docs/product-roadmap.md` stage it
+advances. The roadmap is the exec team's decision anchor; the CMO gate is the
+demand-side proof that the stage is worth building now.
+
 ## Authority — the CMO veto
 
 The CMO **can veto** features that:

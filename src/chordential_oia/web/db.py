@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
 from ..models import BuyerType, BuyerValue, MusicRequirement, Opportunity
@@ -61,9 +61,36 @@ CREATE TABLE IF NOT EXISTS opportunities (
     -- human pipeline
     status TEXT DEFAULT 'New',
     outcome_value REAL,
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '',
+    -- Outreach-to-win layer
+    contact_name TEXT,
+    contact_email TEXT,
+    contact_role TEXT,
+    next_action TEXT,
+    next_action_due TEXT,
+    last_contacted TEXT
+);
+
+CREATE TABLE IF NOT EXISTS outreach_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opp_id INTEGER NOT NULL,
+    created_at TEXT,
+    channel TEXT,
+    direction TEXT,
+    note TEXT
 );
 """
+
+# Columns added by the Outreach layer — applied to pre-existing databases via an
+# idempotent migration so an older chordential.db keeps working after a pull.
+_OUTREACH_COLUMNS = {
+    "contact_name": "TEXT",
+    "contact_email": "TEXT",
+    "contact_role": "TEXT",
+    "next_action": "TEXT",
+    "next_action_due": "TEXT",
+    "last_contacted": "TEXT",
+}
 
 
 def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
@@ -74,6 +101,28 @@ def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    _ensure_schema(conn)
+    conn.commit()
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Idempotently bring an older database up to the current schema.
+
+    Fresh DBs already have everything from ``_SCHEMA``; this only matters for a
+    ``chordential.db`` created before the Outreach layer existed — it adds the
+    missing columns (and the events table) without touching existing data.
+    """
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(opportunities)")}
+    for name, decl in _OUTREACH_COLUMNS.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE opportunities ADD COLUMN {name} {decl}")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS outreach_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            created_at TEXT, channel TEXT, direction TEXT, note TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -243,6 +292,73 @@ def update_status(
 def update_notes(conn: sqlite3.Connection, opp_id: int, notes: str) -> None:
     conn.execute("UPDATE opportunities SET notes = ? WHERE id = ?", (notes, opp_id))
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Outreach-to-win
+# --------------------------------------------------------------------------- #
+def update_outreach(
+    conn: sqlite3.Connection,
+    opp_id: int,
+    contact_name: str = "",
+    contact_email: str = "",
+    contact_role: str = "",
+    next_action: str = "",
+    next_action_due: str = "",
+) -> None:
+    """Persist the human-managed outreach fields (contact + the single next action)."""
+    conn.execute(
+        """UPDATE opportunities
+           SET contact_name = ?, contact_email = ?, contact_role = ?,
+               next_action = ?, next_action_due = ?
+           WHERE id = ?""",
+        (
+            contact_name or None, contact_email or None, contact_role or None,
+            next_action or None, next_action_due or None, opp_id,
+        ),
+    )
+    conn.commit()
+
+
+def add_outreach_event(
+    conn: sqlite3.Connection,
+    opp_id: int,
+    channel: str,
+    direction: str,
+    note: str,
+) -> None:
+    """Append one logged touch and stamp ``last_contacted`` on the opportunity."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO outreach_events (opp_id, created_at, channel, direction, note)
+           VALUES (?,?,?,?,?)""",
+        (opp_id, now, channel, direction, note),
+    )
+    conn.execute(
+        "UPDATE opportunities SET last_contacted = ? WHERE id = ?", (now, opp_id)
+    )
+    conn.commit()
+
+
+def list_outreach_events(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM outreach_events WHERE opp_id = ? ORDER BY created_at DESC",
+        (opp_id,),
+    ).fetchall()
+
+
+def followups_due(conn: sqlite3.Connection, limit: int = 8) -> List[sqlite3.Row]:
+    """Open opportunities whose next action is due on/before today (the follow-up queue)."""
+    today = date.today().isoformat()
+    return conn.execute(
+        """SELECT * FROM opportunities
+           WHERE next_action_due IS NOT NULL AND next_action_due != ''
+             AND next_action_due <= ?
+             AND status NOT IN ('Won','Lost','Passed')
+           ORDER BY next_action_due ASC
+           LIMIT ?""",
+        (today, limit),
+    ).fetchall()
 
 
 def buyer_opportunities(conn: sqlite3.Connection, client: str) -> List[sqlite3.Row]:

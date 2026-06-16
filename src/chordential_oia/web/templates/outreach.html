@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Outreach · {{ row['need'] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">{{ row['need'][:40] }}</a> / Outreach{% endblock %}
+{% block content %}
+
+<div class="subnav">
+  <a href="/opportunity/{{ row['id'] }}">Overview</a>
+  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
+  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
+  <a href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
+  <a class="active" href="/opportunity/{{ row['id'] }}/outreach">Outreach</a>
+  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
+</div>
+
+<div class="brief-head card">
+  <div>
+    <div class="kpi-label">Recommended outreach</div>
+    <div class="verdict-action">{{ plan.target_contact }}</div>
+    <div class="muted">{{ plan.urgency }}</div>
+  </div>
+  <div class="brief-actions">
+    <a class="btn" href="/opportunity/{{ row['id'] }}/outreach.txt" target="_blank">Plain text ↗</a>
+    <button class="btn primary" type="button" onclick="copyPlan(this)">Copy plan</button>
+  </div>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>First-touch message</h2></div>
+    <p class="summary-line big">{{ plan.first_touch_message }}</p>
+    <table class="kv">
+      <tr><td>Primary channel</td><td>{{ plan.primary_channel }}</td></tr>
+      <tr><td>Urgency</td><td>{{ plan.urgency }}</td></tr>
+    </table>
+    <ul class="assume">{% for a in plan.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Recommended cadence</h2></div>
+    <ol class="brief-list cadence">
+      {% for s in plan.steps %}
+      <li>
+        <div class="cadence-action">{{ s.action }}</div>
+        <div class="muted small">{{ s.channel }} · {{ s.timing }}</div>
+        <div class="cadence-point">{{ s.talking_point }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Contact &amp; next action</h2></div>
+    <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/outreach">
+      <label>Contact name</label>
+      <input type="text" name="contact_name" value="{{ row['contact_name'] or '' }}" placeholder="e.g. Dana Reyes">
+      <label>Contact email</label>
+      <input type="email" name="contact_email" value="{{ row['contact_email'] or '' }}" placeholder="name@buyer.com">
+      <label>Contact role</label>
+      <input type="text" name="contact_role" value="{{ row['contact_role'] or plan.target_contact }}" placeholder="{{ plan.target_contact }}">
+      <label>Next action</label>
+      <input type="text" name="next_action" value="{{ row['next_action'] or '' }}" placeholder="e.g. Send intro email + reel">
+      <label for="due">Next action due</label>
+      <input id="due" type="date" name="next_action_due" value="{{ row['next_action_due'] or '' }}">
+      <button class="btn primary" type="submit">Save outreach</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Outreach log</h2></div>
+    {% if row['last_contacted'] %}<p class="muted small">Last contacted {{ row['last_contacted'][:10] }}.</p>{% endif %}
+    <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/outreach/event">
+      <div class="log-row">
+        <select name="channel">
+          <option>Email</option><option>Call</option><option>LinkedIn</option>
+          <option>Meeting</option><option>Portal</option><option>Other</option>
+        </select>
+        <select name="direction">
+          <option>Sent</option><option>Received</option><option>Note</option>
+        </select>
+      </div>
+      <textarea name="note" rows="2" placeholder="What happened? (e.g. Sent intro + reel; awaiting reply)"></textarea>
+      <button class="btn" type="submit">Log a touch</button>
+    </form>
+    <ul class="event-log">
+      {% for e in events %}
+      <li>
+        <span class="pill ghost">{{ e['channel'] }} · {{ e['direction'] }}</span>
+        <span class="muted small">{{ e['created_at'][:10] }}</span>
+        <div>{{ e['note'] }}</div>
+      </li>
+      {% else %}
+      <li class="muted">No touches logged yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<pre id="plan-text" class="visually-hidden">{{ plan.render_text() }}</pre>
+<script>
+function copyPlan(btn){
+  var t = document.getElementById('plan-text').textContent;
+  navigator.clipboard.writeText(t).then(function(){
+    var old = btn.textContent; btn.textContent = 'Copied ✓';
+    setTimeout(function(){ btn.textContent = old; }, 1600);
+  });
+}
+</script>
+{% endblock %}

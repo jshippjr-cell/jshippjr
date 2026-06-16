@@ -18,6 +18,10 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 **pause for Jon's approval** → publish on OK.
 
 ## Per-cycle process
+0. **Name the roadmap stage** — every cycle states which stage of
+   `docs/product-roadmap.md` it advances. A build that maps to no stage is out of
+   scope (or the roadmap is updated first). The roadmap is the decision anchor;
+   the CMO gate (`cmo-charter.md`) and a named roadmap stage are checked together.
 1. **Council dialogue** (short) — agree the single highest-value next build within scope.
 2. **Requirements + plan** — written acceptance criteria.
 3. **Pause for approval** — present the plan to Jon. **Wait for his OK before building.**
@@ -37,4 +41,11 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Build:** new `src/chordential_oia/prepare.py` — deterministic `PursuitBrief` generator (the fifth mission verb) assembling qualification + estimate + strategic value into a ready brief with a suggested response outline; new dashboard "Pursuit brief" tab + plain-text/copy export; exported from the package.
 - **Acceptance:** brief assembles from existing engines (no LLM); `render_text()` copy-paste output; new tab + `.txt` route render; full suite green.
 - **QA:** 79 tests pass; brief + brief.txt routes 200; screenshot verified; 3/3 acceptance.
+- **Status:** ✅ published.
+
+### Cycle 3 — 2026-06-16 — Product Roadmap + the Outreach-to-Win layer
+- **Roadmap stage:** Demand side → **Outreach-to-win** (the sixth mission verb). Also establishes `docs/product-roadmap.md` as the exec decision anchor.
+- **Build:** (A) new `docs/product-roadmap.md` — the two-track (demand/supply) roadmap with status per stage and the talent-matching decision (profile + credits + Jon-reviewed demo reel, no audio AI); governance rule added (every cycle names a roadmap stage). (B) new `src/chordential_oia/outreach.py` — deterministic `OutreachPlan` (recommended contact, urgency, buyer-tuned cadence, first-touch message); persistence for contact + next-action/due + an outreach event log with a non-destructive DB migration; new "Outreach" tab + `.txt` export; dashboard "Follow-ups due" queue.
+- **Acceptance:** plan assembles from existing engines (no LLM); contact + next action persist; events log and stamp last-contacted; follow-ups surface on the dashboard; old databases migrate without data loss; full suite green.
+- **QA:** 91 tests pass; outreach + outreach.txt routes 200; screenshots of the Outreach tab and the dashboard follow-up queue verified; migration test green.
 - **Status:** ✅ published.

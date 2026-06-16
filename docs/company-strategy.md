@@ -46,6 +46,11 @@ The engine we already built covers **Rank**. The company-defining work is
 **Qualify**, **Estimate**, and **Prepare** — because those are where the
 proprietary data and the moat live.
 
+> **Decision anchor:** the live, sequenced view of what we build (this spine plus
+> the buyer-side *Outreach* verb and the whole supply side) is maintained in
+> **`docs/product-roadmap.md`**. Every feature cites the roadmap stage it advances;
+> the CMO gate and the roadmap stage are checked together before any build.
+
 ---
 
 ## The central strategic fork — what do we sell *first*?
