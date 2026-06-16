@@ -1,0 +1,17 @@
+# Render deployment blueprint for the Chordential dashboard.
+# Render reads this automatically: it builds from GitHub (no local machine needed)
+# and redeploys on every push to the branch below, so the live link always shows
+# the latest. Free plan; the service sleeps after ~15 min idle and cold-starts on
+# the next visit (~30-60s). Seed data repopulates on each deploy.
+services:
+  - type: web
+    name: chordential
+    runtime: python
+    plan: free
+    branch: claude/admiring-mayer-u241h5
+    buildCommand: "pip install '.[web]'"
+    startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
