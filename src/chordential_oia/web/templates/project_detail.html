@@ -20,6 +20,35 @@
 
 <div class="callout"><span class="callout-ico">🛈</span> The app scoped the roles and ranked the creators. <strong>You assign each role</strong> — press <em>Assign</em> when you've decided. Nothing is assigned automatically.</div>
 
+<section class="card">
+  <div class="card-head"><h2>Delivery progress</h2>
+    <span class="muted">{{ progress.done }} / {{ progress.total }} done · {{ progress.pct }}%</span></div>
+  <div class="align-track" style="margin:4px 0 14px"><div class="align-fill" style="width: {{ progress.pct }}%"></div></div>
+  <div class="milestone-list">
+    {% for m in milestones %}
+    <div class="milestone-row ms-{{ m['status']|lower|replace(' ','-') }}">
+      <div class="ms-title">{{ m['title'] }}{% if m['role'] %} <span class="muted small">· {{ m['role'] }}</span>{% endif %}</div>
+      <form method="post" action="/project/{{ row['id'] }}/milestone/status" class="ms-status">
+        <input type="hidden" name="milestone_id" value="{{ m['id'] }}">
+        {% for s in milestone_states %}
+        <button class="btn tiny ms-btn ms-{{ s|lower|replace(' ','-') }} {{ 'is-current' if m['status']==s }}" name="status" value="{{ s }}">{{ s }}</button>
+        {% endfor %}
+      </form>
+      <form method="post" action="/project/{{ row['id'] }}/milestone/delete" class="inline">
+        <input type="hidden" name="milestone_id" value="{{ m['id'] }}">
+        <button class="btn tiny" type="submit" title="Remove">✕</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted small">No milestones yet.</p>
+    {% endfor %}
+  </div>
+  <form class="assign-form" method="post" action="/project/{{ row['id'] }}/milestone" style="margin-top:12px">
+    <input type="text" name="title" placeholder="Add a milestone (e.g. First sketch to client)" required>
+    <button class="btn primary" type="submit">Add</button>
+  </form>
+</section>
+
 <div class="cols-2">
   <section class="card">
     <div class="card-head"><h2>Roles &amp; assignment</h2></div>

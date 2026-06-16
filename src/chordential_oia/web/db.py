@@ -113,9 +113,20 @@ CREATE TABLE IF NOT EXISTS assignments (
     talent_id INTEGER,
     created_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    title TEXT,
+    status TEXT DEFAULT 'Pending',
+    role TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
+MILESTONE_STATES = ["Pending", "In progress", "Done"]
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
 # idempotent migration so an older chordential.db keeps working after a pull.
@@ -181,6 +192,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         """CREATE TABLE IF NOT EXISTS assignments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL, role TEXT, talent_id INTEGER, created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS milestones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL, title TEXT, status TEXT DEFAULT 'Pending',
+            role TEXT, created_at TEXT, updated_at TEXT
         )"""
     )
     conn.commit()
@@ -638,7 +656,9 @@ def get_project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.R
 def list_projects(conn: sqlite3.Connection) -> List[sqlite3.Row]:
     return conn.execute(
         """SELECT p.*,
-                  (SELECT COUNT(*) FROM assignments a WHERE a.project_id = p.id) AS assigned
+                  (SELECT COUNT(*) FROM assignments a WHERE a.project_id = p.id) AS assigned,
+                  (SELECT COUNT(*) FROM milestones m WHERE m.project_id = p.id) AS ms_total,
+                  (SELECT COUNT(*) FROM milestones m WHERE m.project_id = p.id AND m.status='Done') AS ms_done
            FROM projects p ORDER BY p.created_at DESC"""
     ).fetchall()
 
@@ -674,6 +694,62 @@ def list_assignments(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.
            WHERE a.project_id = ? ORDER BY a.role, a.created_at""",
         (project_id,),
     ).fetchall()
+
+
+# --- Milestones (delivery progress) --------------------------------------- #
+def add_milestone(
+    conn: sqlite3.Connection, project_id: int, title: str, role: Optional[str] = None
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO milestones (project_id, title, status, role, created_at, updated_at)
+           VALUES (?,?,?,?,?,?)""",
+        (project_id, title, "Pending", role, now, now),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def seed_default_milestones(
+    conn: sqlite3.Connection, project_id: int, roles: List[str]
+) -> None:
+    """Give a new project one deliverable milestone per scoped role."""
+    for role in roles:
+        add_milestone(conn, project_id, f"{role} deliverable", role)
+
+
+def list_milestones(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM milestones WHERE project_id = ? ORDER BY id", (project_id,)
+    ).fetchall()
+
+
+def update_milestone_status(conn: sqlite3.Connection, milestone_id: int, status: str) -> None:
+    if status not in MILESTONE_STATES:
+        raise ValueError(f"Unknown milestone status {status!r}")
+    conn.execute(
+        "UPDATE milestones SET status = ?, updated_at = ? WHERE id = ?",
+        (status, datetime.now(timezone.utc).isoformat(), milestone_id),
+    )
+    conn.commit()
+
+
+def remove_milestone(conn: sqlite3.Connection, milestone_id: int) -> None:
+    conn.execute("DELETE FROM milestones WHERE id = ?", (milestone_id,))
+    conn.commit()
+
+
+def milestone_progress(conn: sqlite3.Connection, project_id: int) -> Dict[str, int]:
+    row = conn.execute(
+        """SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'Done' THEN 1 ELSE 0 END) AS done
+           FROM milestones WHERE project_id = ?""",
+        (project_id,),
+    ).fetchone()
+    total = row["total"] or 0
+    done = row["done"] or 0
+    pct = round(done / total * 100) if total else 0
+    return {"total": total, "done": done, "pct": pct}
 
 
 def distinct_values(conn: sqlite3.Connection, column: str) -> List[str]:

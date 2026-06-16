@@ -321,6 +321,42 @@ def test_project_status_toggle(client):
     assert "Delivered" in client.get(f"/project/{pid}").text
 
 
+def test_project_seeds_milestones_from_roles(client):
+    pid = _win_and_make_project(client, 1)
+    page = client.get(f"/project/{pid}").text
+    assert "Delivery progress" in page
+    # A default deliverable milestone per scoped role (e.g. Composer).
+    assert "Composer deliverable" in page
+    assert "0 /" in page  # nothing done yet
+
+
+def test_milestone_status_advances_progress(client):
+    import re
+    pid = _win_and_make_project(client, 1)
+    page = client.get(f"/project/{pid}").text
+    mid = re.search(r'name="milestone_id" value="(\d+)"', page).group(1)
+    client.post(f"/project/{pid}/milestone/status",
+                data={"milestone_id": mid, "status": "Done"}, follow_redirects=True)
+    after = client.get(f"/project/{pid}").text
+    # At least one done now; progress reflects it.
+    assert "1 /" in after
+
+
+def test_add_and_delete_milestone(client):
+    import re
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/milestone",
+                data={"title": "First sketch to client"}, follow_redirects=True)
+    page = client.get(f"/project/{pid}").text
+    assert "First sketch to client" in page
+    # Delete it (grab the last milestone id present on the page).
+    ids = re.findall(r'name="milestone_id" value="(\d+)"', page)
+    client.post(f"/project/{pid}/milestone/delete",
+                data={"milestone_id": ids[-1]}, follow_redirects=True)
+    # Page still renders fine.
+    assert client.get(f"/project/{pid}").status_code == 200
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3

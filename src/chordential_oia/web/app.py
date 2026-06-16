@@ -667,6 +667,7 @@ def create_project(opp_id: int):
         pid = db.insert_project(
             conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles
         )
+        db.seed_default_milestones(conn, pid, roles)
     finally:
         conn.close()
     return RedirectResponse(f"/project/{pid}", status_code=303)
@@ -694,7 +695,12 @@ def _project_view(conn, project_id: int):
                 qual.discipline, qual.secondary_disciplines,
                 f"{opp.need} {opp.description}", db.load_talent(conn),
             )
-    return {"row": row, "roles": roles, "by_role": by_role, "matches": matches}
+    milestones = db.list_milestones(conn, project_id)
+    progress = db.milestone_progress(conn, project_id)
+    return {
+        "row": row, "roles": roles, "by_role": by_role, "matches": matches,
+        "milestones": milestones, "progress": progress,
+    }
 
 
 @app.get("/project/{project_id}", response_class=HTMLResponse)
@@ -708,7 +714,7 @@ def project_detail(request: Request, project_id: int):
         conn.close()
     return render(
         request, "project_detail.html", nav="projects",
-        project_states=db.PROJECT_STATES, **view,
+        project_states=db.PROJECT_STATES, milestone_states=db.MILESTONE_STATES, **view,
     )
 
 
@@ -738,6 +744,39 @@ def project_status(project_id: int, status: str = Form(...)):
     conn = db.connect()
     try:
         db.update_project_status(conn, project_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/milestone")
+def project_add_milestone(project_id: int, title: str = Form(...), role: str = Form("")):
+    conn = db.connect()
+    try:
+        if title.strip():
+            db.add_milestone(conn, project_id, title.strip(), role.strip() or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/milestone/status")
+def project_milestone_status(
+    project_id: int, milestone_id: int = Form(...), status: str = Form(...)
+):
+    conn = db.connect()
+    try:
+        db.update_milestone_status(conn, milestone_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/milestone/delete")
+def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
+    conn = db.connect()
+    try:
+        db.remove_milestone(conn, milestone_id)
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
