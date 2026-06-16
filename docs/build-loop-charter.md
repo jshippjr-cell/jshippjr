@@ -65,3 +65,11 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** matchable = approved reel + ≥1 discipline; roster/detail render; review + invite persist; seeded roster present; migration-safe; full suite green.
 - **QA (independent QA agent):** 112 tests pass; domain rules (matchable cases, completeness) verified; `/talent` + `/talent/new` 200 with seeded creator; review gate end-to-end (Pending⇒not matchable, Approve⇒Matchable) verified; migration idempotent; clean tree. 5/5 acceptance, no defects. Screenshots verified.
 - **Status:** ✅ published.
+
+### Cycle 6 — 2026-06-16 — Talent Matcher (demand ↔ supply)
+- **Roadmap stage:** Supply side → **Talent match**. Applies the CEO directive (recorded same day): the app does the matching/ranking and explains it, but **does not assign** — assignment is Jon's confirm-button in Cycles 7/8.
+- **Council:** Creative Director wanted craft-first ranking with visible reasoning; CTO kept it deterministic (discipline fit + credits keyword-overlap + completeness), matchable-only, no LLM; CMO put it on the opportunity as a "Talent match" tab.
+- **Build:** new `matching.py` (`match_talent` → ranked `TalentMatch` with reasons; excludes no-craft-fit and unapproved creators); `db.load_talent`; `/opportunity/{id}/match` tab across the opportunity subnav with the "you make the final call" frame.
+- **Acceptance:** matchable-only; primary discipline outranks secondary; credits overlap raises + explains score; deterministic; route renders ranked candidates; no assignment path.
+- **QA (independent QA agent):** 119 tests pass; gate (Pending excluded, Approve includes) verified over HTTP; primary>secondary and credits-overlap verified numerically; deterministic ordering; clean tree. All acceptance, no defects. Screenshot verified.
+- **Status:** ✅ published.
