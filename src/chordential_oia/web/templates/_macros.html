@@ -14,6 +14,10 @@
 <span class="pill sv-{{ strat_class(tier) }}">{% if tier=='Door-opener' %}🚪 {% endif %}{{ tier }}{% if value is not none %} · {{ value|round|int }}{% endif %}</span>
 {% endmacro %}
 
+{% macro rel_pill(rel) %}
+<span class="pill rel-{{ rel.stage_class }}">{{ rel.stage }} · {{ rel.score }}</span>
+{% endmacro %}
+
 {% macro align_bar(value) %}
 <div class="align">
   <div class="align-track"><div class="align-fill" style="width: {{ value }}%"></div></div>

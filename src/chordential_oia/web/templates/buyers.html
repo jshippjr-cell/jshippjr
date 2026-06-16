@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import rel_pill, strat_pill, align_bar %}
+{% block title %}Buyer Graph{% endblock %}
+{% block heading %}Buyer Graph{% endblock %}
+{% block content %}
+
+<p class="summary-line">Every buyer we've seen, ranked by relationship strength then strategic value — the moat asset. Stage runs Cold → Warming → Engaged → Client (won before).</p>
+
+<div class="card no-pad">
+<table class="table">
+  <thead><tr><th>Buyer</th><th>Relationship</th><th>Next best action</th><th>Touches</th><th>Strategic</th><th>Fit</th></tr></thead>
+  <tbody>
+    {% for b in buyers %}
+    <tr>
+      <td>
+        <a class="strong" href="/buyer/{{ b.row['client']|urlencode }}">{{ b.row['client'] }}</a>
+        <div class="muted small">{{ b.row['buyer_type'].replace('_',' ')|title }} · {{ b.row['opps'] }} opp{{ 's' if b.row['opps'] != 1 }}{% if b.row['won'] %} · {{ b.row['won'] }} won{% endif %}</div>
+      </td>
+      <td style="width:130px">{{ rel_pill(b.rel) }}</td>
+      <td class="muted small">{{ b.rel.next_best_action }}</td>
+      <td>{{ b.row['touches'] }}</td>
+      <td>{% if b.strategic_tier %}{{ strat_pill(b.strategic_tier, b.row['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td style="width:120px">{{ align_bar(b.row['avg_alignment']) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No buyers yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

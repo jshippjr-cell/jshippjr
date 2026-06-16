@@ -368,6 +368,52 @@ def buyer_opportunities(conn: sqlite3.Connection, client: str) -> List[sqlite3.R
     ).fetchall()
 
 
+def all_buyers(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    """One aggregated row per buyer for the Buyer Graph directory."""
+    return conn.execute(
+        """
+        SELECT
+            o.client AS client,
+            MIN(o.buyer_type) AS buyer_type,
+            COUNT(*) AS opps,
+            SUM(o.qualified) AS qualified,
+            SUM(CASE WHEN o.status = 'Won' THEN 1 ELSE 0 END) AS won,
+            SUM(CASE WHEN o.status = 'Lost' THEN 1 ELSE 0 END) AS lost,
+            SUM(CASE WHEN o.status IN ('Pursuing','Submitted') THEN 1 ELSE 0 END) AS open_pursuits,
+            MAX(o.strategic_value) AS strategic_value,
+            AVG(o.alignment) AS avg_alignment,
+            MAX(o.last_contacted) AS last_contacted,
+            (SELECT COUNT(*) FROM outreach_events e
+                JOIN opportunities oi ON e.opp_id = oi.id
+                WHERE oi.client = o.client) AS touches
+        FROM opportunities o
+        GROUP BY o.client
+        """
+    ).fetchall()
+
+
+def buyer_touch_summary(conn: sqlite3.Connection, client: str) -> sqlite3.Row:
+    """Total logged outreach touches and the most recent timestamp for a buyer."""
+    return conn.execute(
+        """SELECT COUNT(*) AS touches, MAX(e.created_at) AS last_contacted
+           FROM outreach_events e JOIN opportunities o ON e.opp_id = o.id
+           WHERE o.client = ?""",
+        (client,),
+    ).fetchone()
+
+
+def buyer_contacts(conn: sqlite3.Connection, client: str) -> List[sqlite3.Row]:
+    """Distinct known contacts captured across a buyer's opportunities."""
+    return conn.execute(
+        """SELECT DISTINCT contact_name, contact_email, contact_role
+           FROM opportunities
+           WHERE client = ?
+             AND (contact_name IS NOT NULL OR contact_email IS NOT NULL)
+           ORDER BY contact_name""",
+        (client,),
+    ).fetchall()
+
+
 def distinct_values(conn: sqlite3.Connection, column: str) -> List[str]:
     allowed = {"action", "tier", "discipline", "buyer_type", "status"}
     if column not in allowed:

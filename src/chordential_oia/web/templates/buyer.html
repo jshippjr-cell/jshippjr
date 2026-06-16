@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar, rel_pill %}
 {% block title %}{{ summary.client }}{% endblock %}
 {% block heading %}Buyer profile{% endblock %}
 {% block content %}
@@ -28,6 +28,32 @@
   <div class="kpi accent-won"><div class="kpi-label">Won value</div><div class="kpi-value">{{ summary.won_value|money }}</div><div class="kpi-sub">lifetime</div></div>
   <div class="kpi" style="--accent-bar:#f472b6"><div class="kpi-label">Strategic value</div><div class="kpi-value">{{ summary.avg_strategic|pct if summary.avg_strategic is not none else '—' }}</div><div class="kpi-sub">{{ summary.buyer_value }}{{ ' · marquee' if summary.marquee }}</div></div>
 </div>
+
+<section class="card strat-card">
+  <div class="card-head"><h2>Relationship <span class="muted">— Buyer Graph</span></h2>{{ rel_pill(rel) }}</div>
+  <div class="strat-grid">
+    <div class="strat-bars">
+      <div class="callout"><span class="callout-ico">🎯</span> <strong>Next best action:</strong> {{ rel.next_best_action }}</div>
+      <ul class="reason-list">{% for s in rel.signals %}<li>{{ s }}</li>{% endfor %}</ul>
+    </div>
+    <div>
+      <div class="kpi-label">Known contacts</div>
+      {% if contacts %}
+      <ul class="contact-list">
+        {% for c in contacts %}
+        <li>
+          <strong>{{ c['contact_name'] or c['contact_role'] or 'Contact' }}</strong>
+          {% if c['contact_role'] and c['contact_name'] %}<span class="muted small"> · {{ c['contact_role'] }}</span>{% endif %}
+          {% if c['contact_email'] %}<div class="muted small">{{ c['contact_email'] }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small">No contacts captured yet — add them on an opportunity's Outreach tab.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
 
 <div class="card no-pad">
 <table class="table">

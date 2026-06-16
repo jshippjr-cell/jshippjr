@@ -28,6 +28,7 @@ from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from . import db, seed
+from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
 
@@ -383,13 +384,52 @@ def set_notes(opp_id: int, notes: str = Form("")):
 
 
 # --------------------------------------------------------------------------- #
-# Buyer profile
+# Buyer Graph — directory + profile
 # --------------------------------------------------------------------------- #
+def _strat_tier_for_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    if value >= 80:
+        return "Door-opener"
+    if value >= 65:
+        return "High"
+    if value >= 45:
+        return "Medium"
+    return "Low"
+
+
+@app.get("/buyers", response_class=HTMLResponse)
+def buyers_directory(request: Request):
+    conn = db.connect()
+    try:
+        rows = db.all_buyers(conn)
+    finally:
+        conn.close()
+    buyers = []
+    for r in rows:
+        tier = _strat_tier_for_value(r["strategic_value"])
+        rel = assess_relationship(
+            opps=r["opps"], qualified=int(r["qualified"] or 0),
+            won=int(r["won"] or 0), lost=int(r["lost"] or 0),
+            open_pursuits=int(r["open_pursuits"] or 0), touches=int(r["touches"] or 0),
+            last_contacted_days=days_since(r["last_contacted"]),
+            strategic_tier=tier,
+        )
+        buyers.append({"row": r, "rel": rel, "strategic_tier": tier})
+    # Rank by relationship strength, then strategic value.
+    buyers.sort(
+        key=lambda b: (b["rel"].score, b["row"]["strategic_value"] or 0), reverse=True
+    )
+    return render(request, "buyers.html", nav="buyers", buyers=buyers)
+
+
 @app.get("/buyer/{client}", response_class=HTMLResponse)
 def buyer_profile(request: Request, client: str):
     conn = db.connect()
     try:
         rows = db.buyer_opportunities(conn, client)
+        touch = db.buyer_touch_summary(conn, client)
+        contacts = db.buyer_contacts(conn, client)
     finally:
         conn.close()
     if not rows:
@@ -428,8 +468,16 @@ def buyer_profile(request: Request, client: str):
         "strategic_tier": best_tier,
         "avg_strategic": (sum(strat_vals) / len(strat_vals)) if strat_vals else None,
     }
+    rel = assess_relationship(
+        opps=len(rows), qualified=summary["qualified"],
+        won=len(won), lost=len(lost), open_pursuits=len(pursuing),
+        touches=int(touch["touches"] or 0),
+        last_contacted_days=days_since(touch["last_contacted"]),
+        strategic_tier=best_tier,
+    )
     return render(
-        request, "buyer.html", nav="inbox", summary=summary, rows=rows
+        request, "buyer.html", nav="buyers", summary=summary, rows=rows,
+        rel=rel, contacts=contacts, last_contacted=touch["last_contacted"],
     )
 
 

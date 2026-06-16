@@ -147,6 +147,46 @@ def test_outreach_event_ignores_empty_note(client):
     assert "No touches logged yet" in page
 
 
+def test_buyers_directory_renders_and_ranks(client):
+    r = client.get("/buyers")
+    assert r.status_code == 200
+    assert "Buyer Graph" in r.text
+    # Every seeded buyer should appear as a relationship row (Cold until touched).
+    assert "Cold" in r.text
+
+
+def test_buyer_profile_shows_relationship_panel(client):
+    # Find a real buyer via an opportunity, then open its profile.
+    import re
+    detail = client.get("/opportunity/1").text
+    m = re.search(r'href="(/buyer/[^"]+)"', detail)
+    assert m
+    page = client.get(m.group(1)).text
+    assert "Relationship" in page
+    assert "Next best action" in page
+
+
+def test_relationship_reflects_outreach_and_wins(client):
+    # Capture a contact + log a touch on opp 1, then mark it Won.
+    client.post("/opportunity/1/outreach", data={
+        "contact_name": "Dana Reyes", "contact_email": "dana@acme.com",
+        "contact_role": "Creative Director", "next_action": "Call",
+        "next_action_due": "2026-01-01"}, follow_redirects=True)
+    client.post("/opportunity/1/outreach/event", data={
+        "channel": "Email", "direction": "Sent", "note": "Sent intro"},
+        follow_redirects=True)
+    client.post("/opportunity/1/status", data={"status": "Won", "outcome_value": "9000"},
+                follow_redirects=True)
+    import re
+    detail = client.get("/opportunity/1").text
+    m = re.search(r'href="(/buyer/[^"]+)"', detail)
+    page = client.get(m.group(1)).text
+    assert "Client" in page          # a won deal -> Client stage
+    assert "Dana Reyes" in page      # captured contact surfaces on the buyer
+    # The buyer also appears as a Client in the directory.
+    assert "Client" in client.get("/buyers").text
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3
