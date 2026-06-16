@@ -28,6 +28,7 @@ from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
+from ..matching import match_talent
 from . import db, seed
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -352,6 +353,28 @@ def add_outreach_event(
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}/outreach", status_code=303)
+
+
+@app.get("/opportunity/{opp_id}/match", response_class=HTMLResponse)
+def talent_match_page(request: Request, opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, ev = _load(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        talents = db.load_talent(conn)
+    finally:
+        conn.close()
+    qual, scored = ev
+    matches = match_talent(qual.discipline, qual.secondary_disciplines,
+                           f"{opp.need} {opp.description}", talents)
+    # Detail for the eventual human decision: how many were considered vs gated out.
+    matchable = sum(1 for t in talents if t.matchable)
+    pending = sum(1 for t in talents if t.review_status.value == "Pending")
+    return render(
+        request, "match.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
+        matches=matches, matchable=matchable, pending=pending, roster=len(talents),
+    )
 
 
 @app.post("/opportunity/{opp_id}/status")

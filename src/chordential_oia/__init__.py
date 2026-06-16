@@ -25,6 +25,7 @@ from .estimation import Estimate, EstimationEngine, build_estimate
 from .prepare import PursuitBrief, build_pursuit_brief
 from .outreach import OutreachPlan, OutreachStep, build_outreach_plan
 from .talent import InviteStatus, ReviewStatus, Talent, profile_completeness
+from .matching import TalentMatch, match_talent
 from .strategic import StrategicValue, assess_strategic_value
 from .intake import parse_alert_email, parse_email_path
 from .qualification import (
@@ -58,6 +59,8 @@ __all__ = [
     "ReviewStatus",
     "InviteStatus",
     "profile_completeness",
+    "TalentMatch",
+    "match_talent",
     "MusicDiscipline",
     "MusicRequirement",
     "Opportunity",

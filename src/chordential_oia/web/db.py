@@ -559,6 +559,11 @@ def talent_count(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM talent").fetchone()[0]
 
 
+def load_talent(conn: sqlite3.Connection) -> List[Talent]:
+    """All talent as domain objects (for the matcher)."""
+    return [talent_from_row(r) for r in conn.execute("SELECT * FROM talent ORDER BY name")]
+
+
 def distinct_values(conn: sqlite3.Connection, column: str) -> List[str]:
     allowed = {"action", "tier", "discipline", "buyer_type", "status"}
     if column not in allowed:

@@ -310,3 +310,9 @@ a{color:inherit;text-decoration:none}
 .edit-block{margin-top:16px}
 .edit-block summary{display:inline-block;cursor:pointer;margin-bottom:12px}
 .pill-btn.rev-approved.is-current,.pill-btn.inv-joined.is-current{outline:2px solid var(--orange)}
+
+/* talent match */
+.match-score{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--slate),var(--orange));color:#fff;font-weight:700;font-size:15px}
+.match-reasons{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.match-reasons li{font-size:12.5px;color:var(--muted);line-height:1.4}
+.match-reasons li:before{content:"› ";color:var(--orange)}

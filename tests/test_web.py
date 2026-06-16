@@ -241,6 +241,30 @@ def test_invite_funnel_updates(client):
     assert "Invited" in client.get(f"/talent/{tid}").text
 
 
+def test_talent_match_page_renders(client):
+    # Seeded roster includes approved composers, so opp 1 should surface matches.
+    r = client.get("/opportunity/1/match")
+    assert r.status_code == 200
+    assert "Talent match" in r.text
+    assert "Recommended creators" in r.text
+    # The human-decision framing is present (Jon makes the final call).
+    assert "final call" in r.text.lower()
+
+
+def test_match_excludes_unapproved_until_reviewed(client):
+    # Add a composer but leave them Pending — they must NOT appear as a match.
+    create = client.post("/talent", data={
+        "name": "Unseen Composer", "disciplines": ["composition"],
+        "demo_reel_url": "https://example.com/unseen"}, follow_redirects=True)
+    import re
+    tid = int(re.search(r'/talent/(\d+)/review', create.text).group(1))
+    assert "Unseen Composer" not in client.get("/opportunity/1/match").text
+    # Approve the reel -> now eligible to surface.
+    client.post(f"/talent/{tid}/review", data={"review_status": "Approved"},
+                follow_redirects=True)
+    assert "Unseen Composer" in client.get("/opportunity/1/match").text
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3
