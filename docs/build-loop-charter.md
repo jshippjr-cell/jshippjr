@@ -8,7 +8,7 @@ this file for its operating parameters.*
 | Dimension | Decision |
 |---|---|
 | **North star** | **Expand the vision** — build toward the procurement OS (estimation, prepare/proposals, outreach, buyer graph). |
-| **Autonomy** | **Build, pause before publish** — do the work each cycle, run QA, then present the diff + QA report and **wait for Jon's OK before pushing.** |
+| **Autonomy** | **Approve-then-build** — the council presents the agreed plan/requirements for Jon's OK *before* the engineer builds. (Reconciled with the repo's stop-hook policy, which requires every commit to be pushed: pausing *after* a build would leave uncommitted work the hook rejects, so the pause moves to the plan stage. Once approved, the engineer builds → QA → commit → push.) |
 | **Scope** | **Intelligence engine** — sources, qualification, estimation, the data moat. |
 | **QA bar** | **Tests + screenshot + acceptance** — full suite green, a rendered screenshot of any affected screen, and a written check against the cycle's agreed requirements. |
 
@@ -19,11 +19,12 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 
 ## Per-cycle process
 1. **Council dialogue** (short) — agree the single highest-value next build within scope.
-2. **Requirements** — written acceptance criteria handed to the engineer.
-3. **Build** — implement on branch `claude/admiring-mayer-u241h5`.
-4. **QA** — run `pytest`; render a screenshot of any affected screen; check each acceptance criterion.
-5. **Pause** — present diff + QA report. **Do not push.** Await Jon's "publish".
-6. **Log** — append the cycle outcome below.
+2. **Requirements + plan** — written acceptance criteria.
+3. **Pause for approval** — present the plan to Jon. **Wait for his OK before building.**
+4. **Build** — implement on branch `claude/admiring-mayer-u241h5`.
+5. **QA** — run `pytest`; render a screenshot of any affected screen; check each acceptance criterion.
+6. **Publish** — commit + push (satisfies the stop-hook policy).
+7. **Log** — append the cycle outcome below.
 
 ## Cycle log
 
