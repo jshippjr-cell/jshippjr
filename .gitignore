@@ -20,3 +20,7 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Dashboard SQLite database
+chordential.db
+*.db

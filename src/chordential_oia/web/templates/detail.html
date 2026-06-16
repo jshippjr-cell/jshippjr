@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, align_bar %}
+{% block title %}{{ row['need'] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <div class="pill-row">
+      {{ action_pill(row['action']) }} {{ tier_pill(row['tier']) }} {{ status_pill(row['status']) }}
+      <span class="pill ghost">{{ row['confidence'] }} confidence</span>
+    </div>
+    <h1 class="detail-title">{{ row['need'] }}</h1>
+    <div class="detail-buyer">
+      <a href="/buyer/{{ row['client']|urlencode }}">{{ row['client'] }}</a>
+      <span class="muted">· {{ row['buyer_type'].replace('_',' ')|title }}{% if row['location'] %} · {{ row['location'] }}{% endif %}</span>
+    </div>
+  </div>
+  <div class="detail-fit">
+    <div class="big-num">{{ row['alignment']|pct }}</div>
+    <div class="muted">qualification fit</div>
+  </div>
+</div>
+
+<div class="subnav">
+  <a class="active" href="/opportunity/{{ row['id'] }}">Overview</a>
+  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
+  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
+  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Opportunity</h2></div>
+    <p class="prose">{{ row['description'] or 'No description captured.' }}</p>
+    <table class="kv">
+      <tr><td>Discipline</td><td>{{ row['discipline'].replace('_',' ')|title }}{% if qual.secondary_disciplines %} <span class="muted">(+ {{ qual.secondary_disciplines|map(attribute='label')|join(', ') }})</span>{% endif %}</td></tr>
+      <tr><td>Music requirement</td><td>{{ opp.music_requirement.label }}</td></tr>
+      <tr><td>Budget</td><td>{{ opp.budget_display() }}</td></tr>
+      <tr><td>Opportunity score</td><td>{{ row['score']|pct }} · {{ row['win_probability'] }} win probability</td></tr>
+      <tr><td>Recommended team</td><td>{{ qual.team_shape|join(', ') if qual.team_shape else '—' }}</td></tr>
+      <tr><td>Decision maker</td><td>{{ scored.decision_maker }}</td></tr>
+      <tr><td>Source</td><td>{{ row['source'] }}{% if row['url'] %} · <a class="link" href="{{ row['url'] }}">link</a>{% endif %}</td></tr>
+    </table>
+    <p class="summary-line">{{ qual.fit_summary }}</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Win / loss tracking</h2></div>
+    <div class="status-now">Current status: {{ status_pill(row['status']) }}
+      {% if row['outcome_value'] %}<span class="muted">· {{ row['outcome_value']|money }}</span>{% endif %}</div>
+    <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/status">
+      <label>Update pipeline status</label>
+      <div class="status-buttons">
+        {% for s in PIPELINE_STATES %}
+        <button class="btn pill-btn st-{{ status_class(s) }} {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ s }}</button>
+        {% endfor %}
+      </div>
+      <label for="ov">Outcome value (for Won deals)</label>
+      <input id="ov" type="number" name="outcome_value" step="100" placeholder="e.g. 9000"
+             value="{{ row['outcome_value'] or '' }}">
+      <button class="btn primary" type="submit">Save status</button>
+    </form>
+
+    <div class="card-head" style="margin-top:20px"><h2>Notes</h2></div>
+    <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/notes">
+      <textarea name="notes" rows="4" placeholder="Pursuit notes, contacts, next steps…">{{ row['notes'] }}</textarea>
+      <button class="btn" type="submit">Save notes</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

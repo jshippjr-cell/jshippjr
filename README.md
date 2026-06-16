@@ -109,6 +109,36 @@ chordential-oia --email path/to/intake-inbox/   --qualify   # a whole folder
 chordential-oia --list-sources
 ```
 
+## Web dashboard — the Procurement OS (`chordential-web`)
+
+The user-facing product: a CRM-style dashboard where opportunities are stored,
+viewed, filtered, ranked, and managed — designed as the operating system for
+commercial music procurement (Salesforce/HubSpot/Monday/GovWin, tuned for music).
+
+```bash
+pip install -e ".[web]"      # FastAPI + uvicorn + jinja2 + multipart
+chordential-web              # seeds a local SQLite DB, serves http://127.0.0.1:8000
+# or: uvicorn chordential_oia.web.app:app --reload
+```
+
+It includes every required surface:
+
+- **Executive summary** — win rate, pipeline value, won value, pursue/review
+  counts, discipline mix.
+- **Opportunity inbox** — searchable, filterable (action/tier/discipline/buyer/
+  status), sortable table.
+- **Pipeline lanes** — Pursue / Review / Pass kanban.
+- **Opportunity detail** — overview + win/loss tracking + notes.
+- **Qualification rationale** — the 5-dimension rubric breakdown, reasons, gaps.
+- **Budget estimate** — the ratified Phase-1 expert model (role hours ×
+  complexity multipliers), clearly labeled uncalibrated.
+- **Buyer profile** — per-buyer history, win rate, and value.
+
+Storage is SQLite (`chordential.db`, override with `CHORDENTIAL_DB`); all
+evaluation comes from the existing qualification + scoring engines — the web
+layer adds **no** scoring logic of its own. The schema maps onto Postgres/Supabase
+for production.
+
 ## Email-alert intake (`--email`) — finding real leads
 
 Demo sources return representative data. To evaluate **real** opportunities,

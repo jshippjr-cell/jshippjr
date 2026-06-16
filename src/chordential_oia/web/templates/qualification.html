@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import action_pill, align_bar %}
+{% block title %}Qualification · {{ row['need'] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">{{ row['need'][:40] }}</a> / Qualification{% endblock %}
+{% block content %}
+
+<div class="subnav">
+  <a href="/opportunity/{{ row['id'] }}">Overview</a>
+  <a class="active" href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
+  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
+  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
+</div>
+
+<div class="verdict card {{ action_class(qual.recommended_action.value) }}">
+  <div>
+    <div class="verdict-label">Verdict</div>
+    <div class="verdict-action">{{ qual.recommended_action.value }}</div>
+    <div class="muted">{{ qual.discipline.label }} · {{ qual.confidence.value }} confidence
+      {% if qual.needs_human_review %}· flagged for human review{% endif %}</div>
+  </div>
+  <div class="verdict-fit">
+    <div class="big-num">{{ qual.alignment_pct|pct }}</div>
+    <div class="muted">alignment</div>
+  </div>
+</div>
+
+<p class="summary-line big">{{ qual.fit_summary }}</p>
+
+{% if not qual.qualified %}
+<section class="card">
+  <div class="card-head"><h2>Disqualified at the hard gate</h2></div>
+  <ul class="reason-list bad">
+    {% for d in qual.disqualifiers %}<li>✗ {{ d }}</li>{% endfor %}
+  </ul>
+  <p class="muted">Stored for full recall — never alerted, but queryable.</p>
+</section>
+{% else %}
+<section class="card">
+  <div class="card-head"><h2>Rubric breakdown</h2><span class="muted">5 weighted dimensions → alignment</span></div>
+  <table class="table">
+    <thead><tr><th>Dimension</th><th>Signal</th><th style="width:34%">Strength</th><th>Pts</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for b in qual.breakdown %}
+      <tr>
+        <td class="strong">{{ b.name }}</td>
+        <td>{{ (b.normalized*100)|round|int }}%</td>
+        <td>{{ align_bar((b.normalized*100)|round|int) }}</td>
+        <td>{{ b.points|round(1) }} <span class="muted">/ {{ b.weight|int }}</span></td>
+        <td class="muted small">{{ b.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Why it fits</h2></div>
+    <ul class="reason-list good">
+      {% for r in qual.fit_reasons %}<li>✓ {{ r }}</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Gaps &amp; questions</h2></div>
+    <ul class="reason-list warn">
+      {% for g in qual.gaps %}<li>? {{ g }}</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

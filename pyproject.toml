@@ -14,13 +14,18 @@ keywords = ["music", "opportunities", "rfp", "procurement", "scoring", "agent"]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "httpx>=0.24"]
+web = ["fastapi>=0.110", "uvicorn>=0.23", "jinja2>=3.1", "python-multipart>=0.0.6"]
 
 [project.scripts]
 chordential-oia = "chordential_oia.cli:main"
+chordential-web = "chordential_oia.web.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"chordential_oia.web" = ["templates/*.html", "static/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

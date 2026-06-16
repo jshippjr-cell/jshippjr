@@ -1,0 +1,34 @@
+{% macro action_pill(action) %}
+<span class="pill {{ action_class(action) }}">{{ action }}</span>
+{% endmacro %}
+
+{% macro tier_pill(tier) %}
+<span class="pill tier-{{ tier_class(tier) }}">{{ tier }}</span>
+{% endmacro %}
+
+{% macro status_pill(status) %}
+<span class="pill st-{{ status_class(status) }}">{{ status }}</span>
+{% endmacro %}
+
+{% macro align_bar(value) %}
+<div class="align">
+  <div class="align-track"><div class="align-fill" style="width: {{ value }}%"></div></div>
+  <span class="align-num">{{ value|pct }}</span>
+</div>
+{% endmacro %}
+
+{% macro opp_card(r) %}
+<a class="card opp-card" href="/opportunity/{{ r['id'] }}">
+  <div class="opp-card-top">
+    {{ action_pill(r['action']) }}
+    {{ tier_pill(r['tier']) }}
+  </div>
+  <div class="opp-card-need">{{ r['need'] }}</div>
+  <div class="opp-card-client">{{ r['client'] }}</div>
+  <div class="opp-card-meta">
+    <span>{{ r['discipline'].replace('_',' ')|title }}</span>
+    <span>{{ r['budget_max'] or r['budget_min'] | money if (r['budget_max'] or r['budget_min']) else '—' }}</span>
+  </div>
+  {{ align_bar(r['alignment']) }}
+</a>
+{% endmacro %}

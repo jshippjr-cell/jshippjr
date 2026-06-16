@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Chordential{% endblock %} · Procurement OS</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">◆</div>
+      <div class="brand-text">
+        <strong>Chordential</strong>
+        <span>Procurement OS</span>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Dashboard</a>
+      <a href="/inbox" class="{{ 'active' if nav=='inbox' }}"><span class="ico">▤</span> Opportunity Inbox</a>
+      <a href="/lanes" class="{{ 'active' if nav=='lanes' }}"><span class="ico">▥</span> Pipeline Lanes</a>
+    </nav>
+    <div class="nav-section">Intelligence</div>
+    <nav class="nav">
+      <a href="/inbox?action=Pursue"><span class="dot pursue"></span> Pursue queue</a>
+      <a href="/inbox?action=Review"><span class="dot review"></span> Review queue</a>
+      <a href="/inbox?status=Won"><span class="dot won"></span> Won deals</a>
+    </nav>
+    <div class="sidebar-foot">
+      <span>Music procurement intelligence</span>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-title">{% block heading %}{% endblock %}</div>
+      <form class="topbar-search" action="/inbox" method="get">
+        <input type="search" name="q" placeholder="Search opportunities, buyers, locations…">
+      </form>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+</body>
+</html>

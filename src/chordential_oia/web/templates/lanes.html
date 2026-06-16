@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import opp_card %}
+{% block title %}Pipeline Lanes{% endblock %}
+{% block heading %}Pipeline Lanes{% endblock %}
+{% block content %}
+
+<div class="lanes">
+  <div class="lane lane-pursue">
+    <div class="lane-head"><span class="dot pursue"></span> Pursue <span class="lane-count">{{ pursue|length }}</span></div>
+    <div class="lane-sub">Qualified · aligned · alertable</div>
+    <div class="lane-body">
+      {% for r in pursue %}{{ opp_card(r) }}{% else %}<div class="lane-empty">Nothing to pursue.</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="lane lane-review">
+    <div class="lane-head"><span class="dot review"></span> Review <span class="lane-count">{{ review|length }}</span></div>
+    <div class="lane-sub">Qualified · needs a human decision</div>
+    <div class="lane-body">
+      {% for r in review %}{{ opp_card(r) }}{% else %}<div class="lane-empty">Review queue is clear.</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="lane lane-pass">
+    <div class="lane-head"><span class="dot pass"></span> Pass <span class="lane-count">{{ passed|length }}</span></div>
+    <div class="lane-sub">Disqualified · retained for full recall</div>
+    <div class="lane-body">
+      {% for r in passed %}{{ opp_card(r) }}{% else %}<div class="lane-empty">No disqualified items.</div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

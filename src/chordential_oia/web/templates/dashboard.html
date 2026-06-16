@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_macros.html" import action_pill, tier_pill, align_bar %}
+{% block title %}Executive Summary{% endblock %}
+{% block heading %}Executive Summary{% endblock %}
+{% block content %}
+
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="kpi-label">Opportunities tracked</div>
+    <div class="kpi-value">{{ metrics.total }}</div>
+    <div class="kpi-sub">{{ metrics.qualified }} qualified</div>
+  </div>
+  <div class="kpi accent-pursue">
+    <div class="kpi-label">Pursue queue</div>
+    <div class="kpi-value">{{ metrics.pursue }}</div>
+    <div class="kpi-sub">alertable, high-fit</div>
+  </div>
+  <div class="kpi accent-review">
+    <div class="kpi-label">Awaiting review</div>
+    <div class="kpi-value">{{ metrics.review }}</div>
+    <div class="kpi-sub">needs a human look</div>
+  </div>
+  <div class="kpi accent-won">
+    <div class="kpi-label">Win rate</div>
+    <div class="kpi-value">{{ metrics.win_rate|pct }}</div>
+    <div class="kpi-sub">{{ metrics.won }}W · {{ metrics.lost }}L</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Open pipeline value</div>
+    <div class="kpi-value">{{ metrics.pipeline_value|money }}</div>
+    <div class="kpi-sub">{{ metrics.pursuing }} active deals</div>
+  </div>
+  <div class="kpi accent-won">
+    <div class="kpi-label">Won value</div>
+    <div class="kpi-value">{{ metrics.won_value|money }}</div>
+    <div class="kpi-sub">closed revenue</div>
+  </div>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head">
+      <h2>Top pursue targets</h2>
+      <a class="link" href="/inbox?action=Pursue">View all →</a>
+    </div>
+    <table class="table compact">
+      <thead><tr><th>Opportunity</th><th>Buyer</th><th>Fit</th><th></th></tr></thead>
+      <tbody>
+        {% for r in top %}
+        <tr>
+          <td><a class="strong" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a></td>
+          <td class="muted">{{ r['client'] }}</td>
+          <td style="width:140px">{{ align_bar(r['alignment']) }}</td>
+          <td>{{ tier_pill(r['tier']) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No pursue targets yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Pipeline mix</h2>
+    </div>
+    <div class="mix">
+      {% for name, n in metrics.by_discipline %}
+      <div class="mix-row">
+        <span class="mix-label">{{ name.replace('_',' ')|title }}</span>
+        <div class="mix-bar"><div class="mix-fill" style="width: {{ (n / metrics.qualified * 100) if metrics.qualified else 0 }}%"></div></div>
+        <span class="mix-num">{{ n }}</span>
+      </div>
+      {% else %}
+      <p class="muted">No qualified opportunities yet.</p>
+      {% endfor %}
+    </div>
+    <div class="card-head" style="margin-top:18px"><h2>Needs review</h2>
+      <a class="link" href="/inbox?action=Review">View all →</a></div>
+    <ul class="mini-list">
+      {% for r in review %}
+      <li><a href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a> <span class="muted">· {{ r['client'] }}</span></li>
+      {% else %}
+      <li class="muted">Review queue is clear.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+{% endblock %}
