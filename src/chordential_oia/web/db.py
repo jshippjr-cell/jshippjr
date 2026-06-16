@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
     contact_name TEXT,
     contact_email TEXT,
     contact_role TEXT,
+    contact_linkedin TEXT,
     next_action TEXT,
     next_action_due TEXT,
     last_contacted TEXT
@@ -150,6 +151,7 @@ _OUTREACH_COLUMNS = {
     "contact_name": "TEXT",
     "contact_email": "TEXT",
     "contact_role": "TEXT",
+    "contact_linkedin": "TEXT",
     "next_action": "TEXT",
     "next_action_due": "TEXT",
     "last_contacted": "TEXT",
@@ -411,16 +413,22 @@ def update_outreach(
     contact_role: str = "",
     next_action: str = "",
     next_action_due: str = "",
+    contact_linkedin: str = "",
 ) -> None:
-    """Persist the human-managed outreach fields (contact + the single next action)."""
+    """Persist the human-managed outreach fields (contact + the single next action).
+
+    ``contact_linkedin`` is normalized to a working URL (a bare handle/host gains
+    an ``https://`` scheme) so the profile link is always clickable.
+    """
     conn.execute(
         """UPDATE opportunities
            SET contact_name = ?, contact_email = ?, contact_role = ?,
-               next_action = ?, next_action_due = ?
+               contact_linkedin = ?, next_action = ?, next_action_due = ?
            WHERE id = ?""",
         (
             contact_name or None, contact_email or None, contact_role or None,
-            next_action or None, next_action_due or None, opp_id,
+            _normalize_url(contact_linkedin), next_action or None,
+            next_action_due or None, opp_id,
         ),
     )
     conn.commit()

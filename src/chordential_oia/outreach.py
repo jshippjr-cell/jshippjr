@@ -51,6 +51,7 @@ class OutreachPlan:
     primary_channel: str
     steps: List[OutreachStep]
     first_touch_message: str
+    email_subject: str = ""
     qualified: bool = True
     assumptions: List[str] = field(default_factory=list)
 
@@ -118,6 +119,8 @@ def build_outreach_plan(
         f"Chordential can move fast on this; indicative range {cost_range}. "
         "Open to a quick 15-minute call this week to talk scope?"
     )
+    # Subject line for the one-click mailto draft (kept short and concrete).
+    email_subject = f"{opp.need} — Chordential"
 
     steps: List[OutreachStep] = []
     is_gov = opp.buyer_type is BuyerType.GOVERNMENT
@@ -163,6 +166,7 @@ def build_outreach_plan(
         primary_channel=primary_channel,
         steps=steps,
         first_touch_message=first_touch_message,
+        email_subject=email_subject,
         qualified=qual.qualified,
         assumptions=[
             "Sequenced deterministically from the qualification, estimate, and "

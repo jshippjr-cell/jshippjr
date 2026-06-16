@@ -203,6 +203,9 @@ a{color:inherit;text-decoration:none}
 .website-ico{font-size:13px}
 .website-form input{background:var(--white);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:13px;min-width:180px}
 .website-form input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,103,31,.12)}
+.reach-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.reach-actions a{text-decoration:none}
+.reach-hint{margin:8px 0 14px}
 .prose{color:var(--muted);line-height:1.65}
 .kv{width:100%;border-collapse:collapse;margin-top:10px}
 .kv td{padding:9px 0;border-bottom:1px solid var(--border);vertical-align:top}

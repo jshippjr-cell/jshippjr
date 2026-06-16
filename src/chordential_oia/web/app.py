@@ -364,12 +364,13 @@ def set_outreach(
     contact_role: str = Form(""),
     next_action: str = Form(""),
     next_action_due: str = Form(""),
+    contact_linkedin: str = Form(""),
 ):
     conn = db.connect()
     try:
         db.update_outreach(
             conn, opp_id, contact_name, contact_email, contact_role,
-            next_action, next_action_due,
+            next_action, next_action_due, contact_linkedin,
         )
     finally:
         conn.close()

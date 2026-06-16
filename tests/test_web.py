@@ -136,6 +136,34 @@ def test_outreach_contact_and_followup_persist(client):
     assert "Send intro email + reel" in dash
 
 
+def test_outreach_email_and_linkedin_links(client):
+    # Save a contact email + LinkedIn, then confirm both render as clickable links:
+    # a mailto with the pitch prefilled, and the LinkedIn profile (normalized).
+    client.post(
+        "/opportunity/1/outreach",
+        data={
+            "contact_name": "Dana Reyes",
+            "contact_email": "dana@acme.com",
+            "contact_linkedin": "linkedin.com/in/danareyes",
+            "next_action": "Send intro",
+        },
+        follow_redirects=True,
+    )
+    page = client.get("/opportunity/1/outreach").text
+    # mailto link addressed to the contact, carrying a subject + body (the pitch).
+    assert "mailto:dana@acme.com?subject=" in page
+    assert "&amp;body=" in page  # body of the email prefilled
+    # LinkedIn handle was normalized to a working https:// profile link.
+    assert 'href="https://linkedin.com/in/danareyes"' in page
+    assert "LinkedIn profile" in page
+
+
+def test_outreach_email_link_works_without_saved_email(client):
+    # Even with no contact email captured, the compose draft is offered.
+    page = client.get("/opportunity/2/outreach").text
+    assert "mailto:?subject=" in page  # empty recipient, template still prefilled
+
+
 def test_outreach_event_logs_and_stamps_contact(client):
     client.post(
         "/opportunity/2/outreach/event",

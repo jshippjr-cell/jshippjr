@@ -38,6 +38,13 @@ def test_plan_assembles_from_engines():
     assert "$" in p.first_touch_message  # indicative range present
 
 
+def test_plan_supplies_an_email_subject():
+    p = _plan_for(_agency())
+    # A concrete subject line backs the one-click mailto draft.
+    assert p.email_subject
+    assert _agency().need in p.email_subject
+
+
 def test_render_text_is_copyable_and_complete():
     text = _plan_for(_agency()).render_text()
     for marker in ("OUTREACH PLAN", "Contact:", "Urgency:", "First-touch message:",

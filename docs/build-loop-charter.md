@@ -112,6 +112,13 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Roadmap note:** marked **Invite to the app** as the single partial supply stage — funnel states exist, but real multi-user accounts/login/email for creators is the bigger build that bridges to Model C, deferred until the demand-side moat justifies a second user surface.
 - **Status:** ✅ built; QA green (screenshot caveat above).
 
+### Cycle 12 — 2026-06-16 — Outreach page: one-click email + LinkedIn links
+- **Roadmap stage:** Demand side → **Outreach-to-win** (enhancement — turn the drafted plan into action without copy-paste).
+- **Build:** the Outreach page now surfaces two clickable reach-out actions on the contact card. **✉ Compose email** is a `mailto:` to the saved contact that opens the user's mail client with a prefilled draft — a concrete subject (`{need} — Chordential`, new `OutreachPlan.email_subject`) and the existing deterministic first-touch pitch as the body (both URL-encoded). It works even before an email is captured (empty recipient, template still prefilled). **in LinkedIn profile ↗** opens the contact's profile in a new tab, shown only when a LinkedIn URL is saved. New persisted field `contact_linkedin` (migration-safe column added to `_OUTREACH_COLUMNS`), normalized to a working `https://` URL via the existing `_normalize_url`; added to the contact form and threaded through `update_outreach` + the `/outreach` POST.
+- **Acceptance:** email link is a mailto to the contact carrying subject + body; works with no saved email; LinkedIn link present only when set and normalized; field persists; migration-safe; suite green.
+- **QA:** 136 tests pass (3 new — mailto with subject+body, mailto with empty recipient, normalized LinkedIn link; plus a unit test for `email_subject`). Rendered href verified well-formed (`mailto:dana@acme.com?subject=…&body=Hi…`, `https://linkedin.com/in/danareyes`). Screenshot caveat unchanged (sandbox blocks the Playwright download); structural HTML + tests stood in.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

@@ -53,11 +53,25 @@
 <div class="cols-2">
   <section class="card">
     <div class="card-head"><h2>Contact &amp; next action</h2></div>
+
+    <div class="reach-actions">
+      <a class="btn primary" href="mailto:{{ row['contact_email'] or '' }}?subject={{ plan.email_subject|urlencode }}&amp;body={{ plan.first_touch_message|urlencode }}">✉ Compose email</a>
+      {% if row['contact_linkedin'] %}
+      <a class="btn" href="{{ row['contact_linkedin'] }}" target="_blank" rel="noopener">in LinkedIn profile ↗</a>
+      {% endif %}
+    </div>
+    <p class="muted small reach-hint">
+      {% if row['contact_email'] %}Opens your mail client to <strong>{{ row['contact_email'] }}</strong> with the first-touch pitch prefilled.
+      {% else %}Drafts the first-touch pitch in your mail client — add the contact email below to address it.{% endif %}
+    </p>
+
     <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/outreach">
       <label>Contact name</label>
       <input type="text" name="contact_name" value="{{ row['contact_name'] or '' }}" placeholder="e.g. Dana Reyes">
       <label>Contact email</label>
       <input type="email" name="contact_email" value="{{ row['contact_email'] or '' }}" placeholder="name@buyer.com">
+      <label>Contact LinkedIn</label>
+      <input type="url" name="contact_linkedin" value="{{ row['contact_linkedin'] or '' }}" placeholder="linkedin.com/in/…">
       <label>Contact role</label>
       <input type="text" name="contact_role" value="{{ row['contact_role'] or plan.target_contact }}" placeholder="{{ plan.target_contact }}">
       <label>Next action</label>
