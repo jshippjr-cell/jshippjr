@@ -197,6 +197,41 @@ def test_relationship_reflects_outreach_and_wins(client):
     assert "Client" in client.get("/buyers").text
 
 
+def test_opportunity_overview_action_bar(client):
+    # Reset to New so the advance button is deterministic (seed may stage opp 1).
+    client.post("/opportunity/1/status", data={"status": "New"}, follow_redirects=True)
+    page = client.get("/opportunity/1").text
+    # The Overview carries a quick-action bar with the common next steps.
+    assert "action-bar" in page
+    assert "Pursuit brief" in page
+    assert "Plan outreach" in page
+    assert "Talent match" in page
+    # A New opportunity offers a one-click advance to the next pipeline stage.
+    assert "Mark Pursuing" in page
+
+
+def test_action_bar_advances_pipeline_status(client):
+    # The bar's advance button moves New -> Pursuing in one click.
+    client.post("/opportunity/1/status", data={"status": "Pursuing"}, follow_redirects=True)
+    page = client.get("/opportunity/1").text
+    assert "Mark Submitted" in page  # next step now offered
+    assert "Mark Pursuing" not in page
+
+
+def test_company_website_persists_and_displays(client):
+    import re
+    detail = client.get("/opportunity/1").text
+    m = re.search(r'href="(/buyer/[^"]+)"', detail)
+    assert m, "buyer link not found"
+    buyer_url = m.group(1)
+    # A bare host is normalized to an https:// link and shown compactly.
+    client.post(f"{buyer_url}/website", data={"website": "acme-music.com"},
+                follow_redirects=True)
+    page = client.get(buyer_url).text
+    assert 'href="https://acme-music.com"' in page
+    assert "acme-music.com" in page  # compact display (scheme stripped)
+
+
 def test_talent_roster_seeds_and_renders(client):
     r = client.get("/talent")
     assert r.status_code == 200

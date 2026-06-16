@@ -33,6 +33,20 @@
   <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
 </div>
 
+<div class="action-bar">
+  {% if next_status %}
+  <form method="post" action="/opportunity/{{ row['id'] }}/status">
+    <input type="hidden" name="status" value="{{ next_status }}">
+    <button class="btn primary" type="submit">→ Mark {{ next_status }}</button>
+  </form>
+  {% endif %}
+  <a class="btn" href="/opportunity/{{ row['id'] }}/brief">📋 Pursuit brief</a>
+  <a class="btn" href="/opportunity/{{ row['id'] }}/outreach">✉ Plan outreach</a>
+  <a class="btn" href="/opportunity/{{ row['id'] }}/match">🎬 Talent match</a>
+  {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
+  {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
+</div>
+
 {% if sv.callout and row['qualified'] %}
 <div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>
 {% endif %}

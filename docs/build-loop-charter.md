@@ -104,6 +104,14 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Deferred to next cycle:** the editable **Company website** field (new column + edit UI) and the Opportunity-Overview action bar.
 - **Status:** ✅ built; QA green (screenshot caveat above).
 
+### Cycle 11 — 2026-06-16 — Deferred demand-side polish: Company website + Overview action bar
+- **Roadmap stage:** Demand side → decision-surface polish (clears the two items the Cycle 10 log explicitly deferred).
+- **Build:** (A) **Company website** — a new `companies` table (migration-safe; buyers are still aggregated by client name, this holds the few attributes that belong to the company itself) with `get_company`/`company_website`/`set_company_website` (upsert, URL-normalized: a bare host gains an `https://` scheme). Editable inline on the Buyer profile header; rendered as a compact scheme-stripped link via a new `displayurl` filter. (B) **Opportunity-Overview action bar** — a quick-action row under the subnav: one-click pipeline advance (New→Pursuing→Submitted; **Won is intentionally omitted so closing still routes through the win/loss form that captures the value**) plus jump buttons to Pursuit brief / Plan outreach / Talent match, Open project (when one exists), and the original posting.
+- **Acceptance:** website persists + normalizes + displays compactly; edit repopulates; action bar shows the correct next-status (or none past Submitted) and the jump links; migration-safe; suite green.
+- **QA:** 133 tests pass (3 new — action bar present, advance moves New→Pursuing→Submitted, website persists/normalizes/displays). Rendered HTML verified for both surfaces (advance button + links; normalized `https://acme-music.com` link with compact display). **Pixel screenshot not captured — the sandbox network policy still blocks the Playwright browser download;** structural HTML + tests stood in (same caveat as Cycle 10).
+- **Roadmap note:** marked **Invite to the app** as the single partial supply stage — funnel states exist, but real multi-user accounts/login/email for creators is the bigger build that bridges to Model C, deferred until the demand-side moat justifies a second user surface.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

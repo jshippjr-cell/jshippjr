@@ -63,7 +63,7 @@ relationships?*
 | **Identify required labor** | From a won/qualified project, derive the roles needed (composer, mixer, sound designer, …) | ✅ | Cycle 7 — roles carried from the estimator's `team_shape` into the project |
 | **Recruit talent** | Pipeline of skilled creators to invite into the network | ✅ | Cycle 5 — roster, profile/credits, reel-review gate, funnel |
 | **Talent match** | Match creators to a project on **profile + credits**, plus a **demo-reel upload area Jon personally reviews** | ✅ | Cycle 6 — `matching.py`. **Decision: profile + credits matching, NOT audio AI.** Reel reviewed by Jon (human-in-the-loop). |
-| **Invite to the app** | Bring matched talent into Chordential as users | ◑ | Cycle 5 — funnel states (Prospect→Invited→Joined) built; real auth/email/multi-user is later |
+| **Invite to the app** | Bring matched talent into Chordential as users | ◑ | Cycle 5 — funnel states (Prospect→Invited→Joined) built. **The one partial supply stage.** Real multi-user accounts / login / email for creators is a bigger build — it is the explicit **bridge to Model C** (the marketplace) and is deferred until the demand-side moat justifies opening a second user surface. |
 | **Assign to project** | Attach creators to a won project with roles | ✅ | Cycle 7 — **Jon assigns (decision rights below); nothing auto-assigns.** App surfaces full buyer-side + talent-side detail and ranked matches; Jon presses Assign. |
 | **Track progress** | Per-project task/milestone status | ✅ | Cycle 8 — milestones per role, progress bar (feeds Phase-3 estimation actuals) |
 | **Broadcast progress** | Push status to everyone assigned to the project | ✅ | Cycle 9 — project activity feed; auto-posts + manual broadcast to the assigned crew |

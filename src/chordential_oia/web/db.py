@@ -131,6 +131,14 @@ CREATE TABLE IF NOT EXISTS project_updates (
     kind TEXT DEFAULT 'update',
     created_at TEXT
 );
+
+-- Company-level metadata (buyers are aggregated by client name; this table holds
+-- the few attributes that belong to the company itself, not a single opportunity).
+CREATE TABLE IF NOT EXISTS companies (
+    client TEXT PRIMARY KEY,
+    website TEXT,
+    updated_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -214,6 +222,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL, body TEXT,
             kind TEXT DEFAULT 'update', created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS companies (
+            client TEXT PRIMARY KEY, website TEXT, updated_at TEXT
         )"""
     )
     conn.commit()
@@ -493,6 +506,45 @@ def buyer_touch_summary(conn: sqlite3.Connection, client: str) -> sqlite3.Row:
            WHERE o.client = ?""",
         (client,),
     ).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# Company-level metadata (website, …)
+# --------------------------------------------------------------------------- #
+def _normalize_url(raw: Optional[str]) -> Optional[str]:
+    """Tidy a hand-entered website into a linkable URL (None when blank).
+
+    Adds an ``https://`` scheme when the user typed a bare host so the stored
+    value is always a working link.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = "https://" + raw
+    return raw
+
+
+def get_company(conn: sqlite3.Connection, client: str) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM companies WHERE client = ?", (client,)
+    ).fetchone()
+
+
+def company_website(conn: sqlite3.Connection, client: str) -> Optional[str]:
+    row = get_company(conn, client)
+    return row["website"] if row else None
+
+
+def set_company_website(conn: sqlite3.Connection, client: str, website: str) -> None:
+    """Upsert the company's website (normalized; blank clears it)."""
+    conn.execute(
+        """INSERT INTO companies (client, website, updated_at) VALUES (?,?,?)
+           ON CONFLICT(client) DO UPDATE SET
+               website = excluded.website, updated_at = excluded.updated_at""",
+        (client, _normalize_url(website), datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
 
 
 def buyer_contacts(conn: sqlite3.Connection, client: str) -> List[sqlite3.Row]:

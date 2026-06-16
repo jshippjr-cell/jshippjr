@@ -58,6 +58,18 @@ def slug(value: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in (value or "").lower()).strip("-")
 
 
+def displayurl(value: Optional[str]) -> str:
+    """Render a stored URL compactly — drop the scheme and any trailing slash."""
+    if not value:
+        return "—"
+    return value.split("://", 1)[-1].rstrip("/")
+
+
+# One-click pipeline advance for the Overview action bar. Won is intentionally
+# omitted — closing a deal goes through the win/loss form so the value is captured.
+_NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
+
+
 _ACTION_CLASS = {"Pursue": "pursue", "Review": "review", "Watch": "watch", "Pass": "pass"}
 _TIER_CLASS = {"A-Tier": "a", "B-Tier": "b", "C-Tier": "c", "Watch": "watch"}
 _STATUS_CLASS = {
@@ -68,6 +80,7 @@ _STATUS_CLASS = {
 templates.env.filters["money"] = money
 templates.env.filters["pct"] = pct
 templates.env.filters["slug"] = slug
+templates.env.filters["displayurl"] = displayurl
 templates.env.globals["action_class"] = lambda a: _ACTION_CLASS.get(a, "")
 templates.env.globals["tier_class"] = lambda t: _TIER_CLASS.get(t, "")
 templates.env.globals["status_class"] = lambda s: _STATUS_CLASS.get(s, "")
@@ -230,6 +243,7 @@ def opportunity_detail(request: Request, opp_id: int):
         request, "detail.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
         sv=sv, buyer_count=len(buyer_rows), buyer_values=list(BuyerValue),
         project_id=(project["id"] if project else None),
+        next_status=_NEXT_STATUS.get(row["status"]),
     )
 
 
@@ -478,6 +492,7 @@ def buyer_profile(request: Request, client: str):
         rows = db.buyer_opportunities(conn, client)
         touch = db.buyer_touch_summary(conn, client)
         contacts = db.buyer_contacts(conn, client)
+        website = db.company_website(conn, client)
     finally:
         conn.close()
     if not rows:
@@ -526,7 +541,19 @@ def buyer_profile(request: Request, client: str):
     return render(
         request, "buyer.html", nav="buyers", summary=summary, rows=rows,
         rel=rel, contacts=contacts, last_contacted=touch["last_contacted"],
+        company_website=website,
     )
+
+
+@app.post("/buyer/{client}/website")
+def set_buyer_website(client: str, website: str = Form("")):
+    """Persist the company's website (a company-level attribute, not per-opp)."""
+    conn = db.connect()
+    try:
+        db.set_company_website(conn, client, website)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/buyer/{client}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

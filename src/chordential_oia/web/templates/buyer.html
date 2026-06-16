@@ -14,6 +14,14 @@
     </div>
     <h1 class="detail-title">{{ summary.client }}</h1>
     <div class="muted">{{ summary.disciplines|map('replace','_',' ')|map('title')|join(' · ') or 'No qualified disciplines yet' }}</div>
+    <form class="website-form" method="post" action="/buyer/{{ summary.client|urlencode }}/website">
+      <span class="website-ico">🔗</span>
+      {% if company_website %}
+      <a class="link" href="{{ company_website }}" target="_blank" rel="noopener">{{ company_website|displayurl }}</a>
+      {% endif %}
+      <input type="url" name="website" value="{{ company_website or '' }}" placeholder="company.com">
+      <button class="btn tiny" type="submit">Save</button>
+    </form>
   </div>
   <div class="detail-fit">
     <div class="big-num">{{ summary.avg_alignment|pct }}</div>
