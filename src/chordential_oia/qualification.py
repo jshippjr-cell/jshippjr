@@ -293,6 +293,7 @@ def score_on_craft_buyer(ctx: _QContext) -> Tuple[float, str]:
         BuyerType.BRAND: (1.0, "Brand buyer — real creative spend"),
         BuyerType.PRODUCTION_COMPANY: (0.9, "Production-company buyer"),
         BuyerType.GOVERNMENT: (0.5, "Government buyer — procurement-heavy"),
+        BuyerType.EDUCATIONAL: (0.5, "Educational buyer — procurement-heavy"),
         BuyerType.UNKNOWN: (0.4, "Buyer type unknown"),
     }[ctx.opp.buyer_type]
 

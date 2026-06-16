@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
 {% block title %}{{ row['need'] }}{% endblock %}
 {% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
 {% block content %}
@@ -8,6 +8,7 @@
   <div>
     <div class="pill-row">
       {{ action_pill(row['action']) }} {{ tier_pill(row['tier']) }} {{ status_pill(row['status']) }}
+      {{ strat_pill(sv.tier, sv.score) }}
       <span class="pill ghost">{{ row['confidence'] }} confidence</span>
     </div>
     <h1 class="detail-title">{{ row['need'] }}</h1>
@@ -28,6 +29,31 @@
   <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
   <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
 </div>
+
+{% if sv.callout and row['qualified'] %}
+<div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>
+{% endif %}
+
+<section class="card strat-card">
+  <div class="card-head"><h2>Strategic value <span class="muted">— CMO lens</span></h2>{{ strat_pill(sv.tier, sv.score) }}</div>
+  <div class="strat-grid">
+    <div class="strat-bars">
+      <div class="strat-row"><span>Buyer desirability</span>{{ align_bar((sv.buyer_desirability*100)|round|int) }}</div>
+      <div class="strat-row"><span>Relationship value</span>{{ align_bar((sv.relationship_value*100)|round|int) }}</div>
+      <p class="muted small">{{ sv.rationale }}{% if sv.inferred %} <em>(inferred — confirm below)</em>{% endif %}</p>
+    </div>
+    <form class="strat-form" method="post" action="/opportunity/{{ row['id'] }}/strategic">
+      <label>Buyer relationship value</label>
+      <select name="buyer_value">
+        {% for bv in buyer_values %}
+        <option value="{{ bv.value }}" {{ 'selected' if sv.buyer_value == bv }}>{{ bv.label }}</option>
+        {% endfor %}
+      </select>
+      <label class="check"><input type="checkbox" name="marquee" {{ 'checked' if sv.marquee }}> Marquee / door-opener buyer</label>
+      <button class="btn primary" type="submit">Recompute strategic value</button>
+    </form>
+  </div>
+</section>
 
 <div class="cols-2">
   <section class="card">

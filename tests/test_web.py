@@ -81,3 +81,22 @@ def test_buyer_profile(client):
 
 def test_missing_opportunity_404(client):
     assert client.get("/opportunity/99999").status_code == 404
+
+
+def test_strategic_value_on_detail_and_sort(client):
+    # Detail page surfaces the CMO Strategic-Value lens.
+    detail = client.get("/opportunity/1").text
+    assert "Strategic value" in detail
+    # Inbox can sort by strategic value without erroring.
+    assert client.get("/inbox", params={"order_by": "strategic"}).status_code == 200
+
+
+def test_set_strategic_inputs_recomputes(client):
+    # Marking a buyer as enterprise + marquee should raise its strategic standing.
+    r = client.post(
+        "/opportunity/1/strategic",
+        data={"buyer_value": "enterprise", "marquee": "on"},
+        follow_redirects=True,
+    )
+    assert r.status_code == 200
+    assert "Enterprise buyer" in r.text  # selected option reflected back

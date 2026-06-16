@@ -161,6 +161,7 @@ def score_buyer_type(opp: Opportunity) -> Tuple[float, str]:
         BuyerType.BRAND: (1.0, "Brand / marketing buyer"),
         BuyerType.PRODUCTION_COMPANY: (0.85, "Production-company buyer"),
         BuyerType.GOVERNMENT: (0.3, "Government buyer (procurement-heavy)"),
+        BuyerType.EDUCATIONAL: (0.4, "Educational buyer (procurement-heavy)"),
         BuyerType.UNKNOWN: (0.4, "Buyer type unknown"),
     }
     return mapping[opp.buyer_type]

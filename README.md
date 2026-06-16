@@ -128,6 +128,10 @@ It includes every required surface:
 - **Opportunity inbox** — searchable, filterable (action/tier/discipline/buyer/
   status), sortable table.
 - **Pipeline lanes** — Pursue / Review / Pass kanban.
+- **Strategic-Value lens (CMO)** — a third signal (buyer desirability × relationship
+  value × marquee door-opener) that can override raw budget in ranking, with a
+  spotlight for "small budget, big relationship" deals (a $2k agency brief ranked
+  above a $10k municipal one-off). Editable per opportunity; feeds the moat.
 - **Opportunity detail** — overview + win/loss tracking + notes.
 - **Qualification rationale** — the 5-dimension rubric breakdown, reasons, gaps.
 - **Budget estimate** — the ratified Phase-1 expert model (role hours ×

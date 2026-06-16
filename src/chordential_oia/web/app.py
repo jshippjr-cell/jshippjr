@@ -23,7 +23,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..models import MusicDiscipline
+from ..models import BuyerValue, MusicDiscipline
+from ..strategic import assess_strategic_value
 from . import db, seed
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -64,6 +65,8 @@ templates.env.filters["slug"] = slug
 templates.env.globals["action_class"] = lambda a: _ACTION_CLASS.get(a, "")
 templates.env.globals["tier_class"] = lambda t: _TIER_CLASS.get(t, "")
 templates.env.globals["status_class"] = lambda s: _STATUS_CLASS.get(s, "")
+_STRAT_CLASS = {"Door-opener": "door", "High": "high", "Medium": "medium", "Low": "low"}
+templates.env.globals["strat_class"] = lambda s: _STRAT_CLASS.get(s, "")
 templates.env.globals["PIPELINE_STATES"] = db.PIPELINE_STATES
 
 
@@ -99,10 +102,12 @@ def dashboard(request: Request):
         metrics = db.exec_metrics(conn)
         top = db.list_opportunities(conn, action="Pursue", order_by="alignment")[:6]
         review = db.list_opportunities(conn, action="Review", order_by="alignment")[:5]
+        spotlight = db.strategic_spotlight(conn)
     finally:
         conn.close()
     return render(
-        request, "dashboard.html", nav="dashboard", metrics=metrics, top=top, review=review
+        request, "dashboard.html", nav="dashboard", metrics=metrics, top=top,
+        review=review, spotlight=spotlight,
     )
 
 
@@ -191,9 +196,10 @@ def opportunity_detail(request: Request, opp_id: int):
     finally:
         conn.close()
     qual, scored = ev
+    sv = assess_strategic_value(opp)
     return render(
         request, "detail.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
-             buyer_count=len(buyer_rows)
+        sv=sv, buyer_count=len(buyer_rows), buyer_values=list(BuyerValue),
     )
 
 
@@ -235,6 +241,16 @@ def set_status(opp_id: int, status: str = Form(...), outcome_value: str = Form("
     try:
         value = float(outcome_value) if outcome_value.strip() else None
         db.update_status(conn, opp_id, status, value)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/strategic")
+def set_strategic(opp_id: int, buyer_value: str = Form("unknown"), marquee: str = Form("")):
+    conn = db.connect()
+    try:
+        db.update_strategic_inputs(conn, opp_id, buyer_value, bool(marquee.strip()))
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)

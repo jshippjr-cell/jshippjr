@@ -7,6 +7,7 @@ government, agency, corporate, production, and creative-industry sources.
 from .models import (
     AgencySize,
     BuyerType,
+    BuyerValue,
     CompetitionLevel,
     Confidence,
     MusicDiscipline,
@@ -20,6 +21,7 @@ from .models import (
     Tier,
     WinProbability,
 )
+from .strategic import StrategicValue, assess_strategic_value
 from .intake import parse_alert_email, parse_email_path
 from .qualification import (
     QUALIFICATION_WEIGHTS,
@@ -35,8 +37,11 @@ __version__ = "0.3.0"
 __all__ = [
     "AgencySize",
     "BuyerType",
+    "BuyerValue",
     "CompetitionLevel",
     "Confidence",
+    "StrategicValue",
+    "assess_strategic_value",
     "MusicDiscipline",
     "MusicRequirement",
     "Opportunity",

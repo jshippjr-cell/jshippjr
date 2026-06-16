@@ -55,6 +55,10 @@ _GOVERNMENT_KW = (
     "city of", "county", "federal", "department of", "municipal", "state of",
     "gov", "public affairs",
 )
+_EDUCATIONAL_KW = (
+    "university", "college", "school district", "k-12", "k12", "campus",
+    "academy", "institute of",
+)
 _ORIGINAL_KW = (
     "original", "compose", "composer", "score", "custom music", "write music",
     "anthem", "jingle", "underscore", "sonic logo", "sonic brand", "audio identity",
@@ -109,6 +113,8 @@ def _parse_money(text: str) -> Tuple[Optional[float], Optional[float]]:
 
 def _infer_buyer(text: str) -> BuyerType:
     t = text.lower()
+    if any(k in t for k in _EDUCATIONAL_KW):
+        return BuyerType.EDUCATIONAL
     if any(k in t for k in _GOVERNMENT_KW):
         return BuyerType.GOVERNMENT
     if any(k in t for k in _AGENCY_KW):

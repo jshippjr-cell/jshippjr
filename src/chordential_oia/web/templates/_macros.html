@@ -10,6 +10,10 @@
 <span class="pill st-{{ status_class(status) }}">{{ status }}</span>
 {% endmacro %}
 
+{% macro strat_pill(tier, value=None) %}
+<span class="pill sv-{{ strat_class(tier) }}">{% if tier=='Door-opener' %}🚪 {% endif %}{{ tier }}{% if value is not none %} · {{ value|round|int }}{% endif %}</span>
+{% endmacro %}
+
 {% macro align_bar(value) %}
 <div class="align">
   <div class="align-track"><div class="align-fill" style="width: {{ value }}%"></div></div>

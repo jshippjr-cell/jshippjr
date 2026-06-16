@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, strat_pill, align_bar %}
 {% block title %}Executive Summary{% endblock %}
 {% block heading %}Executive Summary{% endblock %}
 {% block content %}
@@ -36,6 +36,21 @@
     <div class="kpi-sub">closed revenue</div>
   </div>
 </div>
+
+{% if spotlight %}
+<section class="card spotlight">
+  <div class="card-head"><h2>🚪 Strategic spotlight <span class="muted">— small budget, big relationship (CMO)</span></h2></div>
+  <div class="spotlight-grid">
+    {% for r in spotlight %}
+    <a class="spot-card" href="/opportunity/{{ r['id'] }}">
+      {{ strat_pill(r['strategic_tier'], r['strategic_value']) }}
+      <div class="spot-need">{{ r['need'] }}</div>
+      <div class="muted small">{{ r['client'] }} · {{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else 'budget undisclosed' }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <div class="cols-2">
   <section class="card">

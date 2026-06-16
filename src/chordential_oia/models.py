@@ -78,6 +78,29 @@ class BuyerType(Enum):
     BRAND = "brand"  # brand / marketing team buying direct
     PRODUCTION_COMPANY = "production_company"  # film/TV/branded-content shop
     GOVERNMENT = "government"  # public sector / procurement
+    EDUCATIONAL = "educational"  # university / school / district
+
+
+class BuyerValue(Enum):
+    """Relationship value of the buyer over time (CMO Strategic-Value input).
+
+    Distinct from :class:`Relationship` (which tracks prior *contact*); this is
+    *how much future business* the buyer represents.
+    """
+
+    UNKNOWN = "unknown"
+    ONE_TIME = "one_time"  # single project, no expected repeat
+    REPEAT = "repeat"  # recurring / returning buyer
+    ENTERPRISE = "enterprise"  # multi-project / multi-year / portfolio buyer
+
+    @property
+    def label(self) -> str:
+        return {
+            BuyerValue.UNKNOWN: "Unknown",
+            BuyerValue.ONE_TIME: "One-time project",
+            BuyerValue.REPEAT: "Repeat buyer",
+            BuyerValue.ENTERPRISE: "Enterprise buyer",
+        }[self]
 
 
 class Tier(Enum):
@@ -150,6 +173,10 @@ class Opportunity:
     agency_size: AgencySize = AgencySize.UNKNOWN
     relationship: Relationship = Relationship.NONE
     decision_maker: Optional[str] = None
+
+    # --- CMO Strategic-Value inputs (buyer relationship value + door-opener) ---
+    buyer_value: BuyerValue = BuyerValue.UNKNOWN
+    marquee: bool = False  # marquee brand / named agency — a strategic door-opener
 
     # Arbitrary extra tags surfaced from the source (e.g. "cutdowns", "sync")
     tags: list = field(default_factory=list)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
 {% block title %}Opportunity Inbox{% endblock %}
 {% block heading %}Opportunity Inbox{% endblock %}
 {% block content %}
@@ -27,7 +27,7 @@
     {% for v in filters.status %}<option value="{{ v }}" {{ 'selected' if active.status==v }}>{{ v }}</option>{% endfor %}
   </select>
   <select name="order_by">
-    {% for key, label in [('alignment','Sort: Fit'),('score','Sort: Score'),('budget','Sort: Budget'),('client','Sort: Buyer'),('created','Sort: Newest')] %}
+    {% for key, label in [('alignment','Sort: Fit'),('strategic','Sort: Strategic'),('score','Sort: Score'),('budget','Sort: Budget'),('client','Sort: Buyer'),('created','Sort: Newest')] %}
     <option value="{{ key }}" {{ 'selected' if active.order_by==key }}>{{ label }}</option>{% endfor %}
   </select>
   <button class="btn" type="submit">Apply</button>
@@ -41,7 +41,7 @@
   <thead>
     <tr>
       <th>Opportunity</th><th>Buyer</th><th>Discipline</th><th>Budget</th>
-      <th>Fit</th><th>Tier</th><th>Action</th><th>Status</th>
+      <th>Fit</th><th>Strategic</th><th>Action</th><th>Status</th>
     </tr>
   </thead>
   <tbody>
@@ -52,8 +52,8 @@
       <td><a class="muted" href="/buyer/{{ r['client']|urlencode }}">{{ r['client'] }}</a></td>
       <td>{{ r['discipline'].replace('_',' ')|title }}</td>
       <td>{{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else '—' }}</td>
-      <td style="width:130px">{{ align_bar(r['alignment']) }}</td>
-      <td>{{ tier_pill(r['tier']) }}</td>
+      <td style="width:120px">{{ align_bar(r['alignment']) }}</td>
+      <td>{% if r['strategic_tier'] %}{{ strat_pill(r['strategic_tier'], r['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ action_pill(r['action']) }}</td>
       <td>{{ status_pill(r['status']) }}</td>
     </tr>

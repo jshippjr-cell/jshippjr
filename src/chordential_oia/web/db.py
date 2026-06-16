@@ -18,7 +18,8 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from ..models import BuyerType, MusicRequirement, Opportunity
+from ..models import BuyerType, BuyerValue, MusicRequirement, Opportunity
+from ..strategic import assess_strategic_value
 from .evaluate import evaluate
 
 DEFAULT_DB_PATH = os.environ.get("CHORDENTIAL_DB", "chordential.db")
@@ -52,6 +53,11 @@ CREATE TABLE IF NOT EXISTS opportunities (
     score REAL,
     tier TEXT,
     win_probability TEXT,
+    -- CMO Strategic-Value lens
+    buyer_value TEXT DEFAULT 'unknown',
+    marquee INTEGER DEFAULT 0,
+    strategic_value REAL,
+    strategic_tier TEXT,
     -- human pipeline
     status TEXT DEFAULT 'New',
     outcome_value REAL,
@@ -97,20 +103,24 @@ def opportunity_from_row(row: sqlite3.Row) -> Opportunity:
         budget_max=row["budget_max"],
         location=row["location"],
         tags=json.loads(row["tags"]) if row["tags"] else [],
+        buyer_value=_enum(row["buyer_value"], BuyerValue, BuyerValue.UNKNOWN),
+        marquee=bool(row["marquee"]),
     )
 
 
 def insert_opportunity(conn: sqlite3.Connection, opp: Opportunity) -> int:
-    """Evaluate (qualify + score) and store. Returns the new row id."""
+    """Evaluate (qualify + score + strategic value) and store. Returns row id."""
     q, s = evaluate(opp)
+    sv = assess_strategic_value(opp)
     cur = conn.execute(
         """
         INSERT INTO opportunities (
             client, need, description, source, source_tier, url, buyer_type,
             music_requirement, budget_min, budget_max, location, tags, created_at,
             qualified, discipline, alignment, action, confidence, needs_review,
-            score, tier, win_probability, status, outcome_value, notes
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            score, tier, win_probability, buyer_value, marquee, strategic_value,
+            strategic_tier, status, outcome_value, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             opp.client, opp.need, opp.description, opp.source, opp.source_tier,
@@ -120,11 +130,32 @@ def insert_opportunity(conn: sqlite3.Connection, opp: Opportunity) -> int:
             int(q.qualified), q.discipline.value, q.alignment_pct,
             q.recommended_action.value, q.confidence.value, int(q.needs_human_review),
             s.score, s.tier.value, s.win_probability.value,
+            opp.buyer_value.value, int(opp.marquee), sv.score, sv.tier,
             "Passed" if not q.qualified else "New", None, "",
         ),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def update_strategic_inputs(
+    conn: sqlite3.Connection, opp_id: int, buyer_value: str, marquee: bool
+) -> None:
+    """Persist human-set buyer value + marquee flag and recompute strategic value."""
+    row = conn.execute("SELECT * FROM opportunities WHERE id = ?", (opp_id,)).fetchone()
+    if row is None:
+        return
+    opp = opportunity_from_row(row)
+    opp.buyer_value = _enum(buyer_value, BuyerValue, BuyerValue.UNKNOWN)
+    opp.marquee = bool(marquee)
+    sv = assess_strategic_value(opp)
+    conn.execute(
+        """UPDATE opportunities
+           SET buyer_value = ?, marquee = ?, strategic_value = ?, strategic_tier = ?
+           WHERE id = ?""",
+        (opp.buyer_value.value, int(opp.marquee), sv.score, sv.tier, opp_id),
+    )
+    conn.commit()
 
 
 def opportunity_exists(conn: sqlite3.Connection, client: str, need: str) -> bool:
@@ -178,6 +209,7 @@ def list_opportunities(
     order_cols = {
         "alignment": "alignment DESC",
         "score": "score DESC",
+        "strategic": "strategic_value DESC",
         "budget": "COALESCE(budget_max, budget_min, 0) DESC",
         "client": "client ASC",
         "created": "created_at DESC",
@@ -235,6 +267,24 @@ def lane_counts(conn: sqlite3.Connection) -> Dict[str, int]:
         "SELECT action, COUNT(*) AS n FROM opportunities GROUP BY action"
     ).fetchall()
     return {r["action"]: r["n"] for r in rows}
+
+
+def strategic_spotlight(conn: sqlite3.Connection, limit: int = 5) -> List[sqlite3.Row]:
+    """Small-but-strategic opportunities: high strategic value, modest budget.
+
+    This is the CMO's headline — the '$2k agency beats $10k municipal' surface.
+    """
+    return conn.execute(
+        """
+        SELECT * FROM opportunities
+        WHERE qualified = 1
+          AND strategic_value >= 65
+          AND (COALESCE(budget_max, budget_min, 0) < 5000 OR budget_min IS NULL)
+        ORDER BY strategic_value DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
 
 
 def exec_metrics(conn: sqlite3.Connection) -> Dict:
