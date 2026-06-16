@@ -164,6 +164,29 @@ def test_outreach_email_link_works_without_saved_email(client):
     assert "mailto:?subject=" in page  # empty recipient, template still prefilled
 
 
+def test_outreach_autopopulates_linkedin_research(client):
+    # With nothing saved, the page auto-populates a LinkedIn research deep-link
+    # for the inferred decision-maker — no manual entry needed.
+    page = client.get("/opportunity/2/outreach").text
+    assert "linkedin.com/search/results/people" in page
+    # The LinkedIn field is pre-filled with that suggested URL.
+    assert ('name="contact_linkedin" '
+            'value="https://www.linkedin.com/search/results/people') in page
+    assert "Find on LinkedIn" in page
+    assert "auto-researched" in page.lower()
+
+
+def test_saved_linkedin_overrides_autoresearch(client):
+    # Pasting a verified profile takes over from the auto-built search link.
+    client.post("/opportunity/2/outreach",
+                data={"contact_linkedin": "linkedin.com/in/realperson"},
+                follow_redirects=True)
+    page = client.get("/opportunity/2/outreach").text
+    assert 'href="https://linkedin.com/in/realperson"' in page
+    assert "LinkedIn profile" in page
+    assert "search/results/people" not in page  # suggestion no longer shown
+
+
 def test_outreach_event_logs_and_stamps_contact(client):
     client.post(
         "/opportunity/2/outreach/event",

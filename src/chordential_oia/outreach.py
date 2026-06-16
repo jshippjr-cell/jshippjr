@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Optional
+from urllib.parse import quote_plus
 
 from .estimation import Estimate
 from .models import BuyerType, Opportunity, QualificationResult, ScoredOpportunity
@@ -52,6 +53,7 @@ class OutreachPlan:
     steps: List[OutreachStep]
     first_touch_message: str
     email_subject: str = ""
+    linkedin_search_url: str = ""
     qualified: bool = True
     assumptions: List[str] = field(default_factory=list)
 
@@ -76,6 +78,25 @@ class OutreachPlan:
             lines.append("Notes:")
             lines += [f"  - {a}" for a in self.assumptions]
         return "\n".join(lines)
+
+
+def _linkedin_research_url(target: str, company: str) -> str:
+    """A LinkedIn people-search deep-link for the inferred decision-maker.
+
+    Deterministic lead enrichment: we can't fetch a specific private profile
+    without an external data provider, but we *can* point one click at the
+    person to find — the decision-maker's role at this buyer. Built from the
+    RFP's own facts (the scoring engine's inferred role + the buyer name), with
+    the ``Likely`` qualifier and any parenthetical buyer-type suffix stripped so
+    the search terms are clean.
+    """
+    role = target.replace("Likely ", "").strip()
+    company_clean = company.split("(")[0].strip()
+    keywords = f"{role} {company_clean}".strip()
+    return (
+        "https://www.linkedin.com/search/results/people/?keywords="
+        + quote_plus(keywords)
+    )
 
 
 def _urgency(qual: QualificationResult, scored: ScoredOpportunity,
@@ -167,11 +188,14 @@ def build_outreach_plan(
         steps=steps,
         first_touch_message=first_touch_message,
         email_subject=email_subject,
+        linkedin_search_url=_linkedin_research_url(target, opp.client),
         qualified=qual.qualified,
         assumptions=[
             "Sequenced deterministically from the qualification, estimate, and "
             "strategic-value engines — no AI generation.",
             f"Contact ({target}) is inferred — confirm the real name/email before sending.",
+            "LinkedIn link is an auto-built people search for the decision-maker at "
+            "this buyer — open it to find the person, then paste their profile to lock it in.",
             "Log each touch below; the outcome feeds the win/loss moat.",
         ],
     )

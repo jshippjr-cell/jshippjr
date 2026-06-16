@@ -119,6 +119,13 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **QA:** 136 tests pass (3 new — mailto with subject+body, mailto with empty recipient, normalized LinkedIn link; plus a unit test for `email_subject`). Rendered href verified well-formed (`mailto:dana@acme.com?subject=…&body=Hi…`, `https://linkedin.com/in/danareyes`). Screenshot caveat unchanged (sandbox blocks the Playwright download); structural HTML + tests stood in.
 - **Status:** ✅ built; QA green (screenshot caveat above).
 
+### Cycle 13 — 2026-06-16 — Auto-researched LinkedIn lead + brand logo
+- **Roadmap stage:** Demand side → **Outreach-to-win** (lead enrichment) + brand polish.
+- **Build:** (A) **Auto-researched decision-maker LinkedIn** — the outreach page no longer needs the LinkedIn field filled by hand. `OutreachPlan.linkedin_search_url` deterministically builds a LinkedIn **people-search deep-link** from the RFP's own facts (the scoring engine's inferred decision-maker role + the buyer name, with the `Likely` qualifier and any parenthetical buyer-type suffix stripped). The page pre-populates the LinkedIn field and the **Find on LinkedIn ↗** button with it; pasting a verified profile overrides the suggestion (then the button reads **LinkedIn profile**). **Honest scope:** without an external data provider (Apollo/Clearbit/LinkedIn API + network egress) the app can't fetch a *specific* private profile, so it points one click at the exact person to find rather than fabricating profile/email data — the field is the seam where a real enrichment provider drops in later. (B) **Brand logo** — new `static/logo.svg` (the wordmark's signature mark: the chord "o" as a vertical infinity — an orange ring over its faded reflection) replaces the `◆` glyph next to "Chordential" in the sidebar; `.brand-mark` reworked to a cream tile housing the mark.
+- **Acceptance:** LinkedIn link auto-built from inferred role + buyer, terms cleaned; field/button pre-filled when none saved; saved profile overrides; logo renders in the sidebar and is served; suite green.
+- **QA:** 139 tests pass (3 new web + 1 unit). Rendered URL verified (`…/search/results/people/?keywords=Executive+Producer+%2F+Music+Supervisor+Brightline+Films`); `logo.svg` serves 200 and is referenced on every page. Screenshot caveat unchanged (sandbox blocks the Playwright download); structural HTML + tests stood in.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

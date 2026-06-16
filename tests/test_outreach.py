@@ -45,6 +45,15 @@ def test_plan_supplies_an_email_subject():
     assert _agency().need in p.email_subject
 
 
+def test_plan_builds_linkedin_research_link():
+    p = _plan_for(_agency())
+    # Deterministic lead enrichment: a LinkedIn people-search deep-link built
+    # from the inferred decision-maker + buyer (parenthetical suffix stripped).
+    assert "linkedin.com/search/results/people" in p.linkedin_search_url
+    assert "Acme" in p.linkedin_search_url
+    assert "Likely" not in p.linkedin_search_url  # qualifier stripped from terms
+
+
 def test_render_text_is_copyable_and_complete():
     text = _plan_for(_agency()).render_text()
     for marker in ("OUTREACH PLAN", "Contact:", "Urgency:", "First-touch message:",
