@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Pursuit brief · {{ row['need'] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">{{ row['need'][:40] }}</a> / Pursuit brief{% endblock %}
+{% block content %}
+
+<div class="subnav">
+  <a href="/opportunity/{{ row['id'] }}">Overview</a>
+  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
+  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
+  <a class="active" href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
+  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
+</div>
+
+<div class="brief-head card">
+  <div>
+    <div class="kpi-label">Recommendation</div>
+    <div class="verdict-action">{{ brief.recommendation }}</div>
+    <div class="muted">{{ brief.discipline }} · {{ brief.client }}</div>
+  </div>
+  <div class="brief-actions">
+    <a class="btn" href="/opportunity/{{ row['id'] }}/brief.txt" target="_blank">Plain text ↗</a>
+    <button class="btn primary" type="button" onclick="copyBrief(this)">Copy brief</button>
+  </div>
+</div>
+
+<p class="summary-line big">{{ brief.fit_summary }}</p>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Why it fits</h2></div>
+    <ul class="reason-list good">{% for r in brief.why_fit %}<li>✓ {{ r }}</li>{% endfor %}</ul>
+    <div class="card-head" style="margin-top:16px"><h2>Watch-outs</h2></div>
+    <ul class="reason-list warn">{% for w in brief.watchouts %}<li>? {{ w }}</li>{% endfor %}</ul>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>The pursuit</h2></div>
+    <table class="kv">
+      <tr><td>Team</td><td>{{ brief.team|join(', ') if brief.team else 'TBD' }}</td></tr>
+      <tr><td>Budget</td><td>{{ brief.budget_line }}</td></tr>
+      <tr><td>Strategic angle</td><td>{{ brief.strategic_angle }}</td></tr>
+    </table>
+    <div class="card-head" style="margin-top:16px"><h2>Suggested response outline</h2></div>
+    <ol class="brief-list">{% for o in brief.response_outline %}<li>{{ o }}</li>{% endfor %}</ol>
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Next steps</h2></div>
+  <ol class="brief-list">{% for s in brief.next_steps %}<li>{{ s }}</li>{% endfor %}</ol>
+  <ul class="assume">{% for a in brief.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>
+</section>
+
+<pre id="brief-text" class="visually-hidden">{{ brief.render_text() }}</pre>
+<script>
+function copyBrief(btn){
+  var t = document.getElementById('brief-text').textContent;
+  navigator.clipboard.writeText(t).then(function(){
+    var old = btn.textContent; btn.textContent = 'Copied ✓';
+    setTimeout(function(){ btn.textContent = old; }, 1600);
+  });
+}
+</script>
+{% endblock %}

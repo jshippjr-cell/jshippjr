@@ -31,4 +31,10 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 ### Cycle 1 — 2026-06-16 ~14:25 UTC — Promote Estimation to a first-class engine
 - **Build:** new `src/chordential_oia/estimation.py` (Phase-1 expert engine + `EstimationEngine`), added an uncalibrated **confidence band** (±35%) to every estimate, collapsed `web/estimate.py` into a thin shim, exported from the package, surfaced the band on the dashboard estimate page.
 - **Acceptance:** engine returns point + band; team derived from discipline; web delegates to engine (no duplicate logic); existing numbers unchanged; all tests green.
-- **Status:** built + QA'd; **awaiting Jon's approval to publish.**
+- **Status:** ✅ published (commit `781076e`).
+
+### Cycle 2 — 2026-06-16 ~15:05 UTC — The Prepare layer (Pursuit Brief)
+- **Build:** new `src/chordential_oia/prepare.py` — deterministic `PursuitBrief` generator (the fifth mission verb) assembling qualification + estimate + strategic value into a ready brief with a suggested response outline; new dashboard "Pursuit brief" tab + plain-text/copy export; exported from the package.
+- **Acceptance:** brief assembles from existing engines (no LLM); `render_text()` copy-paste output; new tab + `.txt` route render; full suite green.
+- **QA:** 79 tests pass; brief + brief.txt routes 200; screenshot verified; 3/3 acceptance.
+- **Status:** ✅ published.

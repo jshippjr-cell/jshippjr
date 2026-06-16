@@ -265,3 +265,10 @@ a{color:inherit;text-decoration:none}
 .spot-card{display:block;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:12px;transition:border-color .12s,transform .12s}
 .spot-card:hover{border-color:var(--orange);transform:translateY(-1px)}
 .spot-need{font-weight:650;font-size:13px;margin:8px 0 3px;line-height:1.35;color:var(--ink)}
+
+/* pursuit brief */
+.brief-head{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.brief-actions{display:flex;gap:8px;flex-shrink:0}
+.brief-list{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:7px}
+.brief-list li{font-size:13.5px;line-height:1.5;padding-left:2px}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:pre}

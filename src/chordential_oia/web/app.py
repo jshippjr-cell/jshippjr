@@ -19,11 +19,12 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..models import BuyerValue, MusicDiscipline
+from ..prepare import build_pursuit_brief
 from ..strategic import assess_strategic_value
 from . import db, seed
 from .estimate import build_estimate
@@ -233,6 +234,43 @@ def estimate_page(request: Request, opp_id: int):
     return render(
         request, "estimate.html", nav="inbox", row=row, opp=opp, qual=qual, est=est
     )
+
+
+def _brief_for(conn, opp_id: int):
+    """Load an opportunity and assemble its pursuit brief (None if missing)."""
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None, None, None
+    qual, scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    strategic = assess_strategic_value(opp)
+    brief = build_pursuit_brief(opp, qual, scored, est, strategic)
+    return row, opp, brief
+
+
+@app.get("/opportunity/{opp_id}/brief", response_class=HTMLResponse)
+def brief_page(request: Request, opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, brief = _brief_for(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "brief.html", nav="inbox", row=row, opp=opp, brief=brief)
+
+
+@app.get("/opportunity/{opp_id}/brief.txt", response_class=PlainTextResponse)
+def brief_text(opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, brief = _brief_for(conn, opp_id)
+        if row is None:
+            return PlainTextResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    return PlainTextResponse(brief.render_text())
 
 
 @app.post("/opportunity/{opp_id}/status")
