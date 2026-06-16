@@ -165,8 +165,12 @@ This is contested below.
   music editor), hours, cost, price, margin → turns a lead into a go/no-go and a
   proposal skeleton. **This is both a differentiator and the data-moat engine.**
 - **OBJECTION (gating risk):** estimation is only as good as historical data;
-  cold-start is weak. **Requires Jon to seed real past-project actuals** (hours/
-  cost/margin) or early estimates will mislead.
+  cold-start is weak. ~~Requires Jon to seed real past-project actuals~~
+  → **RESOLVED by CEO (2026-06-16):** actuals are **not** a launch dependency.
+  Ship a **hybrid 3-phase model** (expert priors → market benchmarks → actuals
+  calibration). Cold-start is handled by industry assumptions + public rate data;
+  Chordential actuals *improve* the model, they don't *gate* it. See
+  "Estimation Engine — Hybrid Model Spec" below.
 
 ---
 
@@ -260,12 +264,22 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
 4. **Proposal drafting — APPROVED: gate full auto-drafts behind human "pursue."**
    Always produce the cheap brief + estimate; spend on full proposals only after
    a human commits.
-5. **Estimation seed — OPEN.** Pending: Jon to provide real past-project actuals
-   (hours/cost/margin) to train the estimator and avoid cold-start error.
+5. **Estimation engine — APPROVED: hybrid 3-phase model; actuals NOT required to
+   launch.** Ship on expert priors + public market benchmarks; calibrate on
+   Chordential actuals as they accrue. The architecture must let historical
+   outcomes improve the model over time without being a precondition to launch.
+   (Supersedes the earlier "seed data is a hard gate" framing.) Full spec below.
+6. **Priority — APPROVED: Qualification Accuracy *before* Estimation Accuracy.**
+   The business is created by finding and ranking the *right* opportunities and
+   explaining the fit — not by estimating cost perfectly. The estimator may be
+   approximate at launch (a defensible $5k–$10k band with the right team is
+   enough); qualification must be sharp. Executive focus and engineering effort
+   sequence accordingly: **Qualify > Estimate** until qualification is trusted.
 
 ### What these lock in
 - **Build priority:** Qualify → Estimate → Prepare (gated), on top of the
-  existing Rank engine. These produce the proprietary data moat.
+  existing Rank engine. **Qualification accuracy is the #1 objective**; estimation
+  ships approximate and self-improves. These produce the proprietary data moat.
 - **No premature scale:** ~6 clean automated sources max; email-alert intake +
   manual for the rest; no mass scraping; no live agent swarm.
 - **Capital discipline is now a hard constraint** (not raising): every operating
@@ -274,3 +288,91 @@ buyer-relationship building — otherwise it's just a studio with a lead tool.
 - **Win/loss capture is mandatory** from day one — it is the moat, not a metric.
 - **Internal-first product:** the first "customer" is Chordential's own studio;
   every feature must raise Chordential's win rate before it is sold to anyone.
+
+---
+
+## Estimation Engine — Hybrid Model Spec (CEO-directed, 2026-06-16)
+
+**Principle:** Chordential has no historical project dataset yet, so the estimator
+must produce useful numbers from *priors*, then converge on truth from *actuals*.
+This is how consulting firms estimate before they have project history. Historical
+actuals **improve** the model; they are **not** a precondition to launch.
+
+**Sequencing reminder (Decision #6):** the estimator only needs to be *good
+enough* at launch — a defensible budget band + correct team composition. Accuracy
+is earned in Phase 3. Do not block the product on estimation precision.
+
+### Phase 1 — Expert Model (now)
+Industry-standard labor assumptions × complexity multipliers. No data required.
+
+**Base role hours (per project):**
+
+| Role | Typical Hours |
+|---|---|
+| Composer | 4–12 |
+| Arranger | 2–8 |
+| Orchestrator | 4–20 |
+| Music Editor | 1–4 |
+| Mixer | 2–8 |
+| Mastering | 1–2 |
+| Project Manager | 1–3 |
+
+**Complexity multipliers (compose, then apply to the base estimate):**
+
+| Factor | Setting | Multiplier |
+|---|---|---|
+| **Duration** | :15 spot | 0.5× |
+| | :30 spot | 1.0× |
+| | :60 spot | 1.5× |
+| **Revisions** | 1 round (baseline) | +0% |
+| | 2 rounds | +15% |
+| | 3 rounds | +30% |
+| **Instrumentation** | Piano only | 1× |
+| | Hybrid orchestral | 2× |
+| | Full orchestra | 4× |
+| **Licensing reach** | Local market | 1× |
+| | National | 1.2× |
+| | Global | 1.5× |
+
+*Estimate = Σ(role hours × role rate) × duration × instrumentation × licensing,
+then × (1 + revision uplift). Multipliers compose; keep each factor independent so
+Phase 3 can recalibrate any one without disturbing the others.*
+
+### Phase 2 — Market Benchmark Model
+Anchor the dollar figures to public labor/budget data so estimates are credible
+without project history. Reference sources:
+- **AFM** rates (musicians/recording scales)
+- **SAG-AFTRA** music rates
+- **Trailer music** composer rates
+- **Advertising / commercial composer** rates
+- **Production-music** budget norms
+- **Sound designer** day rates
+
+**Output shape (example):** Likely Composer $1,500 · Likely Mix $800 · Likely PM
+$300 · **Expected Total ≈ $2,600** — produced with zero prior Chordential jobs.
+This is also what feeds the qualification-stage budget band ("Estimated $5k–$10k").
+
+### Phase 3 — Chordential Actuals (where the moat starts)
+Every delivered job writes back through the win/loss + delivery tracker:
+estimated vs. actual cost, realized margin, and **actual revision counts by buyer
+segment**. The model recalibrates priors and multipliers from real outcomes.
+
+- *After ~20 projects:* per-type estimate-vs-actual error tightens
+  (e.g. ":30 healthcare commercial — Est $3,000 / Actual $2,450 / Margin 18%").
+- *After ~100 projects:* segment-level intelligence nobody else has —
+  e.g. **avg revisions: healthcare 2.7 · automotive 4.1 · tech 1.3** — which
+  feeds directly back into the Phase-1 revision multiplier *per segment*.
+
+This is the proprietary asset the Founder's Advocate named the north star: an
+estimation model trained on real money. Phases 1–2 make it *useful on day one*;
+Phase 3 makes it *undefeatable over time*.
+
+### Architectural requirements
+- Priors (role hours, multipliers, benchmark rates) live as **versioned,
+  editable config**, not hardcoded — Phase 3 calibration overwrites them safely.
+- Every estimate is **stored with its inputs and the model version** that produced
+  it, so estimate-vs-actual variance is measurable per factor.
+- Calibration is **segmented** (buyer type × media type), because the revision and
+  complexity behavior differs sharply by segment (per the data above).
+- The estimator exposes a **confidence/band**, not just a point number — early on
+  the band is wide (priors only) and narrows as actuals accrue.
