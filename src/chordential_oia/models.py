@@ -63,11 +63,48 @@ class Relationship(Enum):
 
 
 class WinProbability(Enum):
-    """Ranking band derived from the opportunity score."""
+    """Score-band confidence label derived from the opportunity score."""
 
     HIGH = "High"
     MEDIUM = "Medium"
     LONG_SHOT = "Long-shot"
+
+
+class BuyerType(Enum):
+    """Who is buying. Drives both the buyer-fit signal and tier rules."""
+
+    UNKNOWN = "unknown"
+    AGENCY = "agency"  # creative / ad agency
+    BRAND = "brand"  # brand / marketing team buying direct
+    PRODUCTION_COMPANY = "production_company"  # film/TV/branded-content shop
+    GOVERNMENT = "government"  # public sector / procurement
+
+
+class Tier(Enum):
+    """Strategic action bucket assigned by rule (A/B/C), plus a Watch fallback.
+
+    Tiers are classified by the combination-rules in :mod:`scoring`, not by a
+    raw score threshold; the weighted score is used only to rank *within* a tier.
+    """
+
+    A = "A-Tier"
+    B = "B-Tier"
+    C = "C-Tier"
+    WATCH = "Watch"
+
+    @property
+    def label(self) -> str:
+        return {
+            Tier.A: "A-Tier — Pursue Immediately",
+            Tier.B: "B-Tier — Strong Lead",
+            Tier.C: "C-Tier — Government / Needs Teaming",
+            Tier.WATCH: "Watch — Monitor Only",
+        }[self]
+
+    @property
+    def order(self) -> int:
+        """Sort rank (A first)."""
+        return {Tier.A: 0, Tier.B: 1, Tier.C: 2, Tier.WATCH: 3}[self]
 
 
 @dataclass
@@ -91,12 +128,23 @@ class Opportunity:
     # Free-text context (used for keyword fallbacks and the scorecard)
     description: str = ""
 
-    # Scoring signals
+    # Which source tier this came from (1=gov/corporate RFP, 2=agency intel,
+    # 3=film/TV/production, 4=gaming). None when unknown.
+    source_tier: Optional[int] = None
+
+    # --- Primary scoring signals (Chordential commercial model) ---
+    buyer_type: BuyerType = BuyerType.UNKNOWN
+    # Tri-state booleans: True/False set by the source, None = infer from text.
+    commercial_campaign: Optional[bool] = None  # commercial/video campaign work
+    sonic_branding: Optional[bool] = None  # sonic/audio branding mentioned
+    video_production: Optional[bool] = None  # video production included
     music_requirement: MusicRequirement = MusicRequirement.IMPLIED
     budget_min: Optional[float] = None
     budget_max: Optional[float] = None
-    turnaround_days: Optional[int] = None
     location: Optional[str] = None
+
+    # --- Secondary signals (used by the alternate win-probability profile) ---
+    turnaround_days: Optional[int] = None
     remote_friendly: bool = True
     competition: CompetitionLevel = CompetitionLevel.MEDIUM
     agency_size: AgencySize = AgencySize.UNKNOWN
@@ -105,6 +153,21 @@ class Opportunity:
 
     # Arbitrary extra tags surfaced from the source (e.g. "cutdowns", "sync")
     tags: list = field(default_factory=list)
+
+    @property
+    def budget_midpoint(self) -> Optional[float]:
+        """Midpoint of the disclosed budget range, or None if undisclosed."""
+        if self.budget_min is not None and self.budget_max is not None:
+            return (self.budget_min + self.budget_max) / 2
+        if self.budget_min is not None:
+            return self.budget_min
+        if self.budget_max is not None:
+            return self.budget_max
+        return None
+
+    @property
+    def budget_disclosed(self) -> bool:
+        return self.budget_midpoint is not None
 
     def budget_display(self) -> str:
         """Human-readable budget string for the scorecard."""
@@ -139,7 +202,8 @@ class ScoredOpportunity:
 
     opportunity: Opportunity
     score: float  # 0-100
-    win_probability: WinProbability
+    tier: Tier  # A/B/C/Watch action bucket (rule-based)
+    win_probability: WinProbability  # score-band confidence label
     breakdown: list  # list[ScoreBreakdown]
     reasons: list  # list[str] - positive fit factors
     risks: list  # list[str] - things that could lose the deal

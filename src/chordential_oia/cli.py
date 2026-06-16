@@ -40,12 +40,15 @@ def _to_dict(scored: ScoredOpportunity) -> dict:
         "client": opp.client,
         "need": opp.need,
         "score": scored.score,
+        "tier": scored.tier.value,
         "win_probability": scored.win_probability.value,
+        "buyer_type": opp.buyer_type.value,
         "budget": opp.budget_display(),
         "decision_maker": scored.decision_maker,
         "reasons": scored.reasons,
         "risks": scored.risks,
         "source": opp.source,
+        "source_tier": opp.source_tier,
         "url": opp.url,
         "breakdown": [
             {
@@ -104,9 +107,15 @@ def main(argv: List[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.list_sources:
-        for key, cls in sorted(AVAILABLE_SOURCES.items()):
+        for key, cls in sorted(
+            AVAILABLE_SOURCES.items(),
+            key=lambda kv: (getattr(kv[1](), "source_tier", None) or 9, kv[0]),
+        ):
             inst = cls()
-            print(f"{key:<12} {inst.name}  [{inst.category}]")
+            tier = getattr(inst, "source_tier", None)
+            access = getattr(inst, "access", "")
+            tier_tag = f"T{tier}" if tier else "—"
+            print(f"{key:<16} {tier_tag:<3} {inst.name:<22} [{inst.category}] {access}")
         return 0
 
     source_keys = args.sources or list(AVAILABLE_SOURCES)

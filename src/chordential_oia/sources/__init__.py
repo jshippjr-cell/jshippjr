@@ -1,34 +1,28 @@
 """Opportunity sources.
 
 Every source implements :class:`base.OpportunitySource` and yields normalized
-:class:`~chordential_oia.models.Opportunity` records. Real connectors
-(SAM.gov, agency portals, LinkedIn, newsletters, etc.) plug in here later;
-the engine and scorecards stay unchanged.
+:class:`~chordential_oia.models.Opportunity` records. Real connectors plug in
+here later; the engine and scorecards stay unchanged.
+
+``AVAILABLE_SOURCES`` maps a source key to a zero-arg factory returning a
+source instance. It includes a demo source plus Chordential's ten-source,
+four-tier taxonomy (see :mod:`chordential_oia.sources.tiered`).
 """
 
 from .base import OpportunitySource
 from .sample import SampleSource
-from .strategic import (
-    AgencyCampaignSource,
-    CreatorStreamerSource,
-    IndieGameScoringSource,
-)
+from .tiered import TIERED_SOURCES, TieredSource
 
-# Registry of available sources by key. Live connectors get added here as
-# they are built; the CLI discovers sources through this map. The strategic
-# sources map to Chordential's launch roadmaps (see docs/market-research.md).
+# Demo source + the tiered taxonomy. Values are zero-arg callables.
 AVAILABLE_SOURCES = {
     "sample": SampleSource,
-    "agency_campaign": AgencyCampaignSource,  # Roadmap A
-    "indie_game": IndieGameScoringSource,  # Roadmap B
-    "creator_streamer": CreatorStreamerSource,  # Roadmap C
+    **TIERED_SOURCES,
 }
 
 __all__ = [
     "OpportunitySource",
     "SampleSource",
-    "AgencyCampaignSource",
-    "IndieGameScoringSource",
-    "CreatorStreamerSource",
+    "TieredSource",
+    "TIERED_SOURCES",
     "AVAILABLE_SOURCES",
 ]

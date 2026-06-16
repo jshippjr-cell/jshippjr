@@ -1,94 +1,131 @@
-"""Tests for the scoring and ranking engine."""
+"""Tests for the commercial scoring model and A/B/C/Watch tiering."""
 
 from chordential_oia.models import (
-    AgencySize,
-    CompetitionLevel,
+    BuyerType,
     MusicRequirement,
     Opportunity,
-    Relationship,
-    WinProbability,
+    Tier,
 )
-from chordential_oia.scoring import DEFAULT_WEIGHTS, ScoringEngine
+from chordential_oia.scoring import (
+    DEFAULT_WEIGHTS,
+    WIN_PROBABILITY_WEIGHTS,
+    ScoringEngine,
+    classify_tier,
+)
 
 
-def _strong_opp() -> Opportunity:
+def _a_tier() -> Opportunity:
+    # original + commercial + budget > $5k + agency buyer
     return Opportunity(
-        client="Acme Marketing",
-        need="Campaign Music Package",
+        client="Acme (agency)",
+        need="Original Campaign Music",
+        buyer_type=BuyerType.AGENCY,
+        commercial_campaign=True,
+        video_production=True,
         music_requirement=MusicRequirement.ORIGINAL,
-        budget_min=5_000,
-        budget_max=15_000,
-        turnaround_days=14,
-        location="USA",
-        competition=CompetitionLevel.LOW,
-        agency_size=AgencySize.MID,
-        relationship=Relationship.PAST_CLIENT,
+        budget_min=6_000,
+        budget_max=12_000,
+        location="Miami, FL",
     )
 
 
-def _weak_opp() -> Opportunity:
-    return Opportunity(
-        client="Meridian Global",
-        need="Master Service Agreement",
-        music_requirement=MusicRequirement.NONE,
-        budget_min=2_000,
-        budget_max=4_000,
-        turnaround_days=90,
-        location="Germany",
-        remote_friendly=False,
-        competition=CompetitionLevel.HIGH,
-        agency_size=AgencySize.ENTERPRISE,
-        relationship=Relationship.NONE,
-    )
-
-
-def test_default_weights_sum_to_100():
+def test_default_and_alternate_weights_sum_to_100():
     assert sum(DEFAULT_WEIGHTS.values()) == 100
+    assert sum(WIN_PROBABILITY_WEIGHTS.values()) == 100
 
 
-def test_strong_opportunity_scores_high():
+def test_a_tier_rule():
+    tier, _ = classify_tier(_a_tier())
+    assert tier is Tier.A
+
+
+def test_b_tier_production_company():
+    opp = Opportunity(
+        client="Two Rivers",
+        need="Composer for branded series",
+        buyer_type=BuyerType.PRODUCTION_COMPANY,
+        music_requirement=MusicRequirement.ORIGINAL,
+        budget_min=10_000,
+        budget_max=18_000,
+    )
+    assert classify_tier(opp)[0] is Tier.B
+
+
+def test_b_tier_agency_without_budget():
+    # Agency + commercial + music likely but budget undisclosed -> B, not A.
+    opp = _a_tier()
+    opp.budget_min = None
+    opp.budget_max = None
+    assert classify_tier(opp)[0] is Tier.B
+
+
+def test_c_tier_government_buried_music():
+    opp = Opportunity(
+        client="Federal Agency",
+        need="PSA video production",
+        buyer_type=BuyerType.GOVERNMENT,
+        commercial_campaign=False,
+        video_production=True,
+        music_requirement=MusicRequirement.IMPLIED,
+    )
+    assert classify_tier(opp)[0] is Tier.C
+
+
+def test_watch_when_no_music():
+    opp = Opportunity(
+        client="Pixel (agency)",
+        need="Social video editing retainer",
+        buyer_type=BuyerType.AGENCY,
+        commercial_campaign=True,
+        music_requirement=MusicRequirement.NONE,
+    )
+    assert classify_tier(opp)[0] is Tier.WATCH
+
+
+def test_a_tier_scores_higher_than_watch():
     engine = ScoringEngine()
-    scored = engine.score(_strong_opp())
-    assert scored.score >= 70
-    assert scored.win_probability == WinProbability.HIGH
+    a = engine.score(_a_tier())
+    watch = engine.score(
+        Opportunity(client="X", need="No music here", buyer_type=BuyerType.UNKNOWN,
+                    commercial_campaign=False, music_requirement=MusicRequirement.NONE)
+    )
+    assert a.score > watch.score
+    assert a.tier is Tier.A and watch.tier is Tier.WATCH
 
 
-def test_weak_opportunity_is_long_shot():
+def test_score_bounded_and_disclosed_budget_signal():
     engine = ScoringEngine()
-    scored = engine.score(_weak_opp())
-    assert scored.score < 45
-    assert scored.win_probability == WinProbability.LONG_SHOT
+    s = engine.score(_a_tier())
+    assert 0.0 <= s.score <= 100.0
+    budget_sig = next(b for b in s.breakdown if b.name == "Budget Disclosed")
+    assert budget_sig.normalized == 1.0
 
 
-def test_score_is_bounded_0_to_100():
+def test_miami_is_soft_bonus_not_penalty():
     engine = ScoringEngine()
-    for opp in (_strong_opp(), _weak_opp()):
-        scored = engine.score(opp)
-        assert 0.0 <= scored.score <= 100.0
+    miami = _a_tier()
+    elsewhere = _a_tier()
+    elsewhere.location = "Seattle, WA"
+    geo_miami = next(b for b in engine.score(miami).breakdown if b.name == "Miami/Southeast")
+    geo_else = next(b for b in engine.score(elsewhere).breakdown if b.name == "Miami/Southeast")
+    assert geo_miami.normalized == 1.0
+    assert geo_else.normalized == 0.5  # neutral, not zero -> no penalty
 
 
-def test_breakdown_points_sum_to_score():
+def test_rank_orders_by_tier_then_score():
     engine = ScoringEngine()
-    scored = engine.score(_strong_opp())
-    raw = sum(b.points for b in scored.breakdown)
-    # Default weights sum to 100, so raw points already equal the 0-100 score.
-    assert abs(raw - scored.score) < 0.1
+    gov = Opportunity(client="Gov", need="PSA video", buyer_type=BuyerType.GOVERNMENT,
+                      commercial_campaign=False, video_production=True,
+                      music_requirement=MusicRequirement.IMPLIED)
+    ranked = engine.rank([gov, _a_tier()])
+    assert ranked[0].tier is Tier.A
+    assert ranked[-1].tier is Tier.C
 
 
-def test_rank_orders_best_first():
-    engine = ScoringEngine()
-    ranked = engine.rank([_weak_opp(), _strong_opp()])
-    assert ranked[0].client == "Acme Marketing"
-    assert ranked[0].score >= ranked[1].score
-
-
-def test_custom_weights_are_normalized():
-    # Weights that don't sum to 100 should still yield a 0-100 score.
-    engine = ScoringEngine(weights={"Music Needed": 1, "Budget Fit": 1})
-    scored = engine.score(_strong_opp())
-    assert 0.0 <= scored.score <= 100.0
-    # Both criteria are maxed for the strong opp, so the score is ~100.
-    assert scored.score > 95
+def test_alternate_profile_still_works():
+    engine = ScoringEngine(weights=WIN_PROBABILITY_WEIGHTS)
+    s = engine.score(_a_tier())
+    assert 0.0 <= s.score <= 100.0
 
 
 def test_unknown_criterion_raises():
@@ -100,18 +137,17 @@ def test_unknown_criterion_raises():
         raise AssertionError("expected ValueError for unknown criterion")
 
 
-def test_missing_budget_scores_neutral_not_crash():
-    engine = ScoringEngine()
-    opp = _strong_opp()
-    opp.budget_min = None
-    opp.budget_max = None
-    scored = engine.score(opp)
-    assert 0.0 <= scored.score <= 100.0
-    assert opp.budget_display() == "Unknown"
-
-
-def test_decision_maker_inference():
-    engine = ScoringEngine()
-    opp = Opportunity(client="X", need="Brand campaign commercial")
-    scored = engine.score(opp)
-    assert "Creative Director" in scored.decision_maker
+def test_text_inference_for_unset_signals():
+    # No explicit commercial flag, but text reads commercial.
+    opp = Opportunity(
+        client="Agency",
+        need="Brand campaign advert with sonic logo and video spot",
+        buyer_type=BuyerType.AGENCY,
+        music_requirement=MusicRequirement.ORIGINAL,
+        budget_min=7_000,
+        budget_max=10_000,
+    )
+    s = ScoringEngine().score(opp)
+    sonic = next(b for b in s.breakdown if b.name == "Sonic Branding")
+    assert sonic.normalized == 1.0  # inferred from "sonic logo"
+    assert s.tier is Tier.A

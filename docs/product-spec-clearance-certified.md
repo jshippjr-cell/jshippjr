@@ -98,5 +98,6 @@ This is the moat: trust, speed, and a defensible contract — not catalog scale.
 ## How this connects to the OIA agent
 
 The Opportunity Intelligence Agent in this repo ranks inbound opportunities; the
-`agency_campaign` source models exactly this product's lead type (fast-turnaround
-original music with cutdowns), so qualified leads surface and rank automatically.
+Tier 2 agency-intelligence sources (`agency_spotter`, `adforum`, `campaign_us`)
+model exactly this product's lead type (fast-turnaround original music with
+cutdowns), so qualified A-Tier leads surface and rank automatically.

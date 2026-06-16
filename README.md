@@ -16,49 +16,72 @@ touching the scoring or reporting code.
 For every opportunity it emits a scorecard:
 
 ```
-Opportunity Score: 87/100
+Opportunity Score: 100/100
+Tier: A-Tier — Pursue Immediately
 
-Client: Acme Marketing
-Need: Campaign Music Package
-Budget: Estimated $5,000-$15,000
-Decision Maker: Likely Producer / Creative Director
+Client: Meridian Beverage Co. (brand)
+Need: Sonic Branding + Anthem for National Launch
+Buyer: Brand
+Budget: Estimated $15,000-$30,000
+Decision Maker: Likely Brand / Marketing Lead
 Reason For Fit:
-  - Requires original music
-  - Budget ~$10,000 sits in the sweet spot
-  - 14-day turnaround fits Chordential's fast process
+  - Original music + commercial campaign + >$5k + agency/brand buyer
+  - Commercial / video campaign work
+  - Sonic branding mentioned
+  - Miami / Southeast location (Miami, FL)
 Win Probability: High
 Risks:
   - No major risks flagged
-Source: Creative Agency Partner Network (https://example.com/opps/acme-campaign)
+Source: Campaign US Tier 2 (https://example.com/campaignus/meridian-launch)
 ```
 
-…and a full report grouping everything into **Highest / Medium / Long-shot**
-bands.
+…and a full report grouping everything into **A / B / C / Watch** tiers.
 
 ## The ranking engine
 
-Each opportunity is scored 0–100 across seven weighted criteria (the
-defaults match Chordential's spec and sum to 100):
+Each opportunity is scored 0–100 across seven weighted signals — Chordential's
+commercial model (default), tuned to surface fast-turnaround branded/commercial
+music work (sums to 100):
 
-| Criterion             | Weight |
-| --------------------- | -----: |
-| Music Needed          |     25 |
-| Budget Fit            |     20 |
-| Turnaround Fit        |     15 |
-| Competition           |     15 |
-| Agency Size           |     10 |
-| Existing Relationship |     10 |
-| Geography             |      5 |
+| Signal                              | Weight |
+| ----------------------------------- | -----: |
+| Commercial / video campaign         |     25 |
+| Agency or production-company buyer  |     20 |
+| Budget disclosed                    |     15 |
+| Original music requested            |     15 |
+| Sonic branding mentioned            |     10 |
+| Video production included           |     10 |
+| Miami / Southeast location          |      5 |
 
-Each criterion's scorer turns the opportunity's facts into a normalized
-0–100% signal; `score = Σ(weight × signal)`. The score maps to a win band:
+`score = Σ(weight × signal)`. Miami/Southeast is a **soft bonus** — out-of-region
+work scores neutrally, never penalized. Signals a source leaves unset are
+inferred from the opportunity text.
 
-- **High** ≥ 70
-- **Medium** 45–69
-- **Long-shot** < 45
+### A / B / C tiers (rule-based)
 
-Weights are configurable — pass `--weights config/weights.example.json` (or
-your own copy) to retune the model without code changes.
+The **tier** is assigned by combination-rules (not a score threshold); the
+score ranks opportunities *within* a tier:
+
+- **A-Tier — Pursue Immediately:** original music **+** commercial campaign
+  **+** budget > $5k **+** agency/brand buyer
+- **B-Tier — Strong Lead:** production-company buyer with a likely music
+  component, or a commercial agency/brand lead missing one A condition (e.g.
+  undisclosed budget)
+- **C-Tier — Government / Needs Teaming:** government media contract with music
+  buried in a larger scope
+- **Watch — Monitor Only:** matches none of the above
+
+A secondary **Win Probability** label (High/Medium/Long-shot) is derived from
+the raw score.
+
+### Weight profiles
+
+Weights are configurable — pass `--weights <file>` to retune without code:
+
+- `config/weights.example.json` — the commercial model (default)
+- `config/weights.win-probability.json` — the alternate fit/win-probability
+  model (music-need, budget-fit, turnaround, competition, agency-size,
+  relationship, geography)
 
 ## Install & run
 
@@ -88,16 +111,36 @@ PYTHONPATH=src python -m chordential_oia.cli --breakdown
 
 ```
 src/chordential_oia/
-  models.py        # Opportunity, ScoredOpportunity, enums
-  scoring.py       # ScoringEngine + per-criterion scorers + weights
+  models.py        # Opportunity, ScoredOpportunity, enums (Tier, BuyerType)
+  scoring.py       # ScoringEngine, signal scorers, weights, tier rules
   formatting.py    # scorecard & ranked-report rendering
   cli.py           # command-line agent runner
   sources/
     base.py        # OpportunitySource interface (implement fetch())
     sample.py      # built-in mock opportunities (demo + test fixture)
+    tiered.py      # the 10-source, 4-tier Chordential taxonomy
 config/weights.example.json
+config/weights.win-probability.json
+docs/             # market research, product spec
 tests/
 ```
+
+## Source taxonomy (4 tiers, 10 sources)
+
+`chordential-oia --list-sources` shows them with tier + realistic access method:
+
+| Tier | Sources | Typical output |
+| ---- | ------- | -------------- |
+| 1 — Gov / corporate RFP | RFPDB, SAM.gov, GovWin IQ | C-Tier |
+| 2 — Agency intelligence | Agency Spotter, AdForum, Campaign US | A/B-Tier |
+| 3 — Film/TV/production | ProductionHUB, Staff Me Up, Mandy Network | B-Tier |
+| 4 — Gaming / interactive | Hitmarker | B-Tier |
+
+Access reality (see `docs/market-research.md`): only **SAM.gov** has a clean
+official API; **RFPDB / Campaign US** offer RSS; **Mandy / ProductionHUB /
+Hitmarker** are ingested via **saved-search email alerts** (ToS-safe);
+**GovWin IQ / Agency Spotter / AdForum / Staff Me Up** are paid/login-gated and
+surfaced manually. All are currently mock stubs.
 
 ## Adding a live source
 
@@ -129,11 +172,14 @@ pytest
 
 ## Roadmap
 
-- Live connectors: SAM.gov / government RFP feeds, agency & corporate
-  procurement portals, newsletter (RSS/email) parsers, LinkedIn search.
-- LLM-assisted normalization to map messy free-text briefs onto the scoring
-  signals (music requirement, budget, turnaround, competition).
-- De-duplication across sources and persistence so opportunities can be
-  tracked over time.
-- Notifications (digest of new High-probability opportunities).
-```
+This engine is the brain of the **Chordential Opportunity Hub** web app (see
+`docs/` for the market research and product spec). Planned:
+
+- Live connectors per the tier table: SAM.gov API, RFPDB/Campaign US RSS, and
+  email-alert intake for Mandy / ProductionHUB / Hitmarker.
+- LLM-assisted normalization to map messy free-text RFPs onto the scoring
+  signals (commercial campaign, buyer type, budget, music requirement).
+- Persistence + de-duplication across sources.
+- Web app: FastAPI backend (this package as the engine), React/Next.js front
+  end, Clerk auth (invite-only team), Supabase Realtime alerts, Resend email,
+  and end-to-end project status tracking.

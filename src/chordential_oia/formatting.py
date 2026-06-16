@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from .models import ScoredOpportunity, WinProbability
+from .models import ScoredOpportunity, Tier
 
 
 def render_scorecard(scored: ScoredOpportunity) -> str:
@@ -12,9 +12,11 @@ def render_scorecard(scored: ScoredOpportunity) -> str:
     opp = scored.opportunity
     lines: List[str] = []
     lines.append(f"Opportunity Score: {scored.score:.0f}/100")
+    lines.append(f"Tier: {scored.tier.label}")
     lines.append("")
     lines.append(f"Client: {opp.client}")
     lines.append(f"Need: {opp.need}")
+    lines.append(f"Buyer: {opp.buyer_type.value.replace('_', ' ').title()}")
     lines.append(f"Budget: {opp.budget_display()}")
     lines.append(f"Decision Maker: {scored.decision_maker}")
     lines.append("Reason For Fit:")
@@ -25,7 +27,8 @@ def render_scorecard(scored: ScoredOpportunity) -> str:
     for risk in scored.risks:
         lines.append(f"  - {risk}")
     if opp.source and opp.source != "unknown":
-        src = opp.source
+        tier_tag = f"Tier {opp.source_tier}" if opp.source_tier else ""
+        src = f"{opp.source} {tier_tag}".strip()
         if opp.url:
             src = f"{src} ({opp.url})"
         lines.append(f"Source: {src}")
@@ -34,23 +37,24 @@ def render_scorecard(scored: ScoredOpportunity) -> str:
 
 def render_breakdown(scored: ScoredOpportunity) -> str:
     """Render the per-criterion weighted breakdown table."""
-    rows = [f"{'Criterion':<24}{'Weight':>7}{'Signal':>8}{'Points':>8}"]
-    rows.append("-" * 47)
+    rows = [f"{'Criterion':<26}{'Weight':>7}{'Signal':>8}{'Points':>8}"]
+    rows.append("-" * 49)
     for b in scored.breakdown:
         rows.append(
-            f"{b.name:<24}{b.weight:>7.0f}{b.normalized:>8.0%}{b.points:>8.1f}"
+            f"{b.name:<26}{b.weight:>7.0f}{b.normalized:>8.0%}{b.points:>8.1f}"
         )
-    rows.append("-" * 47)
-    rows.append(f"{'Total':<24}{scored.score:>23.1f}")
+    rows.append("-" * 49)
+    rows.append(f"{'Total':<26}{scored.score:>23.1f}")
     return "\n".join(rows)
 
 
 def render_ranked_report(scored_list: List[ScoredOpportunity], show_breakdown: bool = False) -> str:
-    """Render a full ranked report grouped by win-probability band."""
-    bands = {
-        WinProbability.HIGH: "HIGHEST PROBABILITY",
-        WinProbability.MEDIUM: "MEDIUM PROBABILITY",
-        WinProbability.LONG_SHOT: "LONG-SHOT OPPORTUNITIES",
+    """Render a full ranked report grouped by A/B/C/Watch tier."""
+    headings = {
+        Tier.A: "A-TIER — PURSUE IMMEDIATELY",
+        Tier.B: "B-TIER — STRONG LEADS",
+        Tier.C: "C-TIER — GOVERNMENT / NEEDS TEAMING",
+        Tier.WATCH: "WATCH — MONITOR ONLY",
     }
     out: List[str] = []
     out.append("=" * 60)
@@ -58,14 +62,14 @@ def render_ranked_report(scored_list: List[ScoredOpportunity], show_breakdown: b
     out.append(f"  {len(scored_list)} opportunities ranked")
     out.append("=" * 60)
 
-    for band, heading in bands.items():
-        in_band = [s for s in scored_list if s.win_probability == band]
-        if not in_band:
+    for tier in (Tier.A, Tier.B, Tier.C, Tier.WATCH):
+        in_tier = [s for s in scored_list if s.tier == tier]
+        if not in_tier:
             continue
         out.append("")
-        out.append(f"### {heading}  ({len(in_band)})")
+        out.append(f"### {headings[tier]}  ({len(in_tier)})")
         out.append("")
-        for scored in in_band:
+        for scored in in_tier:
             out.append(render_scorecard(scored))
             if show_breakdown:
                 out.append("")
