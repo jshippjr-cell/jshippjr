@@ -96,6 +96,14 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **QA (independent QA agent):** 129 tests pass; auto-broadcast on assign + milestone verified; crew line; manual post + empty/whitespace no-op; newest-first (id DESC tiebreak); migration; clean tree. All acceptance, no defects. Applied QA's polish note (empty body now redirects gracefully instead of 422). Screenshot verified.
 - **Status:** ✅ published.
 
+### Cycle 10 — 2026-06-16 — Executive Summary → pipeline view (demand-side reorg)
+- **Roadmap stage:** Demand side → decision-surface reorganization. Driven by a CEO interview on the demand-side information hierarchy: at a glance Jon wants winnability + angle, the money, and deep-dive links; the dashboard is the workhorse. He then directed the Exec Summary specifically to read as his pipeline.
+- **Build:** replaced the six stat cells **and** the pipeline-mix chart with a three-column pipeline — **🎯 Top targets to pursue** (qualified, not-yet-bid, ranked by tier→fit, each with a suggested price + budget + Original-posting/Contact links), **📨 Tentative** (`Submitted` bids out for decision, value + due), **🏆 Won** (closed deals with the **assigned talent/crew** pulled from the linked project). New `db` helpers `pursue_targets`/`tentative_bids`/`won_deals`; dashboard route computes per-row suggested price via the standard engines; `seed_demo_pipeline` stages one bid + one win (with assigned crew) so the columns show live data, idempotently. Kept Strategic spotlight, Follow-ups due, Needs review.
+- **Acceptance:** three sections render from the correct statuses; Won lists crew (or an assign/spin-up prompt); stat grid + mix chart gone with no dead vars; empty states read cleanly; suite green.
+- **QA:** 130 tests pass (2 new dashboard tests); rendered HTML verified for all three columns, crew chips (Devin Park · Maya Okafor on the demo win), price figures, deep-dive links, and removal of the old cells/chart. **Pixel screenshot not captured — the sandbox network policy blocks the Playwright browser download;** structural HTML + test verification stood in.
+- **Deferred to next cycle:** the editable **Company website** field (new column + edit UI) and the Opportunity-Overview action bar.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

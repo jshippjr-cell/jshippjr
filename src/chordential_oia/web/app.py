@@ -84,6 +84,7 @@ async def lifespan(app: FastAPI):
     if count == 0:
         seed.seed(conn)
     seed.seed_talent(conn)
+    seed.seed_demo_pipeline(conn)
     conn.close()
     yield
 
@@ -102,19 +103,38 @@ def render(request: Request, name: str, **kw):
 # --------------------------------------------------------------------------- #
 # Executive summary
 # --------------------------------------------------------------------------- #
+def _suggested_price(opp) -> float:
+    """Suggested price for one opportunity, via the same engines as the estimate
+    page (qualify → discipline/team → estimate). Deterministic and LLM-free."""
+    qual, _ = evaluate(opp)
+    team = qual.team_shape or qual.discipline.team_shape
+    return build_estimate(opp, team, qual.discipline).suggested_price
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     conn = db.connect()
     try:
-        metrics = db.exec_metrics(conn)
-        top = db.list_opportunities(conn, action="Pursue", order_by="alignment")[:6]
+        # Pipeline column 1 — top targets to pursue, each with a suggested price
+        # (the estimator is deterministic and cheap, so per-row is fine here).
+        pursue = [
+            {"r": r, "price": _suggested_price(db.opportunity_from_row(r))}
+            for r in db.pursue_targets(conn)
+        ]
+        tentative = db.tentative_bids(conn)   # column 2 — bids out for decision
+        won = db.won_deals(conn)              # column 3 — closed wins + crew
         review = db.list_opportunities(conn, action="Review", order_by="alignment")[:5]
         spotlight = db.strategic_spotlight(conn)
         followups = db.followups_due(conn)
+        totals = {
+            "tentative_value": sum((r["outcome_value"] or 0) for r in tentative),
+            "won_value": sum((r["outcome_value"] or 0) for r in won),
+        }
     finally:
         conn.close()
     return render(
-        request, "dashboard.html", nav="dashboard", metrics=metrics, top=top,
+        request, "dashboard.html", nav="dashboard",
+        pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups,
     )
 

@@ -25,7 +25,17 @@ def test_dashboard_loads(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Executive Summary" in r.text
-    assert "Win rate" in r.text
+    # The summary reads as a pipeline: targets → tentative → won.
+    assert "Top targets to pursue" in r.text
+    assert "Tentative" in r.text
+    assert "Won" in r.text
+
+
+def test_dashboard_pipeline_columns_populate(client):
+    # The demo seed stages one bid and one win, and the win carries assigned crew.
+    dash = client.get("/").text
+    assert "bid submitted" in dash          # tentative column has a live bid
+    assert "crew-chip" in dash              # won deal lists assigned team members
 
 
 def test_inbox_and_search(client):

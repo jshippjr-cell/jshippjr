@@ -847,6 +847,56 @@ def strategic_spotlight(conn: sqlite3.Connection, limit: int = 5) -> List[sqlite
     ).fetchall()
 
 
+# --------------------------------------------------------------------------- #
+# Executive-summary pipeline columns (Top targets → Tentative → Won)
+# --------------------------------------------------------------------------- #
+def pursue_targets(conn: sqlite3.Connection, limit: int = 8) -> List[sqlite3.Row]:
+    """Qualified opportunities worth chasing that we haven't bid on yet.
+
+    The top of the funnel: still ``New``/``Pursuing`` (no bid out), ranked by
+    tier then fit so the strongest targets surface first.
+    """
+    return conn.execute(
+        """SELECT * FROM opportunities
+           WHERE qualified = 1 AND status IN ('New','Pursuing')
+           ORDER BY tier ASC, alignment DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
+def tentative_bids(conn: sqlite3.Connection, limit: int = 12) -> List[sqlite3.Row]:
+    """Bids that are out the door awaiting the buyer's decision (``Submitted``)."""
+    return conn.execute(
+        """SELECT * FROM opportunities
+           WHERE status = 'Submitted'
+           ORDER BY COALESCE(next_action_due, '9999-12-31') ASC, created_at DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
+def won_deals(conn: sqlite3.Connection, limit: int = 12) -> List[sqlite3.Row]:
+    """Closed-won deals with their linked project id and assigned crew names.
+
+    ``crew`` is a comma-joined list of the talent assigned to the deal's project
+    (NULL when no project exists yet or nobody is assigned) so the dashboard can
+    show the team on each win without a second query.
+    """
+    return conn.execute(
+        """SELECT o.*, p.id AS project_id,
+                  (SELECT GROUP_CONCAT(DISTINCT t.name)
+                     FROM assignments a JOIN talent t ON a.talent_id = t.id
+                     WHERE a.project_id = p.id) AS crew
+           FROM opportunities o
+           LEFT JOIN projects p ON p.opp_id = o.id
+           WHERE o.status = 'Won'
+           ORDER BY o.created_at DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
 def exec_metrics(conn: sqlite3.Connection) -> Dict:
     """Aggregate numbers for the executive summary dashboard."""
     def scalar(sql: str, params=()) -> float:

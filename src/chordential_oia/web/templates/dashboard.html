@@ -1,40 +1,96 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
+{% from "_macros.html" import tier_pill, status_pill, strat_pill, align_bar %}
 {% block title %}Executive Summary{% endblock %}
 {% block heading %}Executive Summary{% endblock %}
 {% block content %}
 
-<div class="kpi-grid">
-  <div class="kpi">
-    <div class="kpi-label">Opportunities tracked</div>
-    <div class="kpi-value">{{ metrics.total }}</div>
-    <div class="kpi-sub">{{ metrics.qualified }} qualified</div>
-  </div>
-  <div class="kpi accent-pursue">
-    <div class="kpi-label">Pursue queue</div>
-    <div class="kpi-value">{{ metrics.pursue }}</div>
-    <div class="kpi-sub">alertable, high-fit</div>
-  </div>
-  <div class="kpi accent-review">
-    <div class="kpi-label">Awaiting review</div>
-    <div class="kpi-value">{{ metrics.review }}</div>
-    <div class="kpi-sub">needs a human look</div>
-  </div>
-  <div class="kpi accent-won">
-    <div class="kpi-label">Win rate</div>
-    <div class="kpi-value">{{ metrics.win_rate|pct }}</div>
-    <div class="kpi-sub">{{ metrics.won }}W · {{ metrics.lost }}L</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Open pipeline value</div>
-    <div class="kpi-value">{{ metrics.pipeline_value|money }}</div>
-    <div class="kpi-sub">{{ metrics.pursuing }} active deals</div>
-  </div>
-  <div class="kpi accent-won">
-    <div class="kpi-label">Won value</div>
-    <div class="kpi-value">{{ metrics.won_value|money }}</div>
-    <div class="kpi-sub">closed revenue</div>
-  </div>
+<div class="pipeline-grid">
+
+  {# ── Column 1 — top targets to pursue ─────────────────────────────────── #}
+  <section class="card pipe pipe-pursue">
+    <div class="card-head">
+      <h2>🎯 Top targets to pursue</h2>
+      <a class="link" href="/inbox?action=Pursue">View all →</a>
+    </div>
+    <div class="deal-list">
+      {% for item in pursue %}{% set r = item.r %}
+      <div class="deal">
+        <a class="deal-need" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a>
+        <div class="deal-sub">{{ r['client'] }}</div>
+        <div class="deal-money">
+          <span class="money-lead">{{ item.price|money }}</span>
+          <span class="muted small">est. price · budget {{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else 'undisclosed' }}</span>
+        </div>
+        <div class="deal-foot">{{ tier_pill(r['tier']) }}{{ align_bar(r['alignment']) }}</div>
+        {% if r['url'] or r['contact_email'] %}
+        <div class="deal-links">
+          {% if r['url'] %}<a class="dl" href="{{ r['url'] }}" target="_blank" rel="noopener">Original posting ↗</a>{% endif %}
+          {% if r['contact_email'] %}<a class="dl" href="mailto:{{ r['contact_email'] }}">Contact ✉</a>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="muted">No active targets — the pursue queue is clear.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Column 2 — tentative (bids out for decision) ─────────────────────── #}
+  <section class="card pipe pipe-tentative">
+    <div class="card-head">
+      <h2>📨 Tentative</h2>
+      <span class="muted small">{{ tentative|length }} out · {{ totals.tentative_value|money }}</span>
+    </div>
+    <div class="deal-list">
+      {% for r in tentative %}
+      <div class="deal">
+        <a class="deal-need" href="/opportunity/{{ r['id'] }}/outreach">{{ r['need'] }}</a>
+        <div class="deal-sub">{{ r['client'] }}</div>
+        <div class="deal-money">
+          <span class="money-lead">{{ r['outcome_value']|money if r['outcome_value'] else '—' }}</span>
+          <span class="muted small">bid submitted</span>
+        </div>
+        <div class="deal-foot">
+          {{ status_pill(r['status']) }}
+          {% if r['next_action_due'] %}<span class="muted small">⏰ {{ r['next_action_due'] }}</span>{% endif %}
+        </div>
+        {% if r['next_action'] %}<div class="deal-next muted small">{{ r['next_action'] }}</div>{% endif %}
+      </div>
+      {% else %}
+      <p class="muted">No bids out for decision yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Column 3 — won (with assigned crew) ──────────────────────────────── #}
+  <section class="card pipe pipe-won">
+    <div class="card-head">
+      <h2>🏆 Won</h2>
+      <span class="muted small">{{ won|length }} · {{ totals.won_value|money }}</span>
+    </div>
+    <div class="deal-list">
+      {% for r in won %}
+      <div class="deal">
+        <a class="deal-need" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a>
+        <div class="deal-sub">{{ r['client'] }}</div>
+        <div class="deal-money"><span class="money-lead money-won">{{ r['outcome_value']|money if r['outcome_value'] else '—' }}</span></div>
+        <div class="deal-crew">
+          {% if r['crew'] %}
+            {% for name in r['crew'].split(',') %}<span class="crew-chip">{{ name }}</span>{% endfor %}
+          {% elif r['project_id'] %}
+            <span class="muted small">No crew assigned — <a href="/project/{{ r['project_id'] }}">assign team →</a></span>
+          {% else %}
+            <span class="muted small">No project — <a href="/opportunity/{{ r['id'] }}">spin one up →</a></span>
+          {% endif %}
+        </div>
+        {% if r['project_id'] %}<div class="deal-links"><a class="dl" href="/project/{{ r['project_id'] }}">Open project →</a></div>{% endif %}
+      </div>
+      {% else %}
+      <p class="muted">No closed wins yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
 </div>
 
 {% if spotlight %}
@@ -72,54 +128,18 @@
 </section>
 {% endif %}
 
-<div class="cols-2">
-  <section class="card">
-    <div class="card-head">
-      <h2>Top pursue targets</h2>
-      <a class="link" href="/inbox?action=Pursue">View all →</a>
-    </div>
-    <table class="table compact">
-      <thead><tr><th>Opportunity</th><th>Buyer</th><th>Fit</th><th></th></tr></thead>
-      <tbody>
-        {% for r in top %}
-        <tr>
-          <td><a class="strong" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a></td>
-          <td class="muted">{{ r['client'] }}</td>
-          <td style="width:140px">{{ align_bar(r['alignment']) }}</td>
-          <td>{{ tier_pill(r['tier']) }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="muted">No pursue targets yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <h2>Pipeline mix</h2>
-    </div>
-    <div class="mix">
-      {% for name, n in metrics.by_discipline %}
-      <div class="mix-row">
-        <span class="mix-label">{{ name.replace('_',' ')|title }}</span>
-        <div class="mix-bar"><div class="mix-fill" style="width: {{ (n / metrics.qualified * 100) if metrics.qualified else 0 }}%"></div></div>
-        <span class="mix-num">{{ n }}</span>
-      </div>
-      {% else %}
-      <p class="muted">No qualified opportunities yet.</p>
-      {% endfor %}
-    </div>
-    <div class="card-head" style="margin-top:18px"><h2>Needs review</h2>
-      <a class="link" href="/inbox?action=Review">View all →</a></div>
-    <ul class="mini-list">
-      {% for r in review %}
-      <li><a href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a> <span class="muted">· {{ r['client'] }}</span></li>
-      {% else %}
-      <li class="muted">Review queue is clear.</li>
-      {% endfor %}
-    </ul>
-  </section>
-</div>
+<section class="card">
+  <div class="card-head">
+    <h2>Needs review</h2>
+    <a class="link" href="/inbox?action=Review">View all →</a>
+  </div>
+  <ul class="mini-list">
+    {% for r in review %}
+    <li><a href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a> <span class="muted">· {{ r['client'] }}</span></li>
+    {% else %}
+    <li class="muted">Review queue is clear.</li>
+    {% endfor %}
+  </ul>
+</section>
 
 {% endblock %}
