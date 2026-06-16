@@ -97,9 +97,33 @@ chordential-oia --breakdown
 # Hide long-shots and emit JSON for downstream tooling
 chordential-oia --min-score 45 --json
 
+# Run the qualification gate FIRST, then rank only what qualifies
+chordential-oia --qualify
+chordential-oia --qualify --qualify-weights config/qualification_weights.example.json
+
 # List available sources
 chordential-oia --list-sources
 ```
+
+## Qualification layer (`--qualify`)
+
+Scoring answers *"how attractive is this opportunity?"*. **Qualification** answers
+the prior question — *"is this real, original, Chordential-shaped music craft at
+all, and how well does it fit?"* — and can **hard-reject** junk the scorer would
+otherwise rank (cover bands, karaoke, DJs, playlists, lessons, gear). It runs
+*before* Rank:
+
+```
+Ingest → QUALIFY (gate → classify discipline → alignment %) → Rank → Estimate → Prepare
+```
+
+Each opportunity gets a `QualificationResult`: `qualified`, music `discipline`,
+an `alignment_pct` (the "87% aligned" number), a one-line `fit_summary`, a
+precision-biased `recommended_action` (Pursue / Review / Watch / Pass), a
+`confidence`, and a `team_shape` hint handed to the estimator. Only high-alignment,
+high-confidence work is `Pursue` (alertable); everything else stays queryable in
+the DB (full recall). Rubric weights are editable config
+(`config/qualification_weights.example.json`). See `docs/qualification-spec.md`.
 
 No install needed for a quick look:
 
@@ -111,9 +135,10 @@ PYTHONPATH=src python -m chordential_oia.cli --breakdown
 
 ```
 src/chordential_oia/
-  models.py        # Opportunity, ScoredOpportunity, enums (Tier, BuyerType)
+  models.py        # Opportunity, ScoredOpportunity, QualificationResult, enums
   scoring.py       # ScoringEngine, signal scorers, weights, tier rules
-  formatting.py    # scorecard & ranked-report rendering
+  qualification.py # QualificationEngine: gate, discipline, alignment rubric
+  formatting.py    # scorecard, qualification & ranked-report rendering
   cli.py           # command-line agent runner
   sources/
     base.py        # OpportunitySource interface (implement fetch())
@@ -121,6 +146,7 @@ src/chordential_oia/
     tiered.py      # the 10-source, 4-tier Chordential taxonomy
 config/weights.example.json
 config/weights.win-probability.json
+config/qualification_weights.example.json
 docs/             # market research, product spec
 tests/
 ```

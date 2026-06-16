@@ -4,7 +4,46 @@ from __future__ import annotations
 
 from typing import List
 
-from .models import ScoredOpportunity, Tier
+from typing import Tuple
+
+from .models import Opportunity, QualificationAction, QualificationResult, ScoredOpportunity, Tier
+
+
+def render_qualification_report(
+    pairs: List[Tuple[Opportunity, QualificationResult]],
+) -> str:
+    """Render the Qualify-stage verdicts grouped by recommended action."""
+    headings = {
+        QualificationAction.PURSUE: "PURSUE — QUALIFIED, ALIGNED, ALERTABLE",
+        QualificationAction.REVIEW: "REVIEW — QUALIFIED, NEEDS A HUMAN LOOK",
+        QualificationAction.WATCH: "WATCH — QUALIFIED, LOW ALIGNMENT (DB ONLY)",
+        QualificationAction.PASS: "PASS — DISQUALIFIED (FULL RECALL RETAINED)",
+    }
+    order = [
+        QualificationAction.PURSUE,
+        QualificationAction.REVIEW,
+        QualificationAction.WATCH,
+        QualificationAction.PASS,
+    ]
+    out: List[str] = []
+    out.append("=" * 60)
+    out.append("  CHORDENTIAL — QUALIFICATION REPORT")
+    out.append(f"  {len(pairs)} opportunities qualified")
+    out.append("=" * 60)
+    for action in order:
+        in_group = [(o, q) for o, q in pairs if q.recommended_action is action]
+        if not in_group:
+            continue
+        out.append("")
+        out.append(f"### {headings[action]}  ({len(in_group)})")
+        for opp, q in in_group:
+            out.append(f"  [{q.confidence.value:<6}] {opp.client}: {opp.need}")
+            out.append(f"           {q.fit_summary}")
+            if q.disqualifiers:
+                out.append(f"           ✗ {'; '.join(q.disqualifiers)}")
+            elif q.needs_human_review and q.gaps:
+                out.append(f"           ? {'; '.join(q.gaps[:2])}")
+    return "\n".join(out)
 
 
 def render_scorecard(scored: ScoredOpportunity) -> str:

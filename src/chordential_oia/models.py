@@ -179,6 +179,111 @@ class Opportunity:
         return f"Estimated ${amount:,.0f}"
 
 
+class MusicDiscipline(Enum):
+    """The kind of music craft an opportunity calls for (Qualify Stage 1).
+
+    ``fit_weight`` expresses how Chordential-shaped each discipline is: core
+    original craft scores full, adjacent disciplines are weighted down, and
+    ``NON_CRAFT`` is the disqualified bucket routed out by Stage 0.
+    """
+
+    COMPOSITION = "composition"  # original scoring / custom music — the bullseye
+    SONIC_BRANDING = "sonic_branding"  # mnemonics / sound logos — core, sticky
+    SOUND_DESIGN = "sound_design"  # core craft, often bundled with composition
+    ARRANGEMENT = "arrangement"  # arrangement / orchestration — core-adjacent
+    SUPERVISION = "supervision"  # music supervision / sync placement — adjacent
+    LICENSING = "licensing"  # pre-existing / library music — weak fit
+    NON_CRAFT = "non_craft"  # not Chordential-shaped — disqualified
+
+    @property
+    def label(self) -> str:
+        return {
+            MusicDiscipline.COMPOSITION: "Original composition",
+            MusicDiscipline.SONIC_BRANDING: "Sonic branding",
+            MusicDiscipline.SOUND_DESIGN: "Sound design",
+            MusicDiscipline.ARRANGEMENT: "Arrangement / orchestration",
+            MusicDiscipline.SUPERVISION: "Music supervision",
+            MusicDiscipline.LICENSING: "Licensing (pre-existing)",
+            MusicDiscipline.NON_CRAFT: "Not music craft",
+        }[self]
+
+    @property
+    def fit_weight(self) -> float:
+        """0.0-1.0 craft-fit strength used by the Stage 2 rubric."""
+        return {
+            MusicDiscipline.COMPOSITION: 1.0,
+            MusicDiscipline.SONIC_BRANDING: 1.0,
+            MusicDiscipline.SOUND_DESIGN: 1.0,
+            MusicDiscipline.ARRANGEMENT: 0.8,
+            MusicDiscipline.SUPERVISION: 0.5,
+            MusicDiscipline.LICENSING: 0.3,
+            MusicDiscipline.NON_CRAFT: 0.0,
+        }[self]
+
+    @property
+    def team_shape(self) -> list:
+        """Default team roles, handed to the estimator (Estimation Agent input)."""
+        return {
+            MusicDiscipline.COMPOSITION: ["Composer", "Mixer", "Music Editor"],
+            MusicDiscipline.SONIC_BRANDING: ["Composer", "Sound Designer", "Mixer"],
+            MusicDiscipline.SOUND_DESIGN: ["Sound Designer", "Mixer"],
+            MusicDiscipline.ARRANGEMENT: ["Arranger", "Orchestrator", "Mixer"],
+            MusicDiscipline.SUPERVISION: ["Music Supervisor"],
+            MusicDiscipline.LICENSING: ["Music Supervisor"],
+            MusicDiscipline.NON_CRAFT: [],
+        }[self]
+
+
+class Confidence(Enum):
+    """How explicit the deciding signals were (vs inferred from free text)."""
+
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class QualificationAction(Enum):
+    """Routing decision emitted by the qualification layer."""
+
+    PURSUE = "Pursue"  # qualified, aligned, confident -> real-time alert
+    REVIEW = "Review"  # qualified but needs a human look before alerting
+    WATCH = "Watch"  # qualified but low alignment -> DB only, full recall
+    PASS = "Pass"  # disqualified -> stored for recall, never alerted
+
+    @property
+    def alertable(self) -> bool:
+        """Only PURSUE fires a real-time alert (precision-biased, Decision #3)."""
+        return self is QualificationAction.PURSUE
+
+
+@dataclass
+class QualificationResult:
+    """The Qualify-stage verdict for one opportunity (see qualification-spec.md §2).
+
+    Distinct from :class:`ScoredOpportunity`: qualification decides *whether* and
+    *how well* something fits (and can hard-reject), while scoring orders the
+    opportunities that already qualified.
+    """
+
+    qualified: bool
+    discipline: MusicDiscipline
+    alignment_pct: float  # 0-100 fit-with-Chordential score (Stage 2 rubric)
+    fit_summary: str
+    recommended_action: QualificationAction
+    confidence: Confidence
+    needs_human_review: bool
+    fit_reasons: list = field(default_factory=list)  # list[str]
+    disqualifiers: list = field(default_factory=list)  # list[str]
+    gaps: list = field(default_factory=list)  # list[str]
+    secondary_disciplines: list = field(default_factory=list)  # list[MusicDiscipline]
+    team_shape: list = field(default_factory=list)  # roles, handed to the estimator
+    breakdown: list = field(default_factory=list)  # list[ScoreBreakdown]
+
+    @property
+    def alertable(self) -> bool:
+        return self.recommended_action.alertable
+
+
 @dataclass
 class ScoreBreakdown:
     """One criterion's contribution to the total score."""

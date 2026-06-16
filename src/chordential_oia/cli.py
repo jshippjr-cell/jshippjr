@@ -17,8 +17,9 @@ import json
 import sys
 from typing import List
 
-from .formatting import render_ranked_report
-from .models import Opportunity, ScoredOpportunity
+from .formatting import render_qualification_report, render_ranked_report
+from .models import Opportunity, QualificationResult, ScoredOpportunity
+from .qualification import QualificationEngine
 from .scoring import DEFAULT_WEIGHTS, ScoringEngine
 from .sources import AVAILABLE_SOURCES
 
@@ -95,6 +96,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the per-criterion weighted breakdown for each opportunity.",
     )
     parser.add_argument(
+        "--qualify",
+        action="store_true",
+        help="Run the qualification gate first; rank only the qualified set.",
+    )
+    parser.add_argument(
+        "--qualify-weights",
+        metavar="PATH",
+        help="JSON file of {dimension: weight} overriding the qualification rubric.",
+    )
+    parser.add_argument(
         "--json", action="store_true", help="Emit JSON instead of a text report."
     )
     parser.add_argument(
@@ -121,6 +132,21 @@ def main(argv: List[str] | None = None) -> int:
     source_keys = args.sources or list(AVAILABLE_SOURCES)
     opportunities = _collect(source_keys, args.limit)
 
+    qualifications: dict = {}
+    if args.qualify:
+        qengine = (
+            QualificationEngine.from_config(args.qualify_weights)
+            if args.qualify_weights
+            else QualificationEngine()
+        )
+        pairs = [(opp, qengine.qualify(opp)) for opp in opportunities]
+        qualifications = {id(opp): q for opp, q in pairs}
+        if not args.json:
+            print(render_qualification_report(pairs))
+            print()
+        # Rank only the opportunities that cleared the gate (full recall stays in DB).
+        opportunities = [opp for opp, q in pairs if q.qualified]
+
     engine = (
         ScoringEngine.from_config(args.weights)
         if args.weights
@@ -131,7 +157,22 @@ def main(argv: List[str] | None = None) -> int:
         ranked = [s for s in ranked if s.score >= args.min_score]
 
     if args.json:
-        print(json.dumps([_to_dict(s) for s in ranked], indent=2))
+        out = []
+        for s in ranked:
+            d = _to_dict(s)
+            q = qualifications.get(id(s.opportunity))
+            if q is not None:
+                d["qualification"] = {
+                    "qualified": q.qualified,
+                    "discipline": q.discipline.value,
+                    "alignment_pct": q.alignment_pct,
+                    "action": q.recommended_action.value,
+                    "confidence": q.confidence.value,
+                    "fit_summary": q.fit_summary,
+                    "team_shape": q.team_shape,
+                }
+            out.append(d)
+        print(json.dumps(out, indent=2))
     else:
         print(render_ranked_report(ranked, show_breakdown=args.breakdown))
     return 0
