@@ -1,27 +1,39 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_pill %}
 {% block title %}Projects{% endblock %}
 {% block heading %}Projects{% endblock %}
 {% block content %}
 
-<p class="summary-line">Won work, staffed. Each project carries the roles the estimator scoped — you assign the matched creators.</p>
+<p class="summary-line">Won work, staffed. Each project carries the roles the estimator scoped — you assign the matched creators. Understaffed and overdue projects are flagged.</p>
+
+<div class="filterbar seg-bar">
+  <a class="seg {{ 'on' if not active_status }}" href="/projects">All <span class="muted small">{{ counts.all }}</span></a>
+  <a class="seg {{ 'on' if active_status=='Active' }}" href="/projects?status=Active">Active <span class="muted small">{{ counts.Active }}</span></a>
+  <a class="seg {{ 'on' if active_status=='Delivered' }}" href="/projects?status=Delivered">Delivered <span class="muted small">{{ counts.Delivered }}</span></a>
+</div>
 
 <div class="card no-pad">
 <table class="table">
-  <thead><tr><th>Project</th><th>Client</th><th>Roles</th><th>Assigned</th><th>Progress</th><th>Budget</th><th>Status</th></tr></thead>
+  <thead><tr><th>Project</th><th>Client</th><th>Roles</th><th>Crew</th><th>Progress</th><th>Deadline</th><th>Budget</th><th>Status</th></tr></thead>
   <tbody>
     {% for p in projects %}
-    <tr>
-      <td><a class="strong" href="/project/{{ p.row['id'] }}">{{ p.row['need'] }}</a></td>
+    <tr class="{{ 'row-flag' if p.understaffed or p.overdue }}">
+      <td><a class="strong" href="/project/{{ p.row['id'] }}">{{ p.row['need'] }}</a>
+        {% if p.understaffed %}<span class="flag flag-warn">understaffed</span>{% endif %}
+        {% if p.overdue %}<span class="flag flag-late">overdue</span>{% endif %}
+      </td>
       <td class="muted">{{ p.row['client'] }}</td>
       <td class="small">{{ p.roles|join(' · ') if p.roles else '—' }}</td>
-      <td>{{ p.row['assigned'] }} / {{ p.roles|length }}</td>
-      <td class="small">{{ p.row['ms_done'] }} / {{ p.row['ms_total'] }} done</td>
+      <td class="{{ 'stale' if p.understaffed }}">{{ p.row['assigned'] }} / {{ p.roles|length }}</td>
+      <td style="width:130px">
+        <div class="mini-meter"><div class="mini-fill" style="width: {{ p.pct }}%"></div></div>
+        <div class="muted small">{{ p.row['ms_done'] }} / {{ p.row['ms_total'] }} done</div>
+      </td>
+      <td class="small {{ 'stale' if p.overdue }}">{{ p.row['deadline'] or '—' }}</td>
       <td>{{ (p.row['budget_max'] or p.row['budget_min'])|money if (p.row['budget_max'] or p.row['budget_min']) else '—' }}</td>
       <td><span class="pill {{ 'st-won' if p.row['status']=='Delivered' else 'st-pursuing' }}">{{ p.row['status'] }}</span></td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">No projects yet. Win an opportunity, then "Spin up project" from its Overview tab.</td></tr>
+    <tr><td colspan="8" class="muted">No projects yet. Win an opportunity, then "Spin up project" from its Overview tab.</td></tr>
     {% endfor %}
   </tbody>
 </table>

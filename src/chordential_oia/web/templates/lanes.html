@@ -1,32 +1,60 @@
 {% extends "base.html" %}
-{% from "_macros.html" import opp_card %}
+{% from "_macros.html" import tier_pill, align_bar %}
 {% block title %}Pipeline Lanes{% endblock %}
 {% block heading %}Pipeline Lanes{% endblock %}
 {% block content %}
 
-<div class="lanes">
-  <div class="lane lane-pursue">
-    <div class="lane-head"><span class="dot pursue"></span> Pursue <span class="lane-count">{{ pursue|length }}</span></div>
-    <div class="lane-sub">Qualified · aligned · alertable</div>
-    <div class="lane-body">
-      {% for r in pursue %}{{ opp_card(r) }}{% else %}<div class="lane-empty">Nothing to pursue.</div>{% endfor %}
-    </div>
-  </div>
+<p class="summary-line">Your pipeline as a working board — the same stages as the Executive Summary. Advance a deal a stage with one click; this mirrors the status you set on each opportunity.</p>
 
-  <div class="lane lane-review">
-    <div class="lane-head"><span class="dot review"></span> Review <span class="lane-count">{{ review|length }}</span></div>
-    <div class="lane-sub">Qualified · needs a human decision</div>
-    <div class="lane-body">
-      {% for r in review %}{{ opp_card(r) }}{% else %}<div class="lane-empty">Review queue is clear.</div>{% endfor %}
+<div class="kanban">
+  {% for col in columns %}
+  <div class="kcol kcol-{{ status_class(col.status) }}">
+    <div class="kcol-head">{{ col.status }} <span class="lane-count">{{ col.rows|length }}</span></div>
+    <div class="kcol-body">
+      {% for r in col.rows %}
+      <div class="kcard">
+        <a class="kcard-need" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a>
+        <div class="kcard-client">{{ r['client'] }}</div>
+        <div class="kcard-meta">{{ tier_pill(r['tier']) }}<span class="muted small">{{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else '—' }}</span></div>
+        {{ align_bar(r['alignment']) }}
+        <div class="kcard-actions">
+          {% if advance.get(col.status) %}
+          <form method="post" action="/opportunity/{{ r['id'] }}/status">
+            <input type="hidden" name="status" value="{{ advance[col.status] }}">
+            <input type="hidden" name="return_to" value="/lanes">
+            <button class="btn tiny" type="submit">→ {{ advance[col.status] }}</button>
+          </form>
+          {% elif col.status == 'Submitted' %}
+          <form method="post" action="/opportunity/{{ r['id'] }}/status">
+            <input type="hidden" name="status" value="Won"><input type="hidden" name="return_to" value="/lanes">
+            <button class="btn tiny win" type="submit">Won</button>
+          </form>
+          <form method="post" action="/opportunity/{{ r['id'] }}/status">
+            <input type="hidden" name="status" value="Lost"><input type="hidden" name="return_to" value="/lanes">
+            <button class="btn tiny" type="submit">Lost</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="lane-empty">—</div>
+      {% endfor %}
     </div>
   </div>
-
-  <div class="lane lane-pass">
-    <div class="lane-head"><span class="dot pass"></span> Pass <span class="lane-count">{{ passed|length }}</span></div>
-    <div class="lane-sub">Disqualified · retained for full recall</div>
-    <div class="lane-body">
-      {% for r in passed %}{{ opp_card(r) }}{% else %}<div class="lane-empty">No disqualified items.</div>{% endfor %}
-    </div>
-  </div>
+  {% endfor %}
 </div>
+
+{% if passed %}
+<details class="passed-strip">
+  <summary>Passed · {{ passed|length }} <span class="muted small">— disqualified, retained for full recall</span></summary>
+  <div class="kanban-passed">
+    {% for r in passed %}
+    <a class="kcard kcard-flat" href="/opportunity/{{ r['id'] }}">
+      <div class="kcard-need">{{ r['need'] }}</div>
+      <div class="kcard-client">{{ r['client'] }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
 {% endblock %}

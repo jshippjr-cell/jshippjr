@@ -126,6 +126,20 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **QA:** 139 tests pass (3 new web + 1 unit). Rendered URL verified (`…/search/results/people/?keywords=Executive+Producer+%2F+Music+Supervisor+Brightline+Films`); `logo.svg` serves 200 and is referenced on every page. Screenshot caveat unchanged (sandbox blocks the Playwright download); structural HTML + tests stood in.
 - **Status:** ✅ built; QA green (screenshot caveat above).
 
+### Cycle 14 — 2026-06-16 — Decision-surface UX reorg (council review P1–P3)
+- **Roadmap stage:** Cross-cutting decision-surface ergonomics — acts on the council's page-by-page UX review of the six primary screens. No new schema (every signal already existed); all changes are templates/CSS/routes, fully reversible.
+- **Build (by page):**
+  - **Dashboard:** one-line **KPI strip** (in-flight count+value · win-rate · won lifetime · follow-ups-due, each click-to-filter); **Follow-ups due promoted** above the pipeline with an urgent accent; inline **→ Mark <next>** advance on top-target cards.
+  - **Opportunity Inbox:** **auto-submit filters**; **click-to-sort headers** (Buyer/Budget/Fit/Strategic) preserving active filters; **inline advance** per row returning to the *filtered* view (`return_to`); Action-vs-Status legend + header tooltips.
+  - **Pipeline Lanes:** reframed from action-triage to a **status kanban** (New→Pursuing→Submitted→Won/Lost) matching the Dashboard model, with **one-click advance** per card and Won/Lost at Submitted; **Pass collapsed** into an expandable strip.
+  - **Buyer Graph:** **Next-best-action emphasized** (no longer muted); new **Last-touch (days-since)** column with a stale flag; **stage filter** (Cold/Warming/Engaged/Client) + sortable headers.
+  - **Talent Roster:** **KPI cards are click-to-filter**; new inline **reel-review queue** (approve/decline without leaving the page, `return_to`); **sort** (matchable-first / completeness / discipline).
+  - **Projects:** **Deadline** column with **overdue** flag; **understaffed** row flag (assigned < roles); text progress swapped for a **mini progress bar**; **Active/Delivered** segmented filter.
+  - Shared: safe same-site `return_to` redirect helper on `set_status`/`talent_review` (guards against open-redirects).
+- **Acceptance:** every page renders; inline actions persist and return to origin; sorts/filters don't error; flags compute correctly; no schema change; suite green.
+- **QA:** 147 tests pass (8 new; `test_lanes_render` rewritten for the kanban). All six pages smoke-tested 200 with the new components; inline advance + review-approve redirect verified. Screenshot caveat unchanged (sandbox blocks Playwright); structural HTML + tests stood in.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

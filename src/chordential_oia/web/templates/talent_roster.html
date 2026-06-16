@@ -14,11 +14,38 @@
 </div>
 
 <div class="kpi-grid">
-  <div class="kpi"><div class="kpi-label">On roster</div><div class="kpi-value">{{ counts.total }}</div><div class="kpi-sub">creators</div></div>
-  <div class="kpi accent-won"><div class="kpi-label">Matchable</div><div class="kpi-value">{{ counts.matchable }}</div><div class="kpi-sub">approved + skilled</div></div>
-  <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-value">{{ counts.approved }}</div><div class="kpi-sub">reel reviewed</div></div>
-  <div class="kpi accent-review"><div class="kpi-label">Pending review</div><div class="kpi-value">{{ counts.pending }}</div><div class="kpi-sub">awaiting your look</div></div>
+  <a class="kpi" href="/talent"><div class="kpi-label">On roster</div><div class="kpi-value">{{ counts.total }}</div><div class="kpi-sub">creators</div></a>
+  <a class="kpi accent-won" href="/talent?sort=matchable"><div class="kpi-label">Matchable</div><div class="kpi-value">{{ counts.matchable }}</div><div class="kpi-sub">approved + skilled</div></a>
+  <a class="kpi" href="/talent?review=Approved"><div class="kpi-label">Approved</div><div class="kpi-value">{{ counts.approved }}</div><div class="kpi-sub">reel reviewed</div></a>
+  <a class="kpi accent-review" href="/talent?review=Pending"><div class="kpi-label">Pending review</div><div class="kpi-value">{{ counts.pending }}</div><div class="kpi-sub">awaiting your look</div></a>
 </div>
+
+{% if review_queue %}
+<section class="card urgent">
+  <div class="card-head"><h2>🎬 Reel-review queue <span class="muted">— your gate; approve or decline without leaving the roster</span></h2></div>
+  <ul class="review-queue">
+    {% for c in review_queue %}
+    <li>
+      <div class="rq-who">
+        <a class="strong" href="/talent/{{ c.t.id }}">{{ c.t.name }}</a>
+        <span class="muted small">{{ c.t.discipline_labels|join(' · ') or 'No disciplines' }} · {{ c.completeness }}% complete</span>
+      </div>
+      <div class="rq-actions">
+        {% if c.t.demo_reel_url %}<a class="btn tiny" href="{{ c.t.demo_reel_url }}" target="_blank" rel="noopener">Reel ↗</a>{% endif %}
+        <form method="post" action="/talent/{{ c.t.id }}/review">
+          <input type="hidden" name="review_status" value="Approved"><input type="hidden" name="return_to" value="/talent">
+          <button class="btn tiny win" type="submit">✓ Approve</button>
+        </form>
+        <form method="post" action="/talent/{{ c.t.id }}/review">
+          <input type="hidden" name="review_status" value="Declined"><input type="hidden" name="return_to" value="/talent">
+          <button class="btn tiny" type="submit">Decline</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <form class="filterbar" method="get" action="/talent">
   <select name="discipline" onchange="this.form.submit()">
@@ -32,6 +59,10 @@
   <select name="invite" onchange="this.form.submit()">
     <option value="">Any funnel stage</option>
     {% for s in invite_states %}<option value="{{ s }}" {{ 'selected' if active.invite==s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="sort" onchange="this.form.submit()">
+    {% for key, label in [('name','Sort: Name'),('matchable','Sort: Matchable first'),('completeness','Sort: Most complete'),('discipline','Sort: Discipline')] %}
+    <option value="{{ key }}" {{ 'selected' if active.sort==key }}>{{ label }}</option>{% endfor %}
   </select>
   <noscript><button class="btn" type="submit">Filter</button></noscript>
 </form>

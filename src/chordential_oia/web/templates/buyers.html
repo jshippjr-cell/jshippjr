@@ -4,11 +4,28 @@
 {% block heading %}Buyer Graph{% endblock %}
 {% block content %}
 
+{% macro bsort(col, label, width='') %}
+  <th {% if width %}style="width:{{ width }}"{% endif %}><a class="sortable {{ 'sorted' if active.order_by==col }}" href="/buyers?{% if active.stage %}stage={{ active.stage|urlencode }}&{% endif %}order_by={{ col }}">{{ label }}{% if active.order_by==col %} ↓{% endif %}</a></th>
+{% endmacro %}
+
 <p class="summary-line">Every buyer we've seen, ranked by relationship strength then strategic value — the moat asset. Stage runs Cold → Warming → Engaged → Client (won before).</p>
+
+<div class="filterbar seg-bar">
+  <a class="seg {{ 'on' if not active.stage }}" href="/buyers?order_by={{ active.order_by }}">All stages</a>
+  {% for s in stages %}<a class="seg {{ 'on' if active.stage==s }}" href="/buyers?stage={{ s }}&order_by={{ active.order_by }}">{{ s }}</a>{% endfor %}
+</div>
 
 <div class="card no-pad">
 <table class="table">
-  <thead><tr><th>Buyer</th><th>Relationship</th><th>Next best action</th><th>Touches</th><th>Strategic</th><th>Fit</th></tr></thead>
+  <thead><tr>
+    <th>Buyer</th>
+    {{ bsort('relationship','Relationship','140px') }}
+    <th>Next best action</th>
+    {{ bsort('recent','Last touch') }}
+    {{ bsort('touches','Touches') }}
+    {{ bsort('strategic','Strategic') }}
+    {{ bsort('fit','Fit','120px') }}
+  </tr></thead>
   <tbody>
     {% for b in buyers %}
     <tr>
@@ -16,14 +33,19 @@
         <a class="strong" href="/buyer/{{ b.row['client']|urlencode }}">{{ b.row['client'] }}</a>
         <div class="muted small">{{ b.row['buyer_type'].replace('_',' ')|title }} · {{ b.row['opps'] }} opp{{ 's' if b.row['opps'] != 1 }}{% if b.row['won'] %} · {{ b.row['won'] }} won{% endif %}</div>
       </td>
-      <td style="width:130px">{{ rel_pill(b.rel) }}</td>
-      <td class="muted small">{{ b.rel.next_best_action }}</td>
+      <td style="width:140px">{{ rel_pill(b.rel) }}</td>
+      <td><div class="nba">🎯 {{ b.rel.next_best_action }}</div></td>
+      <td class="{{ 'stale' if b.days_since is not none and b.days_since > 30 }}">
+        {% if b.days_since is none %}<span class="muted">never</span>
+        {% elif b.days_since == 0 %}today
+        {% else %}{{ b.days_since }}d ago{% endif %}
+      </td>
       <td>{{ b.row['touches'] }}</td>
       <td>{% if b.strategic_tier %}{{ strat_pill(b.strategic_tier, b.row['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td style="width:120px">{{ align_bar(b.row['avg_alignment']) }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">No buyers yet.</td></tr>
+    <tr><td colspan="7" class="muted">No buyers match this stage.</td></tr>
     {% endfor %}
   </tbody>
 </table>

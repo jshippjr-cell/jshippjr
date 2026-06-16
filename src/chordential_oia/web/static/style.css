@@ -373,3 +373,82 @@ a{color:inherit;text-decoration:none}
 .feed-item.kind-milestone{border-left-color:var(--orange)}
 .feed-item.kind-assignment{border-left-color:var(--slate)}
 .feed-item.kind-update{border-left-color:#1d6b43}
+
+/* ── Decision-surface ergonomics (council reorg: P1/P2/P3) ─────────── */
+a.kpi{text-decoration:none;color:inherit;display:block;transition:border-color .12s,transform .12s}
+a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
+
+/* Dashboard KPI strip */
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:680px){.kpi-strip{grid-template-columns:repeat(2,1fr)}}
+.kpi-cell{display:block;text-decoration:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 15px;box-shadow:var(--shadow-sm);transition:border-color .12s,transform .12s}
+.kpi-cell:hover{border-color:var(--accent);transform:translateY(-1px)}
+.kpi-cell-val{font-size:23px;font-weight:740;letter-spacing:-.5px;color:var(--ink)}
+.kpi-cell-lbl{font-size:11.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.6px}
+.kpi-cell.kpi-alert{border-color:rgba(228,103,31,.45);background:linear-gradient(90deg,rgba(228,103,31,.10),transparent)}
+.kpi-cell.kpi-alert .kpi-cell-val{color:var(--accent)}
+
+/* Urgent card accent (follow-ups, review queue) */
+.card.urgent{border-color:rgba(228,103,31,.40);box-shadow:inset 0 3px 0 var(--orange),var(--shadow-sm)}
+
+/* Inline advance controls */
+.inline-advance{display:inline}
+.dl-btn{background:none;border:none;cursor:pointer;font:inherit;color:var(--accent);font-weight:600;padding:0}
+.dl-btn:hover{text-decoration:underline}
+.row-action form{margin:0}
+.row-action{white-space:nowrap}
+
+/* Sortable table headers */
+.sortable{color:var(--muted2);font-weight:700;text-decoration:none;white-space:nowrap}
+.sortable:hover{color:var(--ink)}
+.sortable.sorted{color:var(--accent)}
+
+/* Status kanban (Pipeline Lanes) */
+.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+@media(max-width:1100px){.kanban{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:680px){.kanban{grid-template-columns:1fr}}
+.kcol{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:120px}
+.kcol-head{font-weight:700;font-size:13px;color:var(--ink);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.kcol-new{box-shadow:inset 0 3px 0 var(--slate)}
+.kcol-pursuing{box-shadow:inset 0 3px 0 var(--orange)}
+.kcol-submitted{box-shadow:inset 0 3px 0 #d8a200}
+.kcol-won{box-shadow:inset 0 3px 0 #2e8b57}
+.kcol-lost{box-shadow:inset 0 3px 0 var(--muted2)}
+.kcol-body{display:flex;flex-direction:column;gap:9px}
+.kcard{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;box-shadow:var(--shadow-sm)}
+.kcard-need{display:block;font-weight:650;font-size:13px;color:var(--ink);text-decoration:none;line-height:1.3}
+.kcard-need:hover{color:var(--accent)}
+.kcard-client{color:var(--muted);font-size:12px;margin:2px 0 7px}
+.kcard-meta{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.kcard-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.kcard-actions form{margin:0}
+.btn.tiny.win{border-color:#2e8b57;color:#2e8b57}
+.kcard-flat{display:block;text-decoration:none}
+.passed-strip{margin-top:18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px 14px}
+.passed-strip summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:13px}
+.kanban-passed{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-top:12px}
+
+/* Buyer Graph: next-best-action + recency */
+.nba{font-weight:600;color:var(--ink);font-size:13px}
+.stale{color:#b4541f;font-weight:600}
+
+/* Segmented filter bar */
+.seg-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.seg{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--border2);border-radius:999px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;background:var(--white)}
+.seg:hover{border-color:var(--accent);color:var(--ink)}
+.seg.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.seg.on .muted{color:rgba(255,255,255,.85)}
+
+/* Talent reel-review queue */
+.review-queue{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.review-queue li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.review-queue li:last-child{border-bottom:none}
+.rq-who{display:flex;flex-direction:column;gap:2px}
+.rq-actions{display:flex;gap:6px;align-items:center}
+.rq-actions form{margin:0}
+
+/* Project flags */
+.flag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:1px 7px;border-radius:999px;margin-left:7px;vertical-align:middle}
+.flag-warn{background:rgba(228,103,31,.15);color:#b4541f}
+.flag-late{background:rgba(180,40,40,.14);color:#b42828}
+.row-flag{background:rgba(228,103,31,.045)}

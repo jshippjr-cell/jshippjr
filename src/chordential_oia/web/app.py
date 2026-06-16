@@ -69,6 +69,18 @@ def displayurl(value: Optional[str]) -> str:
 # omitted — closing a deal goes through the win/loss form so the value is captured.
 _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
 
+# Status kanban (Pipeline Lanes) — the human pipeline as columns, with a
+# one-click forward advance. Won/Lost are terminal; the Submitted column offers
+# the win/loss decision directly.
+_KANBAN_STAGES = ["New", "Pursuing", "Submitted", "Won", "Lost"]
+
+
+def _safe_local(path: str, fallback: str) -> str:
+    """Only redirect to a same-site path (guards the ``return_to`` field)."""
+    if path and path.startswith("/") and not path.startswith("//"):
+        return path
+    return fallback
+
 
 _ACTION_CLASS = {"Pursue": "pursue", "Review": "review", "Watch": "watch", "Pass": "pass"}
 _TIER_CLASS = {"A-Tier": "a", "B-Tier": "b", "C-Tier": "c", "Watch": "watch"}
@@ -139,6 +151,7 @@ def dashboard(request: Request):
         review = db.list_opportunities(conn, action="Review", order_by="alignment")[:5]
         spotlight = db.strategic_spotlight(conn)
         followups = db.followups_due(conn)
+        metrics = db.exec_metrics(conn)
         totals = {
             "tentative_value": sum((r["outcome_value"] or 0) for r in tentative),
             "won_value": sum((r["outcome_value"] or 0) for r in won),
@@ -148,7 +161,7 @@ def dashboard(request: Request):
     return render(
         request, "dashboard.html", nav="dashboard",
         pursue=pursue, tentative=tentative, won=won, totals=totals,
-        review=review, spotlight=spotlight, followups=followups,
+        review=review, spotlight=spotlight, followups=followups, metrics=metrics,
     )
 
 
@@ -199,18 +212,21 @@ def inbox(
 # --------------------------------------------------------------------------- #
 @app.get("/lanes", response_class=HTMLResponse)
 def lanes(request: Request):
+    """The human pipeline as a status kanban (New → Pursuing → Submitted →
+    Won/Lost), each card advanceable one stage with a click. Matches the
+    Dashboard's pipeline model — same statuses, here as a working board."""
     conn = db.connect()
     try:
-        pursue = db.list_opportunities(conn, action="Pursue", order_by="alignment")
-        review = (
-            db.list_opportunities(conn, action="Review", order_by="alignment")
-            + db.list_opportunities(conn, action="Watch", order_by="alignment")
-        )
-        passed = db.list_opportunities(conn, action="Pass", order_by="created")
+        columns = [
+            {"status": s, "rows": db.list_opportunities(conn, status=s, order_by="alignment")}
+            for s in _KANBAN_STAGES
+        ]
+        passed = db.list_opportunities(conn, status="Passed", order_by="created")
     finally:
         conn.close()
     return render(
-        request, "lanes.html", nav="lanes", pursue=pursue, review=review, passed=passed
+        request, "lanes.html", nav="lanes", columns=columns, passed=passed,
+        advance=_NEXT_STATUS,
     )
 
 
@@ -416,14 +432,21 @@ def talent_match_page(request: Request, opp_id: int):
 
 
 @app.post("/opportunity/{opp_id}/status")
-def set_status(opp_id: int, status: str = Form(...), outcome_value: str = Form("")):
+def set_status(
+    opp_id: int,
+    status: str = Form(...),
+    outcome_value: str = Form(""),
+    return_to: str = Form(""),
+):
     conn = db.connect()
     try:
         value = float(outcome_value) if outcome_value.strip() else None
         db.update_status(conn, opp_id, status, value)
     finally:
         conn.close()
-    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+    return RedirectResponse(
+        _safe_local(return_to, f"/opportunity/{opp_id}"), status_code=303
+    )
 
 
 @app.post("/opportunity/{opp_id}/strategic")
@@ -462,7 +485,9 @@ def _strat_tier_for_value(value) -> Optional[str]:
 
 
 @app.get("/buyers", response_class=HTMLResponse)
-def buyers_directory(request: Request):
+def buyers_directory(
+    request: Request, stage: Optional[str] = None, order_by: str = "relationship"
+):
     conn = db.connect()
     try:
         rows = db.all_buyers(conn)
@@ -471,19 +496,30 @@ def buyers_directory(request: Request):
     buyers = []
     for r in rows:
         tier = _strat_tier_for_value(r["strategic_value"])
+        days = days_since(r["last_contacted"])
         rel = assess_relationship(
             opps=r["opps"], qualified=int(r["qualified"] or 0),
             won=int(r["won"] or 0), lost=int(r["lost"] or 0),
             open_pursuits=int(r["open_pursuits"] or 0), touches=int(r["touches"] or 0),
-            last_contacted_days=days_since(r["last_contacted"]),
-            strategic_tier=tier,
+            last_contacted_days=days, strategic_tier=tier,
         )
-        buyers.append({"row": r, "rel": rel, "strategic_tier": tier})
-    # Rank by relationship strength, then strategic value.
-    buyers.sort(
-        key=lambda b: (b["rel"].score, b["row"]["strategic_value"] or 0), reverse=True
+        buyers.append({"row": r, "rel": rel, "strategic_tier": tier, "days_since": days})
+    if stage:
+        buyers = [b for b in buyers if b["rel"].stage == stage]
+    # Sort keys — default ranks by relationship strength then strategic value.
+    sorters = {
+        "relationship": lambda b: (b["rel"].score, b["row"]["strategic_value"] or 0),
+        "strategic": lambda b: (b["row"]["strategic_value"] or 0, b["rel"].score),
+        "touches": lambda b: b["row"]["touches"] or 0,
+        "recent": lambda b: -(b["days_since"] if b["days_since"] is not None else 10**6),
+        "fit": lambda b: b["row"]["avg_alignment"] or 0,
+    }
+    buyers.sort(key=sorters.get(order_by, sorters["relationship"]), reverse=True)
+    stages = ["Cold", "Warming", "Engaged", "Client"]
+    return render(
+        request, "buyers.html", nav="buyers", buyers=buyers, stages=stages,
+        active={"stage": stage or "", "order_by": order_by},
     )
-    return render(request, "buyers.html", nav="buyers", buyers=buyers)
 
 
 @app.get("/buyer/{client}", response_class=HTMLResponse)
@@ -570,25 +606,44 @@ def talent_roster(
     discipline: Optional[str] = None,
     review: Optional[str] = None,
     invite: Optional[str] = None,
+    sort: str = "name",
 ):
     conn = db.connect()
     try:
         rows = db.list_talent(conn, discipline=discipline, review=review, invite=invite)
         talents = [db.talent_from_row(r) for r in rows]
+        # The reel-review queue is the gate only Jon can clear — show every
+        # pending creator regardless of the current filter, with completeness.
+        review_queue = [
+            {"t": t, "completeness": profile_completeness(t)}
+            for t in (db.talent_from_row(r) for r in db.list_talent(conn, review="Pending"))
+        ]
+        # Roster-wide counts (independent of the active filter).
+        all_talents = [db.talent_from_row(r) for r in db.list_talent(conn)]
     finally:
         conn.close()
     cards = [{"t": t, "completeness": profile_completeness(t)} for t in talents]
-    counts = {
-        "total": len(cards),
-        "approved": sum(1 for c in cards if c["t"].is_approved),
-        "pending": sum(1 for c in cards if c["t"].review_status.value == "Pending"),
-        "matchable": sum(1 for c in cards if c["t"].matchable),
+    sorters = {
+        "name": lambda c: c["t"].name.lower(),
+        "completeness": lambda c: -c["completeness"],
+        "matchable": lambda c: (not c["t"].matchable, -c["completeness"]),
+        "discipline": lambda c: (c["t"].discipline_labels[0] if c["t"].discipline_labels else "~"),
     }
-    active = {"discipline": discipline or "", "review": review or "", "invite": invite or ""}
+    cards.sort(key=sorters.get(sort, sorters["name"]))
+    counts = {
+        "total": len(all_talents),
+        "approved": sum(1 for t in all_talents if t.is_approved),
+        "pending": sum(1 for t in all_talents if t.review_status.value == "Pending"),
+        "matchable": sum(1 for t in all_talents if t.matchable),
+    }
+    active = {
+        "discipline": discipline or "", "review": review or "",
+        "invite": invite or "", "sort": sort,
+    }
     return render(
         request, "talent_roster.html", nav="talent", cards=cards, counts=counts,
         disciplines=FORM_DISCIPLINES, review_states=db.REVIEW_STATES,
-        invite_states=db.INVITE_STATES, active=active,
+        invite_states=db.INVITE_STATES, active=active, review_queue=review_queue,
     )
 
 
@@ -663,13 +718,15 @@ def talent_edit(
 
 
 @app.post("/talent/{talent_id}/review")
-def talent_review(talent_id: int, review_status: str = Form(...)):
+def talent_review(talent_id: int, review_status: str = Form(...), return_to: str = Form("")):
     conn = db.connect()
     try:
         db.update_talent_review(conn, talent_id, review_status)
     finally:
         conn.close()
-    return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+    return RedirectResponse(
+        _safe_local(return_to, f"/talent/{talent_id}"), status_code=303
+    )
 
 
 @app.post("/talent/{talent_id}/invite")
@@ -686,17 +743,35 @@ def talent_invite(talent_id: int, invite_status: str = Form(...)):
 # Projects + assignment (supply side) — Jon assigns; nothing auto-assigns
 # --------------------------------------------------------------------------- #
 @app.get("/projects", response_class=HTMLResponse)
-def projects_directory(request: Request):
+def projects_directory(request: Request, status: Optional[str] = None):
     conn = db.connect()
     try:
         rows = db.list_projects(conn)
-        projects = []
-        for r in rows:
-            roles = json.loads(r["roles"]) if r["roles"] else []
-            projects.append({"row": r, "roles": roles})
     finally:
         conn.close()
-    return render(request, "projects.html", nav="projects", projects=projects)
+    counts = {"all": len(rows)}
+    for s in db.PROJECT_STATES:
+        counts[s] = sum(1 for r in rows if r["status"] == s)
+    if status in db.PROJECT_STATES:
+        rows = [r for r in rows if r["status"] == status]
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    projects = []
+    for r in rows:
+        roles = json.loads(r["roles"]) if r["roles"] else []
+        understaffed = (r["assigned"] or 0) < len(roles)
+        deadline = r["deadline"]
+        overdue = bool(deadline and deadline < today and r["status"] != "Delivered")
+        total = r["ms_total"] or 0
+        pct = round((r["ms_done"] or 0) / total * 100) if total else 0
+        projects.append({
+            "row": r, "roles": roles, "understaffed": understaffed,
+            "overdue": overdue, "pct": pct,
+        })
+    return render(
+        request, "projects.html", nav="projects", projects=projects,
+        counts=counts, active_status=(status or ""),
+    )
 
 
 @app.post("/opportunity/{opp_id}/project")

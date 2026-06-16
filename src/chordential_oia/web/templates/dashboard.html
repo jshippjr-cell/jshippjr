@@ -4,6 +4,45 @@
 {% block heading %}Executive Summary{% endblock %}
 {% block content %}
 
+<div class="kpi-strip">
+  <a class="kpi-cell" href="/lanes">
+    <div class="kpi-cell-val">{{ metrics.pursuing }}</div>
+    <div class="kpi-cell-lbl">in flight · {{ metrics.pipeline_value|money }}</div>
+  </a>
+  <a class="kpi-cell" href="/inbox?status=Won">
+    <div class="kpi-cell-val">{{ metrics.win_rate|pct }}</div>
+    <div class="kpi-cell-lbl">win rate · {{ metrics.won }}W {{ metrics.lost }}L</div>
+  </a>
+  <a class="kpi-cell" href="/inbox?status=Won">
+    <div class="kpi-cell-val">{{ metrics.won_value|money }}</div>
+    <div class="kpi-cell-lbl">won · lifetime</div>
+  </a>
+  <a class="kpi-cell {{ 'kpi-alert' if followups }}" href="#followups">
+    <div class="kpi-cell-val">{{ followups|length }}</div>
+    <div class="kpi-cell-lbl">follow-ups due</div>
+  </a>
+</div>
+
+{% if followups %}
+<section class="card urgent" id="followups">
+  <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
+  <table class="table compact">
+    <thead><tr><th>Due</th><th>Next action</th><th>Opportunity</th><th>Buyer</th><th></th></tr></thead>
+    <tbody>
+      {% for r in followups %}
+      <tr>
+        <td class="muted">{{ r['next_action_due'] }}</td>
+        <td>{{ r['next_action'] or '—' }}</td>
+        <td><a class="strong" href="/opportunity/{{ r['id'] }}/outreach">{{ r['need'] }}</a></td>
+        <td class="muted">{{ r['client'] }}</td>
+        <td>{{ status_pill(r['status']) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <div class="pipeline-grid">
 
   {# ── Column 1 — top targets to pursue ─────────────────────────────────── #}
@@ -22,12 +61,18 @@
           <span class="muted small">est. price · budget {{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else 'undisclosed' }}</span>
         </div>
         <div class="deal-foot">{{ tier_pill(r['tier']) }}{{ align_bar(r['alignment']) }}</div>
-        {% if r['url'] or r['contact_email'] %}
         <div class="deal-links">
+          {% set nxt = 'Pursuing' if r['status']=='New' else ('Submitted' if r['status']=='Pursuing' else '') %}
+          {% if nxt %}
+          <form method="post" action="/opportunity/{{ r['id'] }}/status" class="inline-advance">
+            <input type="hidden" name="status" value="{{ nxt }}">
+            <input type="hidden" name="return_to" value="/">
+            <button class="dl dl-btn" type="submit">→ Mark {{ nxt }}</button>
+          </form>
+          {% endif %}
           {% if r['url'] %}<a class="dl" href="{{ r['url'] }}" target="_blank" rel="noopener">Original posting ↗</a>{% endif %}
           {% if r['contact_email'] %}<a class="dl" href="mailto:{{ r['contact_email'] }}">Contact ✉</a>{% endif %}
         </div>
-        {% endif %}
       </div>
       {% else %}
       <p class="muted">No active targets — the pursue queue is clear.</p>
@@ -105,26 +150,6 @@
     </a>
     {% endfor %}
   </div>
-</section>
-{% endif %}
-
-{% if followups %}
-<section class="card" id="followups">
-  <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
-  <table class="table compact">
-    <thead><tr><th>Due</th><th>Next action</th><th>Opportunity</th><th>Buyer</th><th></th></tr></thead>
-    <tbody>
-      {% for r in followups %}
-      <tr>
-        <td class="muted">{{ r['next_action_due'] }}</td>
-        <td>{{ r['next_action'] or '—' }}</td>
-        <td><a class="strong" href="/opportunity/{{ r['id'] }}/outreach">{{ r['need'] }}</a></td>
-        <td class="muted">{{ r['client'] }}</td>
-        <td>{{ status_pill(r['status']) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </section>
 {% endif %}
 

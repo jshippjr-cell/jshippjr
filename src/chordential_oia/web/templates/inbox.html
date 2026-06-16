@@ -4,44 +4,59 @@
 {% block heading %}Opportunity Inbox{% endblock %}
 {% block content %}
 
+{% set params = {'q':active.q,'action':active.action,'tier':active.tier,'discipline':active.discipline,'buyer_type':active.buyer_type,'status':active.status,'min_alignment':active.min_alignment} %}
+{% macro sort_header(col, label, width='') %}
+  {% set qp = [] %}
+  {% for k,v in params.items() if v %}{% set _ = qp.append(k ~ '=' ~ (v|string|urlencode)) %}{% endfor %}
+  {% set _ = qp.append('order_by=' ~ col) %}
+  <th {% if width %}style="width:{{ width }}"{% endif %}><a class="sortable {{ 'sorted' if active.order_by==col }}" href="/inbox?{{ qp|join('&') }}">{{ label }}{% if active.order_by==col %} ↓{% endif %}</a></th>
+{% endmacro %}
+
 <form class="filters card" method="get" action="/inbox">
   <input class="filter-search" type="search" name="q" value="{{ active.q }}" placeholder="Search…">
-  <select name="action">
+  <select name="action" onchange="this.form.submit()">
     <option value="">All actions</option>
     {% for v in filters.action %}<option value="{{ v }}" {{ 'selected' if active.action==v }}>{{ v }}</option>{% endfor %}
   </select>
-  <select name="tier">
+  <select name="tier" onchange="this.form.submit()">
     <option value="">All tiers</option>
     {% for v in filters.tier %}<option value="{{ v }}" {{ 'selected' if active.tier==v }}>{{ v }}</option>{% endfor %}
   </select>
-  <select name="discipline">
+  <select name="discipline" onchange="this.form.submit()">
     <option value="">All disciplines</option>
     {% for v in filters.discipline %}<option value="{{ v }}" {{ 'selected' if active.discipline==v }}>{{ v.replace('_',' ')|title }}</option>{% endfor %}
   </select>
-  <select name="buyer_type">
+  <select name="buyer_type" onchange="this.form.submit()">
     <option value="">All buyers</option>
     {% for v in filters.buyer_type %}<option value="{{ v }}" {{ 'selected' if active.buyer_type==v }}>{{ v.replace('_',' ')|title }}</option>{% endfor %}
   </select>
-  <select name="status">
+  <select name="status" onchange="this.form.submit()">
     <option value="">All statuses</option>
     {% for v in filters.status %}<option value="{{ v }}" {{ 'selected' if active.status==v }}>{{ v }}</option>{% endfor %}
   </select>
-  <select name="order_by">
+  <select name="order_by" onchange="this.form.submit()">
     {% for key, label in [('alignment','Sort: Fit'),('strategic','Sort: Strategic'),('score','Sort: Score'),('budget','Sort: Budget'),('client','Sort: Buyer'),('created','Sort: Newest')] %}
     <option value="{{ key }}" {{ 'selected' if active.order_by==key }}>{{ label }}</option>{% endfor %}
   </select>
-  <button class="btn" type="submit">Apply</button>
+  <noscript><button class="btn" type="submit">Apply</button></noscript>
   <a class="btn ghost" href="/inbox">Clear</a>
 </form>
 
-<div class="result-count">{{ rows|length }} opportunities</div>
+<div class="result-count">{{ rows|length }} opportunities <span class="muted small">· <strong>Action</strong> = engine recommendation · <strong>Status</strong> = your pipeline stage</span></div>
 
 <div class="card no-pad">
 <table class="table">
   <thead>
     <tr>
-      <th>Opportunity</th><th>Buyer</th><th>Discipline</th><th>Budget</th>
-      <th>Fit</th><th>Strategic</th><th>Action</th><th>Status</th>
+      <th>Opportunity</th>
+      {{ sort_header('client','Buyer') }}
+      <th>Discipline</th>
+      {{ sort_header('budget','Budget') }}
+      {{ sort_header('alignment','Fit','120px') }}
+      {{ sort_header('strategic','Strategic') }}
+      <th title="The engine's recommended triage verdict">Action</th>
+      <th title="The pipeline stage you have set">Status</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -56,9 +71,19 @@
       <td>{% if r['strategic_tier'] %}{{ strat_pill(r['strategic_tier'], r['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ action_pill(r['action']) }}</td>
       <td>{{ status_pill(r['status']) }}</td>
+      <td class="row-action">
+        {% set nxt = 'Pursuing' if r['status']=='New' else ('Submitted' if r['status']=='Pursuing' else '') %}
+        {% if nxt %}
+        <form method="post" action="/opportunity/{{ r['id'] }}/status">
+          <input type="hidden" name="status" value="{{ nxt }}">
+          <input type="hidden" name="return_to" value="/inbox{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          <button class="btn tiny" type="submit" title="Advance to {{ nxt }}">→ {{ nxt }}</button>
+        </form>
+        {% endif %}
+      </td>
     </tr>
     {% else %}
-    <tr><td colspan="8" class="muted">No opportunities match these filters.</td></tr>
+    <tr><td colspan="9" class="muted">No opportunities match these filters.</td></tr>
     {% endfor %}
   </tbody>
 </table>

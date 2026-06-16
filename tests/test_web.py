@@ -46,11 +46,95 @@ def test_inbox_and_search(client):
     assert client.get("/inbox", params={"q": "campaign"}).status_code == 200
 
 
-def test_lanes_render(client):
+def test_lanes_render_status_kanban(client):
     r = client.get("/lanes")
     assert r.status_code == 200
-    for lane in ("Pursue", "Review", "Pass"):
-        assert lane in r.text
+    assert "kanban" in r.text
+    # Columns are the human pipeline stages, not the old action lanes.
+    for stage in ("New", "Pursuing", "Submitted", "Won", "Lost"):
+        assert stage in r.text
+
+
+def test_lanes_card_advances_status(client):
+    # Put opp 3 in New, then advance it from the board; it returns to /lanes.
+    client.post("/opportunity/3/status", data={"status": "New"}, follow_redirects=True)
+    r = client.post(
+        "/opportunity/3/status",
+        data={"status": "Pursuing", "return_to": "/lanes"},
+        follow_redirects=False,
+    )
+    assert r.headers["location"] == "/lanes"
+    assert client.get("/opportunity/3").text  # still renders
+    # The opportunity now reports Pursuing.
+    assert "Mark Submitted" in client.get("/opportunity/3").text
+
+
+def test_dashboard_kpi_strip_and_followups_promoted(client):
+    dash = client.get("/").text
+    assert "kpi-strip" in dash
+    assert "win rate" in dash and "follow-ups due" in dash
+    # Inline advance affordance on a top-target card.
+    assert "return_to" in dash
+
+
+def test_inbox_inline_advance_returns_to_filtered_view(client):
+    client.post("/opportunity/3/status", data={"status": "New"}, follow_redirects=True)
+    r = client.post(
+        "/opportunity/3/status",
+        data={"status": "Pursuing", "return_to": "/inbox?status=New"},
+        follow_redirects=False,
+    )
+    assert r.headers["location"] == "/inbox?status=New"
+
+
+def test_inbox_has_sortable_headers_and_autosubmit(client):
+    page = client.get("/inbox").text
+    assert "sortable" in page
+    assert 'order_by=client' in page  # buyer column is a sort link
+    assert "onchange" in page         # filters auto-submit
+    # Sorting by budget does not error.
+    assert client.get("/inbox?order_by=budget").status_code == 200
+
+
+def test_buyers_stage_filter_sort_and_recency(client):
+    page = client.get("/buyers").text
+    assert "Last touch" in page and "All stages" in page
+    assert "nba" in page  # next-best-action emphasized
+    assert client.get("/buyers?stage=Cold&order_by=touches").status_code == 200
+    assert client.get("/buyers?order_by=recent").status_code == 200
+
+
+def test_talent_review_queue_inline_approve(client):
+    # Seeded roster has pending creators; the queue surfaces them.
+    roster = client.get("/talent").text
+    assert "Reel-review queue" in roster
+    import re
+    m = re.search(r'/talent/(\d+)/review', roster)
+    assert m, "no pending creator in the review queue"
+    tid = m.group(1)
+    r = client.post(
+        f"/talent/{tid}/review",
+        data={"review_status": "Approved", "return_to": "/talent"},
+        follow_redirects=False,
+    )
+    assert r.headers["location"] == "/talent"
+
+
+def test_talent_kpis_are_clickable_filters(client):
+    page = client.get("/talent").text
+    assert 'href="/talent?review=Pending"' in page
+    assert client.get("/talent?sort=matchable").status_code == 200
+
+
+def test_projects_deadline_understaffed_and_filter(client):
+    pid = _win_and_make_project(client, 1)
+    page = client.get("/projects").text
+    assert "Deadline" in page
+    # A freshly spun-up project has roles but no crew yet -> understaffed flag.
+    assert "understaffed" in page
+    # Status segments filter without error.
+    assert client.get("/projects?status=Active").status_code == 200
+    assert f"/project/{pid}" in client.get("/projects?status=Active").text
 
 
 def test_detail_and_subpages(client):
