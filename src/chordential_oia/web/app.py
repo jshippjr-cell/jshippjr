@@ -283,6 +283,17 @@ def buyer_profile(request: Request, client: str):
     lost = [r for r in rows if r["status"] == "Lost"]
     pursuing = [r for r in rows if r["status"] in ("Pursuing", "Submitted")]
     decided = len(won) + len(lost)
+
+    # Strategic standing is a buyer-level attribute — resolve the strongest seen.
+    bv_rank = {"enterprise": 3, "repeat": 2, "one_time": 1, "unknown": 0}
+    best_bv = max((r["buyer_value"] or "unknown" for r in rows), key=lambda v: bv_rank.get(v, 0))
+    tier_rank = {"Door-opener": 3, "High": 2, "Medium": 1, "Low": 0}
+    best_tier = max(
+        (r["strategic_tier"] for r in rows if r["strategic_tier"]),
+        key=lambda t: tier_rank.get(t, 0), default=None,
+    )
+    strat_vals = [r["strategic_value"] for r in rows if r["strategic_value"] is not None]
+
     summary = {
         "client": client,
         "buyer_type": rows[0]["buyer_type"],
@@ -295,6 +306,11 @@ def buyer_profile(request: Request, client: str):
         "won_value": sum((r["outcome_value"] or 0) for r in won),
         "avg_alignment": (sum(r["alignment"] or 0 for r in rows) / len(rows)),
         "disciplines": sorted({r["discipline"] for r in rows if r["qualified"]}),
+        # CMO buyer-value standing
+        "buyer_value": BuyerValue(best_bv).label,
+        "marquee": any(r["marquee"] for r in rows),
+        "strategic_tier": best_tier,
+        "avg_strategic": (sum(strat_vals) / len(strat_vals)) if strat_vals else None,
     }
     return render(
         request, "buyer.html", nav="inbox", summary=summary, rows=rows

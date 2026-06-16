@@ -79,6 +79,18 @@ def test_buyer_profile(client):
     assert r.status_code in (200, 404)  # depends on seed naming; must not 500
 
 
+def test_buyer_profile_shows_strategic_standing(client):
+    import re
+    detail = client.get("/opportunity/1").text
+    m = re.search(r'href="(/buyer/[^"]+)"', detail)
+    assert m, "buyer link not found on detail page"
+    page = client.get(m.group(1)).text
+    assert "Strategic value" in page  # CMO buyer-value KPI present
+    # Header shows a buyer relationship value chip (one of the BuyerValue labels).
+    assert any(lbl in page for lbl in
+               ("One-time project", "Repeat buyer", "Enterprise buyer", "Unknown"))
+
+
 def test_missing_opportunity_404(client):
     assert client.get("/opportunity/99999").status_code == 404
 

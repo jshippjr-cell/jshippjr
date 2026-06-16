@@ -1,12 +1,17 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
 {% block title %}{{ summary.client }}{% endblock %}
 {% block heading %}Buyer profile{% endblock %}
 {% block content %}
 
 <div class="detail-head card">
   <div>
-    <div class="pill-row"><span class="pill ghost">{{ summary.buyer_type.replace('_',' ')|title }}</span></div>
+    <div class="pill-row">
+      <span class="pill ghost">{{ summary.buyer_type.replace('_',' ')|title }}</span>
+      <span class="pill ghost">{{ summary.buyer_value }}</span>
+      {% if summary.marquee %}<span class="pill sv-door">🚪 Marquee</span>{% endif %}
+      {% if summary.strategic_tier %}{{ strat_pill(summary.strategic_tier) }}{% endif %}
+    </div>
     <h1 class="detail-title">{{ summary.client }}</h1>
     <div class="muted">{{ summary.disciplines|map('replace','_',' ')|map('title')|join(' · ') or 'No qualified disciplines yet' }}</div>
   </div>
@@ -21,18 +26,20 @@
   <div class="kpi accent-won"><div class="kpi-label">Win rate</div><div class="kpi-value">{{ summary.win_rate|pct if summary.win_rate is not none else '—' }}</div><div class="kpi-sub">{{ summary.won }}W · {{ summary.lost }}L</div></div>
   <div class="kpi"><div class="kpi-label">Active deals</div><div class="kpi-value">{{ summary.pursuing }}</div><div class="kpi-sub">pursuing / submitted</div></div>
   <div class="kpi accent-won"><div class="kpi-label">Won value</div><div class="kpi-value">{{ summary.won_value|money }}</div><div class="kpi-sub">lifetime</div></div>
+  <div class="kpi" style="--accent-bar:#f472b6"><div class="kpi-label">Strategic value</div><div class="kpi-value">{{ summary.avg_strategic|pct if summary.avg_strategic is not none else '—' }}</div><div class="kpi-sub">{{ summary.buyer_value }}{{ ' · marquee' if summary.marquee }}</div></div>
 </div>
 
 <div class="card no-pad">
 <table class="table">
-  <thead><tr><th>Opportunity</th><th>Discipline</th><th>Budget</th><th>Fit</th><th>Action</th><th>Status</th></tr></thead>
+  <thead><tr><th>Opportunity</th><th>Discipline</th><th>Budget</th><th>Fit</th><th>Strategic</th><th>Action</th><th>Status</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
       <td><a class="strong" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a></td>
       <td>{{ r['discipline'].replace('_',' ')|title }}</td>
       <td>{{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else '—' }}</td>
-      <td style="width:130px">{{ align_bar(r['alignment']) }}</td>
+      <td style="width:120px">{{ align_bar(r['alignment']) }}</td>
+      <td>{% if r['strategic_tier'] %}{{ strat_pill(r['strategic_tier'], r['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ action_pill(r['action']) }}</td>
       <td>{{ status_pill(r['status']) }}</td>
     </tr>
