@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill %}
+{% block title %}Projects{% endblock %}
+{% block heading %}Projects{% endblock %}
+{% block content %}
+
+<p class="summary-line">Won work, staffed. Each project carries the roles the estimator scoped — you assign the matched creators.</p>
+
+<div class="card no-pad">
+<table class="table">
+  <thead><tr><th>Project</th><th>Client</th><th>Roles</th><th>Assigned</th><th>Budget</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for p in projects %}
+    <tr>
+      <td><a class="strong" href="/project/{{ p.row['id'] }}">{{ p.row['need'] }}</a></td>
+      <td class="muted">{{ p.row['client'] }}</td>
+      <td class="small">{{ p.roles|join(' · ') if p.roles else '—' }}</td>
+      <td>{{ p.row['assigned'] }} / {{ p.roles|length }}</td>
+      <td>{{ (p.row['budget_max'] or p.row['budget_min'])|money if (p.row['budget_max'] or p.row['budget_min']) else '—' }}</td>
+      <td><span class="pill {{ 'st-won' if p.row['status']=='Delivered' else 'st-pursuing' }}">{{ p.row['status'] }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No projects yet. Win an opportunity, then "Spin up project" from its Overview tab.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

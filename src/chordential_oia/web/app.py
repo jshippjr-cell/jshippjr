@@ -14,6 +14,7 @@ Run it::
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -200,6 +201,7 @@ def opportunity_detail(request: Request, opp_id: int):
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
         buyer_rows = db.buyer_opportunities(conn, row["client"])
+        project = db.project_for_opp(conn, opp_id)
     finally:
         conn.close()
     qual, scored = ev
@@ -207,6 +209,7 @@ def opportunity_detail(request: Request, opp_id: int):
     return render(
         request, "detail.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
         sv=sv, buyer_count=len(buyer_rows), buyer_values=list(BuyerValue),
+        project_id=(project["id"] if project else None),
     )
 
 
@@ -629,6 +632,115 @@ def talent_invite(talent_id: int, invite_status: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Projects + assignment (supply side) — Jon assigns; nothing auto-assigns
+# --------------------------------------------------------------------------- #
+@app.get("/projects", response_class=HTMLResponse)
+def projects_directory(request: Request):
+    conn = db.connect()
+    try:
+        rows = db.list_projects(conn)
+        projects = []
+        for r in rows:
+            roles = json.loads(r["roles"]) if r["roles"] else []
+            projects.append({"row": r, "roles": roles})
+    finally:
+        conn.close()
+    return render(request, "projects.html", nav="projects", projects=projects)
+
+
+@app.post("/opportunity/{opp_id}/project")
+def create_project(opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, ev = _load(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        existing = db.project_for_opp(conn, opp_id)
+        if existing is not None:
+            return RedirectResponse(f"/project/{existing['id']}", status_code=303)
+        qual, scored = ev
+        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+        roles = qual.team_shape or discipline.team_shape
+        pid = db.insert_project(
+            conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles
+        )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{pid}", status_code=303)
+
+
+def _project_view(conn, project_id: int):
+    """Assemble a project with its roles, current assignments, and ranked candidates."""
+    row = db.get_project(conn, project_id)
+    if row is None:
+        return None
+    roles = json.loads(row["roles"]) if row["roles"] else []
+    assignments = db.list_assignments(conn, project_id)
+    by_role = {role: [] for role in roles}
+    for a in assignments:
+        by_role.setdefault(a["role"], []).append(a)
+
+    # Ranked candidates come from the linked opportunity's discipline (the matcher).
+    matches = []
+    if row["opp_id"] is not None:
+        opp_row = db.get_opportunity(conn, row["opp_id"])
+        if opp_row is not None:
+            opp = db.opportunity_from_row(opp_row)
+            qual, scored = evaluate(opp)
+            matches = match_talent(
+                qual.discipline, qual.secondary_disciplines,
+                f"{opp.need} {opp.description}", db.load_talent(conn),
+            )
+    return {"row": row, "roles": roles, "by_role": by_role, "matches": matches}
+
+
+@app.get("/project/{project_id}", response_class=HTMLResponse)
+def project_detail(request: Request, project_id: int):
+    conn = db.connect()
+    try:
+        view = _project_view(conn, project_id)
+        if view is None:
+            return HTMLResponse("Project not found", status_code=404)
+    finally:
+        conn.close()
+    return render(
+        request, "project_detail.html", nav="projects",
+        project_states=db.PROJECT_STATES, **view,
+    )
+
+
+@app.post("/project/{project_id}/assign")
+def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form(...)):
+    """The decision action — Jon assigns a creator to a role. The only assign path."""
+    conn = db.connect()
+    try:
+        db.add_assignment(conn, project_id, role, talent_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/unassign")
+def project_unassign(project_id: int, assignment_id: int = Form(...)):
+    conn = db.connect()
+    try:
+        db.remove_assignment(conn, assignment_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/status")
+def project_status(project_id: int, status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.update_project_status(conn, project_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
 
 
 def main() -> None:  # console entry point

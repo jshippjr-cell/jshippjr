@@ -316,3 +316,14 @@ a{color:inherit;text-decoration:none}
 .match-reasons{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
 .match-reasons li{font-size:12.5px;color:var(--muted);line-height:1.4}
 .match-reasons li:before{content:"› ";color:var(--orange)}
+
+/* projects + assignment */
+.role-list{display:flex;flex-direction:column;gap:14px}
+.role-block{border:1px solid var(--border);border-radius:11px;padding:13px;background:var(--panel)}
+.role-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.assigned-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;font-size:13.5px}
+.assign-form{display:flex;gap:8px;margin-top:8px}
+.assign-form select{flex:1;background:var(--white);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:9px 11px}
+.inline{display:inline}
+.btn.tiny{padding:4px 9px;font-size:12px}
+.match-score.sm{width:34px;height:34px;font-size:13px}

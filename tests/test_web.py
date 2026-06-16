@@ -265,6 +265,62 @@ def test_match_excludes_unapproved_until_reviewed(client):
     assert "Unseen Composer" in client.get("/opportunity/1/match").text
 
 
+def _win_and_make_project(client, opp_id=1):
+    """Mark an opportunity Won and spin up its project; return the project id."""
+    client.post(f"/opportunity/{opp_id}/status",
+                data={"status": "Won", "outcome_value": "9000"}, follow_redirects=True)
+    r = client.post(f"/opportunity/{opp_id}/project", follow_redirects=False)
+    # 303 redirect to /project/{id}
+    loc = r.headers["location"]
+    import re
+    return int(re.search(r"/project/(\d+)", loc).group(1))
+
+
+def test_spin_up_project_from_won_opportunity(client):
+    pid = _win_and_make_project(client, 1)
+    page = client.get(f"/project/{pid}")
+    assert page.status_code == 200
+    assert "Roles & assignment" in page.text or "Roles &amp; assignment" in page.text
+    # Re-posting must not create a duplicate — it redirects to the same project.
+    r2 = client.post("/opportunity/1/project", follow_redirects=False)
+    assert r2.headers["location"].endswith(f"/project/{pid}")
+
+
+def test_assignment_is_explicit_and_reversible(client):
+    pid = _win_and_make_project(client, 1)
+    view = client.get(f"/project/{pid}").text
+    # The project should offer matched creators to assign (seeded approved composers).
+    import re
+    m = re.search(r'<option value="(\d+)">([^<]+) — fit', view)
+    assert m, "no matched creator option on the project page"
+    talent_id = m.group(1)
+    # Before assigning, that creator is not shown as assigned (no checkmark row yet).
+    assert "✓" not in client.get(f"/project/{pid}").text
+    # Assign — the explicit decision action.
+    client.post(f"/project/{pid}/assign",
+                data={"role": "Composer", "talent_id": talent_id}, follow_redirects=True)
+    after = client.get(f"/project/{pid}").text
+    assert "✓" in after and "Unassign" in after
+    # Unassign reverses it.
+    aid = re.search(r'name="assignment_id" value="(\d+)"', after).group(1)
+    client.post(f"/project/{pid}/unassign",
+                data={"assignment_id": aid}, follow_redirects=True)
+    assert "Unassign" not in client.get(f"/project/{pid}").text
+
+
+def test_projects_directory_lists_project(client):
+    pid = _win_and_make_project(client, 1)
+    page = client.get("/projects")
+    assert page.status_code == 200
+    assert f"/project/{pid}" in page.text
+
+
+def test_project_status_toggle(client):
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/status", data={"status": "Delivered"}, follow_redirects=True)
+    assert "Delivered" in client.get(f"/project/{pid}").text
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3

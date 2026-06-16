@@ -78,6 +78,15 @@
     <div class="card-head"><h2>Win / loss tracking</h2></div>
     <div class="status-now">Current status: {{ status_pill(row['status']) }}
       {% if row['outcome_value'] %}<span class="muted">· {{ row['outcome_value']|money }}</span>{% endif %}</div>
+    {% if row['status'] == 'Won' %}
+      {% if project_id %}
+      <a class="btn primary" href="/project/{{ project_id }}">Open project →</a>
+      {% else %}
+      <form method="post" action="/opportunity/{{ row['id'] }}/project" style="margin:8px 0">
+        <button class="btn primary" type="submit">⚙ Spin up project &amp; staff it</button>
+      </form>
+      {% endif %}
+    {% endif %}
     <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/status">
       <label>Update pipeline status</label>
       <div class="status-buttons">

@@ -94,7 +94,28 @@ CREATE TABLE IF NOT EXISTS talent (
     notes TEXT DEFAULT '',
     created_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opp_id INTEGER,
+    client TEXT, need TEXT,
+    budget_min REAL, budget_max REAL,
+    deadline TEXT,
+    status TEXT DEFAULT 'Active',
+    roles TEXT,                  -- JSON list of required role names
+    created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    role TEXT,
+    talent_id INTEGER,
+    created_at TEXT
+);
 """
+
+PROJECT_STATES = ["Active", "Delivered"]
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
 # idempotent migration so an older chordential.db keeps working after a pull.
@@ -146,6 +167,20 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             review_status TEXT DEFAULT 'Pending',
             invite_status TEXT DEFAULT 'Prospect',
             notes TEXT DEFAULT '', created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER, client TEXT, need TEXT,
+            budget_min REAL, budget_max REAL, deadline TEXT,
+            status TEXT DEFAULT 'Active', roles TEXT, created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL, role TEXT, talent_id INTEGER, created_at TEXT
         )"""
     )
     conn.commit()
@@ -562,6 +597,83 @@ def talent_count(conn: sqlite3.Connection) -> int:
 def load_talent(conn: sqlite3.Connection) -> List[Talent]:
     """All talent as domain objects (for the matcher)."""
     return [talent_from_row(r) for r in conn.execute("SELECT * FROM talent ORDER BY name")]
+
+
+# --------------------------------------------------------------------------- #
+# Projects + assignments (supply side — Jon assigns; nothing auto-assigns)
+# --------------------------------------------------------------------------- #
+def insert_project(
+    conn: sqlite3.Connection,
+    opp_id: Optional[int],
+    client: str,
+    need: str,
+    budget_min: Optional[float],
+    budget_max: Optional[float],
+    roles: List[str],
+    deadline: Optional[str] = None,
+) -> int:
+    cur = conn.execute(
+        """INSERT INTO projects
+           (opp_id, client, need, budget_min, budget_max, deadline, status, roles, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (
+            opp_id, client, need, budget_min, budget_max, deadline, "Active",
+            json.dumps(roles), datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def project_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM projects WHERE opp_id = ? LIMIT 1", (opp_id,)
+    ).fetchone()
+
+
+def get_project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+
+
+def list_projects(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute(
+        """SELECT p.*,
+                  (SELECT COUNT(*) FROM assignments a WHERE a.project_id = p.id) AS assigned
+           FROM projects p ORDER BY p.created_at DESC"""
+    ).fetchall()
+
+
+def update_project_status(conn: sqlite3.Connection, project_id: int, status: str) -> None:
+    if status not in PROJECT_STATES:
+        raise ValueError(f"Unknown project status {status!r}")
+    conn.execute("UPDATE projects SET status = ? WHERE id = ?", (status, project_id))
+    conn.commit()
+
+
+def add_assignment(
+    conn: sqlite3.Connection, project_id: int, role: str, talent_id: int
+) -> None:
+    """Assign a creator to a role. Called only from the explicit Assign action."""
+    conn.execute(
+        """INSERT INTO assignments (project_id, role, talent_id, created_at)
+           VALUES (?,?,?,?)""",
+        (project_id, role, talent_id, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+
+
+def remove_assignment(conn: sqlite3.Connection, assignment_id: int) -> None:
+    conn.execute("DELETE FROM assignments WHERE id = ?", (assignment_id,))
+    conn.commit()
+
+
+def list_assignments(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        """SELECT a.*, t.name AS talent_name, t.email AS talent_email
+           FROM assignments a LEFT JOIN talent t ON a.talent_id = t.id
+           WHERE a.project_id = ? ORDER BY a.role, a.created_at""",
+        (project_id,),
+    ).fetchall()
 
 
 def distinct_values(conn: sqlite3.Connection, column: str) -> List[str]:

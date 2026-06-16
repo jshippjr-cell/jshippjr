@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ row['need'] }} · Project{% endblock %}
+{% block heading %}<a class="crumb" href="/projects">Projects</a> / {{ row['need'][:40] }}{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <div class="pill-row">
+      <span class="pill {{ 'st-won' if row['status']=='Delivered' else 'st-pursuing' }}">{{ row['status'] }}</span>
+      {% if row['opp_id'] %}<a class="pill ghost" href="/opportunity/{{ row['opp_id'] }}">From opportunity ↗</a>{% endif %}
+    </div>
+    <h1 class="detail-title">{{ row['need'] }}</h1>
+    <div class="detail-buyer"><a href="/buyer/{{ row['client']|urlencode }}">{{ row['client'] }}</a></div>
+  </div>
+  <div class="detail-fit">
+    <div class="big-num">{{ (row['budget_max'] or row['budget_min'])|money if (row['budget_max'] or row['budget_min']) else '—' }}</div>
+    <div class="muted">budget</div>
+  </div>
+</div>
+
+<div class="callout"><span class="callout-ico">🛈</span> The app scoped the roles and ranked the creators. <strong>You assign each role</strong> — press <em>Assign</em> when you've decided. Nothing is assigned automatically.</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Roles &amp; assignment</h2></div>
+    {% if roles %}
+    <div class="role-list">
+      {% for role in roles %}
+      <div class="role-block">
+        <div class="role-head"><strong>{{ role }}</strong>
+          <span class="muted small">{{ by_role[role]|length }} assigned</span></div>
+        {% for a in by_role[role] %}
+        <div class="assigned-row">
+          <span>✓ <a class="strong" href="/talent/{{ a['talent_id'] }}">{{ a['talent_name'] or 'Unknown' }}</a></span>
+          <form method="post" action="/project/{{ row['id'] }}/unassign" class="inline">
+            <input type="hidden" name="assignment_id" value="{{ a['id'] }}">
+            <button class="btn tiny" type="submit">Unassign</button>
+          </form>
+        </div>
+        {% endfor %}
+        {% if matches %}
+        <form method="post" action="/project/{{ row['id'] }}/assign" class="assign-form">
+          <input type="hidden" name="role" value="{{ role }}">
+          <select name="talent_id" required>
+            <option value="" disabled selected>Choose a matched creator…</option>
+            {% for m in matches %}
+            <option value="{{ m.talent.id }}">{{ m.talent.name }} — fit {{ m.score }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn primary" type="submit">Assign</button>
+        </form>
+        {% else %}
+        <p class="muted small">No matchable creators yet — approve reels on the <a class="link" href="/talent">Talent Roster</a>.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No roles scoped for this project.</p>
+    {% endif %}
+
+    <form class="stack" method="post" action="/project/{{ row['id'] }}/status" style="margin-top:16px">
+      <label>Project status</label>
+      <div class="status-buttons">
+        {% for s in project_states %}
+        <button class="btn pill-btn {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ s }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Recommended creators <span class="muted">— the matcher</span></h2></div>
+    <table class="table compact">
+      <thead><tr><th>Fit</th><th>Creator</th><th>Why</th></tr></thead>
+      <tbody>
+        {% for m in matches %}
+        <tr>
+          <td style="width:48px"><span class="match-score sm">{{ m.score }}</span></td>
+          <td><a class="strong" href="/talent/{{ m.talent.id }}">{{ m.talent.name }}</a>
+            <div class="muted small">{{ m.talent.discipline_labels|join(' · ') }}</div></td>
+          <td class="small"><ul class="match-reasons">{% for r in m.reasons %}<li>{{ r }}</li>{% endfor %}</ul></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No matchable creators for this craft yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
