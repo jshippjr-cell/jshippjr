@@ -101,9 +101,29 @@ chordential-oia --min-score 45 --json
 chordential-oia --qualify
 chordential-oia --qualify --qualify-weights config/qualification_weights.example.json
 
+# Find real leads: parse a forwarded saved-search alert email
+chordential-oia --email samples/mandy_alert.txt --qualify
+chordential-oia --email path/to/intake-inbox/   --qualify   # a whole folder
+
 # List available sources
 chordential-oia --list-sources
 ```
+
+## Email-alert intake (`--email`) — finding real leads
+
+Demo sources return representative data. To evaluate **real** opportunities,
+forward your saved-search alert emails (Mandy, ProductionHub, Hitmarker, …) to an
+intake inbox and point the tool at them. The parser splits a multi-job digest into
+one opportunity per posting, extracts client / budget / location / discipline, and
+feeds them straight into qualify → rank:
+
+```
+forwarded alert email → parse → qualify (gate + align) → rank → your PURSUE board
+```
+
+It is provider-agnostic and heuristic — it reads labeled digests
+(`Title:` / `Company:` / `Budget:` / `Location:`) and infers buyer type and music
+requirement from the text. See `samples/` for example alerts and `intake.py`.
 
 ## Qualification layer (`--qualify`)
 
@@ -138,6 +158,7 @@ src/chordential_oia/
   models.py        # Opportunity, ScoredOpportunity, QualificationResult, enums
   scoring.py       # ScoringEngine, signal scorers, weights, tier rules
   qualification.py # QualificationEngine: gate, discipline, alignment rubric
+  intake.py        # email-alert parser: forwarded alert -> opportunities
   formatting.py    # scorecard, qualification & ranked-report rendering
   cli.py           # command-line agent runner
   sources/

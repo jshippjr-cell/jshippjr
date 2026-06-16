@@ -20,6 +20,7 @@ from .models import (
     Tier,
     WinProbability,
 )
+from .intake import parse_alert_email, parse_email_path
 from .qualification import (
     QUALIFICATION_WEIGHTS,
     QualificationEngine,
@@ -54,5 +55,7 @@ __all__ = [
     "classify_discipline",
     "hard_disqualifiers",
     "record_label",
+    "parse_alert_email",
+    "parse_email_path",
     "__version__",
 ]

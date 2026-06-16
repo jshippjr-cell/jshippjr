@@ -18,6 +18,7 @@ import sys
 from typing import List
 
 from .formatting import render_qualification_report, render_ranked_report
+from .intake import parse_email_path
 from .models import Opportunity, QualificationResult, ScoredOpportunity
 from .qualification import QualificationEngine
 from .scoring import DEFAULT_WEIGHTS, ScoringEngine
@@ -96,6 +97,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the per-criterion weighted breakdown for each opportunity.",
     )
     parser.add_argument(
+        "--email",
+        metavar="PATH",
+        help="Parse a forwarded saved-search alert (file or directory of .txt/.eml) "
+        "into opportunities instead of pulling from demo sources.",
+    )
+    parser.add_argument(
         "--qualify",
         action="store_true",
         help="Run the qualification gate first; rank only the qualified set.",
@@ -129,8 +136,13 @@ def main(argv: List[str] | None = None) -> int:
             print(f"{key:<16} {tier_tag:<3} {inst.name:<22} [{inst.category}] {access}")
         return 0
 
-    source_keys = args.sources or list(AVAILABLE_SOURCES)
-    opportunities = _collect(source_keys, args.limit)
+    if args.email:
+        opportunities = parse_email_path(args.email)
+        if not opportunities:
+            raise SystemExit(f"No opportunities parsed from {args.email!r}.")
+    else:
+        source_keys = args.sources or list(AVAILABLE_SOURCES)
+        opportunities = _collect(source_keys, args.limit)
 
     qualifications: dict = {}
     if args.qualify:
