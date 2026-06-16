@@ -357,6 +357,39 @@ def test_add_and_delete_milestone(client):
     assert client.get(f"/project/{pid}").status_code == 200
 
 
+def test_milestone_move_auto_broadcasts(client):
+    import re
+    pid = _win_and_make_project(client, 1)
+    page = client.get(f"/project/{pid}").text
+    assert "Activity & broadcast" in page or "Activity &amp; broadcast" in page
+    mid = re.search(r'name="milestone_id" value="(\d+)"', page).group(1)
+    client.post(f"/project/{pid}/milestone/status",
+                data={"milestone_id": mid, "status": "Done"}, follow_redirects=True)
+    feed = client.get(f"/project/{pid}").text
+    assert "Done" in feed and "→" in feed  # the auto-posted milestone update
+
+
+def test_assign_auto_broadcasts_and_lists_crew(client):
+    import re
+    pid = _win_and_make_project(client, 1)
+    view = client.get(f"/project/{pid}").text
+    m = re.search(r'<option value="(\d+)">([^<]+) — fit', view)
+    talent_id, name = m.group(1), m.group(2).strip()
+    client.post(f"/project/{pid}/assign",
+                data={"role": "Composer", "talent_id": talent_id}, follow_redirects=True)
+    page = client.get(f"/project/{pid}").text
+    assert "assigned to Composer" in page          # auto-broadcast entry
+    assert "Broadcasts to" in page                 # crew recipient line
+    assert name in page
+
+
+def test_manual_broadcast_post(client):
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/update",
+                data={"body": "Kickoff call Thursday 10am"}, follow_redirects=True)
+    assert "Kickoff call Thursday 10am" in client.get(f"/project/{pid}").text
+
+
 def test_old_database_migrates_without_data_loss(tmp_path, monkeypatch):
     """An old-shape chordential.db (no outreach columns) must migrate cleanly."""
     import sqlite3

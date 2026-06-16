@@ -123,6 +123,14 @@ CREATE TABLE IF NOT EXISTS milestones (
     created_at TEXT,
     updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS project_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    body TEXT,
+    kind TEXT DEFAULT 'update',
+    created_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -199,6 +207,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL, title TEXT, status TEXT DEFAULT 'Pending',
             role TEXT, created_at TEXT, updated_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS project_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL, body TEXT,
+            kind TEXT DEFAULT 'update', created_at TEXT
         )"""
     )
     conn.commit()
@@ -737,6 +752,51 @@ def update_milestone_status(conn: sqlite3.Connection, milestone_id: int, status:
 def remove_milestone(conn: sqlite3.Connection, milestone_id: int) -> None:
     conn.execute("DELETE FROM milestones WHERE id = ?", (milestone_id,))
     conn.commit()
+
+
+def get_milestone(conn: sqlite3.Connection, milestone_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM milestones WHERE id = ?", (milestone_id,)
+    ).fetchone()
+
+
+def get_assignment(conn: sqlite3.Connection, assignment_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        """SELECT a.*, t.name AS talent_name
+           FROM assignments a LEFT JOIN talent t ON a.talent_id = t.id
+           WHERE a.id = ?""",
+        (assignment_id,),
+    ).fetchone()
+
+
+# --- Project activity feed (broadcast to the assigned crew) ---------------- #
+def add_update(
+    conn: sqlite3.Connection, project_id: int, body: str, kind: str = "update"
+) -> int:
+    cur = conn.execute(
+        """INSERT INTO project_updates (project_id, body, kind, created_at)
+           VALUES (?,?,?,?)""",
+        (project_id, body, kind, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_updates(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM project_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC",
+        (project_id,),
+    ).fetchall()
+
+
+def project_crew(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
+    """Distinct assigned creators — the recipients a broadcast reaches."""
+    return conn.execute(
+        """SELECT DISTINCT t.id, t.name, t.email
+           FROM assignments a JOIN talent t ON a.talent_id = t.id
+           WHERE a.project_id = ? ORDER BY t.name""",
+        (project_id,),
+    ).fetchall()
 
 
 def milestone_progress(conn: sqlite3.Connection, project_id: int) -> Dict[str, int]:

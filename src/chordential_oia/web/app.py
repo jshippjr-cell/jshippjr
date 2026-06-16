@@ -700,6 +700,8 @@ def _project_view(conn, project_id: int):
     return {
         "row": row, "roles": roles, "by_role": by_role, "matches": matches,
         "milestones": milestones, "progress": progress,
+        "updates": db.list_updates(conn, project_id),
+        "crew": db.project_crew(conn, project_id),
     }
 
 
@@ -724,6 +726,9 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
     conn = db.connect()
     try:
         db.add_assignment(conn, project_id, role, talent_id)
+        t = db.get_talent(conn, talent_id)
+        name = t["name"] if t else "a creator"
+        db.add_update(conn, project_id, f"{name} assigned to {role}.", "assignment")
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
@@ -733,7 +738,14 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
 def project_unassign(project_id: int, assignment_id: int = Form(...)):
     conn = db.connect()
     try:
+        a = db.get_assignment(conn, assignment_id)
         db.remove_assignment(conn, assignment_id)
+        if a is not None:
+            db.add_update(
+                conn, project_id,
+                f"{a['talent_name'] or 'A creator'} removed from {a['role']}.",
+                "assignment",
+            )
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
@@ -767,6 +779,21 @@ def project_milestone_status(
     conn = db.connect()
     try:
         db.update_milestone_status(conn, milestone_id, status)
+        m = db.get_milestone(conn, milestone_id)
+        if m is not None:
+            db.add_update(conn, project_id, f"“{m['title']}” → {status}.", "milestone")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/project/{project_id}/update")
+def project_post_update(project_id: int, body: str = Form(...)):
+    """Jon posts a note that broadcasts to everyone assigned to the project."""
+    conn = db.connect()
+    try:
+        if body.strip():
+            db.add_update(conn, project_id, body.strip(), "update")
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)

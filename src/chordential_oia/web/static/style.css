@@ -337,3 +337,11 @@ a{color:inherit;text-decoration:none}
 .ms-btn{opacity:.55}
 .ms-btn.is-current{opacity:1;outline:2px solid var(--orange)}
 .ms-btn.ms-done.is-current{outline-color:#1d6b43}
+
+/* project activity feed / broadcast */
+.crew-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.feed{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
+.feed-item{font-size:13px;line-height:1.45;border-left:3px solid var(--border2);padding:3px 0 3px 11px}
+.feed-item.kind-milestone{border-left-color:var(--orange)}
+.feed-item.kind-assignment{border-left-color:var(--slate)}
+.feed-item.kind-update{border-left-color:#1d6b43}

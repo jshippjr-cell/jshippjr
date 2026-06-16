@@ -99,6 +99,32 @@
   </section>
 
   <section class="card">
+    <div class="card-head"><h2>Activity &amp; broadcast</h2></div>
+    <div class="crew-line">
+      {% if crew %}
+      <span class="muted small">Broadcasts to {{ crew|length }} assigned creator{{ 's' if crew|length != 1 }}:</span>
+      {% for c in crew %}<span class="pill ghost">{{ c['name'] }}</span>{% endfor %}
+      {% else %}
+      <span class="muted small">No one assigned yet — assignments and milestone moves will post here for the crew.</span>
+      {% endif %}
+    </div>
+    <form class="assign-form" method="post" action="/project/{{ row['id'] }}/update" style="margin:12px 0">
+      <input type="text" name="body" placeholder="Post an update to the crew…" required>
+      <button class="btn primary" type="submit">Broadcast</button>
+    </form>
+    <ul class="feed">
+      {% for u in updates %}
+      <li class="feed-item kind-{{ u['kind'] }}">
+        <div>{{ u['body'] }}</div>
+        <div class="muted small">{{ u['kind']|title }} · {{ u['created_at'][:16]|replace('T',' ') }}</div>
+      </li>
+      {% else %}
+      <li class="muted small">No activity yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
     <div class="card-head"><h2>Recommended creators <span class="muted">— the matcher</span></h2></div>
     <table class="table compact">
       <thead><tr><th>Fit</th><th>Creator</th><th>Why</th></tr></thead>
