@@ -25,7 +25,13 @@ chordential-web = "chordential_oia.web.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"chordential_oia.web" = ["templates/*.html", "static/*.css"]
+"chordential_oia.web" = [
+    "templates/*.html",
+    "static/*.css",
+    "static/*.png",
+    "static/*.svg",
+    "static/*.ico",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
