@@ -88,3 +88,14 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** default milestones from roles; status advances progress; invalid status rejected; add/delete; directory progress; migration-safe.
 - **QA (independent QA agent):** 126 tests pass; default seeding {total:3,done:0}; Done raises done/pct; invalid status raises ValueError; add/delete; directory readout; migration; clean tree. 6/6 acceptance, no defects. Screenshot verified.
 - **Status:** ✅ published.
+
+### Cycle 9 — 2026-06-16 — Project broadcast feed (completes the supply side)
+- **Roadmap stage:** Supply side → **Broadcast progress to everyone assigned** (final supply-side stage).
+- **Build:** `project_updates` table (migration-safe) + feed helpers + `project_crew` (recipients); assign/unassign and milestone-status routes auto-append feed entries; manual broadcast post; "Activity & broadcast" card with recipient list, post box, and a color-coded newest-first feed.
+- **Acceptance:** auto-broadcast on assign + milestone move; crew recipient list; manual post; empty post no-op; newest-first; migration-safe.
+- **QA (independent QA agent):** 129 tests pass; auto-broadcast on assign + milestone verified; crew line; manual post + empty/whitespace no-op; newest-first (id DESC tiebreak); migration; clean tree. All acceptance, no defects. Applied QA's polish note (empty body now redirects gracefully instead of 422). Screenshot verified.
+- **Status:** ✅ published.
+
+---
+
+**Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

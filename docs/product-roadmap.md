@@ -37,9 +37,9 @@ Win/Loss.* This is the engine that finds the right work and wins it.
 | **Strategic value** | CMO lens — small-budget door-openers beat big one-offs | ✅ | `strategic.py` |
 | **Estimate** | Team, hours, cost, price, margin (Phase-1 expert priors + band) | ✅ | `estimation.py` |
 | **Prepare** | Deterministic pursuit brief + suggested response outline | ✅ | `prepare.py` |
-| **Outreach-to-win** | Recommended contact, urgency, touch cadence, first-touch message, contact + next-action tracking, outreach log, follow-up queue | 🔨 | `outreach.py`, `web/` |
+| **Outreach-to-win** | Recommended contact, urgency, touch cadence, first-touch message, contact + next-action tracking, outreach log, follow-up queue | ✅ | Cycle 3 — `outreach.py`, `web/` |
 | **Win/Loss capture** | Pipeline status + outcome value; feeds the data moat | ✅ | `web/db.py` |
-| **Buyer graph** | Buyer profiles, history, relationship value (the moat asset) | ⏭️ | `web/` buyer pages (partial) |
+| **Buyer graph** | Buyer relationship intelligence (stage, next-best-action), directory, contacts | ✅ | Cycle 4 — `buyer_intel.py` |
 
 **Building now (this cycle): Outreach-to-win.** After Prepare produces a brief,
 Outreach turns it into action — *who* to contact, *how urgently*, a *sequenced
@@ -60,13 +60,13 @@ relationships?*
 
 | Stage | What it does | Status | Notes |
 |---|---|---|---|
-| **Identify required labor** | From a won/qualified project, derive the roles needed (composer, mixer, sound designer, …) | 🗓️ | The estimator already produces `team_shape` — reuse it |
+| **Identify required labor** | From a won/qualified project, derive the roles needed (composer, mixer, sound designer, …) | ✅ | Cycle 7 — roles carried from the estimator's `team_shape` into the project |
 | **Recruit talent** | Pipeline of skilled creators to invite into the network | ✅ | Cycle 5 — roster, profile/credits, reel-review gate, funnel |
-| **Talent match** | Match creators to a project on **profile + credits**, plus a **demo-reel upload area Jon personally reviews** | 🔨 | **Decision (2026-06-16): profile + credits matching, NOT audio AI.** A demo-reel upload area is monitored/reviewed by Jon (human-in-the-loop). Audio analysis is explicitly out of scope for v1. |
-| **Invite to the app** | Bring matched talent into Chordential as users | 🗓️ | First multi-user surface |
-| **Assign to project** | Attach creators to a won project with roles | 🗓️ | **Jon is the decision-maker (see decision rights below).** The app does all qualification + skill matching and surfaces full buyer-side and talent-side detail; Jon pushes the button to confirm each assignment. |
-| **Track progress** | Per-project task/milestone status | 🗓️ | Also feeds Phase-3 estimation actuals (`company-strategy.md`) |
-| **Broadcast progress** | Push status to everyone assigned to the project | 🗓️ | Keeps the whole team in sync |
+| **Talent match** | Match creators to a project on **profile + credits**, plus a **demo-reel upload area Jon personally reviews** | ✅ | Cycle 6 — `matching.py`. **Decision: profile + credits matching, NOT audio AI.** Reel reviewed by Jon (human-in-the-loop). |
+| **Invite to the app** | Bring matched talent into Chordential as users | ◑ | Cycle 5 — funnel states (Prospect→Invited→Joined) built; real auth/email/multi-user is later |
+| **Assign to project** | Attach creators to a won project with roles | ✅ | Cycle 7 — **Jon assigns (decision rights below); nothing auto-assigns.** App surfaces full buyer-side + talent-side detail and ranked matches; Jon presses Assign. |
+| **Track progress** | Per-project task/milestone status | ✅ | Cycle 8 — milestones per role, progress bar (feeds Phase-3 estimation actuals) |
+| **Broadcast progress** | Push status to everyone assigned to the project | ✅ | Cycle 9 — project activity feed; auto-posts + manual broadcast to the assigned crew |
 
 **Talent-matching decision, recorded in full:** matching is on **profile and
 credits only**. Creators get an area to **upload a demo reel, which Jon monitors

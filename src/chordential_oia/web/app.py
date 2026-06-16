@@ -788,7 +788,7 @@ def project_milestone_status(
 
 
 @app.post("/project/{project_id}/update")
-def project_post_update(project_id: int, body: str = Form(...)):
+def project_post_update(project_id: int, body: str = Form("")):
     """Jon posts a note that broadcasts to everyone assigned to the project."""
     conn = db.connect()
     try:
