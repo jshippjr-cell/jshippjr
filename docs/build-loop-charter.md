@@ -81,3 +81,10 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** project from Won opp (no dup); per-role assign/unassign explicit; ranked candidates shown; project status toggle; migration-safe.
 - **QA (independent QA agent):** 123 tests pass; **no-auto-assign directive verified behaviorally AND by code path** (`add_assignment` called only from the assign handler); assign/unassign end-to-end; dedup; migration; clean tree. 16/16 checks, no defects. Screenshot verified.
 - **Status:** ✅ published.
+
+### Cycle 8 — 2026-06-16 — Delivery progress (milestone tracking)
+- **Roadmap stage:** Supply side → **Track progress**. Estimation Director noted this is the source of Phase-3 estimation actuals.
+- **Build:** `milestones` table (migration-safe) + CRUD + `milestone_progress`; default deliverable milestone per role auto-seeded on project creation; advanceable Pending→In progress→Done with a progress bar; done/total surfaced on the project and the projects directory.
+- **Acceptance:** default milestones from roles; status advances progress; invalid status rejected; add/delete; directory progress; migration-safe.
+- **QA (independent QA agent):** 126 tests pass; default seeding {total:3,done:0}; Done raises done/pct; invalid status raises ValueError; add/delete; directory readout; migration; clean tree. 6/6 acceptance, no defects. Screenshot verified.
+- **Status:** ✅ published.
