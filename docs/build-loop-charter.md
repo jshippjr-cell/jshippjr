@@ -57,3 +57,11 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **Acceptance:** deterministic engine with correct stage rules; directory + profile render and rank; relationship reflects outreach + wins; built only from existing data; full suite green.
 - **QA (independent QA agent):** 101 tests pass; engine stage/boundary/determinism checks pass; `/buyers` + buyer profile 200 with expected content; end-to-end (contact → touch → Won ⇒ "Client") verified; clean working tree. 5/5 acceptance, no defects. Screenshots of the directory + profile verified.
 - **Status:** ✅ published.
+
+### Cycle 5 — 2026-06-16 — Talent Roster (supply-side foundation)
+- **Roadmap stage:** Supply side → **Recruit talent** (the first supply-side stage; everything downstream needs a person model).
+- **Council:** CEO reaffirmed match-on-profile-and-credits + a Jon-reviewed demo reel (no audio AI); Creative Director owns the reel gate; CMO defined the Prospect→Invited→Joined funnel; CTO reused `MusicDiscipline` for talent skills and kept it to a new table + migration, reel as a link (no file-hosting infra).
+- **Build:** new `talent.py` (Talent model, ReviewStatus/InviteStatus, profile_completeness, matchable rule); `db.py` talent table + CRUD (migration-safe); `seed.py` starter roster; `/talent` roster + filters, add/edit, demo-reel review action, invite funnel; new Supply nav section.
+- **Acceptance:** matchable = approved reel + ≥1 discipline; roster/detail render; review + invite persist; seeded roster present; migration-safe; full suite green.
+- **QA (independent QA agent):** 112 tests pass; domain rules (matchable cases, completeness) verified; `/talent` + `/talent/new` 200 with seeded creator; review gate end-to-end (Pending⇒not matchable, Approve⇒Matchable) verified; migration idempotent; clean tree. 5/5 acceptance, no defects. Screenshots verified.
+- **Status:** ✅ published.
