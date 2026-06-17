@@ -13,17 +13,22 @@ band arrive in later cycles of Phase 1.
 from __future__ import annotations
 
 import os
+from typing import List
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ..models import MusicDiscipline, Opportunity
+from ..talent import Talent
 from . import db
 from .estimate import build_estimate
 from .evaluate import evaluate
 from .filters import displayurl, money, pct, slug
 from .showcase import get_showcase
+
+# Disciplines offered on the public applicant form (exclude the disqualified bucket).
+APPLY_DISCIPLINES = [d for d in MusicDiscipline if d is not MusicDiscipline.NON_CRAFT]
 
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
@@ -178,3 +183,42 @@ def public_thanks(
 ):
     band = {"low": low, "high": high} if (low and high) else None
     return render(request, "public/thanks.html", active="", kind=kind, band=band)
+
+
+# --------------------------------------------------------------------------- #
+# Creator applications — supply-side intake. Applicants enter the SAME review
+# funnel as sourced/manual talent: Pending until Jon reviews the reel.
+# --------------------------------------------------------------------------- #
+@router.get("/apply", response_class=HTMLResponse)
+def public_apply(request: Request):
+    return render(
+        request, "public/apply.html", active="apply", disciplines=APPLY_DISCIPLINES,
+    )
+
+
+@router.post("/apply", response_class=HTMLResponse)
+def public_apply_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(""),
+    disciplines: List[str] = Form([]),
+    credits: str = Form(""),
+    location: str = Form(""),
+    demo_reel_url: str = Form(""),
+):
+    valid = [
+        MusicDiscipline(d) for d in disciplines
+        if d in {m.value for m in MusicDiscipline}
+    ]
+    t = Talent(
+        name=name.strip(), email=email.strip() or None, disciplines=valid,
+        credits=credits.strip(), location=location.strip() or None,
+        demo_reel_url=demo_reel_url.strip() or None,
+        source="applicant", source_url=demo_reel_url.strip() or None,
+    )
+    conn = db.connect()
+    try:
+        db.insert_talent(conn, t)
+    finally:
+        conn.close()
+    return RedirectResponse("/site/thanks?kind=apply", status_code=303)

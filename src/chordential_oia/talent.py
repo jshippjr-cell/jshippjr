@@ -46,10 +46,25 @@ class Talent:
     invite_status: InviteStatus = InviteStatus.PROSPECT
     notes: str = ""
     id: Optional[int] = None
+    # Provenance: where this creator came from ("manual", "applicant", a source
+    # key) and a link back to the profile/portfolio the record was built from.
+    source: Optional[str] = None
+    source_url: Optional[str] = None
 
     @property
     def discipline_labels(self) -> List[str]:
         return [d.label for d in self.disciplines]
+
+    @property
+    def source_label(self) -> str:
+        """Human-readable origin badge ("Manual" when unset)."""
+        return {
+            "applicant": "Applied",
+            "manual": "Manual",
+            "sample": "Sourced",
+            "demo": "Sourced",
+            "crawl": "Sourced",
+        }.get((self.source or "").lower(), (self.source or "Manual").title())
 
     @property
     def is_approved(self) -> bool:

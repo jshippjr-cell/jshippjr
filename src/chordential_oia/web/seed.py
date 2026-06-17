@@ -17,6 +17,7 @@ from ..intake import parse_email_path
 from ..models import MusicDiscipline, Opportunity
 from ..sources import AVAILABLE_SOURCES
 from ..talent import InviteStatus, ReviewStatus, Talent
+from ..talent_sources import AVAILABLE_TALENT_SOURCES
 from . import db
 from .evaluate import evaluate
 
@@ -91,6 +92,30 @@ def seed_talent(conn: sqlite3.Connection) -> int:
     for t in _TALENT_SEED:
         db.insert_talent(conn, t)
     return len(_TALENT_SEED)
+
+
+def ingest_talent_prospects(conn: sqlite3.Connection) -> int:
+    """Pull candidates from the registered talent sources into the roster.
+
+    Each source yields Pending/Prospect creators (the review gate); we stamp the
+    source key as provenance and de-dupe on name+email so repeated boots don't
+    create duplicates. Sources fail soft — a broken one is skipped, never fatal.
+    In the sandbox/CI only the demo source is registered (no network).
+    """
+    db.init_db(conn)
+    added = 0
+    for key, factory in AVAILABLE_TALENT_SOURCES.items():
+        try:
+            candidates = factory().fetch()
+        except Exception:  # fail soft — a dead source never blocks startup
+            continue
+        for t in candidates:
+            if db.talent_exists(conn, t.name, t.email):
+                continue
+            t.source = t.source or key
+            db.insert_talent(conn, t)
+            added += 1
+    return added
 
 
 def _suggested_price(opp: Opportunity) -> float:

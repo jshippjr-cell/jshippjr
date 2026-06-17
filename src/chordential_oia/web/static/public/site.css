@@ -159,6 +159,10 @@ body.pub a{color:inherit;text-decoration:none}
 .field textarea{resize:vertical}
 .form-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
 .form-note{margin:16px 0 0;font-size:13px;color:var(--muted)}
+.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 16px}
+@media(max-width:680px){.checks{grid-template-columns:1fr}}
+.check{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--text);font-size:14px}
+.check input{width:auto}
 
 /* thank-you */
 .thanks{max-width:640px}

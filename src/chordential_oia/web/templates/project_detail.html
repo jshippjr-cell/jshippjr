@@ -57,6 +57,7 @@
       {% for role in roles %}
       <div class="role-block">
         <div class="role-head"><strong>{{ role }}</strong>
+          {% if role_rates.get(role) %}<span class="muted small">{{ role_rates[role]|money }}/hr</span>{% endif %}
           <span class="muted small">{{ by_role[role]|length }} assigned</span></div>
         {% for a in by_role[role] %}
         <div class="assigned-row">
@@ -133,6 +134,7 @@
         <tr>
           <td style="width:48px"><span class="match-score sm">{{ m.score }}</span></td>
           <td><a class="strong" href="/talent/{{ m.talent.id }}">{{ m.talent.name }}</a>
+            <span class="src-badge src-{{ (m.talent.source or 'manual')|lower }}">{{ m.talent.source_label }}</span>
             <div class="muted small">{{ m.talent.discipline_labels|join(' · ') }}</div></td>
           <td class="small"><ul class="match-reasons">{% for r in m.reasons %}<li>{{ r }}</li>{% endfor %}</ul></td>
         </tr>

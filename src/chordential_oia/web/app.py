@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from ..estimation import ROLE_RATES
 from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI):
     if count == 0:
         seed.seed(conn)
     seed.seed_talent(conn)
+    seed.ingest_talent_prospects(conn)
     seed.seed_demo_pipeline(conn)
     conn.close()
     yield
@@ -901,6 +903,8 @@ def _project_view(conn, project_id: int):
         "milestones": milestones, "progress": progress,
         "updates": db.list_updates(conn, project_id),
         "crew": db.project_crew(conn, project_id),
+        # Per-role pay priors so Jon sees the cost of each scoped role.
+        "role_rates": {role: ROLE_RATES.get(role) for role in roles},
     }
 
 

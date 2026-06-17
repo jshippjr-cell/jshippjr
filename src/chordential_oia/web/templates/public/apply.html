@@ -1,0 +1,58 @@
+{% extends "public_base.html" %}
+{% block title %}Create with us{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">For creators</p>
+    <h1 class="page-title">Create with Chordential.</h1>
+    <p class="page-lede">
+      Composers, sound designers, arrangers, and supervisors — tell us about your
+      work. Every reel is reviewed personally before we reach out.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner form-wrap">
+    <form class="lead-form" method="post" action="/site/apply">
+      <div class="field">
+        <label for="name">Your name *</label>
+        <input id="name" name="name" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email">
+        </div>
+        <div class="field">
+          <label for="location">Location</label>
+          <input id="location" name="location" placeholder="City, or Remote">
+        </div>
+      </div>
+      <div class="field">
+        <label>Disciplines</label>
+        <div class="checks">
+          {% for d in disciplines %}
+          <label class="check"><input type="checkbox" name="disciplines" value="{{ d.value }}"> {{ d.label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field">
+        <label for="credits">Credits / experience</label>
+        <textarea id="credits" name="credits" rows="4"
+                  placeholder="Notable work, clients, roles."></textarea>
+      </div>
+      <div class="field">
+        <label for="demo_reel_url">Demo reel link</label>
+        <input id="demo_reel_url" name="demo_reel_url"
+               placeholder="Link to your reel / portfolio">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Submit your profile</button>
+      </div>
+      <p class="form-note">We review every applicant’s reel personally — no automated screening.</p>
+    </form>
+  </div>
+</section>
+{% endblock %}

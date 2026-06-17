@@ -74,6 +74,7 @@
       <span class="pill rev-{{ c.t.review_status.value|lower }}">{{ c.t.review_status.value }}</span>
       <span class="pill inv-{{ c.t.invite_status.value|lower }}">{{ c.t.invite_status.value }}</span>
       {% if c.t.matchable %}<span class="pill sv-door">✓ Matchable</span>{% endif %}
+      <span class="src-badge src-{{ (c.t.source or 'manual')|lower }}">{{ c.t.source_label }}</span>
     </div>
     <div class="spot-need">{{ c.t.name }}</div>
     <div class="muted small">{{ c.t.discipline_labels|join(' · ') or 'No disciplines set' }}</div>

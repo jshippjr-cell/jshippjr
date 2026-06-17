@@ -93,7 +93,9 @@ CREATE TABLE IF NOT EXISTS talent (
     review_status TEXT DEFAULT 'Pending',
     invite_status TEXT DEFAULT 'Prospect',
     notes TEXT DEFAULT '',
-    created_at TEXT
+    created_at TEXT,
+    source TEXT,                 -- 'manual' | 'applicant' | source key
+    source_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -186,6 +188,12 @@ _INBOUND_COLUMNS = {
     "shown_price_high": "REAL",
 }
 
+# Provenance columns on talent — migrated onto an existing roster the same way.
+_TALENT_COLUMNS = {
+    "source": "TEXT",
+    "source_url": "TEXT",
+}
+
 # Columns added by the Outreach layer — applied to pre-existing databases via an
 # idempotent migration so an older chordential.db keeps working after a pull.
 _OUTREACH_COLUMNS = {
@@ -239,6 +247,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             notes TEXT DEFAULT '', created_at TEXT
         )"""
     )
+    talent_cols = {r["name"] for r in conn.execute("PRAGMA table_info(talent)")}
+    for name, decl in _TALENT_COLUMNS.items():
+        if name not in talent_cols:
+            conn.execute(f"ALTER TABLE talent ADD COLUMN {name} {decl}")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -778,6 +790,8 @@ def talent_from_row(row: sqlite3.Row) -> Talent:
         review_status=_enum(row["review_status"], ReviewStatus, ReviewStatus.PENDING),
         invite_status=_enum(row["invite_status"], InviteStatus, InviteStatus.PROSPECT),
         notes=row["notes"] or "",
+        source=row["source"],
+        source_url=row["source_url"],
     )
 
 
@@ -785,17 +799,34 @@ def insert_talent(conn: sqlite3.Connection, t: Talent) -> int:
     cur = conn.execute(
         """INSERT INTO talent
            (name, email, disciplines, credits, location, demo_reel_url,
-            review_status, invite_status, notes, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            review_status, invite_status, notes, created_at, source, source_url)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             t.name, t.email, json.dumps([d.value for d in t.disciplines]),
             t.credits, t.location, t.demo_reel_url,
             t.review_status.value, t.invite_status.value, t.notes,
             datetime.now(timezone.utc).isoformat(),
+            (t.source or "manual"), t.source_url,
         ),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def talent_exists(
+    conn: sqlite3.Connection, name: str, email: Optional[str] = None
+) -> bool:
+    """Dedupe check for ingest — match on name, narrowed by email when present."""
+    if email:
+        row = conn.execute(
+            "SELECT 1 FROM talent WHERE name = ? AND email = ? LIMIT 1",
+            (name, email),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT 1 FROM talent WHERE name = ? LIMIT 1", (name,)
+        ).fetchone()
+    return row is not None
 
 
 def list_talent(
