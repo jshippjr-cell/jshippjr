@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Chordential</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="admin-login">
+  <div class="card admin-login-card">
+    <img class="admin-login-logo" src="/static/public/wordmark-dark.png" alt="Chordential">
+    <div class="admin-login-tag">Procurement OS — internal</div>
+    {% if error %}<div class="admin-login-error">Incorrect passphrase. Try again.</div>{% endif %}
+    <form method="post" action="/admin/login" class="admin-login-form">
+      <input type="hidden" name="next" value="{{ next }}">
+      <input type="password" name="password" placeholder="Passphrase" autofocus required>
+      <button class="btn primary" type="submit">Sign in</button>
+    </form>
+    <div class="admin-login-foot muted small">This is a private workspace. The public site is at <a class="link" href="/site">/site</a>.</div>
+  </div>
+</div>
+</body>
+</html>

@@ -68,6 +68,20 @@ a{color:inherit;text-decoration:none}
 .dot.pursue{background:var(--orange)} .dot.review{background:var(--slate)}
 .dot.pass{background:var(--olive)} .dot.won{background:var(--sand)}
 .sidebar-foot{margin-top:auto;padding:12px 10px;color:#7d7a70;font-size:11px;border-top:1px solid #2c2826}
+.sidebar-signout{display:inline-block;margin-top:8px;color:#b7b2a4;font-weight:600}
+.sidebar-signout:hover{color:#fff}
+
+/* admin sign-in (gate) */
+.admin-login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:radial-gradient(1100px 540px at 88% -8%, #F3EAdf 0%, rgba(243,234,223,0) 60%), var(--bg)}
+.admin-login-card{width:100%;max-width:380px;text-align:center;padding:30px 28px}
+.admin-login-logo{height:30px;width:auto;margin:2px auto 6px;display:block}
+.admin-login-tag{font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted2);margin-bottom:18px}
+.admin-login-form{display:flex;flex-direction:column;gap:10px}
+.admin-login-form input{background:var(--panel);border:1px solid var(--border2);border-radius:9px;padding:11px 13px;font:inherit;color:var(--text)}
+.admin-login-form input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,103,31,.12)}
+.admin-login-error{background:rgba(120,30,40,.1);color:#7a2330;border:1px solid rgba(120,30,40,.26);border-radius:9px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+.admin-login-foot{margin-top:16px}
 
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar{

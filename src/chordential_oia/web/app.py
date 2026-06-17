@@ -14,6 +14,8 @@ Run it::
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 from contextlib import asynccontextmanager
@@ -82,6 +84,8 @@ templates.env.globals["status_class"] = lambda s: _STATUS_CLASS.get(s, "")
 _STRAT_CLASS = {"Door-opener": "door", "High": "high", "Medium": "medium", "Low": "low"}
 templates.env.globals["strat_class"] = lambda s: _STRAT_CLASS.get(s, "")
 templates.env.globals["PIPELINE_STATES"] = db.PIPELINE_STATES
+# True only when the internal gate is active (CHORDENTIAL_ADMIN_TOKEN set).
+templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_TOKEN"))
 
 
 @asynccontextmanager
@@ -106,6 +110,52 @@ app.mount("/static", StaticFiles(directory=os.path.join(_HERE, "static")), name=
 app.include_router(public_router)
 
 
+# --------------------------------------------------------------------------- #
+# Internal admin gate — a light single-operator shared secret (NOT multi-user
+# auth). OFF unless CHORDENTIAL_ADMIN_TOKEN is set, so dev/tests are unchanged;
+# set it in the Render env to keep the dashboard private while /site stays public.
+# --------------------------------------------------------------------------- #
+ADMIN_COOKIE = "cdl_admin"
+
+
+def _admin_secret() -> Optional[str]:
+    return os.environ.get("CHORDENTIAL_ADMIN_TOKEN") or None
+
+
+def _admin_cookie_value(token: str) -> str:
+    # Store proof-of-knowledge, never the raw token.
+    return hashlib.sha256(f"cdl|{token}".encode()).hexdigest()
+
+
+def _admin_authed(request: Request) -> bool:
+    token = _admin_secret()
+    if not token:
+        return True  # gate disabled
+    cookie = request.cookies.get(ADMIN_COOKIE) or ""
+    return bool(cookie) and hmac.compare_digest(cookie, _admin_cookie_value(token))
+
+
+def _is_public_path(path: str) -> bool:
+    """Public surfaces that never require the admin secret."""
+    return (
+        path == "/site"
+        or path.startswith("/site/")
+        or path.startswith("/static/")
+        or path in ("/healthz", "/favicon.ico")
+        or path.startswith("/admin/login")
+        or path.startswith("/admin/logout")
+    )
+
+
+@app.middleware("http")
+async def _admin_gate(request: Request, call_next):
+    if _admin_secret() and not _is_public_path(request.url.path) and not _admin_authed(request):
+        if request.method == "HEAD":
+            return Response(status_code=200)  # let platform health probes through
+        return RedirectResponse(f"/admin/login?next={request.url.path}", status_code=303)
+    return await call_next(request)
+
+
 def render(request: Request, name: str, **kw):
     """Render a template, compatible with Starlette's (request, name, context) API."""
     context = {"nav": kw.pop("nav", "")}
@@ -128,6 +178,42 @@ def healthz():
 def root_head():
     # Respond to the platform health probe without running the dashboard query.
     return Response(status_code=200)
+
+
+# --------------------------------------------------------------------------- #
+# Admin sign-in (only meaningful when CHORDENTIAL_ADMIN_TOKEN is set)
+# --------------------------------------------------------------------------- #
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page(request: Request, next: str = "/"):
+    if _admin_authed(request):
+        return RedirectResponse(_safe_local(next, "/"), status_code=303)
+    return render(
+        request, "admin_login.html", next=_safe_local(next, "/"), error=False
+    )
+
+
+@app.post("/admin/login")
+def admin_login(request: Request, password: str = Form(""), next: str = Form("/")):
+    token = _admin_secret()
+    if not token:
+        return RedirectResponse("/", status_code=303)
+    if hmac.compare_digest(password.strip(), token):
+        resp = RedirectResponse(_safe_local(next, "/"), status_code=303)
+        resp.set_cookie(
+            ADMIN_COOKIE, _admin_cookie_value(token),
+            httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
+        )
+        return resp
+    return render(
+        request, "admin_login.html", next=_safe_local(next, "/"), error=True
+    )
+
+
+@app.get("/admin/logout")
+def admin_logout():
+    resp = RedirectResponse("/admin/login", status_code=303)
+    resp.delete_cookie(ADMIN_COOKIE)
+    return resp
 
 
 # --------------------------------------------------------------------------- #

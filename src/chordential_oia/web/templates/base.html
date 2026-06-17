@@ -41,6 +41,7 @@
     </nav>
     <div class="sidebar-foot">
       <span>Music procurement intelligence</span>
+      {% if admin_gate_on %}<a class="sidebar-signout" href="/admin/logout">Sign out</a>{% endif %}
     </div>
   </aside>
   <main class="main">
