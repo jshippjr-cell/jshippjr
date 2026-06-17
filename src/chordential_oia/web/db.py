@@ -18,6 +18,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
+from ..invoicing import INVOICE_STATES, Invoice
 from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
 from ..proposals import PROPOSAL_STATES, Proposal
 from ..strategic import assess_strategic_value
@@ -211,6 +212,21 @@ CREATE TABLE IF NOT EXISTS proposals (
     terms TEXT,                             -- JSON [str]
     notes TEXT DEFAULT ''
 );
+
+-- Invoices — deposit + final, reconciling to the proposal total. external_ref /
+-- paid_at exist from the start so the later Stripe wire-up needs no schema change.
+CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    proposal_id INTEGER,
+    created_at TEXT,
+    kind TEXT,                              -- 'Deposit' | 'Final'
+    status TEXT DEFAULT 'Draft',            -- Draft | Issued | Paid
+    amount REAL,
+    note TEXT DEFAULT '',
+    external_ref TEXT,                      -- payment-provider id (Stripe, later)
+    paid_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -355,6 +371,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, status TEXT DEFAULT 'Draft', deposit_pct REAL,
             deposit_amount REAL, total_price REAL, balance_due REAL,
             line_items TEXT, terms TEXT, notes TEXT DEFAULT ''
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER,
+            proposal_id INTEGER, created_at TEXT, kind TEXT,
+            status TEXT DEFAULT 'Draft', amount REAL, note TEXT DEFAULT '',
+            external_ref TEXT, paid_at TEXT
         )"""
     )
     conn.commit()
@@ -978,6 +1002,70 @@ def update_proposal_status(
         raise ValueError(f"Unknown proposal status {status!r}")
     conn.execute(
         "UPDATE proposals SET status = ? WHERE id = ?", (status, proposal_id)
+    )
+    conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Invoices — deterministic; reconcile to the proposal total
+# --------------------------------------------------------------------------- #
+def insert_invoice(
+    conn: sqlite3.Connection,
+    project_id: Optional[int],
+    proposal_id: Optional[int],
+    invoice: Invoice,
+) -> int:
+    cur = conn.execute(
+        """INSERT INTO invoices
+           (project_id, proposal_id, created_at, kind, status, amount, note)
+           VALUES (?,?,?,?,'Draft',?,?)""",
+        (
+            project_id, proposal_id, datetime.now(timezone.utc).isoformat(),
+            invoice.kind, invoice.amount, invoice.note,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_invoices(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM invoices WHERE project_id = ? ORDER BY id", (project_id,)
+    ).fetchall()
+
+
+def get_invoice(conn: sqlite3.Connection, invoice_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM invoices WHERE id = ?", (invoice_id,)
+    ).fetchone()
+
+
+def has_invoice(conn: sqlite3.Connection, project_id: int, kind: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM invoices WHERE project_id = ? AND kind = ? LIMIT 1",
+        (project_id, kind),
+    ).fetchone()
+    return row is not None
+
+
+def update_invoice_status(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    status: str,
+    external_ref: Optional[str] = None,
+) -> None:
+    """Set invoice status. Marking Paid stamps paid_at; external_ref is the
+    payment-provider reference (populated by the Stripe layer later)."""
+    if status not in INVOICE_STATES:
+        raise ValueError(f"Unknown invoice status {status!r}")
+    paid_at = datetime.now(timezone.utc).isoformat() if status == "Paid" else None
+    conn.execute(
+        """UPDATE invoices
+           SET status = ?,
+               paid_at = COALESCE(?, paid_at),
+               external_ref = COALESCE(?, external_ref)
+           WHERE id = ?""",
+        (status, paid_at, external_ref, invoice_id),
     )
     conn.commit()
 

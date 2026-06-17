@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..estimation import ROLE_RATES, RoleLine
+from ..invoicing import build_invoice
 from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
@@ -1050,6 +1051,23 @@ def project_milestone_status(
         m = db.get_milestone(conn, milestone_id)
         if m is not None:
             db.add_update(conn, project_id, f"“{m['title']}” → {status}.", "milestone")
+        # Delivery folds into the money flow: once every milestone is Done and a
+        # proposal exists, draft the final invoice (once) so closing the work and
+        # billing for it are one motion. Jon still issues + marks it paid.
+        if status == "Done":
+            progress = db.milestone_progress(conn, project_id)
+            prop = db.proposal_for_project(conn, project_id)
+            if (
+                progress["total"] > 0 and progress["done"] == progress["total"]
+                and prop is not None and not db.has_invoice(conn, project_id, "Final")
+            ):
+                prow = db.get_project(conn, project_id)
+                inv = _invoice_from_proposal_row(prow, prop, "Final")
+                db.insert_invoice(conn, project_id, prop["id"], inv)
+                db.add_update(
+                    conn, project_id,
+                    "Final invoice drafted (all milestones delivered).", "invoice",
+                )
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
@@ -1125,12 +1143,13 @@ def project_proposal_view(request: Request, project_id: int):
         proposal = db.proposal_for_project(conn, project_id)
         line_items = json.loads(proposal["line_items"]) if proposal and proposal["line_items"] else []
         terms = json.loads(proposal["terms"]) if proposal and proposal["terms"] else []
+        invoices = db.list_invoices(conn, project_id)
     finally:
         conn.close()
     return render(
         request, "proposal_detail.html", nav="projects", project=prow,
-        proposal=proposal, line_items=line_items, terms=terms,
-        proposal_states=db.PROPOSAL_STATES,
+        proposal=proposal, line_items=line_items, terms=terms, invoices=invoices,
+        proposal_states=db.PROPOSAL_STATES, invoice_states=db.INVOICE_STATES,
     )
 
 
@@ -1160,6 +1179,56 @@ def proposal_set_status(proposal_id: int, status: str = Form(...)):
             db.add_update(conn, p["project_id"], f"Proposal {status}.", "proposal")
             return RedirectResponse(
                 f"/project/{p['project_id']}/proposal", status_code=303
+            )
+    finally:
+        conn.close()
+    return RedirectResponse("/projects", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Invoices — deterministic; reconcile to the proposal
+# --------------------------------------------------------------------------- #
+def _invoice_from_proposal_row(prow, prop_row, kind: str):
+    """Build an Invoice from the stored proposal (client/need from the project)."""
+    obj = _proposal_from_row(prop_row)
+    obj.client = prow["client"]
+    obj.need = prow["need"]
+    return build_invoice(obj, kind)
+
+
+@app.post("/project/{project_id}/invoice")
+def project_create_invoice(project_id: int, kind: str = Form(...)):
+    """Issue a deposit or final invoice from the project's proposal."""
+    conn = db.connect()
+    try:
+        prow = db.get_project(conn, project_id)
+        prop = db.proposal_for_project(conn, project_id)
+        if prow is None or prop is None:
+            return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
+        if not db.has_invoice(conn, project_id, kind):
+            inv = _invoice_from_proposal_row(prow, prop, kind)
+            db.insert_invoice(conn, project_id, prop["id"], inv)
+            db.add_update(conn, project_id, f"{kind} invoice created.", "invoice")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
+
+
+@app.post("/invoice/{invoice_id}/status")
+def invoice_set_status(invoice_id: int, status: str = Form(...)):
+    conn = db.connect()
+    try:
+        inv = db.get_invoice(conn, invoice_id)
+        if inv is None:
+            return RedirectResponse("/projects", status_code=303)
+        db.update_invoice_status(conn, invoice_id, status)
+        if inv["project_id"]:
+            db.add_update(
+                conn, inv["project_id"],
+                f"{inv['kind']} invoice {status.lower()}.", "invoice",
+            )
+            return RedirectResponse(
+                f"/project/{inv['project_id']}/proposal", status_code=303
             )
     finally:
         conn.close()

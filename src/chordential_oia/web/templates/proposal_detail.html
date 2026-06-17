@@ -61,6 +61,57 @@
     </form>
   </div>
 </div>
+
+<section class="card" style="margin-top:18px">
+  <div class="card-head"><h2>Invoices</h2>
+    <span class="muted small">deposit + final reconcile to the proposal total</span></div>
+
+  <div class="lead-actions" style="margin-bottom:12px">
+    <form method="post" action="/project/{{ project['id'] }}/invoice">
+      <input type="hidden" name="kind" value="Deposit">
+      <button class="btn tiny" type="submit">Create deposit invoice</button>
+    </form>
+    <form method="post" action="/project/{{ project['id'] }}/invoice">
+      <input type="hidden" name="kind" value="Final">
+      <button class="btn tiny" type="submit">Create final invoice</button>
+    </form>
+  </div>
+
+  {% if invoices %}
+  <table class="table compact">
+    <thead><tr><th>Invoice</th><th>Amount</th><th>Status</th><th style="width:1%">Actions</th></tr></thead>
+    <tbody>
+      {% for inv in invoices %}
+      <tr>
+        <td class="strong">{{ inv['kind'] }}<div class="muted small">{{ inv['note'] }}</div></td>
+        <td>{{ inv['amount']|money }}</td>
+        <td><span class="pill st-{{ inv['status']|lower }}">{{ inv['status'] }}</span>
+          {% if inv['paid_at'] %}<div class="muted small">paid</div>{% endif %}</td>
+        <td>
+          <div class="lead-actions">
+            {% for s in invoice_states %}
+              {% if s != inv['status'] %}
+              <form method="post" action="/invoice/{{ inv['id'] }}/status">
+                <input type="hidden" name="status" value="{{ s }}">
+                <button class="btn tiny {{ 'primary' if s=='Paid' }}" type="submit">Mark {{ s }}</button>
+              </form>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin:0">No invoices yet. A final invoice is also drafted automatically when every milestone is delivered.</p>
+  {% endif %}
+
+  <p class="muted small" style="margin-top:12px">
+    💳 Payments are deterministic for now — “Mark Paid” records it manually.
+    Stripe deposits/payouts wire in later at a single seam (no schema change needed).
+  </p>
+</section>
 {% endif %}
 
 {% endblock %}
