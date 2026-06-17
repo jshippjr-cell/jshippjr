@@ -85,6 +85,25 @@
 </section>
 
 <div class="card" style="margin-top:18px">
+  <div class="card-head"><h2>Point the crawler at your own site/area</h2></div>
+  <form class="filters" method="post" action="/discovery/site/add" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <input class="filter-search" name="name" placeholder="Site / board name" required>
+    <input class="filter-search" name="url" placeholder="URL to comb (use {q} for a keyword slot)" required style="min-width:320px">
+    <select name="kind">
+      <option value="opportunity" {{ 'selected' if kind=='opportunity' }}>Opportunities</option>
+      <option value="talent" {{ 'selected' if kind=='talent' }}>Talent</option>
+    </select>
+    <input class="filter-search" name="rationale" placeholder="Why (optional)">
+    <button class="btn primary" type="submit">Add &amp; point crawler</button>
+  </form>
+  <p class="muted small" style="margin-top:10px">
+    Adds your site as an <strong>active</strong> custom source and queues a target
+    you can approve and fetch. It still respects the gate — nothing is scanned
+    until you approve the target.
+  </p>
+</div>
+
+<div class="card" style="margin-top:18px">
   <div class="card-head"><h2>Propose targets from active sites</h2></div>
   <form class="filters" method="post" action="/discovery/generate" style="gap:10px;flex-wrap:wrap">
     <input type="hidden" name="kind" value="{{ kind }}">

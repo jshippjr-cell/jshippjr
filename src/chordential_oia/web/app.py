@@ -286,6 +286,43 @@ def discovery_site_decide(
     return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
 
 
+@app.post("/discovery/site/add")
+def discovery_site_add(
+    name: str = Form(...),
+    url: str = Form(...),
+    kind: str = Form("opportunity"),
+    rationale: str = Form(""),
+):
+    """Jon points the crawler at his own site/area. Added as an active custom
+    site (his own call) and a Proposed target so it's ready to approve + fetch.
+    Put ``{q}`` in the URL to make it keyword-driven on later generations."""
+    if kind not in db.CRAWL_KINDS:
+        kind = "opportunity"
+    name = name.strip()
+    url = url.strip()
+    if not (name and url):
+        return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+    key = "custom-" + (slug(name) or "site")
+    conn = db.connect()
+    try:
+        db.upsert_discovery_site(
+            conn, key=key, name=name, homepage=url, kind=kind, category="Custom",
+            recommended_by="Jon (CEO)", rationale=rationale.strip() or "Added by Jon.",
+            status="Approved", board_url=url,
+        )
+        # Immediately propose a target for it so it's ready to approve + fetch.
+        row = db.get_discovery_site_by_key(conn, key)
+        t = discovery._custom_site_target(row, kind, None, None)
+        if t:
+            db.insert_crawl_target(
+                conn, t["kind"], t["label"], t["query"], t["url"],
+                t["source_key"], t["rationale"],
+            )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+
+
 @app.post("/discovery/{target_id}/status")
 def discovery_decide(target_id: int, status: str = Form(...), kind: str = Form("talent")):
     """Approve or dismiss a proposed target — Jon's explicit go-ahead/refusal."""

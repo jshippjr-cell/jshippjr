@@ -370,9 +370,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             key TEXT UNIQUE, name TEXT, homepage TEXT, kind TEXT, category TEXT,
             recommended_by TEXT, rationale TEXT, status TEXT DEFAULT 'Suggested',
-            added_at TEXT, decided_at TEXT, notes TEXT DEFAULT ''
+            added_at TEXT, decided_at TEXT, notes TEXT DEFAULT '', board_url TEXT
         )"""
     )
+    site_cols = {r["name"] for r in conn.execute("PRAGMA table_info(discovery_sites)")}
+    if "board_url" not in site_cols:
+        conn.execute("ALTER TABLE discovery_sites ADD COLUMN board_url TEXT")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -868,21 +871,31 @@ def upsert_discovery_site(
     recommended_by: str,
     rationale: str,
     status: str,
+    board_url: Optional[str] = None,
 ) -> None:
-    """Insert a catalog site if new; never overwrite Jon's decision on an existing
-    one (so re-seeding the catalog preserves approvals/rejections)."""
+    """Insert a site if new; never overwrite Jon's decision on an existing one
+    (so re-seeding the catalog preserves approvals/rejections). ``board_url`` is
+    set for Jon-added custom sites (catalog sites build URLs in code)."""
     conn.execute(
         """INSERT INTO discovery_sites
            (key, name, homepage, kind, category, recommended_by, rationale,
-            status, added_at)
-           VALUES (?,?,?,?,?,?,?,?,?)
+            status, added_at, board_url)
+           VALUES (?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(key) DO NOTHING""",
         (
             key, name, homepage, kind, category, recommended_by, rationale,
-            status, datetime.now(timezone.utc).isoformat(),
+            status, datetime.now(timezone.utc).isoformat(), board_url,
         ),
     )
     conn.commit()
+
+
+def get_discovery_site_by_key(
+    conn: sqlite3.Connection, key: str
+) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM discovery_sites WHERE key = ?", (key,)
+    ).fetchone()
 
 
 def list_discovery_sites(

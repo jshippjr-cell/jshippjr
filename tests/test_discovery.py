@@ -185,6 +185,48 @@ def test_web_flow_propose_approve_fetch(ctx):
     assert row["result_count"] == 0          # scrape OFF → nothing ingested
 
 
+def test_jon_can_add_custom_site_and_point_crawler(ctx):
+    client, db_mod = ctx
+    client.post("/discovery/site/add", data={
+        "name": "My Indie Board", "url": "https://indieboard.example/jobs",
+        "kind": "opportunity", "rationale": "A board I know.",
+    })
+    conn = db_mod.connect()
+    try:
+        site = db_mod.get_discovery_site_by_key(conn, "custom-my-indie-board")
+        active = db_mod.active_discovery_site_keys(conn, "opportunity")
+        targets = conn.execute(
+            "SELECT * FROM crawl_targets WHERE source_key='custom-my-indie-board'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert site is not None
+    assert site["status"] == "Approved"           # Jon's own call → active
+    assert site["board_url"] == "https://indieboard.example/jobs"
+    assert "custom-my-indie-board" in active        # usable by the generator
+    assert len(targets) == 1                        # queued, awaiting approval
+    assert targets[0]["status"] == "Proposed"
+
+
+def test_custom_site_keyword_slot_substitutes_on_generate(ctx):
+    client, db_mod = ctx
+    client.post("/discovery/site/add", data={
+        "name": "Query Board", "url": "https://qb.example/search?q={q}",
+        "kind": "opportunity",
+    })
+    conn = db_mod.connect()
+    try:
+        discovery.generate_targets(conn, "opportunity", keyword="sonic branding")
+        rows = conn.execute(
+            "SELECT url FROM crawl_targets WHERE source_key='custom-query-board'"
+        ).fetchall()
+    finally:
+        conn.close()
+    urls = [r["url"] for r in rows]
+    assert any("sonic+branding" in u for u in urls)
+    assert all("{q}" not in u for u in urls)        # the slot was filled
+
+
 def test_approved_fetch_ingests_when_enabled(ctx, monkeypatch):
     _, db_mod = ctx
     monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")

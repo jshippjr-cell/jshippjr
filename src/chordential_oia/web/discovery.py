@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from html.parser import HTMLParser
 from typing import List, Optional
+from urllib.parse import quote_plus
 
 from ..talent_sources.scraped import ScrapedTalentSource, _fetch_url, scrape_enabled
 from . import db
@@ -63,25 +64,54 @@ def propose_targets(
     return out
 
 
+def _custom_site_target(site_row, kind: str, keyword: Optional[str], location: Optional[str]):
+    """Build one target dict from a Jon-added custom site's stored board_url."""
+    url = site_row["board_url"]
+    if not url:
+        return None
+    q = (keyword or "").strip()
+    loc = (location or "").strip()
+    terms = f"{q} {loc}".strip()
+    if "{q}" in url:
+        url = url.format(q=quote_plus(terms or q or "music"))
+    return {
+        "kind": kind,
+        "label": f"{site_row['name']}" + (f" · {loc}" if loc else ""),
+        "query": terms or "(listing)",
+        "url": url,
+        "source_key": site_row["key"],
+        "rationale": site_row["rationale"] or "Added by Jon.",
+    }
+
+
 def generate_targets(
     conn,
     kind: str,
     keyword: Optional[str] = None,
     location: Optional[str] = None,
 ) -> int:
-    """Propose targets for a kind from the active curated sites and store the new
-    ones (deduped on kind+url). Purely deterministic — no fetching."""
+    """Propose targets for a kind from the active sites (curated catalog +
+    Jon-added custom sites) and store the new ones (deduped on kind+url).
+    Purely deterministic — no fetching."""
     if kind not in db.CRAWL_KINDS:
         raise ValueError(f"Unknown crawl kind {kind!r}")
-    active_keys = db.active_discovery_site_keys(conn, kind)
     added = 0
-    for p in propose_targets(active_keys, kind, keyword, location):
-        new_id = db.insert_crawl_target(
-            conn, p["kind"], p["label"], p["query"], p["url"],
-            p["source_key"], p["rationale"],
-        )
-        if new_id is not None:
-            added += 1
+    for key in db.active_discovery_site_keys(conn, kind):
+        site = catalog.get_site(key)
+        if site is not None:
+            proposals = catalog.site_targets(site, kind, keyword, location)
+        else:
+            # A custom site Jon added — build from its stored board_url.
+            row = db.get_discovery_site_by_key(conn, key)
+            t = _custom_site_target(row, kind, keyword, location) if row else None
+            proposals = [t] if t else []
+        for p in proposals:
+            new_id = db.insert_crawl_target(
+                conn, p["kind"], p["label"], p["query"], p["url"],
+                p["source_key"], p["rationale"],
+            )
+            if new_id is not None:
+                added += 1
     return added
 
 
