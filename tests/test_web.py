@@ -198,6 +198,37 @@ def test_missing_opportunity_404(client):
     assert client.get("/opportunity/99999").status_code == 404
 
 
+def test_brief_checklist_tracks_progress(client):
+    page = client.get("/opportunity/1/brief").text
+    assert "Pursuit checklist" in page
+    assert "0 /" in page  # nothing ticked yet
+    import re
+    key = re.search(r'name="step_key" value="([^"]+)"', page).group(1)
+    # Tick the first step done; progress advances and persists.
+    client.post("/opportunity/1/brief/step",
+                data={"step_key": key, "done": "1"}, follow_redirects=True)
+    after = client.get("/opportunity/1/brief").text
+    assert "1 /" in after
+    assert "checked" in after
+    # Untick it again.
+    client.post("/opportunity/1/brief/step",
+                data={"step_key": key, "done": ""}, follow_redirects=True)
+    assert "0 /" in client.get("/opportunity/1/brief").text
+
+
+def test_brief_export_buttons_removed(client):
+    page = client.get("/opportunity/1/brief").text
+    assert "Copy brief" not in page
+    assert "Plain text" not in page
+
+
+def test_outreach_recommends_examples_and_template_message(client):
+    page = client.get("/opportunity/1/outreach").text
+    assert "Recommended examples to attach" in page
+    assert "Chordential is built for" in page  # template-style first-touch message
+    assert "we would anticipate supporting" in page
+
+
 def test_outreach_page_and_text(client):
     r = client.get("/opportunity/1/outreach")
     assert r.status_code == 200
@@ -345,13 +376,23 @@ def test_opportunity_overview_action_bar(client):
     # Reset to New so the advance button is deterministic (seed may stage opp 1).
     client.post("/opportunity/1/status", data={"status": "New"}, follow_redirects=True)
     page = client.get("/opportunity/1").text
-    # The Overview carries a quick-action bar with the common next steps.
+    # The Overview carries a quick-action bar; the redundant brief/outreach/match
+    # buttons were removed (those live in the subnav now).
     assert "action-bar" in page
-    assert "Pursuit brief" in page
-    assert "Plan outreach" in page
-    assert "Talent match" in page
-    # A New opportunity offers a one-click advance to the next pipeline stage.
+    assert "Plan outreach" not in page  # redundant button removed
+    # A New opportunity offers a one-click advance, pushed to the right.
     assert "Mark Pursuing" in page
+    assert "action-right" in page
+
+
+def test_overview_subnav_order(client):
+    # Subnav order: Overview · Budget estimate · Outreach · Talent match ·
+    # Pursuit brief · Buyer profile · Qualification rationale.
+    page = client.get("/opportunity/1").text
+    order = ["Budget estimate", "Outreach", "Talent match", "Pursuit brief",
+             "Buyer profile", "Qualification rationale"]
+    positions = [page.index(x) for x in order]
+    assert positions == sorted(positions), "subnav tabs out of expected order"
 
 
 def test_action_bar_advances_pipeline_status(client):

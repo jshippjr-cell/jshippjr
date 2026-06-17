@@ -1,17 +1,10 @@
 {% extends "base.html" %}
+{% from "_macros.html" import opp_subnav %}
 {% block title %}Talent match · {{ row['need'] }}{% endblock %}
 {% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">{{ row['need'][:40] }}</a> / Talent match{% endblock %}
 {% block content %}
 
-<div class="subnav">
-  <a href="/opportunity/{{ row['id'] }}">Overview</a>
-  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
-  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
-  <a href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
-  <a href="/opportunity/{{ row['id'] }}/outreach">Outreach</a>
-  <a class="active" href="/opportunity/{{ row['id'] }}/match">Talent match</a>
-  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
-</div>
+{{ opp_subnav(row, 'match') }}
 
 <div class="brief-head card">
   <div>

@@ -51,6 +51,7 @@ class PursuitBrief:
     strategic_angle: str
     response_outline: List[str]
     next_steps: List[str]
+    checklist: List[str] = field(default_factory=list)
     qualified: bool = True
     assumptions: List[str] = field(default_factory=list)
 
@@ -142,6 +143,24 @@ def build_pursuit_brief(
         "Log the outcome (win/loss) once decided — it feeds the moat.",
     ]
 
+    # Single, ordered pursuit checklist — the response outline and next steps
+    # merged into one trackable sequence with their overlaps (budget, team,
+    # close) collapsed. This is what the brief page renders and tracks.
+    team_line = ", ".join(team) if team else "TBD"
+    checklist = [
+        f"Acknowledge the brief and confirm scope, deliverables, and deadline with {scored.decision_maker}.",
+        f"Frame why Chordential: {discipline.label} craft, fast turnaround, fit for {buyer} work.",
+    ]
+    if hint:
+        checklist.append(hint)
+    checklist += [
+        f"Confirm team availability: {team_line}.",
+        "Attach a relevant reel / 2–3 reference pieces (see the Outreach tab's recommended examples).",
+        f"Provide an indicative quote: {estimate.cost_range if estimate else 'TBD'} (suggested {price_phrase}).",
+        "Send the response and close with a timeline and one clear next step.",
+        "Log the outcome (win/loss) once decided — it feeds the moat.",
+    ]
+
     return PursuitBrief(
         client=opp.client,
         need=opp.need,
@@ -155,6 +174,7 @@ def build_pursuit_brief(
         strategic_angle=strategic_angle,
         response_outline=outline,
         next_steps=next_steps,
+        checklist=checklist,
         qualified=qual.qualified,
         assumptions=[
             "Assembled deterministically from the qualification, estimate, and "

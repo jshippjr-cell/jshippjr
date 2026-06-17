@@ -308,6 +308,21 @@ def _brief_for(conn, opp_id: int):
     return row, opp, brief
 
 
+def _brief_checklist(brief, done_keys):
+    """Pair each checklist step with a stable key and its done state.
+
+    Key = index + slug so it survives reloads (the list is deterministic per opp)
+    and stays unique even if two steps share a prefix."""
+    items = []
+    for i, text in enumerate(brief.checklist):
+        key = f"{i}-{slug(text)[:48]}"
+        items.append({"key": key, "text": text, "done": key in done_keys})
+    done = sum(1 for it in items if it["done"])
+    total = len(items)
+    progress = {"done": done, "total": total, "pct": round(done / total * 100) if total else 0}
+    return items, progress
+
+
 @app.get("/opportunity/{opp_id}/brief", response_class=HTMLResponse)
 def brief_page(request: Request, opp_id: int):
     conn = db.connect()
@@ -315,9 +330,24 @@ def brief_page(request: Request, opp_id: int):
         row, opp, brief = _brief_for(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
+        done_keys = db.brief_done_keys(conn, opp_id)
     finally:
         conn.close()
-    return render(request, "brief.html", nav="inbox", row=row, opp=opp, brief=brief)
+    items, progress = _brief_checklist(brief, done_keys)
+    return render(
+        request, "brief.html", nav="inbox", row=row, opp=opp, brief=brief,
+        checklist_items=items, progress=progress,
+    )
+
+
+@app.post("/opportunity/{opp_id}/brief/step")
+def toggle_brief_step(opp_id: int, step_key: str = Form(...), done: str = Form("")):
+    conn = db.connect()
+    try:
+        db.set_brief_step(conn, opp_id, step_key, bool(done.strip()))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/brief", status_code=303)
 
 
 @app.get("/opportunity/{opp_id}/brief.txt", response_class=PlainTextResponse)
@@ -341,7 +371,9 @@ def _outreach_for(conn, opp_id: int):
     discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
     est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
     strategic = assess_strategic_value(opp)
-    plan = build_outreach_plan(opp, qual, scored, est, strategic)
+    plan = build_outreach_plan(
+        opp, qual, scored, est, strategic, contact_name=row["contact_name"]
+    )
     return row, opp, plan
 
 

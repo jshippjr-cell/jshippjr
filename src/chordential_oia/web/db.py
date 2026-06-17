@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS companies (
     website TEXT,
     updated_at TEXT
 );
+
+-- Pursuit-brief checklist progress: which steps a human has ticked off per opp.
+CREATE TABLE IF NOT EXISTS brief_progress (
+    opp_id INTEGER NOT NULL,
+    step_key TEXT NOT NULL,
+    done INTEGER DEFAULT 0,
+    updated_at TEXT,
+    PRIMARY KEY (opp_id, step_key)
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -229,6 +238,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS companies (
             client TEXT PRIMARY KEY, website TEXT, updated_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS brief_progress (
+            opp_id INTEGER NOT NULL, step_key TEXT NOT NULL,
+            done INTEGER DEFAULT 0, updated_at TEXT,
+            PRIMARY KEY (opp_id, step_key)
         )"""
     )
     conn.commit()
@@ -551,6 +567,31 @@ def set_company_website(conn: sqlite3.Connection, client: str, website: str) -> 
            ON CONFLICT(client) DO UPDATE SET
                website = excluded.website, updated_at = excluded.updated_at""",
         (client, _normalize_url(website), datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Pursuit-brief checklist progress
+# --------------------------------------------------------------------------- #
+def brief_done_keys(conn: sqlite3.Connection, opp_id: int) -> set:
+    """The set of checklist step keys ticked off for an opportunity."""
+    rows = conn.execute(
+        "SELECT step_key FROM brief_progress WHERE opp_id = ? AND done = 1", (opp_id,)
+    ).fetchall()
+    return {r["step_key"] for r in rows}
+
+
+def set_brief_step(
+    conn: sqlite3.Connection, opp_id: int, step_key: str, done: bool
+) -> None:
+    """Toggle one checklist step done/undone (upsert)."""
+    conn.execute(
+        """INSERT INTO brief_progress (opp_id, step_key, done, updated_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(opp_id, step_key) DO UPDATE SET
+               done = excluded.done, updated_at = excluded.updated_at""",
+        (opp_id, step_key, 1 if done else 0, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
 

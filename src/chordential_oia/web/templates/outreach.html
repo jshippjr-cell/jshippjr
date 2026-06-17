@@ -1,17 +1,10 @@
 {% extends "base.html" %}
+{% from "_macros.html" import opp_subnav %}
 {% block title %}Outreach · {{ row['need'] }}{% endblock %}
 {% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">{{ row['need'][:40] }}</a> / Outreach{% endblock %}
 {% block content %}
 
-<div class="subnav">
-  <a href="/opportunity/{{ row['id'] }}">Overview</a>
-  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
-  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
-  <a href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
-  <a class="active" href="/opportunity/{{ row['id'] }}/outreach">Outreach</a>
-  <a href="/opportunity/{{ row['id'] }}/match">Talent match</a>
-  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
-</div>
+{{ opp_subnav(row, 'outreach') }}
 
 <div class="brief-head card">
   <div>
@@ -28,7 +21,13 @@
 <div class="cols-2">
   <section class="card">
     <div class="card-head"><h2>First-touch message</h2></div>
-    <p class="summary-line big">{{ plan.first_touch_message }}</p>
+    <div class="first-touch">{{ plan.first_touch_message }}</div>
+    {% if plan.recommended_examples %}
+    <div class="attach-box">
+      <div class="attach-head">🎧 Recommended examples to attach <span class="muted small">— matched to the brief's vision</span></div>
+      <ul class="attach-list">{% for ex in plan.recommended_examples %}<li>{{ ex }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
     <table class="kv">
       <tr><td>Primary channel</td><td>{{ plan.primary_channel }}</td></tr>
       <tr><td>Urgency</td><td>{{ plan.urgency }}</td></tr>

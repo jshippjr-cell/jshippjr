@@ -140,6 +140,16 @@ hand requirements to the Engineer → Engineer builds → QA agent verifies →
 - **QA:** 147 tests pass (8 new; `test_lanes_render` rewritten for the kanban). All six pages smoke-tested 200 with the new components; inline advance + review-approve redirect verified. Screenshot caveat unchanged (sandbox blocks Playwright); structural HTML + tests stood in.
 - **Status:** ✅ built; QA green (screenshot caveat above).
 
+### Cycle 15 — 2026-06-16 — Overview reorg + Brief checklist + Outreach proposal & examples
+- **Roadmap stage:** Demand side → Prepare + Outreach-to-win (decision-surface depth). Migration-safe (`brief_progress` table added; all else templates/routes).
+- **Build:**
+  - **Overview (detail):** subnav unified into a `opp_subnav` macro and **reordered** — Overview · Budget estimate · Outreach · Talent match · Pursuit brief · Buyer profile · Qualification rationale (applied across all 6 opp subpages). Action bar de-duplicated (removed Pursuit brief / Plan outreach / Talent match — they're tabs); **Mark <next> pushed to the far right** after Original posting. **Strategic-value card moved below** the Opportunity + Win/loss row.
+  - **Pursuit brief:** the response outline and next steps are **merged into one ordered, de-duplicated pursuit checklist** (budget/team/close overlaps collapsed) that is **tracked** — each step toggles done and a progress bar persists (`brief_progress` table + `brief_done_keys`/`set_brief_step`; index+slug keys). **Council verdict: removed the Plain-text / Copy-brief export buttons** — the brief is an internal working/decision doc; the outbound artifact is the Outreach email (which keeps its own copy). (`.txt` route retained, just unlinked — reversible.)
+  - **Outreach:** **recommended examples to attach** per discipline (e.g. Sonic branding → Sonic logo / Brand anthem / Campaign adaptation) — honest framing: recommended *portfolio* pieces, not synthesized audio (no audio AI). **First-touch message rewritten** into the relationship-first proposal template (thanks → "built for" → relevant-work bullets → unified-system framing → "anticipate supporting" deliverables → walk-through close), adapting examples/deliverables to the discipline and the greeting to the saved contact name.
+- **Acceptance:** subnav order correct on all subpages; action bar de-duped with Mark right-aligned; strategic card relocated; brief checklist persists + progresses; export buttons gone; outreach shows examples + template message; message greeting adapts to contact; migration-safe; suite green.
+- **QA:** 154 tests pass (8 new/updated). Rendered all three surfaces; checklist toggle round-trip, example list, and multi-paragraph message verified. Screenshot caveat unchanged (sandbox blocks Playwright); structural HTML + tests stood in.
+- **Status:** ✅ built; QA green (screenshot caveat above).
+
 ---
 
 **Supply side complete (Cycles 5–9):** recruit → match → assign (Jon's button) → track → broadcast. The OS now spans the full pipeline end to end: scan → qualify → estimate → prepare → outreach → win → recruit → match → assign → track → broadcast.

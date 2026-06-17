@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar, opp_subnav %}
 {% block title %}{{ row['need'] }}{% endblock %}
 {% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
 {% block content %}
@@ -23,54 +23,22 @@
   </div>
 </div>
 
-<div class="subnav">
-  <a class="active" href="/opportunity/{{ row['id'] }}">Overview</a>
-  <a href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
-  <a href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
-  <a href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
-  <a href="/opportunity/{{ row['id'] }}/outreach">Outreach</a>
-  <a href="/opportunity/{{ row['id'] }}/match">Talent match</a>
-  <a href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
-</div>
+{{ opp_subnav(row, 'overview') }}
 
 <div class="action-bar">
+  {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
+  {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
-  <form method="post" action="/opportunity/{{ row['id'] }}/status">
+  <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
     <input type="hidden" name="status" value="{{ next_status }}">
     <button class="btn primary" type="submit">→ Mark {{ next_status }}</button>
   </form>
   {% endif %}
-  <a class="btn" href="/opportunity/{{ row['id'] }}/brief">📋 Pursuit brief</a>
-  <a class="btn" href="/opportunity/{{ row['id'] }}/outreach">✉ Plan outreach</a>
-  <a class="btn" href="/opportunity/{{ row['id'] }}/match">🎬 Talent match</a>
-  {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
-  {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
 </div>
 
 {% if sv.callout and row['qualified'] %}
 <div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>
 {% endif %}
-
-<section class="card strat-card">
-  <div class="card-head"><h2>Strategic value <span class="muted">— CMO lens</span></h2>{{ strat_pill(sv.tier, sv.score) }}</div>
-  <div class="strat-grid">
-    <div class="strat-bars">
-      <div class="strat-row"><span>Buyer desirability</span>{{ align_bar((sv.buyer_desirability*100)|round|int) }}</div>
-      <div class="strat-row"><span>Relationship value</span>{{ align_bar((sv.relationship_value*100)|round|int) }}</div>
-      <p class="muted small">{{ sv.rationale }}{% if sv.inferred %} <em>(inferred — confirm below)</em>{% endif %}</p>
-    </div>
-    <form class="strat-form" method="post" action="/opportunity/{{ row['id'] }}/strategic">
-      <label>Buyer relationship value</label>
-      <select name="buyer_value">
-        {% for bv in buyer_values %}
-        <option value="{{ bv.value }}" {{ 'selected' if sv.buyer_value == bv }}>{{ bv.label }}</option>
-        {% endfor %}
-      </select>
-      <label class="check"><input type="checkbox" name="marquee" {{ 'checked' if sv.marquee }}> Marquee / door-opener buyer</label>
-      <button class="btn primary" type="submit">Recompute strategic value</button>
-    </form>
-  </div>
-</section>
 
 <div class="cols-2">
   <section class="card">
@@ -121,4 +89,25 @@
     </form>
   </section>
 </div>
+
+<section class="card strat-card">
+  <div class="card-head"><h2>Strategic value <span class="muted">— CMO lens</span></h2>{{ strat_pill(sv.tier, sv.score) }}</div>
+  <div class="strat-grid">
+    <div class="strat-bars">
+      <div class="strat-row"><span>Buyer desirability</span>{{ align_bar((sv.buyer_desirability*100)|round|int) }}</div>
+      <div class="strat-row"><span>Relationship value</span>{{ align_bar((sv.relationship_value*100)|round|int) }}</div>
+      <p class="muted small">{{ sv.rationale }}{% if sv.inferred %} <em>(inferred — confirm below)</em>{% endif %}</p>
+    </div>
+    <form class="strat-form" method="post" action="/opportunity/{{ row['id'] }}/strategic">
+      <label>Buyer relationship value</label>
+      <select name="buyer_value">
+        {% for bv in buyer_values %}
+        <option value="{{ bv.value }}" {{ 'selected' if sv.buyer_value == bv }}>{{ bv.label }}</option>
+        {% endfor %}
+      </select>
+      <label class="check"><input type="checkbox" name="marquee" {{ 'checked' if sv.marquee }}> Marquee / door-opener buyer</label>
+      <button class="btn primary" type="submit">Recompute strategic value</button>
+    </form>
+  </div>
+</section>
 {% endblock %}

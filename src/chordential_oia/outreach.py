@@ -20,8 +20,165 @@ from typing import List, Optional
 from urllib.parse import quote_plus
 
 from .estimation import Estimate
-from .models import BuyerType, Opportunity, QualificationResult, ScoredOpportunity
+from .models import BuyerType, MusicDiscipline, Opportunity, QualificationResult, ScoredOpportunity
 from .strategic import StrategicValue
+
+# --------------------------------------------------------------------------- #
+# Per-discipline creative content for the outreach message.
+#
+# IMPORTANT (company strategy): Chordential does NOT synthesize audio. These are
+# recommendations for which *existing portfolio* examples to attach and which
+# deliverables to anticipate — not generated audio. They complement the brief's
+# vision so the human can attach the right reel.
+# --------------------------------------------------------------------------- #
+# What to attach: example types tuned to the discipline (the "audio examples").
+_RECOMMENDED_EXAMPLES = {
+    MusicDiscipline.COMPOSITION: [
+        "Original score / theme example",
+        "Theme-and-variations example",
+        "Multi-channel campaign cut example",
+    ],
+    MusicDiscipline.SONIC_BRANDING: [
+        "Sonic logo example",
+        "Brand anthem example",
+        "Campaign adaptation example",
+    ],
+    MusicDiscipline.SOUND_DESIGN: [
+        "Signature sound-design example",
+        "Motion / UI sound example",
+        "Trailer / promo sound example",
+    ],
+    MusicDiscipline.ARRANGEMENT: [
+        "Arrangement / orchestration example",
+        "Ensemble recording example",
+        "Adaptation / re-arrangement example",
+    ],
+    MusicDiscipline.SUPERVISION: [
+        "Curated placement example",
+        "Cleared-track shortlist example",
+        "Needle-drop reel example",
+    ],
+    MusicDiscipline.LICENSING: [
+        "Licensing / library reel example",
+        "Cleared-track example",
+    ],
+}
+
+# Deliverables we'd "anticipate supporting" — the unified-system framing.
+_DELIVERABLES = {
+    MusicDiscipline.COMPOSITION: [
+        "Original composition / score", "Theme development and variations",
+        "Campaign cutdowns and alternate lengths",
+        "Stems and alternate versions for each channel",
+        "Final mixes optimized for delivery",
+    ],
+    MusicDiscipline.SONIC_BRANDING: [
+        "Sonic logo development", "Brand anthem composition",
+        "Campaign cutdowns and adaptations",
+        "Alternate versions for social, digital, and broadcast",
+        "Final mixes optimized for advertising delivery",
+    ],
+    MusicDiscipline.SOUND_DESIGN: [
+        "Signature sound-design palette", "Key-moment scoring and effects",
+        "Motion / UI / transition sound", "Alternate versions per channel",
+        "Final mixes optimized for delivery",
+    ],
+    MusicDiscipline.ARRANGEMENT: [
+        "Arrangement / orchestration", "Ensemble preparation and recording",
+        "Alternate arrangements and lengths", "Stems and alternate mixes",
+        "Final mixes optimized for delivery",
+    ],
+    MusicDiscipline.SUPERVISION: [
+        "Music supervision and curation", "Track shortlist and creative direction",
+        "Clearance and licensing coordination", "Alternate options per channel",
+        "Delivery-ready files",
+    ],
+    MusicDiscipline.LICENSING: [
+        "Track curation and licensing", "Clearance coordination",
+        "Alternate options per channel", "Delivery-ready files",
+    ],
+}
+
+# Relevant-work bullets for the message ([Project] is the human's to fill in).
+_EXAMPLE_WORK = {
+    MusicDiscipline.COMPOSITION: [
+        "[Project] — Original score for a branded film",
+        "[Project] — Campaign music package with cutdowns and alternate versions",
+        "[Project] — Original composition supporting a multi-channel launch",
+    ],
+    MusicDiscipline.SONIC_BRANDING: [
+        "[Project] — Sonic identity and brand theme development",
+        "[Project] — National campaign music package with cutdowns and alternate versions",
+        "[Project] — Original composition supporting a multi-channel brand launch",
+    ],
+    MusicDiscipline.SOUND_DESIGN: [
+        "[Project] — Signature sound-design system for a product launch",
+        "[Project] — Motion and UI sound for a digital campaign",
+        "[Project] — Trailer / promo sound-design package",
+    ],
+    MusicDiscipline.ARRANGEMENT: [
+        "[Project] — Orchestral arrangement for a brand film",
+        "[Project] — Ensemble arrangement and recording",
+        "[Project] — Multi-version adaptation across channels",
+    ],
+    MusicDiscipline.SUPERVISION: [
+        "[Project] — Music supervision for a branded campaign",
+        "[Project] — Curated, cleared placements across channels",
+        "[Project] — Needle-drop reel for a product launch",
+    ],
+    MusicDiscipline.LICENSING: [
+        "[Project] — Licensed music package with clearance",
+        "[Project] — Curated cleared-track selection for a campaign",
+    ],
+}
+
+_SYSTEM_FRAMING = {
+    MusicDiscipline.SONIC_BRANDING: (
+        "The combination of a sonic logo, brand anthem, and campaign adaptations "
+        "immediately suggests a unified music system rather than a collection of "
+        "individual deliverables, and that's where we tend to provide the most value."
+    ),
+}
+
+
+def _for_discipline(table, disc):
+    """Discipline lookup with a Composition fallback (keeps disqualified safe)."""
+    return table.get(disc) or table[MusicDiscipline.COMPOSITION]
+
+
+def _build_first_touch(opp, qual, contact_name):
+    """The first-touch message — a relationship-first proposal that adapts the
+    examples, deliverables, and framing to the lead's discipline and brand."""
+    disc = qual.discipline
+    name = (contact_name or "").strip() or "there"
+    framing = _SYSTEM_FRAMING.get(disc) or (
+        "The scope reads as a unified music system rather than a collection of "
+        f"individual deliverables, and that's where {disc.label.lower()} work like "
+        "this tends to provide the most value."
+    )
+    examples = _for_discipline(_EXAMPLE_WORK, disc)
+    deliverables = _for_discipline(_DELIVERABLES, disc)
+    ex_lines = "\n".join(f"• {e}" for e in examples)
+    dl_lines = "\n".join(f"• {d}" for d in deliverables)
+    return (
+        f"Hi {name},\n\n"
+        f"Thank you for the opportunity to be considered for {opp.need}.\n\n"
+        "After reviewing the brief, we're confident this is the type of work "
+        f"Chordential is built for. {framing}\n\n"
+        "I've included a few examples of relevant work below that align closely "
+        "with what you've described:\n\n"
+        f"{ex_lines}\n\n"
+        "What stood out to us in your brief is the opportunity to create a musical "
+        f"identity that can extend well beyond this campaign and become an asset "
+        f"{opp.client} can continue to leverage across future content and activations.\n\n"
+        "Based on the information provided, we would anticipate supporting:\n\n"
+        f"{dl_lines}\n\n"
+        "Our team has already begun discussing several creative directions that "
+        "could support the objectives outlined in the brief, and we'd welcome the "
+        "opportunity to walk you through those ideas and better understand your "
+        "goals, timeline, and success criteria."
+    )
+
 
 # Per-buyer-type opening channel + the channel used to ask for a live conversation.
 _CHANNELS = {
@@ -54,6 +211,7 @@ class OutreachPlan:
     first_touch_message: str
     email_subject: str = ""
     linkedin_search_url: str = ""
+    recommended_examples: List[str] = field(default_factory=list)
     qualified: bool = True
     assumptions: List[str] = field(default_factory=list)
 
@@ -117,6 +275,7 @@ def build_outreach_plan(
     scored: ScoredOpportunity,
     estimate: Optional[Estimate],
     strategic: StrategicValue,
+    contact_name: Optional[str] = None,
 ) -> OutreachPlan:
     """Assemble a deterministic outreach plan from existing engine outputs."""
     discipline = qual.discipline
@@ -134,14 +293,10 @@ def build_outreach_plan(
         price_phrase = "TBD"
         cost_range = "TBD"
 
-    first_touch_message = (
-        f"Hi {target} — I saw {opp.client} is exploring {opp.need}. "
-        f"{qual.fit_summary} "
-        f"Chordential can move fast on this; indicative range {cost_range}. "
-        "Open to a quick 15-minute call this week to talk scope?"
-    )
+    first_touch_message = _build_first_touch(opp, qual, contact_name)
     # Subject line for the one-click mailto draft (kept short and concrete).
     email_subject = f"{opp.need} — Chordential"
+    recommended_examples = _for_discipline(_RECOMMENDED_EXAMPLES, discipline) if qual.qualified else []
 
     steps: List[OutreachStep] = []
     is_gov = opp.buyer_type is BuyerType.GOVERNMENT
@@ -189,11 +344,14 @@ def build_outreach_plan(
         first_touch_message=first_touch_message,
         email_subject=email_subject,
         linkedin_search_url=_linkedin_research_url(target, opp.client),
+        recommended_examples=recommended_examples,
         qualified=qual.qualified,
         assumptions=[
             "Sequenced deterministically from the qualification, estimate, and "
             "strategic-value engines — no AI generation.",
             f"Contact ({target}) is inferred — confirm the real name/email before sending.",
+            "Recommended examples are existing portfolio pieces to attach — "
+            "Chordential does not synthesize audio (human craft + Jon-reviewed reels).",
             "LinkedIn link is an auto-built people search for the decision-maker at "
             "this buyer — open it to find the person, then paste their profile to lock it in.",
             "Log each touch below; the outcome feeds the win/loss moat.",

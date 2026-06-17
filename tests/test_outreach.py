@@ -34,8 +34,38 @@ def test_plan_assembles_from_engines():
     assert p.steps and len(p.steps) >= 3
     # Steps are numbered sequentially starting at 1.
     assert [s.order for s in p.steps] == list(range(1, len(p.steps) + 1))
+    # The first-touch message is the template-style proposal, adapted to the lead.
     assert "Acme (agency)" in p.first_touch_message
-    assert "$" in p.first_touch_message  # indicative range present
+    assert "Chordential is built for" in p.first_touch_message
+    assert "we would anticipate supporting" in p.first_touch_message
+    # Examples are recommended to attach (the "audio examples").
+    assert p.recommended_examples
+
+
+def test_message_greeting_adapts_to_contact_name():
+    qual = QualificationEngine().qualify(_agency())
+    scored = ScoringEngine().score(_agency())
+    est = EstimationEngine().estimate(_agency(), qual.team_shape, qual.discipline)
+    strat = assess_strategic_value(_agency())
+    named = build_outreach_plan(_agency(), qual, scored, est, strat, contact_name="Dana Reyes")
+    anon = build_outreach_plan(_agency(), qual, scored, est, strat)
+    assert named.first_touch_message.startswith("Hi Dana Reyes,")
+    assert anon.first_touch_message.startswith("Hi there,")
+
+
+def test_sonic_branding_recommends_matching_examples():
+    opp = Opportunity(
+        client="Beverage Co (brand)",
+        need="Sonic logo + brand anthem + campaign cutdowns",
+        description="Sonic branding: mnemonic sound logo, brand anthem, adaptations.",
+        buyer_type=BuyerType.BRAND,
+        music_requirement=MusicRequirement.ORIGINAL,
+        budget_min=15_000, budget_max=30_000,
+    )
+    p = _plan_for(opp)
+    if p.qualified and "Sonic" in p.recommended_examples[0]:
+        assert "Sonic logo example" in p.recommended_examples
+        assert "Brand anthem example" in p.recommended_examples
 
 
 def test_plan_supplies_an_email_subject():

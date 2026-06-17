@@ -25,6 +25,18 @@
 </div>
 {% endmacro %}
 
+{% macro opp_subnav(row, active='') %}
+<div class="subnav">
+  <a class="{{ 'active' if active=='overview' }}" href="/opportunity/{{ row['id'] }}">Overview</a>
+  <a class="{{ 'active' if active=='estimate' }}" href="/opportunity/{{ row['id'] }}/estimate">Budget estimate</a>
+  <a class="{{ 'active' if active=='outreach' }}" href="/opportunity/{{ row['id'] }}/outreach">Outreach</a>
+  <a class="{{ 'active' if active=='match' }}" href="/opportunity/{{ row['id'] }}/match">Talent match</a>
+  <a class="{{ 'active' if active=='brief' }}" href="/opportunity/{{ row['id'] }}/brief">Pursuit brief</a>
+  <a class="{{ 'active' if active=='buyer' }}" href="/buyer/{{ row['client']|urlencode }}">Buyer profile</a>
+  <a class="{{ 'active' if active=='qualification' }}" href="/opportunity/{{ row['id'] }}/qualification">Qualification rationale</a>
+</div>
+{% endmacro %}
+
 {% macro opp_card(r) %}
 <a class="card opp-card" href="/opportunity/{{ r['id'] }}">
   <div class="opp-card-top">
