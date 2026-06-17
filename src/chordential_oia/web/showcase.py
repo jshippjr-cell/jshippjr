@@ -40,7 +40,9 @@ class Case:
     challenge: str
     solved: str
     outcome: str
-    image: str
+    media_kind: str = "audio"    # 'audio' | 'video' — which player to slot in
+    media_url: str = ""          # empty => placeholder player until the asset lands
+    poster: str = ""             # optional video poster
     sample: bool = True          # honest until real campaigns exist
 
 
@@ -52,7 +54,8 @@ class Step:
     timeline: str
 
 
-# Hero — copy ratified from the brief.
+# Hero — copy ratified from the brief. The background is a placeholder for a
+# looping behind-the-scenes video (asset TBD); no still image behind the text.
 HERO = {
     "eyebrow": "Original composition for agencies",
     "title": "Music that moves campaigns forward — and gets approved.",
@@ -62,7 +65,8 @@ HERO = {
     ),
     "primary_cta": {"label": "View Work", "href": "#work"},
     "secondary_cta": {"label": "Start a conversation", "href": "/site/start"},
-    "image": "/static/public/img/hero.jpg",
+    "video": "",                 # set to a looping .mp4/.webm when the asset exists
+    "poster": "",                # optional poster frame for the loop
 }
 
 # Honest category framing — NOT fabricated client logos (council override).
@@ -101,7 +105,8 @@ DELIVERY_ITEMS = [
     "Rights clarity", "Stems breakdown", "Campaign rollout versions",
 ]
 
-# Featured work — SAMPLE until real campaigns exist (honest).
+# Featured work — SAMPLE until real campaigns exist (honest). Each card carries a
+# media player slot; drop in media_url when the audio/video asset is ready.
 CASES: List[Case] = [
     Case(
         "National retail brand — campaign anthem",
@@ -109,7 +114,7 @@ CASES: List[Case] = [
         "Five stakeholders, two rounds of legal, a moving deadline.",
         "Direction locked up front; three controlled variations; one approval pass.",
         "Approved without reopening the creative conversation.",
-        "/static/public/img/case-1.jpg",
+        media_kind="video",
     ),
     Case(
         "Financial services — sonic identity",
@@ -117,7 +122,7 @@ CASES: List[Case] = [
         "Needed to feel trustworthy and pass brand + compliance review.",
         "A single mnemonic with bounded variants; rights cleared on delivery.",
         "Signed off by brand and compliance without friction.",
-        "/static/public/img/testimonial.jpg",
+        media_kind="audio",
     ),
 ]
 

@@ -4,7 +4,16 @@
 {% block content %}
 {% set h = show.hero %}
 <section class="hero">
-  <div class="hero-img" style="background-image:url('{{ h.image }}')"></div>
+  <div class="hero-media">
+    {% if h.video %}
+    <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
+      <source src="{{ h.video }}">
+    </video>
+    {% else %}
+    {# Placeholder for a looping behind-the-scenes video (asset TBD). #}
+    <div class="hero-placeholder" aria-hidden="true"></div>
+    {% endif %}
+  </div>
   <div class="hero-veil"></div>
   <div class="hero-inner">
     <p class="hero-eyebrow">{{ h.eyebrow }}</p>
@@ -38,8 +47,21 @@
     <div class="case-grid">
       {% for c in show.cases %}
       <article class="case">
-        <div class="case-figure" style="background-image:url('{{ c.image }}')">
-          <span class="case-play">▶</span>
+        <div class="case-media">
+          {% if c.media_url %}
+            {% if c.media_kind == 'video' %}
+            <video class="case-player" controls preload="none" {% if c.poster %}poster="{{ c.poster }}"{% endif %}>
+              <source src="{{ c.media_url }}">
+            </video>
+            {% else %}
+            <audio class="case-player" controls preload="none" src="{{ c.media_url }}"></audio>
+            {% endif %}
+          {% else %}
+            <div class="case-ph {{ 'is-video' if c.media_kind=='video' else 'is-audio' }}">
+              <span class="case-ph-chip">{{ '▶' if c.media_kind=='video' else '♪' }} {{ c.media_kind|title }} player</span>
+              <span class="case-ph-sub">asset coming</span>
+            </div>
+          {% endif %}
           {% if c.sample %}<span class="case-tag">Sample</span>{% endif %}
         </div>
         <div class="case-body">
@@ -105,26 +127,6 @@
       </ul>
     </div>
     <div class="deliver-figure" style="background-image:url('/static/public/img/process.jpg')"></div>
-  </div>
-</section>
-
-<!-- Field Notes (honestly stubbed) -->
-<section class="sec paper2" id="fieldnotes">
-  <div class="sec-inner">
-    <div class="sec-head">
-      <div>
-        <p class="eyebrow">Field notes</p>
-        <h2>How we think about campaign music.</h2>
-      </div>
-    </div>
-    <div class="notes">
-      {% for n in show.field_notes %}
-      <article class="note">
-        <h3>{{ n.title }}</h3>
-        <span class="status">{{ n.status }}</span>
-      </article>
-      {% endfor %}
-    </div>
   </div>
 </section>
 
