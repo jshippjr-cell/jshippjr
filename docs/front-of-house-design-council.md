@@ -114,3 +114,44 @@ testimonials (pilot frame). Pricing stays *outcome-led*, not price-first (per PD
 - **The dashboard is still Jon-only** and unaffected; this is the public surface.
 - Re-review once real case studies and testimonials exist — then the PDF's fuller
   magazine (Field Notes, multiple cases) is unlocked *honestly*.
+
+---
+
+## Addendum — the "Built for…" market strip (2026-06-17)
+
+**Trigger (CEO):** the trust strip read *"Built for teams in Retail · Financial ·
+Healthcare · National brands"* — end-client **verticals** that make us look like we
+only serve three industries and isolate the rest of the market.
+
+The council re-read `docs/market-research.md` (the deep-research briefing, titled
+*"Music Production for Screen, Games & Advertising"*) and `docs/product-roadmap.md`
+/ `cmo-positioning-brief.md`.
+
+**Competitive Intelligence Analyst (citing research):** Verticals are the wrong axis
+entirely. The research validates *markets*, not industries: brands & agencies
+(beachhead, Roadmap A), **film & TV** (sync, $650M and growing), **indie games**
+(~19,100 Steam releases/yr, ≈99% indie with no music contacts — Roadmap B), and
+**creators/streamers** (Roadmap C). Listing Retail/Financial/Healthcare hides three
+of our four real markets.
+
+**CMO (push-back):** Careful not to dilute the **agency/brand beachhead**. The hero
+voice is "for agencies," and Roadmaps B/C are *sequenced later*. If the strip
+shouts "Games! Creators!" we over-promise capabilities we haven't systematized.
+
+**CRO:** A buyer from a game studio or a producer who lands here and sees only
+"Retail/Financial/Healthcare" bounces. The strip is reach, not a capability claim —
+we *can* score for all four today; we're just leading with brands commercially.
+
+**Founder's Advocate:** Frame it as the *kinds of work we score*, spanning the
+research's market map, with brands/agencies first so the beachhead still leads.
+
+**[RATIFIED] New strip — market reach, not verticals, beachhead-first:**
+> **Built for teams across — Brands & agencies · Film & TV · Games · Creators**
+
+- **Brands & agencies** keeps the beachhead voice first (the hero subhead still
+  reads "for agencies").
+- **Film & TV**, **Games**, **Creators** open the full addressable market the deep
+  research validates — without naming a single narrow vertical, so no industry is
+  excluded (a healthcare or fintech brand is simply "Brands & agencies").
+- Honest: these are markets Chordential *can* serve now; commercial focus stays on
+  the brand/agency beachhead per the roadmap's A→B→C sequencing.

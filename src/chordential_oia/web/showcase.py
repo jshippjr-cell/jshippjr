@@ -70,8 +70,10 @@ HERO = {
     "loop": "/static/public/hero-loop.webp",  # generated motion placeholder (animated)
 }
 
-# Honest category framing — NOT fabricated client logos (council override).
-TRUST_CATEGORIES = ["Retail", "Financial", "Healthcare", "National brands"]
+# Honest market reach — NOT fabricated client logos, NOT narrow verticals. These
+# are the markets the deep research validates (docs/market-research.md), led by the
+# brand/agency beachhead. See the council addendum in front-of-house-design-council.md.
+TRUST_CATEGORIES = ["Brands & agencies", "Film & TV", "Games", "Creators"]
 
 # The thesis.
 PROBLEM = {
