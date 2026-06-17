@@ -138,6 +138,36 @@ body.pub a{color:inherit;text-decoration:none}
 .cta-strip p{font-size:17px;color:var(--muted);margin:0 0 24px}
 .cta-strip .hero-actions{justify-content:center}
 
+/* lead capture form */
+.form-wrap{max-width:720px}
+.lead-form{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:28px;box-shadow:var(--shadow-sm);
+}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:680px){.field-row{grid-template-columns:1fr}}
+.field label{font-size:13px;font-weight:650;color:var(--ink)}
+.field input,.field textarea{
+  width:100%;background:var(--panel);border:1px solid var(--border2);border-radius:10px;
+  padding:11px 13px;font:inherit;color:var(--text);
+}
+.field input:focus,.field textarea:focus{
+  outline:none;border-color:var(--accent);background:#fff;
+  box-shadow:0 0 0 3px rgba(228,103,31,.12);
+}
+.field textarea{resize:vertical}
+.form-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+.form-note{margin:16px 0 0;font-size:13px;color:var(--muted)}
+
+/* thank-you */
+.thanks{max-width:640px}
+.thanks-mark{
+  width:54px;height:54px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;
+  margin-bottom:18px;box-shadow:var(--shadow-sm);
+}
+
 /* footer */
 .pub-footer{border-top:1px solid var(--border);background:#fff;padding:28px 0}
 .pub-footer-inner{

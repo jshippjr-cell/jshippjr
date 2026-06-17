@@ -1,0 +1,50 @@
+{% extends "public_base.html" %}
+{% block title %}Book a call{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">Book a call</p>
+    <h1 class="page-title">Let’s talk it through.</h1>
+    <p class="page-lede">
+      Leave your details and a note about what you’re working on — we’ll reach
+      out to set up a time.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner form-wrap">
+    <form class="lead-form" method="post" action="/site/book">
+      <div class="field">
+        <label for="contact_name">Your name *</label>
+        <input id="contact_name" name="contact_name" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="contact_email">Email</label>
+          <input id="contact_email" name="contact_email" type="email">
+        </div>
+        <div class="field">
+          <label for="company">Company / brand</label>
+          <input id="company" name="company">
+        </div>
+      </div>
+      <div class="field">
+        <label for="timeline">Best time to reach you</label>
+        <input id="timeline" name="timeline" placeholder="e.g. weekday mornings ET">
+      </div>
+      <div class="field">
+        <label for="description">What’s it about?</label>
+        <textarea id="description" name="description" rows="4"
+                  placeholder="A sentence or two on the project or question."></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Request a call</button>
+        <a class="btn btn-ghost" href="/site/start">Start a project instead</a>
+      </div>
+      <p class="form-note">We review every request personally and reply with next steps.</p>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..models import BuyerValue, MusicDiscipline
+from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
@@ -145,6 +145,68 @@ def dashboard(request: Request):
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Front-of-House — inbound lead review queue (NOT the opportunity pipeline)
+# --------------------------------------------------------------------------- #
+# Leads come from the public site. They are reviewed and explicitly promoted into
+# the pipeline by hand — a lead is never auto-injected as an opportunity (the
+# precision-bias rule: a human qualifies first).
+@app.get("/leads", response_class=HTMLResponse)
+def inbound_queue(request: Request, status: Optional[str] = None):
+    conn = db.connect()
+    try:
+        leads = db.list_inbound_leads(conn, status=status)
+        counts = db.inbound_counts(conn)
+    finally:
+        conn.close()
+    return render(
+        request, "inbound_queue.html", nav="leads", leads=leads, counts=counts,
+        statuses=db.INBOUND_STATES, active_status=(status or ""),
+    )
+
+
+@app.post("/leads/{lead_id}/status")
+def inbound_set_status(lead_id: int, status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.update_inbound_lead_status(conn, lead_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse("/leads", status_code=303)
+
+
+@app.post("/leads/{lead_id}/promote")
+def inbound_promote(lead_id: int):
+    """Promote a reviewed lead into the pipeline — the human qualify-gate.
+
+    Builds an Opportunity from the lead's facts and runs it through the same
+    insert path (qualify + score + strategic) as any other opportunity, then
+    links the lead to it. This is the only way a lead enters the pipeline.
+    """
+    conn = db.connect()
+    try:
+        lead = db.get_inbound_lead(conn, lead_id)
+        if lead is None:
+            return HTMLResponse("Lead not found", status_code=404)
+        if lead["linked_opp_id"]:
+            return RedirectResponse(
+                f"/opportunity/{lead['linked_opp_id']}", status_code=303
+            )
+        client = (lead["company"] or lead["contact_name"] or "Inbound lead").strip()
+        need = (lead["project_type"] or "Inbound commission").strip()
+        opp = Opportunity(
+            client=client,
+            need=need,
+            description=lead["description"] or "",
+            source="front_of_house",
+        )
+        new_id = db.insert_opportunity(conn, opp)
+        db.link_inbound_to_opp(conn, lead_id, new_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

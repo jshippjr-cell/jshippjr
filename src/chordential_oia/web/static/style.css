@@ -136,6 +136,12 @@ a{color:inherit;text-decoration:none}
 .pill.st-won{background:rgba(228,103,31,.16);color:#B5500F;border-color:rgba(228,103,31,.36)}
 .pill.st-lost{background:rgba(68,22,30,.12);color:#7a2330;border-color:rgba(68,22,30,.28)}
 .pill.st-passed{background:rgba(115,116,105,.12);color:#7c7d71}
+/* inbound-lead review states */
+.pill.st-reviewed{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
+.pill.st-qualified{background:rgba(34,110,70,.12);color:#1d6b43;border-color:rgba(34,110,70,.3)}
+.pill.st-dismissed{background:rgba(115,116,105,.10);color:#7c7d71;border-color:rgba(115,116,105,.22)}
+.lead-actions{display:flex;gap:6px;flex-wrap:wrap}
+.lead-actions form{margin:0}
 .pill-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
 /* alignment bar */

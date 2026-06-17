@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Inbound Leads{% endblock %}
+{% block heading %}Front-of-House · Inbound Leads{% endblock %}
+{% block content %}
+
+<p class="result-count">
+  Public submissions from the front-of-house site. Review each one, then
+  <strong>promote</strong> the real ones into the pipeline — nothing here becomes
+  an opportunity until you say so.
+</p>
+
+<div class="filters card pill-row">
+  <a class="pill-btn {{ 'is-current' if active_status=='' }}" href="/leads">All ({{ counts.total }})</a>
+  {% for s in statuses %}
+  <a class="pill-btn {{ 'is-current' if active_status==s }}" href="/leads?status={{ s }}">{{ s }} ({{ counts[s] }})</a>
+  {% endfor %}
+  <span class="muted small" style="margin-left:auto">{{ counts.open }} open</span>
+</div>
+
+{% if leads %}
+<div class="card no-pad" style="margin-top:18px">
+<table class="table">
+  <thead>
+    <tr>
+      <th>Lead</th><th>Project</th><th>Budget / timeline</th>
+      <th>Source</th><th>Status</th><th style="width:1%">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in leads %}
+    <tr>
+      <td>
+        <div class="strong">{{ l['contact_name'] or '—' }}</div>
+        <div class="muted small">
+          {{ l['company'] or 'No company' }}{% if l['contact_email'] %} · {{ l['contact_email'] }}{% endif %}
+        </div>
+      </td>
+      <td>
+        <div>{{ l['project_type'] or '—' }}</div>
+        {% if l['description'] %}<div class="muted small">{{ l['description'][:90] }}{% if l['description']|length > 90 %}…{% endif %}</div>{% endif %}
+      </td>
+      <td class="small">
+        <div>{{ l['budget_text'] or '—' }}</div>
+        <div class="muted">{{ l['timeline'] or '' }}</div>
+      </td>
+      <td><span class="pill">{{ 'Book a call' if l['source']=='book_call' else 'Questionnaire' }}</span></td>
+      <td>
+        <span class="pill st-{{ l['status']|lower }}">{{ l['status'] }}</span>
+        {% if l['linked_opp_id'] %}
+          <a class="link small" href="/opportunity/{{ l['linked_opp_id'] }}">→ opp #{{ l['linked_opp_id'] }}</a>
+        {% endif %}
+      </td>
+      <td>
+        <div class="lead-actions">
+          {% if not l['linked_opp_id'] %}
+          <form method="post" action="/leads/{{ l['id'] }}/promote">
+            <button class="btn tiny primary" type="submit" title="Create an opportunity from this lead">Promote</button>
+          </form>
+          {% if l['status'] == 'New' %}
+          <form method="post" action="/leads/{{ l['id'] }}/status">
+            <input type="hidden" name="status" value="Reviewed">
+            <button class="btn tiny" type="submit">Mark reviewed</button>
+          </form>
+          {% endif %}
+          {% if l['status'] != 'Dismissed' %}
+          <form method="post" action="/leads/{{ l['id'] }}/status">
+            <input type="hidden" name="status" value="Dismissed">
+            <button class="btn tiny ghost" type="submit">Dismiss</button>
+          </form>
+          {% endif %}
+          {% else %}
+          <span class="muted small">Promoted</span>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="margin-top:18px">
+  <p class="muted" style="margin:0">No leads{% if active_status %} with status “{{ active_status }}”{% endif %} yet. Submissions from the public site will appear here.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "public_base.html" %}
+{% block title %}Start a project{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">Start a project</p>
+    <h1 class="page-title">Tell us what you’re making.</h1>
+    <p class="page-lede">
+      A few details is all we need to come back with an approach and a price
+      range. No commitment — this just opens the conversation.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner form-wrap">
+    <form class="lead-form" method="post" action="/site/start">
+      <div class="field">
+        <label for="contact_name">Your name *</label>
+        <input id="contact_name" name="contact_name" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="contact_email">Email</label>
+          <input id="contact_email" name="contact_email" type="email">
+        </div>
+        <div class="field">
+          <label for="company">Company / brand</label>
+          <input id="company" name="company">
+        </div>
+      </div>
+      <div class="field">
+        <label for="project_type">What kind of project?</label>
+        <input id="project_type" name="project_type"
+               placeholder="e.g. :30 brand spot, sonic logo, title sequence">
+      </div>
+      <div class="field">
+        <label for="description">Describe it</label>
+        <textarea id="description" name="description" rows="5"
+                  placeholder="Tone, references, where it’ll run, anything useful."></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="budget_text">Budget (rough is fine)</label>
+          <input id="budget_text" name="budget_text" placeholder="e.g. around $5k">
+        </div>
+        <div class="field">
+          <label for="timeline">Timeline</label>
+          <input id="timeline" name="timeline" placeholder="e.g. delivery in 4 weeks">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Send it over</button>
+        <a class="btn btn-ghost" href="/site/book">Prefer a call?</a>
+      </div>
+      <p class="form-note">We review every submission personally and reply with next steps.</p>
+    </form>
+  </div>
+</section>
+{% endblock %}

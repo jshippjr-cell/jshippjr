@@ -149,10 +149,31 @@ CREATE TABLE IF NOT EXISTS brief_progress (
     updated_at TEXT,
     PRIMARY KEY (opp_id, step_key)
 );
+
+-- Inbound leads from the public front-of-house site (questionnaire + book-a-call).
+-- These are NOT opportunities: a human reviews and explicitly promotes a lead
+-- into the pipeline (precision-bias rule), so they land in their own review queue.
+CREATE TABLE IF NOT EXISTS inbound_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT,
+    contact_name TEXT,
+    contact_email TEXT,
+    company TEXT,
+    project_type TEXT,
+    description TEXT DEFAULT '',
+    budget_text TEXT,
+    timeline TEXT,
+    source TEXT DEFAULT 'questionnaire',   -- 'questionnaire' | 'book_call'
+    status TEXT DEFAULT 'New',             -- New | Reviewed | Qualified | Dismissed
+    linked_opp_id INTEGER,
+    notes TEXT DEFAULT ''
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
 MILESTONE_STATES = ["Pending", "In progress", "Done"]
+# Front-of-house inbound-lead review states (human qualifies before the pipeline).
+INBOUND_STATES = ["New", "Reviewed", "Qualified", "Dismissed"]
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
 # idempotent migration so an older chordential.db keeps working after a pull.
@@ -245,6 +266,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             opp_id INTEGER NOT NULL, step_key TEXT NOT NULL,
             done INTEGER DEFAULT 0, updated_at TEXT,
             PRIMARY KEY (opp_id, step_key)
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS inbound_leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT,
+            contact_name TEXT, contact_email TEXT, company TEXT,
+            project_type TEXT, description TEXT DEFAULT '', budget_text TEXT,
+            timeline TEXT, source TEXT DEFAULT 'questionnaire',
+            status TEXT DEFAULT 'New', linked_opp_id INTEGER, notes TEXT DEFAULT ''
         )"""
     )
     conn.commit()
@@ -606,6 +636,95 @@ def buyer_contacts(conn: sqlite3.Connection, client: str) -> List[sqlite3.Row]:
            ORDER BY contact_name""",
         (client,),
     ).fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# Inbound leads (front-of-house) — a review queue, not the opportunity pipeline
+# --------------------------------------------------------------------------- #
+def insert_inbound_lead(
+    conn: sqlite3.Connection,
+    contact_name: str,
+    contact_email: str = "",
+    company: str = "",
+    project_type: str = "",
+    description: str = "",
+    budget_text: str = "",
+    timeline: str = "",
+    source: str = "questionnaire",
+) -> int:
+    """Store a public submission as a New lead. No evaluation happens here —
+    a human qualifies and promotes it later (precision-bias rule)."""
+    cur = conn.execute(
+        """INSERT INTO inbound_leads
+           (created_at, contact_name, contact_email, company, project_type,
+            description, budget_text, timeline, source, status)
+           VALUES (?,?,?,?,?,?,?,?,?,'New')""",
+        (
+            datetime.now(timezone.utc).isoformat(),
+            contact_name or None, contact_email or None, company or None,
+            project_type or None, description or "", budget_text or None,
+            timeline or None, source,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_inbound_leads(
+    conn: sqlite3.Connection, status: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Leads for the review queue. Open leads (New/Reviewed) surface first."""
+    clause = " WHERE status = ?" if status else ""
+    params = (status,) if status else ()
+    return conn.execute(
+        f"""SELECT * FROM inbound_leads{clause}
+            ORDER BY
+              CASE status WHEN 'New' THEN 0 WHEN 'Reviewed' THEN 1
+                          WHEN 'Qualified' THEN 2 ELSE 3 END,
+              created_at DESC""",
+        params,
+    ).fetchall()
+
+
+def get_inbound_lead(conn: sqlite3.Connection, lead_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM inbound_leads WHERE id = ?", (lead_id,)
+    ).fetchone()
+
+
+def update_inbound_lead_status(
+    conn: sqlite3.Connection, lead_id: int, status: str
+) -> None:
+    if status not in INBOUND_STATES:
+        raise ValueError(f"Unknown inbound status {status!r}")
+    conn.execute(
+        "UPDATE inbound_leads SET status = ? WHERE id = ?", (status, lead_id)
+    )
+    conn.commit()
+
+
+def link_inbound_to_opp(
+    conn: sqlite3.Connection, lead_id: int, opp_id: int
+) -> None:
+    """Mark a lead promoted: link it to the created opportunity and qualify it."""
+    conn.execute(
+        "UPDATE inbound_leads SET linked_opp_id = ?, status = 'Qualified' WHERE id = ?",
+        (opp_id, lead_id),
+    )
+    conn.commit()
+
+
+def inbound_counts(conn: sqlite3.Connection) -> Dict[str, int]:
+    """Per-status counts for the review-queue badges (always includes 'open')."""
+    rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM inbound_leads GROUP BY status"
+    ).fetchall()
+    counts = {s: 0 for s in INBOUND_STATES}
+    for r in rows:
+        counts[r["status"]] = r["n"]
+    counts["open"] = counts["New"] + counts["Reviewed"]
+    counts["total"] = sum(r["n"] for r in rows)
+    return counts
 
 
 # --------------------------------------------------------------------------- #
