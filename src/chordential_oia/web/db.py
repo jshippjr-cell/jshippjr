@@ -166,7 +166,11 @@ CREATE TABLE IF NOT EXISTS inbound_leads (
     source TEXT DEFAULT 'questionnaire',   -- 'questionnaire' | 'book_call'
     status TEXT DEFAULT 'New',             -- New | Reviewed | Qualified | Dismissed
     linked_opp_id INTEGER,
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '',
+    -- Indicative price band shown to the client at intake (the estimator's
+    -- output). Captured so we can later compare what we quoted vs what we won.
+    shown_price_low REAL,
+    shown_price_high REAL
 );
 """
 
@@ -174,6 +178,13 @@ PROJECT_STATES = ["Active", "Delivered"]
 MILESTONE_STATES = ["Pending", "In progress", "Done"]
 # Front-of-house inbound-lead review states (human qualifies before the pipeline).
 INBOUND_STATES = ["New", "Reviewed", "Qualified", "Dismissed"]
+
+# Columns added to inbound_leads after the table first shipped — migrated onto an
+# existing DB (e.g. one already running Cycle 1.2) the same way _OUTREACH_COLUMNS is.
+_INBOUND_COLUMNS = {
+    "shown_price_low": "REAL",
+    "shown_price_high": "REAL",
+}
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
 # idempotent migration so an older chordential.db keeps working after a pull.
@@ -277,6 +288,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             status TEXT DEFAULT 'New', linked_opp_id INTEGER, notes TEXT DEFAULT ''
         )"""
     )
+    inbound_cols = {r["name"] for r in conn.execute("PRAGMA table_info(inbound_leads)")}
+    for name, decl in _INBOUND_COLUMNS.items():
+        if name not in inbound_cols:
+            conn.execute(f"ALTER TABLE inbound_leads ADD COLUMN {name} {decl}")
     conn.commit()
 
 
@@ -651,19 +666,26 @@ def insert_inbound_lead(
     budget_text: str = "",
     timeline: str = "",
     source: str = "questionnaire",
+    shown_price_low: Optional[float] = None,
+    shown_price_high: Optional[float] = None,
 ) -> int:
     """Store a public submission as a New lead. No evaluation happens here —
-    a human qualifies and promotes it later (precision-bias rule)."""
+    a human qualifies and promotes it later (precision-bias rule).
+
+    ``shown_price_*`` records the indicative band the client was shown (from the
+    estimator) so the eventual win/loss can be compared against what we quoted.
+    """
     cur = conn.execute(
         """INSERT INTO inbound_leads
            (created_at, contact_name, contact_email, company, project_type,
-            description, budget_text, timeline, source, status)
-           VALUES (?,?,?,?,?,?,?,?,?,'New')""",
+            description, budget_text, timeline, source, status,
+            shown_price_low, shown_price_high)
+           VALUES (?,?,?,?,?,?,?,?,?,'New',?,?)""",
         (
             datetime.now(timezone.utc).isoformat(),
             contact_name or None, contact_email or None, company or None,
             project_type or None, description or "", budget_text or None,
-            timeline or None, source,
+            timeline or None, source, shown_price_low, shown_price_high,
         ),
     )
     conn.commit()

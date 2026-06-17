@@ -16,6 +16,13 @@
       We’ve received your project details and will reply personally with an
       approach and a price range.
     </p>
+    {% if band %}
+    <div class="price-band">
+      <span class="price-band-label">Projects like yours typically run</span>
+      <span class="price-band-range">{{ band.low|money }}–{{ band.high|money }}</span>
+      <span class="price-band-note">Indicative only — we’ll confirm once we’ve scoped it with you.</span>
+    </div>
+    {% endif %}
     {% endif %}
     <div class="hero-actions">
       <a class="btn btn-ghost" href="/site">Back to home</a>

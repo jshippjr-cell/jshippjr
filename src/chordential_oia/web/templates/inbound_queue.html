@@ -42,6 +42,9 @@
       <td class="small">
         <div>{{ l['budget_text'] or '—' }}</div>
         <div class="muted">{{ l['timeline'] or '' }}</div>
+        {% if l['shown_price_low'] and l['shown_price_high'] %}
+        <div class="muted" title="Indicative band shown to the client at intake">quoted {{ l['shown_price_low']|money }}–{{ l['shown_price_high']|money }}</div>
+        {% endif %}
       </td>
       <td><span class="pill">{{ 'Book a call' if l['source']=='book_call' else 'Questionnaire' }}</span></td>
       <td>

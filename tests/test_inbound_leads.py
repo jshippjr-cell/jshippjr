@@ -61,7 +61,8 @@ def test_questionnaire_creates_lead_not_opportunity(ctx):
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"] == "/site/thanks?kind=project"
+    # Redirects to the thank-you page (may carry an indicative price band).
+    assert r.headers["location"].startswith("/site/thanks?kind=project")
     # A lead was created; NO opportunity entered the pipeline.
     assert _lead_count(db_mod) == before_leads + 1
     assert _opp_count(db_mod) == before_opps
