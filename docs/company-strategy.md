@@ -309,6 +309,39 @@ procurement*; proposes the **Strategic-Value lens**).
 
 ---
 
+## CEO DECISION — Human-gated discovery crawler (Jon Shipp, 2026-06-17)
+
+**Override.** The earlier ratified position rejected mass web scraping of
+ToS-gated sites as a legal + maintenance liability (see "No premature scale,"
+the CFO↔CTO objection log, and `company-definition.md`'s "Explicitly rejected").
+Jon, as CEO, has decided Chordential **will** add an actual web crawler for
+discovery — on **both** the demand side (opportunities) and the supply side
+(talent) — under a strict governance constraint that resolves the original risk:
+
+**The crawler is human-gated ("the machine proposes, Jon disposes").**
+- The system **deterministically proposes *where* to look** — specific sites,
+  search queries, and feeds derived from disciplines/roles/locations/keywords.
+- **It does not fetch anything on its own.** Jon reviews each proposed target and
+  **explicitly approves** it; only approved targets are ever fetched.
+- Fetched results land in a **staging/review queue** and remain Pending until Jon
+  qualifies them (the existing pursue-gate / reel-review gates). No crawled record
+  auto-enters the pipeline or the matchable roster.
+
+**Why this is consistent with the moat, not a drift into "commodity scraper":**
+the value is still *curation and qualification*, not volume — a human authorizes
+every source and qualifies every result. This keeps the precision-bias rule and
+the "every source has an owner/SLA" rule intact.
+
+**Operating guardrails (binding on the build):** public pages only; respect
+robots.txt; rate-limit and identify the user-agent; fail-soft (a broken crawl
+never blocks startup or the rest of the app); crawled creator PII must have a
+delete path (target/lead/candidate dismissal); the connector ships behind an
+env flag and is OFF where it cannot be operationally supported. This **supersedes**
+the blanket "no mass scraping" line for the *gated* crawler only — unsupervised,
+ungated mass scraping remains rejected.
+
+---
+
 ## Estimation Engine — Hybrid Model Spec (CEO-directed, 2026-06-16)
 
 **Principle:** Chordential has no historical project dataset yet, so the estimator
