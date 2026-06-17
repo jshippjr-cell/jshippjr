@@ -5,10 +5,11 @@
 
 <div class="callout">
   <span class="callout-ico">🛈</span>
-  The crawler <strong>proposes where to look</strong> — it never fetches on its own.
-  Review each target and <strong>Approve</strong> the ones worth crawling; only
-  approved targets are fetched, and results land in a review queue for you to
-  qualify. <em>The machine proposes, you dispose.</em>
+  The crawler combs a <strong>council-vetted catalog of industry sites</strong> — no
+  broad web search. It <strong>proposes where to look</strong> and fetches nothing on
+  its own. Active sites are pre-vetted by the exec team; <strong>suggested</strong>
+  sites wait for your approval before they can be scanned. Then you approve each
+  target. <em>The machine proposes, you dispose.</em>
 </div>
 
 <div class="pill-row" style="margin:14px 0">
@@ -18,22 +19,83 @@
   </a>
   {% endfor %}
   <span class="muted small" style="margin-left:auto">
-    {{ counts.Proposed }} proposed · {{ counts.Approved }} approved · {{ counts.Fetched }} fetched
+    {{ site_counts.active }} active sites · {{ site_counts.Suggested }} suggested
   </span>
 </div>
 
-<div class="card">
-  <div class="card-head"><h2>Propose where to look</h2></div>
+<section class="card">
+  <div class="card-head"><h2>Sites the council recommends combing</h2>
+    <span class="muted small">who recommended it · why</span></div>
+
+  <table class="table compact">
+    <thead><tr><th>Site</th><th>Why (council)</th><th>Status</th><th style="width:1%">Decision</th></tr></thead>
+    <tbody>
+      {% for s in sites %}
+      <tr>
+        <td>
+          <a class="strong" href="{{ s['homepage'] }}" target="_blank" rel="noopener">{{ s['name'] }}</a>
+          <div class="muted small">{{ s['category'] }} · {{ s['kind'] }}</div>
+        </td>
+        <td class="small">
+          <div>{{ s['rationale'] }}</div>
+          <div class="muted">— {{ s['recommended_by'] }}</div>
+        </td>
+        <td>
+          {% if s['status'] in active_states %}
+            <span class="pill st-approved">Active</span>
+          {% elif s['status']=='Suggested' %}
+            <span class="pill st-proposed">Suggested</span>
+          {% else %}
+            <span class="pill st-dismissed">{{ s['status'] }}</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="lead-actions">
+            {% if s['status']=='Suggested' %}
+            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
+              <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny primary" type="submit" title="Allow the crawler to use this site">Approve site</button>
+            </form>
+            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
+              <input type="hidden" name="status" value="Rejected"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny ghost" type="submit">Reject</button>
+            </form>
+            {% elif s['status'] in active_states %}
+            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
+              <input type="hidden" name="status" value="Rejected"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny ghost" type="submit" title="Stop combing this site">Pause</button>
+            </form>
+            {% else %}
+            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
+              <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny" type="submit">Reactivate</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:10px">
+    New venues surface here as <strong>Suggested</strong> for your approval — the
+    council never activates a site on its own. See
+    <code>docs/discovery-sources-council.md</code> for the full deliberation.
+  </p>
+</section>
+
+<div class="card" style="margin-top:18px">
+  <div class="card-head"><h2>Propose targets from active sites</h2></div>
   <form class="filters" method="post" action="/discovery/generate" style="gap:10px;flex-wrap:wrap">
     <input type="hidden" name="kind" value="{{ kind }}">
-    <input class="filter-search" name="terms" placeholder="{{ 'Disciplines (comma-sep, optional)' if kind=='talent' else 'Keywords (comma-sep, optional)' }}">
+    <input class="filter-search" name="terms" placeholder="Keyword (optional, e.g. composer / sonic branding)">
     <input class="filter-search" name="location" placeholder="Location (optional)">
     <button class="btn primary" type="submit">Suggest targets</button>
   </form>
   {% if not scrape_on %}
   <p class="muted small" style="margin-top:10px">
     Live fetching is currently <strong>off</strong> (no <code>CHORDENTIAL_ENABLE_SCRAPE</code>).
-    You can propose and approve targets now; fetching runs where egress is enabled.
+    Propose and approve targets now; fetching runs where egress is enabled.
   </p>
   {% endif %}
 </div>
@@ -93,7 +155,7 @@
 </div>
 {% else %}
 <div class="card" style="margin-top:18px">
-  <p class="muted" style="margin:0">No targets yet. Use “Suggest targets” to propose where to look — then approve the ones worth crawling.</p>
+  <p class="muted" style="margin:0">No targets yet. Use “Suggest targets” to propose specific boards/searches on the active sites — then approve the ones worth crawling.</p>
 </div>
 {% endif %}
 

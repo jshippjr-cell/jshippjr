@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
         seed.seed(conn)
     seed.seed_talent(conn)
     seed.ingest_talent_prospects(conn)
+    discovery.sync_catalog(conn)
     seed.seed_demo_pipeline(conn)
     conn.close()
     yield
@@ -244,11 +245,14 @@ def discovery_page(request: Request, kind: str = "talent"):
     try:
         targets = db.list_crawl_targets(conn, kind=kind)
         counts = db.crawl_counts(conn, kind=kind)
+        sites = db.list_discovery_sites(conn, kind=kind)
+        site_counts = db.discovery_site_counts(conn)
     finally:
         conn.close()
     return render(
         request, "discovery.html", nav="discovery", kind=kind, targets=targets,
         counts=counts, kinds=db.CRAWL_KINDS, scrape_on=discovery.scrape_enabled(),
+        sites=sites, site_counts=site_counts, active_states=db.ACTIVE_SITE_STATES,
     )
 
 
@@ -256,13 +260,27 @@ def discovery_page(request: Request, kind: str = "talent"):
 def discovery_generate(
     kind: str = Form("talent"), location: str = Form(""), terms: str = Form("")
 ):
-    """Propose targets (deterministic, no fetching). Jon approves them next."""
-    term_list = [t.strip() for t in terms.split(",") if t.strip()] or None
+    """Propose targets from the active curated sites (deterministic, no fetching)."""
     conn = db.connect()
     try:
         discovery.generate_targets(
-            conn, kind, terms=term_list, location=location.strip() or None
+            conn, kind, keyword=terms.strip() or None,
+            location=location.strip() or None,
         )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+
+
+@app.post("/discovery/site/{site_id}/status")
+def discovery_site_decide(
+    site_id: int, status: str = Form(...), kind: str = Form("talent")
+):
+    """Approve or reject a suggested site — Jon's permission before it can be
+    scanned. Only active (Established/Approved) sites can propose targets."""
+    conn = db.connect()
+    try:
+        db.update_discovery_site_status(conn, site_id, status)
     finally:
         conn.close()
     return RedirectResponse(f"/discovery?kind={kind}", status_code=303)

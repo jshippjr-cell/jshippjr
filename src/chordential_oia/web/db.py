@@ -366,6 +366,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS discovery_sites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT UNIQUE, name TEXT, homepage TEXT, kind TEXT, category TEXT,
+            recommended_by TEXT, rationale TEXT, status TEXT DEFAULT 'Suggested',
+            added_at TEXT, decided_at TEXT, notes TEXT DEFAULT ''
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
             created_at TEXT, status TEXT DEFAULT 'Draft', deposit_pct REAL,
@@ -843,6 +851,102 @@ def inbound_counts(conn: sqlite3.Connection) -> Dict[str, int]:
 # --------------------------------------------------------------------------- #
 CRAWL_KINDS = ["talent", "opportunity"]
 CRAWL_STATES = ["Proposed", "Approved", "Fetched", "Dismissed"]
+
+# Discovery sites (the curated industry catalog) approval lifecycle. Established +
+# Approved are active (crawlable); Suggested awaits Jon; Rejected is parked.
+SITE_STATES = ["Established", "Suggested", "Approved", "Rejected"]
+ACTIVE_SITE_STATES = ("Established", "Approved")
+
+
+def upsert_discovery_site(
+    conn: sqlite3.Connection,
+    key: str,
+    name: str,
+    homepage: str,
+    kind: str,
+    category: str,
+    recommended_by: str,
+    rationale: str,
+    status: str,
+) -> None:
+    """Insert a catalog site if new; never overwrite Jon's decision on an existing
+    one (so re-seeding the catalog preserves approvals/rejections)."""
+    conn.execute(
+        """INSERT INTO discovery_sites
+           (key, name, homepage, kind, category, recommended_by, rationale,
+            status, added_at)
+           VALUES (?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(key) DO NOTHING""",
+        (
+            key, name, homepage, kind, category, recommended_by, rationale,
+            status, datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+
+
+def list_discovery_sites(
+    conn: sqlite3.Connection,
+    kind: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[sqlite3.Row]:
+    clauses, params = [], []
+    if kind:
+        clauses.append("(kind = ? OR kind = 'both')")
+        params.append(kind)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return conn.execute(
+        f"""SELECT * FROM discovery_sites{where}
+            ORDER BY
+              CASE status WHEN 'Suggested' THEN 0 WHEN 'Established' THEN 1
+                          WHEN 'Approved' THEN 2 ELSE 3 END,
+              name ASC""",
+        params,
+    ).fetchall()
+
+
+def get_discovery_site(conn: sqlite3.Connection, site_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM discovery_sites WHERE id = ?", (site_id,)
+    ).fetchone()
+
+
+def update_discovery_site_status(
+    conn: sqlite3.Connection, site_id: int, status: str
+) -> None:
+    if status not in SITE_STATES:
+        raise ValueError(f"Unknown site status {status!r}")
+    conn.execute(
+        "UPDATE discovery_sites SET status = ?, decided_at = ? WHERE id = ?",
+        (status, datetime.now(timezone.utc).isoformat(), site_id),
+    )
+    conn.commit()
+
+
+def active_discovery_site_keys(conn: sqlite3.Connection, gen_kind: str) -> List[str]:
+    """Site keys eligible to propose targets for a kind — active sites only."""
+    rows = conn.execute(
+        f"""SELECT key FROM discovery_sites
+            WHERE status IN ({','.join('?' * len(ACTIVE_SITE_STATES))})
+              AND (kind = ? OR kind = 'both')""",
+        (*ACTIVE_SITE_STATES, gen_kind),
+    ).fetchall()
+    return [r["key"] for r in rows]
+
+
+def discovery_site_counts(conn: sqlite3.Connection) -> Dict[str, int]:
+    rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM discovery_sites GROUP BY status"
+    ).fetchall()
+    counts = {s: 0 for s in SITE_STATES}
+    for r in rows:
+        counts[r["status"]] = r["n"]
+    counts["active"] = counts["Established"] + counts["Approved"]
+    counts["total"] = sum(r["n"] for r in rows)
+    return counts
 
 
 def crawl_target_exists(conn: sqlite3.Connection, kind: str, url: str) -> bool:

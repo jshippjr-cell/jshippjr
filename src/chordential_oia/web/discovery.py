@@ -1,142 +1,81 @@
 """Human-gated discovery crawler — "the machine proposes, Jon disposes".
 
-Two halves:
+Three halves now:
 
-1. **Propose** (deterministic, no network): from disciplines / roles / keywords,
-   build candidate places to look — specific search URLs on public providers —
-   and store them as ``Proposed`` :data:`crawl_targets`. This mirrors the
-   deterministic LinkedIn people-search deep-link the outreach layer already
-   builds (``outreach._linkedin_research_url``); it only suggests *where* to go.
+1. **Curated sites** (``discovery_sources``): the crawler combs a council-vetted
+   catalog of industry venues (ProductionHub, TAXI, VI-Control, Mandy, Stage 32,
+   Soundlister, Reddit gig subs, SoundBetter, AirGigs, …) — never a broad
+   Google/Bing sweep. Established sites are active; Suggested sites are presented
+   and scanned only after Jon approves the site.
 
-2. **Fetch** (gated): :func:`run_target` fetches a target **only if Jon has
-   Approved it** AND the scrape flag is on (Render). Talent results become
-   Pending creators; opportunity results become inbound leads — both land in a
-   review queue and still require Jon's qualification. Nothing is auto-pursued.
+2. **Propose** (deterministic, no network): from the *active* sites, build
+   candidate search/board URLs as ``Proposed`` crawl targets.
 
-Serves both the supply side (talent) and the demand side (opportunities), so the
-existing RFP scanner gains the same gated-crawl capability.
+3. **Fetch** (gated): :func:`run_target` fetches a target only if Jon Approved it
+   AND the scrape flag is on. Talent results become Pending creators; opportunity
+   results become inbound leads — both land in a review queue for qualification.
+
+Serves both the supply side (talent) and the demand side (opportunities).
 """
 
 from __future__ import annotations
 
 from html.parser import HTMLParser
 from typing import List, Optional
-from urllib.parse import quote_plus
 
-from ..models import MusicDiscipline
 from ..talent_sources.scraped import ScrapedTalentSource, _fetch_url, scrape_enabled
 from . import db
-
-# Public search providers we build deep-links into. Each is a (key, label,
-# url_template) — the template takes a pre-encoded query string. These point a
-# human (and, once approved, the fetcher) at a public results page.
-_TALENT_PROVIDERS = [
-    ("linkedin", "LinkedIn people search",
-     "https://www.linkedin.com/search/results/people/?keywords={q}"),
-    ("google", "Google portfolio search",
-     "https://www.google.com/search?q={q}"),
-]
-_OPPORTUNITY_PROVIDERS = [
-    ("google", "Google RFP search",
-     "https://www.google.com/search?q={q}"),
-    ("bing", "Bing RFP search",
-     "https://www.bing.com/search?q={q}"),
-]
-
-# Default discovery terms when the caller doesn't specify any.
-_DEFAULT_TALENT_DISCIPLINES = [
-    MusicDiscipline.COMPOSITION,
-    MusicDiscipline.SONIC_BRANDING,
-    MusicDiscipline.SOUND_DESIGN,
-]
-_DEFAULT_OPPORTUNITY_KEYWORDS = [
-    "original music RFP",
-    "sonic branding brief",
-    "video score request for proposal",
-]
+from . import discovery_sources as catalog
 
 
-def _discipline_query(d: MusicDiscipline) -> str:
-    """Search keywords for finding a creator in a discipline."""
-    return {
-        MusicDiscipline.COMPOSITION: "film composer original music portfolio",
-        MusicDiscipline.SONIC_BRANDING: "sonic branding sound logo composer",
-        MusicDiscipline.SOUND_DESIGN: "sound designer reel portfolio",
-        MusicDiscipline.ARRANGEMENT: "arranger orchestrator portfolio",
-        MusicDiscipline.SUPERVISION: "music supervisor sync portfolio",
-        MusicDiscipline.LICENSING: "music supervisor licensing portfolio",
-    }.get(d, f"{d.label} portfolio")
+# --------------------------------------------------------------------------- #
+# Catalog sync — keep the discovery_sites table aligned with the code catalog
+# --------------------------------------------------------------------------- #
+def sync_catalog(conn) -> int:
+    """Insert any catalog sites not yet in the DB (never overwrites Jon's
+    approve/reject decisions). Returns how many new sites were added."""
+    before = db.discovery_site_counts(conn)["total"]
+    for site in catalog.CATALOG:
+        db.upsert_discovery_site(
+            conn, site.key, site.name, site.homepage, site.kind, site.category,
+            site.recommended_by, site.rationale, site.status,
+        )
+    return db.discovery_site_counts(conn)["total"] - before
 
 
-def propose_talent_targets(
-    disciplines: Optional[List[MusicDiscipline]] = None,
+# --------------------------------------------------------------------------- #
+# Propose targets from the ACTIVE curated sites only
+# --------------------------------------------------------------------------- #
+def propose_targets(
+    active_keys: List[str],
+    kind: str,
+    keyword: Optional[str] = None,
     location: Optional[str] = None,
 ) -> List[dict]:
-    """Deterministically propose where to look for creators. No network."""
-    disciplines = disciplines or _DEFAULT_TALENT_DISCIPLINES
-    loc = (location or "").strip()
+    """Deterministically build target dicts from the given active site keys. No
+    network. Skips keys not in the catalog or not serving this kind."""
     out: List[dict] = []
-    for d in disciplines:
-        terms = _discipline_query(d)
-        if loc:
-            terms = f"{terms} {loc}"
-        for key, label, tmpl in _TALENT_PROVIDERS:
-            out.append({
-                "kind": "talent",
-                "label": f"{label} — {d.label}" + (f" · {loc}" if loc else ""),
-                "query": terms,
-                "url": tmpl.format(q=quote_plus(terms)),
-                "source_key": key,
-                "rationale": f"Find {d.label} creators via {label.split(' ')[0]}.",
-            })
-    return out
-
-
-def propose_opportunity_targets(
-    keywords: Optional[List[str]] = None,
-    location: Optional[str] = None,
-) -> List[dict]:
-    """Deterministically propose where to look for opportunities. No network."""
-    keywords = keywords or _DEFAULT_OPPORTUNITY_KEYWORDS
-    loc = (location or "").strip()
-    out: List[dict] = []
-    for kw in keywords:
-        terms = f"{kw} {loc}".strip() if loc else kw
-        for key, label, tmpl in _OPPORTUNITY_PROVIDERS:
-            out.append({
-                "kind": "opportunity",
-                "label": f"{label} — “{kw}”" + (f" · {loc}" if loc else ""),
-                "query": terms,
-                "url": tmpl.format(q=quote_plus(terms)),
-                "source_key": key,
-                "rationale": f"Surface RFPs/briefs matching “{kw}”.",
-            })
+    for key in active_keys:
+        site = catalog.get_site(key)
+        if site is None or not site.serves(kind):
+            continue
+        out.extend(catalog.site_targets(site, kind, keyword, location))
     return out
 
 
 def generate_targets(
     conn,
     kind: str,
-    terms: Optional[List[str]] = None,
+    keyword: Optional[str] = None,
     location: Optional[str] = None,
 ) -> int:
-    """Generate proposals for a kind and store the new ones (deduped). Returns
-    how many NEW targets were proposed. Purely deterministic — no fetching."""
-    if kind == "talent":
-        disciplines = None
-        if terms:
-            disciplines = [
-                MusicDiscipline(t) for t in terms
-                if t in {m.value for m in MusicDiscipline}
-            ] or None
-        proposals = propose_talent_targets(disciplines, location)
-    elif kind == "opportunity":
-        proposals = propose_opportunity_targets(terms or None, location)
-    else:
+    """Propose targets for a kind from the active curated sites and store the new
+    ones (deduped on kind+url). Purely deterministic — no fetching."""
+    if kind not in db.CRAWL_KINDS:
         raise ValueError(f"Unknown crawl kind {kind!r}")
-
+    active_keys = db.active_discovery_site_keys(conn, kind)
     added = 0
-    for p in proposals:
+    for p in propose_targets(active_keys, kind, keyword, location):
         new_id = db.insert_crawl_target(
             conn, p["kind"], p["label"], p["query"], p["url"],
             p["source_key"], p["rationale"],
@@ -194,8 +133,8 @@ def run_target(conn, target) -> int:
 
     Enforces the gate: a target that isn't Approved is never fetched. Talent
     results become Pending creators (reel-review gate); opportunity results
-    become inbound leads (promotion gate). Returns the number of records ingested.
-    Fails soft and marks the target Fetched with its count.
+    become inbound leads (promotion gate). Returns the number ingested. Fails
+    soft and marks the target Fetched with its count.
     """
     if target["status"] != "Approved":
         raise ValueError("Only an Approved target can be fetched.")

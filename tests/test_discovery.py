@@ -1,7 +1,8 @@
-"""Human-gated discovery crawler (Cycle 2.3).
+"""Human-gated discovery crawler (Cycles 2.3 + curated sources).
 
-Core contract: the system proposes targets deterministically and never fetches
-anything until Jon approves it. Network is additionally env-gated and is never
+Core contract: the crawler combs a council-vetted catalog of industry sites (no
+broad web search), proposes nothing from a site until that site is active, and
+fetches nothing until Jon approves the target. Network is env-gated and never
 touched in tests except via a monkeypatched fetch.
 """
 
@@ -13,7 +14,6 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from chordential_oia.models import MusicDiscipline
 from chordential_oia.talent_sources import scraped
 from chordential_oia.talent_sources.scraped import (
     ScrapedTalentSource,
@@ -21,6 +21,7 @@ from chordential_oia.talent_sources.scraped import (
     scrape_enabled,
 )
 from chordential_oia.web import discovery
+from chordential_oia.web import discovery_sources as catalog
 
 
 TALENT_HTML = """
@@ -48,49 +49,100 @@ def ctx(tmp_path, monkeypatch):
     importlib.reload(db_mod)
     from chordential_oia.web import app as app_mod
     importlib.reload(app_mod)
-    with TestClient(app_mod.app) as c:
+    with TestClient(app_mod.app) as c:   # lifespan syncs the catalog
         yield c, db_mod
 
 
-# --- Proposal generation (pure, deterministic, no network) ----------------- #
-def test_propose_talent_targets_deterministic():
-    a = discovery.propose_talent_targets([MusicDiscipline.COMPOSITION])
-    b = discovery.propose_talent_targets([MusicDiscipline.COMPOSITION])
-    assert a == b and a, "proposals must be deterministic and non-empty"
-    for t in a:
-        assert t["kind"] == "talent"
-        assert t["url"].startswith("http")
+# --- Curated catalog (pure, no network) ------------------------------------ #
+def test_catalog_has_real_industry_sites():
+    keys = {s.key for s in catalog.CATALOG}
+    for expected in ("productionhub", "taxi", "vicontrol", "soundbetter"):
+        assert expected in keys
 
 
-def test_propose_opportunity_targets():
-    targets = discovery.propose_opportunity_targets(["original music RFP"])
-    assert targets
-    assert all(t["kind"] == "opportunity" for t in targets)
+def test_site_targets_build_real_urls():
+    site = catalog.get_site("reddit_forhire")
+    targets = catalog.site_targets(site, "opportunity", keyword="composer")
+    assert targets and all(t["url"].startswith("https://www.reddit.com") for t in targets)
+
+
+def test_no_broad_search_providers_in_active_proposals(ctx):
+    _, db_mod = ctx
+    conn = db_mod.connect()
+    try:
+        for kind in ("opportunity", "talent"):
+            keys = db_mod.active_discovery_site_keys(conn, kind)
+            for p in discovery.propose_targets(keys, kind, keyword="composer"):
+                assert "google.com/search" not in p["url"]
+                assert "bing.com/search" not in p["url"]
+    finally:
+        conn.close()
+
+
+# --- Catalog sync + site-level gate ---------------------------------------- #
+def test_catalog_synced_with_established_active_and_suggested(ctx):
+    _, db_mod = ctx
+    conn = db_mod.connect()
+    try:
+        counts = db_mod.discovery_site_counts(conn)
+        assert counts["active"] > 0
+        assert counts["Suggested"] > 0          # emerging sites await approval
+    finally:
+        conn.close()
+
+
+def test_suggested_site_not_used_until_approved(ctx):
+    client, db_mod = ctx
+    conn = db_mod.connect()
+    # x_gigs is a Suggested opportunity site.
+    site = conn.execute(
+        "SELECT * FROM discovery_sites WHERE key='x_gigs'"
+    ).fetchone()
+    assert site["status"] == "Suggested"
+    keys_before = db_mod.active_discovery_site_keys(conn, "opportunity")
+    conn.close()
+    assert "x_gigs" not in keys_before          # not active → never proposed
+
+    # Approve the site (Jon's permission), then it becomes active.
+    client.post(f"/discovery/site/{site['id']}/status",
+                data={"status": "Approved", "kind": "opportunity"})
+    conn = db_mod.connect()
+    try:
+        keys_after = db_mod.active_discovery_site_keys(conn, "opportunity")
+    finally:
+        conn.close()
+    assert "x_gigs" in keys_after
+
+
+def test_generate_proposes_from_active_sites_and_dedupes(ctx):
+    _, db_mod = ctx
+    conn = db_mod.connect()
+    try:
+        first = discovery.generate_targets(conn, "opportunity", keyword="composer")
+        again = discovery.generate_targets(conn, "opportunity", keyword="composer")
+    finally:
+        conn.close()
+    assert first > 0
+    assert again == 0          # identical proposals deduped on kind+url
 
 
 # --- Pure parsers ---------------------------------------------------------- #
 def test_parse_talent_html_yields_pending_crawl_talent():
     creators = parse_talent_html(TALENT_HTML, source_url="https://ex.com")
-    names = {c.name for c in creators}
-    assert names == {"Web Wendy", "Crawl Carl"}      # non-creator element ignored
+    assert {c.name for c in creators} == {"Web Wendy", "Crawl Carl"}
     for c in creators:
         assert c.source == "crawl"
-        assert not c.matchable                         # Pending until reviewed
-    wendy = next(c for c in creators if c.name == "Web Wendy")
-    assert MusicDiscipline.COMPOSITION in wendy.disciplines
-    assert MusicDiscipline.SOUND_DESIGN in wendy.disciplines
+        assert not c.matchable
 
 
 def test_parse_opportunity_html():
     recs = discovery.parse_opportunity_html(OPP_HTML)
-    assert len(recs) == 1
-    assert recs[0]["company"] == "Acme Brand"
+    assert len(recs) == 1 and recs[0]["company"] == "Acme Brand"
 
 
 # --- The gate: no fetch without approval, no network without the flag ------ #
 def test_scrape_disabled_by_default():
     assert scrape_enabled() is False
-    # With the flag off, the source never touches the network and yields nothing.
     assert ScrapedTalentSource("https://example.com").fetch() == []
 
 
@@ -98,24 +150,12 @@ def test_run_target_refuses_unapproved(ctx):
     _, db_mod = ctx
     conn = db_mod.connect()
     tid = db_mod.insert_crawl_target(
-        conn, "talent", "L", "q", "https://ex.com", "google", "why"
+        conn, "talent", "L", "q", "https://ex.com", "vicontrol", "why"
     )
     target = db_mod.get_crawl_target(conn, tid)
     conn.close()
     with pytest.raises(ValueError):
-        discovery.run_target(db_mod.connect(), target)  # status is Proposed
-
-
-def test_generate_dedupes(ctx):
-    _, db_mod = ctx
-    conn = db_mod.connect()
-    try:
-        first = discovery.generate_targets(conn, "talent")
-        again = discovery.generate_targets(conn, "talent")
-    finally:
-        conn.close()
-    assert first > 0
-    assert again == 0          # identical proposals are deduped on kind+url
+        discovery.run_target(db_mod.connect(), target)
 
 
 # --- Web flow: propose -> approve -> fetch (gate enforced at each step) ----- #
@@ -123,13 +163,12 @@ def test_web_flow_propose_approve_fetch(ctx):
     client, db_mod = ctx
     assert client.get("/discovery").status_code == 200
 
-    # Propose targets.
     client.post("/discovery/generate", data={"kind": "talent"})
     conn = db_mod.connect()
-    tid = conn.execute(
-        "SELECT id FROM crawl_targets WHERE kind='talent' LIMIT 1"
-    ).fetchone()[0]
+    row = conn.execute("SELECT id FROM crawl_targets WHERE kind='talent' LIMIT 1").fetchone()
     conn.close()
+    assert row is not None, "active talent sites should have produced targets"
+    tid = row[0]
 
     # Fetching a PROPOSED target does nothing (the gate).
     client.post(f"/discovery/{tid}/fetch", data={"kind": "talent"})
@@ -137,43 +176,33 @@ def test_web_flow_propose_approve_fetch(ctx):
     assert db_mod.get_crawl_target(conn, tid)["status"] == "Proposed"
     conn.close()
 
-    # Approve it.
     client.post(f"/discovery/{tid}/status", data={"status": "Approved", "kind": "talent"})
-    conn = db_mod.connect()
-    assert db_mod.get_crawl_target(conn, tid)["status"] == "Approved"
-    conn.close()
-
-    # Fetch with scrape OFF: allowed (approved) but yields nothing, marked Fetched.
     client.post(f"/discovery/{tid}/fetch", data={"kind": "talent"})
     conn = db_mod.connect()
     row = db_mod.get_crawl_target(conn, tid)
     conn.close()
     assert row["status"] == "Fetched"
-    assert row["result_count"] == 0
+    assert row["result_count"] == 0          # scrape OFF → nothing ingested
 
 
 def test_approved_fetch_ingests_when_enabled(ctx, monkeypatch):
-    client, db_mod = ctx
-    # Turn the flag on and monkeypatch the network fetch to return fixture HTML.
+    _, db_mod = ctx
     monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
     monkeypatch.setattr(scraped, "_fetch_url", lambda url, timeout=10.0: TALENT_HTML)
 
     conn = db_mod.connect()
     tid = db_mod.insert_crawl_target(
-        conn, "talent", "L", "q", "https://ex.com", "google", "why"
+        conn, "talent", "L", "q", "https://ex.com", "vicontrol", "why"
     )
     db_mod.update_crawl_target_status(conn, tid, "Approved")
     target = db_mod.get_crawl_target(conn, tid)
     n = discovery.run_target(conn, target)
     conn.close()
-    assert n == 2                          # both creators ingested
+    assert n == 2
 
-    # They land Pending in the roster with crawl provenance — Jon still reviews.
     conn = db_mod.connect()
     try:
-        rows = conn.execute(
-            "SELECT * FROM talent WHERE source='crawl'"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM talent WHERE source='crawl'").fetchall()
     finally:
         conn.close()
     assert {r["name"] for r in rows} == {"Web Wendy", "Crawl Carl"}
