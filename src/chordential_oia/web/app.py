@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -110,6 +110,23 @@ def render(request: Request, name: str, **kw):
     context = {"nav": kw.pop("nav", "")}
     context.update(kw)
     return templates.TemplateResponse(request=request, name=name, context=context)
+
+
+# --------------------------------------------------------------------------- #
+# Health / readiness — cheap endpoints for Render's probe and uptime monitors.
+# Render (and most pingers) issue HEAD requests; our content routes are GET-only,
+# so without these a HEAD / returns 405 and the deploy probe looks unhealthy.
+# --------------------------------------------------------------------------- #
+@app.get("/healthz")
+@app.head("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
+@app.head("/")
+def root_head():
+    # Respond to the platform health probe without running the dashboard query.
+    return Response(status_code=200)
 
 
 # --------------------------------------------------------------------------- #
