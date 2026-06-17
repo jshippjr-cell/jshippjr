@@ -9,9 +9,14 @@
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand">
-      <span class="brand-plate"><img src="/static/logo.png" alt="Chordential"></span>
+    <input type="checkbox" id="side-toggle" class="m-toggle">
+    <div class="side-top">
+      <div class="brand">
+        <span class="brand-plate"><img src="/static/logo.png" alt="Chordential"></span>
+      </div>
+      <label for="side-toggle" class="m-burger sidebar-burger" aria-label="Menu">☰</label>
     </div>
+    <div class="side-nav-wrap">
     <div class="brand-tag">Procurement OS</div>
     <nav class="nav">
       <a href="/" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Dashboard</a>
@@ -42,6 +47,7 @@
     <div class="sidebar-foot">
       <span>Music procurement intelligence</span>
       {% if admin_gate_on %}<a class="sidebar-signout" href="/admin/logout">Sign out</a>{% endif %}
+    </div>
     </div>
   </aside>
   <main class="main">
