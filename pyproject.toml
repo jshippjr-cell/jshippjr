@@ -36,6 +36,7 @@ where = ["src"]
     "static/public/*.png",
     "static/public/*.jpg",
     "static/public/*.svg",
+    "static/public/*.webp",
     "static/public/*.mp4",
     "static/public/*.webm",
     "static/public/*.mp3",

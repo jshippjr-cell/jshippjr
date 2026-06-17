@@ -44,13 +44,14 @@ body.pub a{color:inherit;text-decoration:none}
 }
 .pub-brand img{display:block;height:34px;width:auto}
 .pub-nav{display:flex;align-items:center;gap:6px}
-.pub-nav a{
-  padding:8px 13px;border-radius:9px;color:#E9E3D6;font-weight:600;font-size:14.5px;
+/* higher specificity than `body.pub a{color:inherit}` so links aren't dark */
+.pub-header .pub-nav a{
+  padding:8px 13px;border-radius:9px;color:#EBE5DA;font-weight:600;font-size:14.5px;
   transition:color .12s,background .12s;
 }
-.pub-nav a:hover,.pub-nav a.active{color:#fff;background:rgba(255,255,255,.10)}
-.pub-nav .pub-cta{background:var(--accent);color:#fff}
-.pub-nav .pub-cta:hover{background:#cf5a16;color:#fff}
+.pub-header .pub-nav a:hover,.pub-header .pub-nav a.active{color:#fff;background:rgba(255,255,255,.10)}
+.pub-header .pub-nav .pub-cta{background:var(--accent);color:#fff}
+.pub-header .pub-nav .pub-cta:hover{background:#cf5a16;color:#fff}
 @media(max-width:720px){.pub-nav a:not(.pub-cta){display:none}}
 
 /* ---------- buttons ---------- */
@@ -71,6 +72,7 @@ body.pub a{color:inherit;text-decoration:none}
 .hero{position:relative;background:var(--dark);color:var(--dark-text);overflow:hidden}
 .hero-media{position:absolute;inset:0;overflow:hidden;background:var(--dark)}
 .hero-video{width:100%;height:100%;object-fit:cover}
+.hero-loop{position:absolute;inset:0;background-size:cover;background-position:center}
 .hero-placeholder{position:absolute;inset:0;background:
   radial-gradient(1100px 560px at 72% 4%, rgba(228,103,31,.22), rgba(228,103,31,0) 60%),
   radial-gradient(900px 620px at 16% 100%, rgba(84,102,113,.20), rgba(84,102,113,0) 55%),

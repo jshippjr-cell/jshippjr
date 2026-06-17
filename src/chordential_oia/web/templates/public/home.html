@@ -9,8 +9,10 @@
     <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
       <source src="{{ h.video }}">
     </video>
+    {% elif h.loop %}
+    {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}
+    <div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>
     {% else %}
-    {# Placeholder for a looping behind-the-scenes video (asset TBD). #}
     <div class="hero-placeholder" aria-hidden="true"></div>
     {% endif %}
   </div>

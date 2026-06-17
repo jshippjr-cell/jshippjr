@@ -67,6 +67,7 @@ HERO = {
     "secondary_cta": {"label": "Start a conversation", "href": "/site/start"},
     "video": "",                 # set to a looping .mp4/.webm when the asset exists
     "poster": "",                # optional poster frame for the loop
+    "loop": "/static/public/hero-loop.webp",  # generated motion placeholder (animated)
 }
 
 # Honest category framing — NOT fabricated client logos (council override).
