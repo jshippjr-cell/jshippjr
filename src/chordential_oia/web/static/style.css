@@ -512,3 +512,47 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .checklist li.checked .check-toggle{color:#2e8b57}
 .check-text{font-size:13.5px;color:var(--text);line-height:1.45}
 .checklist li.checked .check-text{color:var(--muted2);text-decoration:line-through}
+
+/* ===================================================================== */
+/* Mobile / tablet — the dashboard becomes a stacked, top-nav layout      */
+/* ===================================================================== */
+@media(max-width:860px){
+  /* stack: sidebar becomes a full-width top bar */
+  .shell{flex-direction:column}
+  .sidebar{
+    width:100%;height:auto;position:static;
+    flex-direction:column;gap:6px;padding:10px 14px 12px;
+    border-right:none;border-bottom:1px solid #2c2826;
+  }
+  .brand{padding:2px 6px 0}
+  .brand-plate img{width:auto;height:24px}
+  .brand-tag,.sidebar-foot{display:none}
+  .nav-section{padding:9px 8px 0;font-size:9.5px}
+  .nav{flex-direction:row;flex-wrap:wrap;gap:6px}
+  .nav a{padding:7px 11px;font-size:13px}
+  .nav a .ico{display:none}
+
+  /* topbar + content */
+  .topbar{position:static;padding:12px 16px;flex-wrap:wrap;gap:10px}
+  .topbar-title{font-size:16px}
+  .topbar-search{flex:1 1 100%}
+  .topbar-search input{width:100%;max-width:none}
+  .content{padding:16px 14px 48px}
+
+  /* detail/header rows stack */
+  .detail-head{flex-direction:column;gap:14px}
+  .detail-head .detail-fit{align-self:flex-start}
+
+  /* wide tables scroll horizontally inside their card instead of overflowing */
+  .content .card{overflow-x:auto}
+  .table{min-width:560px}
+}
+
+@media(max-width:560px){
+  .topbar{flex-direction:column;align-items:stretch}
+  .nav a{font-size:12.5px;padding:6px 9px}
+  .content{padding:14px 12px 44px}
+  .card{padding:14px}
+  .big-num{font-size:22px}
+  .detail-title{font-size:22px}
+}

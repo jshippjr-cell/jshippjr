@@ -52,7 +52,15 @@ body.pub a{color:inherit;text-decoration:none}
 .pub-header .pub-nav a:hover,.pub-header .pub-nav a.active{color:#fff;background:rgba(255,255,255,.10)}
 .pub-header .pub-nav .pub-cta{background:var(--accent);color:#fff}
 .pub-header .pub-nav .pub-cta:hover{background:#cf5a16;color:#fff}
-@media(max-width:720px){.pub-nav a:not(.pub-cta){display:none}}
+@media(max-width:720px){
+  .pub-header-inner{flex-wrap:wrap;gap:8px 10px;padding:12px 18px}
+  .pub-nav{gap:2px;flex-wrap:wrap;justify-content:flex-end}
+  .pub-header .pub-nav a{padding:7px 10px;font-size:13.5px}
+}
+@media(max-width:480px){
+  .pub-header-inner{flex-direction:column;align-items:center}
+  .pub-nav{justify-content:center}
+}
 
 /* ---------- buttons ---------- */
 .btn{
@@ -252,3 +260,22 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .pub-footer-tag{font-size:14px}
 .pub-footer-links{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto}
 .pub-footer-links a:hover{color:#fff}
+
+/* ---------- phones: tighter spacing + type ---------- */
+@media(max-width:560px){
+  .hero-inner{padding:96px 18px 44px}
+  .hero-title{font-size:32px}
+  .hero-lede{font-size:17px}
+  .sec{padding:48px 0}
+  .sec-inner,.band-inner,.page-head-inner,.cta-strip-inner{padding:0 18px}
+  .sec h2,.page-title{font-size:26px}
+  .thesis{font-size:25px}
+  .close-band{padding:60px 18px}
+  .close-band h2{font-size:28px}
+  .page-head{padding:104px 0 44px}
+  .trust-inner{gap:8px 16px;padding:16px 18px}
+  .pub-footer-inner{flex-direction:column;align-items:flex-start;gap:14px}
+  .pub-footer-links{margin-left:0}
+  .lead-form{padding:20px}
+  .btn{padding:12px 18px;font-size:14.5px}
+}
