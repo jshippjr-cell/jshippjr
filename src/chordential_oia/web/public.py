@@ -86,11 +86,7 @@ def public_price_band(project_type: str, description: str):
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
-    show = get_showcase()
-    return render(
-        request, "public/home.html", active="home",
-        hero=show.hero, capabilities=show.capabilities, samples=show.samples[:3],
-    )
+    return render(request, "public/home.html", active="home", show=get_showcase())
 
 
 @router.get("/capabilities", response_class=HTMLResponse)

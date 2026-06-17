@@ -1,66 +1,158 @@
 {% extends "public_base.html" %}
-{% block title %}Original music, sound & sonic identity{% endblock %}
+{% block title %}Original music for campaigns{% endblock %}
 
 {% block content %}
+{% set h = show.hero %}
 <section class="hero">
+  <div class="hero-img" style="background-image:url('{{ h.image }}')"></div>
+  <div class="hero-veil"></div>
   <div class="hero-inner">
-    <p class="hero-eyebrow">{{ hero.eyebrow }}</p>
-    <h1 class="hero-title">{{ hero.title }}</h1>
-    <p class="hero-lede">{{ hero.lede }}</p>
+    <p class="hero-eyebrow">{{ h.eyebrow }}</p>
+    <h1 class="hero-title">{{ h.title }}</h1>
+    <p class="hero-lede">{{ h.lede }}</p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="{{ hero.primary_cta.href }}">{{ hero.primary_cta.label }}</a>
-      <a class="btn btn-ghost" href="{{ hero.secondary_cta.href }}">{{ hero.secondary_cta.label }}</a>
+      <a class="btn btn-primary play" href="{{ h.primary_cta.href }}">{{ h.primary_cta.label }}</a>
+      <a class="btn btn-ghost" href="{{ h.secondary_cta.href }}">{{ h.secondary_cta.label }}</a>
     </div>
   </div>
-</section>
-
-<section class="band">
-  <div class="band-inner">
-    <div class="band-head">
-      <h2>What we make</h2>
-      <a class="band-more" href="/site/capabilities">All capabilities →</a>
-    </div>
-    <div class="cap-grid">
-      {% for cap in capabilities %}
-      <article class="cap-card">
-        <h3>{{ cap.headline }}</h3>
-        <p>{{ cap.blurb }}</p>
-      </article>
+  <div class="trust">
+    <div class="trust-inner">
+      <span class="trust-label">Built for teams in</span>
+      {% for c in show.trust_categories %}
+        <span class="trust-cat">{{ c }}</span>{% if not loop.last %}<span class="trust-dot">·</span>{% endif %}
       {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="band band-alt">
-  <div class="band-inner">
-    <div class="band-head">
-      <h2>Selected work</h2>
-      <a class="band-more" href="/site/samples">See the reel →</a>
+<!-- Featured work (sample-labeled until real campaigns exist) -->
+<section class="sec paper" id="work">
+  <div class="sec-inner">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Recent work</p>
+        <h2>Proof in the format, not just the music.</h2>
+      </div>
+      <a class="sec-more" href="/site/samples">See all work →</a>
     </div>
-    <div class="sample-grid">
-      {% for s in samples %}
-      <article class="sample-card">
-        <div class="sample-poster {{ 'is-video' if s.media_kind=='video' else 'is-audio' }}">
-          <span class="sample-kind">{{ '▶ video' if s.media_kind=='video' else '♪ audio' }}</span>
-          {% if s.placeholder %}<span class="sample-soon">sample coming soon</span>{% endif %}
+    <div class="case-grid">
+      {% for c in show.cases %}
+      <article class="case">
+        <div class="case-figure" style="background-image:url('{{ c.image }}')">
+          <span class="case-play">▶</span>
+          {% if c.sample %}<span class="case-tag">Sample</span>{% endif %}
         </div>
-        <h3>{{ s.title }}</h3>
-        <p class="sample-meta">{{ s.discipline.label }} · {{ s.client_type }}</p>
-        <p>{{ s.blurb }}</p>
+        <div class="case-body">
+          <h3>{{ c.title }}</h3>
+          <dl class="case-rows">
+            <dt>Objective</dt><dd>{{ c.objective }}</dd>
+            <dt>The challenge</dt><dd>{{ c.challenge }}</dd>
+            <dt>How we solved it</dt><dd>{{ c.solved }}</dd>
+            <dt>Outcome</dt><dd>{{ c.outcome }}</dd>
+          </dl>
+        </div>
       </article>
       {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="cta-strip">
-  <div class="cta-strip-inner">
-    <h2>Have something in mind?</h2>
-    <p>Tell us about the project and we’ll come back with an approach and a price range.</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary" href="/site/start">Start a project</a>
-      <a class="btn btn-ghost" href="/site/book">Book a call</a>
+<!-- The thesis: fails operationally -->
+<section class="sec dark">
+  <div class="sec-inner">
+    <p class="eyebrow">The problem</p>
+    <div class="split">
+      <div class="panel bad">
+        <h4>What usually happens</h4>
+        <ul>{% for b in show.problem.before %}<li>{{ b }}</li>{% endfor %}</ul>
+      </div>
+      <div class="panel good">
+        <h4>How it should go</h4>
+        <ul>{% for a in show.problem.after %}<li>{{ a }}</li>{% endfor %}</ul>
+      </div>
     </div>
+    <p class="thesis">Music rarely fails creatively. <span class="em">It fails operationally.</span></p>
+  </div>
+</section>
+
+<!-- The 4-step approach -->
+<section class="sec paper2" id="approach">
+  <div class="sec-inner">
+    <p class="eyebrow">How Chordential works</p>
+    <h2>A contained process, not an open-ended one.</h2>
+    <div class="steps">
+      {% for s in show.steps %}
+      <div class="step">
+        <div class="step-n">{{ s.n }}</div>
+        <h3>{{ s.title }}</h3>
+        <p>{{ s.outcome }}</p>
+        <span class="step-time">{{ s.timeline }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Delivery clarity -->
+<section class="sec paper">
+  <div class="sec-inner deliver">
+    <div>
+      <p class="eyebrow">What delivery actually looks like</p>
+      <h2>Operational clarity, packaged for sign-off.</h2>
+      <p class="lead">Every engagement ends the same way — clean files, clear rights, and versions named so anyone on the campaign can find them.</p>
+      <ul class="deliver-list">
+        {% for d in show.delivery_items %}<li>{{ d }}</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="deliver-figure" style="background-image:url('/static/public/img/process.jpg')"></div>
+  </div>
+</section>
+
+<!-- Field Notes (honestly stubbed) -->
+<section class="sec paper2" id="fieldnotes">
+  <div class="sec-inner">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Field notes</p>
+        <h2>How we think about campaign music.</h2>
+      </div>
+    </div>
+    <div class="notes">
+      {% for n in show.field_notes %}
+      <article class="note">
+        <h3>{{ n.title }}</h3>
+        <span class="status">{{ n.status }}</span>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- About -->
+<section class="sec paper" id="about">
+  <div class="sec-inner about">
+    <div>
+      <p class="eyebrow">About</p>
+      <h2>People hire people.</h2>
+      <p class="lead">{{ show.about }}</p>
+      <a class="btn btn-ghost on-light" href="/site/capabilities">Our approach</a>
+    </div>
+    <ul class="cap-list">
+      {% for cap in show.capabilities %}
+      <li><b>{{ cap.headline }}</b><span>{{ cap.blurb }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<!-- Close -->
+<section class="close-band">
+  <img src="/static/public/wordmark-ko.png" alt="Chordential">
+  <h2>{{ show.close.headline }}</h2>
+  <p>{{ show.close.sub }}</p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="{{ show.close.cta.href }}">{{ show.close.cta.label }}</a>
+    <a class="btn btn-ghost" href="/site/book">Book a call</a>
   </div>
 </section>
 {% endblock %}

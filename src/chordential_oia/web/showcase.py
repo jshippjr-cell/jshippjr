@@ -1,10 +1,10 @@
 """Front-of-house showcase content — deterministic, code-managed.
 
-The public site's brochure copy (hero, capabilities, sample reel) lives here as
-plain data rather than in the database: it is editorial content, not pipeline
-state, so it ships with the app and stays version-controlled. Real audio/video
-assets are supplied later by Jon; until then the sample entries reference
-placeholder posters and are clearly marked.
+Editorial content for the public magazine site, structured to the council-ratified
+framework (see ``docs/front-of-house-design-council.md``, derived from the landing
+-page brief). All "proof" is honest: sample work is labeled Sample, there are no
+fabricated client logos or testimonials. Cinematic stills are placeholders from the
+brief's reference deck, to be replaced with licensed/own photography.
 """
 
 from __future__ import annotations
@@ -12,8 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-# Disciplines map 1:1 onto the qualification engine's MusicDiscipline craft set,
-# so what we advertise is exactly what the engine knows how to qualify and price.
 from ..models import MusicDiscipline
 
 
@@ -30,98 +28,160 @@ class SampleReel:
     discipline: MusicDiscipline
     client_type: str
     blurb: str
-    media_kind: str = "audio"   # "audio" | "video" — drives the player chrome
-    poster: str = ""            # static path to a poster image (placeholder for now)
-    placeholder: bool = True    # True until a real asset is attached
+    media_kind: str = "audio"
+    poster: str = ""
+    placeholder: bool = True
 
 
+@dataclass(frozen=True)
+class Case:
+    title: str
+    objective: str
+    challenge: str
+    solved: str
+    outcome: str
+    image: str
+    sample: bool = True          # honest until real campaigns exist
+
+
+@dataclass(frozen=True)
+class Step:
+    n: int
+    title: str
+    outcome: str
+    timeline: str
+
+
+# Hero — copy ratified from the brief.
 HERO = {
-    "eyebrow": "Original music, sound, and sonic identity",
-    "title": "Music that makes the work unforgettable.",
+    "eyebrow": "Original composition for agencies",
+    "title": "Music that moves campaigns forward — and gets approved.",
     "lede": (
-        "Chordential is a music procurement studio. We compose, design, and "
-        "supervise original sound for brands, agencies, and producers — and we "
-        "match every commission to exactly the right creators."
+        "Original composition for agencies who need clarity, control, and "
+        "confidence in delivery."
     ),
-    "primary_cta": {"label": "Start a project", "href": "/site/start"},
-    "secondary_cta": {"label": "Book a call", "href": "/site/book"},
+    "primary_cta": {"label": "View Work", "href": "#work"},
+    "secondary_cta": {"label": "Start a conversation", "href": "/site/start"},
+    "image": "/static/public/img/hero.jpg",
+}
+
+# Honest category framing — NOT fabricated client logos (council override).
+TRUST_CATEGORIES = ["Retail", "Financial", "Healthcare", "National brands"]
+
+# The thesis.
+PROBLEM = {
+    "before": ["7 versions in the timeline", "“Can we try lighter?”",
+               "“Legal wants safer”", "Feedback piling up"],
+    "after": ["One locked cue", "3 controlled variations", "Approval sent",
+              "Delivery complete"],
+    "headline": "Music rarely fails creatively. It fails operationally.",
+    "image_before": "/static/public/img/problem-a.jpg",
+    "image_after": "/static/public/img/problem-b.jpg",
+}
+
+# The 4-step approach.
+STEPS: List[Step] = [
+    Step(1, "Direction Lock",
+         "We agree the creative direction before a note is written.",
+         "Day 1–2"),
+    Step(2, "Structural Composition",
+         "The cue is built to picture and brief — structure first, not noodling.",
+         "Day 3–6"),
+    Step(3, "Controlled Variation",
+         "A bounded set of variations — not an open-ended revision spiral.",
+         "Day 7–9"),
+    Step(4, "Bounded Delivery",
+         "Stems, versions, cue sheet, and rights — packaged for sign-off.",
+         "Day 10"),
+]
+
+# What delivery actually looks like (true today — operational clarity).
+DELIVERY_ITEMS = [
+    "WAV deliverables", "Version naming system", "Cue sheet",
+    "Rights clarity", "Stems breakdown", "Campaign rollout versions",
+]
+
+# Featured work — SAMPLE until real campaigns exist (honest).
+CASES: List[Case] = [
+    Case(
+        "National retail brand — campaign anthem",
+        "A :60 anthem for a national relaunch, plus cutdowns.",
+        "Five stakeholders, two rounds of legal, a moving deadline.",
+        "Direction locked up front; three controlled variations; one approval pass.",
+        "Approved without reopening the creative conversation.",
+        "/static/public/img/case-1.jpg",
+    ),
+    Case(
+        "Financial services — sonic identity",
+        "A short sonic logo and its variations across touchpoints.",
+        "Needed to feel trustworthy and pass brand + compliance review.",
+        "A single mnemonic with bounded variants; rights cleared on delivery.",
+        "Signed off by brand and compliance without friction.",
+        "/static/public/img/testimonial.jpg",
+    ),
+]
+
+# Field Notes — editorial presence, honestly stubbed.
+FIELD_NOTES = [
+    {"title": "Why most music fails in the approval phase", "status": "Coming soon"},
+    {"title": "The last mile of campaign music", "status": "Coming soon"},
+    {"title": "How to avoid a creative reset in post", "status": "Coming soon"},
+]
+
+ABOUT = (
+    "Chordential is a music procurement studio. We compose, design, and supervise "
+    "original music for agencies and producers — and we run the process so it stays "
+    "contained: clear direction, bounded revisions, and approval-ready delivery."
+)
+
+CLOSE = {
+    "headline": "See how your next campaign could sound.",
+    "sub": "Tell us about the project — we’ll come back with an approach and a price range.",
+    "cta": {"label": "Start a conversation", "href": "/site/start"},
 }
 
 
 CAPABILITIES: List[Capability] = [
-    Capability(
-        MusicDiscipline.COMPOSITION,
-        "Original composition",
-        "Custom scores and tracks written to picture, brief, or brand — from a "
-        "single spot to a full campaign.",
-    ),
-    Capability(
-        MusicDiscipline.SONIC_BRANDING,
-        "Sonic branding",
-        "Mnemonics, sound logos, and audio identity systems that make a brand "
-        "instantly recognizable by ear.",
-    ),
-    Capability(
-        MusicDiscipline.SOUND_DESIGN,
-        "Sound design",
-        "Textures, transitions, and detail work that give a film or product the "
-        "right sonic feel.",
-    ),
-    Capability(
-        MusicDiscipline.ARRANGEMENT,
-        "Arrangement & orchestration",
-        "Arranging and orchestrating existing themes for ensemble, orchestra, or "
-        "hybrid productions.",
-    ),
-    Capability(
-        MusicDiscipline.SUPERVISION,
-        "Music supervision",
-        "Finding, clearing, and placing the right music — original or licensed — "
-        "for your project.",
-    ),
+    Capability(MusicDiscipline.COMPOSITION, "Original composition",
+               "Custom scores and tracks written to picture, brief, or brand."),
+    Capability(MusicDiscipline.SONIC_BRANDING, "Sonic branding",
+               "Mnemonics, sound logos, and audio identity systems."),
+    Capability(MusicDiscipline.SOUND_DESIGN, "Sound design",
+               "Textures, transitions, and detail that give the work its feel."),
+    Capability(MusicDiscipline.ARRANGEMENT, "Arrangement & orchestration",
+               "Arranging and orchestrating for ensemble, orchestra, or hybrid."),
+    Capability(MusicDiscipline.SUPERVISION, "Music supervision",
+               "Finding, clearing, and placing the right music — original or licensed."),
 ]
 
-
-# Placeholder reel — structure is real, assets arrive later (Jon supplies media).
 SAMPLES: List[SampleReel] = [
-    SampleReel(
-        "Anthem for a national rebrand",
-        MusicDiscipline.COMPOSITION,
-        "Brand",
-        "A :60 orchestral-hybrid anthem written for a brand relaunch.",
-        media_kind="video",
-    ),
-    SampleReel(
-        "Three-note sound logo",
-        MusicDiscipline.SONIC_BRANDING,
-        "Agency",
-        "A sonic mnemonic and its variations across touchpoints.",
-        media_kind="audio",
-    ),
-    SampleReel(
-        "Title sequence sound design",
-        MusicDiscipline.SOUND_DESIGN,
-        "Production company",
-        "Designed textures and hits for an episodic title sequence.",
-        media_kind="video",
-    ),
-    SampleReel(
-        "Strings arrangement for a holiday spot",
-        MusicDiscipline.ARRANGEMENT,
-        "Agency",
-        "A warm string arrangement of a known melody for a :30 spot.",
-        media_kind="audio",
-    ),
+    SampleReel("Anthem for a national rebrand", MusicDiscipline.COMPOSITION, "Brand",
+               "A :60 orchestral-hybrid anthem written for a brand relaunch.", "video"),
+    SampleReel("Three-note sound logo", MusicDiscipline.SONIC_BRANDING, "Agency",
+               "A sonic mnemonic and its variations across touchpoints.", "audio"),
+    SampleReel("Title sequence sound design", MusicDiscipline.SOUND_DESIGN,
+               "Production company", "Designed textures and hits for a title sequence.",
+               "video"),
+    SampleReel("Strings arrangement for a holiday spot", MusicDiscipline.ARRANGEMENT,
+               "Agency", "A warm string arrangement of a known melody for a :30.",
+               "audio"),
 ]
 
 
 @dataclass(frozen=True)
 class Showcase:
     hero: dict = field(default_factory=lambda: HERO)
+    trust_categories: List[str] = field(default_factory=lambda: TRUST_CATEGORIES)
+    problem: dict = field(default_factory=lambda: PROBLEM)
+    steps: List[Step] = field(default_factory=lambda: STEPS)
+    delivery_items: List[str] = field(default_factory=lambda: DELIVERY_ITEMS)
+    cases: List[Case] = field(default_factory=lambda: CASES)
+    field_notes: List[dict] = field(default_factory=lambda: FIELD_NOTES)
+    about: str = ABOUT
+    close: dict = field(default_factory=lambda: CLOSE)
     capabilities: List[Capability] = field(default_factory=lambda: CAPABILITIES)
     samples: List[SampleReel] = field(default_factory=lambda: SAMPLES)
 
 
 def get_showcase() -> Showcase:
-    """The single showcase payload the public templates render from."""
     return Showcase()
