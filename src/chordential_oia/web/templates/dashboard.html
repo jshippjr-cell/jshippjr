@@ -52,7 +52,7 @@
       <a class="link" href="/inbox?action=Pursue">View all →</a>
     </div>
     <div class="deal-list">
-      {% for item in pursue %}{% set r = item.r %}
+      {% for item in pursue[:4] %}{% set r = item.r %}
       <div class="deal">
         <a class="deal-need" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a>
         <div class="deal-sub">{{ r['client'] }}</div>
@@ -84,10 +84,13 @@
   <section class="card pipe pipe-tentative">
     <div class="card-head">
       <h2>📨 Tentative</h2>
-      <span class="muted small">{{ tentative|length }} out · {{ totals.tentative_value|money }}</span>
+      <div class="pipe-head-right">
+        <span class="muted small">{{ tentative|length }} · {{ totals.tentative_value|money }}</span>
+        <a class="link" href="/inbox?status=Submitted">View all →</a>
+      </div>
     </div>
     <div class="deal-list">
-      {% for r in tentative %}
+      {% for r in tentative[:4] %}
       <div class="deal">
         <a class="deal-need" href="/opportunity/{{ r['id'] }}/outreach">{{ r['need'] }}</a>
         <div class="deal-sub">{{ r['client'] }}</div>
@@ -111,10 +114,13 @@
   <section class="card pipe pipe-won">
     <div class="card-head">
       <h2>🏆 Won</h2>
-      <span class="muted small">{{ won|length }} · {{ totals.won_value|money }}</span>
+      <div class="pipe-head-right">
+        <span class="muted small">{{ won|length }} · {{ totals.won_value|money }}</span>
+        <a class="link" href="/inbox?status=Won">View all →</a>
+      </div>
     </div>
     <div class="deal-list">
-      {% for r in won %}
+      {% for r in won[:4] %}
       <div class="deal">
         <a class="deal-need" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a>
         <div class="deal-sub">{{ r['client'] }}</div>

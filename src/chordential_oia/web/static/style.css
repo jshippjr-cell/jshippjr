@@ -388,6 +388,9 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .kpi-cell.kpi-alert{border-color:rgba(228,103,31,.45);background:linear-gradient(90deg,rgba(228,103,31,.10),transparent)}
 .kpi-cell.kpi-alert .kpi-cell-val{color:var(--accent)}
 
+/* Pipeline column header: count + View-all link on the right */
+.pipe-head-right{display:flex;align-items:center;gap:12px;white-space:nowrap}
+
 /* Urgent card accent (follow-ups, review queue) */
 .card.urgent{border-color:rgba(228,103,31,.40);box-shadow:inset 0 3px 0 var(--orange),var(--shadow-sm)}
 

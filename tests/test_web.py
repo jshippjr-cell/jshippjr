@@ -69,6 +69,15 @@ def test_lanes_card_advances_status(client):
     assert "Mark Submitted" in client.get("/opportunity/3").text
 
 
+def test_dashboard_columns_capped_at_four(client):
+    t = client.get("/").text
+    # Every column has a "View all" overflow path (Top targets, Tentative, Won).
+    assert 'href="/inbox?status=Submitted"' in t  # Tentative overflow
+    assert 'href="/inbox?status=Won"' in t        # Won overflow
+    # Top-targets is capped at 4 cards (one advance button per card).
+    assert 0 < t.count("→ Mark") <= 4
+
+
 def test_dashboard_kpi_strip_and_followups_promoted(client):
     dash = client.get("/").text
     assert "kpi-strip" in dash
