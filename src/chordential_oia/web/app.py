@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 from ..estimation import ROLE_RATES, RoleLine
 from ..invoicing import build_invoice
 from ..models import BuyerValue, MusicDiscipline, Opportunity
+from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
@@ -1212,6 +1213,34 @@ def project_create_invoice(project_id: int, kind: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
+
+
+@app.post("/invoice/{invoice_id}/checkout")
+def invoice_checkout(invoice_id: int):
+    """Create a checkout for an invoice through the selected payment provider.
+
+    Today the Null provider returns a deterministic reference and the invoice is
+    marked Issued; later, selecting the Stripe provider makes this create a real
+    checkout — this route and the engines do not change.
+    """
+    conn = db.connect()
+    try:
+        inv = db.get_invoice(conn, invoice_id)
+        if inv is None:
+            return RedirectResponse("/projects", status_code=303)
+        ref = get_payment_provider().create_checkout(inv)
+        db.update_invoice_status(conn, invoice_id, "Issued", external_ref=ref)
+        if inv["project_id"]:
+            db.add_update(
+                conn, inv["project_id"],
+                f"{inv['kind']} invoice issued for payment.", "invoice",
+            )
+            return RedirectResponse(
+                f"/project/{inv['project_id']}/proposal", status_code=303
+            )
+    finally:
+        conn.close()
+    return RedirectResponse("/projects", status_code=303)
 
 
 @app.post("/invoice/{invoice_id}/status")

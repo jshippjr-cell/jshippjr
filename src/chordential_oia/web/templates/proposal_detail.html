@@ -83,12 +83,18 @@
     <tbody>
       {% for inv in invoices %}
       <tr>
-        <td class="strong">{{ inv['kind'] }}<div class="muted small">{{ inv['note'] }}</div></td>
+        <td class="strong">{{ inv['kind'] }}<div class="muted small">{{ inv['note'] }}</div>
+          {% if inv['external_ref'] %}<div class="muted small">ref: {{ inv['external_ref'] }}</div>{% endif %}</td>
         <td>{{ inv['amount']|money }}</td>
         <td><span class="pill st-{{ inv['status']|lower }}">{{ inv['status'] }}</span>
           {% if inv['paid_at'] %}<div class="muted small">paid</div>{% endif %}</td>
         <td>
           <div class="lead-actions">
+            {% if inv['status'] == 'Draft' %}
+            <form method="post" action="/invoice/{{ inv['id'] }}/checkout">
+              <button class="btn tiny" type="submit" title="Create a checkout via the payment provider">Issue for payment</button>
+            </form>
+            {% endif %}
             {% for s in invoice_states %}
               {% if s != inv['status'] %}
               <form method="post" action="/invoice/{{ inv['id'] }}/status">
