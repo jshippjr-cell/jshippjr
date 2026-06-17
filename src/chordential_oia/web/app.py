@@ -34,37 +34,16 @@ from . import db, seed
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
+from .filters import displayurl, money, pct, slug
+from .public import router as public_router
 
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 
 
 # --------------------------------------------------------------------------- #
-# Jinja helpers
+# Jinja helpers (filter functions live in .filters — shared with the public site)
 # --------------------------------------------------------------------------- #
-def money(value: Optional[float]) -> str:
-    if value is None:
-        return "—"
-    return f"${value:,.0f}"
-
-
-def pct(value: Optional[float]) -> str:
-    if value is None:
-        return "—"
-    return f"{value:.0f}%"
-
-
-def slug(value: str) -> str:
-    return "".join(c if c.isalnum() else "-" for c in (value or "").lower()).strip("-")
-
-
-def displayurl(value: Optional[str]) -> str:
-    """Render a stored URL compactly — drop the scheme and any trailing slash."""
-    if not value:
-        return "—"
-    return value.split("://", 1)[-1].rstrip("/")
-
-
 # One-click pipeline advance for the Overview action bar. Won is intentionally
 # omitted — closing a deal goes through the win/loss form so the value is captured.
 _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
@@ -116,6 +95,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chordential — Procurement OS", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(_HERE, "static")), name="static")
+# Public front-of-house site (magazine/brochure surface + inbound intake), at /site.
+# Shares this app + DB; renders its own standalone layout, no internal nav.
+app.include_router(public_router)
 
 
 def render(request: Request, name: str, **kw):

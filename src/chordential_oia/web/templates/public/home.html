@@ -1,0 +1,66 @@
+{% extends "public_base.html" %}
+{% block title %}Original music, sound & sonic identity{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-inner">
+    <p class="hero-eyebrow">{{ hero.eyebrow }}</p>
+    <h1 class="hero-title">{{ hero.title }}</h1>
+    <p class="hero-lede">{{ hero.lede }}</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="{{ hero.primary_cta.href }}">{{ hero.primary_cta.label }}</a>
+      <a class="btn btn-ghost" href="{{ hero.secondary_cta.href }}">{{ hero.secondary_cta.label }}</a>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner">
+    <div class="band-head">
+      <h2>What we make</h2>
+      <a class="band-more" href="/site/capabilities">All capabilities →</a>
+    </div>
+    <div class="cap-grid">
+      {% for cap in capabilities %}
+      <article class="cap-card">
+        <h3>{{ cap.headline }}</h3>
+        <p>{{ cap.blurb }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt">
+  <div class="band-inner">
+    <div class="band-head">
+      <h2>Selected work</h2>
+      <a class="band-more" href="/site/samples">See the reel →</a>
+    </div>
+    <div class="sample-grid">
+      {% for s in samples %}
+      <article class="sample-card">
+        <div class="sample-poster {{ 'is-video' if s.media_kind=='video' else 'is-audio' }}">
+          <span class="sample-kind">{{ '▶ video' if s.media_kind=='video' else '♪ audio' }}</span>
+          {% if s.placeholder %}<span class="sample-soon">sample coming soon</span>{% endif %}
+        </div>
+        <h3>{{ s.title }}</h3>
+        <p class="sample-meta">{{ s.discipline.label }} · {{ s.client_type }}</p>
+        <p>{{ s.blurb }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="cta-strip">
+  <div class="cta-strip-inner">
+    <h2>Have something in mind?</h2>
+    <p>Tell us about the project and we’ll come back with an approach and a price range.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="/site/start">Start a project</a>
+      <a class="btn btn-ghost" href="/site/book">Book a call</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

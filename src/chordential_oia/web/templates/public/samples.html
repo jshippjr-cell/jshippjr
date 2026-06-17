@@ -1,0 +1,33 @@
+{% extends "public_base.html" %}
+{% block title %}Samples{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">Samples</p>
+    <h1 class="page-title">Selected work.</h1>
+    <p class="page-lede">
+      A cross-section of recent commissions. Full audio and video reels are on
+      the way.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner">
+    <div class="sample-grid">
+      {% for s in samples %}
+      <article class="sample-card">
+        <div class="sample-poster {{ 'is-video' if s.media_kind=='video' else 'is-audio' }}">
+          <span class="sample-kind">{{ '▶ video' if s.media_kind=='video' else '♪ audio' }}</span>
+          {% if s.placeholder %}<span class="sample-soon">sample coming soon</span>{% endif %}
+        </div>
+        <h3>{{ s.title }}</h3>
+        <p class="sample-meta">{{ s.discipline.label }} · {{ s.client_type }}</p>
+        <p>{{ s.blurb }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

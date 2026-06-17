@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Chordential{% endblock %} · Chordential</title>
+  <link rel="stylesheet" href="/static/public/site.css">
+</head>
+<body class="pub">
+<header class="pub-header">
+  <div class="pub-header-inner">
+    <a class="pub-brand" href="/site">
+      <img src="/static/logo.png" alt="Chordential">
+    </a>
+    <nav class="pub-nav">
+      <a href="/site" class="{{ 'active' if active=='home' }}">Work</a>
+      <a href="/site/capabilities" class="{{ 'active' if active=='capabilities' }}">Capabilities</a>
+      <a href="/site/samples" class="{{ 'active' if active=='samples' }}">Samples</a>
+      <a class="pub-cta" href="/site/start">Start a project</a>
+    </nav>
+  </div>
+</header>
+
+<main class="pub-main">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="pub-footer">
+  <div class="pub-footer-inner">
+    <span>© Chordential — original music, sound & sonic identity.</span>
+    <span class="pub-footer-links">
+      <a href="/site/capabilities">Capabilities</a>
+      <a href="/site/samples">Samples</a>
+      <a href="/site/start">Start a project</a>
+      <a href="/site/book">Book a call</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

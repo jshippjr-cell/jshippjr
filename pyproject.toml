@@ -27,10 +27,19 @@ where = ["src"]
 [tool.setuptools.package-data]
 "chordential_oia.web" = [
     "templates/*.html",
+    "templates/public/*.html",
     "static/*.css",
     "static/*.png",
     "static/*.svg",
     "static/*.ico",
+    "static/public/*.css",
+    "static/public/*.png",
+    "static/public/*.jpg",
+    "static/public/*.svg",
+    "static/public/*.mp4",
+    "static/public/*.webm",
+    "static/public/*.mp3",
+    "static/public/*.wav",
 ]
 
 [tool.pytest.ini_options]

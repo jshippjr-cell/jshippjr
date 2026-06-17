@@ -1,0 +1,39 @@
+{% extends "public_base.html" %}
+{% block title %}Capabilities{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">Capabilities</p>
+    <h1 class="page-title">Every part of the music, handled.</h1>
+    <p class="page-lede">
+      From the first note to the final mix and clearance, Chordential covers the
+      full craft of music for brands, agencies, and producers.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner">
+    <div class="cap-grid wide">
+      {% for cap in capabilities %}
+      <article class="cap-card">
+        <h3>{{ cap.headline }}</h3>
+        <p>{{ cap.blurb }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="cta-strip">
+  <div class="cta-strip-inner">
+    <h2>Ready when you are.</h2>
+    <p>Start a project and we’ll match it to exactly the right creators.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="/site/start">Start a project</a>
+      <a class="btn btn-ghost" href="/site/book">Book a call</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
