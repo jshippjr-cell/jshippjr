@@ -46,7 +46,7 @@
         <div class="muted" title="Indicative band shown to the client at intake">quoted {{ l['shown_price_low']|money }}–{{ l['shown_price_high']|money }}</div>
         {% endif %}
       </td>
-      <td><span class="pill">{{ 'Book a call' if l['source']=='book_call' else 'Questionnaire' }}</span></td>
+      <td><span class="pill">{% if l['source']=='book_call' %}Book a call{% elif l['source']=='crawl' %}Discovered{% else %}Questionnaire{% endif %}</span></td>
       <td>
         <span class="pill st-{{ l['status']|lower }}">{{ l['status'] }}</span>
         {% if l['linked_opp_id'] %}

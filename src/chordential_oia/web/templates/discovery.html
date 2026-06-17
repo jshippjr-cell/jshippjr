@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Discovery{% endblock %}
+{% block heading %}Discovery · Human-gated crawler{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  The crawler <strong>proposes where to look</strong> — it never fetches on its own.
+  Review each target and <strong>Approve</strong> the ones worth crawling; only
+  approved targets are fetched, and results land in a review queue for you to
+  qualify. <em>The machine proposes, you dispose.</em>
+</div>
+
+<div class="pill-row" style="margin:14px 0">
+  {% for k in kinds %}
+  <a class="pill-btn {{ 'is-current' if kind==k }}" href="/discovery?kind={{ k }}">
+    {{ 'Talent' if k=='talent' else 'Opportunities' }}
+  </a>
+  {% endfor %}
+  <span class="muted small" style="margin-left:auto">
+    {{ counts.Proposed }} proposed · {{ counts.Approved }} approved · {{ counts.Fetched }} fetched
+  </span>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>Propose where to look</h2></div>
+  <form class="filters" method="post" action="/discovery/generate" style="gap:10px;flex-wrap:wrap">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input class="filter-search" name="terms" placeholder="{{ 'Disciplines (comma-sep, optional)' if kind=='talent' else 'Keywords (comma-sep, optional)' }}">
+    <input class="filter-search" name="location" placeholder="Location (optional)">
+    <button class="btn primary" type="submit">Suggest targets</button>
+  </form>
+  {% if not scrape_on %}
+  <p class="muted small" style="margin-top:10px">
+    Live fetching is currently <strong>off</strong> (no <code>CHORDENTIAL_ENABLE_SCRAPE</code>).
+    You can propose and approve targets now; fetching runs where egress is enabled.
+  </p>
+  {% endif %}
+</div>
+
+{% if targets %}
+<div class="card no-pad" style="margin-top:18px">
+<table class="table">
+  <thead>
+    <tr><th>Target</th><th>Query</th><th>Status</th><th style="width:1%">Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for t in targets %}
+    <tr>
+      <td>
+        <div class="strong">{{ t['label'] }}</div>
+        <div class="muted small">{{ t['rationale'] }}</div>
+        <a class="link small" href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url']|displayurl }}</a>
+      </td>
+      <td class="small muted">{{ t['query'] }}</td>
+      <td>
+        <span class="pill st-{{ t['status']|lower }}">{{ t['status'] }}</span>
+        {% if t['status']=='Fetched' and t['result_count'] is not none %}
+          <div class="muted small">{{ t['result_count'] }} found</div>
+        {% endif %}
+      </td>
+      <td>
+        <div class="lead-actions">
+          {% if t['status']=='Proposed' %}
+          <form method="post" action="/discovery/{{ t['id'] }}/status">
+            <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny primary" type="submit" title="Approve this target for crawling">Approve</button>
+          </form>
+          <form method="post" action="/discovery/{{ t['id'] }}/status">
+            <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny ghost" type="submit">Dismiss</button>
+          </form>
+          {% elif t['status']=='Approved' %}
+          <form method="post" action="/discovery/{{ t['id'] }}/fetch">
+            <input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny" type="submit" title="Fetch this approved target now">Fetch now</button>
+          </form>
+          <form method="post" action="/discovery/{{ t['id'] }}/status">
+            <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny ghost" type="submit">Dismiss</button>
+          </form>
+          {% elif t['status']=='Fetched' %}
+          <a class="link small" href="{{ '/talent?review=Pending' if kind=='talent' else '/leads' }}">Review results →</a>
+          {% else %}
+          <span class="muted small">Dismissed</span>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="margin-top:18px">
+  <p class="muted" style="margin:0">No targets yet. Use “Suggest targets” to propose where to look — then approve the ones worth crawling.</p>
+</div>
+{% endif %}
+
+{% endblock %}

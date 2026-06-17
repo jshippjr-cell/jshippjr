@@ -31,7 +31,7 @@ from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, seed
+from . import db, discovery, seed
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -209,6 +209,70 @@ def inbound_promote(lead_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Discovery — human-gated crawler ("the machine proposes, Jon disposes")
+# --------------------------------------------------------------------------- #
+# The system proposes WHERE to look; Jon approves each target; only approved
+# targets are ever fetched. Results land in a review queue, never auto-pursued.
+@app.get("/discovery", response_class=HTMLResponse)
+def discovery_page(request: Request, kind: str = "talent"):
+    if kind not in db.CRAWL_KINDS:
+        kind = "talent"
+    conn = db.connect()
+    try:
+        targets = db.list_crawl_targets(conn, kind=kind)
+        counts = db.crawl_counts(conn, kind=kind)
+    finally:
+        conn.close()
+    return render(
+        request, "discovery.html", nav="discovery", kind=kind, targets=targets,
+        counts=counts, kinds=db.CRAWL_KINDS, scrape_on=discovery.scrape_enabled(),
+    )
+
+
+@app.post("/discovery/generate")
+def discovery_generate(
+    kind: str = Form("talent"), location: str = Form(""), terms: str = Form("")
+):
+    """Propose targets (deterministic, no fetching). Jon approves them next."""
+    term_list = [t.strip() for t in terms.split(",") if t.strip()] or None
+    conn = db.connect()
+    try:
+        discovery.generate_targets(
+            conn, kind, terms=term_list, location=location.strip() or None
+        )
+    finally:
+        conn.close()
+    return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+
+
+@app.post("/discovery/{target_id}/status")
+def discovery_decide(target_id: int, status: str = Form(...), kind: str = Form("talent")):
+    """Approve or dismiss a proposed target — Jon's explicit go-ahead/refusal."""
+    conn = db.connect()
+    try:
+        db.update_crawl_target_status(conn, target_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+
+
+@app.post("/discovery/{target_id}/fetch")
+def discovery_fetch(target_id: int, kind: str = Form("talent")):
+    """Fetch an Approved target. Refuses anything not Approved (the gate)."""
+    conn = db.connect()
+    try:
+        target = db.get_crawl_target(conn, target_id)
+        if target is None:
+            return HTMLResponse("Target not found", status_code=404)
+        if target["status"] != "Approved":
+            return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+        discovery.run_target(conn, target)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

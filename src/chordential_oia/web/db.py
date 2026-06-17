@@ -174,6 +174,25 @@ CREATE TABLE IF NOT EXISTS inbound_leads (
     shown_price_low REAL,
     shown_price_high REAL
 );
+
+-- Human-gated discovery crawler: proposed places to look, awaiting Jon's
+-- approval. Nothing is fetched until a target is Approved ("machine proposes,
+-- Jon disposes"). Serves both the talent (supply) and opportunity (demand) sides.
+CREATE TABLE IF NOT EXISTS crawl_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,                    -- 'talent' | 'opportunity'
+    label TEXT,                            -- human-readable description of the target
+    query TEXT,                            -- the search terms/keywords used
+    url TEXT,                              -- the exact URL that would be fetched
+    source_key TEXT,                       -- which proposer/provider produced it
+    rationale TEXT,                        -- why this target was suggested
+    status TEXT DEFAULT 'Proposed',        -- Proposed | Approved | Fetched | Dismissed
+    result_count INTEGER,                  -- how many records the fetch yielded
+    proposed_at TEXT,
+    decided_at TEXT,
+    fetched_at TEXT,
+    notes TEXT DEFAULT ''
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -304,6 +323,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     for name, decl in _INBOUND_COLUMNS.items():
         if name not in inbound_cols:
             conn.execute(f"ALTER TABLE inbound_leads ADD COLUMN {name} {decl}")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS crawl_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
+            label TEXT, query TEXT, url TEXT, source_key TEXT, rationale TEXT,
+            status TEXT DEFAULT 'Proposed', result_count INTEGER,
+            proposed_at TEXT, decided_at TEXT, fetched_at TEXT, notes TEXT DEFAULT ''
+        )"""
+    )
     conn.commit()
 
 
@@ -757,6 +784,118 @@ def inbound_counts(conn: sqlite3.Connection) -> Dict[str, int]:
     for r in rows:
         counts[r["status"]] = r["n"]
     counts["open"] = counts["New"] + counts["Reviewed"]
+    counts["total"] = sum(r["n"] for r in rows)
+    return counts
+
+
+# --------------------------------------------------------------------------- #
+# Discovery crawler — human-gated targets ("machine proposes, Jon disposes")
+# --------------------------------------------------------------------------- #
+CRAWL_KINDS = ["talent", "opportunity"]
+CRAWL_STATES = ["Proposed", "Approved", "Fetched", "Dismissed"]
+
+
+def crawl_target_exists(conn: sqlite3.Connection, kind: str, url: str) -> bool:
+    """Dedupe proposals so re-running the generator doesn't pile up duplicates."""
+    row = conn.execute(
+        "SELECT 1 FROM crawl_targets WHERE kind = ? AND url = ? LIMIT 1",
+        (kind, url),
+    ).fetchone()
+    return row is not None
+
+
+def insert_crawl_target(
+    conn: sqlite3.Connection,
+    kind: str,
+    label: str,
+    query: str,
+    url: str,
+    source_key: str,
+    rationale: str,
+) -> Optional[int]:
+    """Record a proposed target (status Proposed). Returns None if it already
+    exists (deduped on kind+url). Nothing here fetches anything."""
+    if kind not in CRAWL_KINDS:
+        raise ValueError(f"Unknown crawl kind {kind!r}")
+    if crawl_target_exists(conn, kind, url):
+        return None
+    cur = conn.execute(
+        """INSERT INTO crawl_targets
+           (kind, label, query, url, source_key, rationale, status, proposed_at)
+           VALUES (?,?,?,?,?,?,'Proposed',?)""",
+        (
+            kind, label, query, url, source_key, rationale,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_crawl_targets(
+    conn: sqlite3.Connection,
+    kind: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[sqlite3.Row]:
+    clauses, params = [], []
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return conn.execute(
+        f"""SELECT * FROM crawl_targets{where}
+            ORDER BY
+              CASE status WHEN 'Proposed' THEN 0 WHEN 'Approved' THEN 1
+                          WHEN 'Fetched' THEN 2 ELSE 3 END,
+              proposed_at DESC""",
+        params,
+    ).fetchall()
+
+
+def get_crawl_target(conn: sqlite3.Connection, target_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM crawl_targets WHERE id = ?", (target_id,)
+    ).fetchone()
+
+
+def update_crawl_target_status(
+    conn: sqlite3.Connection, target_id: int, status: str
+) -> None:
+    """Approve or dismiss a target. Approval is Jon's explicit go-ahead; only
+    Approved targets are ever eligible to be fetched."""
+    if status not in CRAWL_STATES:
+        raise ValueError(f"Unknown crawl status {status!r}")
+    conn.execute(
+        "UPDATE crawl_targets SET status = ?, decided_at = ? WHERE id = ?",
+        (status, datetime.now(timezone.utc).isoformat(), target_id),
+    )
+    conn.commit()
+
+
+def mark_crawl_target_fetched(
+    conn: sqlite3.Connection, target_id: int, result_count: int
+) -> None:
+    conn.execute(
+        """UPDATE crawl_targets
+           SET status = 'Fetched', result_count = ?, fetched_at = ? WHERE id = ?""",
+        (result_count, datetime.now(timezone.utc).isoformat(), target_id),
+    )
+    conn.commit()
+
+
+def crawl_counts(conn: sqlite3.Connection, kind: Optional[str] = None) -> Dict[str, int]:
+    clause = " WHERE kind = ?" if kind else ""
+    params = (kind,) if kind else ()
+    rows = conn.execute(
+        f"SELECT status, COUNT(*) AS n FROM crawl_targets{clause} GROUP BY status",
+        params,
+    ).fetchall()
+    counts = {s: 0 for s in CRAWL_STATES}
+    for r in rows:
+        counts[r["status"]] = r["n"]
     counts["total"] = sum(r["n"] for r in rows)
     return counts
 
