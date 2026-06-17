@@ -19,6 +19,7 @@ from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
 from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
+from ..proposals import PROPOSAL_STATES, Proposal
 from ..strategic import assess_strategic_value
 from ..talent import InviteStatus, ReviewStatus, Talent
 from .evaluate import evaluate
@@ -193,6 +194,23 @@ CREATE TABLE IF NOT EXISTS crawl_targets (
     fetched_at TEXT,
     notes TEXT DEFAULT ''
 );
+
+-- Proposals — deterministic paperwork generated from the estimator. Payment
+-- execution (Stripe) is a separate later step; this stores the document + status.
+CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    opp_id INTEGER,
+    created_at TEXT,
+    status TEXT DEFAULT 'Draft',           -- Draft | Sent | Accepted | Declined
+    deposit_pct REAL,
+    deposit_amount REAL,
+    total_price REAL,
+    balance_due REAL,
+    line_items TEXT,                        -- JSON [{role,hours,rate,cost}]
+    terms TEXT,                             -- JSON [str]
+    notes TEXT DEFAULT ''
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -329,6 +347,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             label TEXT, query TEXT, url TEXT, source_key TEXT, rationale TEXT,
             status TEXT DEFAULT 'Proposed', result_count INTEGER,
             proposed_at TEXT, decided_at TEXT, fetched_at TEXT, notes TEXT DEFAULT ''
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
+            created_at TEXT, status TEXT DEFAULT 'Draft', deposit_pct REAL,
+            deposit_amount REAL, total_price REAL, balance_due REAL,
+            line_items TEXT, terms TEXT, notes TEXT DEFAULT ''
         )"""
     )
     conn.commit()
@@ -898,6 +924,62 @@ def crawl_counts(conn: sqlite3.Connection, kind: Optional[str] = None) -> Dict[s
         counts[r["status"]] = r["n"]
     counts["total"] = sum(r["n"] for r in rows)
     return counts
+
+
+# --------------------------------------------------------------------------- #
+# Proposals — deterministic paperwork from the estimator
+# --------------------------------------------------------------------------- #
+def insert_proposal(
+    conn: sqlite3.Connection,
+    project_id: Optional[int],
+    opp_id: Optional[int],
+    proposal: Proposal,
+) -> int:
+    cur = conn.execute(
+        """INSERT INTO proposals
+           (project_id, opp_id, created_at, status, deposit_pct, deposit_amount,
+            total_price, balance_due, line_items, terms)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            project_id, opp_id, datetime.now(timezone.utc).isoformat(), "Draft",
+            proposal.deposit_pct, proposal.deposit_amount, proposal.total_price,
+            proposal.balance_due,
+            json.dumps([
+                {"role": l.role, "hours": l.hours, "rate": l.rate, "cost": l.cost}
+                for l in proposal.lines
+            ]),
+            json.dumps(proposal.terms),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_proposal(conn: sqlite3.Connection, proposal_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM proposals WHERE id = ?", (proposal_id,)
+    ).fetchone()
+
+
+def proposal_for_project(
+    conn: sqlite3.Connection, project_id: int
+) -> Optional[sqlite3.Row]:
+    """The most recent proposal for a project (None if none generated yet)."""
+    return conn.execute(
+        "SELECT * FROM proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1",
+        (project_id,),
+    ).fetchone()
+
+
+def update_proposal_status(
+    conn: sqlite3.Connection, proposal_id: int, status: str
+) -> None:
+    if status not in PROPOSAL_STATES:
+        raise ValueError(f"Unknown proposal status {status!r}")
+    conn.execute(
+        "UPDATE proposals SET status = ? WHERE id = ?", (status, proposal_id)
+    )
+    conn.commit()
 
 
 # --------------------------------------------------------------------------- #

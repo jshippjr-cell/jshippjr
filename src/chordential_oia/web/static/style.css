@@ -144,6 +144,13 @@ a{color:inherit;text-decoration:none}
 .pill.st-proposed{background:var(--panel);color:var(--muted);border-color:var(--border2)}
 .pill.st-approved{background:rgba(34,110,70,.12);color:#1d6b43;border-color:rgba(34,110,70,.3)}
 .pill.st-fetched{background:rgba(228,103,31,.13);color:#B5500F;border-color:rgba(228,103,31,.32)}
+/* proposal + invoice states */
+.pill.st-draft{background:var(--panel);color:var(--muted);border-color:var(--border2)}
+.pill.st-sent{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
+.pill.st-accepted{background:rgba(34,110,70,.12);color:#1d6b43;border-color:rgba(34,110,70,.3)}
+.pill.st-declined{background:rgba(68,22,30,.12);color:#7a2330;border-color:rgba(68,22,30,.28)}
+.pill.st-issued{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
+.pill.st-paid{background:rgba(34,110,70,.14);color:#1d6b43;border-color:rgba(34,110,70,.34)}
 .lead-actions{display:flex;gap:6px;flex-wrap:wrap}
 .lead-actions form{margin:0}
 /* talent provenance badge (where a creator came from) */

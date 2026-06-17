@@ -24,8 +24,9 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..estimation import ROLE_RATES
+from ..estimation import ROLE_RATES, RoleLine
 from ..models import BuyerValue, MusicDiscipline, Opportunity
+from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
@@ -1074,6 +1075,95 @@ def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Proposals — deterministic paperwork generated from the estimator
+# --------------------------------------------------------------------------- #
+def _proposal_from_row(row) -> Proposal:
+    """Reconstruct a Proposal object from a stored row (for render/export)."""
+    items = json.loads(row["line_items"]) if row["line_items"] else []
+    lines = [RoleLine(i["role"], i["hours"], i["rate"]) for i in items]
+    return Proposal(
+        client="", need="", discipline="", lines=lines,
+        total_price=row["total_price"], deposit_pct=row["deposit_pct"],
+        deposit_amount=row["deposit_amount"], balance_due=row["balance_due"],
+        terms=json.loads(row["terms"]) if row["terms"] else [],
+    )
+
+
+@app.post("/project/{project_id}/proposal")
+def project_generate_proposal(project_id: int):
+    """Generate a deterministic proposal for a project from the estimator."""
+    conn = db.connect()
+    try:
+        prow = db.get_project(conn, project_id)
+        if prow is None:
+            return HTMLResponse("Project not found", status_code=404)
+        opp_id = prow["opp_id"]
+        if opp_id is None:
+            return RedirectResponse(f"/project/{project_id}", status_code=303)
+        row, opp, ev = _load(conn, opp_id)
+        qual, scored = ev
+        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+        est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+        proposal = build_proposal(opp, qual, est)
+        db.insert_proposal(conn, project_id, opp_id, proposal)
+        db.add_update(conn, project_id, "Proposal generated.", "proposal")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
+
+
+@app.get("/project/{project_id}/proposal", response_class=HTMLResponse)
+def project_proposal_view(request: Request, project_id: int):
+    conn = db.connect()
+    try:
+        prow = db.get_project(conn, project_id)
+        if prow is None:
+            return HTMLResponse("Project not found", status_code=404)
+        proposal = db.proposal_for_project(conn, project_id)
+        line_items = json.loads(proposal["line_items"]) if proposal and proposal["line_items"] else []
+        terms = json.loads(proposal["terms"]) if proposal and proposal["terms"] else []
+    finally:
+        conn.close()
+    return render(
+        request, "proposal_detail.html", nav="projects", project=prow,
+        proposal=proposal, line_items=line_items, terms=terms,
+        proposal_states=db.PROPOSAL_STATES,
+    )
+
+
+@app.get("/project/{project_id}/proposal.txt", response_class=PlainTextResponse)
+def project_proposal_text(project_id: int):
+    conn = db.connect()
+    try:
+        prow = db.get_project(conn, project_id)
+        proposal = db.proposal_for_project(conn, project_id) if prow else None
+    finally:
+        conn.close()
+    if proposal is None:
+        return PlainTextResponse("No proposal yet", status_code=404)
+    obj = _proposal_from_row(proposal)
+    obj.client = prow["client"]
+    obj.need = prow["need"]
+    return PlainTextResponse(obj.render_text())
+
+
+@app.post("/proposal/{proposal_id}/status")
+def proposal_set_status(proposal_id: int, status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.update_proposal_status(conn, proposal_id, status)
+        p = db.get_proposal(conn, proposal_id)
+        if p is not None and p["project_id"]:
+            db.add_update(conn, p["project_id"], f"Proposal {status}.", "proposal")
+            return RedirectResponse(
+                f"/project/{p['project_id']}/proposal", status_code=303
+            )
+    finally:
+        conn.close()
+    return RedirectResponse("/projects", status_code=303)
 
 
 def main() -> None:  # console entry point

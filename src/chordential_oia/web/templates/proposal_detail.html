@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Proposal{% endblock %}
+{% block heading %}Proposal · {{ project['need'] }}{% endblock %}
+{% block content %}
+
+<p class="result-count">
+  <a class="link" href="/project/{{ project['id'] }}">← Back to project</a>
+</p>
+
+{% if not proposal %}
+<div class="card">
+  <p class="muted">No proposal generated yet.</p>
+  <form method="post" action="/project/{{ project['id'] }}/proposal">
+    <button class="btn primary" type="submit">Generate proposal</button>
+  </form>
+  <p class="muted small" style="margin-top:8px">Built deterministically from the estimator — line items and total come straight from the budget estimate.</p>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-head">
+    <h2>{{ project['client'] }} — {{ project['need'] }}</h2>
+    <span class="pill st-{{ proposal['status']|lower }}">{{ proposal['status'] }}</span>
+  </div>
+
+  <table class="table compact">
+    <thead><tr><th>Role</th><th>Hours</th><th>Rate</th><th>Cost</th></tr></thead>
+    <tbody>
+      {% for l in line_items %}
+      <tr>
+        <td class="strong">{{ l.role }}</td>
+        <td>{{ l.hours }}h</td>
+        <td>{{ l.rate|money }}/h</td>
+        <td>{{ l.cost|money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="3" class="strong">Total</td><td class="strong">{{ proposal['total_price']|money }}</td></tr>
+      <tr><td colspan="3">Deposit ({{ (proposal['deposit_pct']*100)|round|int }}%)</td><td>{{ proposal['deposit_amount']|money }}</td></tr>
+      <tr><td colspan="3">Balance on delivery</td><td>{{ proposal['balance_due']|money }}</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="kv" style="margin-top:14px">
+    <div class="strong">Terms</div>
+    <ul class="brief-list">{% for t in terms %}<li>{{ t }}</li>{% endfor %}</ul>
+  </div>
+
+  <div class="action-bar" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    {% for s in proposal_states %}
+      {% if s != proposal['status'] %}
+      <form method="post" action="/proposal/{{ proposal['id'] }}/status">
+        <input type="hidden" name="status" value="{{ s }}">
+        <button class="btn tiny" type="submit">Mark {{ s }}</button>
+      </form>
+      {% endif %}
+    {% endfor %}
+    <a class="btn tiny ghost" href="/project/{{ project['id'] }}/proposal.txt" target="_blank" rel="noopener">Export .txt</a>
+    <form method="post" action="/project/{{ project['id'] }}/proposal" style="margin-left:auto">
+      <button class="btn tiny ghost" type="submit" title="Regenerate from the current estimate">Regenerate</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
