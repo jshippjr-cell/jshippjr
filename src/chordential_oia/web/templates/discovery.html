@@ -102,10 +102,22 @@
     <span class="muted small">flip a source on or off · watch its activity</span>
   </div>
 
-  {% if not scrape_on %}
+  {% if autofetch.enabled %}
+    {% if autofetch.current %}
+    <p class="muted small" style="margin:0 0 10px">
+      <span class="dot pursue"></span> <strong>Auto-fetch running now</strong> — fetching “{{ autofetch.current }}”…
+    </p>
+    {% else %}
+    <p class="muted small" style="margin:0 0 10px">
+      <span class="dot won"></span> <strong>Auto-fetch on</strong> — the crawler scans your On sources on a schedule.
+      {% if autofetch.last_run %}Last cycle {{ autofetch.last_run[:16].replace('T',' ') }} · {{ autofetch.last_found }} found.{% else %}First cycle runs shortly.{% endif %}
+    </p>
+    {% endif %}
+  {% else %}
   <p class="muted small" style="margin:0 0 10px">
-    Live fetching is <strong>off</strong> on this environment (no <code>CHORDENTIAL_ENABLE_SCRAPE</code>).
-    Toggles and approvals still work; fetches run where it's enabled.
+    <span class="dot"></span> Auto-fetch is <strong>off</strong>
+    {% if not scrape_on %}(no <code>CHORDENTIAL_ENABLE_SCRAPE</code>){% endif %}.
+    Toggles and approvals still work; you can fetch approved targets by hand below.
   </p>
   {% endif %}
 

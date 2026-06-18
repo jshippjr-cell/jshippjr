@@ -268,6 +268,9 @@ def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
         os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # The background auto-fetcher writes from a worker thread while request
+    # handlers also write; wait out brief lock contention instead of erroring.
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -800,6 +803,20 @@ def insert_inbound_lead(
     return int(cur.lastrowid)
 
 
+def inbound_lead_exists(
+    conn: sqlite3.Connection, company: str, project_type: str, source: str
+) -> bool:
+    """Dedupe discovered leads so a recurring crawl re-scan of the same board
+    doesn't pile up duplicate leads (matched on source + company + project_type)."""
+    row = conn.execute(
+        """SELECT 1 FROM inbound_leads
+           WHERE source = ? AND IFNULL(company, '') = ? AND IFNULL(project_type, '') = ?
+           LIMIT 1""",
+        (source, company or "", project_type or ""),
+    ).fetchone()
+    return row is not None
+
+
 def list_inbound_leads(
     conn: sqlite3.Connection, status: Optional[str] = None
 ) -> List[sqlite3.Row]:
@@ -1061,6 +1078,34 @@ def get_crawl_target(conn: sqlite3.Connection, target_id: int) -> Optional[sqlit
     return conn.execute(
         "SELECT * FROM crawl_targets WHERE id = ?", (target_id,)
     ).fetchone()
+
+
+def autofetch_due_targets(
+    conn: sqlite3.Connection, refetch_before: str, limit: int = 5
+) -> List[sqlite3.Row]:
+    """Targets the background auto-fetcher may pull this cycle: on an active (On),
+    non-gated source, and either newly **Approved** (the backlog) or a **Fetched**
+    target last scanned before ``refetch_before`` (a recurring re-scan).
+
+    The human gate is preserved end-to-end — only approved-lineage targets on
+    active, non-login-gated sources are ever returned; Proposed/Dismissed targets
+    and login-gated sources are never auto-fetched. Approved backlog comes first,
+    then the stalest re-scans."""
+    placeholders = ",".join("?" * len(ACTIVE_SITE_STATES))
+    return conn.execute(
+        f"""SELECT t.* FROM crawl_targets t
+            JOIN discovery_sites s ON s.key = t.source_key
+            WHERE s.status IN ({placeholders})
+              AND IFNULL(s.login_gated, 0) = 0
+              AND (
+                    t.status = 'Approved'
+                 OR (t.status = 'Fetched'
+                     AND (t.fetched_at IS NULL OR t.fetched_at < ?))
+                  )
+            ORDER BY (t.status = 'Fetched'), t.fetched_at ASC
+            LIMIT ?""",
+        (*ACTIVE_SITE_STATES, refetch_before, limit),
+    ).fetchall()
 
 
 def update_crawl_target_status(

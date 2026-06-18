@@ -65,8 +65,12 @@ Login-gated: manual-assist handoff. **No stored passwords.**
 - **Phase 1 — Clarity (shipped):** page restructured; `login_gated` flag on the
   catalog + DB; per-source activity aggregated from crawl targets; manual-assist
   list; `CHORDENTIAL_ENABLE_SCRAPE` turned on so approved targets actually fetch.
-- **Phase 2 — Live fetching:** Render Cron auto-fetches On sources on a schedule;
-  powers a real-time Activity indicator; per-source rate limiting + health checks.
+- **Phase 2 — Live fetching (shipped):** an in-process background auto-fetcher
+  (`scheduler.py`) — chosen over a separate Render cron service because the SQLite
+  DB lives on a disk only the web service can mount. Each cycle it fetches a
+  bounded batch of due targets on On, non-gated sources (Approved backlog + stale
+  re-scans), with a live "fetching now" indicator on the console. Discovered leads
+  are deduped so re-scans don't pile up. Tunable via `CHORDENTIAL_AUTOFETCH*`.
 - **Phase 3 — Authenticated sources:** official API / RSS via encrypted tokens
   (e.g. Reddit). Still no password vault.
 

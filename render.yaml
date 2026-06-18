@@ -24,9 +24,12 @@ services:
       # (CHORDENTIAL_ADMIN_TOKEN) is set in the Render dashboard, not committed here.
       - key: CHORDENTIAL_DB
         value: "/var/data/chordential.db"
-      # Master switch for live fetching. When set, an Approved crawl target that is
-      # fetched actually pulls + parses the page (results land in the review queue).
+      # Master switch for live fetching. When set, the crawler actually pulls +
+      # parses pages (results land in the review queue) AND the in-process
+      # background auto-fetcher runs, scanning your On sources on a schedule.
       # The human gate still applies: only Approved targets are ever fetched.
+      # Optional knobs (defaults shown): CHORDENTIAL_AUTOFETCH=1 (set 0 for manual
+      # only), CHORDENTIAL_AUTOFETCH_INTERVAL=900 (seconds), CHORDENTIAL_REFETCH_HOURS=12.
       - key: CHORDENTIAL_ENABLE_SCRAPE
         value: "1"
     disk:

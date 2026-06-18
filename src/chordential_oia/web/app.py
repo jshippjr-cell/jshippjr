@@ -36,7 +36,7 @@ from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, seed
+from . import db, discovery, scheduler, seed
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -100,7 +100,15 @@ async def lifespan(app: FastAPI):
     discovery.sync_catalog(conn)
     seed.seed_demo_pipeline(conn)
     conn.close()
-    yield
+    # Background auto-fetcher (Phase 2): runs in-process, no-ops unless scraping
+    # is enabled. Cancelled cleanly on shutdown.
+    import asyncio
+
+    autofetch_task = asyncio.create_task(scheduler.run_loop())
+    try:
+        yield
+    finally:
+        autofetch_task.cancel()
 
 
 app = FastAPI(title="Chordential — Procurement OS", lifespan=lifespan)
@@ -360,6 +368,7 @@ def discovery_page(request: Request, kind: str = "talent"):
         managed_sites=managed_sites, proposed_targets=proposed_targets,
         done_targets=done_targets,
         pending_count=len(pending_sites) + len(proposed_targets),
+        autofetch=scheduler.status(),
     )
 
 

@@ -169,7 +169,13 @@ def run_target(conn, target) -> int:
     """
     if target["status"] != "Approved":
         raise ValueError("Only an Approved target can be fetched.")
+    return _do_fetch(conn, target)
 
+
+def _do_fetch(conn, target) -> int:
+    """Fetch + ingest one target into the review queue. Talent → Pending creators;
+    opportunities → inbound leads (deduped so recurring re-scans don't pile up).
+    No gate check here — callers enforce the approved-lineage gate."""
     ingested = 0
     if target["kind"] == "talent":
         for t in ScrapedTalentSource(target["url"]).fetch():
@@ -183,6 +189,8 @@ def run_target(conn, target) -> int:
             except Exception:
                 html = ""
             for rec in parse_opportunity_html(html):
+                if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
+                    continue
                 db.insert_inbound_lead(
                     conn,
                     contact_name="(discovered)",
@@ -195,3 +203,17 @@ def run_target(conn, target) -> int:
 
     db.mark_crawl_target_fetched(conn, target["id"], ingested)
     return ingested
+
+
+def refetch_target(conn, target) -> int:
+    """Re-scan an already-approved-and-fetched target (the recurring auto-fetch).
+    The gate holds: callers only pass approved-lineage targets on active sources."""
+    return _do_fetch(conn, target)
+
+
+def fetch_or_refetch(conn, target) -> int:
+    """Dispatch for the background auto-fetcher: fetch a new Approved target, or
+    re-scan one already Fetched."""
+    if target["status"] == "Approved":
+        return run_target(conn, target)
+    return refetch_target(conn, target)
