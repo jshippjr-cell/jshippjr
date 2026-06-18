@@ -24,6 +24,11 @@ services:
       # (CHORDENTIAL_ADMIN_TOKEN) is set in the Render dashboard, not committed here.
       - key: CHORDENTIAL_DB
         value: "/var/data/chordential.db"
+      # Master switch for live fetching. When set, an Approved crawl target that is
+      # fetched actually pulls + parses the page (results land in the review queue).
+      # The human gate still applies: only Approved targets are ever fetched.
+      - key: CHORDENTIAL_ENABLE_SCRAPE
+        value: "1"
     disk:
       name: chordential-data
       mountPath: /var/data
