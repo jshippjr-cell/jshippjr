@@ -1,13 +1,17 @@
-# Render deployment blueprint for the Chordential dashboard.
+# Render deployment blueprint for the Chordential app.
 # Render reads this automatically: it builds from GitHub (no local machine needed)
 # and redeploys on every push to the branch below, so the live link always shows
-# the latest. Free plan; the service sleeps after ~15 min idle and cold-starts on
-# the next visit (~30-60s). Seed data repopulates on each deploy.
+# the latest. Starter plan with a persistent disk mounted at /var/data: the SQLite
+# DB lives on the disk (CHORDENTIAL_DB below), so inbound leads and pipeline data
+# survive deploys and restarts. A paid instance also stays always-on (no cold start).
+#
+# NOTE: a persistent disk requires a paid instance — that's why plan is "starter"
+# (not "free"). Render will prompt to confirm the paid upgrade when this syncs.
 services:
   - type: web
     name: chordential
     runtime: python
-    plan: free
+    plan: starter
     branch: claude/admiring-mayer-u241h5
     buildCommand: "pip install '.[web]'"
     startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
@@ -15,3 +19,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # SQLite DB path on the mounted persistent disk (see disk: below). Keeping the
+      # DB here is what makes real data persist across deploys. The admin passphrase
+      # (CHORDENTIAL_ADMIN_TOKEN) is set in the Render dashboard, not committed here.
+      - key: CHORDENTIAL_DB
+        value: "/var/data/chordential.db"
+    disk:
+      name: chordential-data
+      mountPath: /var/data
+      sizeGB: 1
