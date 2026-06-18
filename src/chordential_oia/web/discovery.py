@@ -46,6 +46,48 @@ def sync_catalog(conn) -> int:
     return db.discovery_site_counts(conn)["total"] - before
 
 
+def seed_active_targets(conn, site_row) -> int:
+    """When a source is switched On, queue a default **Approved** target for it
+    (its main board/search) so "On" means "fetching" — no separate approve step.
+    Approving the *source* is the human gate; the deterministic default search
+    needs no extra click. Login-gated sources are skipped (manual-assist only).
+
+    Idempotent: an existing target for the same URL is left as-is, so a default
+    Jon dismissed is never resurrected. Returns how many new targets were added."""
+    if site_row["login_gated"]:
+        return 0
+    site_kind = site_row["kind"]
+    kinds = ["talent", "opportunity"] if site_kind == "both" else [site_kind]
+    site = catalog.get_site(site_row["key"])
+    added = 0
+    for k in kinds:
+        if site is not None:
+            target_dicts = catalog.site_targets(site, k)
+        else:  # a Jon-added custom source — build from its stored board_url
+            t = _custom_site_target(site_row, k, None, None)
+            target_dicts = [t] if t else []
+        for t in target_dicts:
+            tid = db.insert_crawl_target(
+                conn, t["kind"], t["label"], t["query"], t["url"],
+                t["source_key"], t["rationale"],
+            )
+            if tid is not None:
+                db.update_crawl_target_status(conn, tid, "Approved")
+                added += 1
+    return added
+
+
+def seed_all_active(conn) -> int:
+    """Backfill a default Approved target for every already-active, non-gated
+    source that lacks one — so existing On sources start fetching without being
+    toggled. Idempotent (dedupes on URL)."""
+    added = 0
+    for s in db.list_discovery_sites(conn):
+        if s["status"] in db.ACTIVE_SITE_STATES and not s["login_gated"]:
+            added += seed_active_targets(conn, s)
+    return added
+
+
 # --------------------------------------------------------------------------- #
 # Propose targets from the ACTIVE curated sites only
 # --------------------------------------------------------------------------- #

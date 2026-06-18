@@ -163,9 +163,13 @@ def test_web_flow_propose_approve_fetch(ctx):
     client, db_mod = ctx
     assert client.get("/discovery").status_code == 200
 
-    client.post("/discovery/generate", data={"kind": "talent"})
+    # Keyworded generate produces NEW Proposed targets (distinct from the default
+    # Approved targets that active sources are seeded with).
+    client.post("/discovery/generate", data={"kind": "talent", "terms": "violinist"})
     conn = db_mod.connect()
-    row = conn.execute("SELECT id FROM crawl_targets WHERE kind='talent' LIMIT 1").fetchone()
+    row = conn.execute(
+        "SELECT id FROM crawl_targets WHERE kind='talent' AND status='Proposed' LIMIT 1"
+    ).fetchone()
     conn.close()
     assert row is not None, "active talent sites should have produced targets"
     tid = row[0]

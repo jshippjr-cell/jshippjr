@@ -98,6 +98,7 @@ async def lifespan(app: FastAPI):
     seed.seed_talent(conn)
     seed.ingest_talent_prospects(conn)
     discovery.sync_catalog(conn)
+    discovery.seed_all_active(conn)  # On sources get a default target → they fetch
     seed.seed_demo_pipeline(conn)
     conn.close()
     # Background auto-fetcher (Phase 2): runs in-process, no-ops unless scraping
@@ -393,10 +394,15 @@ def discovery_site_decide(
     site_id: int, status: str = Form(...), kind: str = Form("talent")
 ):
     """Approve or reject a suggested site — Jon's permission before it can be
-    scanned. Only active (Established/Approved) sites can propose targets."""
+    scanned. Turning a source On (Approved/Established) also seeds a default
+    Approved target so it starts fetching immediately."""
     conn = db.connect()
     try:
         db.update_discovery_site_status(conn, site_id, status)
+        if status in db.ACTIVE_SITE_STATES:
+            site_row = db.get_discovery_site(conn, site_id)
+            if site_row is not None:
+                discovery.seed_active_targets(conn, site_row)
     finally:
         conn.close()
     return RedirectResponse(f"/discovery?kind={kind}", status_code=303)

@@ -140,6 +140,45 @@ def test_online_cycle_ingests_then_dedups(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# "On = fetching" — turning a source On seeds a default Approved target
+# --------------------------------------------------------------------------- #
+def test_turning_on_seeds_an_approved_target(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    site = conn.execute("SELECT * FROM discovery_sites WHERE key='soundlister'").fetchone()
+
+    added = disc.seed_active_targets(conn, site)
+    assert added >= 1
+    approved = db.list_crawl_targets(conn, kind="opportunity", status="Approved")
+    assert any(r["source_key"] == "soundlister" for r in approved)
+    assert disc.seed_active_targets(conn, site) == 0      # idempotent
+
+
+def test_seeding_skips_login_gated(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    taxi = conn.execute("SELECT * FROM discovery_sites WHERE key='taxi'").fetchone()
+    assert disc.seed_active_targets(conn, taxi) == 0      # gated → manual-assist only
+    assert all(r["source_key"] != "taxi" for r in db.list_crawl_targets(conn))
+
+
+def test_seed_all_active_backfill(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    assert disc.seed_all_active(conn) >= 1
+    keys = {r["source_key"] for r in db.list_crawl_targets(conn, status="Approved")}
+    assert "reddit_forhire" in keys      # active, non-gated → seeded
+    assert "taxi" not in keys            # active but login-gated → skipped
+    assert "linkedin_jobs" not in keys   # suggested + gated → skipped
+
+
+# --------------------------------------------------------------------------- #
 # Phase 3 — Reddit JSON adapter
 # --------------------------------------------------------------------------- #
 def test_reddit_json_url_and_parse():
