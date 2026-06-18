@@ -26,19 +26,19 @@ def client(tmp_path, monkeypatch):
 
 
 def test_public_home_loads(client):
-    r = client.get("/site")
+    r = client.get("/")
     assert r.status_code == 200
     # Hero + the marketing CTAs are present.
     assert "Start a project" in r.text
     assert "Book a call" in r.text
 
 
-def test_public_home_trailing_slash(client):
-    assert client.get("/site/").status_code == 200
+def test_public_home_at_root(client):
+    assert client.get("/").status_code == 200
 
 
 def test_public_uses_standalone_layout_not_internal_shell(client):
-    r = client.get("/site")
+    r = client.get("/")
     # Public pages render the public stylesheet/shell, NOT the internal dashboard.
     assert "/static/public/site.css" in r.text
     assert "Procurement OS" not in r.text          # internal title suffix
@@ -46,7 +46,7 @@ def test_public_uses_standalone_layout_not_internal_shell(client):
 
 
 def test_capabilities_lists_every_discipline(client):
-    r = client.get("/site/capabilities")
+    r = client.get("/capabilities")
     assert r.status_code == 200
     for headline in ("Original composition", "Sonic branding", "Sound design",
                      "Music supervision"):
@@ -54,7 +54,7 @@ def test_capabilities_lists_every_discipline(client):
 
 
 def test_samples_page_renders_reel(client):
-    r = client.get("/site/samples")
+    r = client.get("/samples")
     assert r.status_code == 200
     assert "Selected work" in r.text
     # Placeholder reel is clearly marked until real assets are attached.
@@ -63,12 +63,12 @@ def test_samples_page_renders_reel(client):
 
 def test_internal_dashboard_unaffected_by_public_mount(client):
     # The internal app still works and still shows its own shell.
-    r = client.get("/")
+    r = client.get("/dashboard")
     assert r.status_code == 200
     assert "Procurement OS" in r.text
 
 
 def test_public_nav_links_resolve(client):
     # Every primary marketing nav target is a real, 200-returning page.
-    for path in ("/site", "/site/capabilities", "/site/samples"):
+    for path in ("/", "/capabilities", "/samples"):
         assert client.get(path).status_code == 200

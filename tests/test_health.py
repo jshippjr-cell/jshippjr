@@ -31,7 +31,14 @@ def test_healthz_get_and_head(client):
     assert client.head("/healthz").status_code == 200
 
 
-def test_get_root_still_renders(client):
+def test_get_root_renders_public_home(client):
+    # Root is the public marketing site now; the dashboard moved to /dashboard.
     r = client.get("/")
+    assert r.status_code == 200
+    assert "Start a project" in r.text
+
+
+def test_dashboard_renders_at_dashboard(client):
+    r = client.get("/dashboard")
     assert r.status_code == 200
     assert "Executive Summary" in r.text

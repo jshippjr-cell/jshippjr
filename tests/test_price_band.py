@@ -62,7 +62,7 @@ def test_band_is_none_without_input(ctx):
 def test_questionnaire_stores_and_shows_band(ctx):
     client, db_mod, _ = ctx
     r = client.post(
-        "/site/start",
+        "/start",
         data={"contact_name": "Ivy Â", "company": "Ivy Co",
               "project_type": "Original :30 brand spot",
               "description": "orchestral, hopeful"},
@@ -92,7 +92,7 @@ def test_questionnaire_stores_and_shows_band(ctx):
 def test_internal_queue_shows_quoted_band(ctx):
     client, _, _ = ctx
     client.post(
-        "/site/start",
+        "/start",
         data={"contact_name": "Quote Tester", "company": "QT Co",
               "project_type": "Original :30 brand spot", "description": "strings"},
     )

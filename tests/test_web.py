@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
 
 
 def test_dashboard_loads(client):
-    r = client.get("/")
+    r = client.get("/dashboard")
     assert r.status_code == 200
     assert "Executive Summary" in r.text
     # The summary reads as a pipeline: targets → tentative → won.
@@ -33,7 +33,7 @@ def test_dashboard_loads(client):
 
 def test_dashboard_pipeline_columns_populate(client):
     # The demo seed stages one bid and one win, and the win carries assigned crew.
-    dash = client.get("/").text
+    dash = client.get("/dashboard").text
     assert "bid submitted" in dash          # tentative column has a live bid
     assert "crew-chip" in dash              # won deal lists assigned team members
 
@@ -70,7 +70,7 @@ def test_lanes_card_advances_status(client):
 
 
 def test_dashboard_columns_capped_at_four(client):
-    t = client.get("/").text
+    t = client.get("/dashboard").text
     # Every column has a "View all" overflow path (Top targets, Tentative, Won).
     assert 'href="/inbox?status=Submitted"' in t  # Tentative overflow
     assert 'href="/inbox?status=Won"' in t        # Won overflow
@@ -79,7 +79,7 @@ def test_dashboard_columns_capped_at_four(client):
 
 
 def test_dashboard_kpi_strip_and_followups_promoted(client):
-    dash = client.get("/").text
+    dash = client.get("/dashboard").text
     assert "kpi-strip" in dash
     assert "win rate" in dash and "follow-ups due" in dash
     # Inline advance affordance on a top-target card.
@@ -164,7 +164,7 @@ def test_win_loss_tracking_updates_metrics(client):
         follow_redirects=True,
     )
     assert r.status_code == 200
-    dash = client.get("/").text
+    dash = client.get("/dashboard").text
     assert "$9,000" in dash  # won value rendered
 
 
@@ -255,7 +255,7 @@ def test_outreach_contact_and_followup_persist(client):
     assert "Dana Reyes" in page
     assert "dana@acme.com" in page
     # A past-due next action surfaces on the dashboard follow-up queue.
-    dash = client.get("/").text
+    dash = client.get("/dashboard").text
     assert "Follow-ups due" in dash
     assert "Send intro email + reel" in dash
 

@@ -42,8 +42,8 @@ def _lead_count(db_mod):
 
 def test_intake_forms_render(ctx):
     client, _ = ctx
-    assert client.get("/site/start").status_code == 200
-    assert client.get("/site/book").status_code == 200
+    assert client.get("/start").status_code == 200
+    assert client.get("/book").status_code == 200
 
 
 def test_questionnaire_creates_lead_not_opportunity(ctx):
@@ -51,7 +51,7 @@ def test_questionnaire_creates_lead_not_opportunity(ctx):
     before_opps = _opp_count(db_mod)
     before_leads = _lead_count(db_mod)
     r = client.post(
-        "/site/start",
+        "/start",
         data={
             "contact_name": "Dana Rivera", "contact_email": "dana@acme.com",
             "company": "Acme Co", "project_type": ":30 brand spot",
@@ -62,7 +62,7 @@ def test_questionnaire_creates_lead_not_opportunity(ctx):
     )
     assert r.status_code == 303
     # Redirects to the thank-you page (may carry an indicative price band).
-    assert r.headers["location"].startswith("/site/thanks?kind=project")
+    assert r.headers["location"].startswith("/thanks?kind=project")
     # A lead was created; NO opportunity entered the pipeline.
     assert _lead_count(db_mod) == before_leads + 1
     assert _opp_count(db_mod) == before_opps
@@ -71,12 +71,12 @@ def test_questionnaire_creates_lead_not_opportunity(ctx):
 def test_book_call_creates_lead_with_source(ctx):
     client, db_mod = ctx
     r = client.post(
-        "/site/book",
+        "/book",
         data={"contact_name": "Lee Park", "contact_email": "lee@studio.tv",
               "description": "Title sequence sound design."},
         follow_redirects=False,
     )
-    assert r.headers["location"] == "/site/thanks?kind=call"
+    assert r.headers["location"] == "/thanks?kind=call"
     conn = db_mod.connect()
     try:
         row = conn.execute(
@@ -90,7 +90,7 @@ def test_book_call_creates_lead_with_source(ctx):
 
 def test_lead_appears_in_internal_queue(ctx):
     client, _ = ctx
-    client.post("/site/start", data={"contact_name": "Mara Voss", "company": "Voss Films"})
+    client.post("/start", data={"contact_name": "Mara Voss", "company": "Voss Films"})
     q = client.get("/leads")
     assert q.status_code == 200
     assert "Mara Voss" in q.text
@@ -100,7 +100,7 @@ def test_lead_appears_in_internal_queue(ctx):
 def test_promote_creates_exactly_one_opportunity_and_links(ctx):
     client, db_mod = ctx
     client.post(
-        "/site/start",
+        "/start",
         data={"contact_name": "Sam Cole", "company": "Cole Brands",
               "project_type": "Sonic logo", "description": "Three-note mnemonic."},
     )
@@ -135,7 +135,7 @@ def test_promote_creates_exactly_one_opportunity_and_links(ctx):
 
 def test_promote_is_idempotent(ctx):
     client, db_mod = ctx
-    client.post("/site/start", data={"contact_name": "Pat Vue", "company": "Vue Co"})
+    client.post("/start", data={"contact_name": "Pat Vue", "company": "Vue Co"})
     conn = db_mod.connect()
     lead_id = conn.execute(
         "SELECT id FROM inbound_leads WHERE company='Vue Co'"
@@ -150,7 +150,7 @@ def test_promote_is_idempotent(ctx):
 
 def test_dismiss_sets_status(ctx):
     client, db_mod = ctx
-    client.post("/site/start", data={"contact_name": "Nat Kim", "company": "Kim LLC"})
+    client.post("/start", data={"contact_name": "Nat Kim", "company": "Kim LLC"})
     conn = db_mod.connect()
     lead_id = conn.execute(
         "SELECT id FROM inbound_leads WHERE company='Kim LLC'"

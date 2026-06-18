@@ -121,6 +121,10 @@ chordential-web              # seeds a local SQLite DB, serves http://127.0.0.1:
 # or: uvicorn chordential_oia.web.app:app --reload
 ```
 
+The public marketing site is served at the root (`/`); the internal dashboard
+lives at `/dashboard`. When `CHORDENTIAL_ADMIN_TOKEN` is set, the public site
+stays open while `/dashboard` and all internal routes require the passphrase.
+
 It includes every required surface:
 
 - **Executive summary** — win rate, pipeline value, won value, pursue/review

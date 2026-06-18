@@ -64,7 +64,7 @@ HERO = {
         "confidence in delivery."
     ),
     "primary_cta": {"label": "View Work", "href": "#work"},
-    "secondary_cta": {"label": "Start a conversation", "href": "/site/start"},
+    "secondary_cta": {"label": "Start a conversation", "href": "/start"},
     "video": "",                 # set to a looping .mp4/.webm when the asset exists
     "poster": "",                # optional poster frame for the loop
     "loop": "/static/public/hero-loop.webp",  # generated motion placeholder (animated)
@@ -145,7 +145,7 @@ ABOUT = (
 CLOSE = {
     "headline": "See how your next campaign could sound.",
     "sub": "Tell us about the project — we’ll come back with an approach and a price range.",
-    "cta": {"label": "Start a conversation", "href": "/site/start"},
+    "cta": {"label": "Start a conversation", "href": "/start"},
 }
 
 

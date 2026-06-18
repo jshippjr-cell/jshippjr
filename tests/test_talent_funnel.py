@@ -73,7 +73,7 @@ def test_manual_talent_gets_manual_provenance(ctx):
 
 def test_apply_form_renders(ctx):
     client, _ = ctx
-    r = client.get("/site/apply")
+    r = client.get("/apply")
     assert r.status_code == 200
     assert "Create with Chordential" in r.text
 
@@ -81,14 +81,14 @@ def test_apply_form_renders(ctx):
 def test_apply_creates_pending_applicant(ctx):
     client, db_mod = ctx
     r = client.post(
-        "/site/apply",
+        "/apply",
         data={"name": "Casey Reed", "email": "casey@x.com",
               "disciplines": ["composition", "sound_design"],
               "credits": "Two short films.", "demo_reel_url": "https://x.com/reel"},
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"] == "/site/thanks?kind=apply"
+    assert r.headers["location"] == "/thanks?kind=apply"
     conn = db_mod.connect()
     try:
         row = conn.execute(
@@ -105,7 +105,7 @@ def test_apply_creates_pending_applicant(ctx):
 def test_applicant_becomes_matchable_after_approval(ctx):
     client, db_mod = ctx
     client.post(
-        "/site/apply",
+        "/apply",
         data={"name": "Dev Shah", "disciplines": ["composition"],
               "credits": "Scored a spot."},
     )

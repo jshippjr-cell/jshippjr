@@ -105,17 +105,25 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chordential — Procurement OS", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(_HERE, "static")), name="static")
-# Public front-of-house site (magazine/brochure surface + inbound intake), at /site.
-# Shares this app + DB; renders its own standalone layout, no internal nav.
+# Public front-of-house site (magazine/brochure surface + inbound intake), at the
+# site root (/). Shares this app + DB; renders its own standalone layout, no internal nav.
 app.include_router(public_router)
 
 
 # --------------------------------------------------------------------------- #
 # Internal admin gate — a light single-operator shared secret (NOT multi-user
 # auth). OFF unless CHORDENTIAL_ADMIN_TOKEN is set, so dev/tests are unchanged;
-# set it in the Render env to keep the dashboard private while /site stays public.
+# set it in the Render env to keep the dashboard (/dashboard + all internal
+# routes) private while the public site at / stays open.
 # --------------------------------------------------------------------------- #
 ADMIN_COOKIE = "cdl_admin"
+
+# Public surfaces served at the site root — these never require the admin secret.
+# Everything NOT listed here is gated, so new internal routes are private by
+# default; a new *public* page must be added to this set.
+_PUBLIC_PATHS = frozenset({
+    "/", "/capabilities", "/samples", "/start", "/book", "/thanks", "/apply",
+})
 
 
 def _admin_secret() -> Optional[str]:
@@ -138,8 +146,7 @@ def _admin_authed(request: Request) -> bool:
 def _is_public_path(path: str) -> bool:
     """Public surfaces that never require the admin secret."""
     return (
-        path == "/site"
-        or path.startswith("/site/")
+        path in _PUBLIC_PATHS
         or path.startswith("/static/")
         or path in ("/healthz", "/favicon.ico")
         or path.startswith("/admin/login")
@@ -184,28 +191,28 @@ def root_head():
 # Admin sign-in (only meaningful when CHORDENTIAL_ADMIN_TOKEN is set)
 # --------------------------------------------------------------------------- #
 @app.get("/admin/login", response_class=HTMLResponse)
-def admin_login_page(request: Request, next: str = "/"):
+def admin_login_page(request: Request, next: str = "/dashboard"):
     if _admin_authed(request):
-        return RedirectResponse(_safe_local(next, "/"), status_code=303)
+        return RedirectResponse(_safe_local(next, "/dashboard"), status_code=303)
     return render(
-        request, "admin_login.html", next=_safe_local(next, "/"), error=False
+        request, "admin_login.html", next=_safe_local(next, "/dashboard"), error=False
     )
 
 
 @app.post("/admin/login")
-def admin_login(request: Request, password: str = Form(""), next: str = Form("/")):
+def admin_login(request: Request, password: str = Form(""), next: str = Form("/dashboard")):
     token = _admin_secret()
     if not token:
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/dashboard", status_code=303)
     if hmac.compare_digest(password.strip(), token):
-        resp = RedirectResponse(_safe_local(next, "/"), status_code=303)
+        resp = RedirectResponse(_safe_local(next, "/dashboard"), status_code=303)
         resp.set_cookie(
             ADMIN_COOKIE, _admin_cookie_value(token),
             httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
         )
         return resp
     return render(
-        request, "admin_login.html", next=_safe_local(next, "/"), error=True
+        request, "admin_login.html", next=_safe_local(next, "/dashboard"), error=True
     )
 
 
@@ -227,7 +234,7 @@ def _suggested_price(opp) -> float:
     return build_estimate(opp, team, qual.discipline).suggested_price
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     conn = db.connect()
     try:

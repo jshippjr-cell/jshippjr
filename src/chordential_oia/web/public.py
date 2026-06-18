@@ -1,8 +1,8 @@
 """Public front-of-house site — the audience-facing surface.
 
-A standalone magazine/brochure layout (``public_base.html``) mounted at ``/site``
-on the same FastAPI app and SQLite DB as the internal dashboard, with no internal
-navigation and no logins. This module owns the public routes only; it is imported
+A standalone magazine/brochure layout (``public_base.html``) mounted at the site
+root (``/``) on the same FastAPI app and SQLite DB as the internal dashboard, with
+no internal navigation and no logins. This module owns the public routes only; it is imported
 by :mod:`chordential_oia.web.app` (never the reverse) to avoid a circular import.
 
 Cycle 1.1 ships the brochure pages (home / capabilities / samples). Inbound
@@ -37,7 +37,7 @@ templates.env.filters["pct"] = pct
 templates.env.filters["slug"] = slug
 templates.env.filters["displayurl"] = displayurl
 
-router = APIRouter(prefix="/site", tags=["public"])
+router = APIRouter(tags=["public"])
 
 
 def render(request: Request, name: str, **kw):
@@ -83,7 +83,6 @@ def public_price_band(project_type: str, description: str):
     return {"low": low, "high": high}
 
 
-@router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
     return render(request, "public/home.html", active="home", show=get_showcase())
@@ -141,7 +140,7 @@ def public_start_submit(
         )
     finally:
         conn.close()
-    target = "/site/thanks?kind=project"
+    target = "/thanks?kind=project"
     if band:
         target += f"&low={band['low']}&high={band['high']}"
     return RedirectResponse(target, status_code=303)
@@ -170,7 +169,7 @@ def public_book_submit(
         )
     finally:
         conn.close()
-    return RedirectResponse("/site/thanks?kind=call", status_code=303)
+    return RedirectResponse("/thanks?kind=call", status_code=303)
 
 
 @router.get("/thanks", response_class=HTMLResponse)
@@ -217,4 +216,4 @@ def public_apply_submit(
         db.insert_talent(conn, t)
     finally:
         conn.close()
-    return RedirectResponse("/site/thanks?kind=apply", status_code=303)
+    return RedirectResponse("/thanks?kind=apply", status_code=303)
