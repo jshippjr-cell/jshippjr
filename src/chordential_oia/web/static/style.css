@@ -519,9 +519,11 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 /* ===================================================================== */
 /* Match Board — opportunities (left) x qualified talent (right)          */
 /* ===================================================================== */
-.mb{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:16px}
-@media(max-width:860px){.mb{grid-template-columns:1fr}}
-.mb-col{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow-sm)}
+/* two columns at every width (it's a matching board) — opportunities left,
+   talent right, side by side. */
+.mb{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-top:14px}
+.mb-col{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px;box-shadow:var(--shadow-sm)}
 .mb-col-head{display:flex;justify-content:space-between;font-weight:700;color:var(--ink);margin-bottom:10px;font-size:14px}
 .mb-col-head span{color:var(--muted)}
 .mb-opp{border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:10px;background:var(--panel);transition:border-color .12s,background .12s}
@@ -548,6 +550,23 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .mb-bubble-main{display:flex;flex-direction:column;line-height:1.2;gap:1px}
 .mb-name{font-weight:680;font-size:13.5px;color:var(--ink);white-space:nowrap}
 .mb-role{font-size:11.5px;color:var(--muted);white-space:nowrap}
+/* phones: keep both columns, just tighten so they fit side by side */
+@media(max-width:560px){
+  .mb{gap:8px;margin-top:10px}
+  .mb-col{padding:9px}
+  .mb-col-head{font-size:12.5px}
+  .mb-opp{padding:9px;margin-bottom:8px}
+  .mb-opp-top{flex-direction:column;align-items:flex-start;gap:2px}
+  .mb-opp-top .strong{font-size:12.5px}
+  .mb-rank-link{font-size:11px}
+  .mb-drop-hint{font-size:11px;padding:5px 8px}
+  .mb-chip{font-size:11.5px;padding:3px 5px 3px 9px}
+  .mb-bubbles{gap:7px}
+  .mb-bubble{gap:7px;padding:5px 10px 5px 5px}
+  .mb-score{width:28px;height:28px;font-size:12px}
+  .mb-name{font-size:12.5px}
+  .mb-role{font-size:11px}
+}
 
 /* ===================================================================== */
 /* Mobile / tablet — the dashboard becomes a stacked, top-nav layout      */
