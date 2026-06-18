@@ -29,6 +29,7 @@ where = ["src"]
     "templates/*.html",
     "templates/public/*.html",
     "static/*.css",
+    "static/*.js",
     "static/*.png",
     "static/*.svg",
     "static/*.ico",

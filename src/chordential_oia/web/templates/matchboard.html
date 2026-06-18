@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Match Board{% endblock %}
+{% block heading %}Match Board{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  <strong>Drag</strong> a creator onto an opportunity to assign — or on a phone,
+  <strong>tap a creator</strong> then <strong>tap an opportunity</strong>. Use
+  <em>⇄ rank</em> on an opportunity to re-rank talent by fit for it.
+</div>
+
+<div class="mb">
+  <section class="mb-col mb-opps">
+    <div class="mb-col-head">Opportunities <span>{{ opps|length }}</span></div>
+    {% for o in opps %}
+    <div class="mb-opp {{ 'focus' if focus_id==o.row['id'] }}" data-opp-id="{{ o.row['id'] }}">
+      <div class="mb-opp-top">
+        <a class="strong" href="/opportunity/{{ o.row['id'] }}">{{ o.row['need'] }}</a>
+        <a class="mb-rank-link" href="/matchboard?opp={{ o.row['id'] }}">⇄ rank</a>
+      </div>
+      <div class="muted small">{{ o.row['client'] }} · {{ (o.row['discipline'] or '')|replace('_',' ')|title }}</div>
+      <div class="mb-crew">
+        {% for c in o.crew %}
+        <span class="mb-chip">{{ c['talent_name'] or 'Creator' }}{% if c['role'] %} · {{ c['role'] }}{% endif %}
+          <form method="post" action="/matchboard/unassign" class="mb-x-form">
+            <input type="hidden" name="assignment_id" value="{{ c['id'] }}">
+            <button class="mb-x" type="submit" title="Remove">×</button>
+          </form>
+        </span>
+        {% else %}
+        <span class="mb-drop-hint">Drop talent here</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="muted">No qualified, open opportunities to staff right now.</p>
+    {% endfor %}
+  </section>
+
+  <section class="mb-col mb-talent">
+    <div class="mb-col-head">Qualified talent <span>{{ bubbles|length }}</span></div>
+    {% if focus_label %}
+    <div class="muted small" style="margin-bottom:10px">Ranked by fit for “{{ focus_label }}” · <a class="link" href="/matchboard">clear</a></div>
+    {% else %}
+    <div class="muted small" style="margin-bottom:10px">Ranked by readiness. Pick an opportunity’s <em>⇄ rank</em> to sort by fit.</div>
+    {% endif %}
+    <div class="mb-bubbles">
+      {% for b in bubbles %}
+      <div class="mb-bubble" draggable="true" data-talent-id="{{ b.id }}">
+        <span class="mb-score {{ 'hi' if b.score>=70 }}">{{ b.score|round|int }}</span>
+        <span class="mb-bubble-main">
+          <span class="mb-name">{{ b.name }}</span>
+          <span class="mb-role">{{ b.role }}</span>
+        </span>
+      </div>
+      {% else %}
+      <p class="muted">No approved, matchable talent yet. Approve reels on the <a class="link" href="/talent">Talent Roster</a>.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<script src="/static/matchboard.js"></script>
+{% endblock %}

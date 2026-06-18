@@ -734,6 +734,81 @@ def talent_match_page(request: Request, opp_id: int):
     )
 
 
+# --------------------------------------------------------------------------- #
+# Match Board — opportunities (left) × qualified talent (right), drag/tap assign
+# --------------------------------------------------------------------------- #
+@app.get("/matchboard", response_class=HTMLResponse)
+def matchboard(request: Request, opp: Optional[int] = None):
+    conn = db.connect()
+    try:
+        opp_rows = db.staffable_opportunities(conn)
+        crew = db.all_opp_assignments(conn)
+        talents = [t for t in db.load_talent(conn) if t.matchable]
+
+        # Optional focus: rank the right column by fit for one opportunity.
+        focus_id, focus_label = None, None
+        scores = {}
+        valid_ids = {r["id"] for r in opp_rows}
+        if opp in valid_ids:
+            focus_id = opp
+            frow = db.get_opportunity(conn, opp)
+            fopp = db.opportunity_from_row(frow)
+            fq, _ = evaluate(fopp)
+            focus_label = frow["need"]
+            for mt in match_talent(fq.discipline, fq.secondary_disciplines,
+                                   f"{fopp.need} {fopp.description}", talents):
+                scores[mt.talent.id] = mt.score
+    finally:
+        conn.close()
+
+    def role_of(t):
+        return t.discipline_labels[0] if t.discipline_labels else "Creator"
+
+    if focus_id is not None:
+        bubbles = [{
+            "id": t.id, "name": t.name, "role": role_of(t),
+            "score": scores.get(t.id, 0), "metric": "fit",
+        } for t in talents]
+        bubbles.sort(key=lambda b: b["score"], reverse=True)
+    else:
+        bubbles = [{
+            "id": t.id, "name": t.name, "role": role_of(t),
+            "score": profile_completeness(t), "metric": "ready",
+        } for t in talents]
+        bubbles.sort(key=lambda b: b["score"], reverse=True)
+
+    opps = [{"row": r, "crew": crew.get(r["id"], [])} for r in opp_rows]
+    return render(
+        request, "matchboard.html", nav="matchboard", opps=opps, bubbles=bubbles,
+        focus_id=focus_id, focus_label=focus_label,
+    )
+
+
+@app.post("/matchboard/assign")
+def matchboard_assign(opp_id: int = Form(...), talent_id: int = Form(...)):
+    conn = db.connect()
+    try:
+        t = db.get_talent(conn, talent_id)
+        role = None
+        if t is not None:
+            tt = db.talent_from_row(t)
+            role = tt.discipline_labels[0] if tt.discipline_labels else None
+        db.add_opp_assignment(conn, opp_id, talent_id, role)
+    finally:
+        conn.close()
+    return RedirectResponse("/matchboard", status_code=303)
+
+
+@app.post("/matchboard/unassign")
+def matchboard_unassign(assignment_id: int = Form(...)):
+    conn = db.connect()
+    try:
+        db.remove_opp_assignment(conn, assignment_id)
+    finally:
+        conn.close()
+    return RedirectResponse("/matchboard", status_code=303)
+
+
 @app.post("/opportunity/{opp_id}/status")
 def set_status(
     opp_id: int,
