@@ -337,15 +337,29 @@ def discovery_page(request: Request, kind: str = "talent"):
     conn = db.connect()
     try:
         targets = db.list_crawl_targets(conn, kind=kind)
-        counts = db.crawl_counts(conn, kind=kind)
         sites = db.list_discovery_sites(conn, kind=kind)
         site_counts = db.discovery_site_counts(conn)
+        activity = db.discovery_site_activity(conn)
     finally:
         conn.close()
+    # Split into the console's sections (Row objects → filter in Python, not Jinja):
+    #   • pending_sites  — suggested, non-gated sources awaiting your approval
+    #   • gated_sites    — login/ToS-walled sources → manual-assist (never scraped)
+    #   • managed_sites  — your active/paused sources with an on/off fetch toggle
+    #   • proposed_targets / done_targets — approval queue vs. approved+fetched
+    pending_sites = [s for s in sites if s["status"] == "Suggested" and not s["login_gated"]]
+    gated_sites = [s for s in sites if s["login_gated"]]
+    managed_sites = [s for s in sites if not s["login_gated"] and s["status"] != "Suggested"]
+    proposed_targets = [t for t in targets if t["status"] == "Proposed"]
+    done_targets = [t for t in targets if t["status"] != "Proposed"]
     return render(
-        request, "discovery.html", nav="discovery", kind=kind, targets=targets,
-        counts=counts, kinds=db.CRAWL_KINDS, scrape_on=discovery.scrape_enabled(),
-        sites=sites, site_counts=site_counts, active_states=db.ACTIVE_SITE_STATES,
+        request, "discovery.html", nav="discovery", kind=kind,
+        kinds=db.CRAWL_KINDS, scrape_on=discovery.scrape_enabled(),
+        site_counts=site_counts, active_states=db.ACTIVE_SITE_STATES,
+        activity=activity, pending_sites=pending_sites, gated_sites=gated_sites,
+        managed_sites=managed_sites, proposed_targets=proposed_targets,
+        done_targets=done_targets,
+        pending_count=len(pending_sites) + len(proposed_targets),
     )
 
 

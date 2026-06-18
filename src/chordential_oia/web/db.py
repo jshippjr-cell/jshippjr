@@ -375,12 +375,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             key TEXT UNIQUE, name TEXT, homepage TEXT, kind TEXT, category TEXT,
             recommended_by TEXT, rationale TEXT, status TEXT DEFAULT 'Suggested',
-            added_at TEXT, decided_at TEXT, notes TEXT DEFAULT '', board_url TEXT
+            added_at TEXT, decided_at TEXT, notes TEXT DEFAULT '', board_url TEXT,
+            login_gated INTEGER DEFAULT 0
         )"""
     )
     site_cols = {r["name"] for r in conn.execute("PRAGMA table_info(discovery_sites)")}
     if "board_url" not in site_cols:
         conn.execute("ALTER TABLE discovery_sites ADD COLUMN board_url TEXT")
+    if "login_gated" not in site_cols:
+        conn.execute("ALTER TABLE discovery_sites ADD COLUMN login_gated INTEGER DEFAULT 0")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -877,6 +880,7 @@ def upsert_discovery_site(
     rationale: str,
     status: str,
     board_url: Optional[str] = None,
+    login_gated: bool = False,
 ) -> None:
     """Insert a site if new; never overwrite Jon's decision on an existing one
     (so re-seeding the catalog preserves approvals/rejections). ``board_url`` is
@@ -884,12 +888,13 @@ def upsert_discovery_site(
     conn.execute(
         """INSERT INTO discovery_sites
            (key, name, homepage, kind, category, recommended_by, rationale,
-            status, added_at, board_url)
-           VALUES (?,?,?,?,?,?,?,?,?,?)
+            status, added_at, board_url, login_gated)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(key) DO NOTHING""",
         (
             key, name, homepage, kind, category, recommended_by, rationale,
             status, datetime.now(timezone.utc).isoformat(), board_url,
+            1 if login_gated else 0,
         ),
     )
     conn.commit()
@@ -965,6 +970,31 @@ def discovery_site_counts(conn: sqlite3.Connection) -> Dict[str, int]:
     counts["active"] = counts["Established"] + counts["Approved"]
     counts["total"] = sum(r["n"] for r in rows)
     return counts
+
+
+def discovery_site_activity(conn: sqlite3.Connection) -> Dict[str, dict]:
+    """Per-source fetch activity, aggregated from its crawl targets (keyed by
+    source_key). Powers the Discovery console's "Activity" column: when a source
+    was last fetched, how many targets have been fetched, and total leads found."""
+    rows = conn.execute(
+        """SELECT source_key,
+                  MAX(fetched_at) AS last_fetched,
+                  COALESCE(SUM(result_count), 0) AS found,
+                  SUM(CASE WHEN status = 'Fetched' THEN 1 ELSE 0 END) AS fetched_targets,
+                  SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved_targets
+           FROM crawl_targets
+           WHERE source_key IS NOT NULL AND source_key != ''
+           GROUP BY source_key"""
+    ).fetchall()
+    return {
+        r["source_key"]: {
+            "last_fetched": r["last_fetched"],
+            "found": r["found"] or 0,
+            "fetched_targets": r["fetched_targets"] or 0,
+            "approved_targets": r["approved_targets"] or 0,
+        }
+        for r in rows
+    }
 
 
 def crawl_target_exists(conn: sqlite3.Connection, kind: str, url: str) -> bool:

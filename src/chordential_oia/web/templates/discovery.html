@@ -5,11 +5,8 @@
 
 <div class="callout">
   <span class="callout-ico">🛈</span>
-  The crawler combs a <strong>council-vetted catalog of industry sites</strong> — no
-  broad web search. It <strong>proposes where to look</strong> and fetches nothing on
-  its own. Active sites are pre-vetted by the exec team; <strong>suggested</strong>
-  sites wait for your approval before they can be scanned. Then you approve each
-  target. <em>The machine proposes, you dispose.</em>
+  The crawler combs a <strong>council-vetted catalog of industry sites</strong> — no broad
+  web search, and it fetches nothing on its own. <em>The machine proposes, you dispose.</em>
 </div>
 
 <div class="pill-row" style="margin:14px 0">
@@ -19,57 +16,225 @@
   </a>
   {% endfor %}
   <span class="muted small" style="margin-left:auto">
-    {{ site_counts.active }} active sites · {{ site_counts.Suggested }} suggested
+    {{ managed_sites|length }} sources · {{ pending_count }} need approval · {{ gated_sites|length }} login-gated
   </span>
 </div>
 
+{# ----------------------------------------------------------------------- #}
+{# ① NEEDS YOUR APPROVAL — always on top so nothing waits unseen           #}
+{# ----------------------------------------------------------------------- #}
 <section class="card">
-  <div class="card-head"><h2>Sites the council recommends combing</h2>
-    <span class="muted small">who recommended it · why</span></div>
+  <div class="card-head">
+    <h2>① Needs your approval</h2>
+    <span class="muted small">{{ pending_count }} waiting</span>
+  </div>
 
+  {% if pending_count == 0 %}
+  <p class="muted" style="margin:6px 0 0">Nothing waiting — you're all caught up. ✓</p>
+  {% else %}
+
+  {% if proposed_targets %}
+  <div class="muted small" style="margin:4px 0 6px">New targets to approve before they can be fetched</div>
   <table class="table compact">
-    <thead><tr><th>Site</th><th>Why (council)</th><th>Status</th><th style="width:1%">Decision</th></tr></thead>
     <tbody>
-      {% for s in sites %}
+      {% for t in proposed_targets %}
+      <tr>
+        <td>
+          <div class="strong">{{ t['label'] }}</div>
+          <div class="muted small">{{ t['rationale'] }}</div>
+          <a class="link small" href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url']|displayurl }}</a>
+        </td>
+        <td style="width:1%;white-space:nowrap">
+          <div class="lead-actions">
+            <form method="post" action="/discovery/{{ t['id'] }}/status">
+              <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny primary" type="submit" title="Approve this target for fetching">Approve</button>
+            </form>
+            <form method="post" action="/discovery/{{ t['id'] }}/status">
+              <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny ghost" type="submit">Dismiss</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if pending_sites %}
+  <div class="muted small" style="margin:12px 0 6px">New sources the council suggests — approve to let the crawler use them</div>
+  <table class="table compact">
+    <tbody>
+      {% for s in pending_sites %}
       <tr>
         <td>
           <a class="strong" href="{{ s['homepage'] }}" target="_blank" rel="noopener">{{ s['name'] }}</a>
-          <div class="muted small">{{ s['category'] }} · {{ s['kind'] }}</div>
+          <div class="muted small">{{ s['rationale'] }} — {{ s['recommended_by'] }}</div>
         </td>
-        <td class="small">
-          <div>{{ s['rationale'] }}</div>
-          <div class="muted">— {{ s['recommended_by'] }}</div>
-        </td>
-        <td>
-          {% if s['status'] in active_states %}
-            <span class="pill st-approved">Active</span>
-          {% elif s['status']=='Suggested' %}
-            <span class="pill st-proposed">Suggested</span>
-          {% else %}
-            <span class="pill st-dismissed">{{ s['status'] }}</span>
-          {% endif %}
-        </td>
-        <td>
+        <td style="width:1%;white-space:nowrap">
           <div class="lead-actions">
-            {% if s['status']=='Suggested' %}
             <form method="post" action="/discovery/site/{{ s['id'] }}/status">
               <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
-              <button class="btn tiny primary" type="submit" title="Allow the crawler to use this site">Approve site</button>
+              <button class="btn tiny primary" type="submit" title="Allow the crawler to use this site">Approve</button>
             </form>
             <form method="post" action="/discovery/site/{{ s['id'] }}/status">
               <input type="hidden" name="status" value="Rejected"><input type="hidden" name="kind" value="{{ kind }}">
               <button class="btn tiny ghost" type="submit">Reject</button>
             </form>
-            {% elif s['status'] in active_states %}
-            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
-              <input type="hidden" name="status" value="Rejected"><input type="hidden" name="kind" value="{{ kind }}">
-              <button class="btn tiny ghost" type="submit" title="Stop combing this site">Pause</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% endif %}
+</section>
+
+{# ----------------------------------------------------------------------- #}
+{# ② FETCHING — your active sources, with on/off + activity                #}
+{# ----------------------------------------------------------------------- #}
+<section class="card" style="margin-top:18px">
+  <div class="card-head">
+    <h2>② Fetching · your sources</h2>
+    <span class="muted small">flip a source on or off · watch its activity</span>
+  </div>
+
+  {% if not scrape_on %}
+  <p class="muted small" style="margin:0 0 10px">
+    Live fetching is <strong>off</strong> on this environment (no <code>CHORDENTIAL_ENABLE_SCRAPE</code>).
+    Toggles and approvals still work; fetches run where it's enabled.
+  </p>
+  {% endif %}
+
+  {% if managed_sites %}
+  <table class="table compact">
+    <thead>
+      <tr><th>Source</th><th style="width:1%">Fetch</th><th>Activity</th><th style="width:1%"></th></tr>
+    </thead>
+    <tbody>
+      {% for s in managed_sites %}
+      {% set a = activity.get(s['key']) %}
+      <tr>
+        <td>
+          <span class="strong">{{ s['name'] }}</span>
+          <div class="muted small">{{ s['category'] }} · {{ s['kind'] }}</div>
+        </td>
+        <td style="white-space:nowrap">
+          {% if s['status'] in active_states %}
+          <span class="pill st-approved">● On</span>
+          <form method="post" action="/discovery/site/{{ s['id'] }}/status" style="display:inline">
+            <input type="hidden" name="status" value="Rejected"><input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny ghost" type="submit" title="Stop fetching this source">Turn off</button>
+          </form>
+          {% else %}
+          <span class="pill st-dismissed">○ Off</span>
+          <form method="post" action="/discovery/site/{{ s['id'] }}/status" style="display:inline">
+            <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
+            <button class="btn tiny primary" type="submit" title="Turn on fetching for this source">Turn on</button>
+          </form>
+          {% endif %}
+        </td>
+        <td class="small">
+          {% if a and a['last_fetched'] %}
+            <span class="dot won"></span> Last fetched {{ a['last_fetched'][:10] }} · <strong>{{ a['found'] }}</strong> found
+          {% elif a and a['approved_targets'] %}
+            <span class="muted">Idle · {{ a['approved_targets'] }} target(s) approved, ready to fetch</span>
+          {% else %}
+            <span class="muted">Idle · no targets yet</span>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          {% if a and a['found'] %}
+          <a class="link small" href="{{ '/talent?review=Pending' if kind=='talent' else '/leads' }}">View leads →</a>
+          {% else %}
+          <a class="link small" href="{{ s['homepage'] }}" target="_blank" rel="noopener">Open ↗</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin:0">No active sources yet — approve a suggested source above, or add your own below.</p>
+  {% endif %}
+</section>
+
+{# ----------------------------------------------------------------------- #}
+{# ③ LOGIN-GATED · manual-assist — never scraped, you open them yourself   #}
+{# ----------------------------------------------------------------------- #}
+{% if gated_sites %}
+<section class="card" style="margin-top:18px">
+  <div class="card-head">
+    <h2>③ Login-gated · manual-assist</h2>
+    <span class="muted small">you review these signed in — the crawler never holds your credentials</span>
+  </div>
+  <table class="table compact">
+    <tbody>
+      {% for s in gated_sites %}
+      <tr>
+        <td>
+          <span class="strong">{{ s['name'] }}</span> <span class="pill st-proposed">🔒 login</span>
+          <div class="muted small">{{ s['rationale'] }} — {{ s['recommended_by'] }}</div>
+        </td>
+        <td style="width:1%;white-space:nowrap">
+          <a class="btn tiny" href="{{ s['homepage'] }}" target="_blank" rel="noopener"
+             title="Open in your own logged-in browser to review by hand">Open to review ↗</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:10px">
+    These sites wall their listings behind a login (and their terms forbid automated scraping),
+    so Chordential won't fetch them. Open one in your browser where you're already signed in,
+    skim it, and add anything good by hand. (API-token integrations for these can come later.)
+  </p>
+</section>
+{% endif %}
+
+{# ----------------------------------------------------------------------- #}
+{# ④ APPROVED & FETCHED TARGETS — the live fetch actions + results         #}
+{# ----------------------------------------------------------------------- #}
+{% if done_targets %}
+<section class="card no-pad" style="margin-top:18px">
+  <div class="card-head" style="padding:14px 16px 0"><h2>④ Approved &amp; fetched targets</h2></div>
+  <table class="table">
+    <thead>
+      <tr><th>Target</th><th>Query</th><th>Status</th><th style="width:1%">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for t in done_targets %}
+      <tr>
+        <td>
+          <div class="strong">{{ t['label'] }}</div>
+          <div class="muted small">{{ t['rationale'] }}</div>
+          <a class="link small" href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url']|displayurl }}</a>
+        </td>
+        <td class="small muted">{{ t['query'] }}</td>
+        <td>
+          <span class="pill st-{{ t['status']|lower }}">{{ t['status'] }}</span>
+          {% if t['status']=='Fetched' and t['result_count'] is not none %}
+            <div class="muted small">{{ t['result_count'] }} found</div>
+          {% endif %}
+        </td>
+        <td>
+          <div class="lead-actions">
+            {% if t['status']=='Approved' %}
+            <form method="post" action="/discovery/{{ t['id'] }}/fetch">
+              <input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny" type="submit" title="Fetch this approved target now">Fetch now</button>
             </form>
+            <form method="post" action="/discovery/{{ t['id'] }}/status">
+              <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
+              <button class="btn tiny ghost" type="submit">Dismiss</button>
+            </form>
+            {% elif t['status']=='Fetched' %}
+            <a class="link small" href="{{ '/talent?review=Pending' if kind=='talent' else '/leads' }}">Review results →</a>
             {% else %}
-            <form method="post" action="/discovery/site/{{ s['id'] }}/status">
-              <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
-              <button class="btn tiny" type="submit">Reactivate</button>
-            </form>
+            <span class="muted small">Dismissed</span>
             {% endif %}
           </div>
         </td>
@@ -77,15 +242,16 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted small" style="margin-top:10px">
-    New venues surface here as <strong>Suggested</strong> for your approval — the
-    council never activates a site on its own. See
-    <code>docs/discovery-sources-council.md</code> for the full deliberation.
-  </p>
 </section>
+{% endif %}
 
+{# ----------------------------------------------------------------------- #}
+{# ⑤ TOOLS — add your own source / propose targets (bottom)                #}
+{# ----------------------------------------------------------------------- #}
 <div class="card" style="margin-top:18px">
-  <div class="card-head"><h2>Point the crawler at your own site/area</h2></div>
+  <div class="card-head"><h2>⑤ Tools</h2><span class="muted small">add a source · propose new targets</span></div>
+
+  <div class="muted small" style="margin:4px 0 6px">Point the crawler at your own site/area</div>
   <form class="filters" method="post" action="/discovery/site/add" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
     <input class="filter-search" name="name" placeholder="Site / board name" required>
     <input class="filter-search" name="url" placeholder="URL to comb (use {q} for a keyword slot)" required style="min-width:320px">
@@ -96,86 +262,18 @@
     <input class="filter-search" name="rationale" placeholder="Why (optional)">
     <button class="btn primary" type="submit">Add &amp; point crawler</button>
   </form>
-  <p class="muted small" style="margin-top:10px">
-    Adds your site as an <strong>active</strong> custom source and queues a target
-    you can approve and fetch. It still respects the gate — nothing is scanned
-    until you approve the target.
-  </p>
-</div>
 
-<div class="card" style="margin-top:18px">
-  <div class="card-head"><h2>Propose targets from active sites</h2></div>
+  <div class="muted small" style="margin:16px 0 6px">Propose targets from your active sources</div>
   <form class="filters" method="post" action="/discovery/generate" style="gap:10px;flex-wrap:wrap">
     <input type="hidden" name="kind" value="{{ kind }}">
     <input class="filter-search" name="terms" placeholder="Keyword (optional, e.g. composer / sonic branding)">
     <input class="filter-search" name="location" placeholder="Location (optional)">
     <button class="btn primary" type="submit">Suggest targets</button>
   </form>
-  {% if not scrape_on %}
   <p class="muted small" style="margin-top:10px">
-    Live fetching is currently <strong>off</strong> (no <code>CHORDENTIAL_ENABLE_SCRAPE</code>).
-    Propose and approve targets now; fetching runs where egress is enabled.
+    Both still respect the gate — nothing is scanned until you approve the target up in
+    <strong>① Needs your approval</strong>. See <code>docs/discovery-redesign-council.md</code>.
   </p>
-  {% endif %}
 </div>
-
-{% if targets %}
-<div class="card no-pad" style="margin-top:18px">
-<table class="table">
-  <thead>
-    <tr><th>Target</th><th>Query</th><th>Status</th><th style="width:1%">Actions</th></tr>
-  </thead>
-  <tbody>
-    {% for t in targets %}
-    <tr>
-      <td>
-        <div class="strong">{{ t['label'] }}</div>
-        <div class="muted small">{{ t['rationale'] }}</div>
-        <a class="link small" href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url']|displayurl }}</a>
-      </td>
-      <td class="small muted">{{ t['query'] }}</td>
-      <td>
-        <span class="pill st-{{ t['status']|lower }}">{{ t['status'] }}</span>
-        {% if t['status']=='Fetched' and t['result_count'] is not none %}
-          <div class="muted small">{{ t['result_count'] }} found</div>
-        {% endif %}
-      </td>
-      <td>
-        <div class="lead-actions">
-          {% if t['status']=='Proposed' %}
-          <form method="post" action="/discovery/{{ t['id'] }}/status">
-            <input type="hidden" name="status" value="Approved"><input type="hidden" name="kind" value="{{ kind }}">
-            <button class="btn tiny primary" type="submit" title="Approve this target for crawling">Approve</button>
-          </form>
-          <form method="post" action="/discovery/{{ t['id'] }}/status">
-            <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
-            <button class="btn tiny ghost" type="submit">Dismiss</button>
-          </form>
-          {% elif t['status']=='Approved' %}
-          <form method="post" action="/discovery/{{ t['id'] }}/fetch">
-            <input type="hidden" name="kind" value="{{ kind }}">
-            <button class="btn tiny" type="submit" title="Fetch this approved target now">Fetch now</button>
-          </form>
-          <form method="post" action="/discovery/{{ t['id'] }}/status">
-            <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
-            <button class="btn tiny ghost" type="submit">Dismiss</button>
-          </form>
-          {% elif t['status']=='Fetched' %}
-          <a class="link small" href="{{ '/talent?review=Pending' if kind=='talent' else '/leads' }}">Review results →</a>
-          {% else %}
-          <span class="muted small">Dismissed</span>
-          {% endif %}
-        </div>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<div class="card" style="margin-top:18px">
-  <p class="muted" style="margin:0">No targets yet. Use “Suggest targets” to propose specific boards/searches on the active sites — then approve the ones worth crawling.</p>
-</div>
-{% endif %}
 
 {% endblock %}

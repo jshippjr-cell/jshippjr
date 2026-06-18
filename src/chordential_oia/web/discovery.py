@@ -40,6 +40,7 @@ def sync_catalog(conn) -> int:
         db.upsert_discovery_site(
             conn, site.key, site.name, site.homepage, site.kind, site.category,
             site.recommended_by, site.rationale, site.status,
+            login_gated=site.login_gated,
         )
     return db.discovery_site_counts(conn)["total"] - before
 

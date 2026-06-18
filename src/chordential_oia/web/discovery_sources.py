@@ -42,6 +42,9 @@ class SourceSite:
     rationale: str
     status: str               # STATUS_ESTABLISHED | STATUS_SUGGESTED
     boards: List[Board] = field(default_factory=list)
+    # Login/ToS-walled sources are never auto-scraped — they surface in a
+    # "manual-assist" list where Jon opens them in his own logged-in browser.
+    login_gated: bool = False
 
     def serves(self, gen_kind: str) -> bool:
         return self.kind == "both" or self.kind == gen_kind
@@ -81,6 +84,7 @@ CATALOG: List[SourceSite] = [
         "Independent A&R — music licensing/placement opportunities (film, ad, library).",
         STATUS_ESTABLISHED,
         [("opportunity", "Listings", "https://www.taxi.com/industry-listings")],
+        login_gated=True,
     ),
     SourceSite(
         "vicontrol", "VI-Control · Job Offerings", "https://vi-control.net",
@@ -154,6 +158,7 @@ CATALOG: List[SourceSite] = [
         "search. Login-gated; treat as a suggestion.", STATUS_SUGGESTED,
         [("opportunity", "Jobs search",
           "https://www.linkedin.com/jobs/search/?keywords={q}")],
+        login_gated=True,
     ),
     SourceSite(
         "x_gigs", "X/Twitter · gig hashtags", "https://x.com",
@@ -161,6 +166,7 @@ CATALOG: List[SourceSite] = [
         "Real-time indie gig calls (#composerwanted, #gameaudiojobs). High noise.",
         STATUS_SUGGESTED,
         [("opportunity", "Search", "https://x.com/search?q={q}&f=live")],
+        login_gated=True,
     ),
     SourceSite(
         "behance_sound", "Behance · Sound/Music", "https://www.behance.net",
