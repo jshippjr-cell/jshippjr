@@ -116,8 +116,8 @@ def test_offline_cycle_fetches_nothing_but_marks_fetched(tmp_path, monkeypatch):
 
 
 def test_online_cycle_ingests_then_dedups(tmp_path, monkeypatch):
-    # Scrape ON with a stubbed fetcher: two targets return the same listing, so a
-    # cycle ingests the lead once and dedups the duplicate.
+    # Scrape ON, generic HTML adapter (Soundlister): two targets return the same
+    # listing, so a cycle ingests the lead once and dedups the duplicate.
     db, disc, sch = _modules(tmp_path, monkeypatch, scrape=True)
     html = '<li class="opportunity" data-company="Acme" data-need="Brand spot"></li>'
     monkeypatch.setattr(disc, "_fetch_url", lambda url, timeout=10.0: html)
@@ -125,8 +125,8 @@ def test_online_cycle_ingests_then_dedups(tmp_path, monkeypatch):
     conn = db.connect()
     db.init_db(conn)
     disc.sync_catalog(conn)
-    _approved(db, conn, "reddit_forhire", "https://reddit.example/a")
-    _approved(db, conn, "reddit_forhire", "https://reddit.example/b")
+    _approved(db, conn, "soundlister", "https://sl.example/a")
+    _approved(db, conn, "soundlister", "https://sl.example/b")
     conn.commit()
     conn.close()
 
@@ -137,3 +137,53 @@ def test_online_cycle_ingests_then_dedups(tmp_path, monkeypatch):
     crawl_leads = [l for l in db.list_inbound_leads(conn) if l["source"] == "crawl"]
     assert len(crawl_leads) == 1
     assert crawl_leads[0]["company"] == "Acme"
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3 — Reddit JSON adapter
+# --------------------------------------------------------------------------- #
+def test_reddit_json_url_and_parse():
+    from chordential_oia.web import crawl_adapters as ca
+    u = ca.to_reddit_json_url("https://www.reddit.com/r/forhire/search/?q=composer&sort=new")
+    assert "/r/forhire/search.json" in u
+    assert "limit=25" in u and "raw_json=1" in u and "q=composer" in u
+
+    sample = (
+        '{"data":{"children":['
+        '{"data":{"title":"[Hiring] Composer for indie game","author":"studioX",'
+        '"subreddit":"gameDevClassifieds","permalink":"/r/x/abc","selftext":"need music"}},'
+        '{"data":{"title":"[For Hire] I compose music","author":"me",'
+        '"subreddit":"forhire","permalink":"/r/x/def","selftext":"hire me"}}'
+        ']}}'
+    )
+    recs = ca.parse_reddit_json(sample)
+    assert len(recs) == 1                      # [For Hire] self-promo dropped
+    assert recs[0]["company"] == "u/studioX"
+    assert recs[0]["need"].startswith("[Hiring]")
+    assert recs[0]["url"] == "https://www.reddit.com/r/x/abc"
+
+
+def test_reddit_dispatch_through_cycle(tmp_path, monkeypatch):
+    # A Reddit target routes to the JSON adapter (not the HTML floor).
+    db, disc, sch = _modules(tmp_path, monkeypatch, scrape=True)
+    from chordential_oia.web import crawl_adapters as ca
+    sample = (
+        '{"data":{"children":['
+        '{"data":{"title":"[Hiring] Game composer","author":"acme","subreddit":"forhire",'
+        '"permalink":"/r/forhire/1","selftext":"scope"}}]}}'
+    )
+    monkeypatch.setattr(ca, "_http_get", lambda url, headers, timeout=10.0: sample)
+
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    _approved(db, conn, "reddit_forhire",
+              "https://www.reddit.com/r/forhire/search/?q=composer&sort=new")
+    conn.commit()
+    conn.close()
+
+    found = sch.run_cycle(batch=5, delay=0)
+    assert found == 1
+    conn = db.connect()
+    leads = [l for l in db.list_inbound_leads(conn) if l["source"] == "crawl"]
+    assert leads and leads[0]["company"] == "u/acme"

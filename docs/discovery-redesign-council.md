@@ -71,8 +71,13 @@ Login-gated: manual-assist handoff. **No stored passwords.**
   bounded batch of due targets on On, non-gated sources (Approved backlog + stale
   re-scans), with a live "fetching now" indicator on the console. Discovered leads
   are deduped so re-scans don't pile up. Tunable via `CHORDENTIAL_AUTOFETCH*`.
-- **Phase 3 — Authenticated sources:** official API / RSS via encrypted tokens
-  (e.g. Reddit). Still no password vault.
+- **Phase 3 — Structured source adapters (shipped):** a per-source adapter layer
+  (`crawl_adapters.py`) with the generic HTML parse as the floor. Reddit — a top
+  source — now uses its **public JSON API** (no auth), with an optional official
+  **OAuth app token** (`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`, Render secrets,
+  app credentials — **never a user password**) for higher rate limits. `[For Hire]`
+  self-promo is filtered out to keep the demand queue precise. More adapters
+  (RSS, other APIs) slot in behind the same dispatch.
 
 Human gate is unchanged throughout: only **Approved** targets are ever fetched,
 and every result lands in a review queue (Inbound Leads / Pending talent) for

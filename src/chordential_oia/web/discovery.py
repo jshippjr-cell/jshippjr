@@ -26,6 +26,7 @@ from urllib.parse import quote_plus
 
 from ..talent_sources.scraped import ScrapedTalentSource, _fetch_url, scrape_enabled
 from . import db
+from . import crawl_adapters
 from . import discovery_sources as catalog
 
 
@@ -183,23 +184,18 @@ def _do_fetch(conn, target) -> int:
                 db.insert_talent(conn, t)
                 ingested += 1
     elif target["kind"] == "opportunity":
-        if scrape_enabled():
-            try:
-                html = _fetch_url(target["url"])
-            except Exception:
-                html = ""
-            for rec in parse_opportunity_html(html):
-                if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
-                    continue
-                db.insert_inbound_lead(
-                    conn,
-                    contact_name="(discovered)",
-                    company=rec["company"],
-                    project_type=rec["need"],
-                    description=rec["description"],
-                    source="crawl",
-                )
-                ingested += 1
+        for rec in crawl_adapters.fetch_opportunity_records(target):
+            if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
+                continue
+            db.insert_inbound_lead(
+                conn,
+                contact_name="(discovered)",
+                company=rec["company"],
+                project_type=rec["need"],
+                description=rec["description"],
+                source="crawl",
+            )
+            ingested += 1
 
     db.mark_crawl_target_fetched(conn, target["id"], ingested)
     return ingested
