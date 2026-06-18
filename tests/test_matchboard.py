@@ -1,4 +1,5 @@
-"""Match Board — opportunities x qualified talent, drag/tap to assign (earmark)."""
+"""Match Board — assigning talent staffs the opportunity's PROJECT (shows on the
+Projects page) and broadcasts to the crew feed."""
 
 import importlib
 
@@ -41,34 +42,50 @@ def _seed_pair(db_mod):
     return opp_id, tid
 
 
-def test_board_loads_with_opps_and_talent(ctx):
+def test_board_loads(ctx):
     client, db_mod = ctx
     opp_id, tid = _seed_pair(db_mod)
     r = client.get("/matchboard")
     assert r.status_code == 200
-    assert "Match Board" in r.text
-    assert "Original brand spot music" in r.text     # opportunity on the left
-    assert "Composer Cay" in r.text                  # talent bubble on the right
-    assert "matchboard.js" in r.text                 # drag/drop script wired
+    assert "Original brand spot music" in r.text   # opportunity (left)
+    assert "Composer Cay" in r.text                # talent bubble (right)
 
 
-def test_assign_creates_earmark(ctx):
+def test_assign_creates_project_and_crew_and_broadcast(ctx):
     client, db_mod = ctx
     opp_id, tid = _seed_pair(db_mod)
     r = client.post("/matchboard/assign",
                     data={"opp_id": opp_id, "talent_id": tid},
                     follow_redirects=False)
     assert r.status_code == 303
+
     conn = db_mod.connect()
     try:
-        crew = db_mod.list_opp_assignments(conn, opp_id)
+        proj = db_mod.project_for_opp(conn, opp_id)
+        assert proj is not None                     # project now exists
+        crew = db_mod.list_assignments(conn, proj["id"])
+        names = [a["talent_name"] for a in crew]
+        updates = db_mod.list_updates(conn, proj["id"])
     finally:
         conn.close()
-    assert len(crew) == 1
-    assert crew[0]["talent_name"] == "Composer Cay"
-    assert crew[0]["role"] == "Original composition"   # role from primary discipline
-    # chip now shows on the board
-    assert "Composer Cay" in client.get("/matchboard").text
+    assert "Composer Cay" in names                  # real project crew
+    # broadcast to the team feed naming who joined + the current team
+    assert any("Composer Cay" in u["body"] and "team" in u["body"].lower()
+               for u in updates)
+
+
+def test_assignment_shows_on_projects_page(ctx):
+    client, db_mod = ctx
+    opp_id, tid = _seed_pair(db_mod)
+    client.post("/matchboard/assign", data={"opp_id": opp_id, "talent_id": tid})
+    projects = client.get("/projects").text
+    assert "Original brand spot music" in projects   # project surfaced on /projects
+    # and the crew shows on the project page
+    conn = db_mod.connect()
+    pid = db_mod.project_for_opp(conn, opp_id)["id"]
+    conn.close()
+    detail = client.get(f"/project/{pid}").text
+    assert "Composer Cay" in detail
 
 
 def test_assign_is_deduped(ctx):
@@ -78,24 +95,31 @@ def test_assign_is_deduped(ctx):
     client.post("/matchboard/assign", data={"opp_id": opp_id, "talent_id": tid})
     conn = db_mod.connect()
     try:
-        assert len(db_mod.list_opp_assignments(conn, opp_id)) == 1
+        pid = db_mod.project_for_opp(conn, opp_id)["id"]
+        crew = db_mod.list_assignments(conn, pid)
     finally:
         conn.close()
+    assert sum(1 for a in crew if a["talent_id"] == tid) == 1
 
 
-def test_unassign_removes(ctx):
+def test_unassign_removes_and_notifies(ctx):
     client, db_mod = ctx
     opp_id, tid = _seed_pair(db_mod)
     client.post("/matchboard/assign", data={"opp_id": opp_id, "talent_id": tid})
     conn = db_mod.connect()
-    aid = db_mod.list_opp_assignments(conn, opp_id)[0]["id"]
+    pid = db_mod.project_for_opp(conn, opp_id)["id"]
+    aid = db_mod.list_assignments(conn, pid)[0]["id"]
     conn.close()
+
     client.post("/matchboard/unassign", data={"assignment_id": aid})
     conn = db_mod.connect()
     try:
-        assert db_mod.list_opp_assignments(conn, opp_id) == []
+        crew = db_mod.list_assignments(conn, pid)
+        updates = db_mod.list_updates(conn, pid)
     finally:
         conn.close()
+    assert crew == []
+    assert any("left the crew" in u["body"] for u in updates)
 
 
 def test_focus_ranks_by_fit(ctx):

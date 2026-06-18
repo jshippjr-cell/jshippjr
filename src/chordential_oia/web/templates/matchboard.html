@@ -6,8 +6,10 @@
 <div class="callout">
   <span class="callout-ico">🛈</span>
   <strong>Drag</strong> a creator onto an opportunity to assign — or on a phone,
-  <strong>tap a creator</strong> then <strong>tap an opportunity</strong>. Use
-  <em>⇄ rank</em> on an opportunity to re-rank talent by fit for it.
+  <strong>tap a creator</strong> then <strong>tap an opportunity</strong>. This
+  creates/updates the opportunity’s <strong>project</strong> and posts to the
+  crew’s feed so the whole team sees who they’re working with. Use <em>⇄ rank</em>
+  to re-rank talent by fit.
 </div>
 
 <div class="mb">
@@ -17,7 +19,10 @@
     <div class="mb-opp {{ 'focus' if focus_id==o.row['id'] }}" data-opp-id="{{ o.row['id'] }}">
       <div class="mb-opp-top">
         <a class="strong" href="/opportunity/{{ o.row['id'] }}">{{ o.row['need'] }}</a>
-        <a class="mb-rank-link" href="/matchboard?opp={{ o.row['id'] }}">⇄ rank</a>
+        <span class="mb-opp-links">
+          <a class="mb-rank-link" href="/matchboard?opp={{ o.row['id'] }}">⇄ rank</a>
+          {% if o.project_id %}<a class="mb-rank-link" href="/project/{{ o.project_id }}">→ project</a>{% endif %}
+        </span>
       </div>
       <div class="muted small">{{ o.row['client'] }} · {{ (o.row['discipline'] or '')|replace('_',' ')|title }}</div>
       <div class="mb-crew">

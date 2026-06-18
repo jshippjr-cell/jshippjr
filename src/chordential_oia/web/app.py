@@ -742,8 +742,17 @@ def matchboard(request: Request, opp: Optional[int] = None):
     conn = db.connect()
     try:
         opp_rows = db.staffable_opportunities(conn)
-        crew = db.all_opp_assignments(conn)
         talents = [t for t in db.load_talent(conn) if t.matchable]
+
+        # Each opportunity's crew comes from its project (the real assignments
+        # that also show on the Projects page).
+        opps = []
+        for r in opp_rows:
+            proj = db.project_for_opp(conn, r["id"])
+            crew = db.list_assignments(conn, proj["id"]) if proj else []
+            opps.append({
+                "row": r, "project_id": (proj["id"] if proj else None), "crew": crew,
+            })
 
         # Optional focus: rank the right column by fit for one opportunity.
         focus_id, focus_label = None, None
@@ -764,20 +773,14 @@ def matchboard(request: Request, opp: Optional[int] = None):
     def role_of(t):
         return t.discipline_labels[0] if t.discipline_labels else "Creator"
 
-    if focus_id is not None:
-        bubbles = [{
-            "id": t.id, "name": t.name, "role": role_of(t),
-            "score": scores.get(t.id, 0), "metric": "fit",
-        } for t in talents]
-        bubbles.sort(key=lambda b: b["score"], reverse=True)
-    else:
-        bubbles = [{
-            "id": t.id, "name": t.name, "role": role_of(t),
-            "score": profile_completeness(t), "metric": "ready",
-        } for t in talents]
-        bubbles.sort(key=lambda b: b["score"], reverse=True)
+    metric = "fit" if focus_id is not None else "ready"
+    bubbles = [{
+        "id": t.id, "name": t.name, "role": role_of(t),
+        "score": scores.get(t.id, 0) if focus_id is not None else profile_completeness(t),
+        "metric": metric,
+    } for t in talents]
+    bubbles.sort(key=lambda b: b["score"], reverse=True)
 
-    opps = [{"row": r, "crew": crew.get(r["id"], [])} for r in opp_rows]
     return render(
         request, "matchboard.html", nav="matchboard", opps=opps, bubbles=bubbles,
         focus_id=focus_id, focus_label=focus_label,
@@ -786,14 +789,27 @@ def matchboard(request: Request, opp: Optional[int] = None):
 
 @app.post("/matchboard/assign")
 def matchboard_assign(opp_id: int = Form(...), talent_id: int = Form(...)):
+    """Assign a creator to an opportunity by staffing its project: ensure the
+    project exists (so it shows on Projects), add the assignment, and broadcast
+    to the whole crew so the team knows who they're working with."""
     conn = db.connect()
     try:
+        pid = _ensure_project_for_opp(conn, opp_id)
         t = db.get_talent(conn, talent_id)
-        role = None
-        if t is not None:
-            tt = db.talent_from_row(t)
-            role = tt.discipline_labels[0] if tt.discipline_labels else None
-        db.add_opp_assignment(conn, opp_id, talent_id, role)
+        if pid is None or t is None:
+            return RedirectResponse("/matchboard", status_code=303)
+        tt = db.talent_from_row(t)
+        role = tt.discipline_labels[0] if tt.discipline_labels else "Crew"
+        already = {a["talent_id"] for a in db.list_assignments(conn, pid)}
+        if talent_id not in already:
+            db.add_assignment(conn, pid, role, talent_id)
+            crew = db.project_crew(conn, pid)
+            names = ", ".join(c["name"] for c in crew) or tt.name
+            db.add_update(
+                conn, pid,
+                f"{tt.name} joined the crew as {role}. Current team: {names}.",
+                "assignment",
+            )
     finally:
         conn.close()
     return RedirectResponse("/matchboard", status_code=303)
@@ -803,7 +819,13 @@ def matchboard_assign(opp_id: int = Form(...), talent_id: int = Form(...)):
 def matchboard_unassign(assignment_id: int = Form(...)):
     conn = db.connect()
     try:
-        db.remove_opp_assignment(conn, assignment_id)
+        a = db.get_assignment(conn, assignment_id)
+        db.remove_assignment(conn, assignment_id)
+        if a is not None and a["project_id"]:
+            db.add_update(
+                conn, a["project_id"],
+                f"{a['talent_name'] or 'A creator'} left the crew.", "assignment",
+            )
     finally:
         conn.close()
     return RedirectResponse("/matchboard", status_code=303)
@@ -1152,23 +1174,33 @@ def projects_directory(request: Request, status: Optional[str] = None):
     )
 
 
+def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
+    """Return the opportunity's project id, creating the project (with scoped
+    roles + default milestones) if it doesn't exist yet. Shared by the project
+    button and the Match Board so both stay in sync."""
+    existing = db.project_for_opp(conn, opp_id)
+    if existing is not None:
+        return existing["id"]
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None
+    qual, scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    roles = qual.team_shape or discipline.team_shape
+    pid = db.insert_project(
+        conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles
+    )
+    db.seed_default_milestones(conn, pid, roles)
+    return pid
+
+
 @app.post("/opportunity/{opp_id}/project")
 def create_project(opp_id: int):
     conn = db.connect()
     try:
-        row, opp, ev = _load(conn, opp_id)
-        if row is None:
+        if db.get_opportunity(conn, opp_id) is None:
             return HTMLResponse("Opportunity not found", status_code=404)
-        existing = db.project_for_opp(conn, opp_id)
-        if existing is not None:
-            return RedirectResponse(f"/project/{existing['id']}", status_code=303)
-        qual, scored = ev
-        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-        roles = qual.team_shape or discipline.team_shape
-        pid = db.insert_project(
-            conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles
-        )
-        db.seed_default_milestones(conn, pid, roles)
+        pid = _ensure_project_for_opp(conn, opp_id)
     finally:
         conn.close()
     return RedirectResponse(f"/project/{pid}", status_code=303)

@@ -392,13 +392,6 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             external_ref TEXT, paid_at TEXT
         )"""
     )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS opp_assignments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            opp_id INTEGER NOT NULL, talent_id INTEGER NOT NULL,
-            role TEXT, created_at TEXT
-        )"""
-    )
     conn.commit()
 
 
@@ -1195,7 +1188,7 @@ def update_invoice_status(
 
 
 # --------------------------------------------------------------------------- #
-# Match Board — earmark talent to opportunities (drag/tap to assign)
+# Match Board — staffable opportunities (assignment flows through projects)
 # --------------------------------------------------------------------------- #
 def staffable_opportunities(conn: sqlite3.Connection) -> List[sqlite3.Row]:
     """Qualified, still-open opportunities worth staffing (not Lost/Passed)."""
@@ -1204,58 +1197,6 @@ def staffable_opportunities(conn: sqlite3.Connection) -> List[sqlite3.Row]:
            WHERE qualified = 1 AND status NOT IN ('Lost','Passed')
            ORDER BY tier ASC, alignment DESC, created_at DESC"""
     ).fetchall()
-
-
-def opp_assignment_exists(
-    conn: sqlite3.Connection, opp_id: int, talent_id: int
-) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM opp_assignments WHERE opp_id=? AND talent_id=? LIMIT 1",
-        (opp_id, talent_id),
-    ).fetchone()
-    return row is not None
-
-
-def add_opp_assignment(
-    conn: sqlite3.Connection, opp_id: int, talent_id: int, role: Optional[str]
-) -> Optional[int]:
-    """Earmark a creator to an opportunity (deduped on opp+talent)."""
-    if opp_assignment_exists(conn, opp_id, talent_id):
-        return None
-    cur = conn.execute(
-        """INSERT INTO opp_assignments (opp_id, talent_id, role, created_at)
-           VALUES (?,?,?,?)""",
-        (opp_id, talent_id, role, datetime.now(timezone.utc).isoformat()),
-    )
-    conn.commit()
-    return int(cur.lastrowid)
-
-
-def remove_opp_assignment(conn: sqlite3.Connection, assignment_id: int) -> None:
-    conn.execute("DELETE FROM opp_assignments WHERE id = ?", (assignment_id,))
-    conn.commit()
-
-
-def list_opp_assignments(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
-    return conn.execute(
-        """SELECT a.id, a.opp_id, a.talent_id, a.role, t.name AS talent_name
-           FROM opp_assignments a LEFT JOIN talent t ON a.talent_id = t.id
-           WHERE a.opp_id = ? ORDER BY a.created_at""",
-        (opp_id,),
-    ).fetchall()
-
-
-def all_opp_assignments(conn: sqlite3.Connection) -> Dict[int, List[sqlite3.Row]]:
-    """Map opp_id -> assigned-crew rows, for rendering the whole board at once."""
-    rows = conn.execute(
-        """SELECT a.id, a.opp_id, a.talent_id, a.role, t.name AS talent_name
-           FROM opp_assignments a LEFT JOIN talent t ON a.talent_id = t.id
-           ORDER BY a.created_at"""
-    ).fetchall()
-    out: Dict[int, List[sqlite3.Row]] = {}
-    for r in rows:
-        out.setdefault(r["opp_id"], []).append(r)
-    return out
 
 
 # --------------------------------------------------------------------------- #
