@@ -201,10 +201,27 @@ def push_configured() -> bool:
     return bool(os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip())
 
 
+# Last push failure detail, surfaced on the radar so a silent failure is
+# diagnosable instead of vanishing into a bare "error".
+_LAST_PUSH_ERROR = ""
+
+
+def last_push_error() -> str:
+    return _LAST_PUSH_ERROR
+
+
+def _ascii_header(value: str) -> str:
+    """HTTP headers are latin-1 only — an emoji or smart-quote in a header value
+    makes urllib raise and the whole push silently fail. Drop anything that can't
+    encode so the alert always goes out. (Emoji in the body/Tags is fine.)"""
+    return (value or "").encode("latin-1", "ignore").decode("latin-1")
+
+
 def send_push(title: str, body: str = "", click_url: str = "") -> str:
     """Send one ntfy.sh phone push. Returns a status: 'unset' (no topic
     configured), 'sent' (delivered to ntfy), or 'error' (network/ntfy failed).
     Best-effort — never raises."""
+    global _LAST_PUSH_ERROR
     topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
     if not topic:
         return "unset"
@@ -213,15 +230,17 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
         req = urllib.request.Request(
             url, data=(body or title or "New gig")[:240].encode("utf-8"),
             headers={
-                "Title": (title or "New gig on Chordential")[:120],
-                "Click": click_url or "https://chordential.com/signals",
-                "Tags": "musical_note",
+                "Title": _ascii_header(title or "New gig on Chordential")[:120],
+                "Click": _ascii_header(click_url or "https://chordential.com/signals"),
+                "Tags": "musical_note",   # ntfy renders this as 🎵 on the phone
                 "Priority": "high",
             },
         )
         urllib.request.urlopen(req, timeout=8)  # noqa: S310
+        _LAST_PUSH_ERROR = ""
         return "sent"
-    except Exception:
+    except Exception as e:                       # noqa: BLE001 — best-effort push
+        _LAST_PUSH_ERROR = f"{type(e).__name__}: {e}"[:200]
         return "error"
 
 
@@ -229,7 +248,7 @@ def notify_new_gig(title: str, click_url: str = "") -> None:
     """Push a phone alert when a new live gig lands — only fires for gigs that
     passed the ironclad filter, so it's high-signal. Uses ntfy.sh (free, no
     account): set CHORDENTIAL_NTFY_TOPIC to your topic. Best-effort, never raises."""
-    send_push("🎵 New gig on Chordential", body=title, click_url=click_url)
+    send_push("New gig on Chordential", body=title, click_url=click_url)
 
 
 def ingest_alert(conn, raw: str, source: str = "email") -> int:

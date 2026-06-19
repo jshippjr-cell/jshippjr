@@ -115,6 +115,27 @@ def test_send_push_unset_and_test_route(ctx, monkeypatch):
     assert r.status_code == 303 and "push=unset" in r.headers["location"]
 
 
+def test_push_builds_request_with_unicode_title(ctx, monkeypatch):
+    """Emoji/unicode in the title must not break the push: header values are
+    latin-1 only, so they get sanitized while the request still goes out. We
+    stub the network and assert the Request is built without raising."""
+    _, _, sig = ctx
+    monkeypatch.setenv("CHORDENTIAL_NTFY_TOPIC", "chord-test")
+    captured = {}
+
+    def fake_urlopen(req, timeout=8):
+        # Would raise UnicodeEncodeError here before the fix if a header held an
+        # emoji; reaching this point means headers are latin-1 safe.
+        for k, v in req.header_items():
+            v.encode("latin-1")
+        captured["title"] = req.get_header("Title")
+        return None
+
+    monkeypatch.setattr(sig.urllib.request, "urlopen", fake_urlopen)
+    assert sig.send_push("🎵 New gig — déjà vu", body="composer needed") == "sent"
+    assert "New gig" in captured["title"]            # emoji dropped, text kept
+
+
 def test_f5bot_filter_keeps_only_real_gigs(ctx):
     _, db, sig = ctx
     body = (

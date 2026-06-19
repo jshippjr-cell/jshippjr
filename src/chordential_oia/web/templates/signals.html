@@ -29,7 +29,7 @@
   {% elif push_result == 'unset' %}
   <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ No phone alerts configured. Set <code>CHORDENTIAL_NTFY_TOPIC</code> in Render to your ntfy.sh topic, then subscribe to it in the ntfy app.</p>
   {% elif push_result == 'error' %}
-  <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ Couldn't reach ntfy.sh. The topic is set but the push failed to send — try again.</p>
+  <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ The topic is set but the push failed to send.{% if push_error %} <code>{{ push_error }}</code>{% endif %} — try again.</p>
   {% endif %}
   <p class="muted small" style="margin:8px 0 0">
     {% if feeds %}Polling <strong>{{ feeds|length }}</strong> gig RSS feed(s).{% else %}

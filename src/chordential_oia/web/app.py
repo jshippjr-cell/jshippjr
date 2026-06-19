@@ -409,6 +409,7 @@ def signals_radar(request: Request, push: str = ""):
         request, "signals.html", nav="signals", gigs=gigs,
         feeds=scheduler.configured_feeds(),
         push_result=push, push_configured=signals.push_configured(),
+        push_error=signals.last_push_error(),
     )
 
 
@@ -417,7 +418,7 @@ def signals_test_push():
     """Fire a test phone alert through the real push pipeline so you can confirm
     your ntfy setup end-to-end. Reports back whether the topic is configured."""
     status = signals.send_push(
-        "🎵 Chordential test alert",
+        "Chordential test alert",
         body="If you see this on your phone, new-gig alerts are working.",
         click_url="https://chordential.com/signals",
     )
