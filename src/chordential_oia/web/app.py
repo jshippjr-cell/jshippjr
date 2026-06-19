@@ -374,12 +374,28 @@ def discovery_page(request: Request, kind: str = "talent"):
     )
 
 
+@app.get("/capture", response_class=HTMLResponse)
+def capture_page(
+    request: Request, title: str = "", company: str = "",
+    link: str = "", notes: str = "", budget: str = "",
+):
+    """Focused 'log a gig' page — prefilled from query params so it works as a
+    one-click bookmarklet target, plus a paste-the-post box that auto-fills the
+    fields. The fast path from a Reddit gig to an Inbound Lead."""
+    base = str(request.base_url).rstrip("/")
+    return render(
+        request, "capture.html", nav="leads", base_url=base,
+        title=title, company=company, link=link, notes=notes, budget=budget,
+    )
+
+
 @app.post("/discovery/lead")
 def discovery_add_lead(
     title: str = Form(...),
     company: str = Form(""),
     link: str = Form(""),
     notes: str = Form(""),
+    budget: str = Form(""),
 ):
     """Capture a lead by hand from a manual-assist source — closes the launchpad
     loop (open the right search → see a gig → add it). Lands in the same Inbound
@@ -394,7 +410,8 @@ def discovery_add_lead(
     try:
         db.insert_inbound_lead(
             conn, contact_name="(added by hand)", company=company.strip(),
-            project_type=title, description=desc, source="manual",
+            project_type=title, description=desc, budget_text=budget.strip(),
+            source="manual",
         )
     finally:
         conn.close()

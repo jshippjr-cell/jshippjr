@@ -216,12 +216,15 @@
     </tbody>
   </table>
 
-  <div class="muted small" style="margin:16px 0 6px">Found a gig? Add it to your Inbound Leads:</div>
+  <div class="muted small" style="margin:16px 0 6px">
+    Found a gig? Add it to your Inbound Leads —
+    <a class="link" href="/capture">⚡ open the full capture page</a> (paste-to-fill + one-click bookmarklet).
+  </div>
   <form class="filters" method="post" action="/discovery/lead" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
-    <input class="filter-search" name="title" placeholder="Gig / project (required)" required style="min-width:240px">
+    <input class="filter-search" name="title" placeholder="Gig / project (required)" required style="min-width:220px">
     <input class="filter-search" name="company" placeholder="Company / poster">
-    <input class="filter-search" name="link" placeholder="Link to the post" style="min-width:220px">
-    <input class="filter-search" name="notes" placeholder="Notes">
+    <input class="filter-search" name="budget" placeholder="Budget" style="max-width:120px">
+    <input class="filter-search" name="link" placeholder="Link to the post" style="min-width:200px">
     <button class="btn primary" type="submit">Add lead</button>
   </form>
 </section>

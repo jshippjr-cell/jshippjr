@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Capture a lead{% endblock %}
+{% block heading %}Capture a lead{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:760px">
+  <div class="card-head"><h2>Log a gig you found</h2>
+    <span class="muted small">lands in Inbound Leads → promote to your pipeline</span></div>
+
+  <p class="muted small" style="margin:0 0 12px">
+    Paste the whole post below and we'll auto-fill the fields — or just type them in.
+    Found it from the launchpad? The fastest way is the <strong>one-click bookmarklet</strong> at the bottom.
+  </p>
+
+  <label class="muted small" for="paste">Paste the post (optional — auto-fills below)</label>
+  <textarea id="paste" rows="5" class="filter-search" style="width:100%;margin:4px 0 14px"
+            placeholder="Paste the gig post here…">{{ notes }}</textarea>
+
+  <form method="post" action="/discovery/lead" style="display:grid;gap:12px">
+    <div>
+      <label class="muted small" for="title">Gig / project *</label>
+      <input id="title" name="title" class="filter-search" style="width:100%" required
+             value="{{ title }}" placeholder="e.g. Composer for horror RPG — trailer + ambience">
+    </div>
+    <div class="field-row" style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <label class="muted small" for="company">Company / poster</label>
+        <input id="company" name="company" class="filter-search" style="width:100%" value="{{ company }}">
+      </div>
+      <div style="flex:1;min-width:160px">
+        <label class="muted small" for="budget">Budget</label>
+        <input id="budget" name="budget" class="filter-search" style="width:100%" value="{{ budget }}"
+               placeholder="e.g. $1,000–$1,500">
+      </div>
+    </div>
+    <div>
+      <label class="muted small" for="link">Link to the post</label>
+      <input id="link" name="link" class="filter-search" style="width:100%" value="{{ link }}">
+    </div>
+    <div>
+      <label class="muted small" for="notes">Notes / details</label>
+      <textarea id="notes" name="notes" rows="4" class="filter-search" style="width:100%">{{ notes }}</textarea>
+    </div>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">Save to Inbound Leads</button>
+      <a class="btn ghost" href="/leads">View leads</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="max-width:760px;margin-top:18px">
+  <div class="card-head"><h2>⚡ One-click capture (bookmarklet)</h2></div>
+  <p class="muted small" style="margin:0 0 10px">
+    Drag this button to your browser's bookmarks bar <strong>once</strong>. Then, on any gig page,
+    select the post text and click it — this capture form opens already filled in.
+  </p>
+  <p>
+    <a class="btn primary"
+       href="javascript:(function(){var t=encodeURIComponent(document.title.split(' : ')[0]);var u=encodeURIComponent(location.href);var s=encodeURIComponent((''+window.getSelection()).slice(0,3000));window.open('{{ base_url }}/capture?title='+t+'&amp;link='+u+'&amp;notes='+s);})();"
+       onclick="return false;">➕ Save to Chordential</a>
+    <span class="muted small" style="margin-left:8px">← drag me to the bookmarks bar</span>
+  </p>
+</div>
+
+<script>
+(function(){
+  var paste = document.getElementById('paste');
+  if(!paste) return;
+  function f(id){ return document.getElementById(id); }
+  function fill(){
+    var t = paste.value;
+    var b = t.match(/\$\s?\d[\d,]*(?:\s?[-–—]|\s+to\s+)\s?\$?\s?\d[\d,]*|\$\s?\d[\d,]+/i);
+    if(b && !f('budget').value) f('budget').value = b[0].trim();
+    var l = t.match(/https?:\/\/[^\s)]+/);
+    if(l && !f('link').value) f('link').value = l[0];
+    if(!f('title').value){
+      var line = t.split('\n').map(function(s){return s.trim();})
+                  .filter(function(s){return s.length > 4;})[0];
+      if(line) f('title').value = line.slice(0, 140);
+    }
+    if(!f('notes').value) f('notes').value = t.slice(0, 4000);
+  }
+  paste.addEventListener('input', fill);
+  if(paste.value) fill();   // prefilled via bookmarklet → fill on load
+})();
+</script>
+{% endblock %}

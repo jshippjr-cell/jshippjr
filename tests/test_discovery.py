@@ -192,14 +192,23 @@ def test_web_flow_propose_approve_fetch(ctx):
 def test_manual_lead_capture_lands_in_queue(ctx):
     client, db_mod = ctx
     client.post("/discovery/lead", data={
-        "title": "Indie film score", "company": "Acme Films",
-        "link": "https://reddit.com/r/forhire/x", "notes": "warm, orchestral",
+        "title": "Indie film score", "company": "Acme Films", "budget": "$1,000–$1,500",
+        "link": "https://reddit.com/r/gameDevClassifieds/x", "notes": "warm, orchestral",
     })
     conn = db_mod.connect()
     manual = [r for r in db_mod.list_inbound_leads(conn) if r["source"] == "manual"]
     conn.close()
     assert manual and manual[0]["project_type"] == "Indie film score"
     assert "reddit.com" in (manual[0]["description"] or "")
+    assert "1,000" in (manual[0]["budget_text"] or "")          # budget captured
+
+
+def test_capture_page_prefills_from_query(ctx):
+    client, _ = ctx
+    r = client.get("/capture?title=Composer+for+RPG&budget=%241000&link=https://x.com/p")
+    assert r.status_code == 200
+    assert "Composer for RPG" in r.text          # prefilled into the form
+    assert "Save to Chordential" in r.text        # the bookmarklet is offered
 
 
 def test_jon_can_add_custom_site_and_point_crawler(ctx):
