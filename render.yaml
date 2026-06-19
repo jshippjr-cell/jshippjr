@@ -13,7 +13,7 @@ services:
     runtime: python
     plan: starter
     branch: claude/admiring-mayer-u241h5
-    buildCommand: "pip install '.[web,push]'"
+    buildCommand: "pip install '.[web,gmail,ai]'"
     startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
     envVars:
