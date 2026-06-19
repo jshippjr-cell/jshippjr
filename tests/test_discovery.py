@@ -189,6 +189,19 @@ def test_web_flow_propose_approve_fetch(ctx):
     assert row["result_count"] == 0          # scrape OFF → nothing ingested
 
 
+def test_manual_lead_capture_lands_in_queue(ctx):
+    client, db_mod = ctx
+    client.post("/discovery/lead", data={
+        "title": "Indie film score", "company": "Acme Films",
+        "link": "https://reddit.com/r/forhire/x", "notes": "warm, orchestral",
+    })
+    conn = db_mod.connect()
+    manual = [r for r in db_mod.list_inbound_leads(conn) if r["source"] == "manual"]
+    conn.close()
+    assert manual and manual[0]["project_type"] == "Indie film score"
+    assert "reddit.com" in (manual[0]["description"] or "")
+
+
 def test_jon_can_add_custom_site_and_point_crawler(ctx):
     client, db_mod = ctx
     client.post("/discovery/site/add", data={

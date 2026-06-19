@@ -119,6 +119,7 @@ CATALOG: List[SourceSite] = [
         STATUS_ESTABLISHED,
         [("opportunity", "Search",
           "https://www.reddit.com/r/forhire/search/?q={q}&restrict_sr=1&sort=new")],
+        login_gated=True,
     ),
     SourceSite(
         "reddit_gamedev", "Reddit · r/gameDevClassifieds",
@@ -127,6 +128,7 @@ CATALOG: List[SourceSite] = [
         "Game studios hiring composers and sound designers.", STATUS_ESTABLISHED,
         [("opportunity", "Search",
           "https://www.reddit.com/r/gameDevClassifieds/search/?q={q}&restrict_sr=1&sort=new")],
+        login_gated=True,
     ),
     SourceSite(
         "gearspace", "Gearspace · Employment", "https://gearspace.com",

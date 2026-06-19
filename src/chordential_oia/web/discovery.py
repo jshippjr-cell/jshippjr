@@ -88,6 +88,24 @@ def seed_all_active(conn) -> int:
     return added
 
 
+def manual_assist_url(site_row) -> str:
+    """The best direct-search URL for a manual-assist source — so 'Open search'
+    lands Jon right on the relevant listings (e.g. r/forhire newest), in his own
+    logged-in browser, rather than the bare homepage."""
+    site = catalog.get_site(site_row["key"])
+    if site is not None:
+        for k in ("opportunity", "talent"):
+            targets = catalog.site_targets(site, k)
+            if targets:
+                return targets[0]["url"]
+    if site_row["board_url"]:
+        kind = site_row["kind"] if site_row["kind"] != "both" else "opportunity"
+        t = _custom_site_target(site_row, kind, None, None)
+        if t:
+            return t["url"]
+    return site_row["homepage"] or "#"
+
+
 # --------------------------------------------------------------------------- #
 # Propose targets from the ACTIVE curated sites only
 # --------------------------------------------------------------------------- #

@@ -188,32 +188,40 @@
 {% if gated_sites %}
 <section class="card" style="margin-top:18px">
   <div class="card-head">
-    <h2>③ Login-gated · manual-assist</h2>
-    <span class="muted small">you review these signed in — the crawler never holds your credentials</span>
+    <h2>③ Manual-assist launchpad</h2>
+    <span class="muted small">open the right search yourself · add gigs in a click</span>
   </div>
+  <p class="muted small" style="margin:0 0 10px">
+    These platforms (Reddit, LinkedIn, X, ProductionHub…) <strong>block bots and gate their
+    listings</strong>, so Chordential won't scrape them — that's why an automated crawl returns
+    nothing. Instead, each opens its <strong>best search</strong> in your own logged-in browser;
+    skim it and add anything good with the form below.
+  </p>
   <table class="table compact">
     <tbody>
       {% for s in gated_sites %}
       <tr>
         <td>
-          <span class="strong">{{ s['name'] }}</span> <span class="pill st-proposed">🔒 login</span>
+          <span class="strong">{{ s['name'] }}</span> <span class="pill st-proposed">manual</span>
           <div class="muted small">{{ s['rationale'] }} — {{ s['recommended_by'] }}</div>
         </td>
         <td style="width:1%;white-space:nowrap">
-          <a class="btn tiny" href="{{ s['homepage'] }}" target="_blank" rel="noopener"
-             title="Open in your own logged-in browser to review by hand">Open to review ↗</a>
+          <a class="btn tiny primary" href="{{ review_urls[s['id']] }}" target="_blank" rel="noopener"
+             title="Open this source's search in your browser">Open search ↗</a>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted small" style="margin-top:10px">
-    These sites wall their listings behind a login (and their terms forbid automated scraping),
-    so Chordential won't fetch them. Open one in your browser where you're already signed in,
-    skim it, and add anything good by hand. Sources land here either because the council
-    flagged them or because the crawler <strong>hit a login wall</strong> and moved them here
-    automatically. (API-token integrations can come later.)
-  </p>
+
+  <div class="muted small" style="margin:16px 0 6px">Found a gig? Add it to your Inbound Leads:</div>
+  <form class="filters" method="post" action="/discovery/lead" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <input class="filter-search" name="title" placeholder="Gig / project (required)" required style="min-width:240px">
+    <input class="filter-search" name="company" placeholder="Company / poster">
+    <input class="filter-search" name="link" placeholder="Link to the post" style="min-width:220px">
+    <input class="filter-search" name="notes" placeholder="Notes">
+    <button class="btn primary" type="submit">Add lead</button>
+  </form>
 </section>
 {% endif %}
 

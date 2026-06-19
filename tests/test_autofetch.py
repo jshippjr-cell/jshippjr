@@ -44,14 +44,14 @@ def test_due_targets_respect_the_gate(tmp_path, monkeypatch):
     db.init_db(conn)
     disc.sync_catalog(conn)  # reddit_forhire active; taxi active+login_gated
 
-    reddit = _approved(db, conn, "reddit_forhire", "https://reddit.example/1")
-    _approved(db, conn, "taxi", "https://taxi.example/2")          # active but GATED
-    db.insert_crawl_target(                                         # Proposed, not Approved
-        conn, "opportunity", "p", "(q)", "https://reddit.example/3", "reddit_forhire", "w"
+    sl = _approved(db, conn, "soundlister", "https://sl.example/1")  # active, NOT gated
+    _approved(db, conn, "taxi", "https://taxi.example/2")            # active but GATED
+    db.insert_crawl_target(                                          # Proposed, not Approved
+        conn, "opportunity", "p", "(q)", "https://sl.example/3", "soundlister", "w"
     )
 
     due_ids = {t["id"] for t in db.autofetch_due_targets(conn, "9999-01-01T00:00:00", limit=10)}
-    assert reddit in due_ids                 # approved, active, not gated → due
+    assert sl in due_ids                     # approved, active, not gated → due
     assert len(due_ids) == 1                 # taxi gated out; proposed excluded
 
 
@@ -60,7 +60,7 @@ def test_stale_fetched_target_is_due_again(tmp_path, monkeypatch):
     conn = db.connect()
     db.init_db(conn)
     disc.sync_catalog(conn)
-    tid = _approved(db, conn, "reddit_forhire", "https://reddit.example/1")
+    tid = _approved(db, conn, "soundlister", "https://sl.example/1")
     db.mark_crawl_target_fetched(conn, tid, 0)   # now Fetched, fetched_at = now
 
     # A future cutoff means the just-fetched target is already "stale" → due again.
@@ -102,7 +102,7 @@ def test_offline_cycle_fetches_nothing_but_marks_fetched(tmp_path, monkeypatch):
     conn = db.connect()
     db.init_db(conn)
     disc.sync_catalog(conn)
-    tid = _approved(db, conn, "reddit_forhire", "https://reddit.example/1")
+    tid = _approved(db, conn, "soundlister", "https://sl.example/1")
     conn.commit()
     conn.close()
 
@@ -157,6 +157,17 @@ def test_turning_on_seeds_an_approved_target(tmp_path, monkeypatch):
     assert disc.seed_active_targets(conn, site) == 0      # idempotent
 
 
+def test_manual_assist_url_targets_a_search(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    row = conn.execute("SELECT * FROM discovery_sites WHERE key='reddit_forhire'").fetchone()
+    assert row["login_gated"] == 1                       # Reddit → manual-assist
+    url = disc.manual_assist_url(row)
+    assert "reddit.com/r/forhire" in url and "search" in url   # lands on the gig search
+
+
 def test_seeding_skips_login_gated(tmp_path, monkeypatch):
     db, disc, _ = _modules(tmp_path, monkeypatch)
     conn = db.connect()
@@ -174,7 +185,8 @@ def test_seed_all_active_backfill(tmp_path, monkeypatch):
     disc.sync_catalog(conn)
     assert disc.seed_all_active(conn) >= 1
     keys = {r["source_key"] for r in db.list_crawl_targets(conn, status="Approved")}
-    assert "reddit_forhire" in keys      # active, non-gated → seeded
+    assert "soundlister" in keys         # active, non-gated → seeded
+    assert "reddit_forhire" not in keys  # now manual-assist → skipped
     assert "taxi" not in keys            # active but login-gated → skipped
     assert "linkedin_jobs" not in keys   # suggested + gated → skipped
 
@@ -253,9 +265,10 @@ def test_reddit_json_url_and_parse():
     assert recs[0]["url"] == "https://www.reddit.com/r/x/abc"
 
 
-def test_reddit_dispatch_through_cycle(tmp_path, monkeypatch):
-    # A Reddit target routes to the JSON adapter (not the HTML floor).
-    db, disc, sch = _modules(tmp_path, monkeypatch, scrape=True)
+def test_reddit_adapter_dispatch(tmp_path, monkeypatch):
+    # A Reddit target routes to the JSON adapter (not the HTML floor). Reddit is
+    # manual-assist now, so test the adapter directly rather than via auto-fetch.
+    _modules(tmp_path, monkeypatch, scrape=True)
     from chordential_oia.web import crawl_adapters as ca
     sample = (
         '{"data":{"children":['
@@ -264,17 +277,8 @@ def test_reddit_dispatch_through_cycle(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(ca, "_get_with_meta",
                         lambda url, headers, timeout=10.0: (sample, 200, url))
-
-    conn = db.connect()
-    db.init_db(conn)
-    disc.sync_catalog(conn)
-    _approved(db, conn, "reddit_forhire",
-              "https://www.reddit.com/r/forhire/search/?q=composer&sort=new")
-    conn.commit()
-    conn.close()
-
-    found = sch.run_cycle(batch=5, delay=0)
-    assert found == 1
-    conn = db.connect()
-    leads = [l for l in db.list_inbound_leads(conn) if l["source"] == "crawl"]
-    assert leads and leads[0]["company"] == "u/acme"
+    target = {"source_key": "reddit_forhire",
+              "url": "https://www.reddit.com/r/forhire/search/?q=composer", "kind": "opportunity"}
+    res = ca.fetch_opportunity_records(target)
+    assert res["outcome"] == "ok"
+    assert res["records"] and res["records"][0]["company"] == "u/acme"

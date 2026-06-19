@@ -358,6 +358,7 @@ def discovery_page(request: Request, kind: str = "talent"):
     #   • proposed_targets / done_targets — approval queue vs. approved+fetched
     pending_sites = [s for s in sites if s["status"] == "Suggested" and not s["login_gated"]]
     gated_sites = [s for s in sites if s["login_gated"]]
+    review_urls = {s["id"]: discovery.manual_assist_url(s) for s in gated_sites}
     managed_sites = [s for s in sites if not s["login_gated"] and s["status"] != "Suggested"]
     proposed_targets = [t for t in targets if t["status"] == "Proposed"]
     done_targets = [t for t in targets if t["status"] != "Proposed"]
@@ -367,10 +368,37 @@ def discovery_page(request: Request, kind: str = "talent"):
         site_counts=site_counts, active_states=db.ACTIVE_SITE_STATES,
         activity=activity, pending_sites=pending_sites, gated_sites=gated_sites,
         managed_sites=managed_sites, proposed_targets=proposed_targets,
-        done_targets=done_targets,
+        done_targets=done_targets, review_urls=review_urls,
         pending_count=len(pending_sites) + len(proposed_targets),
         autofetch=scheduler.status(),
     )
+
+
+@app.post("/discovery/lead")
+def discovery_add_lead(
+    title: str = Form(...),
+    company: str = Form(""),
+    link: str = Form(""),
+    notes: str = Form(""),
+):
+    """Capture a lead by hand from a manual-assist source — closes the launchpad
+    loop (open the right search → see a gig → add it). Lands in the same Inbound
+    Leads review queue as everything else."""
+    title = title.strip()
+    if not title:
+        return RedirectResponse("/discovery?kind=opportunity", status_code=303)
+    desc = notes.strip()
+    if link.strip():
+        desc = (desc + ("\n" if desc else "") + link.strip()).strip()
+    conn = db.connect()
+    try:
+        db.insert_inbound_lead(
+            conn, contact_name="(added by hand)", company=company.strip(),
+            project_type=title, description=desc, source="manual",
+        )
+    finally:
+        conn.close()
+    return RedirectResponse("/leads", status_code=303)
 
 
 @app.post("/discovery/generate")
