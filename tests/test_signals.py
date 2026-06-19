@@ -166,6 +166,29 @@ def test_is_music_gig_filter(ctx):
     assert not sig.is_music_gig("Reddit Comments (/r/Music/): poll about composers")  # comment
 
 
+def test_money_signals_demand_recall_fix(ctx):
+    """B0 recall fix: a paid gig that signals pay with money — not a hiring
+    verb — is demand, and a real music gig instead of being silently dropped."""
+    _, _, sig = ctx
+    assert sig.intent("Composer for our mobile game", "$500/track, DM me") == "demand"
+    assert sig.intent("Original score for short film", "USD 2k flat fee") == "demand"
+    assert sig.is_music_gig("Composer for our mobile game — $500/track")
+    # A resolution is not a budget: "4k video" must not read as money/demand.
+    assert sig.intent("Composer wanted", "delivering a 4k video") == "demand"  # via "wanted"
+    assert sig.intent("Editing a 4k video reel") == "unknown"                  # no pay, no demand
+    # Explicit self-promo stays supply even if it quotes a rate.
+    assert sig.intent("Composer available for hire, my rate is $50/hr, check out my reel") == "supply"
+
+
+def test_paid_partner_gig_not_dropped_as_collab(ctx):
+    """B0 recall fix: 'partner'/'royalty' no longer auto-classify a paid agency
+    brief as hobby/collab."""
+    _, _, sig = ctx
+    assert sig.is_music_gig("Seeking a composer to partner with our agency on a paid campaign")
+    # Genuinely unpaid collab is still dropped.
+    assert not sig.is_music_gig("Composer wanted to join our band, rev share only")
+
+
 def test_clear_radar(ctx):
     client, db, _ = ctx
     conn = db.connect()

@@ -129,9 +129,12 @@ def intent(title: str, body: str = "") -> str:
     t = f"{title} {body}".lower()
     demand = any(m in t for m in _DEMAND_MARKERS)
     supply = any(m in t for m in _SUPPLY_MARKERS)
+    # An explicit self-promo stays 'supply' even if it quotes a rate. Otherwise a
+    # money/pay signal is enough to call it a real (demand) gig — it rescues paid
+    # posts that never use a hiring verb ("Composer for our game — $500/track").
     if supply and not demand:
         return "supply"
-    if demand:
+    if demand or _MONEY_RE.search(t):
         return "demand"
     return "unknown"
 
@@ -147,11 +150,23 @@ _MUSIC_ROLE_MARKERS = (
     "theme music", "underscore", "additional music", "music producer",
 )
 _COLLAB_MARKERS = (
-    "partner", "collab", "join our", "join my", "join the", "bandmate",
+    "collab", "join our", "join my", "join the", "bandmate",
     "band member", "virtual band", "looking for members", "for fun",
     "just for fun", "[hobby]", "hobby project", "passion project", "rev share",
-    "revshare", "royalty", "unpaid", "be a part of", "co-writer", "cowriter",
+    "revshare", "unpaid", "be a part of", "co-writer", "cowriter",
     "start a band", "form a band", "no pay", "non-paid", "no budget",
+)
+# A paid gig often signals money instead of saying "hiring" — "$500/track",
+# "USD 2k", "paying", "day rate". Treat that as demand so we don't drop real,
+# obviously-paid work on a keyword technicality. Currency-anchored so "4k video"
+# (a resolution, not a budget) doesn't false-trigger.
+_MONEY_RE = re.compile(
+    r"\$\s?\d"                                              # $500, $2k, $1,000
+    r"|\b(?:usd|eur|gbp|cad|aud)\s?\d"                      # USD 500
+    r"|\bper\s+(?:track|song|cue|episode|minute|spot|ep)\b" # per track
+    r"|/(?:track|song|cue|episode|min)\b"                   # /track
+    r"|\b(?:paying|will pay|paid gig|pay is|rate is|hourly rate|flat fee|day rate)\b",
+    re.IGNORECASE,
 )
 
 
