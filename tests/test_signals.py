@@ -33,6 +33,24 @@ def test_insert_and_dedupe(ctx):
     assert a is not None and b is None        # deduped on external_ref
 
 
+def test_reddit_rss_feed_is_strictly_filtered(ctx, monkeypatch):
+    """A Reddit RSS feed gets the strict music-gig filter (it's noisy); only real
+    gigs land, discussion/noise is dropped."""
+    _, db, sig = ctx
+    items = [
+        {"title": "[Hiring] Composer for our game — $1500/track",
+         "summary": "original music", "link": "https://www.reddit.com/r/x/1", "published": None},
+        {"title": "What's everyone listening to today?",
+         "summary": "chat", "link": "https://www.reddit.com/r/x/2", "published": None},
+    ]
+    monkeypatch.setattr(sig.rss, "fetch_feed", lambda url: items)
+    n = sig.ingest_feed(db.connect(),
+                        "https://www.reddit.com/r/forhire/new.rss", source="reddit")
+    assert n == 1                              # only the hiring gig clears is_music_gig
+    rows = db.list_signals(db.connect())
+    assert len(rows) == 1 and "Composer" in rows[0]["title"]
+
+
 def test_freshness_outranks_raw_score(ctx):
     _, db, sig = ctx
     conn = db.connect()

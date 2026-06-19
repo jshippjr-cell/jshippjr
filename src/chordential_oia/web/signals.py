@@ -375,14 +375,17 @@ def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
 
 
 def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
-    """Poll one RSS/Atom feed of live gigs into signals (deduped on item link)."""
+    """Poll one RSS/Atom feed of live gigs into signals (deduped on item link).
+    Reddit feeds are noisy, so they get the strict is_music_gig filter; curated
+    board feeds keep the lenient (supply-only) filter."""
+    strict = "reddit" in feed_url.lower() or "reddit" in source.lower()
     n = 0
     for it in rss.fetch_feed(feed_url):
         posted = it["published"].isoformat() if it.get("published") else None
         if ingest_signal(
             conn, source=source, title=it["title"], body=it.get("summary", ""),
             url=it.get("link", ""), external_ref=it.get("link") or it["title"],
-            posted_at=posted,
+            posted_at=posted, strict=strict,
         ):
             n += 1
     return n
