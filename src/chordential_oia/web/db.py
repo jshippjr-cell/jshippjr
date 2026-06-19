@@ -990,6 +990,14 @@ def get_signal(conn: sqlite3.Connection, signal_id: int) -> Optional[sqlite3.Row
     return conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
 
 
+def new_signal_count(conn: sqlite3.Connection) -> int:
+    """Count of New (unactioned) live gigs — drives the nav badge."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM signals WHERE status = 'New' "
+        "AND IFNULL(signal_type, 'gig') != 'indicator'"
+    ).fetchone()[0]
+
+
 def set_signal_status(conn: sqlite3.Connection, signal_id: int, status: str) -> None:
     if status not in SIGNAL_STATES:
         raise ValueError(f"Unknown signal status {status!r}")

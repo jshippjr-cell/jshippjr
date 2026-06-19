@@ -179,6 +179,12 @@ def render(request: Request, name: str, **kw):
     """Render a template, compatible with Starlette's (request, name, context) API."""
     context = {"nav": kw.pop("nav", "")}
     context.update(kw)
+    if "new_signals" not in context:        # nav badge — count of unactioned gigs
+        conn = db.connect()
+        try:
+            context["new_signals"] = db.new_signal_count(conn)
+        finally:
+            conn.close()
     return templates.TemplateResponse(request=request, name=name, context=context)
 
 
@@ -459,6 +465,16 @@ def signal_promote(signal_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
+
+
+@app.get("/signals/count")
+def signals_count():
+    """Live count of unactioned gigs — polled by the nav badge."""
+    conn = db.connect()
+    try:
+        return {"new": db.new_signal_count(conn)}
+    finally:
+        conn.close()
 
 
 @app.post("/signals/clear")

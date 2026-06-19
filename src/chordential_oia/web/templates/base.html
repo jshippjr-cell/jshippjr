@@ -30,7 +30,7 @@
     </nav>
     <div class="nav-section">Discovery</div>
     <nav class="nav">
-      <a href="/signals" class="{{ 'active' if nav=='signals' }}"><span class="ico">📡</span> Signal Radar</a>
+      <a href="/signals" class="{{ 'active' if nav=='signals' }}"><span class="ico">📡</span> Signal Radar<span id="signal-badge" style="display:{{ 'inline-block' if new_signals else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_signals or '' }}</span></a>
       <a href="/discovery?kind=talent" class="{{ 'active' if nav=='discovery' }}"><span class="ico">⌖</span> Crawler (gated)</a>
     </nav>
     <div class="nav-section">Supply</div>
@@ -64,5 +64,19 @@
     </div>
   </main>
 </div>
+<script>
+// Keep the Signal Radar badge live (new gigs arrive while you're on other pages).
+(function () {
+  function refresh() {
+    fetch('/signals/count').then(function (r) { return r.json(); }).then(function (d) {
+      var b = document.getElementById('signal-badge');
+      if (!b) return;
+      if (d && d.new > 0) { b.textContent = d.new; b.style.display = 'inline-block'; }
+      else { b.style.display = 'none'; }
+    }).catch(function () {});
+  }
+  setInterval(refresh, 60000);
+})();
+</script>
 </body>
 </html>

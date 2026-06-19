@@ -158,6 +158,20 @@ def test_ingest_drops_self_promo_keeps_gigs(ctx):
     assert any("Hiring" in t for t in titles) and not any("For Hire" in t for t in titles)
 
 
+def test_nav_badge_counts_new_gigs(ctx):
+    client, db, _ = ctx
+    conn = db.connect()
+    s1 = db.insert_signal(conn, source="rss", source_weight=6, title="Composer needed", external_ref="1")
+    db.insert_signal(conn, source="rss", source_weight=6, title="Score for trailer", external_ref="2")
+    conn.close()
+    # JSON count + the badge in the nav both reflect 2 unactioned gigs.
+    assert client.get("/signals/count").json()["new"] == 2
+    assert 'id="signal-badge"' in client.get("/dashboard").text
+    # Promoting/dismissing decrements the count.
+    client.post(f"/signals/{s1}/status", data={"status": "Dismissed"})
+    assert client.get("/signals/count").json()["new"] == 1
+
+
 def test_email_in_webhook_requires_token(ctx):
     client, _, _ = ctx
     assert client.post("/signals/ingest", content="Title: X\nBudget: $5000\n").status_code == 401

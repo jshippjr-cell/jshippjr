@@ -11,7 +11,9 @@ already exist and are reused here.
 from __future__ import annotations
 
 import math
+import os
 import re
+import urllib.request
 from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
@@ -183,12 +185,38 @@ def ingest_signal(
     if bmin is None and bmax is None:
         bmin, bmax = extract_budget(f"{title}\n{body}", labeled_only=True)
     score, tier = _score(title, body, bmin, bmax)
-    return db.insert_signal(
+    sid = db.insert_signal(
         conn, source=source, source_weight=weight_for(source),
         title=title[:300], body=(body or "")[:5000], url=url,
         external_ref=external_ref or url, budget_min=bmin, budget_max=bmax,
         score=score, tier=tier, posted_at=posted_at,
     )
+    if sid is not None:                      # a genuinely new gig cleared the filter
+        notify_new_gig(title, url)
+    return sid
+
+
+def notify_new_gig(title: str, click_url: str = "") -> None:
+    """Push a phone alert when a new live gig lands — only fires for gigs that
+    passed the ironclad filter, so it's high-signal. Uses ntfy.sh (free, no
+    account): set CHORDENTIAL_NTFY_TOPIC to your topic. Best-effort, never raises."""
+    topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
+    if not topic:
+        return
+    url = topic if topic.startswith("http") else f"https://ntfy.sh/{topic}"
+    try:
+        req = urllib.request.Request(
+            url, data=(title or "New gig")[:240].encode("utf-8"),
+            headers={
+                "Title": "🎵 New gig on Chordential",
+                "Click": click_url or "https://chordential.com/signals",
+                "Tags": "musical_note",
+                "Priority": "high",
+            },
+        )
+        urllib.request.urlopen(req, timeout=8)  # noqa: S310
+    except Exception:
+        pass
 
 
 def ingest_alert(conn, raw: str, source: str = "email") -> int:
