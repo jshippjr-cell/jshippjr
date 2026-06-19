@@ -398,7 +398,7 @@ def discovery_page(request: Request, kind: str = "talent"):
 # Signal Engine — the Opportunity Detection layer (freshness × score radar)
 # --------------------------------------------------------------------------- #
 @app.get("/signals", response_class=HTMLResponse)
-def signals_radar(request: Request):
+def signals_radar(request: Request, push: str = ""):
     conn = db.connect()
     try:
         ranked = signals.rank_signals(db.list_signals(conn))
@@ -408,7 +408,20 @@ def signals_radar(request: Request):
     return render(
         request, "signals.html", nav="signals", gigs=gigs,
         feeds=scheduler.configured_feeds(),
+        push_result=push, push_configured=signals.push_configured(),
     )
+
+
+@app.post("/signals/test-push")
+def signals_test_push():
+    """Fire a test phone alert through the real push pipeline so you can confirm
+    your ntfy setup end-to-end. Reports back whether the topic is configured."""
+    status = signals.send_push(
+        "🎵 Chordential test alert",
+        body="If you see this on your phone, new-gig alerts are working.",
+        click_url="https://chordential.com/signals",
+    )
+    return RedirectResponse(f"/signals?push={status}", status_code=303)
 
 
 @app.post("/signals/paste")
@@ -460,7 +473,7 @@ def signal_promote(signal_id: int):
         opp = Opportunity(
             client="Unknown", need=s["title"] or "Detected opportunity",
             description=s["body"] or "", budget_min=s["budget_min"],
-            budget_max=s["budget_max"], source="signal",
+            budget_max=s["budget_max"], source="signal", url=s["url"] or "",
         )
         new_id = db.insert_opportunity(conn, opp)
         db.link_signal_to_opp(conn, signal_id, new_id)

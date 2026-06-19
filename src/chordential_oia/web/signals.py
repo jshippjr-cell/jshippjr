@@ -196,27 +196,40 @@ def ingest_signal(
     return sid
 
 
-def notify_new_gig(title: str, click_url: str = "") -> None:
-    """Push a phone alert when a new live gig lands — only fires for gigs that
-    passed the ironclad filter, so it's high-signal. Uses ntfy.sh (free, no
-    account): set CHORDENTIAL_NTFY_TOPIC to your topic. Best-effort, never raises."""
+def push_configured() -> bool:
+    """True when a mobile-push topic is set (CHORDENTIAL_NTFY_TOPIC)."""
+    return bool(os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip())
+
+
+def send_push(title: str, body: str = "", click_url: str = "") -> str:
+    """Send one ntfy.sh phone push. Returns a status: 'unset' (no topic
+    configured), 'sent' (delivered to ntfy), or 'error' (network/ntfy failed).
+    Best-effort — never raises."""
     topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
     if not topic:
-        return
+        return "unset"
     url = topic if topic.startswith("http") else f"https://ntfy.sh/{topic}"
     try:
         req = urllib.request.Request(
-            url, data=(title or "New gig")[:240].encode("utf-8"),
+            url, data=(body or title or "New gig")[:240].encode("utf-8"),
             headers={
-                "Title": "🎵 New gig on Chordential",
+                "Title": (title or "New gig on Chordential")[:120],
                 "Click": click_url or "https://chordential.com/signals",
                 "Tags": "musical_note",
                 "Priority": "high",
             },
         )
         urllib.request.urlopen(req, timeout=8)  # noqa: S310
+        return "sent"
     except Exception:
-        pass
+        return "error"
+
+
+def notify_new_gig(title: str, click_url: str = "") -> None:
+    """Push a phone alert when a new live gig lands — only fires for gigs that
+    passed the ironclad filter, so it's high-signal. Uses ntfy.sh (free, no
+    account): set CHORDENTIAL_NTFY_TOPIC to your topic. Best-effort, never raises."""
+    send_push("🎵 New gig on Chordential", body=title, click_url=click_url)
 
 
 def ingest_alert(conn, raw: str, source: str = "email") -> int:

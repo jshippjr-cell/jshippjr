@@ -43,7 +43,19 @@
 <div class="cols-2">
   <section class="card">
     <div class="card-head"><h2>Opportunity</h2></div>
-    <p class="prose">{{ row['description'] or 'No description captured.' }}</p>
+    <div class="original-post">
+      <div class="original-post-label">📋 Original post</div>
+      {% if row['url'] %}
+      <a class="original-post-link" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Open the full post — {{ row['url']|displayurl }}</a>
+      {% endif %}
+      {% if row['description'] %}
+      <p class="prose">{{ row['description'] }}</p>
+      {% elif row['url'] %}
+      <p class="muted small">No post text was captured for this lead — open the full post above to see exactly what you're looking at.</p>
+      {% else %}
+      <p class="prose">No description captured.</p>
+      {% endif %}
+    </div>
     <table class="kv">
       <tr><td>Discipline</td><td>{{ row['discipline'].replace('_',' ')|title }}{% if qual.secondary_disciplines %} <span class="muted">(+ {{ qual.secondary_disciplines|map(attribute='label')|join(', ') }})</span>{% endif %}</td></tr>
       <tr><td>Music requirement</td><td>{{ opp.music_requirement.label }}</td></tr>

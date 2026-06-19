@@ -89,6 +89,32 @@ def test_radar_renders_and_promote(ctx):
     assert db.get_signal(conn, sid)["status"] == "Promoted"
 
 
+def test_promote_carries_original_post_url(ctx):
+    """A promoted signal keeps its source link so the opportunity Overview can
+    show the original post (the F5Bot/reddit case where body text is empty)."""
+    client, db, _ = ctx
+    conn = db.connect()
+    sid = db.insert_signal(conn, source="reddit", source_weight=6,
+                           title="[PAID] Composer needed", body="",
+                           url="https://www.reddit.com/r/x/comments/abc/",
+                           score=55, external_ref="https://www.reddit.com/r/x/comments/abc/")
+    conn.close()
+    r = client.post(f"/signals/{sid}/promote", follow_redirects=False)
+    loc = r.headers["location"]
+    page = client.get(loc).text
+    assert "Original post" in page
+    assert "https://www.reddit.com/r/x/comments/abc/" in page   # link surfaced in overview
+
+
+def test_send_push_unset_and_test_route(ctx, monkeypatch):
+    client, _, sig = ctx
+    monkeypatch.delenv("CHORDENTIAL_NTFY_TOPIC", raising=False)
+    assert sig.push_configured() is False
+    assert sig.send_push("hi") == "unset"
+    r = client.post("/signals/test-push", follow_redirects=False)
+    assert r.status_code == 303 and "push=unset" in r.headers["location"]
+
+
 def test_f5bot_filter_keeps_only_real_gigs(ctx):
     _, db, sig = ctx
     body = (

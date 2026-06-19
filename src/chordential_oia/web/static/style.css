@@ -245,6 +245,10 @@ a{color:inherit;text-decoration:none}
 .reach-actions a{text-decoration:none}
 .reach-hint{margin:8px 0 14px}
 .prose{color:var(--muted);line-height:1.65}
+.original-post{margin-bottom:6px;padding:13px 15px;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px}
+.original-post-label{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2);margin-bottom:7px}
+.original-post-link{display:inline-block;font-weight:600;color:var(--accent);overflow-wrap:anywhere;margin-bottom:6px}
+.original-post .prose{white-space:pre-wrap;margin:0}
 .kv{width:100%;border-collapse:collapse;margin-top:10px}
 .kv td{padding:9px 0;border-bottom:1px solid var(--border);vertical-align:top}
 .kv td:first-child{color:var(--muted2);width:42%;font-size:13px}
