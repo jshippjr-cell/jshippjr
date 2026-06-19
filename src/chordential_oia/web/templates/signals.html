@@ -50,6 +50,7 @@
     No gig RSS feeds yet — set <code>CHORDENTIAL_RSS_FEEDS</code> (<code>name|url</code>) to auto-poll.{% endif %}
     Email-in: <code>/signals/ingest?token=…</code>.
     Phone alerts: <strong>{{ 'configured' if push_configured else 'off' }}</strong>{% if push_configured %} · <strong>{{ push_subs }}</strong> device(s) subscribed{% endif %}.
+    Gmail triage: <strong>{{ 'configured' if triage_configured else 'off' }}</strong>{% if triage_auto and triage_auto.enabled %} · auto-triage <strong>on</strong>{% if triage_auto.last_run %} (last run landed {{ triage_auto.last_created }}){% endif %}{% endif %}.
   </p>
   <p class="muted small" style="margin:6px 0 0">
     📱 <strong>To install:</strong> open <code>chordential.com/dashboard</code> in Safari on your iPhone → Share → <em>Add to Home Screen</em>. Open the app icon, then tap <strong>🔔 Enable phone alerts</strong>.

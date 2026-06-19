@@ -94,10 +94,11 @@ def _llm_extract(message: dict, *, model: Optional[str] = None) -> Optional[dict
     return json.loads(raw) if raw else None
 
 
-def _land_signal(conn, external_ref: str, message: dict, result: dict) -> Optional[int]:
+def _land_signal(conn, external_ref: str, message: dict, result: dict) -> Optional[str]:
     """Store a triaged opportunity as a signal — the LLM has already done the
     is-it-a-gig? judgment, so we bypass the keyword filters and insert directly,
-    reusing the engine's scoring + the radar's review/promote flow."""
+    reusing the engine's scoring + the radar's review/promote flow. Returns the
+    display title on a successful insert (for the optional new-gig alert)."""
     title = (result.get("title") or message.get("subject") or "Opportunity").strip()
     client = (result.get("client") or "").strip()
     if client and client.lower() not in title.lower():
@@ -108,20 +109,22 @@ def _land_signal(conn, external_ref: str, message: dict, result: dict) -> Option
     if budget:
         bmin, bmax = extract_budget(budget, labeled_only=False)
     score, tier = signals._score(title, body, bmin, bmax)
-    return db.insert_signal(
+    sid = db.insert_signal(
         conn, source="gmail", source_weight=signals.weight_for("gmail"),
         title=title[:300], body=body, url="", external_ref=external_ref,
         budget_min=bmin, budget_max=bmax, score=score, tier=tier,
         contact_handle=(result.get("contact") or None),
     )
+    return title if sid is not None else None
 
 
 def run_triage(
-    conn, *, limit: int = 25,
+    conn, *, limit: int = 25, notify: bool = False,
     gmail=gmail_client, extractor: Optional[Callable[[dict], Optional[dict]]] = None,
 ) -> dict:
     """Read the unread alert queue, extract real opportunities, land them on the
-    radar. Idempotent (dedup on Gmail id) and best-effort. Returns a summary
+    radar. Idempotent (dedup on Gmail id) and best-effort. When ``notify`` is set
+    (the autonomous path), each landed gig fires a phone alert. Returns a summary
     ``{configured, scanned, created, skipped}``. ``gmail`` and ``extractor`` are
     injectable for tests."""
     global _LAST_RUN
@@ -151,12 +154,68 @@ def run_triage(
             gmail.mark_processed(mid)                    # not a gig → clear it
             skipped += 1
             continue
-        _land_signal(conn, external_ref, message, result)
+        title = _land_signal(conn, external_ref, message, result)
         gmail.mark_processed(mid)
         created += 1
+        if notify and title:                            # autonomous path → alert phone
+            try:
+                signals.notify_new_gig(title, "/signals")
+            except Exception:  # noqa: BLE001 — a push must never stall triage
+                pass
 
     _LAST_RUN = (
         f"Scanned {scanned} new email(s): {created} new opportunit(y/ies) "
         f"landed on the radar, {skipped} skipped."
     )
     return {"configured": True, "scanned": scanned, "created": created, "skipped": skipped}
+
+
+# --------------------------------------------------------------------------- #
+# B3 — feedback loop. Every human verdict on a triaged gig is a labeled example
+# the triage step compounds on (the same "machine proposes, human disposes"
+# philosophy as qualification.record_label). Promote = the LLM was right;
+# dismiss = a false positive. Written as JSONL, best-effort, never raises.
+# --------------------------------------------------------------------------- #
+def _labels_path() -> str:
+    explicit = os.environ.get("CHORDENTIAL_TRIAGE_LABELS", "").strip()
+    if explicit:
+        return explicit
+    db_path = os.environ.get("CHORDENTIAL_DB", "").strip()
+    if db_path:                                          # alongside the DB (persistent disk)
+        return os.path.join(os.path.dirname(os.path.abspath(db_path)) or ".",
+                            "triage_labels.jsonl")
+    return "triage_labels.jsonl"
+
+
+def is_triaged(signal_row) -> bool:
+    """True for a Gmail-sourced (LLM-triaged) signal — the only ones whose
+    accept/reject is a meaningful triage label."""
+    try:
+        return (signal_row["source"] or "") == "gmail"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def record_feedback(signal_row, human_verdict: str) -> Optional[dict]:
+    """Append a triage label: the LLM said this email was an opportunity (it only
+    lands those), and the human's verdict — ``"promoted"`` (agreed) or
+    ``"dismissed"`` (false positive). Best-effort; no-op for non-triaged signals."""
+    if not is_triaged(signal_row):
+        return None
+    try:
+        from datetime import datetime, timezone
+        record = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "source": "gmail",
+            "external_ref": signal_row["external_ref"],
+            "title": signal_row["title"],
+            "body_excerpt": (signal_row["body"] or "")[:500],
+            "llm_verdict": "opportunity",
+            "human_verdict": human_verdict,
+            "agreement": human_verdict == "promoted",
+        }
+        with open(_labels_path(), "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+        return record
+    except Exception:  # noqa: BLE001 — feedback capture must never break the action
+        return None

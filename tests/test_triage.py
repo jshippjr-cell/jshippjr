@@ -125,3 +125,65 @@ def test_triage_run_route_redirects(ctx, monkeypatch):
     r = client.post("/triage/run", follow_redirects=False)
     assert r.status_code == 303 and "triage=1" in r.headers["location"]
     assert called.get("ran")
+
+
+# --- B2: autonomous path fires a phone alert per landed gig ------------------ #
+def test_notify_fires_on_landed_gig(ctx, monkeypatch):
+    _, db, tri = ctx
+    fired = []
+    monkeypatch.setattr(tri.signals, "notify_new_gig",
+                        lambda title, url="": fired.append(title))
+    res = tri.run_triage(db.connect(), notify=True,
+                         gmail=FakeGmail(_INBOX), extractor=_fake_extractor)
+    assert res["created"] == 1
+    assert len(fired) == 1 and "Composer" in fired[0]   # only the real gig alerts
+
+
+def test_scheduler_triage_gating_and_cycle(ctx, monkeypatch):
+    _, db, tri = ctx
+    from chordential_oia.web import scheduler
+    importlib.reload(scheduler)
+
+    monkeypatch.delenv("CHORDENTIAL_TRIAGE_ENABLED", raising=False)
+    assert scheduler.triage_enabled() is False             # off by default
+    monkeypatch.setenv("CHORDENTIAL_TRIAGE_ENABLED", "1")
+    assert scheduler.triage_enabled() is False             # enabled but not configured
+    monkeypatch.setattr(tri, "is_configured", lambda: True)
+    assert scheduler.triage_enabled() is True              # enabled + configured
+
+    monkeypatch.setattr(tri, "run_triage", lambda conn, **kw: {"created": 2})
+    assert scheduler.run_triage_cycle() == 2               # cycle wires to run_triage
+
+
+# --- B3: every human verdict on a triaged gig is a labeled example ----------- #
+def test_record_feedback_writes_only_for_triaged(ctx, tmp_path, monkeypatch):
+    import json
+    _, db, tri = ctx
+    labels = tmp_path / "labels.jsonl"
+    monkeypatch.setenv("CHORDENTIAL_TRIAGE_LABELS", str(labels))
+    conn = db.connect()
+
+    sid = db.insert_signal(conn, source="gmail", source_weight=7, title="Gig",
+                           body="agency music brief", external_ref="gmail:x",
+                           score=60, tier="B")
+    tri.record_feedback(db.get_signal(conn, sid), "promoted")
+    rec = json.loads(labels.read_text().strip())
+    assert rec["human_verdict"] == "promoted" and rec["agreement"] is True
+
+    # A non-triaged (e.g. RSS) signal is not a triage label → no-op.
+    sid2 = db.insert_signal(conn, source="rss", source_weight=6, title="X",
+                            external_ref="rss:1", score=1, tier="C")
+    assert tri.record_feedback(db.get_signal(conn, sid2), "dismissed") is None
+
+
+def test_dismiss_route_records_false_positive(ctx, tmp_path, monkeypatch):
+    client, db, _ = ctx
+    labels = tmp_path / "labels.jsonl"
+    monkeypatch.setenv("CHORDENTIAL_TRIAGE_LABELS", str(labels))
+    conn = db.connect()
+    sid = db.insert_signal(conn, source="gmail", source_weight=7, title="Gig",
+                           body="b", external_ref="gmail:y", score=50, tier="B")
+    r = client.post(f"/signals/{sid}/status", data={"status": "Dismissed"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert labels.exists() and '"human_verdict": "dismissed"' in labels.read_text()

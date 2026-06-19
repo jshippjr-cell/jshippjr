@@ -46,6 +46,47 @@ def autofetch_enabled() -> bool:
     )
 
 
+# Autonomous Gmail triage (Phase B2). Off by default — opt in with
+# CHORDENTIAL_TRIAGE_ENABLED — and only when triage is actually configured
+# (Gmail creds + Anthropic key). Each due cycle reads the unread alert queue,
+# lands real gigs in the review queue, and fires a phone alert per new gig.
+_triage_status = {"last_run": None, "last_created": 0, "total_created": 0, "cycles": 0}
+_last_triage_mono = 0.0
+
+
+def triage_enabled() -> bool:
+    from . import triage
+    return (
+        os.environ.get("CHORDENTIAL_TRIAGE_ENABLED", "0").strip().lower() not in _FALSEY
+        and triage.is_configured()
+    )
+
+
+def _triage_interval_seconds() -> int:
+    try:
+        return max(120, int(os.environ.get("CHORDENTIAL_TRIAGE_INTERVAL", "900")))
+    except ValueError:
+        return 900
+
+
+def run_triage_cycle() -> int:
+    """One autonomous triage pass — reads unread alerts, lands + alerts on new
+    gigs. Blocking; runs in a worker thread. Returns the new gigs created."""
+    from . import triage
+    conn = db.connect()
+    try:
+        res = triage.run_triage(conn, notify=True)
+    finally:
+        conn.close()
+    return res.get("created", 0)
+
+
+def triage_status() -> dict:
+    s = dict(_triage_status)
+    s["enabled"] = triage_enabled()
+    return s
+
+
 def _interval_seconds() -> int:
     try:
         return max(60, int(os.environ.get("CHORDENTIAL_AUTOFETCH_INTERVAL", "900")))
@@ -150,4 +191,17 @@ async def run_loop() -> None:
                 pass
             finally:
                 _status["running"] = False
+        if triage_enabled():                 # Phase B2 — autonomous Gmail triage
+            global _last_triage_mono
+            now_mono = time.monotonic()
+            if now_mono - _last_triage_mono >= _triage_interval_seconds():
+                _last_triage_mono = now_mono
+                try:
+                    created = await asyncio.to_thread(run_triage_cycle)
+                    _triage_status["cycles"] += 1
+                    _triage_status["last_created"] = created
+                    _triage_status["total_created"] += created
+                    _triage_status["last_run"] = datetime.now(timezone.utc).isoformat()
+                except Exception:
+                    pass
         await asyncio.sleep(_interval_seconds())

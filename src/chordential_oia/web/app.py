@@ -523,7 +523,7 @@ def signals_radar(request: Request, push: str = "", triage: str = ""):
         push_result=push, push_configured=webpush.is_configured(),
         push_subs=push_subs, push_error=webpush.last_push_error(),
         triage_result=triage, triage_configured=triage_mod.is_configured(),
-        triage_status=triage_mod.last_run(),
+        triage_status=triage_mod.last_run(), triage_auto=scheduler.triage_status(),
     )
 
 
@@ -596,6 +596,7 @@ def signal_promote(signal_id: int):
         if handle:
             db.set_contact_handle(conn, new_id, handle)
         db.link_signal_to_opp(conn, signal_id, new_id)
+        triage.record_feedback(s, "promoted")   # B3 — a triaged gig the human kept
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
@@ -626,6 +627,10 @@ def signals_clear():
 def signal_set_status(signal_id: int, status: str = Form(...)):
     conn = db.connect()
     try:
+        if status.strip().lower() == "dismissed":   # B3 — a triaged gig the human rejected
+            s = db.get_signal(conn, signal_id)
+            if s is not None:
+                triage.record_feedback(s, "dismissed")
         db.set_signal_status(conn, signal_id, status)
     finally:
         conn.close()
