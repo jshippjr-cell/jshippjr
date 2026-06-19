@@ -255,6 +255,7 @@ _OUTREACH_COLUMNS = {
     "contact_email": "TEXT",
     "contact_role": "TEXT",
     "contact_linkedin": "TEXT",
+    "contact_handle": "TEXT",      # poster's handle (e.g. reddit author) for DM deep-links
     "next_action": "TEXT",
     "next_action_due": "TEXT",
     "last_contacted": "TEXT",
@@ -632,6 +633,15 @@ def update_outreach(
             next_action_due or None, opp_id,
         ),
     )
+    conn.commit()
+
+
+def set_contact_handle(conn: sqlite3.Connection, opp_id: int, handle: str) -> None:
+    """Stamp the poster's handle (e.g. reddit author) carried over on promote."""
+    if not handle:
+        return
+    conn.execute(
+        "UPDATE opportunities SET contact_handle = ? WHERE id = ?", (handle, opp_id))
     conn.commit()
 
 

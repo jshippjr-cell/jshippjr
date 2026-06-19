@@ -169,7 +169,7 @@ def is_music_gig(title: str, body: str = "") -> bool:
 def ingest_signal(
     conn, *, source: str, title: str, body: str = "", url: str = "",
     external_ref: str = "", budget_min=None, budget_max=None, posted_at=None,
-    strict: bool = False,
+    strict: bool = False, contact_handle: str = "",
 ) -> Optional[int]:
     title = (title or "").strip()
     if not title:
@@ -190,6 +190,7 @@ def ingest_signal(
         title=title[:300], body=(body or "")[:5000], url=url,
         external_ref=external_ref or url, budget_min=bmin, budget_max=bmax,
         score=score, tier=tier, posted_at=posted_at,
+        contact_handle=contact_handle or None,
     )
     if sid is not None:                      # a genuinely new gig cleared the filter
         notify_new_gig(title, url)
@@ -277,8 +278,9 @@ _LABEL_RE = re.compile(r"(?im)^\s*(title|role|gig|position|job|project)\s*[:\-]"
 
 
 # "Reddit Posts (/r/sub/): 'Title' by author"  — F5Bot's per-match line.
+# Group 4 captures the author handle so we can deep-link a DM to the poster.
 _F5BOT_LINE = re.compile(
-    r"Reddit\s+(Posts|Comments)\s*\(\s*(/r/[^)]+?)/?\s*\)\s*:\s*['\"]?(.*?)['\"]?(?:\s+by\s+\S+)?\s*$",
+    r"Reddit\s+(Posts|Comments)\s*\(\s*(/r/[^)]+?)/?\s*\)\s*:\s*['\"]?(.*?)['\"]?(?:\s+by\s+(\S+))?\s*$",
     re.IGNORECASE,
 )
 
@@ -317,7 +319,9 @@ def _signals_from_links(body: str) -> List[dict]:
                 kind, sub, title = fm.group(1).lower(), fm.group(2), fm.group(3).strip()
                 if kind == "comments":
                     continue   # a comment on a (usually old) post — never a gig
-                out.append({"title": (title or url)[:200], "url": url, "source": sub})
+                handle = (fm.group(4) or "").strip().lstrip("/").removeprefix("u/")
+                out.append({"title": (title or url)[:200], "url": url,
+                            "source": sub, "handle": handle})
             else:
                 out.append({"title": (ctx or url)[:200], "url": url, "source": "alert"})
     return out
@@ -349,6 +353,7 @@ def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
         if ingest_signal(
             conn, source=c.get("source") or source, title=c["title"],
             url=c["url"], external_ref=c["url"], strict=True,
+            contact_handle=c.get("handle", ""),
         ):
             n += 1
     return n

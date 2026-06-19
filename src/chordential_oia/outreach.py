@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 from .estimation import Estimate
 from .models import BuyerType, MusicDiscipline, Opportunity, QualificationResult, ScoredOpportunity
@@ -357,3 +357,97 @@ def build_outreach_plan(
             "Log each touch below; the outcome feeds the win/loss moat.",
         ],
     )
+
+
+# --------------------------------------------------------------------------- #
+# Channel-aware Respond — reply in the platform the lead came from, with a draft.
+# --------------------------------------------------------------------------- #
+# Email-channel sources (a response goes out as email even without a saved address).
+_EMAIL_SOURCES = ("productionhub", "mandy", "email", "staffmeup", "hitmarker", "front_of_house")
+
+
+def _field(row, key):
+    """Read a column from a sqlite Row or a plain dict (None when absent)."""
+    try:
+        val = row[key]
+    except (KeyError, IndexError):
+        return None
+    return val
+
+
+def _mailto(to: str, subject: str, body: str) -> str:
+    return (f"mailto:{quote(to or '', safe='@')}"
+            f"?subject={quote(subject or '', safe='')}"
+            f"&body={quote(body or '', safe='')}")
+
+
+def respond_action(row, plan: OutreachPlan) -> dict:
+    """Pick how to respond to a lead *in the channel it came from*, with a prepared
+    draft to review and send. Deterministic; sends nothing itself. Returns
+    ``{channel, label, url, draft, opens_compose, hint}``.
+
+    This is **separate** from viewing the original post — that link just opens the
+    posting; this drafts the actual DM/email reply to the person who listed it.
+    """
+    source = (_field(row, "source") or "").lower()
+    url = _field(row, "url") or ""
+    email = _field(row, "contact_email") or ""
+    handle = _field(row, "contact_handle") or ""
+    linkedin = _field(row, "contact_linkedin") or ""
+    need = _field(row, "need") or "your project"
+    subject = plan.email_subject or f"Re: {need}"
+    draft = plan.first_touch_message or ""
+
+    is_reddit = "reddit" in source or "reddit.com" in url or source.startswith("/r/")
+    if is_reddit:
+        if handle:
+            compose = ("https://www.reddit.com/message/compose/?to=" + quote_plus(handle)
+                       + "&subject=" + quote_plus(subject[:100])
+                       + "&message=" + quote_plus(draft[:9000]))
+            return {
+                "channel": "Reddit DM",
+                "label": f"Message on Reddit ▸ u/{handle}",
+                "url": compose, "draft": draft, "opens_compose": True,
+                "hint": "Opens Reddit's message composer to the poster with your note "
+                        "prefilled — review and send.",
+            }
+        return {
+            "channel": "Reddit",
+            "label": "Reply on Reddit ▸ open post",
+            "url": url or "https://www.reddit.com", "draft": draft, "opens_compose": False,
+            "hint": "We don't have the poster's username, so open the post and reply/DM "
+                    "from there — your draft below is ready to paste.",
+        }
+
+    if "linkedin" in source and not email:
+        target = linkedin or plan.linkedin_search_url
+        return {
+            "channel": "LinkedIn",
+            "label": "Message on LinkedIn ▸ open profile",
+            "url": target, "draft": draft, "opens_compose": False,
+            "hint": "Opens the LinkedIn profile/search — paste your draft into a message.",
+        }
+
+    if email or any(k in source for k in _EMAIL_SOURCES):
+        return {
+            "channel": "Email",
+            "label": ("Email ▸ " + email) if email else "Compose email",
+            "url": _mailto(email, subject, draft), "draft": draft, "opens_compose": True,
+            "hint": (f"Opens your mail app to {email} with the pitch prefilled." if email
+                     else "Opens your mail app with the pitch prefilled — add the recipient."),
+        }
+
+    # Fallback: open the source link if we have one, else draft an email.
+    if url:
+        return {
+            "channel": "Open source",
+            "label": "Open listing ▸ respond there",
+            "url": url, "draft": draft, "opens_compose": False,
+            "hint": "Open the listing and respond through its own channel — draft ready below.",
+        }
+    return {
+        "channel": "Email",
+        "label": "Compose email",
+        "url": _mailto(email, subject, draft), "draft": draft, "opens_compose": True,
+        "hint": "Opens your mail app with the pitch prefilled — add the recipient.",
+    }

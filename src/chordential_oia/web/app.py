@@ -32,7 +32,7 @@ from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
-from ..outreach import build_outreach_plan
+from ..outreach import build_outreach_plan, respond_action
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
@@ -574,6 +574,10 @@ def signal_promote(signal_id: int):
             budget_max=s["budget_max"], source="signal", url=s["url"] or "",
         )
         new_id = db.insert_opportunity(conn, opp)
+        # Carry the poster's handle so the channel-aware Respond button can DM them.
+        handle = s["contact_handle"] if "contact_handle" in s.keys() else None
+        if handle:
+            db.set_contact_handle(conn, new_id, handle)
         db.link_signal_to_opp(conn, signal_id, new_id)
     finally:
         conn.close()
@@ -977,7 +981,8 @@ def outreach_page(request: Request, opp_id: int):
     finally:
         conn.close()
     return render(
-        request, "outreach.html", nav="inbox", row=row, opp=opp, plan=plan, events=events
+        request, "outreach.html", nav="inbox", row=row, opp=opp, plan=plan, events=events,
+        respond=respond_action(row, plan),
     )
 
 
@@ -1240,18 +1245,15 @@ def buyers_directory(
     )
 
 
-@app.get("/buyer/{client}", response_class=HTMLResponse)
-def buyer_profile(request: Request, client: str):
-    conn = db.connect()
-    try:
-        rows = db.buyer_opportunities(conn, client)
-        touch = db.buyer_touch_summary(conn, client)
-        contacts = db.buyer_contacts(conn, client)
-        website = db.company_website(conn, client)
-    finally:
-        conn.close()
+def _buyer_context(conn, client: str) -> Optional[dict]:
+    """Assemble the full buyer-profile context (None when the buyer is unknown).
+    Shared by the standalone /buyer/{client} page and the opp-scoped tab."""
+    rows = db.buyer_opportunities(conn, client)
     if not rows:
-        return HTMLResponse("Buyer not found", status_code=404)
+        return None
+    touch = db.buyer_touch_summary(conn, client)
+    contacts = db.buyer_contacts(conn, client)
+    website = db.company_website(conn, client)
 
     won = [r for r in rows if r["status"] == "Won"]
     lost = [r for r in rows if r["status"] == "Lost"]
@@ -1293,11 +1295,39 @@ def buyer_profile(request: Request, client: str):
         last_contacted_days=days_since(touch["last_contacted"]),
         strategic_tier=best_tier,
     )
-    return render(
-        request, "buyer.html", nav="buyers", summary=summary, rows=rows,
-        rel=rel, contacts=contacts, last_contacted=touch["last_contacted"],
-        company_website=website,
-    )
+    return {
+        "summary": summary, "rows": rows, "rel": rel, "contacts": contacts,
+        "last_contacted": touch["last_contacted"], "company_website": website,
+    }
+
+
+@app.get("/buyer/{client}", response_class=HTMLResponse)
+def buyer_profile(request: Request, client: str):
+    conn = db.connect()
+    try:
+        ctx = _buyer_context(conn, client)
+    finally:
+        conn.close()
+    if ctx is None:
+        return HTMLResponse("Buyer not found", status_code=404)
+    return render(request, "buyer.html", nav="buyers", **ctx)
+
+
+@app.get("/opportunity/{opp_id}/buyer", response_class=HTMLResponse)
+def opportunity_buyer(request: Request, opp_id: int):
+    """The buyer profile rendered inside the opportunity's tabbed context, so the
+    subnav stays put instead of jumping to the standalone company page."""
+    conn = db.connect()
+    try:
+        row, opp, ev = _load(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        ctx = _buyer_context(conn, row["client"])
+    finally:
+        conn.close()
+    if ctx is None:
+        return HTMLResponse("Buyer not found", status_code=404)
+    return render(request, "buyer.html", nav="inbox", opp_row=row, **ctx)
 
 
 @app.post("/buyer/{client}/website")

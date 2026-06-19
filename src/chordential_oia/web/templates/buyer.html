@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar, rel_pill %}
+{% from "_macros.html" import action_pill, tier_pill, status_pill, strat_pill, align_bar, rel_pill, opp_subnav %}
 {% block title %}{{ summary.client }}{% endblock %}
-{% block heading %}Buyer profile{% endblock %}
+{% block heading %}{% if opp_row %}<a class="crumb" href="/opportunity/{{ opp_row['id'] }}">{{ opp_row['need'][:40] }}</a> / Buyer profile{% else %}Buyer profile{% endif %}{% endblock %}
 {% block content %}
+
+{% if opp_row %}{{ opp_subnav(opp_row, 'buyer') }}{% endif %}
 
 <div class="detail-head card">
   <div>
