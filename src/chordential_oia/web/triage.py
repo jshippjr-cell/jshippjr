@@ -167,6 +167,21 @@ def run_triage(
         f"Scanned {scanned} new email(s): {created} new opportunit(y/ies) "
         f"landed on the radar, {skipped} skipped."
     )
+    if scanned == 0 and created == 0:
+        # Nothing read — surface the Gmail error (lib missing / auth / API) if any,
+        # so a silent failure is diagnosable instead of looking like an empty inbox.
+        err = ""
+        try:
+            err = getattr(gmail, "last_error", lambda: "")()
+        except Exception:  # noqa: BLE001
+            err = ""
+        if err:
+            _LAST_RUN += f"  ⚠ Gmail error: {err}"
+        else:
+            _LAST_RUN += (
+                f"  (No unread mail matched label '{gmail_client.label()}' — "
+                "check the CHORDENTIAL_GMAIL_LABEL value and mark a few alerts unread.)"
+            )
     return {"configured": True, "scanned": scanned, "created": created, "skipped": skipped}
 
 
