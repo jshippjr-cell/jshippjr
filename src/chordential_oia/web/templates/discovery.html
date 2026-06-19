@@ -151,7 +151,15 @@
         </td>
         <td class="small">
           {% if a and a['last_fetched'] %}
-            <span class="dot won"></span> Last fetched {{ a['last_fetched'][:10] }} · <strong>{{ a['found'] }}</strong> found
+            {% if a['found'] %}
+              <span class="dot won"></span> Last fetched {{ a['last_fetched'][:10] }} · <strong>{{ a['found'] }}</strong> found
+            {% elif a['last_outcome'] == 'blocked' %}
+              <span class="dot lost"></span> Fetched {{ a['last_fetched'][:10] }} · <strong>blocked</strong> — site rejects bots
+            {% elif a['last_outcome'] == 'error' %}
+              <span class="dot lost"></span> Fetched {{ a['last_fetched'][:10] }} · couldn't reach the site
+            {% else %}
+              <span class="muted">Fetched {{ a['last_fetched'][:10] }} · 0 matched <span class="small">(no custom adapter for this site yet)</span></span>
+            {% endif %}
           {% elif a and a['approved_targets'] %}
             <span class="muted">Idle · {{ a['approved_targets'] }} target(s) approved, ready to fetch</span>
           {% else %}
@@ -202,7 +210,9 @@
   <p class="muted small" style="margin-top:10px">
     These sites wall their listings behind a login (and their terms forbid automated scraping),
     so Chordential won't fetch them. Open one in your browser where you're already signed in,
-    skim it, and add anything good by hand. (API-token integrations for these can come later.)
+    skim it, and add anything good by hand. Sources land here either because the council
+    flagged them or because the crawler <strong>hit a login wall</strong> and moved them here
+    automatically. (API-token integrations can come later.)
   </p>
 </section>
 {% endif %}
@@ -228,8 +238,18 @@
         <td class="small muted">{{ t['query'] }}</td>
         <td>
           <span class="pill st-{{ t['status']|lower }}">{{ t['status'] }}</span>
-          {% if t['status']=='Fetched' and t['result_count'] is not none %}
-            <div class="muted small">{{ t['result_count'] }} found</div>
+          {% if t['status']=='Fetched' %}
+            {% if t['result_count'] %}
+              <div class="muted small">{{ t['result_count'] }} found</div>
+            {% elif t['last_outcome'] == 'blocked' %}
+              <div class="muted small">blocked (bots rejected)</div>
+            {% elif t['last_outcome'] == 'login' %}
+              <div class="muted small">login required</div>
+            {% elif t['last_outcome'] == 'error' %}
+              <div class="muted small">couldn't reach</div>
+            {% else %}
+              <div class="muted small">0 matched</div>
+            {% endif %}
           {% endif %}
         </td>
         <td>

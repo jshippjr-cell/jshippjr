@@ -193,7 +193,8 @@ CREATE TABLE IF NOT EXISTS crawl_targets (
     proposed_at TEXT,
     decided_at TEXT,
     fetched_at TEXT,
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '',
+    last_outcome TEXT                      -- why the last fetch returned what it did
 );
 
 -- Proposals — deterministic paperwork generated from the estimator. Payment
@@ -370,9 +371,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
             label TEXT, query TEXT, url TEXT, source_key TEXT, rationale TEXT,
             status TEXT DEFAULT 'Proposed', result_count INTEGER,
-            proposed_at TEXT, decided_at TEXT, fetched_at TEXT, notes TEXT DEFAULT ''
+            proposed_at TEXT, decided_at TEXT, fetched_at TEXT, notes TEXT DEFAULT '',
+            last_outcome TEXT
         )"""
     )
+    crawl_cols = {r["name"] for r in conn.execute("PRAGMA table_info(crawl_targets)")}
+    if "last_outcome" not in crawl_cols:
+        conn.execute("ALTER TABLE crawl_targets ADD COLUMN last_outcome TEXT")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS discovery_sites (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -899,15 +904,18 @@ def upsert_discovery_site(
     board_url: Optional[str] = None,
     login_gated: bool = False,
 ) -> None:
-    """Insert a site if new; never overwrite Jon's decision on an existing one
-    (so re-seeding the catalog preserves approvals/rejections). ``board_url`` is
-    set for Jon-added custom sites (catalog sites build URLs in code)."""
+    """Insert a site if new; never overwrite Jon's status decision on an existing
+    one (re-seeding preserves approvals/rejections). The ``login_gated`` flag IS
+    synced (sticky-True) — it's a catalog/detection fact, not a user decision, so
+    a source known/found to need a login moves to manual-assist and stays there.
+    ``board_url`` is set for Jon-added custom sites (catalog sites build URLs)."""
     conn.execute(
         """INSERT INTO discovery_sites
            (key, name, homepage, kind, category, recommended_by, rationale,
             status, added_at, board_url, login_gated)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-           ON CONFLICT(key) DO NOTHING""",
+           ON CONFLICT(key) DO UPDATE SET
+             login_gated = MAX(discovery_sites.login_gated, excluded.login_gated)""",
         (
             key, name, homepage, kind, category, recommended_by, rationale,
             status, datetime.now(timezone.utc).isoformat(), board_url,
@@ -998,8 +1006,11 @@ def discovery_site_activity(conn: sqlite3.Connection) -> Dict[str, dict]:
                   MAX(fetched_at) AS last_fetched,
                   COALESCE(SUM(result_count), 0) AS found,
                   SUM(CASE WHEN status = 'Fetched' THEN 1 ELSE 0 END) AS fetched_targets,
-                  SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved_targets
-           FROM crawl_targets
+                  SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved_targets,
+                  (SELECT t2.last_outcome FROM crawl_targets t2
+                    WHERE t2.source_key = t.source_key AND t2.fetched_at IS NOT NULL
+                    ORDER BY t2.fetched_at DESC LIMIT 1) AS last_outcome
+           FROM crawl_targets t
            WHERE source_key IS NOT NULL AND source_key != ''
            GROUP BY source_key"""
     ).fetchall()
@@ -1009,6 +1020,7 @@ def discovery_site_activity(conn: sqlite3.Connection) -> Dict[str, dict]:
             "found": r["found"] or 0,
             "fetched_targets": r["fetched_targets"] or 0,
             "approved_targets": r["approved_targets"] or 0,
+            "last_outcome": r["last_outcome"],
         }
         for r in rows
     }
@@ -1123,12 +1135,24 @@ def update_crawl_target_status(
 
 
 def mark_crawl_target_fetched(
-    conn: sqlite3.Connection, target_id: int, result_count: int
+    conn: sqlite3.Connection, target_id: int, result_count: int,
+    outcome: Optional[str] = None,
 ) -> None:
     conn.execute(
         """UPDATE crawl_targets
-           SET status = 'Fetched', result_count = ?, fetched_at = ? WHERE id = ?""",
-        (result_count, datetime.now(timezone.utc).isoformat(), target_id),
+           SET status = 'Fetched', result_count = ?, fetched_at = ?, last_outcome = ?
+           WHERE id = ?""",
+        (result_count, datetime.now(timezone.utc).isoformat(), outcome, target_id),
+    )
+    conn.commit()
+
+
+def set_site_login_gated(conn: sqlite3.Connection, source_key: str, gated: bool = True) -> None:
+    """Flag a source as login-gated (→ manual-assist, never auto-fetched). Used by
+    the fetch diagnostics when a login wall is detected at runtime."""
+    conn.execute(
+        "UPDATE discovery_sites SET login_gated = ? WHERE key = ?",
+        (1 if gated else 0, source_key),
     )
     conn.commit()
 

@@ -220,13 +220,16 @@ def _do_fetch(conn, target) -> int:
     opportunities → inbound leads (deduped so recurring re-scans don't pile up).
     No gate check here — callers enforce the approved-lineage gate."""
     ingested = 0
+    outcome = None
     if target["kind"] == "talent":
         for t in ScrapedTalentSource(target["url"]).fetch():
             if not db.talent_exists(conn, t.name, t.email):
                 db.insert_talent(conn, t)
                 ingested += 1
+        outcome = "ok" if ingested else "empty"
     elif target["kind"] == "opportunity":
-        for rec in crawl_adapters.fetch_opportunity_records(target):
+        res = crawl_adapters.fetch_opportunity_records(target)
+        for rec in res["records"]:
             if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
                 continue
             db.insert_inbound_lead(
@@ -238,8 +241,13 @@ def _do_fetch(conn, target) -> int:
                 source="crawl",
             )
             ingested += 1
+        outcome = res["outcome"]
+        # Auto-detect a login wall → move the source to manual-assist (never
+        # auto-fetched again) so Jon knows it needs his own signed-in browser.
+        if outcome == "login" and target["source_key"]:
+            db.set_site_login_gated(conn, target["source_key"], True)
 
-    db.mark_crawl_target_fetched(conn, target["id"], ingested)
+    db.mark_crawl_target_fetched(conn, target["id"], ingested, outcome)
     return ingested
 
 

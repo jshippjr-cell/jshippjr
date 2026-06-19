@@ -119,8 +119,9 @@ def test_online_cycle_ingests_then_dedups(tmp_path, monkeypatch):
     # Scrape ON, generic HTML adapter (Soundlister): two targets return the same
     # listing, so a cycle ingests the lead once and dedups the duplicate.
     db, disc, sch = _modules(tmp_path, monkeypatch, scrape=True)
+    from chordential_oia.web import crawl_adapters as ca
     html = '<li class="opportunity" data-company="Acme" data-need="Brand spot"></li>'
-    monkeypatch.setattr(disc, "_fetch_url", lambda url, timeout=10.0: html)
+    monkeypatch.setattr(ca, "_get_with_meta", lambda url, headers, timeout=10.0: (html, 200, url))
 
     conn = db.connect()
     db.init_db(conn)
@@ -179,6 +180,56 @@ def test_seed_all_active_backfill(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# Fetch diagnostics — explain *why* a fetch came back empty
+# --------------------------------------------------------------------------- #
+def test_classify_outcome():
+    from chordential_oia.web import crawl_adapters as ca
+    assert ca.classify_outcome("anything", 200, "u", 3) == "ok"
+    assert ca.classify_outcome("", 403, "u", 0) == "blocked"
+    assert ca.classify_outcome("", 401, "u", 0) == "login"
+    assert ca.classify_outcome('<input type="password">', 200, "u", 0) == "login"
+    assert ca.classify_outcome("<html>jobs</html>", 200, "u", 0) == "empty"
+    assert ca.classify_outcome("", 0, "u", 0) == "error"
+
+
+def test_login_wall_auto_moves_source_to_manual_assist(tmp_path, monkeypatch):
+    db, disc, sch = _modules(tmp_path, monkeypatch, scrape=True)
+    from chordential_oia.web import crawl_adapters as ca
+    wall = '<html><form><input type="password" name="pw"></form>Please log in</html>'
+    monkeypatch.setattr(ca, "_get_with_meta", lambda url, headers, timeout=10.0: (wall, 200, url))
+
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    tid = _approved(db, conn, "soundlister", "https://soundlister.example/jobs")
+    conn.commit()
+    conn.close()
+
+    sch.run_cycle(batch=5, delay=0)
+
+    conn = db.connect()
+    site = conn.execute("SELECT login_gated FROM discovery_sites WHERE key='soundlister'").fetchone()
+    assert site["login_gated"] == 1                     # auto-moved to manual-assist
+    assert db.get_crawl_target(conn, tid)["last_outcome"] == "login"
+
+
+def test_login_gated_propagates_on_resync(tmp_path, monkeypatch):
+    # A row seeded before the flag existed gets corrected on the next catalog sync.
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    conn.execute(
+        "INSERT INTO discovery_sites (key, name, kind, status, login_gated) "
+        "VALUES ('linkedin_jobs','LinkedIn','opportunity','Established',0)"
+    )
+    conn.commit()
+    disc.sync_catalog(conn)
+    row = conn.execute("SELECT login_gated, status FROM discovery_sites WHERE key='linkedin_jobs'").fetchone()
+    assert row["login_gated"] == 1            # catalog flag now applied
+    assert row["status"] == "Established"     # Jon's status decision preserved
+
+
+# --------------------------------------------------------------------------- #
 # Phase 3 — Reddit JSON adapter
 # --------------------------------------------------------------------------- #
 def test_reddit_json_url_and_parse():
@@ -211,7 +262,8 @@ def test_reddit_dispatch_through_cycle(tmp_path, monkeypatch):
         '{"data":{"title":"[Hiring] Game composer","author":"acme","subreddit":"forhire",'
         '"permalink":"/r/forhire/1","selftext":"scope"}}]}}'
     )
-    monkeypatch.setattr(ca, "_http_get", lambda url, headers, timeout=10.0: sample)
+    monkeypatch.setattr(ca, "_get_with_meta",
+                        lambda url, headers, timeout=10.0: (sample, 200, url))
 
     conn = db.connect()
     db.init_db(conn)

@@ -64,6 +64,7 @@ CATALOG: List[SourceSite] = [
         "opportunity", "Production job board", "RFP Intelligence Director",
         "Film/video producers post crew + music calls here.", STATUS_ESTABLISHED,
         [("opportunity", "Jobs", "https://www.productionhub.com/jobs/search?keywords={q}")],
+        login_gated=True,
     ),
     SourceSite(
         "mandy", "Mandy.com", "https://www.mandy.com",

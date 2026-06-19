@@ -43,6 +43,47 @@ def _http_get(url: str, headers: dict, timeout: float = 10.0) -> str:
         return resp.read().decode(charset, errors="replace")
 
 
+def _get_with_meta(url: str, headers: dict, timeout: float = 10.0):
+    """GET returning (text, status, final_url) and never raising — so the caller
+    can diagnose *why* a fetch came back empty (login wall, block, etc.)."""
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return resp.read().decode(charset, errors="replace"), resp.status, resp.geturl()
+    except urllib.error.HTTPError as e:  # 401/403/429/5xx — keep the status
+        return "", e.code, url
+    except Exception:
+        return "", 0, url
+
+
+# Strong signals that content is walled behind a login (avoid generic "sign in"
+# nav links, which appear on nearly every page and would false-positive).
+_LOGIN_HINTS = (
+    'type="password"', "sign in to view", "log in to view", "log in to see",
+    "please log in", "members only", "subscription required", "subscribers only",
+    "create a free account to", "sign up to see", "register to view",
+)
+
+
+def classify_outcome(text: str, status: int, final_url: str, n_records: int) -> str:
+    """Diagnose a fetch: ok | login | blocked | error | empty."""
+    if n_records > 0:
+        return "ok"
+    if status == 401:
+        return "login"
+    if status in (403, 429):
+        return "blocked"
+    if status == 0 or status >= 500:
+        return "error"
+    low = (text or "").lower()
+    if "login" in (final_url or "").lower() or "signin" in (final_url or "").lower():
+        return "login"
+    if any(h in low for h in _LOGIN_HINTS):
+        return "login"
+    return "empty"  # fetched fine, but nothing matched (usually: no adapter yet)
+
+
 # --------------------------------------------------------------------------- #
 # Reddit adapter
 # --------------------------------------------------------------------------- #
@@ -122,34 +163,38 @@ def parse_reddit_json(text: str) -> List[dict]:
     return out
 
 
-def fetch_reddit(url: str) -> List[dict]:
+def fetch_reddit(url: str) -> dict:
     token = _reddit_token()
     json_url = to_reddit_json_url(url, oauth=bool(token))
     headers = {"User-Agent": _REDDIT_UA}
     if token:
         headers["Authorization"] = f"bearer {token}"
-    try:
-        text = _http_get(json_url, headers)
-    except Exception:
-        return []
-    return parse_reddit_json(text)
+    text, status, final_url = _get_with_meta(json_url, headers)
+    records = parse_reddit_json(text)
+    outcome = classify_outcome(text, status, final_url, len(records))
+    # Reddit blocks unauthenticated API traffic from datacenters — call that out.
+    detail = ""
+    if outcome == "blocked" and not token:
+        detail = "Reddit blocked the request — add REDDIT_CLIENT_ID/SECRET for the official API."
+    return {"records": records, "outcome": outcome, "detail": detail}
 
 
 # --------------------------------------------------------------------------- #
 # Dispatch
 # --------------------------------------------------------------------------- #
-def fetch_opportunity_records(target) -> List[dict]:
+def fetch_opportunity_records(target) -> dict:
     """Fetch one opportunity target via the best adapter for its source. Returns
-    [] when scraping is disabled (the gate lives one level up too)."""
+    a diagnosis: ``{"records": [...], "outcome": ok|login|blocked|empty|error,
+    "detail": str}``. ``outcome == "off"`` when scraping is disabled."""
     if not scrape_enabled():
-        return []
+        return {"records": [], "outcome": "off", "detail": ""}
     if is_reddit(target):
         return fetch_reddit(target["url"])
-    # Generic HTML floor — reuse discovery's fetch + parser (lazy import avoids a
-    # cycle, and keeps a single monkeypatch point for tests).
+    # Generic HTML floor — reuse discovery's parser (lazy import avoids a cycle).
     from . import discovery
-    try:
-        html = discovery._fetch_url(target["url"])
-    except Exception:
-        html = ""
-    return discovery.parse_opportunity_html(html)
+    text, status, final_url = _get_with_meta(
+        target["url"], {"User-Agent": "ChordentialDiscoveryBot/1.0 (+https://chordential.com)"}
+    )
+    records = discovery.parse_opportunity_html(text)
+    outcome = classify_outcome(text, status, final_url, len(records))
+    return {"records": records, "outcome": outcome, "detail": ""}
