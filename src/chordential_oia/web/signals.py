@@ -233,7 +233,7 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
                 "Title": _ascii_header(title or "New gig on Chordential")[:120],
                 "Click": _ascii_header(click_url or "https://chordential.com/signals"),
                 "Tags": "musical_note",   # ntfy renders this as 🎵 on the phone
-                "Priority": "high",
+                "Priority": "max",        # urgent → iOS plays sound + pops a banner
             },
         )
         urllib.request.urlopen(req, timeout=8)  # noqa: S310
