@@ -55,20 +55,14 @@ _DEFAULT_Q = {"opportunity": "composer music", "talent": "composer"}
 
 
 # --------------------------------------------------------------------------- #
-# Launchpad keyword bank — learned from real gigs (e.g. r/gameDevClassifieds
-# "[PAID] Looking for a Music Composer"). These role / intent / exclusion terms
-# are embedded into the manual-assist "Open search" links so they land on actual
-# PAID music & audio roles, not talent self-promo or unpaid rev-share asks.
+# Launchpad search terms — learned from real gigs (e.g. r/gameDevClassifieds
+# "[PAID] Looking for a Music Composer"). IMPORTANT: Reddit's search is
+# keyword-only — complex boolean ((a OR b) (c OR d) -x) returns ZERO results — so
+# we offer a few SIMPLE one-click searches per channel instead of one mega-query.
+# Each term below is a working search; the user clicks whichever fits and skims
+# the newest results. Tune this list as Jon flags real hits/misses.
 # --------------------------------------------------------------------------- #
-ROLE_TERMS = [
-    "composer", '"music composer"', "soundtrack", '"original music"', "score",
-    '"sound design"', '"sound designer"', '"game audio"', '"music producer"',
-    '"music supervisor"', '"sonic branding"', '"additional music"',
-]
-INTENT_TERMS = ["hiring", "paid", '"looking for"', "seeking", "commission"]
-EXCLUDE_TERMS = [
-    '"for hire"', '"rev share"', "revshare", "unpaid", "royalty", "volunteer",
-]
+SEARCH_TERMS = ["composer", "music", '"sound design"', '"game audio"', "soundtrack"]
 
 
 # --------------------------------------------------------------------------- #

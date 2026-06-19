@@ -205,9 +205,11 @@
           <span class="strong">{{ s['name'] }}</span> <span class="pill st-proposed">manual</span>
           <div class="muted small">{{ s['rationale'] }} — {{ s['recommended_by'] }}</div>
         </td>
-        <td style="width:1%;white-space:nowrap">
-          <a class="btn tiny primary" href="{{ review_urls[s['id']] }}" target="_blank" rel="noopener"
-             title="Open this source's search in your browser">Open search ↗</a>
+        <td style="white-space:nowrap;text-align:right">
+          {% for srch in review_searches[s['id']] %}
+          <a class="btn tiny {{ 'primary' if loop.first }}" href="{{ srch['url'] }}" target="_blank" rel="noopener"
+             title="Search {{ s['name'] }} for ‘{{ srch['label'] }}’, newest first">{{ srch['label'] }} ↗</a>
+          {% endfor %}
         </td>
       </tr>
       {% endfor %}

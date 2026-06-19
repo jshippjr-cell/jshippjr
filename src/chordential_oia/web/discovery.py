@@ -88,29 +88,42 @@ def seed_all_active(conn) -> int:
     return added
 
 
-def reddit_search_url(subreddit: str) -> str:
-    """A high-yield Reddit search for a subreddit, built from the launchpad
-    keyword bank: (role terms) AND (hiring intent) AND (exclude unpaid/self-promo),
-    newest first, last month. Lands 'Open search' right on real PAID gigs."""
-    role = "(" + " OR ".join(catalog.ROLE_TERMS) + ")"
-    intent = "(" + " OR ".join(catalog.INTENT_TERMS) + ")"
-    excl = " ".join("-" + t for t in catalog.EXCLUDE_TERMS)
-    q = f"{role} {intent} {excl}"
+def reddit_search_url(subreddit: str, term: str = "composer") -> str:
+    """A SIMPLE Reddit search (Reddit's search can't do boolean), newest first,
+    restricted to the sub — guaranteed to return results the user can skim."""
     return (
         f"https://www.reddit.com/r/{subreddit}/search/"
-        f"?q={quote_plus(q)}&restrict_sr=1&sort=new&t=month"
+        f"?q={quote_plus(term)}&restrict_sr=1&sort=new"
     )
 
 
-def manual_assist_url(site_row) -> str:
-    """The best direct-search URL for a manual-assist source — so 'Open search'
-    lands Jon right on the relevant listings (e.g. r/forhire newest PAID gigs),
-    in his own logged-in browser, rather than the bare homepage."""
+def _subreddit_of(site_row) -> Optional[str]:
     home = site_row["homepage"] or ""
-    if "reddit.com/r/" in home:                       # smart, keyword-bank search
+    if "reddit.com/r/" in home:
         sub = home.rstrip("/").split("/r/")[-1]
-        if sub:
-            return reddit_search_url(sub)
+        return sub or None
+    return None
+
+
+def manual_assist_searches(site_row) -> List[dict]:
+    """One-click searches for a manual-assist source. Reddit sources get several
+    simple term searches (composer / music / sound design …); everything else
+    gets a single best-search link."""
+    sub = _subreddit_of(site_row)
+    if sub:
+        labels = [t.strip('"') for t in catalog.SEARCH_TERMS]
+        return [
+            {"label": lbl, "url": reddit_search_url(sub, term)}
+            for lbl, term in zip(labels, catalog.SEARCH_TERMS)
+        ]
+    return [{"label": "Open search", "url": manual_assist_url(site_row)}]
+
+
+def manual_assist_url(site_row) -> str:
+    """The best single direct-search URL for a manual-assist source."""
+    sub = _subreddit_of(site_row)
+    if sub:
+        return reddit_search_url(sub)
     site = catalog.get_site(site_row["key"])
     if site is not None:
         for k in ("opportunity", "talent"):

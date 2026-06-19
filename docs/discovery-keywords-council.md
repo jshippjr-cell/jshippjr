@@ -61,6 +61,15 @@ Embedded search shape:
 | **r/gameaudio** *(new)* | Game-audio community; studios hiring composers/SD. |
 | LinkedIn · X · TAXI · ProductionHub | Login/ToS-walled — open in your session. |
 
+## Addendum (2026-06-19) — Reddit search is keyword-only
+
+Field test killed the clever query: Reddit's search **does not support boolean**
+— `(role OR …) (intent OR …) -exclusions` returned **zero** results on r/INAT.
+Revised approach: offer a few **simple one-click searches per channel** (composer ·
+music · "sound design" · "game audio" · soundtrack), each newest-first and
+restricted to the sub. Each is a working query; the user clicks whichever fits and
+skims. Precision comes from the human eye, not an over-clever string.
+
 ## Power tips (for later)
 
 - **Flair search** on r/gameDevClassifieds: `flair:"PAID - Musician"` is the

@@ -157,20 +157,24 @@ def test_turning_on_seeds_an_approved_target(tmp_path, monkeypatch):
     assert disc.seed_active_targets(conn, site) == 0      # idempotent
 
 
-def test_manual_assist_url_uses_keyword_bank(tmp_path, monkeypatch):
+def test_manual_assist_searches_are_simple(tmp_path, monkeypatch):
+    # Reddit search can't do boolean — each launchpad search must be a single
+    # simple term, newest-first, restricted to the sub.
     db, disc, _ = _modules(tmp_path, monkeypatch)
     conn = db.connect()
     db.init_db(conn)
     disc.sync_catalog(conn)
     row = conn.execute("SELECT * FROM discovery_sites WHERE key='reddit_forhire'").fetchone()
     assert row["login_gated"] == 1                       # Reddit → manual-assist
-    url = disc.manual_assist_url(row)
-    # Lands on a keyword-bank search: role terms + intent + newest-first.
-    assert "reddit.com/r/forhire/search" in url
-    assert "composer" in url and "sound" in url
-    assert "hiring" in url and "paid" in url
-    assert "sort=new" in url and "restrict_sr=1" in url
-    assert "rev" in url and url.count("-%22") + url.count("-revshare") >= 1  # exclusions
+
+    searches = disc.manual_assist_searches(row)
+    assert len(searches) >= 3                             # a few one-click options
+    labels = {s["label"] for s in searches}
+    assert "composer" in labels and "music" in labels
+    for s in searches:
+        assert "reddit.com/r/forhire/search" in s["url"]
+        assert "sort=new" in s["url"] and "restrict_sr=1" in s["url"]
+        assert " OR " not in s["url"] and "-%22" not in s["url"]   # no boolean/excludes
 
 
 def test_new_reddit_channels_present(tmp_path, monkeypatch):
