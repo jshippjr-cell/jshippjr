@@ -246,8 +246,16 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
 
 def notify_new_gig(title: str, click_url: str = "") -> None:
     """Push a phone alert when a new live gig lands — only fires for gigs that
-    passed the ironclad filter, so it's high-signal. Uses ntfy.sh (free, no
-    account): set CHORDENTIAL_NTFY_TOPIC to your topic. Best-effort, never raises."""
+    passed the ironclad filter, so it's high-signal. Best-effort, never raises.
+
+    Primary channel is native Web Push to the installed PWA (a real iOS/desktop
+    notification that opens the app to the radar). ntfy.sh is kept as a fallback
+    until Web Push is verified on the phone."""
+    try:
+        from . import webpush
+        webpush.send_web_push("🎵 New gig on Chordential", body=title, url="/signals")
+    except Exception:
+        pass
     send_push("New gig on Chordential", body=title, click_url=click_url)
 
 

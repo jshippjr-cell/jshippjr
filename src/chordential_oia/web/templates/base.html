@@ -5,6 +5,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Chordential{% endblock %} · Procurement OS</title>
   <link rel="stylesheet" href="/static/style.css">
+  <!-- PWA: installable iOS/desktop app + native Web Push -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#E4671F">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Chordential">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  {% block head %}{% endblock %}
+  <script>
+  // Register the root-scope service worker (drives Web Push + install).
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  }
+  function _urlB64ToUint8(base64){
+    var pad = '='.repeat((4 - base64.length % 4) % 4);
+    var b64 = (base64 + pad).replace(/-/g,'+').replace(/_/g,'/');
+    var raw = atob(b64), arr = new Uint8Array(raw.length);
+    for (var i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  // Called by the "Enable phone alerts" button — must run from a user tap (iOS).
+  async function chordentialEnablePush(btn){
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('Phone alerts need iOS 16.4+ and the app added to your Home Screen first.');
+      return;
+    }
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      var perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('Notifications were not allowed.'); return; }
+      var key = (await (await fetch('/push/vapid-public')).json()).key;
+      if (!key) { alert('Phone alerts are not configured on the server yet.'); return; }
+      var sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: _urlB64ToUint8(key)
+      });
+      await fetch('/push/subscribe', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(sub)
+      });
+      if (btn) { btn.textContent = 'Phone alerts on'; btn.disabled = true; }
+    } catch (e) {
+      alert('Could not enable alerts: ' + (e && e.message ? e.message : e));
+    }
+  }
+  </script>
 </head>
 <body>
 <div class="shell">

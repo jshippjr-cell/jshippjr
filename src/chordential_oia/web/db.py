@@ -406,6 +406,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signals)")}
     if "signal_type" not in sig_cols:
         conn.execute("ALTER TABLE signals ADD COLUMN signal_type TEXT DEFAULT 'gig'")
+    if "contact_handle" not in sig_cols:   # poster's handle (e.g. reddit author)
+        conn.execute("ALTER TABLE signals ADD COLUMN contact_handle TEXT")
+    # Web Push subscriptions — one row per browser/device that opted into native
+    # phone alerts for the installed PWA. Deduped on the push endpoint.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint TEXT UNIQUE, p256dh TEXT, auth TEXT, created_at TEXT
+        )"""
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -956,20 +966,24 @@ def insert_signal(
     budget_min: Optional[float] = None, budget_max: Optional[float] = None,
     score: Optional[float] = None, tier: Optional[str] = None,
     posted_at: Optional[str] = None, signal_type: str = "gig",
+    contact_handle: Optional[str] = None,
 ) -> Optional[int]:
     """Record a detected signal (the tape). Deduped on external_ref. found_at is
     stamped now; posted_at is when the opportunity went live (feed value or now).
-    signal_type is 'gig' (a live posting) or 'indicator' (music-spend-incoming)."""
+    signal_type is 'gig' (a live posting) or 'indicator' (music-spend-incoming).
+    contact_handle is the poster's handle (e.g. reddit author) when known."""
     if signal_exists(conn, external_ref):
         return None
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO signals
            (source, source_weight, external_ref, title, body, url,
-            budget_min, budget_max, score, tier, posted_at, found_at, status, signal_type)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'New',?)""",
+            budget_min, budget_max, score, tier, posted_at, found_at, status,
+            signal_type, contact_handle)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'New',?,?)""",
         (source, source_weight, external_ref, title, body, url,
-         budget_min, budget_max, score, tier, posted_at or now, now, signal_type),
+         budget_min, budget_max, score, tier, posted_at or now, now,
+         signal_type, contact_handle),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -996,6 +1010,40 @@ def new_signal_count(conn: sqlite3.Connection) -> int:
         "SELECT COUNT(*) FROM signals WHERE status = 'New' "
         "AND IFNULL(signal_type, 'gig') != 'indicator'"
     ).fetchone()[0]
+
+
+# --------------------------------------------------------------------------- #
+# Web Push subscriptions — devices opted into native phone alerts (the PWA).
+# --------------------------------------------------------------------------- #
+def add_push_subscription(
+    conn: sqlite3.Connection, *, endpoint: str, p256dh: str, auth: str
+) -> None:
+    """Store (or refresh) a browser push subscription, deduped on its endpoint."""
+    if not endpoint:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,
+               auth=excluded.auth""",
+        (endpoint, p256dh, auth, now),
+    )
+    conn.commit()
+
+
+def list_push_subscriptions(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute("SELECT * FROM push_subscriptions").fetchall()
+
+
+def delete_push_subscription(conn: sqlite3.Connection, endpoint: str) -> None:
+    """Drop a subscription (called when the push service reports it expired/gone)."""
+    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    conn.commit()
+
+
+def push_subscription_count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0]
 
 
 def set_signal_status(conn: sqlite3.Connection, signal_id: int, status: str) -> None:

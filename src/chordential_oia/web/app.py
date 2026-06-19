@@ -36,7 +36,7 @@ from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, scheduler, seed, signals
+from . import db, discovery, scheduler, seed, signals, webpush
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -162,6 +162,9 @@ def _is_public_path(path: str) -> bool:
         path in _PUBLIC_PATHS
         or path.startswith("/static/")
         or path in ("/healthz", "/favicon.ico")
+        # PWA install assets — fetched by the browser/OS (sometimes without the
+        # admin cookie), and non-sensitive, so they bypass the gate.
+        or path in ("/sw.js", "/manifest.webmanifest", "/apple-touch-icon.png")
         or path.startswith("/admin/login")
         or path.startswith("/admin/logout")
         or path == "/signals/ingest"   # email-in webhook (its own shared-secret token)
@@ -205,6 +208,99 @@ def healthz():
 def root_head():
     # Respond to the platform health probe without running the dashboard query.
     return Response(status_code=200)
+
+
+# --------------------------------------------------------------------------- #
+# PWA (installable iOS/desktop app) — served from the site root so the service
+# worker's scope covers the whole origin. "Add to Home Screen" → a Chordential
+# app icon that opens the dashboard standalone; new gigs arrive via Web Push.
+# --------------------------------------------------------------------------- #
+_MANIFEST = {
+    "name": "Chordential — Procurement OS",
+    "short_name": "Chordential",
+    "description": "Find, qualify, and win commercial music work.",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#FCF7F8",
+    "theme_color": "#E4671F",
+    "icons": [
+        {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png",
+         "purpose": "any maskable"},
+        {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png",
+         "purpose": "any maskable"},
+    ],
+}
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return Response(json.dumps(_MANIFEST), media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    with open(os.path.join(_HERE, "static", "sw.js"), encoding="utf-8") as f:
+        js = f.read()
+    # Root-scope SW must not be cached stale; allow control of the whole origin.
+    return Response(js, media_type="application/javascript", headers={
+        "Cache-Control": "no-cache", "Service-Worker-Allowed": "/",
+    })
+
+
+@app.get("/apple-touch-icon.png")
+def apple_touch_icon():
+    from fastapi.responses import FileResponse
+    return FileResponse(os.path.join(_HERE, "static", "apple-touch-icon.png"))
+
+
+# --------------------------------------------------------------------------- #
+# Web Push subscription + delivery (native phone alerts for the installed PWA)
+# --------------------------------------------------------------------------- #
+@app.get("/push/vapid-public")
+def push_vapid_public():
+    """The VAPID public key the browser needs to subscribe (empty until set)."""
+    return {"key": webpush.vapid_public()}
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request):
+    """Store this device's push subscription so it receives new-gig alerts."""
+    try:
+        body = await request.json()
+    except Exception:
+        return Response("bad request", status_code=400)
+    endpoint = (body or {}).get("endpoint") or ""
+    keys = (body or {}).get("keys") or {}
+    if not endpoint or not keys.get("p256dh") or not keys.get("auth"):
+        return Response("missing subscription fields", status_code=400)
+    conn = db.connect()
+    try:
+        db.add_push_subscription(
+            conn, endpoint=endpoint, p256dh=keys["p256dh"], auth=keys["auth"])
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+@app.post("/push/test")
+def push_test():
+    """Fire a test alert through the real Web Push pipeline so you can confirm
+    your phone receives it. Reports the outcome on the radar."""
+    if not webpush.is_configured():
+        return RedirectResponse("/signals?push=unset", status_code=303)
+    res = webpush.send_web_push(
+        "🎵 Chordential test alert",
+        body="If you see this on your phone, new-gig alerts are working.",
+        url="/signals",
+    )
+    if res["subscriptions"] == 0:
+        state = "nosub"
+    elif res["sent"] > 0:
+        state = "sent"
+    else:
+        state = "error"
+    return RedirectResponse(f"/signals?push={state}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #
@@ -402,14 +498,15 @@ def signals_radar(request: Request, push: str = ""):
     conn = db.connect()
     try:
         ranked = signals.rank_signals(db.list_signals(conn))
+        push_subs = db.push_subscription_count(conn)
     finally:
         conn.close()
     gigs = [x for x in ranked if (x["row"]["signal_type"] or "gig") != "indicator"]
     return render(
         request, "signals.html", nav="signals", gigs=gigs,
         feeds=scheduler.configured_feeds(),
-        push_result=push, push_configured=signals.push_configured(),
-        push_error=signals.last_push_error(),
+        push_result=push, push_configured=webpush.is_configured(),
+        push_subs=push_subs, push_error=webpush.last_push_error(),
     )
 
 

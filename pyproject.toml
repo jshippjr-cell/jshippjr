@@ -16,6 +16,10 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "httpx>=0.24"]
 web = ["fastapi>=0.110", "uvicorn>=0.23", "jinja2>=3.1", "python-multipart>=0.0.6"]
+# Web Push (native iOS/desktop notifications for the installed PWA). Isolated so
+# the core never hard-depends on it; imported lazily, only when actually sending
+# (Render-only — sandbox/CI egress is blocked and mocks the sender).
+push = ["pywebpush>=1.14"]
 
 [project.scripts]
 chordential-oia = "chordential_oia.cli:main"

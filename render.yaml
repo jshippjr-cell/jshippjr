@@ -13,7 +13,7 @@ services:
     runtime: python
     plan: starter
     branch: claude/admiring-mayer-u241h5
-    buildCommand: "pip install '.[web]'"
+    buildCommand: "pip install '.[web,push]'"
     startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
     envVars:
@@ -32,6 +32,10 @@ services:
       # only), CHORDENTIAL_AUTOFETCH_INTERVAL=900 (seconds), CHORDENTIAL_REFETCH_HOURS=12.
       - key: CHORDENTIAL_ENABLE_SCRAPE
         value: "1"
+      # Web Push (native phone alerts for the installed PWA). The VAPID keypair
+      # and subject are set in the Render dashboard (the private key is a secret),
+      # NOT committed here: CHORDENTIAL_VAPID_PUBLIC, CHORDENTIAL_VAPID_PRIVATE,
+      # CHORDENTIAL_VAPID_SUBJECT (a mailto:). Optional: CHORDENTIAL_DISCOVERY_CALL_URL.
     disk:
       name: chordential-data
       mountPath: /var/data
