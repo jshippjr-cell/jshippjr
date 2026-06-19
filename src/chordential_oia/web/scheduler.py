@@ -83,21 +83,33 @@ def configured_feeds():
     return feeds
 
 
+def lead_indicators_enabled() -> bool:
+    """Leading-indicator (music-spend-incoming) feeds — on by default."""
+    return os.environ.get("CHORDENTIAL_LEAD_INDICATORS", "1").strip().lower() not in _FALSEY
+
+
+def signals_active() -> bool:
+    return bool(configured_feeds()) or lead_indicators_enabled()
+
+
 def poll_feeds() -> int:
-    """Poll every configured RSS feed into the signals tape. Blocking — runs in a
-    worker thread. No-op (and no network) when no feeds are configured."""
-    feeds = configured_feeds()
-    if not feeds:
-        return 0
+    """Poll configured RSS feeds (live gigs) + the leading-indicator feeds into
+    the signals tape. Blocking — runs in a worker thread; best-effort per feed."""
     from . import signals
     conn = db.connect()
     total = 0
     try:
-        for name, url in feeds:
+        for name, url in configured_feeds():
             try:
                 total += signals.ingest_feed(conn, url, source=name)
             except Exception:
                 pass
+        if lead_indicators_enabled():
+            for label, base, query in signals.LEAD_INDICATOR_FEEDS:
+                try:
+                    total += signals.ingest_indicator_feed(conn, label, base, query)
+                except Exception:
+                    pass
     finally:
         conn.close()
     return total
@@ -129,7 +141,7 @@ async def run_loop() -> None:
     """The forever loop, started from the app lifespan. Self-heals on errors."""
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
-        if configured_feeds():               # Signal Engine: poll RSS feeds
+        if signals_active():                 # Signal Engine: RSS gigs + indicators
             try:
                 await asyncio.to_thread(poll_feeds)
             except Exception:

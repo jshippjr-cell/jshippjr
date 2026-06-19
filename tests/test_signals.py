@@ -119,3 +119,43 @@ def test_email_in_webhook_requires_token(ctx):
     r = client.post("/signals/ingest?token=sig-secret&source=f5bot",
                     content="Title: Composer\nBudget: $5,000\nNeed a composer.\n")
     assert r.status_code == 200 and r.json()["ingested"] >= 1
+
+
+# --- Phase 3: leading indicators -------------------------------------------- #
+def test_indicator_feed_ingests_as_indicator(ctx, monkeypatch):
+    _, db, sig = ctx
+    from chordential_oia.web import rss
+    items = [{"title": "WPP wins Toyota creative account", "link": "http://n/1",
+              "summary": "...", "published": None}]
+    monkeypatch.setattr(rss, "fetch_feed", lambda url: items)
+    conn = db.connect()
+    assert sig.ingest_indicator_feed(conn, "Agency-of-record wins", 72, "q") == 1
+    row = db.list_signals(conn)[0]
+    assert row["signal_type"] == "indicator" and row["score"] == 72
+
+
+def test_radar_splits_gigs_and_indicators(ctx):
+    client, db, _ = ctx
+    conn = db.connect()
+    db.insert_signal(conn, source="rss", source_weight=6, title="Composer gig", score=50, external_ref="g1")
+    db.insert_signal(conn, source="Agency wins", source_weight=10, title="Brand rebrands",
+                     score=66, external_ref="i1", signal_type="indicator")
+    conn.close()
+    t = client.get("/signals").text
+    assert "Live gigs" in t and "Leading indicators" in t
+    assert "Composer gig" in t and "Brand rebrands" in t
+
+
+def test_promote_indicator_is_proactive(ctx):
+    client, db, _ = ctx
+    conn = db.connect()
+    sid = db.insert_signal(conn, source="Agency wins", source_weight=10,
+                           title="Brand X rebrands", score=66, external_ref="ind1",
+                           signal_type="indicator")
+    conn.close()
+    r = client.post(f"/signals/{sid}/promote", follow_redirects=False)
+    oid = int(r.headers["location"].rsplit("/", 1)[-1])
+    conn = db.connect()
+    opp = db.get_opportunity(conn, oid)
+    assert opp["source"] == "lead_indicator"
+    assert "LEADING INDICATOR" in opp["description"]

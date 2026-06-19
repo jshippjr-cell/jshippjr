@@ -399,9 +399,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             external_ref TEXT, title TEXT, body TEXT DEFAULT '', url TEXT,
             budget_min REAL, budget_max REAL, score REAL, tier TEXT,
             posted_at TEXT, found_at TEXT, status TEXT DEFAULT 'New',
-            linked_opp_id INTEGER, notes TEXT DEFAULT ''
+            linked_opp_id INTEGER, notes TEXT DEFAULT '',
+            signal_type TEXT DEFAULT 'gig'
         )"""
     )
+    sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signals)")}
+    if "signal_type" not in sig_cols:
+        conn.execute("ALTER TABLE signals ADD COLUMN signal_type TEXT DEFAULT 'gig'")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -951,20 +955,21 @@ def insert_signal(
     body: str = "", url: str = "", external_ref: str = "",
     budget_min: Optional[float] = None, budget_max: Optional[float] = None,
     score: Optional[float] = None, tier: Optional[str] = None,
-    posted_at: Optional[str] = None,
+    posted_at: Optional[str] = None, signal_type: str = "gig",
 ) -> Optional[int]:
     """Record a detected signal (the tape). Deduped on external_ref. found_at is
-    stamped now; posted_at is when the opportunity went live (feed value or now)."""
+    stamped now; posted_at is when the opportunity went live (feed value or now).
+    signal_type is 'gig' (a live posting) or 'indicator' (music-spend-incoming)."""
     if signal_exists(conn, external_ref):
         return None
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO signals
            (source, source_weight, external_ref, title, body, url,
-            budget_min, budget_max, score, tier, posted_at, found_at, status)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'New')""",
+            budget_min, budget_max, score, tier, posted_at, found_at, status, signal_type)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'New',?)""",
         (source, source_weight, external_ref, title, body, url,
-         budget_min, budget_max, score, tier, posted_at or now, now),
+         budget_min, budget_max, score, tier, posted_at or now, now, signal_type),
     )
     conn.commit()
     return int(cur.lastrowid)

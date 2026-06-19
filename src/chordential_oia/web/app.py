@@ -394,9 +394,12 @@ def signals_radar(request: Request):
         ranked = signals.rank_signals(db.list_signals(conn))
     finally:
         conn.close()
+    gigs = [x for x in ranked if (x["row"]["signal_type"] or "gig") != "indicator"]
+    indicators = [x for x in ranked if (x["row"]["signal_type"] or "gig") == "indicator"]
     return render(
-        request, "signals.html", nav="signals", ranked=ranked,
+        request, "signals.html", nav="signals", gigs=gigs, indicators=indicators,
         feeds=scheduler.configured_feeds(),
+        indicators_on=scheduler.lead_indicators_enabled(),
     )
 
 
@@ -446,10 +449,15 @@ def signal_promote(signal_id: int):
             return HTMLResponse("Signal not found", status_code=404)
         if s["linked_opp_id"]:
             return RedirectResponse(f"/opportunity/{s['linked_opp_id']}", status_code=303)
+        is_indicator = (s["signal_type"] or "gig") == "indicator"
+        desc = s["body"] or ""
+        if is_indicator:
+            desc = ("[LEADING INDICATOR — no brief yet; pursue proactively to get "
+                    "ahead of the music spend] " + desc).strip()
         opp = Opportunity(
             client="Unknown", need=s["title"] or "Detected opportunity",
-            description=s["body"] or "", budget_min=s["budget_min"],
-            budget_max=s["budget_max"], source="signal",
+            description=desc, budget_min=s["budget_min"], budget_max=s["budget_max"],
+            source="lead_indicator" if is_indicator else "signal",
         )
         new_id = db.insert_opportunity(conn, opp)
         db.link_signal_to_opp(conn, signal_id, new_id)

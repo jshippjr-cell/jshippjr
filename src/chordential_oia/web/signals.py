@@ -14,6 +14,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import List, Optional
+from urllib.parse import quote_plus
 
 from ..intake import extract_budget, parse_alert_email
 from ..models import Opportunity
@@ -187,7 +188,7 @@ def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
 
 
 def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
-    """Poll one RSS/Atom feed into signals (deduped on item link)."""
+    """Poll one RSS/Atom feed of live gigs into signals (deduped on item link)."""
     n = 0
     for it in rss.fetch_feed(feed_url):
         posted = it["published"].isoformat() if it.get("published") else None
@@ -195,6 +196,49 @@ def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
             conn, source=source, title=it["title"], body=it.get("summary", ""),
             url=it.get("link", ""), external_ref=it.get("link") or it["title"],
             posted_at=posted,
+        ):
+            n += 1
+    return n
+
+
+# --------------------------------------------------------------------------- #
+# Leading indicators (the moat) — detect "music spend incoming" via Google News
+# RSS, BEFORE a brief exists. These are not gigs to qualify; they're accounts to
+# get ahead of. Scored by the indicator's strength, not the gig rubric.
+# --------------------------------------------------------------------------- #
+def _gnews(query: str) -> str:
+    return (
+        "https://news.google.com/rss/search?q="
+        + quote_plus(query) + "&hl=en-US&gl=US&ceid=US:en"
+    )
+
+
+# (label, base_score, google-news query) — tune freely.
+LEAD_INDICATOR_FEEDS = [
+    ("Agency-of-record wins", 72,
+     '"agency of record" OR "wins creative account" OR "names creative agency"'),
+    ("Brand rebrands (sonic branding)", 66,
+     '"new brand identity" OR rebrand OR "brand refresh" OR "rebranding"'),
+    ("New film/TV productions", 60,
+     '"ordered to series" OR greenlit OR "begins production" series'),
+    ("New game productions", 58,
+     '"announces new game" OR "reveals new game" OR "new game studio"'),
+    ("New ad campaigns", 54,
+     '"launches campaign" OR "unveils new campaign" OR "debuts campaign"'),
+]
+
+
+def ingest_indicator_feed(conn, label: str, base_score: float, query: str) -> int:
+    """Poll one leading-indicator Google-News feed into signals (type=indicator)."""
+    n = 0
+    for it in rss.fetch_feed(_gnews(query)):
+        posted = it["published"].isoformat() if it.get("published") else None
+        if db.insert_signal(
+            conn, source=label, source_weight=weight_for("agency"),
+            title=(it["title"] or "")[:300], body=(it.get("summary") or "")[:2000],
+            url=it.get("link", ""), external_ref=it.get("link") or it["title"],
+            score=base_score, tier="Indicator", posted_at=posted,
+            signal_type="indicator",
         ):
             n += 1
     return n
