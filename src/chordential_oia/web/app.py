@@ -37,7 +37,7 @@ from ..capabilities import build_capabilities_doc, default_toggles
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, scheduler, seed, signals, webpush
+from . import db, discovery, scheduler, seed, signals, triage, webpush
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -304,6 +304,19 @@ def push_test():
     return RedirectResponse(f"/signals?push={state}", status_code=303)
 
 
+@app.post("/triage/run")
+def triage_run():
+    """Manually run agentic Gmail triage (Phase B1): read unread alert emails,
+    extract the real opportunities, land them on the radar in the review queue.
+    No autonomy yet — this is the verify-extraction-quality step."""
+    conn = db.connect()
+    try:
+        triage.run_triage(conn)
+    finally:
+        conn.close()
+    return RedirectResponse("/signals?triage=1", status_code=303)
+
+
 # --------------------------------------------------------------------------- #
 # Admin sign-in (only meaningful when CHORDENTIAL_ADMIN_TOKEN is set)
 # --------------------------------------------------------------------------- #
@@ -495,7 +508,7 @@ def discovery_page(request: Request, kind: str = "talent"):
 # Signal Engine — the Opportunity Detection layer (freshness × score radar)
 # --------------------------------------------------------------------------- #
 @app.get("/signals", response_class=HTMLResponse)
-def signals_radar(request: Request, push: str = ""):
+def signals_radar(request: Request, push: str = "", triage: str = ""):
     conn = db.connect()
     try:
         ranked = signals.rank_signals(db.list_signals(conn))
@@ -503,11 +516,14 @@ def signals_radar(request: Request, push: str = ""):
     finally:
         conn.close()
     gigs = [x for x in ranked if (x["row"]["signal_type"] or "gig") != "indicator"]
+    from . import triage as triage_mod  # local alias: param shadows the module
     return render(
         request, "signals.html", nav="signals", gigs=gigs,
         feeds=scheduler.configured_feeds(),
         push_result=push, push_configured=webpush.is_configured(),
         push_subs=push_subs, push_error=webpush.last_push_error(),
+        triage_result=triage, triage_configured=triage_mod.is_configured(),
+        triage_status=triage_mod.last_run(),
     )
 
 

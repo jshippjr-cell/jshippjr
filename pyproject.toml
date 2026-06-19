@@ -23,10 +23,17 @@ dev = ["pytest>=7.0", "httpx>=0.24"]
 web = ["fastapi>=0.110", "uvicorn>=0.23", "jinja2>=3.1", "python-multipart>=0.0.6", "pywebpush>=1.14"]
 # Retained for back-compat with existing build commands that say ".[web,push]".
 push = ["pywebpush>=1.14"]
+# Phase B1 — agentic Gmail triage. All optional and lazily imported, so the core
+# app, CI, and the sandbox never depend on them; only a deploy that runs triage
+# (or the MCP server) needs them installed.
+gmail = ["google-api-python-client>=2.0", "google-auth>=2.0"]
+ai = ["anthropic>=0.40"]
+mcp = ["mcp>=1.2"]
 
 [project.scripts]
 chordential-oia = "chordential_oia.cli:main"
 chordential-web = "chordential_oia.web.app:main"
+chordential-gmail-mcp = "chordential_oia.mcp.gmail_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

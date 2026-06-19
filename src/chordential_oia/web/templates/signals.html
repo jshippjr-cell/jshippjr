@@ -22,10 +22,19 @@
               title="Turn on native phone alerts for this device (installed app)">🔔 Enable phone alerts</button>
       <button class="btn ghost tiny" type="submit" formaction="/push/test"
               title="Send a test alert to your phone to confirm push is working">📲 Send test alert</button>
+      <button class="btn ghost tiny" type="submit" formaction="/triage/run"
+              title="Read unread alert emails and extract real opportunities onto the radar">📥 Run Gmail triage</button>
       <button class="btn ghost tiny" type="submit" formaction="/signals/clear"
               onclick="return confirm('Clear all open signals from the radar?')">Clear radar</button>
     </div>
   </form>
+  {% if triage_result %}
+    {% if triage_configured %}
+  <p class="muted small" style="margin:8px 0 0;color:var(--green,#2e8b57)">📥 {{ triage_status }}</p>
+    {% else %}
+  <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ {{ triage_status or 'Gmail triage is not configured.' }} Set <code>CHORDENTIAL_GMAIL_*</code> + <code>ANTHROPIC_API_KEY</code> in Render.</p>
+    {% endif %}
+  {% endif %}
   {% if push_result == 'sent' %}
   <p class="muted small" style="margin:8px 0 0;color:var(--green,#2e8b57)">✓ Test alert sent — check your phone. New live gigs will alert you the same way.</p>
   {% elif push_result == 'unset' %}
