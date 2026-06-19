@@ -51,9 +51,14 @@ def last_push_error() -> str:
 def _send_one(subscription_info: dict, payload: str) -> int:
     """Send to a single subscription; returns the HTTP status (0 on transport
     error). Raised pywebpush errors are unwrapped to their response code so the
-    caller can prune expired (404/410) subscriptions."""
+    caller can prune expired (404/410) subscriptions. The push service's
+    rejection body (Apple/Mozilla explain *why*) is stashed in _LAST_PUSH_ERROR
+    so the radar can show it."""
+    global _LAST_PUSH_ERROR
     from pywebpush import WebPushException, webpush  # lazy — Render-only
 
+    # Fresh claims per send: Apple rejects a JWT whose `exp` is in the past or
+    # >24h out, so let pywebpush stamp `exp` itself each time (never reuse).
     try:
         webpush(
             subscription_info=subscription_info,
@@ -64,7 +69,15 @@ def _send_one(subscription_info: dict, payload: str) -> int:
         )
         return 200
     except WebPushException as exc:  # has .response on HTTP errors
-        return getattr(getattr(exc, "response", None), "status_code", 0) or 0
+        resp = getattr(exc, "response", None)
+        code = getattr(resp, "status_code", 0) or 0
+        body = ""
+        try:
+            body = (getattr(resp, "text", "") or "").strip()[:160]
+        except Exception:  # noqa: BLE001
+            body = ""
+        _LAST_PUSH_ERROR = f"push returned {code or '—'}: {body or exc}"[:240]
+        return code
 
 
 def send_web_push(title: str, body: str = "", url: str = "/signals") -> dict:
@@ -101,8 +114,8 @@ def send_web_push(title: str, body: str = "", url: str = "/signals") -> dict:
                 pruned += 1
             elif code == 200:
                 sent += 1
-            else:
-                _LAST_PUSH_ERROR = f"push returned {code}"
+                _LAST_PUSH_ERROR = ""        # cleared on a clean send
+            # else: _send_one already stashed the push service's rejection body
         return {"configured": True, "subscriptions": len(subs), "sent": sent, "pruned": pruned}
     finally:
         conn.close()

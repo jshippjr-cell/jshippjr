@@ -105,3 +105,22 @@ def test_send_noop_when_unconfigured(ctx):
     _, _, wp = ctx
     res = wp.send_web_push("hi")                           # no VAPID env
     assert res["configured"] is False and res["sent"] == 0
+
+
+def test_rejection_body_is_captured_and_shown(ctx, monkeypatch):
+    """When the push service rejects a send, its explanation is stashed in
+    last_push_error() and rendered on the radar so it's diagnosable."""
+    client, db, wp = ctx
+    _vapid(monkeypatch)
+    conn = db.connect()
+    db.add_push_subscription(conn, endpoint="https://push/x", p256dh="p", auth="a")
+
+    def fake_send_one(info, payload):                      # mimic _send_one on a 403
+        wp._LAST_PUSH_ERROR = "push returned 403: BadJwtToken"
+        return 403
+
+    monkeypatch.setattr(wp, "_send_one", fake_send_one)
+    r = client.post("/push/test", follow_redirects=False)
+    assert "push=error" in r.headers["location"]
+    page = client.get("/signals?push=error").text
+    assert "BadJwtToken" in page                           # real reason surfaced

@@ -34,6 +34,7 @@
   <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ No device is subscribed yet. On your iPhone: add Chordential to your Home Screen, open it, then tap <strong>🔔 Enable phone alerts</strong> — then test again.</p>
   {% elif push_result == 'error' %}
   <p class="muted small" style="margin:8px 0 0;color:#e5484d">⚠ The push failed to send. Try re-enabling alerts on this device, then test again.</p>
+  {% if push_error %}<p class="muted small" style="margin:4px 0 0;color:#e5484d"><code style="white-space:pre-wrap;word-break:break-word">{{ push_error }}</code></p>{% endif %}
   {% endif %}
   <p class="muted small" style="margin:8px 0 0">
     {% if feeds %}Polling <strong>{{ feeds|length }}</strong> gig RSS feed(s).{% else %}
