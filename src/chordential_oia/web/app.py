@@ -92,14 +92,16 @@ templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_
 async def lifespan(app: FastAPI):
     conn = db.connect()
     db.init_db(conn)
-    count = conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0]
-    if count == 0:
-        seed.seed(conn)
-    seed.seed_talent(conn)
-    seed.ingest_talent_prospects(conn)
     discovery.sync_catalog(conn)
     discovery.seed_all_active(conn)  # On sources get a default target → they fetch
-    seed.seed_demo_pipeline(conn)
+    if seed.seed_demo_enabled():     # dev/tests: populate placeholder data
+        if conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0] == 0:
+            seed.seed(conn)
+        seed.seed_talent(conn)
+        seed.ingest_talent_prospects(conn)
+        seed.seed_demo_pipeline(conn)
+    else:                            # production: clean slate — real data only
+        seed.purge_demo_data(conn)
     conn.execute("DELETE FROM signals WHERE signal_type = 'indicator'")  # feature dropped
     conn.commit()
     conn.close()

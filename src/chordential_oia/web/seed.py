@@ -181,3 +181,66 @@ def reset_and_seed(db_path: str = db.DEFAULT_DB_PATH) -> int:
         return seed(conn)
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Demo data control — seed placeholders for dev/tests, clean slate in production
+# --------------------------------------------------------------------------- #
+# Opportunities created through the real flow carry these sources; anything else
+# in the opportunities table is build/demo placeholder data.
+_REAL_OPP_SOURCES = ("signal", "front_of_house", "lead_indicator")
+
+
+def seed_demo_enabled() -> bool:
+    """Seed the demo dataset only when explicitly asked (dev/tests). Off by
+    default so production shows a clean slate — your real data only."""
+    return os.environ.get("CHORDENTIAL_SEED_DEMO", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def purge_demo_data(conn: sqlite3.Connection) -> int:
+    """Remove the build's placeholder opportunities/talent/projects so the
+    dashboard shows only real data. Runs only while placeholders are present, and
+    never deletes opportunities created through the real flow (signal/lead
+    promotes) or talent that applied. Returns how many opportunities were removed."""
+    db.init_db(conn)
+    keep = ",".join("?" * len(_REAL_OPP_SOURCES))
+    demo = [
+        r[0] for r in conn.execute(
+            f"SELECT id FROM opportunities WHERE IFNULL(source,'') NOT IN ({keep})",
+            _REAL_OPP_SOURCES,
+        ).fetchall()
+    ]
+    if not demo:
+        return 0  # already clean — touch nothing (protects manually-added rows)
+    ph = ",".join("?" * len(demo))
+    proj = [r[0] for r in conn.execute(
+        f"SELECT id FROM projects WHERE opp_id IN ({ph})", demo).fetchall()]
+    if proj:
+        pph = ",".join("?" * len(proj))
+        for tbl in ("assignments", "milestones", "project_updates", "invoices"):
+            try:
+                conn.execute(f"DELETE FROM {tbl} WHERE project_id IN ({pph})", proj)
+            except Exception:
+                pass
+    for stmt in (
+        f"DELETE FROM proposals WHERE opp_id IN ({ph})",
+        f"DELETE FROM projects WHERE opp_id IN ({ph})",
+        f"DELETE FROM outreach_events WHERE opp_id IN ({ph})",
+        f"DELETE FROM brief_progress WHERE opp_id IN ({ph})",
+        f"UPDATE inbound_leads SET linked_opp_id = NULL WHERE linked_opp_id IN ({ph})",
+    ):
+        try:
+            conn.execute(stmt, demo)
+        except Exception:
+            pass
+    removed = conn.execute(
+        f"DELETE FROM opportunities WHERE id IN ({ph})", demo).rowcount
+    # All seeded talent is demo; keep only creators who actually applied.
+    try:
+        conn.execute("DELETE FROM talent WHERE IFNULL(source,'') != 'applicant'")
+    except Exception:
+        pass
+    conn.commit()
+    return removed
