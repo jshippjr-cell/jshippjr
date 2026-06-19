@@ -157,7 +157,7 @@ def test_turning_on_seeds_an_approved_target(tmp_path, monkeypatch):
     assert disc.seed_active_targets(conn, site) == 0      # idempotent
 
 
-def test_manual_assist_url_targets_a_search(tmp_path, monkeypatch):
+def test_manual_assist_url_uses_keyword_bank(tmp_path, monkeypatch):
     db, disc, _ = _modules(tmp_path, monkeypatch)
     conn = db.connect()
     db.init_db(conn)
@@ -165,7 +165,23 @@ def test_manual_assist_url_targets_a_search(tmp_path, monkeypatch):
     row = conn.execute("SELECT * FROM discovery_sites WHERE key='reddit_forhire'").fetchone()
     assert row["login_gated"] == 1                       # Reddit → manual-assist
     url = disc.manual_assist_url(row)
-    assert "reddit.com/r/forhire" in url and "search" in url   # lands on the gig search
+    # Lands on a keyword-bank search: role terms + intent + newest-first.
+    assert "reddit.com/r/forhire/search" in url
+    assert "composer" in url and "sound" in url
+    assert "hiring" in url and "paid" in url
+    assert "sort=new" in url and "restrict_sr=1" in url
+    assert "rev" in url and url.count("-%22") + url.count("-revshare") >= 1  # exclusions
+
+
+def test_new_reddit_channels_present(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    disc.sync_catalog(conn)
+    keys = {r["key"]: r["login_gated"]
+            for r in conn.execute("SELECT key, login_gated FROM discovery_sites").fetchall()}
+    assert keys.get("reddit_inat") == 1          # added + manual-assist
+    assert keys.get("reddit_gameaudio") == 1
 
 
 def test_seeding_skips_login_gated(tmp_path, monkeypatch):

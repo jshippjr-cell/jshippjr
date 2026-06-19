@@ -88,10 +88,29 @@ def seed_all_active(conn) -> int:
     return added
 
 
+def reddit_search_url(subreddit: str) -> str:
+    """A high-yield Reddit search for a subreddit, built from the launchpad
+    keyword bank: (role terms) AND (hiring intent) AND (exclude unpaid/self-promo),
+    newest first, last month. Lands 'Open search' right on real PAID gigs."""
+    role = "(" + " OR ".join(catalog.ROLE_TERMS) + ")"
+    intent = "(" + " OR ".join(catalog.INTENT_TERMS) + ")"
+    excl = " ".join("-" + t for t in catalog.EXCLUDE_TERMS)
+    q = f"{role} {intent} {excl}"
+    return (
+        f"https://www.reddit.com/r/{subreddit}/search/"
+        f"?q={quote_plus(q)}&restrict_sr=1&sort=new&t=month"
+    )
+
+
 def manual_assist_url(site_row) -> str:
     """The best direct-search URL for a manual-assist source — so 'Open search'
-    lands Jon right on the relevant listings (e.g. r/forhire newest), in his own
-    logged-in browser, rather than the bare homepage."""
+    lands Jon right on the relevant listings (e.g. r/forhire newest PAID gigs),
+    in his own logged-in browser, rather than the bare homepage."""
+    home = site_row["homepage"] or ""
+    if "reddit.com/r/" in home:                       # smart, keyword-bank search
+        sub = home.rstrip("/").split("/r/")[-1]
+        if sub:
+            return reddit_search_url(sub)
     site = catalog.get_site(site_row["key"])
     if site is not None:
         for k in ("opportunity", "talent"):
@@ -103,7 +122,7 @@ def manual_assist_url(site_row) -> str:
         t = _custom_site_target(site_row, kind, None, None)
         if t:
             return t["url"]
-    return site_row["homepage"] or "#"
+    return home or "#"
 
 
 # --------------------------------------------------------------------------- #

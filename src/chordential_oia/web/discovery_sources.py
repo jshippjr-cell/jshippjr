@@ -55,6 +55,23 @@ _DEFAULT_Q = {"opportunity": "composer music", "talent": "composer"}
 
 
 # --------------------------------------------------------------------------- #
+# Launchpad keyword bank — learned from real gigs (e.g. r/gameDevClassifieds
+# "[PAID] Looking for a Music Composer"). These role / intent / exclusion terms
+# are embedded into the manual-assist "Open search" links so they land on actual
+# PAID music & audio roles, not talent self-promo or unpaid rev-share asks.
+# --------------------------------------------------------------------------- #
+ROLE_TERMS = [
+    "composer", '"music composer"', "soundtrack", '"original music"', "score",
+    '"sound design"', '"sound designer"', '"game audio"', '"music producer"',
+    '"music supervisor"', '"sonic branding"', '"additional music"',
+]
+INTENT_TERMS = ["hiring", "paid", '"looking for"', "seeking", "commission"]
+EXCLUDE_TERMS = [
+    '"for hire"', '"rev share"', "revshare", "unpaid", "royalty", "volunteer",
+]
+
+
+# --------------------------------------------------------------------------- #
 # The catalog
 # --------------------------------------------------------------------------- #
 CATALOG: List[SourceSite] = [
@@ -128,6 +145,24 @@ CATALOG: List[SourceSite] = [
         "Game studios hiring composers and sound designers.", STATUS_ESTABLISHED,
         [("opportunity", "Search",
           "https://www.reddit.com/r/gameDevClassifieds/search/?q={q}&restrict_sr=1&sort=new")],
+        login_gated=True,
+    ),
+    SourceSite(
+        "reddit_inat", "Reddit · r/INAT", "https://www.reddit.com/r/INAT",
+        "opportunity", "Game-dev team board", "Demand-Gen Manager",
+        "“I Need A Team” — game projects posting [PAID] composer/audio roles.",
+        STATUS_ESTABLISHED,
+        [("opportunity", "Search",
+          "https://www.reddit.com/r/INAT/search/?q={q}&restrict_sr=1&sort=new")],
+        login_gated=True,
+    ),
+    SourceSite(
+        "reddit_gameaudio", "Reddit · r/gameaudio", "https://www.reddit.com/r/gameaudio",
+        "opportunity", "Game-audio community", "RFP Intelligence Director",
+        "Game-audio community — composers/sound designers and the studios hiring them.",
+        STATUS_ESTABLISHED,
+        [("opportunity", "Search",
+          "https://www.reddit.com/r/gameaudio/search/?q={q}&restrict_sr=1&sort=new")],
         login_gated=True,
     ),
     SourceSite(
