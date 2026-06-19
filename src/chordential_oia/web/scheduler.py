@@ -148,6 +148,67 @@ def poll_feeds() -> int:
     return total
 
 
+# Direct Reddit polling — the cap-free replacement for F5Bot's Reddit coverage.
+# Reuses the OAuth adapter in crawl_adapters; runs each result through the strict
+# is_music_gig filter (so only real paid gigs land) and the normal new-gig alert.
+# Reddit blocks unauthenticated API traffic from datacenters, so this only
+# activates when REDDIT_CLIENT_ID/SECRET are set — otherwise it would just 403.
+DEFAULT_REDDIT_QUERIES = (
+    'https://www.reddit.com/r/gameDevClassifieds/search/?q=composer OR music OR "sound design"&restrict_sr=1&sort=new',
+    "https://www.reddit.com/r/INAT/search/?q=composer OR music&restrict_sr=1&sort=new",
+    'https://www.reddit.com/r/forhire/search/?q=composer OR "original music" OR "sound design"&restrict_sr=1&sort=new',
+    "https://www.reddit.com/r/composer/search/?q=hiring OR paid OR commission OR budget&restrict_sr=1&sort=new",
+)
+
+
+def reddit_queries():
+    """Subreddit search/listing URLs to poll — from CHORDENTIAL_REDDIT_QUERIES
+    (comma-separated) or a curated high-intent default set."""
+    raw = os.environ.get("CHORDENTIAL_REDDIT_QUERIES", "").strip()
+    if raw:
+        return [u.strip() for u in raw.split(",") if u.strip()]
+    return list(DEFAULT_REDDIT_QUERIES)
+
+
+def reddit_enabled() -> bool:
+    """On when scraping is enabled, Reddit app credentials are present, and it's
+    not explicitly switched off."""
+    return (
+        discovery.scrape_enabled()
+        and bool(os.environ.get("REDDIT_CLIENT_ID") and os.environ.get("REDDIT_CLIENT_SECRET"))
+        and os.environ.get("CHORDENTIAL_REDDIT", "1").strip().lower() not in _FALSEY
+    )
+
+
+def poll_reddit() -> int:
+    """Poll the configured subreddit searches into the signals tape. Blocking —
+    runs in a worker thread; best-effort per query. Returns the new gigs landed."""
+    from . import crawl_adapters, signals
+    conn = db.connect()
+    total = 0
+    try:
+        for url in reddit_queries():
+            try:
+                res = crawl_adapters.fetch_reddit(url)
+                for rec in res.get("records", []):
+                    company = str(rec.get("company") or "")
+                    sid = signals.ingest_signal(
+                        conn, source="reddit",
+                        title=rec.get("need", ""), body=rec.get("description", ""),
+                        url=rec.get("url") or "", external_ref=rec.get("url") or "",
+                        strict=True,                       # is_music_gig keeps only real gigs
+                        contact_handle=company if company.startswith("u/") else "",
+                    )
+                    if sid is not None:
+                        total += 1
+            except Exception:
+                pass  # one bad query must never stall the loop
+            time.sleep(2)  # politeness between subreddit calls
+    finally:
+        conn.close()
+    return total
+
+
 def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
     """One pass: fetch a bounded batch of due targets. Blocking — runs in a worker
     thread off the event loop. Returns the number of leads/creators ingested."""
@@ -177,6 +238,11 @@ async def run_loop() -> None:
         if signals_active():                 # Signal Engine: RSS gigs + indicators
             try:
                 await asyncio.to_thread(poll_feeds)
+            except Exception:
+                pass
+        if reddit_enabled():                 # direct Reddit gigs (cap-free, replaces F5Bot)
+            try:
+                await asyncio.to_thread(poll_reddit)
             except Exception:
                 pass
         if autofetch_enabled():
