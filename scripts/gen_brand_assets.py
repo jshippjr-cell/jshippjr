@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Regenerate Chordential brand assets so the logo never disappears.
+"""Regenerate the Chordential phone/app icons from the real brand logo.
 
-The master logo (static/logo.png) is a *white* wordmark with an orange mark —
-made for the dark sidebar. On light surfaces (the capabilities PDF, a browser
-tab) the white letters vanish, and on the phone home-screen tile the whole mark
-washes out. This script derives, from that one master, the variants those
-surfaces need:
+The master wordmark (static/public/wordmark-dark.png — the wine "chordential"
+with the orange mark, from the uploaded Echo artwork) reads fine on light
+surfaces, but its white knockout twin washed out on the phone home-screen tile.
+This script crops the orange mark from the real logo and sets it on a dark
+charcoal tile, so the app icon is high-contrast and on-brand at small sizes.
 
-  - logo-dark.png   the wordmark recolored to ink (#1F1E1E) for LIGHT backgrounds,
-                    keeping the orange mark + its reflection.
-  - icon-512/192/apple-touch  the orange mark on a dark charcoal tile, so the app
-                    icon is high-contrast and on-brand at small sizes.
+Light-background surfaces (the capabilities PDF, browser tabs) use the real
+wordmark directly — no derived asset.
 
 Run from the repo root:  python scripts/gen_brand_assets.py
 """
@@ -20,28 +18,8 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "..", "src", "chordential_oia", "web", "static")
-INK = (31, 30, 30)          # --ink
-CHARCOAL = (31, 30, 30)     # icon tile background (matches sidebar)
-
-
-def _is_orange(r, g, b):
-    """The orange mark + its peach reflection (warm: red dominates blue)."""
-    return r > 150 and b < 150 and g < 205 and (r - b) > 55
-
-
-def make_dark_wordmark(src: Image.Image) -> Image.Image:
-    """Recolor the white letters to ink for light backgrounds; keep the orange."""
-    out = []
-    for (r, g, b, a) in src.getdata():
-        if a == 0:
-            out.append((0, 0, 0, 0))
-        elif _is_orange(r, g, b):
-            out.append((r, g, b, a))                 # keep the orange mark/reflection
-        else:
-            out.append((INK[0], INK[1], INK[2], a))  # white letters -> ink
-    img = Image.new("RGBA", src.size)
-    img.putdata(out)
-    return img
+SOURCE = os.path.join(STATIC, "public", "wordmark-dark.png")
+CHARCOAL = (31, 30, 30)     # --ink, matches the sidebar
 
 
 def crop_mark(src: Image.Image) -> Image.Image:
@@ -52,7 +30,7 @@ def crop_mark(src: Image.Image) -> Image.Image:
         if a > 170 and r > 180 and b < 115 and 40 < g < 175:
             xs.append(i % w)
             ys.append(i // w)
-    pad = 12
+    pad = 14
     box = (max(0, min(xs) - pad), max(0, min(ys) - pad),
            min(w, max(xs) + pad), min(h, max(ys) + pad))
     return src.crop(box)
@@ -70,11 +48,7 @@ def make_icon(mark: Image.Image, size: int) -> Image.Image:
 
 
 def main() -> None:
-    src = Image.open(os.path.join(STATIC, "logo.png")).convert("RGBA")
-
-    make_dark_wordmark(src).save(os.path.join(STATIC, "logo-dark.png"))
-    print("wrote logo-dark.png")
-
+    src = Image.open(SOURCE).convert("RGBA")
     mark = crop_mark(src)
     for name, size in [("icon-512.png", 512), ("icon-192.png", 192),
                        ("apple-touch-icon.png", 180)]:
