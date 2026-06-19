@@ -64,6 +64,14 @@ _DEFAULT_Q = {"opportunity": "composer music", "talent": "composer"}
 # --------------------------------------------------------------------------- #
 SEARCH_TERMS = ["composer", "music", '"sound design"', '"game audio"', "soundtrack"]
 
+# Simple, FLAT exclusions appended to each search (term -hobby -revshare …).
+# Reddit supports flat `-word` / `-"phrase"` exclusions even though it can't do
+# nested boolean — this strips the unpaid / rev-share / self-promo noise.
+EXCLUDE_TERMS = [
+    "hobby", "revshare", '"rev share"', "royalty", "unpaid",
+    '"not paying"', '"for hire"', "collab",
+]
+
 
 # --------------------------------------------------------------------------- #
 # The catalog

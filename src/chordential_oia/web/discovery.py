@@ -89,11 +89,14 @@ def seed_all_active(conn) -> int:
 
 
 def reddit_search_url(subreddit: str, term: str = "composer") -> str:
-    """A SIMPLE Reddit search (Reddit's search can't do boolean), newest first,
-    restricted to the sub — guaranteed to return results the user can skim."""
+    """A FLAT Reddit search: one positive term + simple ``-exclusions`` (no nested
+    boolean, which Reddit can't parse), newest first, restricted to the sub. Keeps
+    the paid gigs, strips the [Hobby]/[RevShare]/for-hire noise."""
+    excl = " ".join("-" + t for t in catalog.EXCLUDE_TERMS)
+    q = f"{term} {excl}".strip()
     return (
         f"https://www.reddit.com/r/{subreddit}/search/"
-        f"?q={quote_plus(term)}&restrict_sr=1&sort=new"
+        f"?q={quote_plus(q)}&restrict_sr=1&sort=new"
     )
 
 

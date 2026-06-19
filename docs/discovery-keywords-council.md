@@ -66,9 +66,10 @@ Embedded search shape:
 Field test killed the clever query: Reddit's search **does not support boolean**
 — `(role OR …) (intent OR …) -exclusions` returned **zero** results on r/INAT.
 Revised approach: offer a few **simple one-click searches per channel** (composer ·
-music · "sound design" · "game audio" · soundtrack), each newest-first and
-restricted to the sub. Each is a working query; the user clicks whichever fits and
-skims. Precision comes from the human eye, not an over-clever string.
+music · "sound design" · "game audio" · soundtrack), each a **flat** query — one
+positive term plus simple `-exclusions` (`-hobby -revshare -"for hire" …`), which
+Reddit *does* honor even though it chokes on nested `(a OR b)` boolean. Newest
+first, restricted to the sub. Tune `EXCLUDE_TERMS` as noise shows up.
 
 ## Power tips (for later)
 

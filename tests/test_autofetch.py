@@ -174,7 +174,8 @@ def test_manual_assist_searches_are_simple(tmp_path, monkeypatch):
     for s in searches:
         assert "reddit.com/r/forhire/search" in s["url"]
         assert "sort=new" in s["url"] and "restrict_sr=1" in s["url"]
-        assert " OR " not in s["url"] and "-%22" not in s["url"]   # no boolean/excludes
+        assert " OR " not in s["url"] and "%28" not in s["url"]   # FLAT — no boolean/parens
+        assert "-hobby" in s["url"] and "-revshare" in s["url"]   # exclusions applied
 
 
 def test_new_reddit_channels_present(tmp_path, monkeypatch):
