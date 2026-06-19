@@ -101,12 +101,46 @@ def _age_label(h: float) -> str:
 # --------------------------------------------------------------------------- #
 # Ingest adapters — many feeders, one tape
 # --------------------------------------------------------------------------- #
+# Demand vs. supply intent. F5Bot/keyword alerts can't tell "Composer needed"
+# (a gig) from "Composer looking for work" (talent self-promo) — so we filter it
+# here. Wide net at the alerter; precision at ingest. Tune these freely.
+_SUPPLY_MARKERS = (
+    "[for hire]", "for hire", "looking for work", "available for hire",
+    "available for work", "available to compose", "open to work",
+    "open for commissions", "open for work", "hire me", "i'm a composer",
+    "i am a composer", "i'm a music", "offering my", "my portfolio",
+    "freelance composer available", "i compose", "i can compose", "i make music",
+    "check out my", "my services", "commissions open",
+)
+_DEMAND_MARKERS = (
+    "[hiring]", "[paid]", "needed", "need a", "we need", "we're looking",
+    "we are looking", "looking for a composer", "looking for composer",
+    "looking for a music", "looking for music", "seeking", "hiring", "wanted",
+    "commission a", "in search of", "looking to hire", "paid gig", "budget",
+)
+
+
+def intent(title: str, body: str = "") -> str:
+    """'demand' (a real gig), 'supply' (talent self-promo), or 'unknown'."""
+    t = f"{title} {body}".lower()
+    demand = any(m in t for m in _DEMAND_MARKERS)
+    supply = any(m in t for m in _SUPPLY_MARKERS)
+    if supply and not demand:
+        return "supply"
+    if demand:
+        return "demand"
+    return "unknown"
+
+
 def ingest_signal(
     conn, *, source: str, title: str, body: str = "", url: str = "",
     external_ref: str = "", budget_min=None, budget_max=None, posted_at=None,
 ) -> Optional[int]:
     title = (title or "").strip()
     if not title:
+        return None
+    # Drop talent self-promo — this radar is for demand (gigs), not supply.
+    if intent(title, body) == "supply":
         return None
     bmin, bmax = budget_min, budget_max
     if bmin is None and bmax is None:

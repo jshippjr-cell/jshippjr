@@ -113,6 +113,26 @@ def test_labeled_digest_uses_structured_parser(ctx):
     assert db.list_signals(conn)[0]["budget_min"] == 4000.0   # structured → budget parsed
 
 
+# --- Intent filter: demand (gigs) vs supply (self-promo) -------------------- #
+def test_intent_classifier(ctx):
+    _, _, sig = ctx
+    assert sig.intent("[Hiring] Composer needed for game") == "demand"
+    assert sig.intent("[For Hire] Composer looking for work") == "supply"
+    assert sig.intent("Looking for a composer for our indie game") == "demand"
+    assert sig.intent("Experienced composer available for hire, check out my portfolio") == "supply"
+
+
+def test_ingest_drops_self_promo_keeps_gigs(ctx):
+    _, db, sig = ctx
+    conn = db.connect()
+    kept = sig.ingest_signal(conn, source="f5bot", title="[Hiring] Composer needed", external_ref="a")
+    dropped = sig.ingest_signal(conn, source="f5bot",
+                                title="[For Hire] composer available, hire me", external_ref="b")
+    assert kept is not None and dropped is None
+    titles = [r["title"] for r in db.list_signals(conn)]
+    assert any("Hiring" in t for t in titles) and not any("For Hire" in t for t in titles)
+
+
 def test_email_in_webhook_requires_token(ctx):
     client, _, _ = ctx
     assert client.post("/signals/ingest", content="Title: X\nBudget: $5000\n").status_code == 401
