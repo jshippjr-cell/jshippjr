@@ -72,8 +72,12 @@ ProductionHUB 10 · Mandy 10 · Agency Intelligence 10 · Hitmarker 9 · Staff M
 - **Phase 2 — Instant email backbone:** stand up inbound email (Mailgun/SendGrid)
   → webhook → signals. Jon sets Mandy/ProductionHUB/Hitmarker/F5Bot to *instant*
   alerts forwarded in.
-- **Phase 3 — Leading indicators (the moat):** agency new-business + new-production
-  signals → "music spend incoming" before the brief exists.
+- **Phase 3 — Leading indicators (built, then DROPPED by CEO 2026-06-19):** the
+  news-based radar (agency wins / rebrands / productions) proved to be fluff —
+  not actionable without a decision-maker contact, and high-noise. Council voted
+  4-to-1 to cut it; CEO confirmed. The radar is now 100% live gigs (actionable).
+  A narrow, contact-enriched "agency account-wins" watchlist remains the only
+  version worth revisiting later.
 - **Phase 4 — Harder channels:** LinkedIn signal detection, Discord watchers.
 
 ## Recommendation

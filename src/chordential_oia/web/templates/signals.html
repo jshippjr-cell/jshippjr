@@ -25,7 +25,6 @@
   <p class="muted small" style="margin:8px 0 0">
     {% if feeds %}Polling <strong>{{ feeds|length }}</strong> gig RSS feed(s).{% else %}
     No gig RSS feeds yet — set <code>CHORDENTIAL_RSS_FEEDS</code> (<code>name|url</code>) to auto-poll.{% endif %}
-    {% if indicators_on %} Leading-indicator radar <strong>on</strong>.{% endif %}
     Email-in: <code>/signals/ingest?token=…</code>.
   </p>
 </div>
@@ -76,11 +75,6 @@
 <h2 style="margin:18px 0 0">📡 Live gigs <span class="muted small">— ranked by freshness × score</span></h2>
 {% if gigs %}{{ signal_table(gigs, 'gig') }}{% else %}
 <div class="card"><p class="muted" style="margin:0">No live gigs yet. Paste an alert, wire an RSS feed, or point a saved-search/F5Bot email at the webhook.</p></div>
-{% endif %}
-
-<h2 style="margin:22px 0 0">🔮 Leading indicators <span class="muted small">— music spend incoming; get ahead of the brief</span></h2>
-{% if indicators %}{{ signal_table(indicators, 'indicator') }}{% else %}
-<div class="card"><p class="muted" style="margin:0">No indicators yet — the radar watches the news for agency wins, new productions, and rebrands. They'll appear here as they break.</p></div>
 {% endif %}
 
 {% endblock %}

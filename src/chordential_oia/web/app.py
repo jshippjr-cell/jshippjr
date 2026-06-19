@@ -100,6 +100,8 @@ async def lifespan(app: FastAPI):
     discovery.sync_catalog(conn)
     discovery.seed_all_active(conn)  # On sources get a default target → they fetch
     seed.seed_demo_pipeline(conn)
+    conn.execute("DELETE FROM signals WHERE signal_type = 'indicator'")  # feature dropped
+    conn.commit()
     conn.close()
     # Background auto-fetcher (Phase 2): runs in-process, no-ops unless scraping
     # is enabled. Cancelled cleanly on shutdown.
@@ -395,11 +397,9 @@ def signals_radar(request: Request):
     finally:
         conn.close()
     gigs = [x for x in ranked if (x["row"]["signal_type"] or "gig") != "indicator"]
-    indicators = [x for x in ranked if (x["row"]["signal_type"] or "gig") == "indicator"]
     return render(
-        request, "signals.html", nav="signals", gigs=gigs, indicators=indicators,
+        request, "signals.html", nav="signals", gigs=gigs,
         feeds=scheduler.configured_feeds(),
-        indicators_on=scheduler.lead_indicators_enabled(),
     )
 
 
@@ -449,15 +449,10 @@ def signal_promote(signal_id: int):
             return HTMLResponse("Signal not found", status_code=404)
         if s["linked_opp_id"]:
             return RedirectResponse(f"/opportunity/{s['linked_opp_id']}", status_code=303)
-        is_indicator = (s["signal_type"] or "gig") == "indicator"
-        desc = s["body"] or ""
-        if is_indicator:
-            desc = ("[LEADING INDICATOR — no brief yet; pursue proactively to get "
-                    "ahead of the music spend] " + desc).strip()
         opp = Opportunity(
             client="Unknown", need=s["title"] or "Detected opportunity",
-            description=desc, budget_min=s["budget_min"], budget_max=s["budget_max"],
-            source="lead_indicator" if is_indicator else "signal",
+            description=s["body"] or "", budget_min=s["budget_min"],
+            budget_max=s["budget_max"], source="signal",
         )
         new_id = db.insert_opportunity(conn, opp)
         db.link_signal_to_opp(conn, signal_id, new_id)
