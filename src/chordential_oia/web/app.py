@@ -226,9 +226,9 @@ _MANIFEST = {
     "background_color": "#FCF7F8",
     "theme_color": "#E4671F",
     "icons": [
-        {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png",
+        {"src": "/static/icon-192.png?v=3", "sizes": "192x192", "type": "image/png",
          "purpose": "any maskable"},
-        {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png",
+        {"src": "/static/icon-512.png?v=3", "sizes": "512x512", "type": "image/png",
          "purpose": "any maskable"},
     ],
 }
@@ -252,7 +252,11 @@ def service_worker():
 @app.get("/apple-touch-icon.png")
 def apple_touch_icon():
     from fastapi.responses import FileResponse
-    return FileResponse(os.path.join(_HERE, "static", "apple-touch-icon.png"))
+    # no-cache so a re-add picks up a changed icon instead of a stale iOS copy.
+    return FileResponse(
+        os.path.join(_HERE, "static", "apple-touch-icon.png"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # --------------------------------------------------------------------------- #
