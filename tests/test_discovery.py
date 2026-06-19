@@ -61,7 +61,7 @@ def test_catalog_has_real_industry_sites():
 
 
 def test_site_targets_build_real_urls():
-    site = catalog.get_site("reddit_forhire")
+    site = catalog.get_site("reddit_gamedev")
     targets = catalog.site_targets(site, "opportunity", keyword="composer")
     assert targets and all(t["url"].startswith("https://www.reddit.com") for t in targets)
 

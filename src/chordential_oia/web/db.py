@@ -925,6 +925,13 @@ def upsert_discovery_site(
     conn.commit()
 
 
+def remove_discovery_site(conn: sqlite3.Connection, key: str) -> None:
+    """Delete a source and its crawl targets (used to retire catalog sources)."""
+    conn.execute("DELETE FROM crawl_targets WHERE source_key = ?", (key,))
+    conn.execute("DELETE FROM discovery_sites WHERE key = ?", (key,))
+    conn.commit()
+
+
 def get_discovery_site_by_key(
     conn: sqlite3.Connection, key: str
 ) -> Optional[sqlite3.Row]:

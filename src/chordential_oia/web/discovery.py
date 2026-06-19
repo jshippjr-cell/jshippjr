@@ -37,6 +37,8 @@ def sync_catalog(conn) -> int:
     """Insert any catalog sites not yet in the DB (never overwrites Jon's
     approve/reject decisions). Returns how many new sites were added."""
     before = db.discovery_site_counts(conn)["total"]
+    for key in catalog.RETIRED_KEYS:          # drop sources removed from the catalog
+        db.remove_discovery_site(conn, key)
     for site in catalog.CATALOG:
         db.upsert_discovery_site(
             conn, site.key, site.name, site.homepage, site.kind, site.category,

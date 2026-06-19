@@ -132,15 +132,6 @@ CATALOG: List[SourceSite] = [
         [("opportunity", "Jobs", "https://www.filmmusic.net/jobs/")],
     ),
     SourceSite(
-        "reddit_forhire", "Reddit · r/forhire", "https://www.reddit.com/r/forhire",
-        "opportunity", "Community gig board", "Demand-Gen Manager",
-        "“[Hiring] composer/music” posts from indie producers and devs.",
-        STATUS_ESTABLISHED,
-        [("opportunity", "Search",
-          "https://www.reddit.com/r/forhire/search/?q={q}&restrict_sr=1&sort=new")],
-        login_gated=True,
-    ),
-    SourceSite(
         "reddit_gamedev", "Reddit · r/gameDevClassifieds",
         "https://www.reddit.com/r/gameDevClassifieds",
         "opportunity", "Community gig board", "Demand-Gen Manager",
@@ -223,6 +214,10 @@ CATALOG: List[SourceSite] = [
         [("opportunity", "Creative gigs", "https://www.craigslist.org/search/crg?query={q}")],
     ),
 ]
+
+# Sources removed from the catalog — deleted from existing DBs on sync so they
+# stop showing up (e.g. r/forhire: too much talent self-promo, low gig signal).
+RETIRED_KEYS = {"reddit_forhire"}
 
 _BY_KEY = {s.key: s for s in CATALOG}
 

@@ -164,7 +164,7 @@ def test_manual_assist_searches_are_simple(tmp_path, monkeypatch):
     conn = db.connect()
     db.init_db(conn)
     disc.sync_catalog(conn)
-    row = conn.execute("SELECT * FROM discovery_sites WHERE key='reddit_forhire'").fetchone()
+    row = conn.execute("SELECT * FROM discovery_sites WHERE key='reddit_gamedev'").fetchone()
     assert row["login_gated"] == 1                       # Reddit → manual-assist
 
     searches = disc.manual_assist_searches(row)
@@ -172,10 +172,26 @@ def test_manual_assist_searches_are_simple(tmp_path, monkeypatch):
     labels = {s["label"] for s in searches}
     assert "composer" in labels and "music" in labels
     for s in searches:
-        assert "reddit.com/r/forhire/search" in s["url"]
+        assert "reddit.com/r/gameDevClassifieds/search" in s["url"]
         assert "sort=new" in s["url"] and "restrict_sr=1" in s["url"]
         assert " OR " not in s["url"] and "%28" not in s["url"]   # FLAT — no boolean/parens
         assert "-hobby" in s["url"] and "-revshare" in s["url"]   # exclusions applied
+
+
+def test_forhire_is_retired(tmp_path, monkeypatch):
+    db, disc, _ = _modules(tmp_path, monkeypatch)
+    conn = db.connect()
+    db.init_db(conn)
+    # Simulate a DB that still has the old forhire row, then sync.
+    conn.execute(
+        "INSERT INTO discovery_sites (key, name, kind, status, login_gated) "
+        "VALUES ('reddit_forhire','Reddit · r/forhire','opportunity','Established',1)"
+    )
+    conn.commit()
+    disc.sync_catalog(conn)
+    assert conn.execute(
+        "SELECT 1 FROM discovery_sites WHERE key='reddit_forhire'"
+    ).fetchone() is None
 
 
 def test_new_reddit_channels_present(tmp_path, monkeypatch):
