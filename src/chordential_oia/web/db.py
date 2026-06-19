@@ -1005,6 +1005,17 @@ def link_signal_to_opp(conn: sqlite3.Connection, signal_id: int, opp_id: int) ->
     conn.commit()
 
 
+def clear_signals(conn: sqlite3.Connection, only_open: bool = True) -> int:
+    """Wipe the radar. By default only clears open (New/Reviewed) signals so
+    promoted ones keep their link; pass only_open=False to delete everything."""
+    if only_open:
+        cur = conn.execute("DELETE FROM signals WHERE status IN ('New','Reviewed')")
+    else:
+        cur = conn.execute("DELETE FROM signals")
+    conn.commit()
+    return cur.rowcount
+
+
 def remove_discovery_site(conn: sqlite3.Connection, key: str) -> None:
     """Delete a source and its crawl targets (used to retire catalog sources)."""
     conn.execute("DELETE FROM crawl_targets WHERE source_key = ?", (key,))

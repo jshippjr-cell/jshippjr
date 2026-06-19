@@ -89,20 +89,45 @@ def test_radar_renders_and_promote(ctx):
     assert db.get_signal(conn, sid)["status"] == "Promoted"
 
 
-def test_f5bot_link_list_ingests_per_link(ctx):
+def test_f5bot_filter_keeps_only_real_gigs(ctx):
     _, db, sig = ctx
     body = (
-        "F5Bot found the following posts:\n\nReddit:\n\n"
-        "composer - [Hiring] Composer for indie horror game\n"
-        "https://www.reddit.com/r/gameDevClassifieds/comments/abc/\n\n"
-        "music producer - [PAID] Looking for music producer\n"
-        "https://www.reddit.com/r/wearethemusicmakers/comments/def/\n"
+        "F5Bot found the following:\n\n"
+        "Reddit Posts (/r/gameDevClassifieds/): '[PAID] Looking for Music Composer' by dev1\n"
+        "https://f5bot.com/url?u=https%3A%2F%2Fwww.reddit.com%2Fr%2FgameDevClassifieds%2Fcomments%2Fabc%2F&i=1\n\n"
+        "Reddit Comments (/r/Music/): 'Legendary producer dead at 29' by foo\n"
+        "https://f5bot.com/url?u=https%3A%2F%2Fwww.reddit.com%2Fr%2FMusic%2Fcomments%2Fxyz%2F&i=2\n\n"
+        "Reddit Posts (/r/IndiaSocial/): 'Late Night Random Discussion Thread' by bar\n"
+        "https://f5bot.com/url?u=https%3A%2F%2Fwww.reddit.com%2Fr%2FIndiaSocial%2Fcomments%2Fqqq%2F&i=3\n"
     )
     conn = db.connect()
-    assert sig.ingest_email(conn, "F5Bot found 2 matches", body, source="f5bot") == 2
+    assert sig.ingest_email(conn, "F5Bot", body, source="f5bot") == 1   # only the PAID gig
     rows = db.list_signals(conn)
-    assert any("[Hiring] Composer" in r["title"] for r in rows)
-    assert any("gameDevClassifieds" in (r["url"] or "") for r in rows)
+    assert len(rows) == 1
+    assert "Music Composer" in rows[0]["title"]
+    assert rows[0]["url"].startswith("https://www.reddit.com")          # f5bot link unwrapped
+    assert rows[0]["source"] == "/r/gameDevClassifieds"
+
+
+def test_is_music_gig_filter(ctx):
+    _, _, sig = ctx
+    assert sig.is_music_gig("[PAID] Composer needed for our game")
+    assert not sig.is_music_gig("Late Night Random Discussion Thread")        # no role/demand
+    assert not sig.is_music_gig("Looking for a video editor and content creator")  # no music role
+    assert not sig.is_music_gig("RIP Bobby Prince - Music Composer")          # role, no demand
+    assert not sig.is_music_gig("[Hobby] band needs a composer for fun")      # collab/unpaid
+    assert not sig.is_music_gig("Reddit Comments (/r/Music/): poll about composers")  # comment
+
+
+def test_clear_radar(ctx):
+    client, db, _ = ctx
+    conn = db.connect()
+    db.insert_signal(conn, source="x", source_weight=5, title="a", external_ref="1")
+    db.insert_signal(conn, source="x", source_weight=5, title="b", external_ref="2")
+    conn.close()
+    client.post("/signals/clear")
+    conn = db.connect()
+    assert db.list_signals(conn) == []
 
 
 def test_labeled_digest_uses_structured_parser(ctx):

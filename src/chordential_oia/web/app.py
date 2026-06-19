@@ -466,6 +466,17 @@ def signal_promote(signal_id: int):
     return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
 
 
+@app.post("/signals/clear")
+def signals_clear():
+    """Wipe the open radar — start fresh after a filter change."""
+    conn = db.connect()
+    try:
+        db.clear_signals(conn)
+    finally:
+        conn.close()
+    return RedirectResponse("/signals", status_code=303)
+
+
 @app.post("/signals/{signal_id}/status")
 def signal_set_status(signal_id: int, status: str = Form(...)):
     conn = db.connect()

@@ -16,7 +16,11 @@
   <form method="post" action="/signals/paste" style="display:grid;gap:8px">
     <textarea name="text" rows="3" class="filter-search" style="width:100%"
               placeholder="Paste an alert email (Mandy / ProductionHUB / Hitmarker / F5Bot)… one or many postings."></textarea>
-    <div class="form-actions"><button class="btn primary" type="submit">Parse into signals</button></div>
+    <div class="form-actions" style="display:flex;align-items:center;gap:10px">
+      <button class="btn primary" type="submit">Parse into signals</button>
+      <button class="btn ghost tiny" type="submit" formaction="/signals/clear"
+              onclick="return confirm('Clear all open signals from the radar?')">Clear radar</button>
+    </div>
   </form>
   <p class="muted small" style="margin:8px 0 0">
     {% if feeds %}Polling <strong>{{ feeds|length }}</strong> gig RSS feed(s).{% else %}
@@ -27,8 +31,8 @@
 </div>
 
 {% macro signal_table(items, kind) %}
-<div class="card no-pad" style="margin-top:14px">
-<table class="table">
+<div class="card no-pad" style="margin-top:14px;overflow-x:auto">
+<table class="table" style="max-width:100%">
   <thead>
     <tr><th style="width:1%">#</th><th>{{ 'Signal' if kind=='gig' else 'Account / event' }}</th>
         <th>{{ 'Score' if kind=='gig' else 'Strength' }}</th><th>Rank</th><th style="width:1%">Actions</th></tr>
@@ -38,15 +42,16 @@
     {% set r = s['row'] %}
     <tr>
       <td class="muted">{{ loop.index }}</td>
-      <td>
-        <div class="strong">{{ r['title'] }}</div>
+      <td style="max-width:560px;overflow-wrap:anywhere">
+        <div class="strong">{{ r['title'] }}
+          {% if r['url'] %}<a class="link small" href="{{ r['url'] }}" target="_blank" rel="noopener" style="font-weight:400">· open ↗</a>{% endif %}
+        </div>
         <div class="muted small">
           <span class="pill {{ 'st-won' if s['fresh'] else '' }}">{{ s['age_label'] }} old</span>
           · {{ r['source'] }}
           {% if kind=='gig' and r['tier'] %} · {{ r['tier'] }}-tier{% endif %}
           {% if r['budget_min'] %} · ${{ r['budget_min']|int }}{% if r['budget_max'] %}–${{ r['budget_max']|int }}{% endif %}{% endif %}
         </div>
-        {% if r['url'] %}<a class="link small" href="{{ r['url'] }}" target="_blank" rel="noopener">{{ r['url']|displayurl }}</a>{% endif %}
       </td>
       <td><span class="strong">{{ r['score']|round|int if r['score'] is not none else '–' }}</span></td>
       <td class="muted">{{ s['rank']|round(1) }}</td>

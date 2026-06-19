@@ -14,7 +14,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import List, Optional
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 from ..intake import extract_budget, parse_alert_email
 from ..models import Opportunity
@@ -113,10 +113,12 @@ _SUPPLY_MARKERS = (
     "check out my", "my services", "commissions open",
 )
 _DEMAND_MARKERS = (
-    "[hiring]", "[paid]", "needed", "need a", "we need", "we're looking",
-    "we are looking", "looking for a composer", "looking for composer",
+    "[hiring]", "[paid]", "needed", "need a", "needs a", "needs an", "in need of",
+    "we need", "we're looking", "we are looking",
+    "looking for a composer", "looking for composer",
     "looking for a music", "looking for music", "seeking", "hiring", "wanted",
-    "commission a", "in search of", "looking to hire", "paid gig", "budget",
+    "commission a", "in search of", "searching for", "looking to hire",
+    "paid gig", "budget", "we're making", "we are making", "our game", "our film",
 )
 
 
@@ -132,15 +134,50 @@ def intent(title: str, body: str = "") -> str:
     return "unknown"
 
 
+# A real music gig (for the noisy keyword-alert sources). Must name a music role
+# AND express hiring intent AND not be a collab/hobby/unpaid ask. This is the
+# "ironclad" filter — everything else (discussions, news, polls, self-promo,
+# off-topic, comments-on-old-posts) is dropped before it ever reaches the radar.
+_MUSIC_ROLE_MARKERS = (
+    "composer", "compose", "composing", "score", "scoring", "soundtrack",
+    "original music", "original score", "sound design", "sound designer",
+    "sonic brand", "music composer", "film music", "game audio", "music for",
+    "theme music", "underscore", "additional music", "music producer",
+)
+_COLLAB_MARKERS = (
+    "partner", "collab", "join our", "join my", "join the", "bandmate",
+    "band member", "virtual band", "looking for members", "for fun",
+    "just for fun", "[hobby]", "hobby project", "passion project", "rev share",
+    "revshare", "royalty", "unpaid", "be a part of", "co-writer", "cowriter",
+    "start a band", "form a band", "no pay", "non-paid", "no budget",
+)
+
+
+def is_music_gig(title: str, body: str = "") -> bool:
+    t = f"{title} {body}".lower()
+    if "reddit comment" in t:          # F5Bot comment match → old post, new comment
+        return False
+    if not any(m in t for m in _MUSIC_ROLE_MARKERS):
+        return False
+    if any(m in t for m in _COLLAB_MARKERS):
+        return False
+    return intent(title, body) == "demand"
+
+
 def ingest_signal(
     conn, *, source: str, title: str, body: str = "", url: str = "",
     external_ref: str = "", budget_min=None, budget_max=None, posted_at=None,
+    strict: bool = False,
 ) -> Optional[int]:
     title = (title or "").strip()
     if not title:
         return None
-    # Drop talent self-promo — this radar is for demand (gigs), not supply.
-    if intent(title, body) == "supply":
+    if strict:
+        # Noisy keyword-alert source (F5Bot etc.) — keep only real music gigs.
+        if not is_music_gig(title, body):
+            return None
+    elif intent(title, body) == "supply":
+        # Curated source — just drop talent self-promo.
         return None
     bmin, bmax = budget_min, budget_max
     if bmin is None and bmax is None:
@@ -171,24 +208,50 @@ _URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 _LABEL_RE = re.compile(r"(?im)^\s*(title|role|gig|position|job|project)\s*[:\-]")
 
 
+# "Reddit Posts (/r/sub/): 'Title' by author"  — F5Bot's per-match line.
+_F5BOT_LINE = re.compile(
+    r"Reddit\s+(Posts|Comments)\s*\(\s*(/r/[^)]+?)/?\s*\)\s*:\s*['\"]?(.*?)['\"]?(?:\s+by\s+\S+)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _unwrap_url(url: str) -> str:
+    """F5Bot wraps links as f5bot.com/url?u=<real>. Unwrap to the real URL — both
+    cleaner to show and easier to dedupe/classify."""
+    if "f5bot.com/url" in url:
+        q = parse_qs(urlparse(url).query)
+        if q.get("u"):
+            return unquote(q["u"][0])
+    return url
+
+
 def _signals_from_links(body: str) -> List[dict]:
-    """Link-list alerts (F5Bot / Google Alerts): one candidate per URL, titled by
-    the text on its line (or the nearest preceding non-empty line). Deduped."""
+    """Link-list alerts (F5Bot / Google Alerts): one candidate per URL. Parses
+    F5Bot's "Reddit Posts (/r/sub/): 'Title'" lines into a clean title + source,
+    DROPS comment matches (they fire on old posts), and unwraps the redirect."""
     out, seen = [], set()
     lines = (body or "").splitlines()
     for i, line in enumerate(lines):
         for m in _URL_RE.finditer(line):
-            url = m.group(0).rstrip(".,);]")
+            raw = m.group(0).rstrip(".,);]")
+            url = _unwrap_url(raw)
             if url in seen:
                 continue
             seen.add(url)
-            title = line.replace(url, "").strip(" -–—|:•\t")
-            if len(title) < 4:
+            ctx = line.replace(raw, "").strip(" -–—|:•\t")
+            if len(ctx) < 4:
                 for j in range(i - 1, -1, -1):
                     if lines[j].strip():
-                        title = lines[j].strip()
+                        ctx = lines[j].strip()
                         break
-            out.append({"title": (title or url)[:200], "url": url})
+            fm = _F5BOT_LINE.search(ctx)
+            if fm:
+                kind, sub, title = fm.group(1).lower(), fm.group(2), fm.group(3).strip()
+                if kind == "comments":
+                    continue   # a comment on a (usually old) post — never a gig
+                out.append({"title": (title or url)[:200], "url": url, "source": sub})
+            else:
+                out.append({"title": (ctx or url)[:200], "url": url, "source": "alert"})
     return out
 
 
@@ -211,11 +274,13 @@ def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
                 n += 1
         if n:
             return n
-    # Link-list alert → one signal per match.
+    # Link-list alert (F5Bot/Google Alerts) → one signal per match, through the
+    # ironclad music-gig filter (these sources are noisy).
     n = 0
     for c in links:
         if ingest_signal(
-            conn, source=source, title=c["title"], url=c["url"], external_ref=c["url"]
+            conn, source=c.get("source") or source, title=c["title"],
+            url=c["url"], external_ref=c["url"], strict=True,
         ):
             n += 1
     return n
