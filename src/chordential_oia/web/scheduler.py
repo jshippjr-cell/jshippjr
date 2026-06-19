@@ -67,6 +67,42 @@ def status() -> dict:
     return s
 
 
+def configured_feeds():
+    """RSS feeds to poll, from CHORDENTIAL_RSS_FEEDS — comma-separated, each
+    either a URL or 'name|url' so the source is labeled on the radar."""
+    feeds = []
+    for part in os.environ.get("CHORDENTIAL_RSS_FEEDS", "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "|" in part:
+            name, url = part.split("|", 1)
+            feeds.append((name.strip() or "rss", url.strip()))
+        else:
+            feeds.append(("rss", part))
+    return feeds
+
+
+def poll_feeds() -> int:
+    """Poll every configured RSS feed into the signals tape. Blocking — runs in a
+    worker thread. No-op (and no network) when no feeds are configured."""
+    feeds = configured_feeds()
+    if not feeds:
+        return 0
+    from . import signals
+    conn = db.connect()
+    total = 0
+    try:
+        for name, url in feeds:
+            try:
+                total += signals.ingest_feed(conn, url, source=name)
+            except Exception:
+                pass
+    finally:
+        conn.close()
+    return total
+
+
 def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
     """One pass: fetch a bounded batch of due targets. Blocking — runs in a worker
     thread off the event loop. Returns the number of leads/creators ingested."""
@@ -93,6 +129,11 @@ async def run_loop() -> None:
     """The forever loop, started from the app lifespan. Self-heals on errors."""
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
+        if configured_feeds():               # Signal Engine: poll RSS feeds
+            try:
+                await asyncio.to_thread(poll_feeds)
+            except Exception:
+                pass
         if autofetch_enabled():
             _status["running"] = True
             try:

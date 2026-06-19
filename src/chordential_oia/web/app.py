@@ -36,7 +36,7 @@ from ..outreach import build_outreach_plan
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, scheduler, seed
+from . import db, discovery, scheduler, seed, signals
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -160,6 +160,7 @@ def _is_public_path(path: str) -> bool:
         or path in ("/healthz", "/favicon.ico")
         or path.startswith("/admin/login")
         or path.startswith("/admin/logout")
+        or path == "/signals/ingest"   # email-in webhook (its own shared-secret token)
     )
 
 
@@ -381,6 +382,87 @@ def discovery_page(request: Request, kind: str = "talent"):
         pending_count=len(pending_sites) + len(proposed_targets),
         autofetch=scheduler.status(),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Signal Engine — the Opportunity Detection layer (freshness × score radar)
+# --------------------------------------------------------------------------- #
+@app.get("/signals", response_class=HTMLResponse)
+def signals_radar(request: Request):
+    conn = db.connect()
+    try:
+        ranked = signals.rank_signals(db.list_signals(conn))
+    finally:
+        conn.close()
+    return render(
+        request, "signals.html", nav="signals", ranked=ranked,
+        feeds=scheduler.configured_feeds(),
+    )
+
+
+@app.post("/signals/paste")
+def signals_paste(text: str = Form("")):
+    """Paste a forwarded saved-search / F5Bot alert → parse into signals."""
+    conn = db.connect()
+    try:
+        signals.ingest_alert(conn, text, source="paste")
+    finally:
+        conn.close()
+    return RedirectResponse("/signals", status_code=303)
+
+
+@app.post("/signals/ingest")
+async def signals_ingest(request: Request, token: str = "", source: str = "email"):
+    """Email-in webhook (Phase 2 backbone) — a mail service POSTs a forwarded
+    alert here. Protected by a shared secret (CHORDENTIAL_SIGNAL_TOKEN), not the
+    admin cookie, since it's machine-to-machine."""
+    secret = os.environ.get("CHORDENTIAL_SIGNAL_TOKEN")
+    if not secret or token != secret:
+        return PlainTextResponse("unauthorized", status_code=401)
+    ctype = request.headers.get("content-type", "")
+    if "form" in ctype or "urlencoded" in ctype:
+        form = await request.form()
+        body = (form.get("body-plain") or form.get("text") or form.get("body") or "")
+    else:
+        body = (await request.body()).decode("utf-8", "replace")
+    conn = db.connect()
+    try:
+        n = signals.ingest_alert(conn, str(body), source=source)
+    finally:
+        conn.close()
+    return {"ingested": n}
+
+
+@app.post("/signals/{signal_id}/promote")
+def signal_promote(signal_id: int):
+    """Promote a signal into the pipeline — the same human gate leads use."""
+    conn = db.connect()
+    try:
+        s = db.get_signal(conn, signal_id)
+        if s is None:
+            return HTMLResponse("Signal not found", status_code=404)
+        if s["linked_opp_id"]:
+            return RedirectResponse(f"/opportunity/{s['linked_opp_id']}", status_code=303)
+        opp = Opportunity(
+            client="Unknown", need=s["title"] or "Detected opportunity",
+            description=s["body"] or "", budget_min=s["budget_min"],
+            budget_max=s["budget_max"], source="signal",
+        )
+        new_id = db.insert_opportunity(conn, opp)
+        db.link_signal_to_opp(conn, signal_id, new_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
+
+
+@app.post("/signals/{signal_id}/status")
+def signal_set_status(signal_id: int, status: str = Form(...)):
+    conn = db.connect()
+    try:
+        db.set_signal_status(conn, signal_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse("/signals", status_code=303)
 
 
 @app.get("/capture", response_class=HTMLResponse)

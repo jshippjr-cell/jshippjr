@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Signal Radar{% endblock %}
+{% block heading %}Signal Radar — Opportunity Detection{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  The trading-desk tape. Detected opportunities, ranked by <strong>freshness × score</strong> —
+  a fresh, relevant signal outranks a stale one, so you can be the first email in the inbox.
+  Feed signals in below, then <strong>promote</strong> the good ones into your pipeline.
+</div>
+
+<div class="card" style="margin:14px 0">
+  <div class="card-head"><h2>Feed in an alert</h2>
+    <span class="muted small">paste a forwarded saved-search / F5Bot email</span></div>
+  <form method="post" action="/signals/paste" style="display:grid;gap:8px">
+    <textarea name="text" rows="3" class="filter-search" style="width:100%"
+              placeholder="Paste an alert email (Mandy / ProductionHUB / Hitmarker / F5Bot)… one or many postings."></textarea>
+    <div class="form-actions"><button class="btn primary" type="submit">Parse into signals</button></div>
+  </form>
+  <p class="muted small" style="margin:8px 0 0">
+    {% if feeds %}Polling <strong>{{ feeds|length }}</strong> RSS feed(s) every few minutes.{% else %}
+    No RSS feeds configured yet — set <code>CHORDENTIAL_RSS_FEEDS</code> (comma-separated
+    <code>name|url</code>) to auto-poll. Email-in: POST forwarded alerts to <code>/signals/ingest?token=…</code>.{% endif %}
+  </p>
+</div>
+
+{% if ranked %}
+<div class="card no-pad">
+<table class="table">
+  <thead>
+    <tr><th style="width:1%">#</th><th>Signal</th><th>Score</th><th>Rank</th><th style="width:1%">Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for s in ranked %}
+    {% set r = s['row'] %}
+    <tr>
+      <td class="muted">{{ loop.index }}</td>
+      <td>
+        <div class="strong">{{ r['title'] }}</div>
+        <div class="muted small">
+          <span class="pill {{ 'st-won' if s['fresh'] else '' }}">{{ s['age_label'] }} old</span>
+          · {{ r['source'] }} (w{{ r['source_weight'] }})
+          {% if r['tier'] %} · {{ r['tier'] }}-tier{% endif %}
+          {% if r['budget_min'] %} · ${{ r['budget_min']|int }}{% if r['budget_max'] %}–${{ r['budget_max']|int }}{% endif %}{% endif %}
+        </div>
+        {% if r['url'] %}<a class="link small" href="{{ r['url'] }}" target="_blank" rel="noopener">{{ r['url']|displayurl }}</a>{% endif %}
+      </td>
+      <td><span class="strong">{{ r['score']|round|int if r['score'] is not none else '–' }}</span></td>
+      <td class="muted">{{ s['rank']|round(1) }}</td>
+      <td>
+        <div class="lead-actions">
+          <form method="post" action="/signals/{{ r['id'] }}/promote">
+            <button class="btn tiny primary" type="submit" title="Promote into the pipeline">Promote →</button>
+          </form>
+          <form method="post" action="/signals/{{ r['id'] }}/status">
+            <input type="hidden" name="status" value="Dismissed">
+            <button class="btn tiny ghost" type="submit">Dismiss</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card">
+  <p class="muted" style="margin:0">No signals yet. Paste an alert above, wire up an RSS feed,
+  or point a saved-search/F5Bot email at the ingest webhook — then the freshest, highest-scoring
+  opportunities surface here first.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -393,6 +393,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     if "login_gated" not in site_cols:
         conn.execute("ALTER TABLE discovery_sites ADD COLUMN login_gated INTEGER DEFAULT 0")
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT, source_weight INTEGER DEFAULT 5,
+            external_ref TEXT, title TEXT, body TEXT DEFAULT '', url TEXT,
+            budget_min REAL, budget_max REAL, score REAL, tier TEXT,
+            posted_at TEXT, found_at TEXT, status TEXT DEFAULT 'New',
+            linked_opp_id INTEGER, notes TEXT DEFAULT ''
+        )"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
             created_at TEXT, status TEXT DEFAULT 'Draft', deposit_pct REAL,
@@ -921,6 +931,71 @@ def upsert_discovery_site(
             status, datetime.now(timezone.utc).isoformat(), board_url,
             1 if login_gated else 0,
         ),
+    )
+    conn.commit()
+
+
+SIGNAL_STATES = ["New", "Reviewed", "Promoted", "Dismissed"]
+
+
+def signal_exists(conn: sqlite3.Connection, external_ref: str) -> bool:
+    if not external_ref:
+        return False
+    return conn.execute(
+        "SELECT 1 FROM signals WHERE external_ref = ? LIMIT 1", (external_ref,)
+    ).fetchone() is not None
+
+
+def insert_signal(
+    conn: sqlite3.Connection, *, source: str, source_weight: int, title: str,
+    body: str = "", url: str = "", external_ref: str = "",
+    budget_min: Optional[float] = None, budget_max: Optional[float] = None,
+    score: Optional[float] = None, tier: Optional[str] = None,
+    posted_at: Optional[str] = None,
+) -> Optional[int]:
+    """Record a detected signal (the tape). Deduped on external_ref. found_at is
+    stamped now; posted_at is when the opportunity went live (feed value or now)."""
+    if signal_exists(conn, external_ref):
+        return None
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO signals
+           (source, source_weight, external_ref, title, body, url,
+            budget_min, budget_max, score, tier, posted_at, found_at, status)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'New')""",
+        (source, source_weight, external_ref, title, body, url,
+         budget_min, budget_max, score, tier, posted_at or now, now),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_signals(
+    conn: sqlite3.Connection, status: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Open signals (New/Reviewed) by default — the live tape."""
+    if status:
+        return conn.execute("SELECT * FROM signals WHERE status = ?", (status,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM signals WHERE status IN ('New','Reviewed')"
+    ).fetchall()
+
+
+def get_signal(conn: sqlite3.Connection, signal_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
+
+
+def set_signal_status(conn: sqlite3.Connection, signal_id: int, status: str) -> None:
+    if status not in SIGNAL_STATES:
+        raise ValueError(f"Unknown signal status {status!r}")
+    conn.execute("UPDATE signals SET status = ? WHERE id = ?", (status, signal_id))
+    conn.commit()
+
+
+def link_signal_to_opp(conn: sqlite3.Connection, signal_id: int, opp_id: int) -> None:
+    conn.execute(
+        "UPDATE signals SET status = 'Promoted', linked_opp_id = ? WHERE id = ?",
+        (opp_id, signal_id),
     )
     conn.commit()
 
