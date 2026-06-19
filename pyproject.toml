@@ -15,10 +15,13 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "httpx>=0.24"]
-web = ["fastapi>=0.110", "uvicorn>=0.23", "jinja2>=3.1", "python-multipart>=0.0.6"]
-# Web Push (native iOS/desktop notifications for the installed PWA). Isolated so
-# the core never hard-depends on it; imported lazily, only when actually sending
-# (Render-only — sandbox/CI egress is blocked and mocks the sender).
+# pywebpush ships with the web stack: native phone alerts are a web-app feature,
+# and bundling it here means it installs on any deploy that runs the web app —
+# regardless of whether the build command remembers the separate "push" extra.
+# It's still imported lazily (only when actually sending), so a CLI-only install
+# or an egress-blocked sandbox never touches it; tests mock the sender.
+web = ["fastapi>=0.110", "uvicorn>=0.23", "jinja2>=3.1", "python-multipart>=0.0.6", "pywebpush>=1.14"]
+# Retained for back-compat with existing build commands that say ".[web,push]".
 push = ["pywebpush>=1.14"]
 
 [project.scripts]
