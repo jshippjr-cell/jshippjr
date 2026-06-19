@@ -111,6 +111,39 @@ def _parse_money(text: str) -> Tuple[Optional[float], Optional[float]]:
     return min(nums), max(nums)
 
 
+parse_money = _parse_money  # public alias
+
+
+# Inline "Budget: $1,000-$1,500" anywhere in a paragraph (not just line-anchored).
+_BUDGET_INLINE_RE = re.compile(
+    r"(?:budget|compensation|\bcomp\b|\bpays?\b|\brate\b|\bfee\b)\s*[:\-]?\s*"
+    r"(\$?\s?\d[\d,]*(?:\.\d+)?\s?k?"
+    r"(?:\s*(?:-|–|—|to)\s*\$?\s?\d[\d,]*(?:\.\d+)?\s?k?)?)",
+    re.IGNORECASE,
+)
+
+
+def extract_budget(
+    text: str, labeled_only: bool = False
+) -> Tuple[Optional[float], Optional[float]]:
+    """Best-effort ``(min, max)`` budget from free text. Prefers a
+    ``Budget:``-labeled value (line-anchored or inline mid-paragraph, e.g.
+    ``…wood. Budget: $1,000-$1,500 USD Deliverables:…``); otherwise scans the
+    whole string — unless ``labeled_only`` is set, for noisy prose where only an
+    explicit budget label should be trusted."""
+    if not text:
+        return None, None
+    labeled = _label_value(text, _BUDGET_LABELS)
+    if labeled:
+        return _parse_money(labeled)
+    m = _BUDGET_INLINE_RE.search(text)
+    if m:
+        return _parse_money(m.group(1))
+    if labeled_only:
+        return None, None
+    return _parse_money(text)
+
+
 def _infer_buyer(text: str) -> BuyerType:
     t = text.lower()
     if any(k in t for k in _EDUCATIONAL_KW):

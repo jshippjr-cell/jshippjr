@@ -115,6 +115,13 @@ _COMPOSITION_KW = (
 )
 _LICENSING_KW = ("license", "licensed", "pre-existing", "existing track", "catalog")
 
+# Role terms that, when they appear in the *title*, mean composition is the craft
+# even if the brief also lists ambient/sound-design deliverables.
+_COMPOSER_ROLE_KW = (
+    "composer", "compose", "music composer", "original score", "soundtrack",
+    "main theme", "theme music",
+)
+
 # Clearance-risk markers (lower the "clearable" score).
 _CLEARANCE_RISK_KW = (
     "master rights", "sample clearance", "clear samples", "existing song",
@@ -228,6 +235,16 @@ def classify_discipline(opp: Opportunity) -> Tuple[MusicDiscipline, List[MusicDi
     ]
     primary = next(d for d in priority if d in detected)
     secondary = [d for d in detected if d is not primary]
+    # A title that explicitly names a composer/scoring role is the craft, even
+    # when the brief lists ambient/sound-design deliverables — promote COMPOSITION
+    # over SOUND_DESIGN in that case (e.g. "Looking for Music Composer" + ambience).
+    if (
+        primary is MusicDiscipline.SOUND_DESIGN
+        and MusicDiscipline.COMPOSITION in detected
+        and any(k in (opp.need or "").lower() for k in _COMPOSER_ROLE_KW)
+    ):
+        primary = MusicDiscipline.COMPOSITION
+        secondary = [d for d in detected if d is not primary]
     return primary, secondary
 
 

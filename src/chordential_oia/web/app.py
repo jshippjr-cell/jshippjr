@@ -321,10 +321,19 @@ def inbound_promote(lead_id: int):
             )
         client = (lead["company"] or lead["contact_name"] or "Inbound lead").strip()
         need = (lead["project_type"] or "Inbound commission").strip()
+        # Pull the budget out of the captured field, or the "Budget:" line in the
+        # pasted post — so a promoted gig shows its real budget, not "Unknown".
+        from ..intake import extract_budget
+
+        bmin, bmax = extract_budget(lead["budget_text"] or "")
+        if bmin is None and bmax is None:
+            bmin, bmax = extract_budget(lead["description"] or "", labeled_only=True)
         opp = Opportunity(
             client=client,
             need=need,
             description=lead["description"] or "",
+            budget_min=bmin,
+            budget_max=bmax,
             source="front_of_house",
         )
         new_id = db.insert_opportunity(conn, opp)
