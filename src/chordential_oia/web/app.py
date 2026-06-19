@@ -33,6 +33,7 @@ from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan, respond_action
+from ..capabilities import build_capabilities_doc, default_toggles
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
@@ -1328,6 +1329,36 @@ def opportunity_buyer(request: Request, opp_id: int):
     if ctx is None:
         return HTMLResponse("Buyer not found", status_code=404)
     return render(request, "buyer.html", nav="inbox", opp_row=row, **ctx)
+
+
+@app.get("/opportunity/{opp_id}/capabilities", response_class=HTMLResponse)
+def opportunity_capabilities(request: Request, opp_id: int):
+    """Branded, toggleable capabilities/proposal doc → preview and Save as PDF.
+
+    Sections default by deal stage (discovery hides cost; proposal adds the price
+    band; contract adds terms + DocuSign). Once the toggle bar is submitted, each
+    section follows its checkbox so you can tailor what the buyer sees."""
+    conn = db.connect()
+    try:
+        row, opp, ev = _load(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    qual, scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+
+    toggles = default_toggles(row["status"])
+    qp = request.query_params
+    if qp.get("submitted"):                       # toggle bar was applied
+        for key in ("cost", "examples", "call", "terms"):
+            toggles[key] = qp.get(key) == "1"
+    doc = build_capabilities_doc(
+        opp, qual, est, toggles=toggles,
+        call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
+    )
+    return render(request, "capabilities_doc.html", nav="inbox", row=row, doc=doc)
 
 
 @app.post("/buyer/{client}/website")

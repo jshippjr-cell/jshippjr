@@ -27,6 +27,7 @@
 
 <div class="action-bar">
   {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
+  <a class="btn ghost" href="/opportunity/{{ row['id'] }}/capabilities">📄 Capabilities doc</a>
   {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
