@@ -67,18 +67,41 @@ def _service():
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
+def _resolve_label_id(svc, name: str):
+    """Find the Gmail label ID whose name matches (case-insensitively). Returns
+    ``(label_id, all_label_names)`` — id is None when there's no match, and the
+    name list lets the caller report what *does* exist."""
+    resp = svc.users().labels().list(userId="me").execute()
+    labels = resp.get("labels", [])
+    names = [lbl.get("name", "") for lbl in labels]
+    target = name.strip().lower()
+    for lbl in labels:
+        if lbl.get("name", "").strip().lower() == target:
+            return lbl.get("id"), names
+    return None, names
+
+
 def list_candidates(limit: int = 25) -> List[dict]:
-    """Unread messages under the alerts label — the triage queue. Returns a list
-    of ``{"id", "thread_id"}``; empty (with last_error set) on any failure."""
+    """Unread messages under the alerts label — the triage queue. Resolves the
+    label to its ID and filters by ``[label, UNREAD]`` (far more reliable than the
+    ``label:`` search operator). Returns ``{"id", "thread_id"}``; empty (with
+    last_error set) on any failure or when the label name doesn't exist."""
     global _LAST_ERROR
     if not is_configured():
         return []
     try:
         svc = _service()
-        q = f"label:{label()} is:unread"
+        label_id, names = _resolve_label_id(svc, label())
+        if label_id is None:
+            visible = ", ".join(sorted(n for n in names if not n.isupper())) or "(none)"
+            _LAST_ERROR = (
+                f"label '{label()}' not found. Your labels: {visible}"
+            )[:240]
+            return []
         resp = (
             svc.users().messages()
-            .list(userId="me", q=q, maxResults=max(1, min(limit, 100)))
+            .list(userId="me", labelIds=[label_id, "UNREAD"],
+                  maxResults=max(1, min(limit, 100)))
             .execute()
         )
         _LAST_ERROR = ""
