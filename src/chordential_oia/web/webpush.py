@@ -88,16 +88,24 @@ def send_web_push(title: str, body: str = "", url: str = "/signals") -> dict:
     if not is_configured():
         return {"configured": False, "subscriptions": 0, "sent": 0, "pruned": 0}
 
-    payload = json.dumps({
-        "title": title or "New gig on Chordential",
-        "body": body or "",
-        "url": url or "/signals",
-        "ts": datetime.now(timezone.utc).isoformat(),
-    })
-
     conn = db.connect()
     sent = pruned = 0
     try:
+        # The app-icon badge count (unactioned gigs) rides along in the payload so
+        # the service worker can stamp a red badge on the home-screen icon. The
+        # test alert may find 0 unactioned gigs; the SW floors the badge at 1 so a
+        # test still visibly badges the icon.
+        try:
+            badge_count = db.new_signal_count(conn)
+        except Exception:  # noqa: BLE001 — badge is best-effort, never block a send
+            badge_count = 0
+        payload = json.dumps({
+            "title": title or "New gig on Chordential",
+            "body": body or "",
+            "url": url or "/signals",
+            "count": badge_count,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        })
         subs = db.list_push_subscriptions(conn)
         for s in subs:
             info = {

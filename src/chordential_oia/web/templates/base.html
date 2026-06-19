@@ -121,6 +121,16 @@
     }).catch(function () {});
   }
   setInterval(refresh, 60000);
+
+  // Clear the home-screen app-icon badge whenever the app is open/focused:
+  // by opening the app you've "seen" the alert, matching iOS badge convention.
+  function clearAppBadge() {
+    if (navigator.clearAppBadge) { navigator.clearAppBadge().catch(function () {}); }
+  }
+  clearAppBadge();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') clearAppBadge();
+  });
 })();
 </script>
 </body>

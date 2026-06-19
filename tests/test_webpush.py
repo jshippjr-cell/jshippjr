@@ -107,6 +107,27 @@ def test_send_noop_when_unconfigured(ctx):
     assert res["configured"] is False and res["sent"] == 0
 
 
+def test_payload_carries_badge_count(ctx, monkeypatch):
+    """Every push payload includes a numeric `count` so the service worker can
+    stamp the app-icon badge."""
+    import json
+    client, db, wp = ctx
+    _vapid(monkeypatch)
+    conn = db.connect()
+    db.add_push_subscription(conn, endpoint="https://push/x", p256dh="p", auth="a")
+
+    seen = {}
+
+    def fake_send_one(info, payload):
+        seen["payload"] = json.loads(payload)
+        return 200
+
+    monkeypatch.setattr(wp, "_send_one", fake_send_one)
+    wp.send_web_push("hi", body="there")
+    assert "count" in seen["payload"]
+    assert isinstance(seen["payload"]["count"], int)
+
+
 def test_rejection_body_is_captured_and_shown(ctx, monkeypatch):
     """When the push service rejects a send, its explanation is stashed in
     last_push_error() and rendered on the radar so it's diagnosable."""

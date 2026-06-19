@@ -23,11 +23,22 @@ self.addEventListener('push', function (event) {
     renotify: true,
     data: { url: data.url || '/signals' }
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Stamp the home-screen app icon with a red count badge (iOS 16.4+ / desktop).
+  // Floor at 1 so a test alert (which may find 0 unactioned gigs) still badges.
+  var count = (typeof data.count === 'number' && data.count > 0) ? data.count : 1;
+  var work = [self.registration.showNotification(title, options)];
+  if (self.navigator && self.navigator.setAppBadge) {
+    work.push(self.navigator.setAppBadge(count).catch(function () {}));
+  }
+  event.waitUntil(Promise.all(work));
 });
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
+  // Opening the app from the alert clears the icon badge.
+  if (self.navigator && self.navigator.clearAppBadge) {
+    self.navigator.clearAppBadge().catch(function () {});
+  }
   var target = (event.notification.data && event.notification.data.url) || '/signals';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
