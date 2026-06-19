@@ -405,7 +405,7 @@ def signals_paste(text: str = Form("")):
     """Paste a forwarded saved-search / F5Bot alert → parse into signals."""
     conn = db.connect()
     try:
-        signals.ingest_alert(conn, text, source="paste")
+        signals.ingest_email(conn, "", text, source="paste")
     finally:
         conn.close()
     return RedirectResponse("/signals", status_code=303)
@@ -420,14 +420,17 @@ async def signals_ingest(request: Request, token: str = "", source: str = "email
     if not secret or token != secret:
         return PlainTextResponse("unauthorized", status_code=401)
     ctype = request.headers.get("content-type", "")
+    subject = ""
     if "form" in ctype or "urlencoded" in ctype:
-        form = await request.form()
-        body = (form.get("body-plain") or form.get("text") or form.get("body") or "")
+        form = await request.form()       # Mailgun / SendGrid inbound parse
+        body = (form.get("body-plain") or form.get("stripped-text")
+                or form.get("text") or form.get("body") or "")
+        subject = form.get("subject") or ""
     else:
         body = (await request.body()).decode("utf-8", "replace")
     conn = db.connect()
     try:
-        n = signals.ingest_alert(conn, str(body), source=source)
+        n = signals.ingest_email(conn, str(subject), str(body), source=source)
     finally:
         conn.close()
     return {"ingested": n}

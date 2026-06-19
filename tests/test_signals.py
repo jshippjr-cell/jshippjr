@@ -89,6 +89,30 @@ def test_radar_renders_and_promote(ctx):
     assert db.get_signal(conn, sid)["status"] == "Promoted"
 
 
+def test_f5bot_link_list_ingests_per_link(ctx):
+    _, db, sig = ctx
+    body = (
+        "F5Bot found the following posts:\n\nReddit:\n\n"
+        "composer - [Hiring] Composer for indie horror game\n"
+        "https://www.reddit.com/r/gameDevClassifieds/comments/abc/\n\n"
+        "music producer - [PAID] Looking for music producer\n"
+        "https://www.reddit.com/r/wearethemusicmakers/comments/def/\n"
+    )
+    conn = db.connect()
+    assert sig.ingest_email(conn, "F5Bot found 2 matches", body, source="f5bot") == 2
+    rows = db.list_signals(conn)
+    assert any("[Hiring] Composer" in r["title"] for r in rows)
+    assert any("gameDevClassifieds" in (r["url"] or "") for r in rows)
+
+
+def test_labeled_digest_uses_structured_parser(ctx):
+    _, db, sig = ctx
+    conn = db.connect()
+    raw = "Title: Composer for trailer\nBudget: $4,000\nNeed original score.\n"
+    assert sig.ingest_email(conn, "", raw, source="email") == 1
+    assert db.list_signals(conn)[0]["budget_min"] == 4000.0   # structured → budget parsed
+
+
 def test_email_in_webhook_requires_token(ctx):
     client, _, _ = ctx
     assert client.post("/signals/ingest", content="Title: X\nBudget: $5000\n").status_code == 401

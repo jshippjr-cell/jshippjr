@@ -11,6 +11,7 @@ already exist and are reused here.
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -126,6 +127,60 @@ def ingest_alert(conn, raw: str, source: str = "email") -> int:
         if ingest_signal(
             conn, source=source, title=o.need, body=o.description or "",
             budget_min=o.budget_min, budget_max=o.budget_max, external_ref=ref,
+        ):
+            n += 1
+    return n
+
+
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+_LABEL_RE = re.compile(r"(?im)^\s*(title|role|gig|position|job|project)\s*[:\-]")
+
+
+def _signals_from_links(body: str) -> List[dict]:
+    """Link-list alerts (F5Bot / Google Alerts): one candidate per URL, titled by
+    the text on its line (or the nearest preceding non-empty line). Deduped."""
+    out, seen = [], set()
+    lines = (body or "").splitlines()
+    for i, line in enumerate(lines):
+        for m in _URL_RE.finditer(line):
+            url = m.group(0).rstrip(".,);]")
+            if url in seen:
+                continue
+            seen.add(url)
+            title = line.replace(url, "").strip(" -–—|:•\t")
+            if len(title) < 4:
+                for j in range(i - 1, -1, -1):
+                    if lines[j].strip():
+                        title = lines[j].strip()
+                        break
+            out.append({"title": (title or url)[:200], "url": url})
+    return out
+
+
+def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
+    """Robustly turn any forwarded alert email into signals. Labeled digests
+    (Mandy/ProductionHUB) go through the structured parser; link-list alerts
+    (F5Bot/Google Alerts) become one signal per link."""
+    body = body or ""
+    text = f"{subject}\n{body}" if subject else body
+    links = _signals_from_links(body)
+    # Structured digest, or a single forwarded posting → the rich parser.
+    if _LABEL_RE.search(body) or len(links) < 2:
+        n = 0
+        for o in parse_alert_email(text):
+            ref = f"{o.need}|{o.client or ''}"[:200]
+            if ingest_signal(
+                conn, source=source, title=o.need, body=o.description or "",
+                budget_min=o.budget_min, budget_max=o.budget_max, external_ref=ref,
+            ):
+                n += 1
+        if n:
+            return n
+    # Link-list alert → one signal per match.
+    n = 0
+    for c in links:
+        if ingest_signal(
+            conn, source=source, title=c["title"], url=c["url"], external_ref=c["url"]
         ):
             n += 1
     return n
