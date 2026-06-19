@@ -120,6 +120,21 @@ def get_message(message_id: str) -> dict:
         return {"id": message_id, "sender": "", "subject": "", "date": "", "body": ""}
 
 
+def account_email() -> str:
+    """The email address the refresh token authorizes — so a token minted against
+    the wrong Google account (a common setup slip) is immediately visible."""
+    global _LAST_ERROR
+    if not is_configured():
+        return ""
+    try:
+        prof = _service().users().getProfile(userId="me").execute()
+        _LAST_ERROR = ""
+        return prof.get("emailAddress", "")
+    except Exception as e:                                  # noqa: BLE001 — best-effort
+        _LAST_ERROR = f"{type(e).__name__}: {e}"[:240]
+        return ""
+
+
 def mark_processed(message_id: str) -> bool:
     """Remove UNREAD so a triaged message leaves the queue (the list query is
     ``is:unread``). Idempotency at the source; the DB dedup is the backstop."""
