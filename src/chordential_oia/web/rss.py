@@ -64,12 +64,23 @@ def _parse_date(s: str) -> Optional[datetime]:
         return None
 
 
+def _flair(el) -> str:
+    """Reddit puts a post's link flair (e.g. PAID, Hiring, For Hire) in a
+    <category> element — capture it so the filter can target paid posts even when
+    the flair isn't repeated in the title."""
+    for c in el:
+        if _local(c.tag) == "category":
+            return (c.get("term") or c.get("label") or _text(c) or "").strip()
+    return ""
+
+
 def _rss_item(it) -> dict:
     return {
         "title": _text(_find(it, "title")),
         "link": _text(_find(it, "link")),
         "summary": _text(_find(it, "description")),
         "published": _parse_date(_text(_find(it, "pubdate"))),
+        "flair": _flair(it),
     }
 
 
@@ -81,6 +92,7 @@ def _atom_entry(it) -> dict:
         "link": link,
         "summary": _text(_find(it, "summary")) or _text(_find(it, "content")),
         "published": _parse_date(_text(_find(it, "updated")) or _text(_find(it, "published"))),
+        "flair": _flair(it),
     }
 
 

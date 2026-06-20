@@ -59,8 +59,8 @@ SOURCES = [
 
 # From research — the channels actually worth following (see docs/lead-sources-research.md).
 REDDIT_CHANNELS = [
-    {"name": "r/gameDevClassifieds", "why": "Studios hiring composers/sound — [PAID]/[HIRING] flair. Best single source.",
-     "rss": "https://www.reddit.com/r/gameDevClassifieds/new/.rss"},
+    {"name": "r/gameDevClassifieds", "why": "Studios hiring composers/sound — best single source. This feed targets the [PAID] flair only.",
+     "rss": 'https://www.reddit.com/r/gameDevClassifieds/search.rss?q=flair_name:"PAID"&restrict_sr=1&sort=new'},
     {"name": "r/forhire", "why": "General freelance; filter Hiring flair + music/composer/audio.",
      "rss": 'https://www.reddit.com/r/forhire/search.rss?q=flair_name:"hiring" (music OR composer OR audio)&restrict_sr=1&sort=new'},
     {"name": "r/composer", "why": "Commission/hire requests — lower volume, high relevance.",

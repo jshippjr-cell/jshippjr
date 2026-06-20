@@ -397,10 +397,16 @@ def ingest_feed_report(conn, feed_url: str, source: str = "rss") -> dict:
     items = rss.fetch_feed(feed_url)
     landed = 0
     for it in items:
+        title = it["title"]
+        # Reddit: fold the post flair into the title so the filter targets the
+        # [PAID]/[Hiring] flair (and drops [For Hire]/[RevShare]) even when the
+        # tag isn't repeated in the title text.
+        if strict and it.get("flair"):
+            title = f"[{it['flair']}] {title}"
         posted = it["published"].isoformat() if it.get("published") else None
         if ingest_signal(
-            conn, source=source, title=it["title"], body=it.get("summary", ""),
-            url=it.get("link", ""), external_ref=it.get("link") or it["title"],
+            conn, source=source, title=title, body=it.get("summary", ""),
+            url=it.get("link", ""), external_ref=it.get("link") or title,
             posted_at=posted, strict=strict,
         ):
             landed += 1

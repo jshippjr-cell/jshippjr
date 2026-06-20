@@ -65,6 +65,27 @@ def test_selftest_page_renders(ctx):
     assert "Engine Self-Test" in r.text and "ProductionHUB" in r.text
 
 
+def test_reddit_flair_targets_paid(ctx, monkeypatch):
+    """The Reddit [PAID]/[Hiring] flair lands the gig even when the title is
+    plain; [For Hire] (self-promo) and [Rev Share]/unpaid are dropped."""
+    _, db, sig = ctx
+    items = [
+        {"title": "Composer for our RPG", "summary": "looking for a score",
+         "link": "r1", "published": None, "flair": "PAID"},            # plain title, paid flair
+        {"title": "Composer available, great portfolio", "summary": "",
+         "link": "r2", "published": None, "flair": "For Hire"},        # self-promo
+        {"title": "Composer needed for our game", "summary": "",
+         "link": "r3", "published": None, "flair": "Rev Share"},       # unpaid
+    ]
+    monkeypatch.setattr(sig.rss, "fetch_feed", lambda url: items)
+    rep = sig.ingest_feed_report(db.connect(),
+                                 "https://www.reddit.com/r/gameDevClassifieds/new/.rss",
+                                 source="reddit-gamedev")
+    assert rep["fetched"] == 3 and rep["landed"] == 1     # only the [PAID] one lands
+    rows = db.list_signals(db.connect())
+    assert len(rows) == 1 and rows[0]["title"].startswith("[PAID]")
+
+
 def test_ingest_feed_report_counts(ctx, monkeypatch):
     _, db, sig = ctx
     items = [
