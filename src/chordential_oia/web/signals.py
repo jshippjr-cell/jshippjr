@@ -35,14 +35,20 @@ SOURCE_WEIGHTS = {
 # outranks a day-old A-tier (you can still be the first email in the inbox).
 TAU_HOURS = 12.0
 
+# Source priority enters the rank as a *gentle* multiplier centred on this
+# weight: a top source (10) tilts ~1.4x above a low one (4 → ~0.6x) of equal
+# freshness×score, but a fresher/stronger lead from a low-weight source can still
+# win — freshness×score stays dominant.
+WEIGHT_PIVOT = 7.0
+
 
 def weight_for(source: str) -> int:
+    """Source priority from SOURCE_WEIGHTS. Highest-weight match wins; unknown
+    sources get a neutral 5. No floor — so a low-priority source (e.g. SoundBetter
+    at 4) keeps its intended weight."""
     s = (source or "").lower()
-    best = 5
-    for key, w in SOURCE_WEIGHTS.items():
-        if key in s:
-            best = max(best, w)
-    return best
+    matched = [w for key, w in SOURCE_WEIGHTS.items() if key in s]
+    return max(matched) if matched else 5
 
 
 # --------------------------------------------------------------------------- #
@@ -74,19 +80,27 @@ def freshness(age_h: float) -> float:
     return math.exp(-age_h / TAU_HOURS)
 
 
-def rank_value(score: Optional[float], posted_at: Optional[str], now=None) -> float:
-    return (score or 0.0) * freshness(age_hours(posted_at, now))
+def rank_value(score: Optional[float], posted_at: Optional[str], now=None,
+               weight: Optional[float] = None) -> float:
+    """freshness × score, gently tilted by source priority. ``weight`` None →
+    no tilt (neutral), for back-compat."""
+    base = (score or 0.0) * freshness(age_hours(posted_at, now))
+    if weight is None:
+        return base
+    return base * (float(weight) / WEIGHT_PIVOT)
 
 
 def rank_signals(rows) -> List[dict]:
-    """Attach age + freshness×score rank to each signal and sort, freshest-best."""
+    """Attach age + freshness×score×source-weight rank to each signal and sort,
+    best-first."""
     now = datetime.now(timezone.utc)
     out = []
     for r in rows:
         a = age_hours(r["posted_at"], now)
+        weight = r["source_weight"] if "source_weight" in r.keys() else None
         out.append({
             "row": r, "age_hours": a, "age_label": _age_label(a), "fresh": a < 2.0,
-            "rank": rank_value(r["score"], r["posted_at"], now),
+            "rank": rank_value(r["score"], r["posted_at"], now, weight),
         })
     out.sort(key=lambda d: d["rank"], reverse=True)
     return out

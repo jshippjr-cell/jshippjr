@@ -50,10 +50,12 @@ def test_engine_selftest_all_sources_land(ctx):
     assert len(rep["rows"]) == len(sig.SELFTEST_SOURCES) == 10
     keys = {r["key"] for r in rep["rows"]}
     assert {"productionhub", "mandy", "hitmarker", "soundbetter"} <= keys
-    # Documents current behavior: identical content ranks identically because
-    # source weight is not (yet) a ranking factor.
-    assert rep["weight_affects_rank"] is False
     assert all(r["score"] is not None for r in rep["rows"])
+    # Source weight now tilts the rank: identical content → a top-weight source
+    # ranks first, SoundBetter (un-floored to 4) last.
+    assert rep["weight_affects_rank"] is True
+    assert rep["rows"][0]["weight"] == 10
+    assert rep["rows"][-1]["label"] == "SoundBetter" and rep["rows"][-1]["weight"] == 4
 
 
 def test_selftest_page_renders(ctx):
