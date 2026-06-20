@@ -78,6 +78,7 @@
     <nav class="nav">
       <a href="/signals" class="{{ 'active' if nav=='signals' }}"><span class="ico">📡</span> Signal Radar<span id="signal-badge" style="display:{{ 'inline-block' if new_signals else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_signals or '' }}</span></a>
       <a href="/discovery?kind=talent" class="{{ 'active' if nav=='discovery' }}"><span class="ico">⌖</span> Crawler (gated)</a>
+      <a href="/sources" class="{{ 'active' if nav=='sources' }}"><span class="ico">⛃</span> Source Health</a>
     </nav>
     <div class="nav-section">Supply</div>
     <nav class="nav">

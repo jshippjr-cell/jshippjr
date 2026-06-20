@@ -80,7 +80,7 @@ def test_triage_lands_opportunities_and_skips_noise(ctx):
     assert res == {"configured": True, "scanned": 2, "created": 1, "skipped": 1}
     rows = db.list_signals(db.connect())
     assert len(rows) == 1
-    assert rows[0]["source"] == "gmail"
+    assert rows[0]["source"] == "mandy"        # attributed by sender (alerts@mandy.com)
     assert "Composer" in rows[0]["title"]
     assert rows[0]["external_ref"] == "gmail:m1"
     assert set(gmail.processed) == {"m1", "m2"}        # both leave the queue

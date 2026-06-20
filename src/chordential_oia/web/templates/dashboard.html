@@ -21,6 +21,12 @@
     <div class="kpi-cell-val">{{ followups|length }}</div>
     <div class="kpi-cell-lbl">follow-ups due</div>
   </a>
+  {% if src_health %}
+  <a class="kpi-cell" href="/sources" title="When each source last delivered a lead + what you pay">
+    <div class="kpi-cell-val">{{ src_health.receiving }}/{{ src_health.total }}</div>
+    <div class="kpi-cell-lbl">sources receiving{% if src_health.monthly_cost %} · ${{ '%.0f'|format(src_health.monthly_cost) }}/mo{% endif %}</div>
+  </a>
+  {% endif %}
 </div>
 
 {% if followups %}

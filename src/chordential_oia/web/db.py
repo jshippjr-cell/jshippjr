@@ -417,6 +417,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             endpoint TEXT UNIQUE, p256dh TEXT, auth TEXT, created_at TEXT
         )"""
     )
+    # Per-source subscription cost / notes (operator-entered) for the Source
+    # Health table on the dashboard. Lead *activity* is derived live from signals.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS source_meta (
+            source_key TEXT PRIMARY KEY, monthly_cost REAL,
+            notes TEXT DEFAULT '', updated_at TEXT
+        )"""
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -1020,6 +1028,69 @@ def new_signal_count(conn: sqlite3.Connection) -> int:
         "SELECT COUNT(*) FROM signals WHERE status = 'New' "
         "AND IFNULL(signal_type, 'gig') != 'indicator'"
     ).fetchone()[0]
+
+
+# --------------------------------------------------------------------------- #
+# Source Health — live lead activity per source + operator-entered cost.
+# --------------------------------------------------------------------------- #
+def source_activity(conn: sqlite3.Connection, since_iso: str) -> List[sqlite3.Row]:
+    """Per raw-source: last lead time, total count, count since ``since_iso``.
+    The caller buckets raw sources (reddit-forhire, mandy, …) into canonical
+    sources."""
+    return conn.execute(
+        """SELECT source,
+                  MAX(found_at)                                   AS last_found,
+                  COUNT(*)                                        AS total,
+                  SUM(CASE WHEN found_at >= ? THEN 1 ELSE 0 END)  AS recent
+           FROM signals GROUP BY source""",
+        (since_iso,),
+    ).fetchall()
+
+
+def get_source_costs(conn: sqlite3.Connection) -> Dict[str, sqlite3.Row]:
+    rows = conn.execute("SELECT * FROM source_meta").fetchall()
+    return {r["source_key"]: r for r in rows}
+
+
+def set_source_cost(
+    conn: sqlite3.Connection, source_key: str,
+    monthly_cost: Optional[float], notes: str = "",
+) -> None:
+    """Upsert an operator's monthly subscription cost (and notes) for a source."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO source_meta (source_key, monthly_cost, notes, updated_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(source_key) DO UPDATE SET
+             monthly_cost=excluded.monthly_cost, notes=excluded.notes,
+             updated_at=excluded.updated_at""",
+        (source_key, monthly_cost, notes, now),
+    )
+    conn.commit()
+
+
+def insert_test_signal(conn: sqlite3.Connection, source_key: str, label: str) -> int:
+    """Inject a clearly-marked test lead for a source so the Source Health table's
+    'last lead' visibly updates — proves the per-source wiring end to end."""
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO signals
+           (source, source_weight, external_ref, title, body, url, score, tier,
+            posted_at, found_at, status, signal_type, notes)
+           VALUES (?,?,?,?,?,?,?,?,?,?,'New','gig','source-test')""",
+        (source_key, 5, f"sourcetest:{source_key}:{now}",
+         f"[TEST] lead from {label}", "Source Health wiring test.", "",
+         50.0, "Watch", now, now),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def clear_test_signals(conn: sqlite3.Connection) -> int:
+    """Delete the [TEST] leads injected by the Source Health tester."""
+    cur = conn.execute("DELETE FROM signals WHERE notes = 'source-test'")
+    conn.commit()
+    return cur.rowcount
 
 
 # --------------------------------------------------------------------------- #

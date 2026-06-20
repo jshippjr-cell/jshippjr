@@ -37,7 +37,7 @@ from ..capabilities import build_capabilities_doc, default_toggles
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, scheduler, seed, signals, triage, webpush
+from . import db, discovery, scheduler, seed, signals, sources, triage, webpush
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -308,6 +308,68 @@ def push_test():
     return RedirectResponse(f"/signals?push={state}", status_code=303)
 
 
+@app.get("/sources", response_class=HTMLResponse)
+def sources_page(request: Request, tested: str = ""):
+    """Source Health — when each source last delivered a lead, the monthly cost
+    you've entered, and a per-source test button. Lead activity is live; cost is
+    operator-entered."""
+    from datetime import datetime, timedelta, timezone
+    conn = db.connect()
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        health = sources.health_rows(db.source_activity(conn, since),
+                                     db.get_source_costs(conn))
+    finally:
+        conn.close()
+    for row in health["rows"]:
+        row["weight"] = signals.weight_for(row["key"])
+    tested_label = next((s["label"] for s in sources.SOURCES if s["key"] == tested), "")
+    return render(request, "sources.html", nav="sources", health=health,
+                  tested=tested_label, reddit_channels=sources.REDDIT_CHANNELS,
+                  discord_channels=sources.DISCORD_CHANNELS)
+
+
+@app.post("/sources/cost")
+def sources_set_cost(source_key: str = Form(...), monthly_cost: str = Form(""),
+                     notes: str = Form("")):
+    cost = None
+    raw = monthly_cost.strip().lstrip("$").replace(",", "")
+    if raw:
+        try:
+            cost = float(raw)
+        except ValueError:
+            cost = None
+    conn = db.connect()
+    try:
+        db.set_source_cost(conn, source_key, cost, notes.strip())
+    finally:
+        conn.close()
+    return RedirectResponse("/sources", status_code=303)
+
+
+@app.post("/sources/test")
+def sources_test(source_key: str = Form(...)):
+    """Inject a marked [TEST] lead for a source so its 'last lead' updates —
+    proves the Source Health wiring without waiting for a real lead."""
+    label = next((s["label"] for s in sources.SOURCES if s["key"] == source_key), source_key)
+    conn = db.connect()
+    try:
+        db.insert_test_signal(conn, source_key, label)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/sources?tested={source_key}", status_code=303)
+
+
+@app.post("/sources/cleartests")
+def sources_clear_tests():
+    conn = db.connect()
+    try:
+        db.clear_test_signals(conn)
+    finally:
+        conn.close()
+    return RedirectResponse("/sources", status_code=303)
+
+
 @app.get("/signals/selftest", response_class=HTMLResponse)
 def signals_selftest(request: Request):
     """Run one synthetic lead from every weighted source through the real
@@ -405,12 +467,23 @@ def dashboard(request: Request):
             "tentative_value": sum((r["outcome_value"] or 0) for r in tentative),
             "won_value": sum((r["outcome_value"] or 0) for r in won),
         }
+        from datetime import datetime, timedelta, timezone
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        health = sources.health_rows(db.source_activity(conn, since),
+                                     db.get_source_costs(conn))
+        src_health = {
+            "total": len(health["rows"]),
+            "receiving": sum(1 for r in health["rows"] if r["status"] == "Receiving"),
+            "quiet": sum(1 for r in health["rows"] if r["status"] == "Quiet"),
+            "monthly_cost": health["total_monthly_cost"],
+        }
     finally:
         conn.close()
     return render(
         request, "dashboard.html", nav="dashboard",
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
+        src_health=src_health,
     )
 
 

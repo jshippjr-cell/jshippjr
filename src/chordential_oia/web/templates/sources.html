@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Source Health{% endblock %}
+{% block heading %}Source Health — where leads actually come from{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  This is the <strong>truth</strong> about your sources: when each one last delivered a real
+  lead, and what you pay to subscribe. A source only shows activity if something is
+  actually wired to it — so anything you haven't connected reads <strong>“never”</strong>.
+  Use <strong>Test</strong> on a row to inject a marked lead and confirm the wiring end-to-end.
+</div>
+
+{% if tested %}
+<p class="muted small" style="margin:10px 0;color:var(--green,#2e8b57)">✓ Injected a test lead for <strong>{{ tested }}</strong> — its “Last lead” should now read “just now”. Clear test leads below when done.</p>
+{% endif %}
+
+<div class="card no-pad" style="margin:14px 0;overflow-x:auto">
+<table class="table" style="max-width:100%">
+  <thead>
+    <tr>
+      <th>Source</th><th>What it is / how leads arrive</th>
+      <th style="width:1%">Priority</th><th style="width:1%">Last lead</th>
+      <th style="width:1%">30d</th><th style="width:1%">Monthly cost</th>
+      <th style="width:1%">Status</th><th style="width:1%">Test</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in health.rows %}
+    <tr>
+      <td>
+        <strong>{{ r.label }}</strong>
+        {% if r.url %}<br><a class="muted small" href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url.split('//')[-1] }}</a>{% endif %}
+      </td>
+      <td class="muted small">{{ r.kind }} · {{ r.connect }}<br><span style="color:#b5500f">{{ r.tip }}</span></td>
+      <td>{{ r.weight }}</td>
+      <td>{% if r.received %}<strong>{{ r.last }}</strong>{% else %}<span class="muted">never</span>{% endif %}</td>
+      <td>{{ r.recent }}</td>
+      <td>
+        <form method="post" action="/sources/cost" style="display:flex;gap:4px;align-items:center">
+          <input type="hidden" name="source_key" value="{{ r.key }}">
+          <span class="muted">$</span>
+          <input type="text" name="monthly_cost" value="{{ r.cost if r.cost is not none else '' }}"
+                 placeholder="—" inputmode="decimal" style="width:64px;padding:4px 6px;border:1px solid var(--border2,#ddd);border-radius:6px;font:inherit">
+          <button class="btn ghost tiny" type="submit">Save</button>
+        </form>
+      </td>
+      <td>
+        {% if r.status == 'Receiving' %}<span class="pill" style="background:rgba(46,139,87,.13);color:#2e8b57">Receiving</span>
+        {% elif r.status == 'Quiet' %}<span class="pill" style="background:rgba(228,103,31,.13);color:#b5500f">Quiet</span>
+        {% else %}<span class="pill" style="background:#eee;color:#666">No leads yet</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/sources/test">
+          <input type="hidden" name="source_key" value="{{ r.key }}">
+          <button class="btn ghost tiny" type="submit" title="Inject a marked test lead so Last lead updates">Test</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td><strong>Other / direct</strong></td>
+      <td class="muted small">Paste, email-in, F5Bot, and any source not in the list above</td>
+      <td>—</td>
+      <td>{% if health.other.last %}<strong>{{ health.other.last_label }}</strong>{% else %}<span class="muted">never</span>{% endif %}</td>
+      <td>{{ health.other.recent }}</td>
+      <td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 18px">
+  <span class="muted small">Total entered monthly spend: <strong>${{ '%.2f'|format(health.total_monthly_cost) }}</strong></span>
+  <form method="post" action="/sources/cleartests"
+        onsubmit="return confirm('Remove all [TEST] leads injected from this page?')">
+    <button class="btn ghost tiny" type="submit">🧹 Clear test leads</button>
+  </form>
+</div>
+
+<div class="card" style="margin:14px 0">
+  <div class="card-head"><h2>Recommended Reddit channels</h2>
+    <span class="muted small">free · paste the feeds into <code>CHORDENTIAL_RSS_FEEDS</code></span></div>
+  <ul style="margin:8px 0 0;padding-left:18px;line-height:1.7">
+    {% for c in reddit_channels %}
+    <li><strong>{{ c.name }}</strong> — <span class="muted small">{{ c.why }}</span><br>
+      <code class="small" style="white-space:pre-wrap;word-break:break-all">{{ c.rss }}</code></li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="card" style="margin:14px 0">
+  <div class="card-head"><h2>Recommended Discord servers</h2>
+    <span class="muted small">manual monitoring of #hiring channels — no scraping (Discord ToS)</span></div>
+  <ul style="margin:8px 0 0;padding-left:18px;line-height:1.7">
+    {% for c in discord_channels %}
+    <li><strong>{{ c.name }}</strong> — <span class="muted small">{{ c.why }}</span>
+      {% if c.invite %} · <a href="{{ c.invite }}" target="_blank" rel="noopener">join</a>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% endblock %}

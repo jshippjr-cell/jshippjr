@@ -20,7 +20,7 @@ import os
 from typing import Callable, Optional
 
 from ..intake import extract_budget
-from . import db, gmail_client, signals
+from . import db, gmail_client, signals, sources
 
 # Cheap model for the binary gate + extraction (CFO's cost concern). Overridable.
 _DEFAULT_MODEL = "claude-haiku-4-5"
@@ -109,8 +109,11 @@ def _land_signal(conn, external_ref: str, message: dict, result: dict) -> Option
     if budget:
         bmin, bmax = extract_budget(budget, labeled_only=False)
     score, tier = signals._score(title, body, bmin, bmax)
+    # Attribute to the originating board (mandy.com → "mandy") so Source Health
+    # reflects which platform delivered the lead, not just "gmail".
+    src = sources.source_for_sender(message.get("sender", ""))
     sid = db.insert_signal(
-        conn, source="gmail", source_weight=signals.weight_for("gmail"),
+        conn, source=src, source_weight=signals.weight_for(src),
         title=title[:300], body=body, url="", external_ref=external_ref,
         budget_min=bmin, budget_max=bmax, score=score, tier=tier,
         contact_handle=(result.get("contact") or None),
