@@ -11,11 +11,26 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import List, Optional
+from urllib.parse import quote, urlsplit, urlunsplit
+
+
+def _safe_url(url: str) -> str:
+    """Percent-encode a feed URL so unencoded spaces / quotes in a search query
+    (e.g. ``?q=composer OR music``) don't break the HTTP request. Already-encoded
+    ``%xx`` are preserved (``%`` is in the safe set, so no double-encoding)."""
+    p = urlsplit(url.strip())
+    return urlunsplit((
+        p.scheme, p.netloc,
+        quote(p.path, safe="/%:@"),
+        quote(p.query, safe="=&%+:,@"),
+        p.fragment,
+    ))
 
 
 def _get(url: str, timeout: float = 10.0) -> bytes:
     req = urllib.request.Request(
-        url, headers={"User-Agent": "ChordentialSignal/1.0 (+https://chordential.com)"}
+        _safe_url(url),
+        headers={"User-Agent": "ChordentialSignal/1.0 (+https://chordential.com)"}
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
         return r.read()

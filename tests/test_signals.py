@@ -33,6 +33,15 @@ def test_insert_and_dedupe(ctx):
     assert a is not None and b is None        # deduped on external_ref
 
 
+def test_rss_url_encoding_handles_spaces():
+    """A search feed with raw spaces is percent-encoded; pre-encoded URLs are
+    left intact (no double-encoding)."""
+    from chordential_oia.web.rss import _safe_url
+    out = _safe_url("https://www.reddit.com/r/forhire/search.rss?q=composer OR music&restrict_sr=1")
+    assert " " not in out and "q=composer%20OR%20music" in out
+    assert _safe_url("https://x/y.rss?q=%22a%20b%22") == "https://x/y.rss?q=%22a%20b%22"
+
+
 def test_reddit_rss_feed_is_strictly_filtered(ctx, monkeypatch):
     """A Reddit RSS feed gets the strict music-gig filter (it's noisy); only real
     gigs land, discussion/noise is dropped."""
