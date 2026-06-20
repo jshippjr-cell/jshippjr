@@ -161,6 +161,46 @@ DEFAULT_REDDIT_QUERIES = (
 )
 
 
+# Last manual poll summary, surfaced on the radar (like the triage/push summaries).
+_last_poll = ""
+
+
+def last_poll() -> str:
+    return _last_poll
+
+
+def poll_now() -> str:
+    """Run every configured feed (RSS + Reddit) right now and build a per-feed
+    summary — so a manual test shows exactly what each feed returned (and whether
+    Reddit RSS is reachable from here). Best-effort; never raises."""
+    global _last_poll
+    from . import signals
+    parts = []
+    conn = db.connect()
+    try:
+        feeds = configured_feeds()
+        if not feeds:
+            parts.append("no RSS feeds set (CHORDENTIAL_RSS_FEEDS)")
+        for name, url in feeds:
+            try:
+                rep = signals.ingest_feed_report(conn, url, source=name)
+                if rep["fetched"] == 0:
+                    parts.append(f"{name}: 0 items (blocked or empty)")
+                else:
+                    parts.append(f"{name}: {rep['fetched']} items → {rep['landed']} new gig(s)")
+            except Exception as e:  # noqa: BLE001
+                parts.append(f"{name}: error {type(e).__name__}")
+    finally:
+        conn.close()
+    if reddit_enabled():
+        try:
+            parts.append(f"reddit-api: {poll_reddit()} new gig(s)")
+        except Exception:  # noqa: BLE001
+            parts.append("reddit-api: error")
+    _last_poll = " · ".join(parts) if parts else "nothing to poll"
+    return _last_poll
+
+
 def reddit_queries():
     """Subreddit search/listing URLs to poll — from CHORDENTIAL_REDDIT_QUERIES
     (comma-separated) or a curated high-intent default set."""

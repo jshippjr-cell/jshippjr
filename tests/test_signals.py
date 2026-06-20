@@ -42,6 +42,44 @@ def test_rss_url_encoding_handles_spaces():
     assert _safe_url("https://x/y.rss?q=%22a%20b%22") == "https://x/y.rss?q=%22a%20b%22"
 
 
+def test_ingest_feed_report_counts(ctx, monkeypatch):
+    _, db, sig = ctx
+    items = [
+        {"title": "[Hiring] Composer needed — $1000", "summary": "music",
+         "link": "l1", "published": None},
+        {"title": "random chat thread", "summary": "", "link": "l2", "published": None},
+    ]
+    monkeypatch.setattr(sig.rss, "fetch_feed", lambda url: items)
+    rep = sig.ingest_feed_report(db.connect(),
+                                 "https://www.reddit.com/r/x/new.rss", source="reddit-x")
+    assert rep == {"fetched": 2, "landed": 1}      # both fetched, only the gig lands
+
+
+def test_poll_now_reports_per_feed(ctx, monkeypatch):
+    client, db, sig = ctx
+    from chordential_oia.web import scheduler
+    monkeypatch.setenv("CHORDENTIAL_RSS_FEEDS",
+                       "reddit-x|https://www.reddit.com/r/x/new.rss")
+    items = [
+        {"title": "[Hiring] Composer for a game — $1000", "summary": "music",
+         "link": "https://reddit.com/r/x/1", "published": None},
+        {"title": "random chat", "summary": "", "link": "https://reddit.com/r/x/2",
+         "published": None},
+    ]
+    monkeypatch.setattr(sig.rss, "fetch_feed", lambda url: items)
+    summary = scheduler.poll_now()
+    assert "reddit-x" in summary and "2 items" in summary and "1 new gig" in summary
+    assert scheduler.last_poll() == summary
+
+
+def test_poll_route_redirects(ctx, monkeypatch):
+    client, _, _ = ctx
+    from chordential_oia.web import scheduler
+    monkeypatch.setattr(scheduler, "poll_now", lambda: "polled")
+    r = client.post("/signals/poll", follow_redirects=False)
+    assert r.status_code == 303 and "poll=1" in r.headers["location"]
+
+
 def test_reddit_rss_feed_is_strictly_filtered(ctx, monkeypatch):
     """A Reddit RSS feed gets the strict music-gig filter (it's noisy); only real
     gigs land, discussion/noise is dropped."""

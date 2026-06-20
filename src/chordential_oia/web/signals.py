@@ -374,18 +374,25 @@ def ingest_email(conn, subject: str, body: str, source: str = "email") -> int:
     return n
 
 
-def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
-    """Poll one RSS/Atom feed of live gigs into signals (deduped on item link).
-    Reddit feeds are noisy, so they get the strict is_music_gig filter; curated
+def ingest_feed_report(conn, feed_url: str, source: str = "rss") -> dict:
+    """Poll one RSS/Atom feed into signals; return ``{fetched, landed}`` so a
+    manual poll can show how many items the feed returned vs. how many cleared
+    the filter. Reddit feeds are noisy → strict is_music_gig filter; curated
     board feeds keep the lenient (supply-only) filter."""
     strict = "reddit" in feed_url.lower() or "reddit" in source.lower()
-    n = 0
-    for it in rss.fetch_feed(feed_url):
+    items = rss.fetch_feed(feed_url)
+    landed = 0
+    for it in items:
         posted = it["published"].isoformat() if it.get("published") else None
         if ingest_signal(
             conn, source=source, title=it["title"], body=it.get("summary", ""),
             url=it.get("link", ""), external_ref=it.get("link") or it["title"],
             posted_at=posted, strict=strict,
         ):
-            n += 1
-    return n
+            landed += 1
+    return {"fetched": len(items), "landed": landed}
+
+
+def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
+    """Poll one feed; returns the number of new gigs landed (deduped on link)."""
+    return ingest_feed_report(conn, feed_url, source)["landed"]

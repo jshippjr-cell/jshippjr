@@ -24,10 +24,15 @@
               title="Send a test alert to your phone to confirm push is working">📲 Send test alert</button>
       <button class="btn ghost tiny" type="submit" formaction="/triage/run"
               title="Read unread alert emails and extract real opportunities onto the radar">📥 Run Gmail triage</button>
+      <button class="btn ghost tiny" type="submit" formaction="/signals/poll"
+              title="Poll every configured RSS/Reddit feed right now and report what each returned">🔄 Refresh feeds now</button>
       <button class="btn ghost tiny" type="submit" formaction="/signals/clear"
               onclick="return confirm('Clear all open signals from the radar?')">Clear radar</button>
     </div>
   </form>
+  {% if poll_result %}
+  <p class="muted small" style="margin:8px 0 0;color:var(--ink,#1F1E1E)">🔄 {{ poll_status or 'Nothing polled.' }}</p>
+  {% endif %}
   {% if triage_result %}
     {% if triage_configured %}
   <p class="muted small" style="margin:8px 0 0;color:var(--green,#2e8b57)">📥 {{ triage_status }}</p>

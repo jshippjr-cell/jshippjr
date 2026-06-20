@@ -308,6 +308,14 @@ def push_test():
     return RedirectResponse(f"/signals?push={state}", status_code=303)
 
 
+@app.post("/signals/poll")
+def signals_poll():
+    """Run every configured feed (RSS + Reddit) right now and report what each
+    returned — an on-demand test of the discovery feeds."""
+    scheduler.poll_now()
+    return RedirectResponse("/signals?poll=1", status_code=303)
+
+
 @app.post("/triage/run")
 def triage_run():
     """Manually run agentic Gmail triage (Phase B1): read unread alert emails,
@@ -512,7 +520,7 @@ def discovery_page(request: Request, kind: str = "talent"):
 # Signal Engine — the Opportunity Detection layer (freshness × score radar)
 # --------------------------------------------------------------------------- #
 @app.get("/signals", response_class=HTMLResponse)
-def signals_radar(request: Request, push: str = "", triage: str = ""):
+def signals_radar(request: Request, push: str = "", triage: str = "", poll: str = ""):
     conn = db.connect()
     try:
         ranked = signals.rank_signals(db.list_signals(conn))
@@ -528,6 +536,7 @@ def signals_radar(request: Request, push: str = "", triage: str = ""):
         push_subs=push_subs, push_error=webpush.last_push_error(),
         triage_result=triage, triage_configured=triage_mod.is_configured(),
         triage_status=triage_mod.last_run(), triage_auto=scheduler.triage_status(),
+        poll_result=poll, poll_status=scheduler.last_poll(),
     )
 
 
