@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Engine self-test{% endblock %}
+{% block heading %}Engine Self-Test — all sources{% endblock %}
+{% block content %}
+
+<div class="card" style="margin:14px 0">
+  <div class="card-head"><h2>End-to-end lead engine</h2>
+    <span class="muted small">one identical synthetic gig per source, through the real pipeline</span></div>
+  <p class="muted small" style="margin:6px 0 12px">
+    Each source feeds one identical "[Hiring] Composer…" lead through the real
+    ingest → music-gig filter → score → freshness-rank path, in a throwaway
+    in-memory database — your live radar is never touched. Identical content
+    means any difference in <em>rank</em> can only come from source weight.
+  </p>
+
+  {% if report.all_landed %}
+  <p style="margin:0 0 6px"><strong style="color:var(--green,#2e8b57)">✓ All {{ report.rows|length }} sources ingest, pass the filter, score, and rank.</strong></p>
+  {% else %}
+  <p style="margin:0 0 6px"><strong style="color:#e5484d">⚠ Some sources did not land — see the table.</strong></p>
+  {% endif %}
+
+  {% if report.weight_affects_rank %}
+  <p class="muted small" style="margin:0 0 12px">Source weight is influencing rank order.</p>
+  {% else %}
+  <p class="muted small" style="margin:0 0 12px;color:#b5500f">
+    ⚠ Every source ranks identically despite different weights — <strong>source weight is
+    recorded but does not currently influence ranking</strong> (the radar ranks by
+    freshness × score only).
+  </p>
+  {% endif %}
+
+  <table class="table">
+    <thead><tr>
+      <th style="width:1%">#</th><th>Source</th><th>Weight</th><th>Lands</th>
+      <th>Score</th><th>Tier</th><th>Rank (freshness × score)</th>
+    </tr></thead>
+    <tbody>
+      {% for r in report.rows %}
+      <tr>
+        <td>{{ r.position if r.position is not none else '—' }}</td>
+        <td>{{ r.label }}</td>
+        <td>{{ r.weight }}</td>
+        <td>{{ '✓' if r.landed else '✗' }}</td>
+        <td>{{ r.score if r.score is not none else '—' }}</td>
+        <td>{{ r.tier or '—' }}</td>
+        <td>{{ r.rank if r.rank is not none else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="muted small" style="margin:12px 0 0">
+    <a href="/signals">← back to Signal Radar</a>
+  </p>
+</div>
+{% endblock %}

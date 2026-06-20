@@ -42,6 +42,27 @@ def test_rss_url_encoding_handles_spaces():
     assert _safe_url("https://x/y.rss?q=%22a%20b%22") == "https://x/y.rss?q=%22a%20b%22"
 
 
+def test_engine_selftest_all_sources_land(ctx):
+    """Every weighted source ingests, passes the filter, scores, and ranks."""
+    _, _, sig = ctx
+    rep = sig.engine_selftest()
+    assert rep["all_landed"] is True
+    assert len(rep["rows"]) == len(sig.SELFTEST_SOURCES) == 10
+    keys = {r["key"] for r in rep["rows"]}
+    assert {"productionhub", "mandy", "hitmarker", "soundbetter"} <= keys
+    # Documents current behavior: identical content ranks identically because
+    # source weight is not (yet) a ranking factor.
+    assert rep["weight_affects_rank"] is False
+    assert all(r["score"] is not None for r in rep["rows"])
+
+
+def test_selftest_page_renders(ctx):
+    client, _, _ = ctx
+    r = client.get("/signals/selftest")
+    assert r.status_code == 200
+    assert "Engine Self-Test" in r.text and "ProductionHUB" in r.text
+
+
 def test_ingest_feed_report_counts(ctx, monkeypatch):
     _, db, sig = ctx
     items = [

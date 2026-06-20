@@ -396,3 +396,68 @@ def ingest_feed_report(conn, feed_url: str, source: str = "rss") -> dict:
 def ingest_feed(conn, feed_url: str, source: str = "rss") -> int:
     """Poll one feed; returns the number of new gigs landed (deduped on link)."""
     return ingest_feed_report(conn, feed_url, source)["landed"]
+
+
+# --------------------------------------------------------------------------- #
+# Whole-engine self-test — one synthetic lead from each weighted source, run
+# through the real ingest → score → freshness-rank pipeline in a throwaway
+# in-memory DB (never touches live data). Proves every source lands, scores, and
+# ranks, and surfaces that source weight is recorded but not yet a rank factor.
+# --------------------------------------------------------------------------- #
+SELFTEST_SOURCES = [
+    ("ProductionHUB", "productionhub"), ("Mandy", "mandy"),
+    ("Agency Intelligence", "agency"), ("Hitmarker", "hitmarker"),
+    ("Staff Me Up", "staffmeup"), ("LinkedIn", "linkedin"),
+    ("The Dots", "thedots"), ("Behance", "behance"),
+    ("Upwork", "upwork"), ("SoundBetter", "soundbetter"),
+]
+
+_SELFTEST_SAMPLE = (
+    "[Hiring] Composer needed for a national commercial — original music & sonic "
+    "branding for an agency campaign. Budget $8,000. Paid gig, DM to apply."
+)
+
+
+def engine_selftest() -> dict:
+    """Run one identical synthetic gig from every weighted source through the
+    real pipeline. Returns ``{"rows": [...], "weight_affects_rank": bool}``.
+    Identical content means any rank difference is purely source weight — so if
+    ranks are all equal, weight isn't influencing the order (it currently isn't)."""
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    landed_by_key = {}
+    for label, key in SELFTEST_SOURCES:
+        sid = ingest_signal(
+            conn, source=key, title=_SELFTEST_SAMPLE, body=_SELFTEST_SAMPLE,
+            url=f"https://example.test/{key}", external_ref=f"selftest:{key}",
+            strict=True,                     # toughest path — the is_music_gig filter
+        )
+        landed_by_key[key] = sid is not None
+
+    ranked = rank_signals(db.list_signals(conn))
+    rows = []
+    seen = set()
+    for pos, d in enumerate(ranked, 1):
+        r = d["row"]
+        key = r["source"]
+        seen.add(key)
+        label = next((lbl for lbl, k in SELFTEST_SOURCES if k == key), key)
+        rows.append({
+            "position": pos, "label": label, "key": key,
+            "weight": weight_for(key), "landed": True,
+            "score": r["score"], "tier": r["tier"], "rank": round(d["rank"], 2),
+        })
+    # Any source whose sample didn't clear the filter (shouldn't happen).
+    for label, key in SELFTEST_SOURCES:
+        if key not in seen:
+            rows.append({
+                "position": None, "label": label, "key": key,
+                "weight": weight_for(key), "landed": landed_by_key.get(key, False),
+                "score": None, "tier": None, "rank": None,
+            })
+
+    ranks = [r["rank"] for r in rows if r["rank"] is not None]
+    weight_affects_rank = len(set(ranks)) > 1   # identical content → differs only if weight ranks
+    conn.close()
+    return {"rows": rows, "weight_affects_rank": weight_affects_rank,
+            "all_landed": all(r["landed"] for r in rows)}

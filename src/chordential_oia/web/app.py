@@ -308,6 +308,15 @@ def push_test():
     return RedirectResponse(f"/signals?push={state}", status_code=303)
 
 
+@app.get("/signals/selftest", response_class=HTMLResponse)
+def signals_selftest(request: Request):
+    """Run one synthetic lead from every weighted source through the real
+    ingest → score → rank pipeline (throwaway DB — live data untouched) so the
+    whole engine is verifiable end-to-end across all sources."""
+    return render(request, "engine_selftest.html", nav="signals",
+                  report=signals.engine_selftest())
+
+
 @app.post("/signals/poll")
 def signals_poll():
     """Run every configured feed (RSS + Reddit) right now and report what each

@@ -28,6 +28,8 @@
               title="Poll every configured RSS/Reddit feed right now and report what each returned">🔄 Refresh feeds now</button>
       <button class="btn ghost tiny" type="submit" formaction="/signals/clear"
               onclick="return confirm('Clear all open signals from the radar?')">Clear radar</button>
+      <a class="btn ghost tiny" href="/signals/selftest"
+         title="Run one lead from every source through the real engine and see it land, score, and rank">🧪 Engine self-test</a>
     </div>
   </form>
   {% if poll_result %}
