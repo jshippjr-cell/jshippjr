@@ -29,6 +29,10 @@ push = ["pywebpush>=1.14"]
 gmail = ["google-api-python-client>=2.0", "google-auth>=2.0"]
 ai = ["anthropic>=0.40"]
 mcp = ["mcp>=1.2"]
+# Veo video generation for the capabilities film (scripts/gen_capabilities_film.py).
+# Standalone tooling, imported lazily inside the script, so the app/CI/sandbox
+# never depend on it — only a machine actually generating clips installs it.
+veo = ["google-genai>=0.3"]
 
 [project.scripts]
 chordential-oia = "chordential_oia.cli:main"
