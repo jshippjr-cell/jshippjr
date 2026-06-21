@@ -247,6 +247,46 @@ the package above is the deliverable you can run today in Flow/Gemini.
 ```
 Say the word and I'll add it.
 
+> **Done — the script now exists:** `scripts/gen_capabilities_film.py` (`pip install '.[veo]'`,
+> set `GEMINI_API_KEY`, then `python scripts/gen_capabilities_film.py --shots all`).
+
+---
+
+## 9. Hero loop (website background)
+
+A separate, short, **seamlessly looping** plate for the landing-page hero — darker and lower-contrast
+than the film shots, with the center kept clean so headline text reads over it. These live in the
+script as `LOOP_SHOTS`; generate them with `--shots loop` (or one at a time, e.g. `--shots loop-a`).
+
+**Loop A — `loop-hero` (the recommended hero plate):**
+```
+[Global style §1] Slow continuous abstract motion in deep charcoal and wine: warm amber
+audio-waveform light ripples drifting left to right, fine glowing particles and soft volumetric haze
+orbiting gently, a faint cream bloom pulsing slowly like a breathing light. No focal subject, endless
+flowing seamless texture. The frame stays mostly dark with light low and to the sides so the center
+remains clean for headline text. 16:9, 1080p.
+[+ negative prompt §1]
+```
+Alternates: `loop-b1` defocused brand bokeh · `loop-b2` abstracted score/MIDI light · `loop-b3`
+audio-reactive waveforms. Generate a couple and pick the one that sits best behind the headline.
+
+**Making it loop seamlessly — two options:**
+- **In Google Flow:** use **Frames to Video** and set the *same* image as both the first and last
+  frame, so the clip ends where it began.
+- **From the script (no Flow):** generate `loop-a`, then crossfade the tail back into the head with
+  ffmpeg, e.g. for an 8s clip with a 1s blend:
+  ```
+  ffmpeg -i loop-a_loop-hero.mp4 -filter_complex \
+    "[0]split[a][b];[a]trim=0:7,setpts=PTS-STARTPTS[main];\
+     [b]trim=7:8,setpts=PTS-STARTPTS[tail];\
+     [main][tail]xfade=transition=fade:duration=1:offset=6" hero-loop.mp4
+  ```
+  Then drop `hero-loop.mp4` (+ a `hero-poster.jpg` still) into `static/` and I'll wire the hero.
+
+For a web background, a clean crossfade loop is indistinguishable from a "true" seam — don't
+over-engineer it.
+
+
 ---
 
 ## 9. Loop version — seamless hero background (15–30s)
