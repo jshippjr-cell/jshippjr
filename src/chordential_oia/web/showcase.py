@@ -65,9 +65,9 @@ HERO = {
     ),
     "primary_cta": {"label": "View Work", "href": "#work"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    "video": "",                 # set to a looping .mp4/.webm when the asset exists
-    "poster": "",                # optional poster frame for the loop
-    "loop": "/static/public/hero-loop.webp",  # generated motion placeholder (animated)
+    "video": "/static/public/hero-process.mp4",  # capabilities "Process" reel (Concept→Delivery)
+    "poster": "/static/public/hero-process-poster.jpg",  # first-frame poster (no black flash)
+    "loop": "/static/public/hero-loop.webp",  # animated fallback if video is cleared
 }
 
 # Honest market reach — NOT fabricated client logos, NOT narrow verticals. These
