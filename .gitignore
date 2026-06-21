@@ -24,3 +24,6 @@ htmlcov/
 # Dashboard SQLite database
 chordential.db
 *.db
+
+# Generated Veo video clips + assembled film (large binaries; delivered directly)
+capabilities_clips/
