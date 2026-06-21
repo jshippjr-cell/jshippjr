@@ -77,5 +77,16 @@ def test_sources_page_and_cost_and_test(ctx):
 def test_sources_page_lists_recommended_channels(ctx):
     client, _ = ctx
     page = client.get("/sources").text
-    assert "r/gameDevClassifieds" in page          # reddit recs
+    assert "r/gameDevClassifieds" in page          # reddit recs (reference)
     assert "Work With Indies" in page              # discord recs
+
+
+def test_sources_page_is_honest_reddit_rss_is_blocked(ctx):
+    """Reddit RSS is blocked from the server — the page must say so and must not
+    tell the operator to paste feeds into CHORDENTIAL_RSS_FEEDS."""
+    client, _ = ctx
+    page = client.get("/sources").text
+    assert "requires official API" in page
+    assert "blocked from the server" in page
+    # No longer advertises the dead RSS path.
+    assert "paste the feeds into" not in page

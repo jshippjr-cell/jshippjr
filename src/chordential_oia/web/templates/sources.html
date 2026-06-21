@@ -79,12 +79,16 @@
 </div>
 
 <div class="card" style="margin:14px 0">
-  <div class="card-head"><h2>Recommended Reddit channels</h2>
-    <span class="muted small">free · paste the feeds into <code>CHORDENTIAL_RSS_FEEDS</code></span></div>
+  <div class="card-head"><h2>Reddit channels <span class="muted">(requires official API)</span></h2>
+    <span class="muted small">RSS is blocked from the server — these need the Reddit API to connect</span></div>
+  <p class="muted small" style="margin:6px 0 0">
+    Reddit blocks datacenter IPs, so subreddit RSS feeds return nothing from Render — confirmed live.
+    These are the subreddits worth wiring up <em>if</em> the official Reddit API is ever connected; they
+    aren't paste-ready feeds. Until then, Reddit reads “never” and the gig-board alert emails are your funnel.
+  </p>
   <ul style="margin:8px 0 0;padding-left:18px;line-height:1.7">
     {% for c in reddit_channels %}
-    <li><strong>{{ c.name }}</strong> — <span class="muted small">{{ c.why }}</span><br>
-      <code class="small" style="white-space:pre-wrap;word-break:break-all">{{ c.rss }}</code></li>
+    <li><strong>{{ c.name }}</strong> — <span class="muted small">{{ c.why }}</span></li>
     {% endfor %}
   </ul>
 </div>

@@ -50,27 +50,24 @@ SOURCES = [
      "kind": "Music marketplace", "connect": "Alert email → Gmail label → triage",
      "tip": "Best 'pure music' marketplace here. Premium unlocks the job board (+5% commission)."},
     {"key": "reddit", "label": "Reddit", "url": "https://www.reddit.com",
-     "kind": "Community (free)", "connect": "Subreddit RSS feeds (CHORDENTIAL_RSS_FEEDS)",
-     "tip": "Free. Densest paid demand on r/gameDevClassifieds & r/forhire. See recommended channels below."},
+     "kind": "Community — not connected", "connect": "Reddit blocks server IPs — RSS doesn't work from Render. Needs the official Reddit API to connect.",
+     "tip": "Confirmed blocked: subreddit RSS returns nothing from the server. Until the official API is wired this will always read 'never'. Lean on the gig-board alert emails (Gmail label → triage) — that's the reliable funnel."},
     {"key": "discord", "label": "Discord", "url": "https://discord.com",
      "kind": "Community (manual)", "connect": "Manual — monitor #hiring channels (no public API)",
      "tip": "No public API; automated scraping breaks Discord ToS. Monitor #hiring channels manually. See recommended servers below."},
 ]
 
-# From research — the channels actually worth following (see docs/lead-sources-research.md).
+# Reference only — the subreddits actually worth following IF the official Reddit
+# API is ever wired (see docs/lead-sources-research.md). These are NOT paste-ready
+# RSS feeds: Reddit blocks the server's IP, so subreddit RSS returns nothing from
+# Render. Kept as targets for a future API integration.
 REDDIT_CHANNELS = [
-    {"name": "r/gameDevClassifieds", "why": "Studios hiring composers/sound — best single source. This feed targets the [PAID] flair only.",
-     "rss": 'https://www.reddit.com/r/gameDevClassifieds/search.rss?q=flair_name:"PAID"&restrict_sr=1&sort=new'},
-    {"name": "r/forhire", "why": "General freelance; filter Hiring flair + music/composer/audio.",
-     "rss": 'https://www.reddit.com/r/forhire/search.rss?q=flair_name:"hiring" (music OR composer OR audio)&restrict_sr=1&sort=new'},
-    {"name": "r/composer", "why": "Commission/hire requests — lower volume, high relevance.",
-     "rss": "https://www.reddit.com/r/composer/new/.rss"},
-    {"name": "r/gameDevJobs", "why": "Game-dev jobs including audio roles.",
-     "rss": "https://www.reddit.com/r/gameDevJobs/new/.rss"},
-    {"name": "r/podcasting", "why": "Theme/intro music + sonic branding — recurring branding work.",
-     "rss": 'https://www.reddit.com/r/podcasting/search.rss?q=music OR theme OR "sound design"&restrict_sr=1&sort=new'},
-    {"name": "r/advertising", "why": "Agency sonic-branding / ad-music — rare but high-value.",
-     "rss": 'https://www.reddit.com/r/advertising/search.rss?q="sonic branding" OR jingle OR "audio logo"&restrict_sr=1&sort=new'},
+    {"name": "r/gameDevClassifieds", "why": "Studios hiring composers/sound — best single source. Target the [PAID] flair."},
+    {"name": "r/forhire", "why": "General freelance; filter Hiring flair + music/composer/audio."},
+    {"name": "r/composer", "why": "Commission/hire requests — lower volume, high relevance."},
+    {"name": "r/gameDevJobs", "why": "Game-dev jobs including audio roles."},
+    {"name": "r/podcasting", "why": "Theme/intro music + sonic branding — recurring branding work."},
+    {"name": "r/advertising", "why": "Agency sonic-branding / ad-music — rare but high-value."},
 ]
 
 DISCORD_CHANNELS = [
