@@ -246,3 +246,78 @@ the package above is the deliverable you can run today in Flow/Gemini.
 #   poll op until done; download op.response.generated_videos[0] -> shots/NN.mp4
 ```
 Say the word and I'll add it.
+
+---
+
+## 9. Loop version — seamless hero background (15–30s)
+
+A **continuous, no-beginning / no-ending** loop that lives behind the hero headline on the site/PWA.
+Different rules from the linear film: it must be **seamless**, **muted-autoplay-safe**, **subtle
+enough that cream text reads on top**, and **web-light** (a few MB).
+
+### Two ways to make it actually seamless
+- **Best — same first & last frame (forced loop):** in Veo, use **image-to-video** with the *same*
+  reference image as both the **start frame and the end frame**. The clip returns to where it began,
+  so it loops with no visible cut. Generate one strong 8s plate this way and just loop it — a hero
+  background doesn't need length, it needs to never seam.
+- **Fallback — crossfade loop in the editor:** generate 15–24s of *cyclical* motion (drifting
+  particles, flowing ink, slow orbit), then overlap the last ~1.5s onto the first ~1.5s with a
+  crossfade. Hides the seam for any abstract texture.
+
+### Plate prompts (text-free, dark, loopable)
+Keep these **darker and lower-contrast** than the film shots so headline text stays legible.
+
+**Loop A — single hero plate (simplest, 8s, looped):**
+```
+Slow continuous abstract motion in deep charcoal and wine: warm amber audio-waveform light ripples
+drifting left to right, fine glowing particles and soft volumetric haze orbiting gently, a faint
+cream bloom pulsing slowly like a breathing light. No focal subject, no hard movement, endless
+flowing texture that feels seamless. Dark, premium, atmospheric, understated. The frame stays mostly
+dark with light concentrated low and to the sides so the center remains clean. Silent. 16:9, 1080p.
+[+ negative prompt §1]
+```
+
+**Loop B — 24s triptych (more variety; 3 × 8s loopable plates, crossfaded):**
+```
+B1: Blurred, bokeh-soft commercial film footage and brand color washes drifting slowly past, heavily
+defocused so it reads as warm abstract light in charcoal and amber. Continuous gentle parallax. Dark
+and clean in the center. No text. 16:9.
+
+B2: A glowing orchestral score and slow-scrolling MIDI piano-roll light, abstracted and out of focus
+into flowing amber and cream streaks over black; subtle particle drift. Endless motion. No readable
+text. 16:9.
+
+B3: Soft audio-reactive waveforms and equalizer light pulsing slowly in wine and amber over deep
+charcoal, fine embers rising. Hypnotic, seamless, low-contrast. No text. 16:9.
+[+ negative prompt §1 on each]
+```
+
+### Text — rotate the words *in HTML/CSS*, not in the video
+Keep the loop **text-free** and animate the words over it in the page. That keeps type crisp,
+accessible, selectable, and lets you change copy without re-rendering. Fade each in/out (~2.5s each),
+then hold the last:
+```
+Original Composition  →  Production  →  Sound Design  →  Creative Music Solutions
+```
+(Brand: cream `#FCF7F8` text, orange `#E4671F` emphasis, on the darkened loop.)
+
+### Wiring it into the hero (when you have the file)
+```html
+<video class="hero-bg" autoplay muted loop playsinline
+       poster="/static/hero-poster.jpg" aria-hidden="true">
+  <source src="/static/hero-loop.webm" type="video/webm">   <!-- VP9, smallest -->
+  <source src="/static/hero-loop.mp4"  type="video/mp4">    <!-- H.264 fallback -->
+</video>
+<div class="hero-scrim"></div>   <!-- dark gradient so text reads -->
+<div class="hero-words"><!-- the rotating words, animated in CSS --></div>
+```
+- `muted` + `playsinline` are **required** for autoplay on iOS — without both, the loop won't play.
+- Add a `hero-scrim` (e.g. `linear-gradient(rgba(26,21,24,.45), rgba(26,21,24,.75))`) so headline
+  contrast holds over any frame.
+- Provide a `poster` still (first frame) so something shows before the video loads / if it's blocked.
+- Optimize for web: 1080p, short loop, VP9 `.webm` + H.264 `.mp4`, target a few MB; respect
+  `prefers-reduced-motion` (fall back to the poster image).
+
+**Want me to wire this into the actual hero** (add the `<video>` + scrim + CSS word-rotation to the
+landing template, with a `prefers-reduced-motion` fallback) once you've dropped `hero-loop.mp4/.webm`
++ `hero-poster.jpg` into `static/`? Say go and I'll build it.
