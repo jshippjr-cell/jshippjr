@@ -48,7 +48,7 @@
     </div>
     <div class="case-grid">
       {% for d in show.demos %}
-      <article class="case-bubble">
+      <article class="case-bubble" tabindex="0">
         <h3>{{ d.title }}</h3>
         <p class="demo-meta">{{ d.discipline_label }}</p>
         {% if d.audio_url %}

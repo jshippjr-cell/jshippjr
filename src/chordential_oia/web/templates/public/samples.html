@@ -15,7 +15,7 @@
   <div class="band-inner">
     <div class="demo-grid">
       {% for d in demos %}
-      <article class="demo-card">
+      <article class="demo-card" tabindex="0">
         <h3>{{ d.title }}</h3>
         <p class="demo-meta">{{ d.discipline_label }}</p>
         {% if d.audio_url %}
