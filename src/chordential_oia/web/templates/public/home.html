@@ -46,9 +46,9 @@
       </div>
       <a class="sec-more" href="/samples">{{ show.demos_intro.home_cta }}</a>
     </div>
-    <div class="demo-grid">
+    <div class="case-grid">
       {% for d in show.demos %}
-      <article class="demo-card">
+      <article class="case-bubble">
         <h3>{{ d.title }}</h3>
         <p class="demo-meta">{{ d.discipline_label }}</p>
         {% if d.audio_url %}
@@ -56,6 +56,12 @@
         {% else %}
         <p class="demo-soon">♪ audio demo coming soon</p>
         {% endif %}
+        <dl class="case-rows">
+          <dt>Objective</dt><dd>{{ d.objective }}</dd>
+          <dt>Creative Brief</dt><dd>{{ d.brief }}</dd>
+          <dt>Approach</dt><dd>{{ d.approach }}</dd>
+          <dt>What It Demonstrates</dt><dd>{{ d.demonstrates }}</dd>
+        </dl>
         <a class="demo-link" href="/samples">See the brief →</a>
       </article>
       {% endfor %}
