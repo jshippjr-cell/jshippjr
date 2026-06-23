@@ -262,23 +262,24 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .demo-brief-body h4{font-family:var(--serif);font-size:12px;letter-spacing:.05em;
   text-transform:uppercase;color:var(--sand);margin:12px 0 3px}
 .demo-brief-body p{margin:0;color:var(--dark-muted);font-size:14px;line-height:1.55}
-/* Home case-study bubbles — warm colored panels (like the problem split) */
+/* Home case-study bubbles — clean light cards (match the "How Chordential works" steps) */
 .case-bubble{position:relative;display:flex;flex-direction:column;overflow:hidden;
-  border-radius:var(--radius);padding:24px 22px 22px;
-  background:linear-gradient(165deg,rgba(122,35,48,.34) 0%,rgba(228,103,31,.12) 100%);
-  border:1px solid rgba(228,103,31,.42);box-shadow:0 18px 40px rgba(0,0,0,.28);
+  background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px 22px 22px;box-shadow:var(--shadow-sm);
   transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
 .case-bubble::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,var(--orange),var(--wine))}
-.case-bubble:hover{transform:translateY(-4px);border-color:rgba(228,103,31,.72);
-  box-shadow:0 26px 54px rgba(0,0,0,.36)}
-.case-bubble h3{font-family:var(--serif);font-size:21px;margin:2px 0 4px;color:var(--cream)}
+.case-bubble:hover{transform:translateY(-4px);border-color:rgba(228,103,31,.5);
+  box-shadow:var(--shadow)}
+.case-bubble h3{font-family:var(--serif);font-size:20px;margin:2px 0 4px;color:var(--ink)}
+.case-bubble .demo-meta{color:var(--accent)}
+.case-bubble .demo-soon{color:var(--muted)}
 .case-bubble .demo-audio{margin:6px 0 14px}
-.case-bubble .case-rows{margin:0;font-size:14px;color:var(--dark-muted)}
-.case-bubble .case-rows dt{font-weight:700;color:var(--sand);text-transform:uppercase;
+.case-bubble .case-rows{margin:0;font-size:14px;color:var(--muted)}
+.case-bubble .case-rows dt{font-weight:700;color:var(--ink);text-transform:uppercase;
   letter-spacing:.5px;font-size:11px;margin-top:12px}
-.case-bubble .case-rows dd{margin:3px 0 0;color:var(--dark-text);line-height:1.5}
-.case-bubble .demo-link{margin-top:16px}
+.case-bubble .case-rows dd{margin:3px 0 0;color:var(--muted);line-height:1.5}
+.case-bubble .demo-link{margin-top:16px;color:var(--accent)}
 
 .cta-strip{padding:72px 0;text-align:center}
 .cta-strip-inner{max-width:680px}
