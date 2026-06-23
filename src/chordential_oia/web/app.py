@@ -169,6 +169,7 @@ def _is_public_path(path: str) -> bool:
         or path.startswith("/admin/login")
         or path.startswith("/admin/logout")
         or path == "/signals/ingest"   # email-in webhook (its own shared-secret token)
+        or path == "/webhooks/stripe"  # Stripe webhook (verified by Stripe signature)
     )
 
 
@@ -2022,6 +2023,41 @@ def invoice_set_status(invoice_id: int, status: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse("/projects", status_code=303)
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe payment webhook — marks an invoice Paid when its checkout completes.
+
+    Public (no admin cookie): authenticity is the Stripe signature, verified in
+    the provider against STRIPE_WEBHOOK_SECRET. Idempotent — a re-delivered event
+    for an already-Paid invoice is a no-op. Only acts in Stripe mode.
+    """
+    provider = get_payment_provider()
+    if getattr(provider, "name", "") != "stripe":
+        return Response(status_code=200)  # not in Stripe mode — ignore
+    body = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = provider.handle_webhook({"body": body, "signature": signature})
+    except Exception:
+        return Response(status_code=400)  # bad signature / unparseable
+    invoice_id = event.get("invoice_id")
+    if event.get("status") == "Paid" and invoice_id is not None:
+        conn = db.connect()
+        try:
+            inv = db.get_invoice(conn, int(invoice_id))
+            if inv is not None and inv["status"] != "Paid":
+                db.update_invoice_status(
+                    conn, int(invoice_id), "Paid",
+                    external_ref=event.get("external_ref"),
+                )
+                if inv["project_id"]:
+                    db.add_update(conn, inv["project_id"],
+                                  f"{inv['kind']} invoice paid (Stripe).", "invoice")
+        finally:
+            conn.close()
+    return Response(status_code=200)
 
 
 def main() -> None:  # console entry point
