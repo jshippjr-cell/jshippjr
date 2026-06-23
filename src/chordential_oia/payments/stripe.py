@@ -54,14 +54,14 @@ class StripePaymentProvider:
         kind = invoice["kind"]
         amount_cents = int(round(float(invoice["amount"]) * 100))
         note = (invoice["note"] or "") if "note" in invoice.keys() else ""
+        # Redirect to a PUBLIC page — the payer isn't the admin, so never land
+        # them on an admin-gated route. (Phase 2 adds a branded receipt page.)
         domain = (self.domain or "https://chordential.com").rstrip("/")
-        project_id = invoice["project_id"] if "project_id" in invoice.keys() else None
-        base = f"{domain}/project/{project_id}/proposal" if project_id else domain
 
         session = stripe.checkout.Session.create(
             mode="payment",
-            success_url=f"{base}?paid={inv_id}",
-            cancel_url=f"{base}?canceled={inv_id}",
+            success_url=f"{domain}/?paid={inv_id}",
+            cancel_url=f"{domain}/?canceled={inv_id}",
             client_reference_id=str(inv_id),
             metadata={"invoice_id": str(inv_id), "kind": str(kind)},
             line_items=[{

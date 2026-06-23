@@ -65,7 +65,9 @@ def test_create_checkout_builds_session_and_returns_url(fake_stripe):
     assert c["metadata"] == {"invoice_id": "7", "kind": "Deposit"}
     li = c["line_items"][0]["price_data"]
     assert li["currency"] == "usd" and li["unit_amount"] == 125000  # dollars -> cents
-    assert "/project/3/proposal?paid=7" in c["success_url"]
+    # Payer lands on a PUBLIC page, never the admin-gated project route.
+    assert c["success_url"] == "https://chordential.com/?paid=7"
+    assert c["cancel_url"] == "https://chordential.com/?canceled=7"
 
 
 def test_handle_webhook_maps_paid_session_to_invoice(fake_stripe):
