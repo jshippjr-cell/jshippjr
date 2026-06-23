@@ -2,25 +2,22 @@
 {% block title %}Capability demos{% endblock %}
 
 {% block content %}
+{% set intro = demos_intro %}
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="hero-eyebrow">Capability Demonstrations</p>
-    <h1 class="page-title">Capability demos.</h1>
-    <p class="page-lede">
-      Chordential is a new studio, so these aren’t client commissions — they’re
-      demonstrations of how we’d approach a brief and the craft we bring to it.
-      Press play, then open each one to see the thinking.
-    </p>
+    <p class="hero-eyebrow">{{ intro.eyebrow }}</p>
+    <h1 class="page-title">{{ intro.title }}</h1>
+    <p class="page-lede">{{ intro.lede }}</p>
   </div>
 </section>
 
-<section class="band">
+<section class="demos-band">
   <div class="band-inner">
-    <div class="sample-grid">
+    <div class="demo-grid">
       {% for d in demos %}
-      <article class="sample-card demo-card">
+      <article class="demo-card">
         <h3>{{ d.title }}</h3>
-        <p class="sample-meta">{{ d.discipline_label }}</p>
+        <p class="demo-meta">{{ d.discipline_label }}</p>
         {% if d.audio_url %}
         <audio class="demo-audio" controls preload="none" src="{{ d.audio_url }}">
           Your browser doesn’t support audio playback.

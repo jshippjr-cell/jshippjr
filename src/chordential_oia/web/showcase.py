@@ -80,7 +80,7 @@ HERO = {
         "Original composition for agencies who need clarity, control, and "
         "confidence in delivery."
     ),
-    "primary_cta": {"label": "View Work", "href": "#work"},
+    "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
     "video": "/static/public/hero-process.mp4",  # capabilities "Process" reel (Concept→Delivery)
     "poster": "/static/public/hero-process-poster.jpg",  # first-frame poster (no black flash)
@@ -193,9 +193,24 @@ SAMPLES: List[SampleReel] = [
 ]
 
 
+# Demos intro — CMO-led copy (docs/capability-demos-council.md). Leads with the
+# brief and the buyer, never with "new studio" / "no clients": a demonstration is
+# the purest proof for a craft house, and saying so is both confident and true.
+DEMOS_INTRO = {
+    "eyebrow": "Capability Demonstrations",
+    "title": "Built to brief.",
+    "lede": (
+        "Every track here answers a campaign brief — an objective, a creative "
+        "challenge, and our response in music. Press play for the sound; open the "
+        "brief to see how we'd score yours."
+    ),
+    # Home featured-section heading (same vocabulary, one continuous story).
+    "home_title": "Hear how we'd score your brief.",
+    "home_cta": "Open the full briefs →",
+}
+
 # Capability demos — the public "Capability demos" page. Truthful: demonstrations
-# of approach/craft, not client commissions. Two audio files attached; the other
-# two players read "audio coming soon" until their assets are uploaded.
+# of approach/craft, not client commissions. All four tracks attached.
 DEMOS: List[CapabilityDemo] = [
     CapabilityDemo(
         "Strings Arrangement for a Holiday Spot",
@@ -270,6 +285,7 @@ class Showcase:
     capabilities: List[Capability] = field(default_factory=lambda: CAPABILITIES)
     samples: List[SampleReel] = field(default_factory=lambda: SAMPLES)
     demos: List[CapabilityDemo] = field(default_factory=lambda: DEMOS)
+    demos_intro: dict = field(default_factory=lambda: DEMOS_INTRO)
 
 
 def get_showcase() -> Showcase:

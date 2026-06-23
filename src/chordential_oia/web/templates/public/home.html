@@ -36,45 +36,27 @@
   </div>
 </section>
 
-<!-- Featured work (sample-labeled until real campaigns exist) -->
-<section class="sec paper" id="work">
+<!-- Capability demonstrations — same tracks as /samples, one continuous funnel -->
+<section class="sec dark" id="work">
   <div class="sec-inner">
     <div class="sec-head">
       <div>
-        <p class="eyebrow">Recent work</p>
-        <h2>Proof in the format, not just the music.</h2>
+        <p class="eyebrow">Capability Demonstrations</p>
+        <h2>{{ show.demos_intro.home_title }}</h2>
       </div>
-      <a class="sec-more" href="/samples">See all work →</a>
+      <a class="sec-more" href="/samples">{{ show.demos_intro.home_cta }}</a>
     </div>
-    <div class="case-grid">
-      {% for c in show.cases %}
-      <article class="case">
-        <div class="case-media">
-          {% if c.media_url %}
-            {% if c.media_kind == 'video' %}
-            <video class="case-player" controls preload="none" {% if c.poster %}poster="{{ c.poster }}"{% endif %}>
-              <source src="{{ c.media_url }}">
-            </video>
-            {% else %}
-            <audio class="case-player" controls preload="none" src="{{ c.media_url }}"></audio>
-            {% endif %}
-          {% else %}
-            <div class="case-ph {{ 'is-video' if c.media_kind=='video' else 'is-audio' }}">
-              <span class="case-ph-chip">{{ '▶' if c.media_kind=='video' else '♪' }} {{ c.media_kind|title }} player</span>
-              <span class="case-ph-sub">asset coming</span>
-            </div>
-          {% endif %}
-          {% if c.sample %}<span class="case-tag">Sample</span>{% endif %}
-        </div>
-        <div class="case-body">
-          <h3>{{ c.title }}</h3>
-          <dl class="case-rows">
-            <dt>Objective</dt><dd>{{ c.objective }}</dd>
-            <dt>The challenge</dt><dd>{{ c.challenge }}</dd>
-            <dt>How we solved it</dt><dd>{{ c.solved }}</dd>
-            <dt>Outcome</dt><dd>{{ c.outcome }}</dd>
-          </dl>
-        </div>
+    <div class="demo-grid">
+      {% for d in show.demos %}
+      <article class="demo-card">
+        <h3>{{ d.title }}</h3>
+        <p class="demo-meta">{{ d.discipline_label }}</p>
+        {% if d.audio_url %}
+        <audio class="demo-audio" controls preload="none" src="{{ d.audio_url }}"></audio>
+        {% else %}
+        <p class="demo-soon">♪ audio demo coming soon</p>
+        {% endif %}
+        <a class="demo-link" href="/samples">See the brief →</a>
       </article>
       {% endfor %}
     </div>
@@ -123,7 +105,7 @@
     <div>
       <p class="eyebrow">What delivery actually looks like</p>
       <h2>Operational clarity, packaged for sign-off.</h2>
-      <p class="lead">Every engagement ends the same way — clean files, clear rights, and versions named so anyone on the campaign can find them.</p>
+      <p class="lead">We deliver the same way every time — clean files, clear rights, and versions named so anyone on the campaign can find them.</p>
       <ul class="deliver-list">
         {% for d in show.delivery_items %}<li>{{ d }}</li>{% endfor %}
       </ul>

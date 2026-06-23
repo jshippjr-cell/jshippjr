@@ -56,9 +56,9 @@ def test_capabilities_lists_every_discipline(client):
 def test_samples_page_renders_capability_demos(client):
     r = client.get("/samples")
     assert r.status_code == 200
-    # Reframed as honest capability demonstrations, not client commissions.
-    assert "Capability demos" in r.text
-    assert "not client commissions" in r.text or "aren’t client commissions" in r.text
+    # CMO-led copy: confident + truthful, never apologetic about being new.
+    assert "Capability Demonstrations" in r.text and "Built to brief." in r.text
+    assert "new studio" not in r.text and "aren’t client commissions" not in r.text
     # Expandable brief on each demo.
     assert "See how we’d approach this brief" in r.text
     # Audio-only: all four demos render <audio> players, no video players.
@@ -66,6 +66,18 @@ def test_samples_page_renders_capability_demos(client):
                   "demo-title-sequence.mp3", "demo-retail-anthem.mp3"):
         assert track in r.text
     assert r.text.count("<audio") == 4 and "<video" not in r.text
+
+
+def test_home_work_section_is_truthful_capability_demos(client):
+    # The home "work" section must not imply delivered client engagements.
+    r = client.get("/")
+    assert r.status_code == 200
+    for past_claim in ("Recent work", "See all work", "How we solved it",
+                       "Every engagement"):
+        assert past_claim not in r.text
+    # It shows the real demo players and routes to the demos page.
+    assert "Capability Demonstrations" in r.text
+    assert "demo-holiday-strings.mp3" in r.text and "See the brief" in r.text
 
 
 def test_internal_dashboard_unaffected_by_public_mount(client):
