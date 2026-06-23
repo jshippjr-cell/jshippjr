@@ -101,7 +101,7 @@ def public_capabilities(request: Request):
 def public_samples(request: Request):
     show = get_showcase()
     return render(
-        request, "public/samples.html", active="samples", samples=show.samples,
+        request, "public/samples.html", active="samples", demos=show.demos,
     )
 
 

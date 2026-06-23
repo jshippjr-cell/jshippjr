@@ -1,14 +1,15 @@
 {% extends "public_base.html" %}
-{% block title %}Samples{% endblock %}
+{% block title %}Capability demos{% endblock %}
 
 {% block content %}
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="hero-eyebrow">Samples</p>
-    <h1 class="page-title">Selected work.</h1>
+    <p class="hero-eyebrow">Capability Demonstrations</p>
+    <h1 class="page-title">Capability demos.</h1>
     <p class="page-lede">
-      A cross-section of recent commissions. Full audio and video reels are on
-      the way.
+      Chordential is a new studio, so these aren’t client commissions — they’re
+      demonstrations of how we’d approach a brief and the craft we bring to it.
+      Press play, then open each one to see the thinking.
     </p>
   </div>
 </section>
@@ -16,15 +17,30 @@
 <section class="band">
   <div class="band-inner">
     <div class="sample-grid">
-      {% for s in samples %}
-      <article class="sample-card">
-        <div class="sample-poster {{ 'is-video' if s.media_kind=='video' else 'is-audio' }}">
-          <span class="sample-kind">{{ '▶ video' if s.media_kind=='video' else '♪ audio' }}</span>
-          {% if s.placeholder %}<span class="sample-soon">sample coming soon</span>{% endif %}
-        </div>
-        <h3>{{ s.title }}</h3>
-        <p class="sample-meta">{{ s.discipline.label }} · {{ s.client_type }}</p>
-        <p>{{ s.blurb }}</p>
+      {% for d in demos %}
+      <article class="sample-card demo-card">
+        <h3>{{ d.title }}</h3>
+        <p class="sample-meta">{{ d.discipline_label }}</p>
+        {% if d.audio_url %}
+        <audio class="demo-audio" controls preload="none" src="{{ d.audio_url }}">
+          Your browser doesn’t support audio playback.
+        </audio>
+        {% else %}
+        <p class="demo-soon">♪ audio demo coming soon</p>
+        {% endif %}
+        <details class="demo-brief">
+          <summary>See how we’d approach this brief</summary>
+          <div class="demo-brief-body">
+            <h4>Objective</h4>
+            <p>{{ d.objective }}</p>
+            <h4>Creative Brief</h4>
+            <p>{{ d.brief }}</p>
+            <h4>Approach</h4>
+            <p>{{ d.approach }}</p>
+            <h4>What It Demonstrates</h4>
+            <p>{{ d.demonstrates }}</p>
+          </div>
+        </details>
       </article>
       {% endfor %}
     </div>

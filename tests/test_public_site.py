@@ -53,12 +53,19 @@ def test_capabilities_lists_every_discipline(client):
         assert headline in r.text
 
 
-def test_samples_page_renders_reel(client):
+def test_samples_page_renders_capability_demos(client):
     r = client.get("/samples")
     assert r.status_code == 200
-    assert "Selected work" in r.text
-    # Placeholder reel is clearly marked until real assets are attached.
-    assert "sample coming soon" in r.text
+    # Reframed as honest capability demonstrations, not client commissions.
+    assert "Capability demos" in r.text
+    assert "not client commissions" in r.text or "aren’t client commissions" in r.text
+    # Expandable brief on each demo.
+    assert "See how we’d approach this brief" in r.text
+    # Audio-only: an attached demo renders an <audio> player; no video players.
+    assert "demo-holiday-strings.mp3" in r.text
+    assert "<audio" in r.text and "<video" not in r.text
+    # Pending assets degrade gracefully, not as broken players.
+    assert "audio demo coming soon" in r.text
 
 
 def test_internal_dashboard_unaffected_by_public_mount(client):

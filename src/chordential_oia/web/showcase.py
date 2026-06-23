@@ -54,6 +54,23 @@ class Step:
     timeline: str
 
 
+@dataclass(frozen=True)
+class CapabilityDemo:
+    """A capability demonstration for the public 'Capability demos' page.
+
+    Honest framing: Chordential hasn't won client engagements yet, so these are
+    NOT case studies of real commissions — they demonstrate how we'd approach a
+    brief and the craft we bring. ``audio_url`` empty => 'audio coming soon'.
+    """
+    title: str
+    discipline_label: str
+    objective: str
+    brief: str
+    approach: str
+    demonstrates: str
+    audio_url: str = ""
+
+
 # Hero — copy ratified from the brief. The background is a placeholder for a
 # looping behind-the-scenes video (asset TBD); no still image behind the text.
 HERO = {
@@ -176,6 +193,69 @@ SAMPLES: List[SampleReel] = [
 ]
 
 
+# Capability demos — the public "Capability demos" page. Truthful: demonstrations
+# of approach/craft, not client commissions. Two audio files attached; the other
+# two players read "audio coming soon" until their assets are uploaded.
+DEMOS: List[CapabilityDemo] = [
+    CapabilityDemo(
+        "Strings Arrangement for a Holiday Spot",
+        "Arrangement & orchestration",
+        "Explore how orchestral string arrangements can support seasonal advertising "
+        "while maintaining a premium brand aesthetic.",
+        "A holiday campaign requires music that evokes warmth, nostalgia, and celebration "
+        "without relying on predictable seasonal tropes.",
+        "This demonstration explores contemporary string writing, layered harmonies, and "
+        "dynamic orchestration techniques designed to create emotional connection while "
+        "preserving a refined commercial sound.",
+        "An approach to arranging and orchestrating music that enhances storytelling and "
+        "supports emotionally driven advertising campaigns.",
+        audio_url="/static/public/demo-holiday-strings.mp3",
+    ),
+    CapabilityDemo(
+        "Title Sequence Sound Design",
+        "Sound design",
+        "Explore how sound design can establish tone, atmosphere, and narrative intrigue "
+        "before a story unfolds.",
+        "A title sequence must capture attention immediately and create anticipation "
+        "without relying on dialogue or narrative context.",
+        "This demonstration examines the use of evolving textures, cinematic impacts, "
+        "transitional elements, and atmospheric layers to create tension, movement, and "
+        "immersion.",
+        "An approach to building sonic environments that strengthen visual storytelling "
+        "and contribute to a distinctive creative identity.",
+        audio_url="",  # asset pending re-upload
+    ),
+    CapabilityDemo(
+        "National Retail Brand — Campaign Anthem",
+        "Original composition",
+        "Explore how music can support a national retail brand relaunch through emotional "
+        "storytelling and broad audience appeal.",
+        "A large consumer brand requires a campaign anthem that feels optimistic, "
+        "trustworthy, and adaptable across advertising, digital, and social content.",
+        "This demonstration explores a momentum-driven musical direction built around a "
+        "memorable melodic theme, combining organic instrumentation with modern production "
+        "techniques to create energy, optimism, and forward movement.",
+        "An approach to developing brand-forward music that reinforces messaging, supports "
+        "storytelling, and connects with diverse consumer audiences.",
+        audio_url="",  # asset pending re-upload
+    ),
+    CapabilityDemo(
+        "Financial Services — Brand Theme",
+        "Sonic branding",
+        "Explore how music can communicate trust, stability, and long-term confidence "
+        "within a financial services context.",
+        "A financial brand requires a musical identity that conveys credibility and "
+        "sophistication while avoiding generic corporate conventions.",
+        "This demonstration examines a restrained piano-led theme supported by subtle "
+        "electronic textures and recurring musical motifs intended to communicate clarity, "
+        "intelligence, and modern professionalism.",
+        "An approach to translating brand attributes into a cohesive musical identity "
+        "suitable for advertising, presentations, digital experiences, and branded content.",
+        audio_url="/static/public/demo-financial-theme.mp3",
+    ),
+]
+
+
 @dataclass(frozen=True)
 class Showcase:
     hero: dict = field(default_factory=lambda: HERO)
@@ -189,6 +269,7 @@ class Showcase:
     close: dict = field(default_factory=lambda: CLOSE)
     capabilities: List[Capability] = field(default_factory=lambda: CAPABILITIES)
     samples: List[SampleReel] = field(default_factory=lambda: SAMPLES)
+    demos: List[CapabilityDemo] = field(default_factory=lambda: DEMOS)
 
 
 def get_showcase() -> Showcase:

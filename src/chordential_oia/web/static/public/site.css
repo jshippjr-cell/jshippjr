@@ -231,6 +231,18 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .sample-card h3{font-family:var(--serif);margin:0 0 4px;font-size:18px}
 .sample-meta{margin:0 0 8px;font-size:13px;color:var(--accent);font-weight:600}
 .sample-card p{margin:0;color:var(--muted);font-size:14px}
+/* Capability demos — audio-only cards with an expandable brief */
+.demo-card{display:flex;flex-direction:column}
+.demo-audio{width:100%;margin:4px 0 10px}
+.demo-soon{font-style:italic;color:var(--muted);font-size:13px;margin:4px 0 10px}
+.demo-brief{border-top:1px solid var(--border);padding-top:10px;margin-top:2px}
+.demo-brief summary{cursor:pointer;color:var(--accent);font-weight:650;font-size:14px;list-style:none;outline:none}
+.demo-brief summary::-webkit-details-marker{display:none}
+.demo-brief summary::before{content:"▸ "}
+.demo-brief[open] summary::before{content:"▾ "}
+.demo-brief-body{margin-top:10px}
+.demo-brief-body h4{font-family:var(--serif);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);margin:12px 0 2px}
+.demo-brief-body p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}
 
 .cta-strip{padding:72px 0;text-align:center}
 .cta-strip-inner{max-width:680px}
