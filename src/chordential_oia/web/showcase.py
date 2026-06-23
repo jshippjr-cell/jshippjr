@@ -223,7 +223,7 @@ DEMOS: List[CapabilityDemo] = [
         "immersion.",
         "An approach to building sonic environments that strengthen visual storytelling "
         "and contribute to a distinctive creative identity.",
-        audio_url="",  # asset pending re-upload
+        audio_url="/static/public/demo-title-sequence.mp3",
     ),
     CapabilityDemo(
         "National Retail Brand — Campaign Anthem",
@@ -237,7 +237,7 @@ DEMOS: List[CapabilityDemo] = [
         "techniques to create energy, optimism, and forward movement.",
         "An approach to developing brand-forward music that reinforces messaging, supports "
         "storytelling, and connects with diverse consumer audiences.",
-        audio_url="",  # asset pending re-upload
+        audio_url="/static/public/demo-retail-anthem.mp3",
     ),
     CapabilityDemo(
         "Financial Services — Brand Theme",

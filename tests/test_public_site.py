@@ -61,11 +61,11 @@ def test_samples_page_renders_capability_demos(client):
     assert "not client commissions" in r.text or "aren’t client commissions" in r.text
     # Expandable brief on each demo.
     assert "See how we’d approach this brief" in r.text
-    # Audio-only: an attached demo renders an <audio> player; no video players.
-    assert "demo-holiday-strings.mp3" in r.text
-    assert "<audio" in r.text and "<video" not in r.text
-    # Pending assets degrade gracefully, not as broken players.
-    assert "audio demo coming soon" in r.text
+    # Audio-only: all four demos render <audio> players, no video players.
+    for track in ("demo-holiday-strings.mp3", "demo-financial-theme.mp3",
+                  "demo-title-sequence.mp3", "demo-retail-anthem.mp3"):
+        assert track in r.text
+    assert r.text.count("<audio") == 4 and "<video" not in r.text
 
 
 def test_internal_dashboard_unaffected_by_public_mount(client):
