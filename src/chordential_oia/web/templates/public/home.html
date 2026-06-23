@@ -56,13 +56,15 @@
         {% else %}
         <p class="demo-soon">♪ audio demo coming soon</p>
         {% endif %}
-        <dl class="case-rows">
-          <dt>Objective</dt><dd>{{ d.objective }}</dd>
-          <dt>Creative Brief</dt><dd>{{ d.brief }}</dd>
-          <dt>Approach</dt><dd>{{ d.approach }}</dd>
-          <dt>What It Demonstrates</dt><dd>{{ d.demonstrates }}</dd>
-        </dl>
-        <a class="demo-link" href="/samples">See the brief →</a>
+        <details class="demo-brief">
+          <summary>See the brief</summary>
+          <dl class="case-rows">
+            <dt>Objective</dt><dd>{{ d.objective }}</dd>
+            <dt>Creative Brief</dt><dd>{{ d.brief }}</dd>
+            <dt>Approach</dt><dd>{{ d.approach }}</dd>
+            <dt>What It Demonstrates</dt><dd>{{ d.demonstrates }}</dd>
+          </dl>
+        </details>
       </article>
       {% endfor %}
     </div>
