@@ -179,7 +179,14 @@ async def _admin_gate(request: Request, call_next):
         if request.method == "HEAD":
             return Response(status_code=200)  # let platform health probes through
         return RedirectResponse(f"/admin/login?next={request.url.path}", status_code=303)
-    return await call_next(request)
+    response = await call_next(request)
+    # Let browsers cache static assets so a looping hero video / replayed audio
+    # loads ONCE and replays from cache, instead of re-streaming from this single
+    # worker on every navigation (which starves other media → stutter). Change a
+    # file's ?v= query to bust it.
+    if request.url.path.startswith("/static/") and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "public, max-age=604800"  # 7 days
+    return response
 
 
 def render(request: Request, name: str, **kw):

@@ -82,13 +82,13 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    # Hero background: the animated WebP loads ONCE and loops client-side (zero
-    # extra server hits). A looping <video> re-streams forever and, on a single
-    # worker instance (WEB_CONCURRENCY=1), starves on-demand audio -> stutter.
-    # So the video URL is intentionally empty; the template falls back to `loop`.
-    "video": "",
+    # Hero background: clip three (the Process reel), compressed. Served with
+    # long cache headers (see the /static cache middleware) so the browser loads
+    # it ONCE and loops it from cache — no per-navigation re-streaming that would
+    # starve audio on a single-worker instance.
+    "video": "/static/public/hero-process.mp4?v=2",
     "poster": "/static/public/hero-process-poster.jpg?v=2",
-    "loop": "/static/public/hero-loop.webp",  # load-once animated background
+    "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }
 
 # Honest market reach — NOT fabricated client logos, NOT narrow verticals. These
