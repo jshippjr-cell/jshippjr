@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Sample Delivery Package</title>
+<style>
+  :root{
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
+    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#cfc9bf;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  .page{position:relative;width:210mm;min-height:297mm;margin:14px auto;background:#fff;
+    padding:22mm 20mm 20mm;overflow:hidden;box-shadow:0 8px 34px rgba(0,0,0,.22)}
+  .watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;z-index:0}
+  .watermark span{font-family:var(--sans);font-weight:800;letter-spacing:.18em;font-size:74px;
+    color:rgba(68,22,30,.05);transform:rotate(-28deg);white-space:nowrap}
+  .content{position:relative;z-index:1}
+  /* letterhead */
+  .lh{display:flex;align-items:center;justify-content:space-between;background:var(--wine);
+    padding:11px 16px;border-radius:8px;margin-bottom:26px}
+  .lh .logo{height:19px;width:auto;display:block}
+  .lh-meta{font-size:10px;color:#e7c6ba;text-transform:uppercase;letter-spacing:.14em;text-align:right}
+  .doc-kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 6px}
+  h1.doc{font-family:var(--serif);font-size:30px;line-height:1.1;margin:0 0 4px;color:var(--ink);font-weight:600}
+  .doc-sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+  .foot{position:absolute;left:20mm;right:20mm;bottom:12mm;display:flex;justify-content:space-between;
+    border-top:1px solid var(--line);padding-top:8px;font-size:9.5px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.1em;z-index:1}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:11.5px}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);
+    border-bottom:2px solid var(--wine);padding:7px 8px}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr.grp td{background:var(--cream);font-weight:700;color:var(--wine);text-transform:uppercase;
+    letter-spacing:.08em;font-size:9.5px}
+  .tick{color:var(--orange);font-weight:800}
+  .chip{display:inline-block;background:var(--wine);color:#fff;font-size:10px;font-weight:700;
+    letter-spacing:.06em;padding:5px 11px;border-radius:20px}
+  .chip.ok{background:rgba(228,103,31,.14);color:#b5500f}
+  .mono{font-family:var(--mono);font-size:11px}
+  .panel{background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .accent-bar{height:3px;background:linear-gradient(90deg,var(--orange),var(--wine));border-radius:3px;margin:0 0 18px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .seal{width:96px;height:96px;border-radius:50%;border:3px solid var(--orange);color:var(--wine);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
+  .seal b{font-family:var(--serif);font-size:15px;letter-spacing:0}
+  /* cover */
+  .cover{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
+    padding:0;display:flex;flex-direction:column;justify-content:space-between}
+  .cover .inner{position:relative;z-index:1;padding:30mm 22mm}
+  .cover .logo-cover{height:30px;width:auto;display:block}
+  
+  .cover h1{font-family:var(--serif);font-weight:600;font-size:50px;line-height:1.05;margin:18px 0 6px}
+  .cover .tag{color:var(--sand);font-size:15px;max-width:60%}
+  .cover .rule{height:2px;width:120px;background:var(--orange);margin:26px 0}
+  .cover .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;max-width:78%;font-size:12.5px}
+  .cover .meta div span{display:block;color:#b89a8c;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:2px}
+  .cover .status{display:inline-block;margin-top:26px;border:1px solid var(--orange);color:var(--orange);
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;padding:8px 16px;border-radius:4px}
+  /* tree */
+  .tree{display:flex;align-items:center;gap:0;margin:8px 0 6px}
+  .node{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;min-width:120px;text-align:center}
+  .node .v{font-family:var(--serif);font-size:16px;color:var(--wine)}
+  .node .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+  .node.final{border-color:var(--orange);box-shadow:0 0 0 3px rgba(228,103,31,.16)}
+  .arr{flex:1;height:2px;background:var(--wine);position:relative;min-width:26px}
+  .arr:after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--wine)}
+  .branches{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;margin-left:150px}
+  .branch{background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:11px}
+  /* rollout */
+  .rollout{display:grid;grid-template-columns:90px 1fr;gap:0 14px;align-items:center}
+  .rcell{padding:11px 0;border-bottom:1px solid var(--line)}
+  .ver{font-family:var(--serif);color:var(--wine);font-size:17px}
+  .ver small{display:block;font-family:var(--sans);color:var(--muted);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+  .chans{display:flex;gap:8px;flex-wrap:wrap}
+  .chan{background:#fff;border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:6px;
+    padding:6px 10px;font-size:11px}
+  .chan b{display:block;font-size:11.5px}
+  .chan span{color:var(--muted);font-size:9.5px}
+  .legend{font-size:10.5px;color:var(--muted)}
+  ul.clean{margin:6px 0;padding-left:18px;font-size:12px;line-height:1.7}
+  .sig{margin-top:14px;border-top:1.5px solid var(--ink);padding-top:6px;font-size:11px}
+  .sig span{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.1em}
+  @media print{
+    body{background:#fff}
+    .page{margin:0;box-shadow:none;width:auto;min-height:auto;page-break-after:always}
+    .toolbar{display:none}
+  }
+  .toolbar{position:sticky;top:0;z-index:9;background:var(--wine);color:#fff;display:flex;align-items:center;gap:14px;justify-content:space-between;padding:10px 18px;font-size:12.5px}
+  .toolbar i{color:#e7c6ba;font-style:italic}
+  .tb-link{color:#f0b487;text-decoration:none;font-weight:700;white-space:nowrap}
+  .tb-actions{display:flex;gap:8px}
+  .tb-btn{background:var(--orange);color:#fff;border:0;border-radius:6px;padding:7px 13px;font:inherit;font-weight:700;font-size:12px;text-decoration:none;cursor:pointer;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a class="tb-link" href="/">← Chordential</a>
+  <span>Sample delivery package — a demonstration of our format <i>(fictional campaign)</i></span>
+  <span class="tb-actions"><a class="tb-btn" href="/static/public/Chordential_Sample_Delivery_Package.pdf" download>Download PDF</a><button class="tb-btn" onclick="window.print()">Print</button></span>
+</div>
+
+<!-- 1 — COVER -->
+<section class="page cover">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="inner">
+    <img class="logo-cover" src="/static/public/wordmark-ko.png" alt="Chordential">
+    <div class="rule"></div>
+    <p class="doc-kicker" style="color:var(--orange)">Delivery Package</p>
+    <h1>Find Your Horizon</h1>
+    <p class="tag">Original campaign anthem, cutdowns &amp; sonic identity — composed, produced, and cleared for AURORA Outdoor Co.</p>
+    <div class="status">Final — Approved for Release</div>
+    <div class="rule" style="margin:34px 0 22px"></div>
+    <div class="meta">
+      <div><span>Client / Brand</span>AURORA Outdoor Co.</div>
+      <div><span>Agency</span>Northlight Creative <em>(sample)</em></div>
+      <div><span>Campaign</span>Find Your Horizon — Spring 2026</div>
+      <div><span>Package ID</span>CHD-2026-0417</div>
+      <div><span>Delivered</span>17 April 2026</div>
+      <div><span>Locked Version</span>v3 — FINAL</div>
+    </div>
+  </div>
+  <div class="foot" style="color:#9b8276;border-color:rgba(255,255,255,.12)">
+    <span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 1 / 8</span></div>
+</section>
+
+<!-- 2 — DELIVERABLES MANIFEST -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 01</p>
+    <h1 class="doc">Deliverables Manifest</h1>
+    <p class="doc-sub">Everything contracted, accounted for in one place.
+      <span class="chip ok" style="margin-left:8px">23 assets · 100% delivered</span></p>
+    <table>
+      <thead><tr><th>Asset</th><th>Format / Spec</th><th>Duration</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Masters</td></tr>
+        <tr><td>Find Your Horizon — Anthem (Master)</td><td>WAV 24-bit / 48 kHz</td><td>0:60</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>Anthem — Instrumental (TV mix)</td><td>WAV 24-bit / 48 kHz</td><td>0:60</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr class="grp"><td colspan="4">Cutdowns</td></tr>
+        <tr><td>Anthem — :30 cutdown</td><td>WAV + MP3 320</td><td>0:30</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>Anthem — :15 cutdown</td><td>WAV + MP3 320</td><td>0:15</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>Anthem — :06 bumper</td><td>WAV + MP3 320</td><td>0:06</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr class="grp"><td colspan="4">Social verticals</td></tr>
+        <tr><td>:15 vertical (9:16 loudness)</td><td>WAV + MP3 320</td><td>0:15</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>:06 vertical (9:16 loudness)</td><td>WAV + MP3 320</td><td>0:06</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr class="grp"><td colspan="4">Sonic identity</td></tr>
+        <tr><td>AURORA Mnemonic (sonic logo)</td><td>WAV 24-bit / 48 kHz</td><td>0:03</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr class="grp"><td colspan="4">Production assets &amp; documentation</td></tr>
+        <tr><td>Stem package (9 stems)</td><td>WAV 24-bit / 48 kHz</td><td>—</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>Cue sheet &amp; rights certificate</td><td>PDF</td><td>—</td><td><span class="tick">✓</span> Delivered</td></tr>
+        <tr><td>Campaign rollout map</td><td>PDF</td><td>—</td><td><span class="tick">✓</span> Delivered</td></tr>
+      </tbody>
+    </table>
+    <div class="panel" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px"><b>Account status:</b> Deposit (50%) paid · Balance settled on delivery.</div>
+      <span class="chip ok">Paid in full</span>
+    </div>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 2 / 8</span></div>
+</section>
+
+<!-- 3 — MUSIC ASSET MAP -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 02</p>
+    <h1 class="doc">Music Asset Map</h1>
+    <p class="doc-sub">Named so anyone on the campaign can find any file in seconds.</p>
+    <div class="accent-bar"></div>
+    <div class="two">
+      <div class="panel mono" style="font-size:10.5px;line-height:1.9">
+        AURORA_FindYourHorizon/<br>
+        ├─ 01_Masters/<br>
+        │&nbsp;&nbsp;├─ AURORA_Anthem_60_MASTER_v3_FINAL.wav<br>
+        │&nbsp;&nbsp;└─ AURORA_Anthem_60_INSTR_v3_FINAL.wav<br>
+        ├─ 02_Cutdowns/<br>
+        │&nbsp;&nbsp;├─ AURORA_Anthem_30_MASTER_v3_FINAL.wav<br>
+        │&nbsp;&nbsp;├─ AURORA_Anthem_15_MASTER_v3_FINAL.wav<br>
+        │&nbsp;&nbsp;└─ AURORA_Anthem_06_BUMPER_v3_FINAL.wav<br>
+        ├─ 03_Social/<br>
+        │&nbsp;&nbsp;├─ AURORA_Anthem_15_VERT_v3_FINAL.wav<br>
+        │&nbsp;&nbsp;└─ AURORA_Anthem_06_VERT_v3_FINAL.wav<br>
+        ├─ 04_SonicLogo/<br>
+        │&nbsp;&nbsp;└─ AURORA_Mnemonic_03_MASTER_v3_FINAL.wav<br>
+        ├─ 05_Stems/ &nbsp;(9 files — see inventory)<br>
+        └─ 06_Docs/<br>
+        &nbsp;&nbsp;&nbsp;├─ AURORA_CueSheet_RightsCert.pdf<br>
+        &nbsp;&nbsp;&nbsp;└─ AURORA_RolloutMap.pdf
+      </div>
+      <div>
+        <div class="panel">
+          <p style="margin:0 0 10px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Naming convention</p>
+          <p class="mono" style="font-size:12px;color:var(--orange)">CAMPAIGN_CUE_LENGTH_ROLE_VERSION_STATE</p>
+          <ul class="clean">
+            <li><b>CAMPAIGN</b> — AURORA</li>
+            <li><b>CUE</b> — Anthem / Mnemonic</li>
+            <li><b>LENGTH</b> — 60 / 30 / 15 / 06 / 03 (seconds)</li>
+            <li><b>ROLE</b> — MASTER / INSTR / BUMPER / VERT</li>
+            <li><b>VERSION</b> — v1 / v2 / v3</li>
+            <li><b>STATE</b> — WIP / APPR / FINAL</li>
+          </ul>
+        </div>
+        <p class="legend" style="margin-top:12px">Every file in this package follows the convention — no “final_final_v2” guesswork, no lost assets at 11pm before air.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 3 / 8</span></div>
+</section>
+
+<!-- 4 — VERSION TREE -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 03</p>
+    <h1 class="doc">Version Tree</h1>
+    <p class="doc-sub">Controlled variation — three bounded rounds, not an open-ended revision spiral.</p>
+    <div class="accent-bar"></div>
+    <div class="tree">
+      <div class="node"><div class="v">v1</div><div class="l">Concept</div></div>
+      <div class="arr"></div>
+      <div class="node"><div class="v">v2</div><div class="l">Direction Lock</div></div>
+      <div class="arr"></div>
+      <div class="node final"><div class="v">v3</div><div class="l">FINAL · Approved</div></div>
+    </div>
+    <div class="branches">
+      <div class="branch">↳ :30 cutdown</div>
+      <div class="branch">↳ :15 cutdown</div>
+      <div class="branch">↳ :06 bumper</div>
+      <div class="branch">↳ Instrumental / TV mix</div>
+      <div class="branch">↳ 9:16 verticals</div>
+      <div class="branch">↳ Sonic logo</div>
+    </div>
+    <div class="two" style="margin-top:30px">
+      <div class="panel"><p style="margin:0;font-weight:700;color:var(--wine);font-size:12px">v1 — Concept</p>
+        <p style="font-size:11.5px;color:var(--muted);margin:6px 0 0">Direction options to picture &amp; brief. One chosen, the rest parked — before a full production starts.</p></div>
+      <div class="panel"><p style="margin:0;font-weight:700;color:var(--wine);font-size:12px">v2 — Direction Lock</p>
+        <p style="font-size:11.5px;color:var(--muted);margin:6px 0 0">Arrangement &amp; tone agreed. Bounded revision window opens; all cutdowns derive from here.</p></div>
+    </div>
+    <div class="panel" style="margin-top:16px;border-color:var(--orange)">
+      <p style="margin:0;font-weight:700;color:var(--wine);font-size:12px">v3 — FINAL (Approved)</p>
+      <p style="font-size:11.5px;color:var(--muted);margin:6px 0 0">Signed off without reopening the creative conversation. <b style="color:var(--ink)">Locked in 3 rounds.</b></p>
+    </div>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 4 / 8</span></div>
+</section>
+
+<!-- 5 — RIGHTS & OWNERSHIP CERTIFICATE -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 04</p>
+    <h1 class="doc">Rights &amp; Ownership Certificate</h1>
+    <p class="doc-sub">Cue sheet, publishing splits, and grant of rights — cleared on delivery.</p>
+    <table style="margin-bottom:16px">
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <tbody>
+        <tr><td>Find Your Horizon (Anthem)</td><td>VV</td><td>0:60</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
+        <tr><td>— :30 / :15 / :06 cutdowns</td><td>BI</td><td>var.</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
+        <tr><td>AURORA Mnemonic</td><td>Logo</td><td>0:03</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
+      </tbody>
+    </table>
+    <div class="two">
+      <div class="panel">
+        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights</p>
+        <ul class="clean">
+          <li><b>Type:</b> Original work — full buyout / work-made-for-hire</li>
+          <li><b>Territory:</b> Worldwide</li>
+          <li><b>Term:</b> Perpetuity</li>
+          <li><b>Media:</b> All campaign media (broadcast, digital, social, OOH, in-store)</li>
+          <li><b>Exclusivity:</b> Exclusive to AURORA for the campaign category</li>
+          <li><b>Clearances:</b> No samples, no third-party masters — 100% original &amp; clear</li>
+        </ul>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+        <div class="seal"><span>Chordential</span><b>CLEARED</b><span>CHD-2026-0417</span></div>
+        <p style="font-size:10.5px;color:var(--muted);margin:12px 0 0;max-width:230px">
+          Chordential certifies the above cues are original, owned, and free to use as granted — no PRO surprises, no clearance risk.</p>
+      </div>
+    </div>
+    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental · Logo Brand mnemonic. Shares total 100% per cue.</p>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 5 / 8</span></div>
+</section>
+
+<!-- 6 — STEM INVENTORY -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 05</p>
+    <h1 class="doc">Stem Inventory</h1>
+    <p class="doc-sub">Mix-ready stems — every layer labeled, all WAV 24-bit / 48 kHz, time-aligned to the master.</p>
+    <table>
+      <thead><tr><th>#</th><th>Stem</th><th>File</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Rhythm</td></tr>
+        <tr><td>1</td><td>Drums</td><td class="mono">AURORA_Anthem_60_STEM_DRUMS_v3.wav</td><td>Kit + room</td></tr>
+        <tr><td>2</td><td>Percussion</td><td class="mono">AURORA_Anthem_60_STEM_PERC_v3.wav</td><td>Taikos, shaker, claps</td></tr>
+        <tr><td>3</td><td>Bass</td><td class="mono">AURORA_Anthem_60_STEM_BASS_v3.wav</td><td>Synth + upright blend</td></tr>
+        <tr class="grp"><td colspan="4">Harmonic</td></tr>
+        <tr><td>4</td><td>Keys</td><td class="mono">AURORA_Anthem_60_STEM_KEYS_v3.wav</td><td>Felt piano, Rhodes</td></tr>
+        <tr><td>5</td><td>Guitars</td><td class="mono">AURORA_Anthem_60_STEM_GTR_v3.wav</td><td>Acoustic + ambient elec</td></tr>
+        <tr class="grp"><td colspan="4">Melodic</td></tr>
+        <tr><td>6</td><td>Strings</td><td class="mono">AURORA_Anthem_60_STEM_STR_v3.wav</td><td>Ensemble, hybrid</td></tr>
+        <tr><td>7</td><td>Brass</td><td class="mono">AURORA_Anthem_60_STEM_BRS_v3.wav</td><td>Horn swells (chorus)</td></tr>
+        <tr class="grp"><td colspan="4">Texture &amp; vocal</td></tr>
+        <tr><td>8</td><td>FX / Risers</td><td class="mono">AURORA_Anthem_60_STEM_FX_v3.wav</td><td>Transitions, impacts</td></tr>
+        <tr><td>9</td><td>Choir / Vox</td><td class="mono">AURORA_Anthem_60_STEM_VOX_v3.wav</td><td>Wordless choir hook</td></tr>
+      </tbody>
+    </table>
+    <div class="panel" style="margin-top:16px;font-size:11.5px"><b>Re-version ready:</b> stems are gain-staged and aligned so the agency edit suite can re-cut to any future length without a callback.</div>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 6 / 8</span></div>
+</section>
+
+<!-- 7 — CAMPAIGN ROLLOUT INFOGRAPHIC -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 06</p>
+    <h1 class="doc">Campaign Rollout Map</h1>
+    <p class="doc-sub">Every version, mapped to where it runs — so the right cut is in the right place on air date.</p>
+    <div class="accent-bar"></div>
+    <div class="rollout">
+      <div class="rcell ver">:60<small>Anthem</small></div>
+      <div class="rcell"><div class="chans">
+        <div class="chan"><b>Brand film</b><span>YouTube · site hero</span></div>
+        <div class="chan"><b>Cinema</b><span>pre-show</span></div></div></div>
+      <div class="rcell ver">:30<small>Cutdown</small></div>
+      <div class="rcell"><div class="chans">
+        <div class="chan"><b>TV / CTV</b><span>linear + connected</span></div>
+        <div class="chan"><b>Radio</b><span>spot</span></div></div></div>
+      <div class="rcell ver">:15<small>Cutdown</small></div>
+      <div class="rcell"><div class="chans">
+        <div class="chan"><b>Pre-roll</b><span>YouTube · OTT</span></div>
+        <div class="chan"><b>Vertical</b><span>IG / TikTok feed</span></div></div></div>
+      <div class="rcell ver">:06<small>Bumper</small></div>
+      <div class="rcell"><div class="chans">
+        <div class="chan"><b>Bumper</b><span>YouTube</span></div>
+        <div class="chan"><b>Vertical</b><span>Stories / Reels</span></div></div></div>
+      <div class="rcell ver">:03<small>Mnemonic</small></div>
+      <div class="rcell"><div class="chans">
+        <div class="chan"><b>All endcards</b><span>every asset sign-off</span></div>
+        <div class="chan"><b>OOH / in-store</b><span>where audio plays</span></div></div></div>
+    </div>
+    <div class="panel" style="margin-top:22px;font-size:11.5px"><b>Why it matters:</b> the music isn’t one file — it’s a system sized for each placement, loudness-prepped, and named to match your media plan. Hand it to the buying team and it just slots in.</div>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 7 / 8</span></div>
+</section>
+
+<!-- 8 — FINAL APPROVAL CERTIFICATE -->
+<section class="page">
+  <div class="watermark"><span>SAMPLE · SAMPLE · SAMPLE</span></div>
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · CHD-2026-0417</div></div>
+    <p class="doc-kicker">Document 07</p>
+    <h1 class="doc">Final Approval Certificate</h1>
+    <p class="doc-sub">Signed, locked, released.</p>
+    <div class="panel" style="text-align:center;padding:30px 22px;border-color:var(--orange)">
+      <div class="seal" style="margin:0 auto 16px;width:108px;height:108px"><span>Chordential</span><b>APPROVED</b><span>for release</span></div>
+      <p style="font-family:var(--serif);font-size:22px;color:var(--wine);margin:0 0 4px">Find Your Horizon — Spring 2026</p>
+      <p style="color:var(--muted);font-size:12px;margin:0">AURORA Outdoor Co. · via Northlight Creative <em>(sample)</em></p>
+      <p style="margin:14px 0 0;font-size:12.5px">Locked version <b>v3 — FINAL</b> · Package <b>CHD-2026-0417</b> · 23 assets delivered</p>
+    </div>
+    <div class="two" style="margin-top:34px">
+      <div class="sig">Approved — Client / Agency<br><br><br><span>Name, title &amp; date</span></div>
+      <div class="sig">Released — Chordential<br><br><br><span>J. Shipp · Composer / Principal · 17 Apr 2026</span></div>
+    </div>
+    <p class="legend" style="margin-top:30px">This certificate confirms the campaign music is approved, delivered in full, and cleared for release under the rights granted in Document 04. No further action required.</p>
+  </div>
+  <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 8 / 8</span></div>
+</section>
+
+</body>
+</html>

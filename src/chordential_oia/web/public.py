@@ -106,6 +106,13 @@ def public_samples(request: Request):
     )
 
 
+@router.get("/delivery-sample", response_class=HTMLResponse)
+def public_delivery_sample(request: Request):
+    """Sample agency delivery package — proves the premium delivery experience.
+    Self-contained branded page (8 documents) with a Download-PDF action."""
+    return render(request, "public/delivery_sample.html", active="")
+
+
 # --------------------------------------------------------------------------- #
 # Inbound intake — questionnaire + book-a-call. Submissions become review-queue
 # leads (NOT opportunities); Jon promotes them from the internal dashboard.

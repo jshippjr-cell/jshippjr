@@ -178,6 +178,19 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .deliver-list li{display:flex;gap:10px;align-items:center;font-weight:600}
 .deliver-list li::before{content:"✓";color:var(--accent);font-weight:800}
 .deliver-figure{border-radius:var(--radius);aspect-ratio:4/3;background:#2a2624 center/cover;border:1px solid var(--border)}
+/* Delivery-package preview card (→ /delivery-sample) */
+.deliver-preview{position:relative;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  text-decoration:none;overflow:hidden;border-radius:var(--radius);padding:34px 30px;min-height:300px;
+  background:radial-gradient(120% 100% at 20% 0%, #3a1219, #1f1013 65%, #160c0e);
+  box-shadow:var(--shadow);transition:transform .18s ease,box-shadow .18s ease}
+.deliver-preview::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--orange),var(--wine))}
+.deliver-preview:hover{transform:translateY(-4px);box-shadow:0 26px 54px rgba(0,0,0,.34)}
+.dp-logo{height:24px;width:auto;margin-bottom:14px}
+.dp-kicker{color:var(--orange);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.dp-title{font-family:var(--serif);color:#fff;font-size:30px;line-height:1.05}
+.dp-meta{color:var(--sand);font-size:13px;max-width:340px;line-height:1.5}
+.dp-cta{color:#f0b487;font-weight:650;font-size:14px;margin-top:8px}
 
 /* ---------- field notes ---------- */
 .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}

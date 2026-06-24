@@ -124,8 +124,15 @@
       <ul class="deliver-list">
         {% for d in show.delivery_items %}<li>{{ d }}</li>{% endfor %}
       </ul>
+      <a class="btn btn-primary" href="/delivery-sample" style="margin-top:10px">See exactly what lands in your inbox →</a>
     </div>
-    <div class="deliver-figure" style="background-image:url('/static/public/img/process.jpg?v=2')"></div>
+    <a class="deliver-preview" href="/delivery-sample">
+      <img src="/static/public/wordmark-ko.png" alt="Chordential" class="dp-logo">
+      <span class="dp-kicker">Sample delivery package</span>
+      <span class="dp-title">Find Your Horizon</span>
+      <span class="dp-meta">8 branded documents — cover, manifest, rights certificate, rollout map &amp; more</span>
+      <span class="dp-cta">View the package →</span>
+    </a>
   </div>
 </section>
 

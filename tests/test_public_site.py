@@ -79,6 +79,20 @@ def test_home_work_section_is_truthful_capability_demos(client):
     assert "res.cloudinary.com" in r.text and "See the brief" in r.text
 
 
+def test_delivery_sample_page_and_pdf(client):
+    # The branded sample delivery package renders and is clearly a demo.
+    r = client.get("/delivery-sample")
+    assert r.status_code == 200
+    for doc in ("Deliverables Manifest", "Rights", "Campaign Rollout", "Final Approval"):
+        assert doc in r.text
+    assert "SAMPLE" in r.text and "wordmark-ko.png" in r.text  # honest + real logo
+    # The downloadable PDF deploys and serves as a PDF.
+    pdf = client.get("/static/public/Chordential_Sample_Delivery_Package.pdf")
+    assert pdf.status_code == 200 and "pdf" in pdf.headers.get("content-type", "")
+    # The home delivery section links to it.
+    assert "/delivery-sample" in client.get("/").text
+
+
 def test_internal_dashboard_unaffected_by_public_mount(client):
     # The internal app still works and still shows its own shell.
     r = client.get("/dashboard")

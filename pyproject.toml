@@ -63,6 +63,7 @@ where = ["src"]
     "static/public/*.webm",
     "static/public/*.mp3",
     "static/public/*.wav",
+    "static/public/*.pdf",
     "static/public/img/*.jpg",
     "static/public/img/*.png",
 ]
