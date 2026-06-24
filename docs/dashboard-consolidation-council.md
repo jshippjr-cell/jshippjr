@@ -456,3 +456,34 @@ consolidation → #4 triage module → #7 detail/stepper → #8 combined doc + S
 DocuSign (own phase).**
 
 Mark up the ten decisions and the cabinet will turn your rulings into a build plan.
+
+---
+
+## Founder's rulings — 2026-06-24 (Jon Shipp, CEO)
+
+Walked through conversationally; all ten settled.
+
+1. **Dashboard vs Lanes →** ✅ **Two daily tabs** — "Today" (KPIs + Needs-triage +
+   Top-targets) and "Pipeline" (the kanban). Inbox demoted to a find-a-deal search tool.
+2. **Stage labels →** ✅ **Approved** — Pursuing→*Reaching out*, Submitted→*Proposal
+   out*, Lost+Passed→*Closed*. "Reaching out" and "Proposal out" stay **separate
+   columns**. (Any single word can be tweaked later without disruption.)
+3. **Merge Leads + Signals →** ✅ **Yes** — one "Incoming" queue (unified view over a
+   UNION), one badge, **phone push for website + crawler leads too.** Ships first.
+4. **★ The fork →** ✅ **Two-list split** — "Needs triage" (all sources, inline
+   Promote/Dismiss) stacked above "Top targets to pursue" (qualified-only). Gate intact.
+5. **Quick-win bugs →** ✅ **Ship all three** — follow-ups empty state, "View all" →
+   triage, Promote success/error feedback.
+6. **Questionnaire gate →** ✅ **Option (b)** — email always **+ (phone OR LinkedIn)**;
+   company website optional. Server-side validation + honeypot.
+7. **Lead detail →** ✅ **Contact info to the top** (tap-to-call/email) + **guided-not-
+   gated stepper** + new **"Delivery doc sent"** milestone.
+8. **Combined client doc →** ✅ **Yes** — capabilities framing + delivery-package
+   outline, auto-filled, **Stripe "Pay deposit" surfaced** (already wired). Rich
+   sections render only with real data (progressive disclosure).
+9. **★ DocuSign →** ✅ **Deferred** to its own later phase (net-new SDK + PDF engine +
+   webhook).
+10. **Crawler tab →** ✅ **Light-touch legibility** now (on/off state, fetch feedback,
+    output → Incoming) + **instrument source→won attribution** before deeper investment.
+
+Build plan: see `docs/dashboard-consolidation-build-plan.md`.
