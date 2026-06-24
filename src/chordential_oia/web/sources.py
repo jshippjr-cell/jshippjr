@@ -57,17 +57,23 @@ SOURCES = [
      "tip": "No public API; automated scraping breaks Discord ToS. Monitor #hiring channels manually. See recommended servers below."},
 ]
 
-# Reference only — the subreddits actually worth following IF the official Reddit
-# API is ever wired (see docs/lead-sources-research.md). These are NOT paste-ready
-# RSS feeds: Reddit blocks the server's IP, so subreddit RSS returns nothing from
-# Render. Kept as targets for a future API integration.
+# Demand-targeted Reddit RSS — each feed uses a flair/keyword SEARCH so it returns
+# only the DEMAND side (studios hiring), not [FOR HIRE] self-promo. Paste these into
+# CHORDENTIAL_RSS_FEEDS as `label|url` pairs. (URLs are pre-encoded so they survive
+# the env var; the is_music_gig gate is still the safety net behind them.)
 REDDIT_CHANNELS = [
-    {"name": "r/gameDevClassifieds", "why": "Studios hiring composers/sound — best single source. Target the [PAID] flair."},
-    {"name": "r/forhire", "why": "General freelance; filter Hiring flair + music/composer/audio."},
-    {"name": "r/composer", "why": "Commission/hire requests — lower volume, high relevance."},
-    {"name": "r/gameDevJobs", "why": "Game-dev jobs including audio roles."},
-    {"name": "r/podcasting", "why": "Theme/intro music + sonic branding — recurring branding work."},
-    {"name": "r/advertising", "why": "Agency sonic-branding / ad-music — rare but high-value."},
+    {"name": "r/gameDevClassifieds — [PAID] only",
+     "why": "Studios offering PAID work (the demand flair). Best single source.",
+     "rss": 'https://www.reddit.com/r/gameDevClassifieds/search.rss?q=flair_name%3A%22PAID%22&restrict_sr=1&sort=new'},
+    {"name": "r/forhire — [Hiring] + music",
+     "why": "General freelance, narrowed to the Hiring flair AND music terms.",
+     "rss": 'https://www.reddit.com/r/forhire/search.rss?q=flair_name%3A%22Hiring%22%20(music%20OR%20composer%20OR%20audio%20OR%20sound)&restrict_sr=1&sort=new'},
+    {"name": "r/composer — commission/hire",
+     "why": "Commission & hire requests (no flair system; keyword-targeted).",
+     "rss": 'https://www.reddit.com/r/composer/search.rss?q=commission%20OR%20hiring%20OR%20%22looking%20for%22&restrict_sr=1&sort=new'},
+    {"name": "r/gameDevJobs — audio",
+     "why": "Game-dev job posts, narrowed to audio/music roles.",
+     "rss": 'https://www.reddit.com/r/gameDevJobs/search.rss?q=composer%20OR%20music%20OR%20audio%20OR%20sound&restrict_sr=1&sort=new'},
 ]
 
 DISCORD_CHANNELS = [
