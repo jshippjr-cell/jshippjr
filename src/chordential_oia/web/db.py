@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS inbound_leads (
     created_at TEXT,
     contact_name TEXT,
     contact_email TEXT,
+    phone TEXT,
+    contact_linkedin TEXT,
     company TEXT,
     project_type TEXT,
     description TEXT DEFAULT '',
@@ -241,6 +243,8 @@ INBOUND_STATES = ["New", "Reviewed", "Qualified", "Dismissed"]
 _INBOUND_COLUMNS = {
     "shown_price_low": "REAL",
     "shown_price_high": "REAL",
+    "phone": "TEXT",
+    "contact_linkedin": "TEXT",
 }
 
 # Provenance columns on talent — migrated onto an existing roster the same way.
@@ -984,6 +988,8 @@ def insert_inbound_lead(
     source: str = "questionnaire",
     shown_price_low: Optional[float] = None,
     shown_price_high: Optional[float] = None,
+    phone: str = "",
+    contact_linkedin: str = "",
 ) -> int:
     """Store a public submission as a New lead. No evaluation happens here —
     a human qualifies and promotes it later (precision-bias rule).
@@ -993,13 +999,14 @@ def insert_inbound_lead(
     """
     cur = conn.execute(
         """INSERT INTO inbound_leads
-           (created_at, contact_name, contact_email, company, project_type,
-            description, budget_text, timeline, source, status,
-            shown_price_low, shown_price_high)
-           VALUES (?,?,?,?,?,?,?,?,?,'New',?,?)""",
+           (created_at, contact_name, contact_email, phone, contact_linkedin,
+            company, project_type, description, budget_text, timeline, source,
+            status, shown_price_low, shown_price_high)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,'New',?,?)""",
         (
             datetime.now(timezone.utc).isoformat(),
-            contact_name or None, contact_email or None, company or None,
+            contact_name or None, contact_email or None, phone or None,
+            contact_linkedin or None, company or None,
             project_type or None, description or "", budget_text or None,
             timeline or None, source, shown_price_low, shown_price_high,
         ),
@@ -1067,6 +1074,8 @@ def list_incoming(conn: sqlite3.Connection) -> List[Dict]:
             sub_bits.append(l["company"])
         if l["contact_email"]:
             sub_bits.append(l["contact_email"])
+        if "phone" in l.keys() and l["phone"]:
+            sub_bits.append(l["phone"])
         out.append({
             "kind": "lead",
             "id": l["id"],

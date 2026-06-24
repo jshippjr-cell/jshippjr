@@ -737,3 +737,109 @@ def test_incoming_dismiss_lead_sets_status(client):
         assert db_mod.incoming_unactioned_count(conn) == 1
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3 — public intake gate (email always + phone OR LinkedIn) + honeypot.
+# --------------------------------------------------------------------------- #
+def _lead_count():
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        return conn.execute("SELECT COUNT(*) FROM inbound_leads").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_start_requires_phone_or_linkedin(client):
+    # Email but neither phone nor LinkedIn -> rejected, no lead stored.
+    r = client.post(
+        "/start",
+        data={"contact_name": "Pat", "contact_email": "pat@example.com"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert "phone" in r.text.lower()
+    assert _lead_count() == 0
+
+
+def test_start_requires_email(client):
+    # No email at all (but a phone) -> still rejected.
+    r = client.post(
+        "/start",
+        data={"contact_name": "Pat", "phone": "555-1212"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert _lead_count() == 0
+
+
+def test_start_email_plus_phone_succeeds_and_stores_phone(client):
+    r = client.post(
+        "/start",
+        data={
+            "contact_name": "Pat", "contact_email": "pat@example.com",
+            "phone": "555-1212", "project_type": "Brand film",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303  # redirect to /thanks
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM inbound_leads WHERE contact_email = 'pat@example.com'"
+        ).fetchone()
+        assert row is not None
+        assert row["phone"] == "555-1212"
+    finally:
+        conn.close()
+
+
+def test_start_email_plus_linkedin_succeeds(client):
+    r = client.post(
+        "/start",
+        data={
+            "contact_name": "Pat", "contact_email": "pat@example.com",
+            "contact_linkedin": "linkedin.com/in/pat",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert _lead_count() == 1
+
+
+def test_start_honeypot_silently_drops_bot(client):
+    r = client.post(
+        "/start",
+        data={
+            "contact_name": "Bot", "contact_email": "bot@example.com",
+            "phone": "555-0000", "company_url": "http://spam.example",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303          # looks like success to the bot
+    assert _lead_count() == 0            # but nothing was stored
+
+
+def test_book_email_plus_phone_succeeds(client):
+    r = client.post(
+        "/book",
+        data={
+            "contact_name": "Pat", "contact_email": "pat@example.com",
+            "phone": "555-1212",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert _lead_count() == 1
+
+
+def test_book_requires_reachable_channel(client):
+    r = client.post(
+        "/book",
+        data={"contact_name": "Pat", "contact_email": "pat@example.com"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert _lead_count() == 0

@@ -42,9 +42,12 @@ router = APIRouter(tags=["public"])
 
 def render(request: Request, name: str, **kw):
     """Render a public template (active marks the current marketing nav item)."""
+    status_code = kw.pop("status_code", 200)
     context = {"active": kw.pop("active", "")}
     context.update(kw)
-    return templates.TemplateResponse(request=request, name=name, context=context)
+    return templates.TemplateResponse(
+        request=request, name=name, context=context, status_code=status_code,
+    )
 
 
 def _round_band(value: float, *, up: bool) -> int:
@@ -81,6 +84,22 @@ def public_price_band(project_type: str, description: str):
     low = _round_band(est.cost_low * ratio, up=False)
     high = _round_band(est.cost_high * ratio, up=True)
     return {"low": low, "high": high}
+
+
+def _validate_lead_contact(email: str, phone: str, linkedin: str):
+    """Server-side gate for the intake forms (founder's ruling #6, option b):
+    email is ALWAYS required, PLUS at least one of {phone, LinkedIn}. Returns an
+    error string when the submission fails, or ``None`` when it's reachable.
+
+    HTML ``required`` is bypassable (bots skip the form entirely), so this runs
+    regardless of the client-side attributes.
+    """
+    email = (email or "").strip()
+    if not email or "@" not in email or "." not in email:
+        return "Please enter a valid email address so we can reach you."
+    if not (phone or "").strip() and not (linkedin or "").strip():
+        return "Please add a phone number or LinkedIn so we have a way to follow up."
+    return None
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -130,12 +149,33 @@ def public_start_submit(
     request: Request,
     contact_name: str = Form(...),
     contact_email: str = Form(""),
+    phone: str = Form(""),
+    contact_linkedin: str = Form(""),
     company: str = Form(""),
     project_type: str = Form(""),
     description: str = Form(""),
     budget_text: str = Form(""),
     timeline: str = Form(""),
+    company_url: str = Form(""),          # honeypot — must stay blank for humans
 ):
+    # Honeypot: a bot fills the off-screen field. Pretend success without
+    # inserting a lead or firing a notification.
+    if company_url.strip():
+        return RedirectResponse("/thanks?kind=project", status_code=303)
+
+    error = _validate_lead_contact(contact_email, phone, contact_linkedin)
+    if error:
+        show = get_showcase()
+        return render(
+            request, "public/start.html", active="start",
+            capabilities=show.capabilities, error=error,
+            contact_name=contact_name, contact_email=contact_email,
+            phone=phone, contact_linkedin=contact_linkedin, company=company,
+            project_type=project_type, description=description,
+            budget_text=budget_text, timeline=timeline,
+            status_code=400,
+        )
+
     band = public_price_band(project_type.strip(), description.strip())
     conn = db.connect()
     try:
@@ -145,6 +185,7 @@ def public_start_submit(
             timeline.strip(), source="questionnaire",
             shown_price_low=(band["low"] if band else None),
             shown_price_high=(band["high"] if band else None),
+            phone=phone.strip(), contact_linkedin=contact_linkedin.strip(),
         )
     finally:
         conn.close()
@@ -169,16 +210,34 @@ def public_book_submit(
     request: Request,
     contact_name: str = Form(...),
     contact_email: str = Form(""),
+    phone: str = Form(""),
+    contact_linkedin: str = Form(""),
     company: str = Form(""),
     timeline: str = Form(""),
     description: str = Form(""),
+    company_url: str = Form(""),          # honeypot — must stay blank for humans
 ):
+    # Honeypot: silently accept the bot's submission without storing it.
+    if company_url.strip():
+        return RedirectResponse("/thanks?kind=call", status_code=303)
+
+    error = _validate_lead_contact(contact_email, phone, contact_linkedin)
+    if error:
+        return render(
+            request, "public/book.html", active="book", error=error,
+            contact_name=contact_name, contact_email=contact_email,
+            phone=phone, contact_linkedin=contact_linkedin, company=company,
+            timeline=timeline, description=description,
+            status_code=400,
+        )
+
     conn = db.connect()
     try:
         db.insert_inbound_lead(
             conn, contact_name.strip(), contact_email.strip(), company.strip(),
             project_type="Intro call", description=description.strip(),
             timeline=timeline.strip(), source="book_call",
+            phone=phone.strip(), contact_linkedin=contact_linkedin.strip(),
         )
     finally:
         conn.close()

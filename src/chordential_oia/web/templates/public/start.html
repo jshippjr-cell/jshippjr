@@ -16,38 +16,63 @@
 <section class="band">
   <div class="band-inner form-wrap">
     <form class="lead-form" method="post" action="/start">
+      {% if error %}
+      <p class="form-error" style="color:#b00020;font-weight:600;margin:0 0 6px">{{ error }}</p>
+      {% endif %}
       <div class="field">
         <label for="contact_name">Your name *</label>
-        <input id="contact_name" name="contact_name" required>
+        <input id="contact_name" name="contact_name" required value="{{ contact_name|default('', true) }}">
       </div>
       <div class="field-row">
         <div class="field">
-          <label for="contact_email">Email</label>
-          <input id="contact_email" name="contact_email" type="email">
+          <label for="contact_email">Email *</label>
+          <input id="contact_email" name="contact_email" type="email" required
+                 value="{{ contact_email|default('', true) }}">
         </div>
         <div class="field">
           <label for="company">Company / brand</label>
-          <input id="company" name="company">
+          <input id="company" name="company" value="{{ company|default('', true) }}">
         </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel" value="{{ phone|default('', true) }}">
+        </div>
+        <div class="field">
+          <label for="contact_linkedin">LinkedIn</label>
+          <input id="contact_linkedin" name="contact_linkedin"
+                 placeholder="linkedin.com/in/you"
+                 value="{{ contact_linkedin|default('', true) }}">
+        </div>
+      </div>
+      <p class="form-note" style="margin-top:-6px">
+        Email plus a phone or LinkedIn is required so we have a way to reach you.
+      </p>
+      <div class="hp-field" aria-hidden="true"
+           style="position:absolute;left:-9999px;top:-9999px;height:0;overflow:hidden">
+        <label for="company_url">Leave this blank</label>
+        <input id="company_url" name="company_url" tabindex="-1" autocomplete="off">
       </div>
       <div class="field">
         <label for="project_type">What kind of project?</label>
         <input id="project_type" name="project_type"
+               value="{{ project_type|default('', true) }}"
                placeholder="e.g. :30 brand spot, sonic logo, title sequence">
       </div>
       <div class="field">
         <label for="description">Describe it</label>
         <textarea id="description" name="description" rows="5"
-                  placeholder="Tone, references, where it’ll run, anything useful."></textarea>
+                  placeholder="Tone, references, where it’ll run, anything useful.">{{ description|default('', true) }}</textarea>
       </div>
       <div class="field-row">
         <div class="field">
           <label for="budget_text">Budget (rough is fine)</label>
-          <input id="budget_text" name="budget_text" placeholder="e.g. around $5k">
+          <input id="budget_text" name="budget_text" value="{{ budget_text|default('', true) }}" placeholder="e.g. around $5k">
         </div>
         <div class="field">
           <label for="timeline">Timeline</label>
-          <input id="timeline" name="timeline" placeholder="e.g. delivery in 4 weeks">
+          <input id="timeline" name="timeline" value="{{ timeline|default('', true) }}" placeholder="e.g. delivery in 4 weeks">
         </div>
       </div>
       <div class="form-actions">

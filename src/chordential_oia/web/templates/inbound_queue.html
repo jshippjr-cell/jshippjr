@@ -32,7 +32,7 @@
       <td>
         <div class="strong">{{ l['contact_name'] or '—' }}</div>
         <div class="muted small">
-          {{ l['company'] or 'No company' }}{% if l['contact_email'] %} · {{ l['contact_email'] }}{% endif %}
+          {{ l['company'] or 'No company' }}{% if l['contact_email'] %} · {{ l['contact_email'] }}{% endif %}{% if l['phone'] %} · {{ l['phone'] }}{% endif %}
         </div>
       </td>
       <td>
