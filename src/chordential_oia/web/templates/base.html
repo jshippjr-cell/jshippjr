@@ -65,19 +65,17 @@
     <div class="side-nav-wrap">
     <div class="brand-tag">Procurement OS</div>
     <nav class="nav">
-      <a href="/dashboard" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Dashboard</a>
-      <a href="/inbox" class="{{ 'active' if nav=='inbox' }}"><span class="ico">▤</span> Opportunity Inbox</a>
-      <a href="/lanes" class="{{ 'active' if nav=='lanes' }}"><span class="ico">▥</span> Pipeline Lanes</a>
+      <a href="/dashboard" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Today</a>
+      <a href="/lanes" class="{{ 'active' if nav=='lanes' }}"><span class="ico">▥</span> Pipeline</a>
       <a href="/buyers" class="{{ 'active' if nav=='buyers' }}"><span class="ico">◈</span> Buyer Graph</a>
     </nav>
     <div class="nav-section">Front-of-House</div>
     <nav class="nav">
       <a href="/incoming" class="{{ 'active' if nav=='incoming' }}"><span class="ico">📥</span> Incoming<span id="incoming-badge" style="display:{{ 'inline-block' if new_incoming else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_incoming or '' }}</span></a>
-      <a href="/leads" class="{{ 'active' if nav=='leads' }}"><span class="ico">✦</span> Inbound Leads</a>
     </nav>
     <div class="nav-section">Discovery</div>
     <nav class="nav">
-      <a href="/signals" class="{{ 'active' if nav=='signals' }}"><span class="ico">📡</span> Signal Radar<span id="signal-badge" style="display:{{ 'inline-block' if new_signals else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_signals or '' }}</span></a>
+      <a href="/signals" class="{{ 'active' if nav=='signals' }}"><span class="ico">📡</span> Signal engine<span id="signal-badge" style="display:{{ 'inline-block' if new_signals else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_signals or '' }}</span></a>
       <a href="/discovery?kind=talent" class="{{ 'active' if nav=='discovery' }}"><span class="ico">⌖</span> Crawler (gated)</a>
       <a href="/sources" class="{{ 'active' if nav=='sources' }}"><span class="ico">⛃</span> Source Health</a>
     </nav>

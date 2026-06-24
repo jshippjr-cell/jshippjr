@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
 def test_dashboard_loads(client):
     r = client.get("/dashboard")
     assert r.status_code == 200
-    assert "Executive Summary" in r.text
+    assert "Today" in r.text
     # The summary reads as a pipeline: targets → tentative → won.
     assert "Top targets to pursue" in r.text
     assert "Tentative" in r.text
@@ -50,8 +50,9 @@ def test_lanes_render_status_kanban(client):
     r = client.get("/lanes")
     assert r.status_code == 200
     assert "kanban" in r.text
-    # Columns are the human pipeline stages, not the old action lanes.
-    for stage in ("New", "Pursuing", "Submitted", "Won", "Lost"):
+    # Columns are the human pipeline stages (relabeled at the view layer), with
+    # Lost + Passed collapsed into one "Closed" archive column.
+    for stage in ("New", "Reaching out", "Proposal out", "Won", "Closed"):
         assert stage in r.text
 
 
@@ -65,8 +66,9 @@ def test_lanes_card_advances_status(client):
     )
     assert r.headers["location"] == "/lanes"
     assert client.get("/opportunity/3").text  # still renders
-    # The opportunity now reports Pursuing.
-    assert "Mark Submitted" in client.get("/opportunity/3").text
+    # The opportunity now reports Pursuing (relabeled "Reaching out"); the next
+    # suggested step is the relabeled "Proposal out".
+    assert "Mark Proposal out" in client.get("/opportunity/3").text
 
 
 def test_dashboard_columns_capped_at_four(client):
@@ -380,8 +382,9 @@ def test_opportunity_overview_action_bar(client):
     # buttons were removed (those live in the subnav now).
     assert "action-bar" in page
     assert "Plan outreach" not in page  # redundant button removed
-    # A New opportunity offers a one-click advance, pushed to the right.
-    assert "Mark Pursuing" in page
+    # A New opportunity offers a one-click advance, pushed to the right
+    # (label relabeled at the view layer: Pursuing → "Reaching out").
+    assert "Mark Reaching out" in page
     assert "action-right" in page
 
 
@@ -399,8 +402,10 @@ def test_action_bar_advances_pipeline_status(client):
     # The bar's advance button moves New -> Pursuing in one click.
     client.post("/opportunity/1/status", data={"status": "Pursuing"}, follow_redirects=True)
     page = client.get("/opportunity/1").text
-    assert "Mark Submitted" in page  # next step now offered
-    assert "Mark Pursuing" not in page
+    # Next step now offered is "Proposal out" (was Submitted); the prior step's
+    # label "Reaching out" (was Pursuing) is no longer the suggested action.
+    assert "Mark Proposal out" in page
+    assert "Mark Reaching out" not in page
 
 
 def test_company_website_persists_and_displays(client):
@@ -737,6 +742,54 @@ def test_incoming_dismiss_lead_sets_status(client):
         assert db_mod.incoming_unactioned_count(conn) == 1
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4 — tab consolidation + stage relabel + the two-list "Today" home.
+# --------------------------------------------------------------------------- #
+def test_today_home_shows_needs_triage(client):
+    # An inbound lead is waiting; the "Today" home surfaces it in Needs triage
+    # with inline Promote/Dismiss, above the qualified Top-targets list.
+    _seed_incoming()
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    assert "Needs triage" in r.text          # the new first module
+    assert "Brand film" in r.text            # the waiting inbound lead's title
+    assert "Promote" in r.text and "Dismiss" in r.text
+    # Top-targets stays below, qualified-only.
+    assert "Top targets to pursue" in r.text
+
+
+def test_today_home_triage_empty_state(client):
+    # No leads/signals seeded → a clean all-caught-up state, still renders 200.
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    assert "Needs triage" in r.text
+    assert "all caught up" in r.text
+
+
+def test_lanes_collapses_closed_and_relabels(client):
+    r = client.get("/lanes")
+    assert r.status_code == 200
+    # Friendly relabels appear as column headers.
+    assert "Reaching out" in r.text          # was "Pursuing"
+    assert "Proposal out" in r.text          # was "Submitted"
+    # Lost + Passed collapse into a single "Closed" column; the old raw labels
+    # are gone from the board's column heads.
+    assert "Closed" in r.text
+    assert r.text.count("kcol-head") == 5    # New, Reaching out, Proposal out, Won, Closed
+
+
+def test_stage_label_maps_view_layer():
+    from chordential_oia.web import db as db_mod
+    assert db_mod.stage_label("Submitted") == "Proposal out"
+    assert db_mod.stage_label("Pursuing") == "Reaching out"
+    assert db_mod.stage_label("Passed") == "Closed"
+    assert db_mod.stage_label("Lost") == "Closed"
+    assert db_mod.stage_label("New") == "New"
+    # Stored values are untouched (no data migration).
+    assert "Submitted" in db_mod.PIPELINE_STATES
+    assert db_mod.stage_label("Unknown") == "Unknown"  # fallback to raw
 
 
 # --------------------------------------------------------------------------- #

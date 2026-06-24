@@ -55,10 +55,13 @@ templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 # omitted — closing a deal goes through the win/loss form so the value is captured.
 _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
 
-# Status kanban (Pipeline Lanes) — the human pipeline as columns, with a
-# one-click forward advance. Won/Lost are terminal; the Submitted column offers
-# the win/loss decision directly.
-_KANBAN_STAGES = ["New", "Pursuing", "Submitted", "Won", "Lost"]
+# Status kanban (Pipeline) — the human pipeline as columns, with a one-click
+# forward advance. Won is terminal; the Submitted ("Proposal out") column offers
+# the win/loss decision directly. Lost + Passed collapse into one "Closed" column
+# (ruling #2) — friendly labels are applied at the view layer via stage_label.
+_KANBAN_STAGES = ["New", "Pursuing", "Submitted", "Won"]
+# Statuses folded into the single trailing "Closed" archive column.
+_CLOSED_STAGES = ["Lost", "Passed"]
 
 
 def _safe_local(path: str, fallback: str) -> str:
@@ -85,6 +88,9 @@ templates.env.globals["status_class"] = lambda s: _STATUS_CLASS.get(s, "")
 _STRAT_CLASS = {"Door-opener": "door", "High": "high", "Medium": "medium", "Low": "low"}
 templates.env.globals["strat_class"] = lambda s: _STRAT_CLASS.get(s, "")
 templates.env.globals["PIPELINE_STATES"] = db.PIPELINE_STATES
+# View-layer stage relabel (ruling #2): friendly label for a raw pipeline status.
+templates.env.globals["stage_label"] = db.stage_label
+templates.env.filters["stage_label"] = db.stage_label
 # True only when the internal gate is active (CHORDENTIAL_ADMIN_TOKEN set).
 templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_TOKEN"))
 
@@ -477,6 +483,10 @@ def dashboard(request: Request):
         review = db.list_opportunities(conn, action="Review", order_by="alignment")[:5]
         spotlight = db.strategic_spotlight(conn)
         followups = db.followups_due(conn)
+        # "Needs triage" home module (ruling #4) — fed by the unified Incoming queue.
+        incoming_all = db.list_incoming(conn)
+        incoming = incoming_all[:6]            # home preview — first few, newest first
+        incoming_total = len(incoming_all)
         metrics = db.exec_metrics(conn)
         totals = {
             "tentative_value": sum((r["outcome_value"] or 0) for r in tentative),
@@ -498,7 +508,7 @@ def dashboard(request: Request):
         request, "dashboard.html", nav="dashboard",
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
-        src_health=src_health,
+        src_health=src_health, incoming=incoming, incoming_total=incoming_total,
     )
 
 
@@ -975,11 +985,15 @@ def lanes(request: Request):
             {"status": s, "rows": db.list_opportunities(conn, status=s, order_by="alignment")}
             for s in _KANBAN_STAGES
         ]
-        passed = db.list_opportunities(conn, status="Passed", order_by="created")
+        # Lost + Passed collapse into one "Closed" archive column (ruling #2).
+        closed_rows = []
+        for s in _CLOSED_STAGES:
+            closed_rows += db.list_opportunities(conn, status=s, order_by="created")
+        columns.append({"status": "Lost", "rows": closed_rows})
     finally:
         conn.close()
     return render(
-        request, "lanes.html", nav="lanes", columns=columns, passed=passed,
+        request, "lanes.html", nav="lanes", columns=columns,
         advance=_NEXT_STATUS,
     )
 

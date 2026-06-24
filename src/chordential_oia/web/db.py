@@ -31,6 +31,23 @@ DEFAULT_DB_PATH = os.environ.get("CHORDENTIAL_DB", "chordential.db")
 # Human-managed pipeline states (distinct from the engine's qualification action).
 PIPELINE_STATES = ["New", "Pursuing", "Submitted", "Won", "Lost", "Passed"]
 
+# View-layer display labels for the stored pipeline states (ruling #2). The stored
+# values above never change (no data migration); these are friendly labels shown to
+# the user. Lost + Passed both read as "Closed".
+STAGE_LABELS = {
+    "New": "New",
+    "Pursuing": "Reaching out",
+    "Submitted": "Proposal out",
+    "Won": "Won",
+    "Lost": "Closed",
+    "Passed": "Closed",
+}
+
+
+def stage_label(status: str) -> str:
+    """Friendly display label for a raw pipeline status (falls back to the raw value)."""
+    return STAGE_LABELS.get(status, status)
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

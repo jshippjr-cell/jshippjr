@@ -7,7 +7,7 @@
 {% endmacro %}
 
 {% macro status_pill(status) %}
-<span class="pill st-{{ status_class(status) }}">{{ status }}</span>
+<span class="pill st-{{ status_class(status) }}">{{ stage_label(status) }}</span>
 {% endmacro %}
 
 {% macro strat_pill(tier, value=None) %}

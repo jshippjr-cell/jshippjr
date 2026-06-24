@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import tier_pill, align_bar %}
-{% block title %}Pipeline Lanes{% endblock %}
-{% block heading %}Pipeline Lanes{% endblock %}
+{% block title %}Pipeline{% endblock %}
+{% block heading %}Pipeline{% endblock %}
 {% block content %}
 
 {% macro kcard(r, col, advance) %}
@@ -15,7 +15,7 @@
     <form method="post" action="/opportunity/{{ r['id'] }}/status">
       <input type="hidden" name="status" value="{{ advance[col.status] }}">
       <input type="hidden" name="return_to" value="/lanes">
-      <button class="btn tiny" type="submit">→ {{ advance[col.status] }}</button>
+      <button class="btn tiny" type="submit">→ {{ stage_label(advance[col.status]) }}</button>
     </form>
     {% elif col.status == 'Submitted' %}
     <form method="post" action="/opportunity/{{ r['id'] }}/status">
@@ -24,19 +24,19 @@
     </form>
     <form method="post" action="/opportunity/{{ r['id'] }}/status">
       <input type="hidden" name="status" value="Lost"><input type="hidden" name="return_to" value="/lanes">
-      <button class="btn tiny" type="submit">Lost</button>
+      <button class="btn tiny" type="submit">{{ stage_label('Lost') }}</button>
     </form>
     {% endif %}
   </div>
 </div>
 {% endmacro %}
 
-<p class="summary-line">Your pipeline as a working board — the same stages as the Executive Summary. Advance a deal a stage with one click; this mirrors the status you set on each opportunity.</p>
+<p class="summary-line">Your pipeline as a working board — advance a deal a stage with one click; this mirrors the status you set on each opportunity. Lost and passed deals are archived together under Closed.</p>
 
 <div class="kanban">
   {% for col in columns %}
   <div class="kcol kcol-{{ status_class(col.status) }}">
-    <div class="kcol-head">{{ col.status }} <span class="lane-count">{{ col.rows|length }}</span></div>
+    <div class="kcol-head">{{ stage_label(col.status) }} <span class="lane-count">{{ col.rows|length }}</span></div>
     <div class="kcol-body">
       {% if col.rows %}
         {% for r in col.rows[:6] %}{{ kcard(r, col, advance) }}{% endfor %}
@@ -54,17 +54,4 @@
   {% endfor %}
 </div>
 
-{% if passed %}
-<details class="passed-strip">
-  <summary>Passed · {{ passed|length }} <span class="muted small">— disqualified, retained for full recall</span></summary>
-  <div class="kanban-passed">
-    {% for r in passed %}
-    <a class="kcard kcard-flat" href="/opportunity/{{ r['id'] }}">
-      <div class="kcard-need">{{ r['need'] }}</div>
-      <div class="kcard-client">{{ r['client'] }}</div>
-    </a>
-    {% endfor %}
-  </div>
-</details>
-{% endif %}
 {% endblock %}

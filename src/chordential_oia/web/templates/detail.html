@@ -32,7 +32,7 @@
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
     <input type="hidden" name="status" value="{{ next_status }}">
-    <button class="btn primary" type="submit">→ Mark {{ next_status }}</button>
+    <button class="btn primary" type="submit">→ Mark {{ stage_label(next_status) }}</button>
   </form>
   {% endif %}
 </div>
@@ -86,7 +86,7 @@
       <label>Update pipeline status</label>
       <div class="status-buttons">
         {% for s in PIPELINE_STATES %}
-        <button class="btn pill-btn st-{{ status_class(s) }} {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ s }}</button>
+        <button class="btn pill-btn st-{{ status_class(s) }} {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ stage_label(s) }}{% if s == 'Lost' %} (lost){% elif s == 'Passed' %} (passed){% endif %}</button>
         {% endfor %}
       </div>
       <label for="ov">Outcome value (for Won deals)</label>
