@@ -71,6 +71,14 @@ class CapabilityDemo:
     audio_url: str = ""
 
 
+# Heavy media (hero video + demo audio) is served from jsDelivr's CDN — straight
+# off the public GitHub repo — so the single app worker never streams big files,
+# which was causing playback stutter. Pinned to a commit SHA: immutable + cached
+# on a global CDN. Bump the SHA whenever a media file's bytes change.
+CDN = ("https://cdn.jsdelivr.net/gh/jshippjr-cell/jshippjr@"
+       "278d27b8fd9295f37477b1ede7c6292c82f96bf3/src/chordential_oia/web/static/public")
+
+
 # Hero — copy ratified from the brief. The background is a placeholder for a
 # looping behind-the-scenes video (asset TBD); no still image behind the text.
 HERO = {
@@ -82,12 +90,9 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    # Hero background: clip three (the Process reel), compressed. Served with
-    # long cache headers (see the /static cache middleware) so the browser loads
-    # it ONCE and loops it from cache — no per-navigation re-streaming that would
-    # starve audio on a single-worker instance.
-    "video": "/static/public/hero-process.mp4?v=2",
-    "poster": "/static/public/hero-process-poster.jpg?v=2",
+    # Hero background: clip three (the Process reel), full quality, off the CDN.
+    "video": CDN + "/hero-process.mp4",
+    "poster": CDN + "/hero-process-poster.jpg",
     "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }
 
@@ -228,7 +233,7 @@ DEMOS: List[CapabilityDemo] = [
         "preserving a refined commercial sound.",
         "An approach to arranging and orchestrating music that enhances storytelling and "
         "supports emotionally driven advertising campaigns.",
-        audio_url="/static/public/demo-holiday-strings.mp3",
+        audio_url=CDN + "/demo-holiday-strings.mp3",
     ),
     CapabilityDemo(
         "Title Sequence Sound Design",
@@ -242,7 +247,7 @@ DEMOS: List[CapabilityDemo] = [
         "immersion.",
         "An approach to building sonic environments that strengthen visual storytelling "
         "and contribute to a distinctive creative identity.",
-        audio_url="/static/public/demo-title-sequence.mp3",
+        audio_url=CDN + "/demo-title-sequence.mp3",
     ),
     CapabilityDemo(
         "National Retail Brand — Campaign Anthem",
@@ -256,7 +261,7 @@ DEMOS: List[CapabilityDemo] = [
         "techniques to create energy, optimism, and forward movement.",
         "An approach to developing brand-forward music that reinforces messaging, supports "
         "storytelling, and connects with diverse consumer audiences.",
-        audio_url="/static/public/demo-retail-anthem.mp3",
+        audio_url=CDN + "/demo-retail-anthem.mp3",
     ),
     CapabilityDemo(
         "Financial Services — Brand Theme",
@@ -270,7 +275,7 @@ DEMOS: List[CapabilityDemo] = [
         "intelligence, and modern professionalism.",
         "An approach to translating brand attributes into a cohesive musical identity "
         "suitable for advertising, presentations, digital experiences, and branded content.",
-        audio_url="/static/public/demo-financial-theme.mp3",
+        audio_url=CDN + "/demo-financial-theme.mp3",
     ),
 ]
 
