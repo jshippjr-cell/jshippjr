@@ -7,7 +7,7 @@
   <div class="hero-media">
     {% if h.video %}
     <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
-      <source src="{{ h.video }}">
+      <source src="{{ h.video }}" type="video/mp4">
     </video>
     {% elif h.loop %}
     {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}

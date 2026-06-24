@@ -43,5 +43,19 @@
     </span>
   </div>
 </footer>
+<script>
+(function(){
+  // iOS often ignores the autoplay attribute; nudge the muted hero to play inline.
+  var hero = document.querySelector('video.hero-video');
+  if(hero){ hero.muted = true; var hp = hero.play(); if(hp && hp.catch){ hp.catch(function(){}); } }
+  // Only one demo track at a time: starting one pauses any other that's playing.
+  var auds = Array.prototype.slice.call(document.querySelectorAll('audio'));
+  auds.forEach(function(a){
+    a.addEventListener('play', function(){
+      auds.forEach(function(o){ if(o !== a && !o.paused){ o.pause(); } });
+    });
+  });
+})();
+</script>
 </body>
 </html>

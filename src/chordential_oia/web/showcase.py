@@ -82,9 +82,9 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    # Hero background: clip three (the Process reel) on the Cloudinary media CDN.
-    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782268745/Engineers_working__string_ensemb__202606232225_-_Trim_aextix.mp4",
-    "poster": "/static/public/hero-process-poster.jpg?v=2",
+    # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on Cloudinary.
+    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782271309/herospliced_lbtrdp.mp4",
+    "poster": "/static/public/hero-spliced-poster.jpg?v=1",
     "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }
 
