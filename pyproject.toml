@@ -32,6 +32,10 @@ mcp = ["mcp>=1.2"]
 # Live payments. Imported lazily inside payments/stripe.py, so the app/CI/sandbox
 # never depend on it; only a deploy running live Stripe payments installs it.
 stripe = ["stripe>=7.0"]
+# Managed Postgres (production). Imported lazily in db.connect() only when
+# CHORDENTIAL_DB is a postgres:// URL, so dev/tests/CI stay on SQLite with no driver.
+# Removing the SQLite-on-disk dependency is what unlocks zero-downtime deploys.
+postgres = ["psycopg[binary]>=3.1"]
 # Veo video generation for the capabilities film (scripts/gen_capabilities_film.py).
 # Standalone tooling, imported lazily inside the script, so the app/CI/sandbox
 # never depend on it — only a machine actually generating clips installs it.

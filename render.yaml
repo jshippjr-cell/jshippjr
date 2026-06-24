@@ -13,9 +13,13 @@ services:
     runtime: python
     plan: starter
     branch: claude/admiring-mayer-u241h5
-    buildCommand: "pip install '.[web,gmail,ai,stripe]'"
+    buildCommand: "pip install '.[web,gmail,ai,stripe,postgres]'"
     startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
+    # Render switches traffic to a new instance only after this returns 200. Once
+    # the disk is removed at cutover (see docs/zero-downtime-cutover.md) Render runs
+    # the new instance alongside the old → true zero-downtime, blue-green deploys.
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
@@ -36,6 +40,11 @@ services:
       # and subject are set in the Render dashboard (the private key is a secret),
       # NOT committed here: CHORDENTIAL_VAPID_PUBLIC, CHORDENTIAL_VAPID_PRIVATE,
       # CHORDENTIAL_VAPID_SUBJECT (a mailto:). Optional: CHORDENTIAL_DISCOVERY_CALL_URL.
+    # ⚠️ ZERO-DOWNTIME CUTOVER: this disk is what blocks zero-downtime deploys
+    # (single-attach). At cutover, REMOVE this disk block and the CHORDENTIAL_DB
+    # value above, add a Render Postgres `databases:` block + a fromDatabase env,
+    # AFTER migrating the data. Do NOT remove the disk before the data migration —
+    # see docs/zero-downtime-cutover.md for the exact, safe order.
     disk:
       name: chordential-data
       mountPath: /var/data

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
@@ -262,9 +263,166 @@ _OUTREACH_COLUMNS = {
 }
 
 
-def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
-    # Ensure the parent directory exists — matters when CHORDENTIAL_DB points at a
-    # mounted persistent disk (e.g. /var/data/chordential.db on Render).
+# --------------------------------------------------------------------------- #
+# Backend abstraction — SQLite (dev/tests) OR Postgres (production).
+#
+# Production runs on managed Postgres so the web service has NO persistent disk,
+# which is what unlocks Render's zero-downtime (blue-green) deploys. The 100+
+# query functions below are written once in SQLite dialect; a thin shim adapts
+# them to Postgres so nothing else changes. Selected by CHORDENTIAL_DB: a path
+# → SQLite, a postgres(ql):// URL → Postgres.
+# --------------------------------------------------------------------------- #
+def _is_pg_url(s: str) -> bool:
+    return s.startswith("postgres://") or s.startswith("postgresql://")
+
+
+def _pg_translate(sql: str) -> str:
+    """SQLite dialect → Postgres for a single statement."""
+    # DDL: SQLite autoincrement PK → Postgres SERIAL.
+    sql = re.sub(r"\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b", "SERIAL PRIMARY KEY", sql, flags=re.I)
+    sql = re.sub(r"\s+AUTOINCREMENT\b", "", sql, flags=re.I)
+    # Functions. Two-arg scalar MAX/MIN (a comma inside, no nested parens) are
+    # GREATEST/LEAST in Postgres; the no-comma aggregate MAX(col)/MIN(col) is left alone.
+    sql = re.sub(r"\bMAX\(([^()]*,[^()]*)\)", r"GREATEST(\1)", sql, flags=re.I)
+    sql = re.sub(r"\bMIN\(([^()]*,[^()]*)\)", r"LEAST(\1)", sql, flags=re.I)
+    sql = re.sub(r"\bIFNULL\s*\(", "COALESCE(", sql, flags=re.I)
+    sql = re.sub(r"\bGROUP_CONCAT\s*\(\s*(DISTINCT\s+)?(.+?)\s*\)",
+                 lambda m: f"string_agg({m.group(1) or ''}{m.group(2)}, ',')", sql, flags=re.I)
+    # Schema introspection used by _ensure_schema.
+    sql = re.sub(r"PRAGMA\s+table_info\s*\(\s*(\w+)\s*\)",
+                 r"SELECT column_name AS name FROM information_schema.columns WHERE table_name = '\1'",
+                 sql, flags=re.I)
+    # Placeholders (queries use SQLite '?'; no '?' appears in string literals here).
+    sql = sql.replace("?", "%s")
+    return sql
+
+
+class _PgRow:
+    """sqlite3.Row-compatible: supports row["col"] AND row[0], keys(), get()."""
+    __slots__ = ("_v", "_m")
+
+    def __init__(self, cols, values):
+        self._v = values
+        self._m = {c: i for i, c in enumerate(cols)}
+
+    def __getitem__(self, k):
+        return self._v[self._m[k]] if isinstance(k, str) else self._v[k]
+
+    def __iter__(self):
+        return iter(self._v)
+
+    def __len__(self):
+        return len(self._v)
+
+    def keys(self):
+        return list(self._m.keys())
+
+    def get(self, k, default=None):
+        i = self._m.get(k)
+        return self._v[i] if i is not None else default
+
+    def __contains__(self, k):
+        return k in self._m
+
+
+def _pg_row_factory(cur):
+    cols = [d.name for d in (cur.description or [])]
+    return lambda values: _PgRow(cols, values)
+
+
+class _PgCursor:
+    def __init__(self, cur, lastrowid=None):
+        self._cur = cur
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def __iter__(self):
+        return iter(self._cur)
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+
+class _PgConn:
+    """Adapts a psycopg connection to the sqlite3.Connection API the app uses."""
+
+    # Tables whose PK column is `id` — an INSERT into one needs `RETURNING id` so
+    # the shim can expose `cursor.lastrowid` (psycopg has none). Derived once from
+    # the live catalog (covers tables created in _SCHEMA *and* _ensure_schema).
+    _id_tables_cache = None
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def _id_tables(self):
+        if _PgConn._id_tables_cache is None:
+            cur = self._conn.cursor()
+            cur.execute(
+                "SELECT table_name FROM information_schema.columns "
+                "WHERE column_name = 'id' AND table_schema = 'public' "
+                "AND data_type IN ('integer', 'bigint')"
+            )
+            _PgConn._id_tables_cache = {r[0].lower() for r in cur.fetchall()}
+        return _PgConn._id_tables_cache
+
+    def execute(self, sql: str, params=()):
+        q = _pg_translate(sql)
+        add_id = False
+        head = q.lstrip()[:6].upper()
+        if head == "INSERT" and "RETURNING" not in q.upper() and "ON CONFLICT" not in q.upper():
+            m = re.match(r"\s*INSERT\s+INTO\s+\"?(\w+)\"?", q, re.I)
+            if m and m.group(1).lower() in self._id_tables():
+                q = q.rstrip().rstrip(";") + " RETURNING id"
+                add_id = True
+        cur = self._conn.cursor()
+        cur.execute(q, tuple(params) if params else None)
+        last = None
+        if add_id:
+            row = cur.fetchone()
+            last = row[0] if row is not None else None
+        return _PgCursor(cur, last)
+
+    def executescript(self, sql: str):
+        # Strip `-- …` line comments first: a ';' inside a comment would otherwise
+        # break the statement split. (String literals here contain no ';'.)
+        no_comments = re.sub(r"--[^\n]*", "", sql)
+        cur = self._conn.cursor()
+        for stmt in _pg_translate(no_comments).split(";"):
+            if stmt.strip():
+                cur.execute(stmt)
+
+    def executemany(self, sql: str, seq):
+        self._conn.cursor().executemany(_pg_translate(sql), [tuple(s) for s in seq])
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, *_):
+        self._conn.commit() if exc_type is None else self._conn.rollback()
+        return False
+
+
+def connect(db_path: str = DEFAULT_DB_PATH):
+    if _is_pg_url(db_path):
+        import psycopg  # lazy: only production/Postgres needs the driver
+        url = db_path.replace("postgres://", "postgresql://", 1)
+        return _PgConn(psycopg.connect(url, autocommit=False, row_factory=_pg_row_factory))
+    # SQLite (dev + tests). Ensure the parent dir exists for a mounted-disk path.
     parent = os.path.dirname(db_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
