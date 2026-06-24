@@ -149,4 +149,25 @@
     <a class="btn btn-ghost" href="/book">Book a call</a>
   </div>
 </section>
+
+{# Don't let the looping hero video and a demo track fight for the device's media
+   pipeline / the single server worker: pause the hero while any demo plays. #}
+<script>
+(function(){
+  var hero = document.querySelector('video.hero-video');
+  if(!hero) return;
+  var auds = Array.prototype.slice.call(document.querySelectorAll('audio'));
+  if(!auds.length) return;
+  function anyPlaying(){ return auds.some(function(a){ return !a.paused && !a.ended; }); }
+  function sync(){
+    if(anyPlaying()){ hero.pause(); }
+    else { var p = hero.play(); if(p && p.catch){ p.catch(function(){}); } }
+  }
+  auds.forEach(function(a){
+    a.addEventListener('play', sync);
+    a.addEventListener('pause', sync);
+    a.addEventListener('ended', sync);
+  });
+})();
+</script>
 {% endblock %}
