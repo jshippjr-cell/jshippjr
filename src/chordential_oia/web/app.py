@@ -55,6 +55,11 @@ templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 # omitted — closing a deal goes through the win/loss form so the value is captured.
 _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
 
+# Stepper "expected next step" (Phase 5, ruling #7). Extends the linear flow all the
+# way to Won — kept separate from _NEXT_STATUS so the action-bar's "close via the
+# win/loss form" behaviour is undisturbed. New → Reaching out → Proposal out → Won.
+_STEPPER_NEXT = {"New": "Pursuing", "Pursuing": "Submitted", "Submitted": "Won"}
+
 # Status kanban (Pipeline) — the human pipeline as columns, with a one-click
 # forward advance. Won is terminal; the Submitted ("Proposal out") column offers
 # the win/loss decision directly. Lost + Passed collapse into one "Closed" column
@@ -607,6 +612,19 @@ def inbound_promote(lead_id: int):
             # to a ghost /opportunity/None. Send the human back with an error flag.
             return RedirectResponse("/incoming?error=promote", status_code=303)
         db.link_inbound_to_opp(conn, lead_id, new_id)
+        # Carry the lead's contact details onto the new opportunity so the detail
+        # page surfaces them up top as tap-to-act links (best-effort).
+        try:
+            keys = lead.keys()
+            db.set_opp_contact(
+                conn, new_id,
+                contact_name=(lead["contact_name"] or "") if "contact_name" in keys else "",
+                contact_email=(lead["contact_email"] or "") if "contact_email" in keys else "",
+                contact_phone=(lead["phone"] or "") if "phone" in keys else "",
+                contact_linkedin=(lead["contact_linkedin"] or "") if "contact_linkedin" in keys else "",
+            )
+        except Exception:
+            pass
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{new_id}?promoted=1", status_code=303)
@@ -1023,11 +1041,17 @@ def opportunity_detail(request: Request, opp_id: int):
         conn.close()
     qual, scored = ev
     sv = assess_strategic_value(opp)
+    # Guided-not-gated stepper: the expected next stage along the working flow
+    # (New → Reaching out → Proposal out → Won). Computed separately from the
+    # action-bar's _NEXT_STATUS so adding Submitted→Won here doesn't change the
+    # Won-via-win/loss-form behaviour elsewhere.
+    stepper_next = _STEPPER_NEXT.get(row["status"])
     return render(
         request, "detail.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
         sv=sv, buyer_count=len(buyer_rows), buyer_values=list(BuyerValue),
         project_id=(project["id"] if project else None),
         next_status=_NEXT_STATUS.get(row["status"]),
+        stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
     )
 
 
@@ -1182,12 +1206,13 @@ def set_outreach(
     next_action: str = Form(""),
     next_action_due: str = Form(""),
     contact_linkedin: str = Form(""),
+    contact_phone: str = Form(""),
 ):
     conn = db.connect()
     try:
         db.update_outreach(
             conn, opp_id, contact_name, contact_email, contact_role,
-            next_action, next_action_due, contact_linkedin,
+            next_action, next_action_due, contact_linkedin, contact_phone,
         )
     finally:
         conn.close()
@@ -1340,6 +1365,19 @@ def set_status(
     try:
         value = float(outcome_value) if outcome_value.strip() else None
         db.update_status(conn, opp_id, status, value)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        _safe_local(return_to, f"/opportunity/{opp_id}"), status_code=303
+    )
+
+
+@app.post("/opportunity/{opp_id}/delivery-sent")
+def mark_delivery_sent(opp_id: int, return_to: str = Form("")):
+    """Stamp the 'Delivery doc sent' milestone (the outreach → closing hand-off)."""
+    conn = db.connect()
+    try:
+        db.mark_delivery_doc_sent(conn, opp_id)
     finally:
         conn.close()
     return RedirectResponse(

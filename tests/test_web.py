@@ -896,3 +896,68 @@ def test_book_requires_reachable_channel(client):
     )
     assert r.status_code == 400
     assert _lead_count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Phase 5 — lead detail: contact-first + guided stepper + delivery milestone.
+# --------------------------------------------------------------------------- #
+def test_detail_shows_contact_tap_to_act_links(client):
+    # Seed a contact (incl. phone) via the outreach form, then the Overview pulls
+    # it to the top as tel:/mailto: tap-to-act links.
+    client.post(
+        "/opportunity/1/outreach",
+        data={
+            "contact_name": "Dana Reyes",
+            "contact_email": "dana@acme.com",
+            "contact_phone": "(415) 555-0142",
+        },
+        follow_redirects=True,
+    )
+    page = client.get("/opportunity/1").text
+    assert "Dana Reyes" in page
+    assert 'href="tel:(415) 555-0142"' in page
+    assert 'href="mailto:dana@acme.com"' in page
+
+
+def test_detail_stepper_shows_friendly_stage_labels(client):
+    page = client.get("/opportunity/1").text
+    assert "stage-stepper" in page
+    # The stepper renders the working stages with their friendly view-layer labels.
+    for label in ("New", "Reaching out", "Proposal out", "Won"):
+        assert label in page
+
+
+def test_delivery_doc_sent_milestone(client):
+    page = client.get("/opportunity/1").text
+    assert "Mark delivery doc sent" in page          # not yet sent -> the button
+    r = client.post(
+        "/opportunity/1/delivery-sent", follow_redirects=False
+    )
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        row = db_mod.get_opportunity(conn, 1)
+    finally:
+        conn.close()
+    assert row["delivery_doc_sent_at"]               # stamped
+    page = client.get("/opportunity/1").text
+    assert "Delivery doc sent" in page and "✓" in page  # now the checkmark marker
+
+
+def test_promote_carries_lead_phone_onto_opportunity(client):
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        lead_id = db_mod.insert_inbound_lead(
+            conn, "Casey Park", "casey@studio.com", "Studio Park",
+            project_type="Brand film", source="questionnaire",
+            phone="(212) 555-0199", contact_linkedin="linkedin.com/in/caseypark",
+        )
+    finally:
+        conn.close()
+    r = client.post(f"/leads/{lead_id}/promote", follow_redirects=False)
+    assert r.status_code == 303
+    new_opp = r.headers["location"].split("/opportunity/")[1].split("?")[0]
+    page = client.get(f"/opportunity/{new_opp}").text
+    assert 'href="tel:(212) 555-0199"' in page       # phone carried + tap-to-act

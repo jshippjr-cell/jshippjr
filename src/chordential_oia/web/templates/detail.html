@@ -23,6 +23,58 @@
   </div>
 </div>
 
+{# ── Contact-first: tap-to-act links pulled to the top (ruling #7) ───────── #}
+{% set has_contact = row['contact_name'] or row['contact_email'] or row['contact_phone'] or row['contact_linkedin'] or row['contact_role'] %}
+<div class="card contact-card">
+  {% if has_contact %}
+  <div class="contact-row">
+    <div class="contact-id">
+      <span class="contact-ico">👤</span>
+      <strong>{{ row['contact_name'] or 'Contact' }}</strong>
+      {% if row['contact_role'] %}<span class="muted">· {{ row['contact_role'] }}</span>{% endif %}
+    </div>
+    <div class="contact-acts">
+      {% if row['contact_phone'] %}<a class="btn primary tiny" href="tel:{{ row['contact_phone'] }}">📞 {{ row['contact_phone'] }}</a>{% endif %}
+      {% if row['contact_email'] %}<a class="btn tiny" href="mailto:{{ row['contact_email'] }}">✉ {{ row['contact_email'] }}</a>{% endif %}
+      {% if row['contact_linkedin'] %}<a class="btn ghost tiny" href="{{ row['contact_linkedin'] }}" target="_blank" rel="noopener">in LinkedIn ↗</a>{% endif %}
+      <a class="btn ghost tiny" href="/opportunity/{{ row['id'] }}/outreach">✎ Edit</a>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted">No contact captured yet —
+    <a class="link" href="/opportunity/{{ row['id'] }}/outreach">add it on the outreach tab</a>.</p>
+  {% endif %}
+</div>
+
+{# ── Guided-not-gated stepper + Delivery-doc milestone (ruling #7) ───────── #}
+<div class="card stepper-card">
+  <ol class="stage-stepper">
+    {% for s in stepper_stages %}
+    <li class="stage-step{% if row['status']==s %} is-current{% endif %}{% if row['status'] in ['Lost','Passed'] %} is-muted{% endif %}">
+      <span class="stage-dot"></span>{{ stage_label(s) }}
+    </li>
+    {% endfor %}
+    {% if row['status'] in ['Lost','Passed'] %}
+    <li class="stage-step is-current is-closed"><span class="stage-dot"></span>Closed</li>
+    {% endif %}
+  </ol>
+  <div class="stepper-acts">
+    {% if stepper_next %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/status" class="inline">
+      <input type="hidden" name="status" value="{{ stepper_next }}">
+      <button class="btn primary" type="submit">→ Mark {{ stage_label(stepper_next) }}</button>
+    </form>
+    {% endif %}
+    {% if row['delivery_doc_sent_at'] %}
+    <span class="milestone done">✓ Delivery doc sent · {{ row['delivery_doc_sent_at'][:10] }}</span>
+    {% else %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/delivery-sent" class="inline">
+      <button class="btn ghost tiny" type="submit">Mark delivery doc sent</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
 {{ opp_subnav(row, 'overview') }}
 
 <div class="action-bar">
@@ -83,7 +135,7 @@
       {% endif %}
     {% endif %}
     <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/status">
-      <label>Update pipeline status</label>
+      <label>…or jump to another stage</label>
       <div class="status-buttons">
         {% for s in PIPELINE_STATES %}
         <button class="btn pill-btn st-{{ status_class(s) }} {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ stage_label(s) }}{% if s == 'Lost' %} (lost){% elif s == 'Passed' %} (passed){% endif %}</button>

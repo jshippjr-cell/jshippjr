@@ -86,11 +86,13 @@ CREATE TABLE IF NOT EXISTS opportunities (
     -- Outreach-to-win layer
     contact_name TEXT,
     contact_email TEXT,
+    contact_phone TEXT,
     contact_role TEXT,
     contact_linkedin TEXT,
     next_action TEXT,
     next_action_due TEXT,
-    last_contacted TEXT
+    last_contacted TEXT,
+    delivery_doc_sent_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS outreach_events (
@@ -275,12 +277,14 @@ _TALENT_COLUMNS = {
 _OUTREACH_COLUMNS = {
     "contact_name": "TEXT",
     "contact_email": "TEXT",
+    "contact_phone": "TEXT",
     "contact_role": "TEXT",
     "contact_linkedin": "TEXT",
     "contact_handle": "TEXT",      # poster's handle (e.g. reddit author) for DM deep-links
     "next_action": "TEXT",
     "next_action_due": "TEXT",
     "last_contacted": "TEXT",
+    "delivery_doc_sent_at": "TEXT",
 }
 
 
@@ -803,6 +807,7 @@ def update_outreach(
     next_action: str = "",
     next_action_due: str = "",
     contact_linkedin: str = "",
+    contact_phone: str = "",
 ) -> None:
     """Persist the human-managed outreach fields (contact + the single next action).
 
@@ -811,14 +816,55 @@ def update_outreach(
     """
     conn.execute(
         """UPDATE opportunities
-           SET contact_name = ?, contact_email = ?, contact_role = ?,
+           SET contact_name = ?, contact_email = ?, contact_phone = ?, contact_role = ?,
                contact_linkedin = ?, next_action = ?, next_action_due = ?
            WHERE id = ?""",
         (
-            contact_name or None, contact_email or None, contact_role or None,
+            contact_name or None, contact_email or None, contact_phone or None,
+            contact_role or None,
             _normalize_url(contact_linkedin), next_action or None,
             next_action_due or None, opp_id,
         ),
+    )
+    conn.commit()
+
+
+def set_opp_contact(
+    conn: sqlite3.Connection,
+    opp_id: int,
+    contact_name: str = "",
+    contact_email: str = "",
+    contact_phone: str = "",
+    contact_linkedin: str = "",
+) -> None:
+    """Best-effort: stamp contact fields onto an opportunity (carried over on promote).
+
+    Only overwrites a column when a non-empty value is supplied, so this never
+    clears contact details a human has already entered.
+    """
+    sets, params = [], []
+    if contact_name:
+        sets.append("contact_name = ?"); params.append(contact_name)
+    if contact_email:
+        sets.append("contact_email = ?"); params.append(contact_email)
+    if contact_phone:
+        sets.append("contact_phone = ?"); params.append(contact_phone)
+    if contact_linkedin:
+        sets.append("contact_linkedin = ?"); params.append(_normalize_url(contact_linkedin))
+    if not sets:
+        return
+    params.append(opp_id)
+    conn.execute(
+        f"UPDATE opportunities SET {', '.join(sets)} WHERE id = ?", params
+    )
+    conn.commit()
+
+
+def mark_delivery_doc_sent(conn: sqlite3.Connection, opp_id: int) -> None:
+    """Stamp the 'Delivery doc sent' milestone with the current UTC time."""
+    conn.execute(
+        "UPDATE opportunities SET delivery_doc_sent_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), opp_id),
     )
     conn.commit()
 

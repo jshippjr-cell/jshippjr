@@ -43,6 +43,8 @@
       <input type="text" name="contact_name" value="{{ row['contact_name'] or '' }}" placeholder="e.g. Dana Reyes">
       <label>Contact email</label>
       <input type="email" name="contact_email" value="{{ row['contact_email'] or '' }}" placeholder="name@buyer.com">
+      <label>Contact phone</label>
+      <input type="tel" name="contact_phone" value="{{ row['contact_phone'] or '' }}" placeholder="e.g. (415) 555-0142">
       <label>Contact LinkedIn <span class="muted small">{{ '(auto-researched — replace with the verified profile)' if not row['contact_linkedin'] }}</span></label>
       <input type="url" name="contact_linkedin" value="{{ li }}" placeholder="linkedin.com/in/…">
       <label>Contact role</label>
