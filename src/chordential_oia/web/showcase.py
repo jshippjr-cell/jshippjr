@@ -82,8 +82,8 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    # Hero background: clip three (the Process reel), full quality, served locally.
-    "video": "/static/public/hero-process.mp4?v=3",
+    # Hero background: clip three (the Process reel) on the Cloudinary media CDN.
+    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782268745/Engineers_working__string_ensemb__202606232225_-_Trim_aextix.mp4",
     "poster": "/static/public/hero-process-poster.jpg?v=2",
     "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }
@@ -225,7 +225,7 @@ DEMOS: List[CapabilityDemo] = [
         "preserving a refined commercial sound.",
         "An approach to arranging and orchestrating music that enhances storytelling and "
         "supports emotionally driven advertising campaigns.",
-        audio_url="/static/public/demo-holiday-strings.mp3",
+        audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269017/STRING_ARRANGEMENT_HOLIDAY_SPOT_3_Evergreen_Window_nlifit.mp3",
     ),
     CapabilityDemo(
         "Title Sequence Sound Design",
@@ -239,7 +239,7 @@ DEMOS: List[CapabilityDemo] = [
         "immersion.",
         "An approach to building sonic environments that strengthen visual storytelling "
         "and contribute to a distinctive creative identity.",
-        audio_url="/static/public/demo-title-sequence.mp3",
+        audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269007/Title_sequence_sound_design_4_Black_Thread_zhtdsg.mp3",
     ),
     CapabilityDemo(
         "National Retail Brand — Campaign Anthem",
@@ -253,7 +253,7 @@ DEMOS: List[CapabilityDemo] = [
         "techniques to create energy, optimism, and forward movement.",
         "An approach to developing brand-forward music that reinforces messaging, supports "
         "storytelling, and connects with diverse consumer audiences.",
-        audio_url="/static/public/demo-retail-anthem.mp3",
+        audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269033/ANTHEM_FOR_A_NATIONAL_REBRAND_3_5_Crestline_Motif_scjbhs.mp3",
     ),
     CapabilityDemo(
         "Financial Services — Brand Theme",
@@ -267,7 +267,7 @@ DEMOS: List[CapabilityDemo] = [
         "intelligence, and modern professionalism.",
         "An approach to translating brand attributes into a cohesive musical identity "
         "suitable for advertising, presentations, digital experiences, and branded content.",
-        audio_url="/static/public/demo-financial-theme.mp3",
+        audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269023/FIVE_NOTE_SOUND_LOGO_2_Five_Note_Signal_udyk8p.mp3",
     ),
 ]
 

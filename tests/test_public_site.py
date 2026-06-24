@@ -61,10 +61,8 @@ def test_samples_page_renders_capability_demos(client):
     assert "new studio" not in r.text and "aren’t client commissions" not in r.text
     # Expandable brief on each demo.
     assert "See how we’d approach this brief" in r.text
-    # Audio-only: all four demos render <audio> players, no video players.
-    for track in ("demo-holiday-strings.mp3", "demo-financial-theme.mp3",
-                  "demo-title-sequence.mp3", "demo-retail-anthem.mp3"):
-        assert track in r.text
+    # Audio-only: all four demos render <audio> players from the media CDN, no video.
+    assert r.text.count("res.cloudinary.com") >= 4
     assert r.text.count("<audio") == 4 and "<video" not in r.text
 
 
@@ -77,7 +75,8 @@ def test_home_work_section_is_truthful_capability_demos(client):
         assert past_claim not in r.text
     # It shows the real demo players and routes to the demos page.
     assert "Capability Demonstrations" in r.text
-    assert "demo-holiday-strings.mp3" in r.text and "See the brief" in r.text
+    # Demo players (now served from the Cloudinary media CDN) + the brief toggle.
+    assert "res.cloudinary.com" in r.text and "See the brief" in r.text
 
 
 def test_internal_dashboard_unaffected_by_public_mount(client):
