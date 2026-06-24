@@ -84,7 +84,7 @@
       {% for inv in invoices %}
       <tr>
         <td class="strong">{{ inv['kind'] }}<div class="muted small">{{ inv['note'] }}</div>
-          {% if inv['external_ref'] %}<div class="muted small">ref: {{ inv['external_ref'] }}</div>{% endif %}</td>
+          {% if inv['external_ref'] and not inv['external_ref'].startswith('http') %}<div class="muted small">ref: {{ inv['external_ref'] }}</div>{% endif %}</td>
         <td>{{ inv['amount']|money }}</td>
         <td><span class="pill st-{{ inv['status']|lower }}">{{ inv['status'] }}</span>
           {% if inv['paid_at'] %}<div class="muted small">paid</div>{% endif %}</td>
@@ -94,6 +94,9 @@
             <form method="post" action="/invoice/{{ inv['id'] }}/checkout">
               <button class="btn tiny" type="submit" title="Create a checkout via the payment provider">Issue for payment</button>
             </form>
+            {% endif %}
+            {% if inv['external_ref'] and inv['external_ref'].startswith('http') and inv['status'] != 'Paid' %}
+            <a class="btn tiny primary" href="{{ inv['external_ref'] }}" target="_blank" rel="noopener">Open payment page ↗</a>
             {% endif %}
             {% for s in invoice_states %}
               {% if s != inv['status'] %}
@@ -114,8 +117,9 @@
   {% endif %}
 
   <p class="muted small" style="margin-top:12px">
-    💳 Payments are deterministic for now — “Mark Paid” records it manually.
-    Stripe deposits/payouts wire in later at a single seam (no schema change needed).
+    💳 “Issue for payment” creates a Stripe checkout — open the payment page to pay (or send
+    that link to the client). Paying flips the invoice to Paid automatically via the Stripe
+    webhook; “Mark Paid” is the manual fallback.
   </p>
 </section>
 {% endif %}
