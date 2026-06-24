@@ -186,6 +186,10 @@ async def _admin_gate(request: Request, call_next):
     # file's ?v= query to bust it.
     if request.url.path.startswith("/static/") and "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "public, max-age=604800"  # 7 days
+    elif "text/html" in response.headers.get("content-type", ""):
+        # Always revalidate HTML so content / media-URL changes land immediately on
+        # EVERY device — mobile browsers otherwise serve a stale cached page.
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 
