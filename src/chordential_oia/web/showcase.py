@@ -220,13 +220,12 @@ DEMOS: List[CapabilityDemo] = [
         "Arrangement & orchestration",
         "Explore how orchestral string arrangements can support seasonal advertising "
         "while maintaining a premium brand aesthetic.",
-        "A holiday campaign requires music that evokes warmth, nostalgia, and celebration "
-        "without relying on predictable seasonal tropes.",
-        "This demonstration explores contemporary string writing, layered harmonies, and "
-        "dynamic orchestration techniques designed to create emotional connection while "
-        "preserving a refined commercial sound.",
-        "An approach to arranging and orchestrating music that enhances storytelling and "
-        "supports emotionally driven advertising campaigns.",
+        "A holiday campaign requiring music that evokes warmth, nostalgia, and celebration "
+        "— without leaning on predictable seasonal tropes.",
+        "Contemporary string writing, layered harmonies, and dynamic orchestration designed "
+        "to create emotional connection while preserving a refined commercial sound.",
+        "Storytelling-first arranging and orchestration that makes emotionally driven "
+        "advertising land.",
         audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269017/STRING_ARRANGEMENT_HOLIDAY_SPOT_3_Evergreen_Window_nlifit.mp3",
     ),
     CapabilityDemo(
@@ -234,13 +233,12 @@ DEMOS: List[CapabilityDemo] = [
         "Sound design",
         "Explore how sound design can establish tone, atmosphere, and narrative intrigue "
         "before a story unfolds.",
-        "A title sequence must capture attention immediately and create anticipation "
-        "without relying on dialogue or narrative context.",
-        "This demonstration examines the use of evolving textures, cinematic impacts, "
-        "transitional elements, and atmospheric layers to create tension, movement, and "
-        "immersion.",
-        "An approach to building sonic environments that strengthen visual storytelling "
-        "and contribute to a distinctive creative identity.",
+        "A title sequence capturing attention instantly and building anticipation — with no "
+        "dialogue or narrative to lean on.",
+        "Evolving textures, cinematic impacts, transitional elements, and atmospheric layers "
+        "that build tension, movement, and immersion.",
+        "Sonic worlds that strengthen visual storytelling and sharpen a brand's creative "
+        "identity.",
         audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269007/Title_sequence_sound_design_4_Black_Thread_zhtdsg.mp3",
     ),
     CapabilityDemo(
@@ -248,13 +246,13 @@ DEMOS: List[CapabilityDemo] = [
         "Original composition",
         "Explore how music can support a national retail brand relaunch through emotional "
         "storytelling and broad audience appeal.",
-        "A large consumer brand requires a campaign anthem that feels optimistic, "
-        "trustworthy, and adaptable across advertising, digital, and social content.",
-        "This demonstration explores a momentum-driven musical direction built around a "
-        "memorable melodic theme, combining organic instrumentation with modern production "
-        "techniques to create energy, optimism, and forward movement.",
-        "An approach to developing brand-forward music that reinforces messaging, supports "
-        "storytelling, and connects with diverse consumer audiences.",
+        "A national relaunch demanding an anthem that feels optimistic and trustworthy — and "
+        "adapts across broadcast, digital, and social.",
+        "A momentum-driven direction built around a memorable melodic theme — organic "
+        "instrumentation meeting modern production to create energy, optimism, and forward "
+        "movement.",
+        "Brand-forward music that reinforces the message and connects across diverse "
+        "audiences.",
         audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269033/ANTHEM_FOR_A_NATIONAL_REBRAND_3_5_Crestline_Motif_scjbhs.mp3",
     ),
     CapabilityDemo(
@@ -262,13 +260,12 @@ DEMOS: List[CapabilityDemo] = [
         "Sonic branding",
         "Explore how music can communicate trust, stability, and long-term confidence "
         "within a financial services context.",
-        "A financial brand requires a musical identity that conveys credibility and "
-        "sophistication while avoiding generic corporate conventions.",
-        "This demonstration examines a restrained piano-led theme supported by subtle "
-        "electronic textures and recurring musical motifs intended to communicate clarity, "
-        "intelligence, and modern professionalism.",
-        "An approach to translating brand attributes into a cohesive musical identity "
-        "suitable for advertising, presentations, digital experiences, and branded content.",
+        "A financial brand needing an identity that signals credibility and sophistication "
+        "— without the generic corporate clichés.",
+        "A restrained, piano-led theme supported by subtle electronic textures and recurring "
+        "motifs — communicating clarity, intelligence, and modern professionalism.",
+        "Brand attributes translated into one cohesive identity that carries across every "
+        "touchpoint.",
         audio_url="https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782269023/FIVE_NOTE_SOUND_LOGO_2_Five_Note_Signal_udyk8p.mp3",
     ),
 ]
