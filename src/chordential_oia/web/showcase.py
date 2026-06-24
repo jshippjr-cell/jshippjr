@@ -82,8 +82,10 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on Cloudinary.
-    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/v1782271309/herospliced_lbtrdp.mp4",
+    # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on
+    # Cloudinary. f_auto,q_auto = optimal codec + visually-lossless quality, so it's
+    # a smaller, faster-starting file with NO visible quality loss.
+    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto/v1782271309/herospliced_lbtrdp.mp4",
     "poster": "/static/public/hero-spliced-poster.jpg?v=1",
     "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }

@@ -6,10 +6,11 @@
 <section class="hero">
   <div class="hero-media">
     {% if h.video %}
-    {# Phones show the poster still instantly (no multi-MB video download = no
-       landing lag); the script loads + plays the video only on larger screens. #}
-    <video class="hero-video" muted loop playsinline preload="none"
-           {% if h.poster %}poster="{{ h.poster }}"{% endif %} data-src="{{ h.video }}"></video>
+    {# Poster shows instantly while the Cloudinary-optimized video buffers, on all
+       devices. No `type` on the source so f_auto can deliver the best codec. #}
+    <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
+      <source src="{{ h.video }}">
+    </video>
     {% elif h.loop %}
     {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}
     <div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>
