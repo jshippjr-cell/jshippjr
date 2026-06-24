@@ -29,6 +29,9 @@
   {% endif %}
 </div>
 
+{# Always render this section so the "follow-ups due" KPI anchor never jumps into
+   the void — when nothing is due it shows a clear all-clear state instead of
+   feeling like a dead link. #}
 {% if followups %}
 <section class="card urgent" id="followups">
   <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
@@ -47,6 +50,11 @@
     </tbody>
   </table>
 </section>
+{% else %}
+<section class="card" id="followups">
+  <div class="card-head"><h2>⏰ Follow-ups due</h2></div>
+  <p class="muted">✅ Nothing due today — you're all caught up.</p>
+</section>
 {% endif %}
 
 <div class="pipeline-grid">
@@ -55,7 +63,7 @@
   <section class="card pipe pipe-pursue">
     <div class="card-head">
       <h2>🎯 Top targets to pursue</h2>
-      <a class="link" href="/inbox?action=Pursue">View all →</a>
+      <a class="link" href="/incoming">View all →</a>
     </div>
     <div class="deal-list">
       {% for item in pursue[:4] %}{% set r = item.r %}
