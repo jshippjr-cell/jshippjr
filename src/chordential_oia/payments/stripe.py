@@ -86,19 +86,19 @@ class StripePaymentProvider:
         ``{"invoice_id", "status": "Paid", "external_ref"}`` for a captured
         payment, else ``{}`` (ignored). Verification uses STRIPE_WEBHOOK_SECRET;
         if it's unset we parse without verifying (dev only)."""
-        stripe = self._client()
         body = payload.get("body")
         signature = payload.get("signature")
+        # Verify authenticity (raises on a bad signature → the route returns 400).
+        # We discard the returned object and parse the raw JSON ourselves below,
+        # because the SDK's typed event objects don't all support dict .get().
         if self.webhook_secret:
-            # Raises on a bad signature — the route turns that into a 400.
-            event = stripe.Webhook.construct_event(body, signature, self.webhook_secret)
-        else:
-            raw = body.decode() if isinstance(body, (bytes, bytearray)) else (body or "{}")
-            event = json.loads(raw)
+            self._client().Webhook.construct_event(body, signature, self.webhook_secret)
+        raw = body.decode() if isinstance(body, (bytes, bytearray)) else (body or "{}")
+        event = json.loads(raw)
 
         if event.get("type") not in _PAID_EVENTS:
             return {}
-        obj = event.get("data", {}).get("object", {})
+        obj = (event.get("data") or {}).get("object") or {}
         if obj.get("payment_status") not in _PAID_STATUSES:
             return {}
         ref = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("invoice_id")
