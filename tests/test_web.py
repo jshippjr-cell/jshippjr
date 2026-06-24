@@ -669,3 +669,71 @@ def test_set_strategic_inputs_recomputes(client):
     )
     assert r.status_code == 200
     assert "Enterprise buyer" in r.text  # selected option reflected back
+
+
+# --------------------------------------------------------------------------- #
+# Phase 1 — unified "Incoming" queue (leads + signals UNION), one badge, push.
+# --------------------------------------------------------------------------- #
+def _seed_incoming():
+    """Seed one inbound lead and one signal into the (already-isolated) test DB."""
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        lead_id = db_mod.insert_inbound_lead(
+            conn, "Ada Lovelace", "ada@example.com", "Analytical Engine Co",
+            project_type="Brand film", source="questionnaire",
+        )
+        sig_id = db_mod.insert_signal(
+            conn, source="reddit-forhire", source_weight=5,
+            title="Need a composer for a short film", body="Paying gig, 2 weeks.",
+            external_ref="test:incoming:1", score=70.0, tier="Watch",
+        )
+    finally:
+        conn.close()
+    return lead_id, sig_id
+
+
+def test_incoming_shows_lead_and_signal(client):
+    _seed_incoming()
+    r = client.get("/incoming")
+    assert r.status_code == 200
+    # Both a lead and a signal appear in the one unified queue.
+    assert "Brand film" in r.text                     # the lead's title
+    assert "Need a composer for a short film" in r.text  # the signal's title
+    # Source chips render for each source.
+    assert "Website" in r.text and "Signal" in r.text
+
+
+def test_incoming_unactioned_count_sums_both(client):
+    _seed_incoming()
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert db_mod.incoming_unactioned_count(conn) == 2  # 1 New lead + 1 New signal
+    finally:
+        conn.close()
+
+
+def test_incoming_count_endpoint(client):
+    _seed_incoming()
+    r = client.get("/incoming/count")
+    assert r.status_code == 200
+    assert r.json()["new"] == 2
+
+
+def test_incoming_dismiss_lead_sets_status(client):
+    lead_id, _ = _seed_incoming()
+    r = client.post(
+        f"/leads/{lead_id}/status", data={"status": "Dismissed"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        lead = db_mod.get_inbound_lead(conn, lead_id)
+        assert lead["status"] == "Dismissed"
+        # Dismissed items drop out of the unified count (was 2, now 1 signal).
+        assert db_mod.incoming_unactioned_count(conn) == 1
+    finally:
+        conn.close()

@@ -1038,6 +1038,92 @@ def list_inbound_leads(
     ).fetchall()
 
 
+def _lead_source_chip(source: Optional[str]) -> str:
+    """Short, human source label for the unified Incoming queue."""
+    s = (source or "").strip().lower()
+    if s == "crawl":
+        return "Crawler"
+    if s in ("email", "paste"):
+        return "Email"
+    # questionnaire, book_call, and anything else from the public site
+    return "Website"
+
+
+def list_incoming(conn: sqlite3.Connection) -> List[Dict]:
+    """Unified read-model over the two intake stores (a UNION at the view layer,
+    NOT a table merge): OPEN inbound leads (New/Reviewed) + open signals
+    (New/Reviewed, gigs only — indicators excluded). Each row is normalized into
+    one plain dict so the Incoming queue renders both alike. Newest first."""
+    out: List[Dict] = []
+
+    lead_rows = conn.execute(
+        "SELECT * FROM inbound_leads WHERE status IN ('New','Reviewed') "
+        "ORDER BY created_at DESC"
+    ).fetchall()
+    for l in lead_rows:
+        title = (l["project_type"] or l["company"] or l["contact_name"] or "Inbound lead")
+        sub_bits = []
+        if l["company"]:
+            sub_bits.append(l["company"])
+        if l["contact_email"]:
+            sub_bits.append(l["contact_email"])
+        out.append({
+            "kind": "lead",
+            "id": l["id"],
+            "source_chip": _lead_source_chip(l["source"]),
+            "title": title,
+            "subtitle": " · ".join(sub_bits),
+            "contact": l["contact_email"] or l["contact_name"] or "",
+            "created_at": l["created_at"],
+            "status": l["status"],
+            "score": None,
+            "tier": None,
+            "url": "/leads",
+            "promote_url": f"/leads/{l['id']}/promote",
+            "dismiss_url": f"/leads/{l['id']}/status",
+        })
+
+    sig_rows = conn.execute(
+        "SELECT * FROM signals WHERE status IN ('New','Reviewed') "
+        "AND IFNULL(signal_type, 'gig') != 'indicator' "
+        "ORDER BY found_at DESC"
+    ).fetchall()
+    for s in sig_rows:
+        body = (s["body"] or "").strip().replace("\n", " ")
+        snippet = body[:120] + ("…" if len(body) > 120 else "")
+        if not snippet and s["budget_min"]:
+            snippet = f"${int(s['budget_min'])}"
+            if s["budget_max"]:
+                snippet += f"–${int(s['budget_max'])}"
+        out.append({
+            "kind": "signal",
+            "id": s["id"],
+            "source_chip": "Signal",
+            "title": s["title"] or "Detected opportunity",
+            "subtitle": snippet,
+            "contact": (s["contact_handle"] if "contact_handle" in s.keys() else None) or "",
+            "created_at": s["found_at"],
+            "status": s["status"],
+            "score": s["score"],
+            "tier": s["tier"],
+            "url": "/signals",
+            "promote_url": f"/signals/{s['id']}/promote",
+            "dismiss_url": f"/signals/{s['id']}/status",
+        })
+
+    out.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return out
+
+
+def incoming_unactioned_count(conn: sqlite3.Connection) -> int:
+    """The unified nav badge: inbound 'New' leads + 'New' signal gigs (indicators
+    excluded). 'Needs me' = everything that just arrived and hasn't been touched."""
+    leads = conn.execute(
+        "SELECT COUNT(*) FROM inbound_leads WHERE status = 'New'"
+    ).fetchone()[0]
+    return leads + new_signal_count(conn)
+
+
 def get_inbound_lead(conn: sqlite3.Connection, lead_id: int) -> Optional[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM inbound_leads WHERE id = ?", (lead_id,)

@@ -295,6 +295,11 @@ def _do_fetch(conn, target) -> int:
                 description=rec["description"],
                 source="crawl",
             )
+            try:                             # best-effort phone push — never breaks the fetch
+                from . import signals
+                signals.notify_new_lead(rec["company"] or rec["need"], "crawler")
+            except Exception:
+                pass
             ingested += 1
         outcome = res["outcome"]
         # Auto-detect a login wall → move the source to manual-assist (never

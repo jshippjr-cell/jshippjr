@@ -72,6 +72,7 @@
     </nav>
     <div class="nav-section">Front-of-House</div>
     <nav class="nav">
+      <a href="/incoming" class="{{ 'active' if nav=='incoming' }}"><span class="ico">📥</span> Incoming<span id="incoming-badge" style="display:{{ 'inline-block' if new_incoming else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_incoming or '' }}</span></a>
       <a href="/leads" class="{{ 'active' if nav=='leads' }}"><span class="ico">✦</span> Inbound Leads</a>
     </nav>
     <div class="nav-section">Discovery</div>
@@ -114,12 +115,18 @@
 <script>
 // Keep the Signal Radar badge live (new gigs arrive while you're on other pages).
 (function () {
+  function setBadge(id, n) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    if (n > 0) { b.textContent = n; b.style.display = 'inline-block'; }
+    else { b.style.display = 'none'; }
+  }
   function refresh() {
     fetch('/signals/count').then(function (r) { return r.json(); }).then(function (d) {
-      var b = document.getElementById('signal-badge');
-      if (!b) return;
-      if (d && d.new > 0) { b.textContent = d.new; b.style.display = 'inline-block'; }
-      else { b.style.display = 'none'; }
+      setBadge('signal-badge', d && d.new);
+    }).catch(function () {});
+    fetch('/incoming/count').then(function (r) { return r.json(); }).then(function (d) {
+      setBadge('incoming-badge', d && d.new);
     }).catch(function () {});
   }
   setInterval(refresh, 60000);

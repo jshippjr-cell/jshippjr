@@ -202,6 +202,8 @@ def render(request: Request, name: str, **kw):
         conn = db.connect()
         try:
             context["new_signals"] = db.new_signal_count(conn)
+            # Unified "Incoming" badge — all sources (leads + signals).
+            context["new_incoming"] = db.incoming_unactioned_count(conn)
         finally:
             conn.close()
     return templates.TemplateResponse(request=request, name=name, context=context)
@@ -506,6 +508,31 @@ def dashboard(request: Request):
 # Leads come from the public site. They are reviewed and explicitly promoted into
 # the pipeline by hand — a lead is never auto-injected as an opportunity (the
 # precision-bias rule: a human qualifies first).
+# --------------------------------------------------------------------------- #
+# Incoming — the unified intake queue (a UNION view over inbound_leads + signals,
+# not a table merge). Every new lead from every source rolls up here, newest
+# first, with a source chip + inline Promote/Dismiss.
+# --------------------------------------------------------------------------- #
+@app.get("/incoming", response_class=HTMLResponse)
+def incoming_queue(request: Request):
+    conn = db.connect()
+    try:
+        rows = db.list_incoming(conn)
+    finally:
+        conn.close()
+    return render(request, "incoming.html", nav="incoming", rows=rows)
+
+
+@app.get("/incoming/count")
+def incoming_count():
+    """Live count of unactioned incoming items (all sources) — polled by the nav badge."""
+    conn = db.connect()
+    try:
+        return {"new": db.incoming_unactioned_count(conn)}
+    finally:
+        conn.close()
+
+
 @app.get("/leads", response_class=HTMLResponse)
 def inbound_queue(request: Request, status: Optional[str] = None):
     conn = db.connect()
@@ -565,10 +592,14 @@ def inbound_promote(lead_id: int):
             source="front_of_house",
         )
         new_id = db.insert_opportunity(conn, opp)
+        if not new_id:
+            # Promote failed before linking — don't link to a null id or redirect
+            # to a ghost /opportunity/None. Send the human back with an error flag.
+            return RedirectResponse("/incoming?error=promote", status_code=303)
         db.link_inbound_to_opp(conn, lead_id, new_id)
     finally:
         conn.close()
-    return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
+    return RedirectResponse(f"/opportunity/{new_id}?promoted=1", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

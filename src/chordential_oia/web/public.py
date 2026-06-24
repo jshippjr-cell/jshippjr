@@ -148,6 +148,11 @@ def public_start_submit(
         )
     finally:
         conn.close()
+    try:                                     # best-effort phone push — never blocks the submit
+        from . import signals
+        signals.notify_new_lead(company.strip() or contact_name.strip(), "website")
+    except Exception:
+        pass
     target = "/thanks?kind=project"
     if band:
         target += f"&low={band['low']}&high={band['high']}"
@@ -177,6 +182,11 @@ def public_book_submit(
         )
     finally:
         conn.close()
+    try:                                     # best-effort phone push — never blocks the submit
+        from . import signals
+        signals.notify_new_lead(company.strip() or contact_name.strip(), "website")
+    except Exception:
+        pass
     return RedirectResponse("/thanks?kind=call", status_code=303)
 
 

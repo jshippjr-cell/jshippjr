@@ -324,6 +324,23 @@ def notify_new_gig(title: str, click_url: str = "") -> None:
     send_push("New gig on Chordential", body=title, click_url=click_url)
 
 
+def notify_new_lead(company_or_name: str, source: str) -> None:
+    """Push a phone alert when a new inbound lead lands — website questionnaire,
+    book-a-call, or crawler find. A warm form-fill is a hotter lead than a cold
+    RSS hit, so it earns the same buzz. Best-effort, never raises.
+
+    Mirrors notify_new_gig: native Web Push to the installed PWA (opens the app
+    to the unified Incoming queue) with ntfy.sh as a fallback."""
+    msg = f"New {source} lead — {company_or_name}".strip()
+    try:
+        from . import webpush
+        webpush.send_web_push("🌐 New lead on Chordential", body=msg, url="/incoming")
+    except Exception:
+        pass
+    send_push("New lead on Chordential", body=msg,
+              click_url="https://chordential.com/incoming")
+
+
 def ingest_alert(conn, raw: str, source: str = "email") -> int:
     """Parse a forwarded saved-search / F5Bot alert email into signals."""
     n = 0

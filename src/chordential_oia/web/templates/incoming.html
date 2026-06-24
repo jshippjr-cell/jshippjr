@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Incoming{% endblock %}
+{% block heading %}Incoming — every new lead, one queue{% endblock %}
+{% block content %}
+
+<p class="result-count">
+  Everything that just arrived — website questionnaires, book-a-call requests,
+  crawler finds, and market signals — newest first. Review each, then
+  <strong>promote</strong> the real ones into the pipeline or <strong>dismiss</strong>
+  the noise. Nothing becomes an opportunity until you say so.
+</p>
+
+{% if request.query_params.get('error') == 'promote' %}
+<div class="callout" style="border-color:#e5484d">
+  <span class="callout-ico">⚠</span>
+  Couldn't promote that lead — no opportunity was created. Nothing was changed; try again.
+</div>
+{% endif %}
+
+{% set chip = {
+  'Website': ('🌐', 'st-won'),
+  'Crawler': ('🤖', 'st-reviewed'),
+  'Signal':  ('📡', 'st-new'),
+  'Email':   ('✉', '')
+} %}
+
+{% if rows %}
+<div class="card no-pad" style="margin-top:18px;overflow-x:auto">
+<table class="table">
+  <thead>
+    <tr>
+      <th>Source</th><th>Lead</th><th>Details</th>
+      <th>Status</th><th style="width:1%">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    {% set c = chip.get(r['source_chip'], ('•', '')) %}
+    <tr>
+      <td><span class="pill {{ c[1] }}">{{ c[0] }} {{ r['source_chip'] }}</span></td>
+      <td style="max-width:380px;overflow-wrap:anywhere">
+        <div class="strong">{{ r['title'] }}</div>
+        {% if r['subtitle'] %}<div class="muted small">{{ r['subtitle'] }}</div>{% endif %}
+        {% if r['contact'] %}<div class="muted small">{{ r['contact'] }}</div>{% endif %}
+      </td>
+      <td class="small">
+        {% if r['score'] is not none %}
+        <div><span class="strong">{{ r['score']|round|int }}</span> score{% if r['tier'] %} · {{ r['tier'] }}-tier{% endif %}</div>
+        {% endif %}
+        {% if r['url'] %}<a class="link small" href="{{ r['url'] }}">view in {{ 'Signals' if r['kind']=='signal' else 'Leads' }} →</a>{% endif %}
+      </td>
+      <td><span class="pill st-{{ r['status']|lower }}">{{ r['status'] }}</span></td>
+      <td>
+        <div class="lead-actions">
+          <form method="post" action="{{ r['promote_url'] }}">
+            <button class="btn tiny primary" type="submit" title="Create an opportunity from this">Promote</button>
+          </form>
+          <form method="post" action="{{ r['dismiss_url'] }}">
+            <input type="hidden" name="status" value="Dismissed">
+            <button class="btn tiny ghost" type="submit">Dismiss</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="margin-top:18px">
+  <p class="muted" style="margin:0">✅ Nothing new to triage. New leads and signals from every source will land here.</p>
+</div>
+{% endif %}
+
+{% endblock %}
