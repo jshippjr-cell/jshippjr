@@ -1577,6 +1577,67 @@ def discovery_site_activity(conn: sqlite3.Connection) -> Dict[str, dict]:
     }
 
 
+def _attribution_source_label(source: Optional[str]) -> str:
+    """Normalize a raw inbound-lead source into a channel label for attribution.
+
+    questionnaire/book_call → "Website"; crawl → "Crawler";
+    email/paste → "Email"; anything else → the raw source string."""
+    s = (source or "").strip().lower()
+    if s in ("questionnaire", "book_call"):
+        return "Website"
+    if s == "crawl":
+        return "Crawler"
+    if s in ("email", "paste"):
+        return "Email"
+    return (source or "").strip() or "Other"
+
+
+def source_attribution(conn: sqlite3.Connection) -> List[Dict]:
+    """Source→won rollup so the founder can judge which channel earns its keep.
+
+    Per normalized channel: ``leads_in`` (everything that came in), ``promoted``
+    (linked to an opportunity), and ``won`` (linked opp now status='Won').
+    Inbound leads are bucketed by :func:`_attribution_source_label`; every signal
+    rolls up into one "Signal" bucket. Merged and sorted by won desc, leads_in desc."""
+    buckets: Dict[str, Dict] = {}
+
+    def _bump(label: str, promoted: bool, won: bool) -> None:
+        b = buckets.setdefault(
+            label, {"source": label, "leads_in": 0, "promoted": 0, "won": 0}
+        )
+        b["leads_in"] += 1
+        if promoted:
+            b["promoted"] += 1
+        if won:
+            b["won"] += 1
+
+    lead_rows = conn.execute(
+        """SELECT l.source AS source, l.linked_opp_id AS opp_id, o.status AS opp_status
+           FROM inbound_leads l
+           LEFT JOIN opportunities o ON o.id = l.linked_opp_id"""
+    ).fetchall()
+    for r in lead_rows:
+        promoted = r["opp_id"] is not None
+        won = promoted and (r["opp_status"] == "Won")
+        _bump(_attribution_source_label(r["source"]), promoted, won)
+
+    sig_rows = conn.execute(
+        """SELECT s.linked_opp_id AS opp_id, o.status AS opp_status
+           FROM signals s
+           LEFT JOIN opportunities o ON o.id = s.linked_opp_id"""
+    ).fetchall()
+    for r in sig_rows:
+        promoted = r["opp_id"] is not None
+        won = promoted and (r["opp_status"] == "Won")
+        _bump("Signal", promoted, won)
+
+    return sorted(
+        buckets.values(),
+        key=lambda b: (b["won"], b["leads_in"]),
+        reverse=True,
+    )
+
+
 def crawl_target_exists(conn: sqlite3.Connection, kind: str, url: str) -> bool:
     """Dedupe proposals so re-running the generator doesn't pile up duplicates."""
     row = conn.execute(

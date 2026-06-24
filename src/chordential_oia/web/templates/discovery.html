@@ -9,6 +9,32 @@
   web search, and it fetches nothing on its own. <em>The machine proposes, you dispose.</em>
 </div>
 
+{# --- Auto-fetch state banner — unmistakable, top of page (Phase 7) --------- #}
+{% if autofetch.enabled %}
+<div class="callout" style="margin-top:12px;border-left:4px solid var(--won,#2e7d32)">
+  <span class="callout-ico">▶</span>
+  <strong>Auto-fetch is ON</strong> — approved sources are scanned on a schedule.
+  {% if autofetch.current %}
+    Fetching “{{ autofetch.current }}” right now…
+  {% elif autofetch.last_run %}
+    Last run {{ autofetch.last_run[:16].replace('T',' ') }} · {{ autofetch.last_found }} found.
+  {% else %}
+    First cycle runs shortly.
+  {% endif %}
+</div>
+{% else %}
+<div class="callout" style="margin-top:12px;border-left:4px solid var(--lost,#b71c1c)">
+  <span class="callout-ico">⏸</span>
+  <strong>Auto-fetch is OFF</strong> — approved sources aren't being scanned on a schedule.
+  {% if not scrape_on %}
+  Enable it by setting <code>CHORDENTIAL_ENABLE_SCRAPE=1</code> in the environment
+  (the master switch). Approvals and manual <em>Fetch now</em> below still work.
+  {% else %}
+  The scheduler is off (<code>CHORDENTIAL_AUTOFETCH=0</code>); manual <em>Fetch now</em> still works.
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="pill-row" style="margin:14px 0">
   {% for k in kinds %}
   <a class="pill-btn {{ 'is-current' if kind==k }}" href="/discovery?kind={{ k }}">
@@ -21,9 +47,43 @@
 </div>
 
 {# ----------------------------------------------------------------------- #}
-{# ① NEEDS YOUR APPROVAL — always on top so nothing waits unseen           #}
+{# 📈 WHERE YOUR DEALS COME FROM — source→won attribution (Phase 7)         #}
 {# ----------------------------------------------------------------------- #}
 <section class="card">
+  <div class="card-head">
+    <h2>📈 Where your deals come from</h2>
+    <span class="muted small">does each channel earn its keep?</span>
+  </div>
+  {% if attribution %}
+  <table class="table compact">
+    <thead>
+      <tr><th>Source</th><th style="text-align:right">Leads in</th><th style="text-align:right">Promoted</th><th style="text-align:right">Won</th><th style="text-align:right">Win rate</th></tr>
+    </thead>
+    <tbody>
+      {% for a in attribution %}
+      <tr>
+        <td class="strong">{{ a['source'] }}</td>
+        <td style="text-align:right">{{ a['leads_in'] }}</td>
+        <td style="text-align:right">{{ a['promoted'] }}</td>
+        <td style="text-align:right">{{ a['won'] }}</td>
+        <td style="text-align:right">{{ '%.0f%%'|format(100 * a['won'] / a['leads_in']) if a['leads_in'] else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin:6px 0 0">No leads yet — once sources start producing, this shows which channel turns into won deals.</p>
+  {% endif %}
+  <p class="muted small" style="margin:10px 0 0">
+    Source → promoted → won, by channel. This measures whether each channel earns its keep
+    before the crawler gets deeper investment.
+  </p>
+</section>
+
+{# ----------------------------------------------------------------------- #}
+{# ① NEEDS YOUR APPROVAL — always on top so nothing waits unseen           #}
+{# ----------------------------------------------------------------------- #}
+<section class="card" style="margin-top:18px">
   <div class="card-head">
     <h2>① Needs your approval</h2>
     <span class="muted small">{{ pending_count }} waiting</span>
@@ -263,15 +323,22 @@
             {% else %}
               <div class="muted small">0 matched</div>
             {% endif %}
+            {% if t['fetched_at'] %}
+            <div class="muted small">last fetched {{ t['fetched_at'][:16].replace('T',' ') }}</div>
+            {% endif %}
           {% endif %}
         </td>
         <td>
           <div class="lead-actions">
             {% if t['status']=='Approved' %}
-            <form method="post" action="/discovery/{{ t['id'] }}/fetch">
+            <form method="post" action="/discovery/{{ t['id'] }}/fetch"
+                  onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Fetching…';">
               <input type="hidden" name="kind" value="{{ kind }}">
               <button class="btn tiny" type="submit" title="Fetch this approved target now">Fetch now</button>
             </form>
+            {% if t['fetched_at'] %}
+            <div class="muted small">last fetched {{ t['fetched_at'][:16].replace('T',' ') }}{% if t['result_count'] %} · {{ t['result_count'] }} found{% endif %}</div>
+            {% endif %}
             <form method="post" action="/discovery/{{ t['id'] }}/status">
               <input type="hidden" name="status" value="Dismissed"><input type="hidden" name="kind" value="{{ kind }}">
               <button class="btn tiny ghost" type="submit">Dismiss</button>

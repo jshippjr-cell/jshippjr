@@ -645,6 +645,7 @@ def discovery_page(request: Request, kind: str = "talent"):
         sites = db.list_discovery_sites(conn, kind=kind)
         site_counts = db.discovery_site_counts(conn)
         activity = db.discovery_site_activity(conn)
+        attribution = db.source_attribution(conn)
     finally:
         conn.close()
     # Split into the console's sections (Row objects → filter in Python, not Jinja):
@@ -667,6 +668,7 @@ def discovery_page(request: Request, kind: str = "talent"):
         done_targets=done_targets, review_searches=review_searches,
         pending_count=len(pending_sites) + len(proposed_targets),
         autofetch=scheduler.status(),
+        attribution=attribution,
     )
 
 

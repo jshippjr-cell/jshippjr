@@ -1031,3 +1031,88 @@ def test_capabilities_doc_mark_delivery_sent_in_toolbar(client):
     page = client.get("/opportunity/1/capabilities").text
     assert "✓ Sent" in page
     assert "Mark delivery doc sent" not in page
+
+
+# --------------------------------------------------------------------------- #
+# Phase 7 — crawler legibility + source→won attribution.
+# --------------------------------------------------------------------------- #
+def test_source_attribution_rolls_up_leads_promoted_won(client):
+    """A website lead promoted-and-won, a crawler lead promoted-not-won, and an
+    un-promoted website lead → correct leads_in/promoted/won per normalized source."""
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        # 1. Website lead → promote → mark Won.
+        web_won = db_mod.insert_inbound_lead(
+            conn, "Won Webster", "won@site.com", "Webster Co",
+            project_type="Brand film", source="questionnaire",
+        )
+        # 2. Crawler lead → promote, leave open (not won).
+        crawl_open = db_mod.insert_inbound_lead(
+            conn, "(discovered)", company="Crawled Corp",
+            project_type="Score", source="crawl",
+        )
+        # 3. Website lead, never promoted.
+        db_mod.insert_inbound_lead(
+            conn, "Raw Lead", "raw@site.com", "Raw Co",
+            project_type="Jingle", source="book_call",
+        )
+    finally:
+        conn.close()
+
+    # Promote via the real route (creates + links the opportunity).
+    r1 = client.post(f"/leads/{web_won}/promote", follow_redirects=False)
+    won_opp = int(r1.headers["location"].split("/opportunity/")[1].split("?")[0])
+    client.post(f"/leads/{crawl_open}/promote", follow_redirects=False)
+
+    conn = db_mod.connect()
+    try:
+        db_mod.update_status(conn, won_opp, "Won")
+        ordered = db_mod.source_attribution(conn)
+    finally:
+        conn.close()
+    rows = {r["source"]: r for r in ordered}
+
+    assert rows["Website"]["leads_in"] == 2      # one won, one un-promoted
+    assert rows["Website"]["promoted"] == 1
+    assert rows["Website"]["won"] == 1
+    assert rows["Crawler"]["leads_in"] == 1
+    assert rows["Crawler"]["promoted"] == 1
+    assert rows["Crawler"]["won"] == 0
+    # Sorted by won desc → the channel with a win leads the list.
+    assert ordered[0]["source"] == "Website"
+
+
+def test_source_attribution_buckets_signals(client):
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        db_mod.insert_signal(
+            conn, source="reddit-forhire", source_weight=5,
+            title="Composer wanted", external_ref="test:attr:sig:1",
+        )
+        rows = {r["source"]: r for r in db_mod.source_attribution(conn)}
+    finally:
+        conn.close()
+    assert "Signal" in rows
+    assert rows["Signal"]["leads_in"] >= 1
+    assert rows["Signal"]["promoted"] == 0
+
+
+def test_discovery_renders_attribution_and_autofetch_state(client):
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        db_mod.insert_inbound_lead(
+            conn, "Panel Lead", "panel@site.com", "Panel Co",
+            project_type="Brand film", source="questionnaire",
+        )
+    finally:
+        conn.close()
+    r = client.get("/discovery")
+    assert r.status_code == 200
+    # The attribution panel renders with its table once a lead exists.
+    assert "Where your deals come from" in r.text
+    assert "Win rate" in r.text
+    # The auto-fetch on/off banner renders (off in tests — no scrape flag set).
+    assert "Auto-fetch is OFF" in r.text
