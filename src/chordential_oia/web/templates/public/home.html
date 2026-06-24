@@ -6,9 +6,22 @@
 <section class="hero">
   <div class="hero-media">
     {% if h.video %}
-    <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
-      <source src="{{ h.video }}">
-    </video>
+    {# Stream the hero video only on larger screens (and not for reduced-motion):
+       phones show the lightweight poster instead, so they never pay for the video. #}
+    <video class="hero-video" muted loop playsinline preload="none"
+           {% if h.poster %}poster="{{ h.poster }}"{% endif %} data-src="{{ h.video }}"></video>
+    <script>
+    (function(){
+      var v = document.currentScript.previousElementSibling;
+      if(!v || v.tagName !== 'VIDEO') return;
+      var big = window.matchMedia('(min-width:768px)').matches;
+      var reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+      if(big && !reduce){
+        v.src = v.dataset.src; v.autoplay = true; v.load();
+        var p = v.play(); if(p && p.catch){ p.catch(function(){}); }
+      }
+    })();
+    </script>
     {% elif h.loop %}
     {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}
     <div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>
@@ -118,7 +131,7 @@
         {% for d in show.delivery_items %}<li>{{ d }}</li>{% endfor %}
       </ul>
     </div>
-    <div class="deliver-figure" style="background-image:url('/static/public/img/process.jpg')"></div>
+    <div class="deliver-figure" style="background-image:url('/static/public/img/process.jpg?v=2')"></div>
   </div>
 </section>
 

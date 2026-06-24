@@ -82,8 +82,8 @@ HERO = {
     ),
     "primary_cta": {"label": "Hear the demos", "href": "/samples"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
-    "video": "/static/public/hero-process.mp4",  # capabilities "Process" reel (Concept→Delivery)
-    "poster": "/static/public/hero-process-poster.jpg",  # first-frame poster (no black flash)
+    "video": "/static/public/hero-process.mp4?v=2",  # capabilities "Process" reel (compressed)
+    "poster": "/static/public/hero-process-poster.jpg?v=2",  # first-frame poster (shown on mobile)
     "loop": "/static/public/hero-loop.webp",  # animated fallback if video is cleared
 }
 
