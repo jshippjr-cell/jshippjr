@@ -55,7 +55,8 @@ def test_gate_on_public_surfaces_stay_open(tmp_path, monkeypatch):
         assert c.get("/healthz").status_code == 200
         assert c.get("/admin/login").status_code == 200
         # public intake still works through the gate
-        assert c.post("/start", data={"contact_name": "X"},
+        assert c.post("/start", data={"contact_name": "X",
+                      "contact_email": "x@example.com", "phone": "555-0150"},
                       follow_redirects=False).status_code == 303
 
 

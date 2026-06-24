@@ -54,6 +54,7 @@ def test_questionnaire_creates_lead_not_opportunity(ctx):
         "/start",
         data={
             "contact_name": "Dana Rivera", "contact_email": "dana@acme.com",
+            "phone": "555-0101",
             "company": "Acme Co", "project_type": ":30 brand spot",
             "description": "Warm, hopeful, orchestral.", "budget_text": "around $6k",
             "timeline": "4 weeks",
@@ -73,6 +74,7 @@ def test_book_call_creates_lead_with_source(ctx):
     r = client.post(
         "/book",
         data={"contact_name": "Lee Park", "contact_email": "lee@studio.tv",
+              "phone": "555-0102",
               "description": "Title sequence sound design."},
         follow_redirects=False,
     )
@@ -90,7 +92,8 @@ def test_book_call_creates_lead_with_source(ctx):
 
 def test_lead_appears_in_internal_queue(ctx):
     client, _ = ctx
-    client.post("/start", data={"contact_name": "Mara Voss", "company": "Voss Films"})
+    client.post("/start", data={"contact_name": "Mara Voss", "company": "Voss Films",
+                                "contact_email": "mara@vossfilms.com", "phone": "555-0103"})
     q = client.get("/leads")
     assert q.status_code == 200
     assert "Mara Voss" in q.text
@@ -102,6 +105,7 @@ def test_promote_creates_exactly_one_opportunity_and_links(ctx):
     client.post(
         "/start",
         data={"contact_name": "Sam Cole", "company": "Cole Brands",
+              "contact_email": "sam@colebrands.com", "phone": "555-0104",
               "project_type": "Sonic logo", "description": "Three-note mnemonic."},
     )
     conn = db_mod.connect()
@@ -135,7 +139,8 @@ def test_promote_creates_exactly_one_opportunity_and_links(ctx):
 
 def test_promote_is_idempotent(ctx):
     client, db_mod = ctx
-    client.post("/start", data={"contact_name": "Pat Vue", "company": "Vue Co"})
+    client.post("/start", data={"contact_name": "Pat Vue", "company": "Vue Co",
+                                "contact_email": "pat@vue.co", "phone": "555-0105"})
     conn = db_mod.connect()
     lead_id = conn.execute(
         "SELECT id FROM inbound_leads WHERE company='Vue Co'"
@@ -150,7 +155,8 @@ def test_promote_is_idempotent(ctx):
 
 def test_dismiss_sets_status(ctx):
     client, db_mod = ctx
-    client.post("/start", data={"contact_name": "Nat Kim", "company": "Kim LLC"})
+    client.post("/start", data={"contact_name": "Nat Kim", "company": "Kim LLC",
+                                "contact_email": "nat@kim.llc", "phone": "555-0106"})
     conn = db_mod.connect()
     lead_id = conn.execute(
         "SELECT id FROM inbound_leads WHERE company='Kim LLC'"

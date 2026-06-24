@@ -41,4 +41,4 @@ def test_get_root_renders_public_home(client):
 def test_dashboard_renders_at_dashboard(client):
     r = client.get("/dashboard")
     assert r.status_code == 200
-    assert "Executive Summary" in r.text
+    assert "Today" in r.text

@@ -64,6 +64,7 @@ def test_questionnaire_stores_and_shows_band(ctx):
     r = client.post(
         "/start",
         data={"contact_name": "Ivy Â", "company": "Ivy Co",
+              "contact_email": "ivy@ivy.co", "phone": "555-0201",
               "project_type": "Original :30 brand spot",
               "description": "orchestral, hopeful"},
         follow_redirects=False,
@@ -94,6 +95,7 @@ def test_internal_queue_shows_quoted_band(ctx):
     client.post(
         "/start",
         data={"contact_name": "Quote Tester", "company": "QT Co",
+              "contact_email": "qt@qt.co", "phone": "555-0202",
               "project_type": "Original :30 brand spot", "description": "strings"},
     )
     q = client.get("/leads")
