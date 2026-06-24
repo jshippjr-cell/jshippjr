@@ -1555,6 +1555,18 @@ def opportunity_capabilities(request: Request, opp_id: int):
         row, opp, ev = _load(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
+        # The deal's project + its Deposit invoice (if either exists yet) — used to
+        # surface the Stripe "Pay deposit" button, exactly as the detail page looks
+        # the project up. No project/invoice → we fall back to showing the amount.
+        project = db.project_for_opp(conn, opp_id)
+        deposit_invoice = None
+        stored_proposal = None
+        if project is not None:
+            stored_proposal = db.proposal_for_project(conn, project["id"])
+            for inv in db.list_invoices(conn, project["id"]):
+                if inv["kind"] == "Deposit":
+                    deposit_invoice = inv
+                    break
     finally:
         conn.close()
     qual, scored = ev
@@ -1564,13 +1576,25 @@ def opportunity_capabilities(request: Request, opp_id: int):
     toggles = default_toggles(row["status"])
     qp = request.query_params
     if qp.get("submitted"):                       # toggle bar was applied
-        for key in ("cost", "examples", "call", "terms"):
+        for key in ("cost", "examples", "call", "terms", "delivery"):
             toggles[key] = qp.get(key) == "1"
     doc = build_capabilities_doc(
         opp, qual, est, toggles=toggles,
         call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
     )
-    return render(request, "capabilities_doc.html", nav="inbox", row=row, doc=doc)
+
+    # Deposit amount for the Pay-deposit element: the stored proposal's deposit if
+    # the project's been spun up, otherwise the estimate-derived deposit.
+    if stored_proposal is not None and stored_proposal["deposit_amount"]:
+        deposit_amount = stored_proposal["deposit_amount"]
+    else:
+        deposit_amount = build_proposal(opp, qual, est).deposit_amount
+
+    return render(
+        request, "capabilities_doc.html", nav="inbox", row=row, doc=doc,
+        deposit_amount=deposit_amount,
+        deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
+    )
 
 
 @app.post("/buyer/{client}/website")

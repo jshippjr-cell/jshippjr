@@ -961,3 +961,73 @@ def test_promote_carries_lead_phone_onto_opportunity(client):
     new_opp = r.headers["location"].split("/opportunity/")[1].split("?")[0]
     page = client.get(f"/opportunity/{new_opp}").text
     assert 'href="tel:(212) 555-0199"' in page       # phone carried + tap-to-act
+
+
+# --------------------------------------------------------------------------- #
+# Phase 6 — combined personalized client document + surfaced Stripe deposit.
+# --------------------------------------------------------------------------- #
+def test_capabilities_doc_shows_delivery_outline_for_submitted_opp(client):
+    # Opp 1 is seeded Submitted (proposal stage) → the delivery-package outline
+    # renders alongside the capabilities framing.
+    page = client.get("/opportunity/1/capabilities").text
+    assert "delivery package" in page.lower()        # the combined block heading
+    assert "Deliverables manifest" in page           # a rich sub-section renders
+    assert "Final master" in page                    # a deliverables row appears
+    assert "Rights &amp; ownership" in page
+
+
+def test_capabilities_doc_hides_delivery_for_discovery_opp(client):
+    # Opp 3 is seeded New (discovery) → no delivery block by default.
+    page = client.get("/opportunity/3/capabilities").text
+    assert "Deliverables manifest" not in page
+    assert "What your delivery package includes" not in page
+
+
+def test_capabilities_doc_no_sample_data_leaks(client):
+    # The static AURORA sample must never bleed into a real deal's doc.
+    page = client.get("/opportunity/1/capabilities").text
+    assert "AURORA" not in page
+    assert "Find Your Horizon" not in page
+
+
+def test_capabilities_doc_surfaces_pay_deposit_with_invoice(client):
+    # Spin up the deal: project → proposal → Deposit invoice, all via the
+    # existing routes, then the doc surfaces a Stripe checkout form.
+    client.post("/opportunity/1/project", follow_redirects=True)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        pid = db_mod.project_for_opp(conn, 1)["id"]
+    finally:
+        conn.close()
+    client.post(f"/project/{pid}/proposal", follow_redirects=True)
+    client.post(f"/project/{pid}/invoice", data={"kind": "Deposit"}, follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        inv = [i for i in db_mod.list_invoices(conn, pid) if i["kind"] == "Deposit"][0]
+    finally:
+        conn.close()
+    page = client.get("/opportunity/1/capabilities").text
+    assert f'action="/invoice/{inv["id"]}/checkout"' in page
+    assert "Pay deposit" in page
+
+
+def test_capabilities_doc_deposit_amount_without_invoice(client):
+    # No project/invoice yet → show the amount with the muted spin-up note,
+    # not a checkout form.
+    page = client.get("/opportunity/1/capabilities").text
+    assert "Deposit invoice is generated when the project is spun up" in page
+    assert "/checkout" not in page
+
+
+def test_capabilities_doc_mark_delivery_sent_in_toolbar(client):
+    page = client.get("/opportunity/1/capabilities").text
+    assert "Mark delivery doc sent" in page
+    client.post(
+        "/opportunity/1/delivery-sent",
+        data={"return_to": "/opportunity/1/capabilities"},
+        follow_redirects=False,
+    )
+    page = client.get("/opportunity/1/capabilities").text
+    assert "✓ Sent" in page
+    assert "Mark delivery doc sent" not in page
