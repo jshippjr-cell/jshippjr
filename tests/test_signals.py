@@ -337,6 +337,32 @@ def test_ingest_drops_self_promo_keeps_gigs(ctx):
     assert any("Hiring" in t for t in titles) and not any("For Hire" in t for t in titles)
 
 
+def test_radar_rejects_supply_and_junk(ctx):
+    """Live-radar precision fix: the exact junk that reached the radar must be
+    dropped — [FOR HIRE] self-promo (even with a demand-ish word), award-winning
+    self-promo, product deals, and bot system messages. Real demand still passes."""
+    _, db, sig = ctx
+    conn = db.connect()
+    bad = [
+        ("[gameDevClassifieds] [FOR HIRE] Composer seeking to work on game soundtracks", ""),
+        ("[Amazon] Trent Reznor & Atticus Ross - Queer (Original Score) [Cobalt] - $13.19", ""),
+        ("Award-Winning Game Composer | IGN-Featured | Streamer-Played Titles",
+         "My name is Dillan and I am a 2X award winning composer & sound designer for games."),
+        ("F5Bot ALERT LIMIT REACHED: sound designer", ""),
+        ("[gameDevClassifieds] [FOR HIRE] - Musicians / Audio Design / Composing",
+         "We are flexible and willing to work with your budget. Demo track: soundcloud.com/x"),
+    ]
+    for i, (title, body) in enumerate(bad):
+        assert sig.ingest_signal(conn, source="reddit-gamedev", title=title, body=body,
+                                 external_ref=f"bad{i}", strict=True) is None, title
+    assert db.list_signals(conn) == []        # nothing junk reached the radar
+    # A genuine paid demand gig still clears the gate.
+    assert sig.ingest_signal(conn, source="reddit-gamedev",
+        title="[PAID] Studio seeking a composer for our indie game",
+        external_ref="real", strict=True) is not None
+    conn.close()
+
+
 def test_nav_badge_counts_new_gigs(ctx):
     client, db, _ = ctx
     conn = db.connect()

@@ -137,10 +137,43 @@ _DEMAND_MARKERS = (
     "paid gig", "budget", "we're making", "we are making", "our game", "our film",
 )
 
+# Explicit self-promo ALWAYS means supply, even when a demand-ish word also appears
+# — "[FOR HIRE] Composer seeking to work" is a job-seeker, not a gig. These hard-
+# override the demand check in intent(). (Stage-0 precision per docs/qualification-spec.md.)
+_HARD_SUPPLY_MARKERS = (
+    "[for hire]", "for hire", "hire me", "available for hire", "available for work",
+    "available to compose", "open for commissions", "open for work", "commissions open",
+    "my portfolio", "my services", "check out my", "my demo", "demo track",
+    "my soundcloud", "ign-featured", "ign featured", "my album", "my albums",
+)
+_SELF_PROMO_RE = re.compile(
+    r"\bi(?:'m| am) a\b[^.?!]{0,40}\b(?:composer|sound design|musician|producer|score)"
+    r"|\baward[- ]winning (?:game )?composer\b"
+    r"|\bmy (?:music|work) can be found\b",
+    re.IGNORECASE,
+)
+
+# Not a gig at all — product deals, ads, and bot system messages. Hard-rejected for
+# EVERY source before scoring (the junk gate the qualification spec calls Stage 0).
+_JUNK_MARKERS = (
+    "[amazon]", "vinyl", "for sale", "on sale", "% off", "shop now", "buy now",
+    "alert limit reached", "[deal]", "discount code", "coupon code",
+)
+
+
+def is_junk(title: str, body: str = "") -> bool:
+    """A product deal, ad, or bot system message — never a real gig."""
+    t = f"{title} {body}".lower()
+    return any(m in t for m in _JUNK_MARKERS)
+
 
 def intent(title: str, body: str = "") -> str:
     """'demand' (a real gig), 'supply' (talent self-promo), or 'unknown'."""
     t = f"{title} {body}".lower()
+    # Explicit self-promo ("[FOR HIRE]", "I'm a composer…") is ALWAYS supply, even
+    # when a demand-ish word appears — a job-seeker's post is not a gig.
+    if any(m in t for m in _HARD_SUPPLY_MARKERS) or _SELF_PROMO_RE.search(t):
+        return "supply"
     demand = any(m in t for m in _DEMAND_MARKERS)
     supply = any(m in t for m in _SUPPLY_MARKERS)
     # An explicit self-promo stays 'supply' even if it quotes a rate. Otherwise a
@@ -202,6 +235,8 @@ def ingest_signal(
 ) -> Optional[int]:
     title = (title or "").strip()
     if not title:
+        return None
+    if is_junk(title, body):           # product deals, ads, bot system messages
         return None
     if strict:
         # Noisy keyword-alert source (F5Bot etc.) — keep only real music gigs.
