@@ -26,10 +26,12 @@ class StripePaymentProvider:
     name = "stripe"
 
     def __init__(self) -> None:
-        # Read config from env at construction; never hard-codes secrets.
-        self.secret_key = os.environ.get("STRIPE_SECRET_KEY")
-        self.webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
-        self.domain = os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN")
+        # Read config from env at construction; never hard-codes secrets. .strip()
+        # guards the common copy-paste gotcha — a trailing space/newline in the env
+        # var breaks Stripe's exact-match signature verification.
+        self.secret_key = (os.environ.get("STRIPE_SECRET_KEY") or "").strip() or None
+        self.webhook_secret = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip() or None
+        self.domain = (os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN") or "").strip() or None
 
     def _client(self):
         try:

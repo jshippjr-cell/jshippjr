@@ -2051,8 +2051,9 @@ async def stripe_webhook(request: Request):
     signature = request.headers.get("stripe-signature", "")
     try:
         event = provider.handle_webhook({"body": body, "signature": signature})
-    except Exception:
-        return Response(status_code=400)  # bad signature / unparseable
+    except Exception as e:  # surface the reason in Stripe's delivery log
+        return Response(content=f"webhook error: {type(e).__name__}: {e}"[:400],
+                        status_code=400)
     invoice_id = event.get("invoice_id")
     if event.get("status") == "Paid" and invoice_id is not None:
         conn = db.connect()
