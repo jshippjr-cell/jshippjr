@@ -82,3 +82,32 @@ def test_open_in_mail_client_mailto_carries_body(client):
     decoded = unquote(m.group(1))
     assert "— Jon Shipp · Chordential" in decoded
     assert "isn't always ideal" in decoded
+
+
+def test_compose_music_upload_returns_to_composer_and_plays_on_page(client):
+    """Uploading a track from the composer returns to the composer, lists the
+    track, and the tailored first-touch page then plays it."""
+    # the composer shows the music section + a preview link
+    page = client.get("/opportunity/3/compose").text
+    assert "First-touch page · music" in page
+    # upload an audio file with return_to=compose
+    r = client.post(
+        "/opportunity/3/doc/upload",
+        data={"action": "add", "label": "Score sketch",
+              "return_to": "/opportunity/3/compose"},
+        files={"file": ("sketch.mp3", b"ID3fake-mp3-bytes", "audio/mpeg")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/opportunity/3/compose"
+    # the composer now lists the track
+    assert "Score sketch" in client.get("/opportunity/3/compose").text
+    # and the first-touch page plays it (valid token)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        token = db_mod.ensure_share_token(conn, 3)
+    finally:
+        conn.close()
+    ft = client.get(f"/opportunity/3/first-touch?k={token}").text
+    assert "<audio" in ft and "Score sketch" in ft

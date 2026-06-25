@@ -49,6 +49,41 @@
   </section>
 </div>
 
+<section class="card">
+  <div class="card-head"><h2>🎧 First-touch page · music</h2>
+    <a class="link" href="{{ page_url }}" target="_blank" rel="noopener">Preview the page ↗</a></div>
+  <p class="muted small" style="margin-top:0">Upload tracks the recipient can play when they open the tailored page. The first one shows under “A relevant example”.</p>
+
+  {% if relevant_uploads %}
+  <ul class="event-log">
+    {% for up in relevant_uploads %}
+    <li>
+      <span class="pill ghost">🎵 {{ up.label }}</span>
+      <a class="muted small" href="{{ up.url }}" target="_blank" rel="noopener">listen ↗</a>
+      <form method="post" action="/opportunity/{{ row['id'] }}/doc/upload" style="display:inline;margin-left:8px">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="filename" value="{{ up.filename }}">
+        <input type="hidden" name="return_to" value="/opportunity/{{ row['id'] }}/compose">
+        <button class="btn ghost tiny" type="submit">× remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted small">No tracks yet — the page shows “a tailored example is available on request” until you add one.</p>
+  {% endif %}
+
+  <form class="stack" method="post" enctype="multipart/form-data" action="/opportunity/{{ row['id'] }}/doc/upload" style="margin-top:10px">
+    <input type="hidden" name="action" value="add">
+    <input type="hidden" name="return_to" value="/opportunity/{{ row['id'] }}/compose">
+    <label>Track label</label>
+    <input type="text" name="label" placeholder="e.g. Score sketch for your film">
+    <label>Audio file <span class="muted small">(.mp3, .wav, .m4a, .aac, .ogg, .flac)</span></label>
+    <input type="file" name="file" accept="audio/*">
+    <button class="btn primary" type="submit">+ Upload track</button>
+  </form>
+</section>
+
 <script>
 function copyCompose(btn){
   var t = document.getElementById('compose-body').textContent;

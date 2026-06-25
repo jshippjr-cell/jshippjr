@@ -21,8 +21,7 @@
     .page{max-width:680px;margin:30px auto;background:var(--cream);
       box-shadow:0 8px 40px rgba(0,0,0,.16);border-radius:8px;overflow:hidden}
     .letterhead{padding:30px 40px 20px;border-bottom:3px solid var(--orange)}
-    .wordmark{font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--wine)}
-    .wordmark span{color:var(--orange)}
+    .wordmark{height:30px;display:block}
     .kicker{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;
       color:var(--muted);margin-top:14px;font-weight:700}
     .title{font-size:25px;font-weight:760;letter-spacing:-.5px;margin:4px 0 2px;color:var(--wine)}
@@ -62,7 +61,7 @@
 <body>
 <div class="page">
   <div class="letterhead">
-    <div class="wordmark">Chord<span>ential</span></div>
+    <img class="wordmark" src="/static/public/wordmark-dark.png" alt="Chordential">
     <div class="kicker">Prepared for {{ client }}</div>
     <div class="title">A short page for your brief</div>
   </div>
@@ -126,11 +125,6 @@
 
     <section class="block">
       <h2 class="sec">The easiest next step</h2>
-      <div class="callout">
-        I know opening links from a stranger isn't always ideal — so if it's easier,
-        I'm happy to walk you through the work on a short call and talk through how
-        we'd approach {{ client }}'s project specifically.
-      </div>
       <div class="cta">
         {% if call_url %}
         <a class="btn-cta" href="{{ call_url }}" target="_blank" rel="noopener">Book a short call →</a>

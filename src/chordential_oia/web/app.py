@@ -1303,13 +1303,18 @@ def compose_page(request: Request, opp_id: int):
         row, opp, plan, blocks, selected, body = _compose_state(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
+        overrides = db.get_doc_overrides(conn, opp_id)
+        relevant_uploads = overrides.get("relevant_uploads") or []
+        token = db.ensure_share_token(conn, opp_id)
     finally:
         conn.close()
     subject = plan.email_subject
     mailto = _mailto(row["contact_email"] or "", subject, body)
+    page_url = f"/opportunity/{opp_id}/first-touch?k={token}"
     return render(
         request, "compose.html", nav="inbox", row=row, opp=opp, plan=plan,
         blocks=blocks, selected=selected, body=body, subject=subject, mailto=mailto,
+        relevant_uploads=relevant_uploads, page_url=page_url,
     )
 
 
@@ -1767,6 +1772,15 @@ def _doc_redirect(opp_id: int):
     )
 
 
+def _doc_back(opp_id: int, return_to: str = ""):
+    """Redirect back to the caller (e.g. the composer) when a safe local
+    ``return_to`` is supplied, else to the capabilities doc editor."""
+    rt = (return_to or "").strip()
+    if rt.startswith("/opportunity/") and "//" not in rt and " " not in rt:
+        return RedirectResponse(rt, status_code=303)
+    return _doc_redirect(opp_id)
+
+
 @app.post("/opportunity/{opp_id}/doc/field")
 def doc_field(opp_id: int, name: str = Form(""), value: str = Form("")):
     """Set/reset a scalar override field (client, understanding, delivery_template,
@@ -1907,6 +1921,7 @@ async def doc_upload(
     label: str = Form(""),
     action: str = Form("add"),
     filename: str = Form(""),
+    return_to: str = Form(""),
     file: Optional[UploadFile] = File(None),
 ):
     """Upload (or remove) a founder audio sample for the Relevant-work section.
@@ -1933,10 +1948,10 @@ async def doc_upload(
                 os.remove(os.path.join(UPLOAD_DIR, base))
             except OSError:
                 pass
-            return _doc_redirect(opp_id)
+            return _doc_back(opp_id, return_to)
 
         if file is None or not (file.filename or "").strip():
-            return _doc_redirect(opp_id)
+            return _doc_back(opp_id, return_to)
 
         ext = os.path.splitext(file.filename)[1].lower()
         ctype = (file.content_type or "").lower()
@@ -1974,7 +1989,7 @@ async def doc_upload(
         db.update_doc_override(conn, opp_id, "relevant_uploads", uploads)
     finally:
         conn.close()
-    return _doc_redirect(opp_id)
+    return _doc_back(opp_id, return_to)
 
 
 @app.post("/buyer/{client}/website")
