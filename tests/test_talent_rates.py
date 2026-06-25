@@ -146,6 +146,14 @@ def test_assigned_day_rate_flows_into_proposal(ctx):
     days = max(1, math.ceil(hours / 8.0))
     assert line["rate"] == 2000.0
     assert line["cost"] == days * 2000.0          # day-rate cost, not the default
+    # The stored line carries its unit + display labels so the CLIENT proposal
+    # never shows a day rate as "$2,000/h" (which would read as an error).
+    assert line["unit"] == "day"
+    assert line["rate_label"] == "$2,000/day"
+    assert line["qty_label"] == f"{days}d"
+    # The rendered client proposal page shows /day, not /h, for this line.
+    page = client.get(f"/project/{pid}/proposal").text
+    assert "$2,000/day" in page
 
     # The proposal total must match the override-driven estimate, and differ
     # from the no-rate (default) estimate for the same team.

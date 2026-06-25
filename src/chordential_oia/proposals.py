@@ -41,7 +41,7 @@ class Proposal:
     def render_text(self) -> str:
         """Plain-text proposal for copy-paste / export."""
         rows = [
-            f"  - {l.role}: {l.hours:g}h × ${l.rate:,.0f}/h = ${l.cost:,.0f}"
+            f"  - {l.role}: {l.breakdown}"
             for l in self.lines
         ] or ["  - —"]
         parts = [

@@ -23,13 +23,13 @@
   </div>
 
   <table class="table compact">
-    <thead><tr><th>Role</th><th>Hours</th><th>Rate</th><th>Cost</th></tr></thead>
+    <thead><tr><th>Role</th><th>Qty</th><th>Rate</th><th>Cost</th></tr></thead>
     <tbody>
       {% for l in line_items %}
       <tr>
         <td class="strong">{{ l.role }}</td>
-        <td>{{ l.hours }}h</td>
-        <td>{{ l.rate|money }}/h</td>
+        <td>{{ l.qty_label|default(l.hours ~ 'h', true) }}</td>
+        <td>{{ l.rate_label|default((l.rate|money) ~ '/h', true) }}</td>
         <td>{{ l.cost|money }}</td>
       </tr>
       {% endfor %}

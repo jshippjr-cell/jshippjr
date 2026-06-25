@@ -65,12 +65,46 @@ class RoleLine:
     # simply hours × rate. ``cost_override`` carries the computed cost in that
     # case; left None, the line falls back to the hourly hours × rate.
     cost_override: Optional[float] = None
+    # The rate unit, so the line displays correctly on the client proposal —
+    # a day/flat rate must NOT render as "Nh × $rate/h" (reads as $rate/hour).
+    unit: str = "hourly"
 
     @property
     def cost(self) -> float:
         if self.cost_override is not None:
             return self.cost_override
         return self.hours * self.rate
+
+    @property
+    def _days(self) -> int:
+        return max(1, math.ceil(self.hours / 8.0))
+
+    @property
+    def qty_label(self) -> str:
+        """Quantity column on the proposal (hours, days, or a flat marker)."""
+        if self.unit == "day":
+            return f"{self._days}d"
+        if self.unit == "project":
+            return "flat"
+        return f"{self.hours:g}h"
+
+    @property
+    def rate_label(self) -> str:
+        """Rate column, unit-correct so the client never sees a $/h day rate."""
+        if self.unit == "day":
+            return f"${self.rate:,.0f}/day"
+        if self.unit == "project":
+            return "flat fee"
+        return f"${self.rate:,.0f}/h"
+
+    @property
+    def breakdown(self) -> str:
+        """One-line scope row for the plain-text proposal."""
+        if self.unit == "day":
+            return f"{self._days}d × ${self.rate:,.0f}/day = ${self.cost:,.0f}"
+        if self.unit == "project":
+            return f"flat fee = ${self.cost:,.0f}"
+        return f"{self.hours:g}h × ${self.rate:,.0f}/h = ${self.cost:,.0f}"
 
 
 @dataclass
@@ -148,11 +182,11 @@ def _override_line(role: str, hours: float, override: dict) -> RoleLine:
     unit = (override.get("unit") or "hourly").lower()
     if unit == "day":
         days = max(1, math.ceil(hours / 8.0))
-        return RoleLine(role, hours, rate, cost_override=days * rate)
+        return RoleLine(role, hours, rate, cost_override=days * rate, unit="day")
     if unit == "project":
-        return RoleLine(role, hours, rate, cost_override=rate)
+        return RoleLine(role, hours, rate, cost_override=rate, unit="project")
     # hourly (default): plain hours × rate, no explicit override needed.
-    return RoleLine(role, hours, rate)
+    return RoleLine(role, hours, rate, unit="hourly")
 
 
 def build_estimate(

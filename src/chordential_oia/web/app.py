@@ -2407,7 +2407,7 @@ def _proposal_from_row(row) -> Proposal:
     items = json.loads(row["line_items"]) if row["line_items"] else []
     lines = []
     for i in items:
-        line = RoleLine(i["role"], i["hours"], i["rate"])
+        line = RoleLine(i["role"], i["hours"], i["rate"], unit=i.get("unit", "hourly"))
         # Preserve a day/flat line cost that isn't simply hours × rate (e.g. an
         # assigned talent's day or per-project rate) so the stored doc renders as
         # generated.

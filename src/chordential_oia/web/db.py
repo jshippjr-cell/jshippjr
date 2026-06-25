@@ -1948,7 +1948,8 @@ def insert_proposal(
             proposal.deposit_pct, proposal.deposit_amount, proposal.total_price,
             proposal.balance_due,
             json.dumps([
-                {"role": l.role, "hours": l.hours, "rate": l.rate, "cost": l.cost}
+                {"role": l.role, "hours": l.hours, "rate": l.rate, "cost": l.cost,
+                 "unit": l.unit, "qty_label": l.qty_label, "rate_label": l.rate_label}
                 for l in proposal.lines
             ]),
             json.dumps(proposal.terms),
