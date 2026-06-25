@@ -45,3 +45,14 @@ def test_profile_completeness_scales_with_fields():
 
 def test_default_funnel_stage_is_prospect():
     assert Talent(name="Z").invite_status is InviteStatus.PROSPECT
+
+
+def test_audio_mixing_engineer_is_a_valid_discipline():
+    # The new discipline resolves everywhere a per-discipline lookup happens.
+    d = MusicDiscipline.MIXING
+    assert d.label == "Audio mixing engineer"
+    assert d.fit_weight == 1.0
+    assert d.team_shape  # has a default team (no KeyError)
+    # A creator can hold it; it's an approvable craft.
+    t = Talent(name="Mix Pro", disciplines=[d])
+    assert d in t.disciplines

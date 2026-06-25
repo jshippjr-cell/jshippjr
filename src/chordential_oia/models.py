@@ -220,6 +220,7 @@ class MusicDiscipline(Enum):
     ARRANGEMENT = "arrangement"  # arrangement / orchestration — core-adjacent
     SUPERVISION = "supervision"  # music supervision / sync placement — adjacent
     LICENSING = "licensing"  # pre-existing / library music — weak fit
+    MIXING = "mixing"  # audio mixing / mastering engineer — core production craft
     NON_CRAFT = "non_craft"  # not Chordential-shaped — disqualified
 
     @property
@@ -231,6 +232,7 @@ class MusicDiscipline(Enum):
             MusicDiscipline.ARRANGEMENT: "Arrangement / orchestration",
             MusicDiscipline.SUPERVISION: "Music supervision",
             MusicDiscipline.LICENSING: "Licensing (pre-existing)",
+            MusicDiscipline.MIXING: "Audio mixing engineer",
             MusicDiscipline.NON_CRAFT: "Not music craft",
         }[self]
 
@@ -244,6 +246,7 @@ class MusicDiscipline(Enum):
             MusicDiscipline.ARRANGEMENT: 0.8,
             MusicDiscipline.SUPERVISION: 0.5,
             MusicDiscipline.LICENSING: 0.3,
+            MusicDiscipline.MIXING: 1.0,
             MusicDiscipline.NON_CRAFT: 0.0,
         }[self]
 
@@ -257,6 +260,7 @@ class MusicDiscipline(Enum):
             MusicDiscipline.ARRANGEMENT: ["Arranger", "Orchestrator", "Mixer"],
             MusicDiscipline.SUPERVISION: ["Music Supervisor"],
             MusicDiscipline.LICENSING: ["Music Supervisor"],
+            MusicDiscipline.MIXING: ["Mix Engineer", "Mastering"],
             MusicDiscipline.NON_CRAFT: [],
         }[self]
 

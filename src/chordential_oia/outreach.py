@@ -63,6 +63,11 @@ _RECOMMENDED_EXAMPLES = {
         "Licensing / library reel example",
         "Cleared-track example",
     ],
+    MusicDiscipline.MIXING: [
+        "Mix-engineering before/after example",
+        "Multi-format mix + master example",
+        "Stem mix / re-version example",
+    ],
 }
 
 # Deliverables we'd "anticipate supporting" — the unified-system framing.
@@ -98,6 +103,11 @@ _DELIVERABLES = {
         "Track curation and licensing", "Clearance coordination",
         "Alternate options per channel", "Delivery-ready files",
     ],
+    MusicDiscipline.MIXING: [
+        "Full mix and master", "Instrumental / TV / stem mixes",
+        "Loudness-compliant deliverables per channel",
+        "Revisions to picture", "Delivery-ready master files",
+    ],
 }
 
 # Relevant-work bullets for the message ([Project] is the human's to fill in).
@@ -130,6 +140,11 @@ _EXAMPLE_WORK = {
     MusicDiscipline.LICENSING: [
         "[Project] — Licensed music package with clearance",
         "[Project] — Curated cleared-track selection for a campaign",
+    ],
+    MusicDiscipline.MIXING: [
+        "[Project] — Mix and master for a branded campaign",
+        "[Project] — Multi-format mixes (broadcast, social, cinema)",
+        "[Project] — Stem mixing and re-versions across channels",
     ],
 }
 
