@@ -32,7 +32,10 @@ from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
-from ..outreach import build_outreach_plan, respond_action
+from ..outreach import (
+    COMPOSE_BLOCK_KEYS, assemble_email, build_compose_blocks, build_outreach_plan,
+    compose_selection, respond_action, _mailto,
+)
 from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, chips_for,
     default_toggles,
@@ -1250,6 +1253,68 @@ def add_outreach_event(
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}/outreach", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Block composer (Phase 1) — on/off blocks + live preview, choices persisted per
+# deal under the `compose` doc-override; the send action builds a personal
+# plain-text email into Jon's own mail client (mailto). Mirrors the doc save
+# routes' style.
+# --------------------------------------------------------------------------- #
+def _compose_state(conn, opp_id: int):
+    """Load the opp/plan, build the composer blocks, and resolve the saved
+    selection + assembled body from the `compose` override. Returns
+    ``(row, opp, plan, blocks, selected, body)`` (all None when missing)."""
+    row, opp, plan = _outreach_for(conn, opp_id)
+    if row is None:
+        return None, None, None, None, None, None
+    overrides = db.get_doc_overrides(conn, opp_id)
+    blocks = build_compose_blocks(
+        opp, None, plan, overrides=overrides, opp_id=opp_id,
+        contact_name=row["contact_name"],
+    )
+    selected = compose_selection(blocks, overrides)
+    body = assemble_email(blocks, selected)
+    return row, opp, plan, blocks, selected, body
+
+
+@app.get("/opportunity/{opp_id}/compose", response_class=HTMLResponse)
+def compose_page(request: Request, opp_id: int):
+    conn = db.connect()
+    try:
+        row, opp, plan, blocks, selected, body = _compose_state(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    subject = plan.email_subject
+    mailto = _mailto(row["contact_email"] or "", subject, body)
+    return render(
+        request, "compose.html", nav="inbox", row=row, opp=opp, plan=plan,
+        blocks=blocks, selected=selected, body=body, subject=subject, mailto=mailto,
+    )
+
+
+@app.post("/opportunity/{opp_id}/compose")
+async def set_compose(request: Request, opp_id: int):
+    """Persist the composer state: the checked block keys + any edited block texts
+    are written into the `compose` doc-override. Mirrors the doc save routes."""
+    form = await request.form()
+    on = [str(k) for k in form.getlist("on")]
+    text = {}
+    for key in COMPOSE_BLOCK_KEYS:
+        raw = form.get(f"text_{key}")
+        if isinstance(raw, str) and raw.strip():
+            text[key] = raw
+    compose = {"on": on}
+    if text:
+        compose["text"] = text
+    conn = db.connect()
+    try:
+        db.update_doc_override(conn, opp_id, "compose", compose)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/compose", status_code=303)
 
 
 @app.get("/opportunity/{opp_id}/match", response_class=HTMLResponse)

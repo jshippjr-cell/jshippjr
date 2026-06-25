@@ -172,6 +172,150 @@ def _build_first_touch(opp, qual, contact_name):
     )
 
 
+# --------------------------------------------------------------------------- #
+# Block composer (Phase 1) — an on/off block model over the generated first-touch
+# content, assembled into a personal plain-text email body for Jon's mail client.
+#
+# Each block is ``{key, label, default_on, text}`` where ``text`` is the generated
+# plain-text content (overridable per-deal via the ``compose`` override). The
+# default selection is the ``default_on`` keys; the email reads hand-typed and
+# minimal (Founder's Advocate ruling) with richness opt-in.
+# --------------------------------------------------------------------------- #
+# Ordered block keys — Phase 2 consumes this contract (the compose override stores
+# {"on": [keys], "text": {key: editedText}}).
+COMPOSE_BLOCK_KEYS = [
+    "opener", "understanding", "track", "call_offer", "page_link", "signoff",
+    "example_more", "credibility", "ps",
+]
+
+# The soft tailored-page link (Phase 2 builds the real token-gated page). For now
+# the URL is a deterministic stub built from the opp id; Phase 2 wires the token.
+def _page_url(opp_id) -> str:
+    ident = opp_id if opp_id is not None else "preview"
+    token = str(ident)
+    return f"/opportunity/{ident}/first-touch?k={token}"
+
+
+def _first_brief_line(opp) -> str:
+    """ONE specific line about their brief, drawn from need/description."""
+    need = (getattr(opp, "need", "") or "").strip()
+    desc = (getattr(opp, "description", "") or "").strip()
+    brief = need or desc
+    if not brief:
+        return "Thanks for putting your music brief out there — it caught my eye."
+    # Keep it short and concrete; a single clause referencing their own words.
+    snippet = brief.split("\n", 1)[0].strip()
+    if len(snippet) > 160:
+        snippet = snippet[:157].rstrip() + "…"
+    return f"I read your brief for {snippet} and it's squarely the kind of work I love to take on."
+
+
+def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
+                         contact_name=None):
+    """Assemble the ordered list of composer blocks for one opportunity.
+
+    Returns a list of ``{key, label, default_on, text}`` dicts. ``overrides`` is
+    the per-deal ``doc_overrides`` blob; a ``compose.text`` entry replaces a
+    block's generated text (so Jon's hand edits survive). ``opp_id`` is the DB row
+    id used to build the soft page-link URL (Phase 2 wires the real token);
+    ``contact_name`` is the known recipient name for the greeting."""
+    overrides = overrides or {}
+    compose = overrides.get("compose") or {}
+    text_over = compose.get("text") or {}
+
+    from .capabilities import build_understanding
+
+    name = (contact_name or "").strip() or "there"
+
+    examples = list(getattr(plan, "recommended_examples", []) or [])
+    best = examples[0] if examples else ""
+    more = examples[1:]
+
+    opener = f"Hi {name},\n\n{_first_brief_line(opp)}"
+    understanding = build_understanding(opp)
+    if best:
+        track = f"One piece I think speaks directly to your brief: {best}."
+    else:
+        track = "I can pull a piece from our portfolio that speaks directly to your brief."
+    call_offer = (
+        "I can attach a few examples, but I also know opening links from a "
+        "stranger isn't always ideal — so if it's easier, I'm happy to walk you "
+        "through them on a short call."
+    )
+    page_url = _page_url(opp_id)
+    page_link = (
+        f"If useful, here's a short page I put together for your brief: {page_url}"
+    )
+    signoff = "— Jon Shipp · Chordential"
+    if more:
+        example_more = "A couple more, if helpful:\n" + "\n".join(f"• {e}" for e in more)
+    else:
+        example_more = "Happy to send a couple more references tuned to your brief."
+    credibility = (
+        "Everything we deliver is original and cleared, with a fixed scope and a "
+        "vetted craft team."
+    )
+    ps = "P.S. Happy to send a couple more references tuned to your brief if that's useful."
+
+    defaults = {
+        "opener": opener,
+        "understanding": understanding,
+        "track": track,
+        "call_offer": call_offer,
+        "page_link": page_link,
+        "signoff": signoff,
+        "example_more": example_more,
+        "credibility": credibility,
+        "ps": ps,
+    }
+    labels = {
+        "opener": "Warm opener",
+        "understanding": "What we understand you need",
+        "track": "One relevant track",
+        "call_offer": "The call offer",
+        "page_link": "Soft tailored-page link",
+        "signoff": "Personal sign-off",
+        "example_more": "A second / third example",
+        "credibility": "Credibility line",
+        "ps": "P.S.",
+    }
+    default_on = {"opener", "understanding", "track", "call_offer", "page_link", "signoff"}
+
+    blocks = []
+    for key in COMPOSE_BLOCK_KEYS:
+        text = text_over.get(key)
+        if not (isinstance(text, str) and text.strip()):
+            text = defaults[key]
+        blocks.append({
+            "key": key,
+            "label": labels[key],
+            "default_on": key in default_on,
+            "text": text,
+        })
+    return blocks
+
+
+def compose_selection(blocks, overrides=None):
+    """The set of currently-selected (ON) block keys.
+
+    Falls back to each block's ``default_on`` when the ``compose`` override has no
+    saved ``on`` list (an un-composed deal renders the minimal defaults)."""
+    overrides = overrides or {}
+    compose = overrides.get("compose") or {}
+    on = compose.get("on")
+    if isinstance(on, list):
+        saved = {str(k) for k in on}
+        return [b["key"] for b in blocks if b["key"] in saved]
+    return [b["key"] for b in blocks if b["default_on"]]
+
+
+def assemble_email(blocks, selected) -> str:
+    """Join the SELECTED blocks' text in order, separated by blank lines."""
+    sel = set(selected or [])
+    parts = [b["text"].strip() for b in blocks if b["key"] in sel and b["text"].strip()]
+    return "\n\n".join(parts)
+
+
 # Per-buyer-type opening channel + the channel used to ask for a live conversation.
 _CHANNELS = {
     BuyerType.AGENCY: ("Email, then a LinkedIn touch", "Phone / video call"),

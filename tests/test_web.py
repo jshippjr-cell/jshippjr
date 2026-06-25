@@ -276,18 +276,22 @@ def test_outreach_email_and_linkedin_links(client):
         follow_redirects=True,
     )
     page = client.get("/opportunity/1/outreach").text
-    # mailto link addressed to the contact, carrying a subject + body (the pitch).
-    assert "mailto:dana@acme.com?subject=" in page
-    assert "&amp;body=" in page  # body of the email prefilled
+    # The Compose button now opens the block composer (Phase 1) rather than a raw
+    # mailto; the mailto with the pitch prefilled lives on the composer screen.
+    assert 'href="/opportunity/1/compose"' in page
+    compose = client.get("/opportunity/1/compose").text
+    assert "mailto:dana@acme.com?subject=" in compose
     # LinkedIn handle was normalized to a working https:// profile link.
     assert 'href="https://linkedin.com/in/danareyes"' in page
     assert "LinkedIn profile" in page
 
 
 def test_outreach_email_link_works_without_saved_email(client):
-    # Even with no contact email captured, the compose draft is offered.
+    # Even with no contact email captured, the composer offers the mailto draft.
     page = client.get("/opportunity/2/outreach").text
-    assert "mailto:?subject=" in page  # empty recipient, template still prefilled
+    assert 'href="/opportunity/2/compose"' in page
+    compose = client.get("/opportunity/2/compose").text
+    assert "mailto:?subject=" in compose  # empty recipient, template still prefilled
 
 
 def test_outreach_autopopulates_linkedin_research(client):

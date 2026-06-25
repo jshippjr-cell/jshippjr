@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import opp_subnav %}
+{% block title %}Compose · {{ row['need'] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}/outreach">{{ row['need'][:40] }}</a> / Compose{% endblock %}
+{% block content %}
+
+{{ opp_subnav(row, 'outreach') }}
+
+<div class="brief-head card">
+  <div>
+    <div class="kpi-label">First-touch composer</div>
+    <div class="verdict-action">Build a personal email — blocks on/off</div>
+    <div class="muted">Minimal by default. Toggle a block, hit Apply, and the preview updates. Send opens your own mail client.</div>
+  </div>
+</div>
+
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Blocks</h2></div>
+    <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/compose">
+      {% for b in blocks %}
+      <div class="compose-block" style="border:1px solid var(--line,#e6e1e2);border-radius:10px;padding:10px;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600">
+          <input type="checkbox" name="on" value="{{ b.key }}" {{ 'checked' if b.key in selected }}>
+          {{ b.label }}
+          {% if not b.default_on %}<span class="pill ghost" style="font-weight:500">optional</span>{% endif %}
+        </label>
+        <textarea name="text_{{ b.key }}" rows="3" style="width:100%;margin-top:6px">{{ b.text }}</textarea>
+      </div>
+      {% endfor %}
+      <button class="btn primary" type="submit">Apply</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Live preview</h2>
+      <span class="muted small">— assembled from the saved state</span></div>
+    <table class="kv"><tr><td>Subject</td><td>{{ subject }}</td></tr></table>
+    <div class="first-touch" id="compose-body" style="margin-top:10px;white-space:pre-wrap">{{ body }}</div>
+
+    <div class="reach-actions" style="margin-top:14px">
+      <a class="btn primary" href="{{ mailto }}">✉ Open in mail client</a>
+      <button class="btn ghost" type="button" onclick="copyCompose(this)">Copy email</button>
+    </div>
+    <p class="muted small reach-hint">
+      {% if row['contact_email'] %}Opens your mail client to <strong>{{ row['contact_email'] }}</strong> with this body prefilled.
+      {% else %}Opens your mail client with this body prefilled — add the recipient (or set the contact email on the Outreach page).{% endif %}
+    </p>
+  </section>
+</div>
+
+<script>
+function copyCompose(btn){
+  var t = document.getElementById('compose-body').textContent;
+  navigator.clipboard.writeText(t).then(function(){
+    var old = btn.textContent; btn.textContent = 'Copied ✓';
+    setTimeout(function(){ btn.textContent = old; }, 1600);
+  });
+}
+</script>
+{% endblock %}

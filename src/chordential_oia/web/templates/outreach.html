@@ -23,7 +23,7 @@
 
     {% set li = row['contact_linkedin'] or plan.linkedin_search_url %}
     <div class="reach-actions">
-      <a class="btn primary" href="mailto:{{ row['contact_email'] or '' }}?subject={{ plan.email_subject|urlencode }}&amp;body={{ plan.first_touch_message|urlencode }}">✉ Compose email</a>
+      <a class="btn primary" href="/opportunity/{{ row['id'] }}/compose">✉ Compose email</a>
       <a class="btn" href="{{ li }}" target="_blank" rel="noopener">in {{ 'LinkedIn profile' if row['contact_linkedin'] else 'Find on LinkedIn' }} ↗</a>
     </div>
     <p class="muted small reach-hint">
