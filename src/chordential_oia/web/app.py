@@ -33,7 +33,10 @@ from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
 from ..prepare import build_pursuit_brief
 from ..outreach import build_outreach_plan, respond_action
-from ..capabilities import build_capabilities_doc, default_toggles
+from ..capabilities import (
+    DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, chips_for,
+    default_toggles,
+)
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
@@ -1569,6 +1572,9 @@ def opportunity_capabilities(request: Request, opp_id: int):
                 if inv["kind"] == "Deposit":
                     deposit_invoice = inv
                     break
+        # Per-deal hand edits (client name, understanding, chips, links, template).
+        overrides = db.get_doc_overrides(conn, opp_id)
+        custom_chips = db.list_custom_chips(conn)
     finally:
         conn.close()
     qual, scored = ev
@@ -1581,9 +1587,21 @@ def opportunity_capabilities(request: Request, opp_id: int):
         for key in ("cost", "examples", "call", "terms", "delivery"):
             toggles[key] = qp.get(key) == "1"
     doc = build_capabilities_doc(
-        opp, qual, est, toggles=toggles,
+        opp, qual, est, toggles=toggles, overrides=overrides,
         call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
     )
+
+    # Edit-mode payload the (later) editable-template UI consumes: the chip library
+    # per editable section (deliverable chips scoped to the chosen template), the
+    # available delivery templates for the override dropdown, and saved "My chips".
+    edit = qp.get("edit") == "1"
+    chip_library = {
+        section: chips_for(section, doc.delivery_template)
+        for section in SECTION_FAMILY
+    }
+    delivery_templates = {
+        key: tmpl["label"] for key, tmpl in DELIVERY_TEMPLATES.items()
+    }
 
     # Deposit amount for the Pay-deposit element: the stored proposal's deposit if
     # the project's been spun up, otherwise the estimate-derived deposit.
@@ -1596,7 +1614,101 @@ def opportunity_capabilities(request: Request, opp_id: int):
         request, "capabilities_doc.html", nav="inbox", row=row, doc=doc,
         deposit_amount=deposit_amount,
         deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
+        edit=edit, overrides=overrides, chip_library=chip_library,
+        custom_chips=custom_chips, delivery_templates=delivery_templates,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Editable client document — per-deal save endpoints (the UI pass calls these).
+# Each is best-effort, validates inputs minimally, and redirects back into edit
+# mode so the toolbar/edit affordances stay visible after a save.
+# --------------------------------------------------------------------------- #
+_DOC_FIELDS = {"client", "understanding", "delivery_template", "delivery_assumptions"}
+
+
+def _doc_redirect(opp_id: int):
+    return RedirectResponse(
+        f"/opportunity/{opp_id}/capabilities?edit=1", status_code=303
+    )
+
+
+@app.post("/opportunity/{opp_id}/doc/field")
+def doc_field(opp_id: int, name: str = Form(""), value: str = Form("")):
+    """Set/reset a scalar override field (client, understanding, delivery_template,
+    delivery_assumptions). A blank value resets that field to the generated default."""
+    if name in _DOC_FIELDS:
+        conn = db.connect()
+        try:
+            db.update_doc_override(conn, opp_id, name, value)
+        finally:
+            conn.close()
+    return _doc_redirect(opp_id)
+
+
+@app.post("/opportunity/{opp_id}/doc/chip")
+def doc_chip(
+    opp_id: int, section: str = Form(""), action: str = Form(""),
+    label: str = Form(""), sentence: str = Form(""),
+):
+    """Add/remove a support chip in one section's ``support_chips`` list."""
+    section = (section or "").strip()
+    if section and action in ("add", "remove"):
+        conn = db.connect()
+        try:
+            overrides = db.get_doc_overrides(conn, opp_id)
+            chips = dict(overrides.get("support_chips") or {})
+            current = list(chips.get(section) or [])
+            if action == "add" and (label.strip() or sentence.strip()):
+                current.append({"label": label.strip(), "sentence": sentence.strip()})
+            elif action == "remove":
+                current = [
+                    c for c in current
+                    if not (c.get("label") == label and c.get("sentence") == sentence)
+                ]
+            if current:
+                chips[section] = current
+            else:
+                chips.pop(section, None)
+            db.update_doc_override(conn, opp_id, "support_chips", chips or None)
+        finally:
+            conn.close()
+    return _doc_redirect(opp_id)
+
+
+@app.post("/opportunity/{opp_id}/doc/link")
+def doc_link(
+    opp_id: int, action: str = Form(""), label: str = Form(""), url: str = Form(""),
+):
+    """Add/remove a hand-picked relevant-work link ({label, url})."""
+    if action in ("add", "remove"):
+        conn = db.connect()
+        try:
+            overrides = db.get_doc_overrides(conn, opp_id)
+            links = list(overrides.get("relevant_links") or [])
+            if action == "add" and url.strip():
+                links.append({"label": label.strip() or url.strip(), "url": url.strip()})
+            elif action == "remove":
+                links = [l for l in links if l.get("url") != url]
+            db.update_doc_override(conn, opp_id, "relevant_links", links or None)
+        finally:
+            conn.close()
+    return _doc_redirect(opp_id)
+
+
+@app.post("/chips/custom")
+def chips_custom(
+    request: Request, family: str = Form(""), label: str = Form(""),
+    sentence: str = Form(""),
+):
+    """Save a reusable custom chip into "My chips" (global across deals)."""
+    conn = db.connect()
+    try:
+        db.add_custom_chip(conn, family, label, sentence)
+    finally:
+        conn.close()
+    back = request.headers.get("referer") or "/"
+    return RedirectResponse(back, status_code=303)
 
 
 @app.post("/buyer/{client}/website")

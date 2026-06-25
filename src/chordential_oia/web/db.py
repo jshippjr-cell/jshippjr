@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS opportunities (
     next_action TEXT,
     next_action_due TEXT,
     last_contacted TEXT,
-    delivery_doc_sent_at TEXT
+    delivery_doc_sent_at TEXT,
+    doc_overrides TEXT
 );
 
 CREATE TABLE IF NOT EXISTS outreach_events (
@@ -250,6 +251,16 @@ CREATE TABLE IF NOT EXISTS invoices (
     external_ref TEXT,                      -- payment-provider id (Stripe, later)
     paid_at TEXT
 );
+
+-- "My chips" — reusable support descriptors Jon types once and keeps. Global
+-- (not per-deal): a phrase written for one client is available on every doc.
+CREATE TABLE IF NOT EXISTS custom_chips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family TEXT,                            -- craft | aesthetic | deliverable | assurance
+    label TEXT,                            -- short label shown in the rail
+    sentence TEXT,                         -- the sentence inserted into the doc
+    created_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -285,6 +296,10 @@ _OUTREACH_COLUMNS = {
     "next_action_due": "TEXT",
     "last_contacted": "TEXT",
     "delivery_doc_sent_at": "TEXT",
+    # Editable client-document per-deal overrides (JSON blob). Display data only,
+    # never queried relationally — the builder reads it on top of the generated
+    # defaults so an un-touched deal renders exactly as before.
+    "doc_overrides": "TEXT",
 }
 
 
@@ -624,6 +639,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             external_ref TEXT, paid_at TEXT
         )"""
     )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS custom_chips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            family TEXT, label TEXT, sentence TEXT, created_at TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -793,6 +814,79 @@ def update_status(
 def update_notes(conn: sqlite3.Connection, opp_id: int, notes: str) -> None:
     conn.execute("UPDATE opportunities SET notes = ? WHERE id = ?", (notes, opp_id))
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Editable client-document — per-deal overrides + reusable "My chips"
+# --------------------------------------------------------------------------- #
+def get_doc_overrides(conn: sqlite3.Connection, opp_id: int) -> dict:
+    """The per-deal client-document overrides as a dict ({} when none/blank).
+
+    Keys (all optional): ``client``, ``understanding``, ``delivery_template``,
+    ``delivery_assumptions``, ``support_chips`` (section → list of
+    {label, sentence}), ``relevant_links`` (list of {label, url}),
+    ``deliverable_overrides`` (optional list replacing generated deliverables)."""
+    row = conn.execute(
+        "SELECT doc_overrides FROM opportunities WHERE id = ?", (opp_id,)
+    ).fetchone()
+    if row is None:
+        return {}
+    raw = row["doc_overrides"]
+    if not raw or not str(raw).strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_doc_overrides(conn: sqlite3.Connection, opp_id: int, overrides: dict) -> None:
+    """Write the full overrides dict back as JSON (empty dict clears the column)."""
+    blob = json.dumps(overrides) if overrides else None
+    conn.execute(
+        "UPDATE opportunities SET doc_overrides = ? WHERE id = ?", (blob, opp_id)
+    )
+    conn.commit()
+
+
+def update_doc_override(conn: sqlite3.Connection, opp_id: int, key: str, value) -> dict:
+    """Merge a single override key. A blank/None value *removes* the key so the
+    field falls back to the generated default ("reset to generated"). Returns the
+    updated overrides dict."""
+    overrides = get_doc_overrides(conn, opp_id)
+    blank = value is None or (isinstance(value, str) and not value.strip())
+    if blank:
+        overrides.pop(key, None)
+    else:
+        overrides[key] = value
+    save_doc_overrides(conn, opp_id, overrides)
+    return overrides
+
+
+def list_custom_chips(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    """All saved "My chips" (reusable across every deal), newest first."""
+    return conn.execute(
+        "SELECT * FROM custom_chips ORDER BY created_at DESC, id DESC"
+    ).fetchall()
+
+
+def add_custom_chip(
+    conn: sqlite3.Connection, family: str, label: str, sentence: str
+) -> Optional[int]:
+    """Save a reusable custom chip. Requires a label + sentence; returns its id."""
+    label = (label or "").strip()
+    sentence = (sentence or "").strip()
+    if not label or not sentence:
+        return None
+    cur = conn.execute(
+        """INSERT INTO custom_chips (family, label, sentence, created_at)
+           VALUES (?,?,?,?)""",
+        ((family or "").strip() or None, label, sentence,
+         datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
 
 
 # --------------------------------------------------------------------------- #
