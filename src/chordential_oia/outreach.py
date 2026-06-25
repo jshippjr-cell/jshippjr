@@ -15,6 +15,7 @@ buyer. It does **not** send mail — it drafts and structures the outreach so Jo
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import List, Optional
 from urllib.parse import quote, quote_plus
@@ -195,7 +196,10 @@ COMPOSE_BLOCK_KEYS = [
 def _page_url(opp_id, token=None) -> str:
     ident = opp_id if opp_id is not None else "preview"
     k = token if (token and str(token).strip()) else str(ident)
-    return f"/opportunity/{ident}/first-touch?k={k}"
+    # Absolute URL so the link is clickable in the email (a relative path is dead
+    # in a mail client). Uses the configured public domain; chordential.com default.
+    base = os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com").rstrip("/")
+    return f"{base}/opportunity/{ident}/first-touch?k={k}"
 
 
 def _first_brief_line(opp) -> str:

@@ -110,6 +110,8 @@ def test_compose_page_link_carries_real_token(client):
     # NOT the old ?k=3 stub.
     assert f"first-touch?k={token}" in page
     assert "first-touch?k=3" not in page
+    # The link must be ABSOLUTE so it's clickable in an email — not a bare path.
+    assert f"https://chordential.com/opportunity/3/first-touch?k={token}" in page
 
 
 def test_first_touch_reachable_when_admin_gate_on(tmp_path, monkeypatch):
