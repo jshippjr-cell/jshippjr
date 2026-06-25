@@ -58,7 +58,10 @@
       {% for role in roles %}
       <div class="role-block">
         <div class="role-head"><strong>{{ role }}</strong>
-          {% if role_rates.get(role) %}<span class="muted small">{{ role_rates[role]|money }}/hr</span>{% endif %}
+          {% set ov = rate_overrides.get(role) %}
+          {% if ov %}
+          <span class="small" title="This rate overrides the default in the proposal">{{ ov.talent_name }} — {{ ov.rate|money }}{% if ov.unit == 'day' %}/day{% elif ov.unit == 'project' %} flat{% else %}/hr{% endif %}</span>
+          {% elif role_rates.get(role) %}<span class="muted small">{{ role_rates[role]|money }}/hr</span>{% endif %}
           <span class="muted small">{{ by_role[role]|length }} assigned</span></div>
         {% for a in by_role[role] %}
         <div class="assigned-row">

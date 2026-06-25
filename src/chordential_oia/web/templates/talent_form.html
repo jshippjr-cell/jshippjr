@@ -22,6 +22,15 @@
     <input type="text" name="location" placeholder="Los Angeles, CA / Remote">
     <label>Demo reel link</label>
     <input type="url" name="demo_reel_url" placeholder="https://… (you'll review this before they're matchable)">
+    <label>Rate</label>
+    <div class="row" style="display:flex; gap:.5rem">
+      <input type="number" name="rate" step="0.01" min="0" placeholder="e.g. 1200" style="flex:2">
+      <select name="rate_unit" style="flex:1">
+        <option value="hourly" selected>Hourly</option>
+        <option value="day">Day</option>
+        <option value="project">Per project</option>
+      </select>
+    </div>
     <label>Notes</label>
     <textarea name="notes" rows="2" placeholder="How we found them, who referred, etc."></textarea>
     <button class="btn primary" type="submit">Add to roster</button>

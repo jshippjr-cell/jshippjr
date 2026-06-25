@@ -50,6 +50,11 @@ class Talent:
     # key) and a link back to the profile/portfolio the record was built from.
     source: Optional[str] = None
     source_url: Optional[str] = None
+    # Pay rate the founder sets per creator. When this talent is assigned to a
+    # role on a project, this rate overrides the global role default in the
+    # project proposal. ``rate_unit`` ∈ {hourly, day, project}.
+    rate: Optional[float] = None
+    rate_unit: str = "hourly"
 
     @property
     def discipline_labels(self) -> List[str]:

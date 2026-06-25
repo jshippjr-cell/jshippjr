@@ -14,6 +14,7 @@ until that data exists.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -60,9 +61,15 @@ class RoleLine:
     role: str
     hours: float
     rate: float
+    # When an assigned talent's rate is a day/flat rate, the line cost is not
+    # simply hours × rate. ``cost_override`` carries the computed cost in that
+    # case; left None, the line falls back to the hourly hours × rate.
+    cost_override: Optional[float] = None
 
     @property
     def cost(self) -> float:
+        if self.cost_override is not None:
+            return self.cost_override
         return self.hours * self.rate
 
 
@@ -129,20 +136,53 @@ def _revisions(text: str) -> Multiplier:
     return Multiplier("Revisions", "2 rounds assumed (+15%)", 1.15)
 
 
+def _override_line(role: str, hours: float, override: dict) -> RoleLine:
+    """Build a role line whose rate/cost come from an assigned talent's rate.
+
+    ``override`` = {"rate": float, "unit": "hourly"|"day"|"project"}. Conversions:
+      hourly  → cost = hours × rate (line behaves like a normal hourly line)
+      day     → days = max(1, ceil(hours/8)); cost = days × rate
+      project → flat: cost = rate (replaces the line cost regardless of hours)
+    """
+    rate = float(override["rate"])
+    unit = (override.get("unit") or "hourly").lower()
+    if unit == "day":
+        days = max(1, math.ceil(hours / 8.0))
+        return RoleLine(role, hours, rate, cost_override=days * rate)
+    if unit == "project":
+        return RoleLine(role, hours, rate, cost_override=rate)
+    # hourly (default): plain hours × rate, no explicit override needed.
+    return RoleLine(role, hours, rate)
+
+
 def build_estimate(
-    opp: Opportunity, team_shape: List[str], discipline: MusicDiscipline
+    opp: Opportunity,
+    team_shape: List[str],
+    discipline: MusicDiscipline,
+    rate_overrides: Optional[Dict[str, dict]] = None,
 ) -> Estimate:
-    """Produce a Phase-1 expert estimate (point + confidence band) for an opp."""
+    """Produce a Phase-1 expert estimate (point + confidence band) for an opp.
+
+    ``rate_overrides`` maps {role_name: {"rate": float, "unit": ...}}. When a
+    role is present, its line rate/cost are computed from that assigned-talent
+    rate instead of the global default — this is how an assigned creator's real
+    cost flows into the project proposal. Absent (the default), the estimate is
+    identical to the pre-feature behaviour.
+    """
     text = f"{opp.need} {opp.description} {' '.join(opp.tags)}".lower()
 
     roles = list(team_shape) if team_shape else ["Composer", "Mixer"]
     if "Project Manager" not in roles:
         roles = roles + ["Project Manager"]
 
-    lines = [
-        RoleLine(role, ROLE_HOURS.get(role, 4.0), ROLE_RATES.get(role, 100.0))
-        for role in roles
-    ]
+    overrides = rate_overrides or {}
+    lines = []
+    for role in roles:
+        hours = ROLE_HOURS.get(role, 4.0)
+        if role in overrides and overrides[role] and overrides[role].get("rate") is not None:
+            lines.append(_override_line(role, hours, overrides[role]))
+        else:
+            lines.append(RoleLine(role, hours, ROLE_RATES.get(role, 100.0)))
     base_cost = sum(line.cost for line in lines)
 
     duration = _infer_duration(text)
@@ -214,7 +254,8 @@ class EstimationEngine:
         opp: Opportunity,
         team_shape: Optional[List[str]] = None,
         discipline: Optional[MusicDiscipline] = None,
+        rate_overrides: Optional[Dict[str, dict]] = None,
     ) -> Estimate:
         discipline = discipline or MusicDiscipline.COMPOSITION
         team_shape = team_shape or discipline.team_shape
-        return build_estimate(opp, team_shape, discipline)
+        return build_estimate(opp, team_shape, discipline, rate_overrides)

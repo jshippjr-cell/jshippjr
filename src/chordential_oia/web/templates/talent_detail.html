@@ -53,6 +53,7 @@
       <tr><td>Credits</td><td>{{ t.credits or '—' }}</td></tr>
       <tr><td>Email</td><td>{{ t.email or '—' }}</td></tr>
       <tr><td>Location</td><td>{{ t.location or '—' }}</td></tr>
+      <tr><td>Rate</td><td>{% if t.rate is not none %}{{ t.rate|money }}{% if t.rate_unit == 'day' %}/day{% elif t.rate_unit == 'project' %} flat (per project){% else %}/hr{% endif %}{% else %}—{% endif %}</td></tr>
       <tr><td>Notes</td><td>{{ t.notes or '—' }}</td></tr>
     </table>
 
@@ -75,6 +76,15 @@
         <input type="text" name="location" value="{{ t.location or '' }}">
         <label>Demo reel link</label>
         <input type="url" name="demo_reel_url" value="{{ t.demo_reel_url or '' }}">
+        <label>Rate</label>
+        <div class="row" style="display:flex; gap:.5rem">
+          <input type="number" name="rate" step="0.01" min="0" value="{{ t.rate if t.rate is not none else '' }}" placeholder="e.g. 1200" style="flex:2">
+          <select name="rate_unit" style="flex:1">
+            <option value="hourly" {{ 'selected' if t.rate_unit == 'hourly' }}>Hourly</option>
+            <option value="day" {{ 'selected' if t.rate_unit == 'day' }}>Day</option>
+            <option value="project" {{ 'selected' if t.rate_unit == 'project' }}>Per project</option>
+          </select>
+        </div>
         <label>Notes</label>
         <textarea name="notes" rows="2">{{ t.notes }}</textarea>
         <button class="btn primary" type="submit">Save profile</button>

@@ -2064,6 +2064,25 @@ def talent_new(request: Request):
     )
 
 
+_RATE_UNITS = {"hourly", "day", "project"}
+
+
+def _clean_rate_unit(unit: str) -> str:
+    unit = (unit or "hourly").strip().lower()
+    return unit if unit in _RATE_UNITS else "hourly"
+
+
+def _parse_rate(raw: str) -> Optional[float]:
+    """Blank rate → None (no rate set); otherwise a float, ignoring bad input."""
+    raw = (raw or "").strip().replace("$", "").replace(",", "")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 @app.post("/talent")
 def talent_create(
     name: str = Form(...),
@@ -2073,12 +2092,15 @@ def talent_create(
     location: str = Form(""),
     demo_reel_url: str = Form(""),
     notes: str = Form(""),
+    rate: str = Form(""),
+    rate_unit: str = Form("hourly"),
 ):
     valid = [MusicDiscipline(d) for d in disciplines if d in {m.value for m in MusicDiscipline}]
     t = Talent(
         name=name.strip(), email=email.strip() or None, disciplines=valid,
         credits=credits.strip(), location=location.strip() or None,
         demo_reel_url=demo_reel_url.strip() or None, notes=notes.strip(),
+        rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
     )
     conn = db.connect()
     try:
@@ -2115,12 +2137,15 @@ def talent_edit(
     location: str = Form(""),
     demo_reel_url: str = Form(""),
     notes: str = Form(""),
+    rate: str = Form(""),
+    rate_unit: str = Form("hourly"),
 ):
     conn = db.connect()
     try:
         db.update_talent_profile(
             conn, talent_id, name.strip(), email, disciplines, credits.strip(),
             location, demo_reel_url, notes.strip(),
+            rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
         )
     finally:
         conn.close()
@@ -2247,6 +2272,9 @@ def _project_view(conn, project_id: int):
         "crew": db.project_crew(conn, project_id),
         # Per-role pay priors so Jon sees the cost of each scoped role.
         "role_rates": {role: ROLE_RATES.get(role) for role in roles},
+        # When an assigned talent has their own rate it overrides the role
+        # default in the proposal — surface it so the cost source is clear.
+        "rate_overrides": db.assigned_rate_overrides(conn, project_id),
     }
 
 
@@ -2377,7 +2405,16 @@ def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
 def _proposal_from_row(row) -> Proposal:
     """Reconstruct a Proposal object from a stored row (for render/export)."""
     items = json.loads(row["line_items"]) if row["line_items"] else []
-    lines = [RoleLine(i["role"], i["hours"], i["rate"]) for i in items]
+    lines = []
+    for i in items:
+        line = RoleLine(i["role"], i["hours"], i["rate"])
+        # Preserve a day/flat line cost that isn't simply hours × rate (e.g. an
+        # assigned talent's day or per-project rate) so the stored doc renders as
+        # generated.
+        stored_cost = i.get("cost")
+        if stored_cost is not None and abs(stored_cost - line.hours * line.rate) > 1e-9:
+            line.cost_override = stored_cost
+        lines.append(line)
     return Proposal(
         client="", need="", discipline="", lines=lines,
         total_price=row["total_price"], deposit_pct=row["deposit_pct"],
@@ -2400,7 +2437,12 @@ def project_generate_proposal(project_id: int):
         row, opp, ev = _load(conn, opp_id)
         qual, scored = ev
         discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-        est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+        # An assigned talent's own rate overrides the global role default for
+        # that line, so the client-facing proposal reflects real assigned cost.
+        rate_overrides = db.assigned_rate_overrides(conn, project_id)
+        est = build_estimate(
+            opp, qual.team_shape or discipline.team_shape, discipline, rate_overrides
+        )
         proposal = build_proposal(opp, qual, est)
         db.insert_proposal(conn, project_id, opp_id, proposal)
         db.add_update(conn, project_id, "Proposal generated.", "proposal")

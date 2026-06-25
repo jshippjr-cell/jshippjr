@@ -119,7 +119,9 @@ CREATE TABLE IF NOT EXISTS talent (
     notes TEXT DEFAULT '',
     created_at TEXT,
     source TEXT,                 -- 'manual' | 'applicant' | source key
-    source_url TEXT
+    source_url TEXT,
+    rate REAL,                   -- founder-set pay rate (NULL = no rate set)
+    rate_unit TEXT DEFAULT 'hourly'  -- 'hourly' | 'day' | 'project'
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -282,6 +284,8 @@ _INBOUND_COLUMNS = {
 _TALENT_COLUMNS = {
     "source": "TEXT",
     "source_url": "TEXT",
+    "rate": "REAL",
+    "rate_unit": "TEXT DEFAULT 'hourly'",
 }
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
@@ -2088,6 +2092,8 @@ def talent_from_row(row: sqlite3.Row) -> Talent:
         notes=row["notes"] or "",
         source=row["source"],
         source_url=row["source_url"],
+        rate=(row["rate"] if "rate" in row.keys() else None),
+        rate_unit=((row["rate_unit"] if "rate_unit" in row.keys() else None) or "hourly"),
     )
 
 
@@ -2095,14 +2101,16 @@ def insert_talent(conn: sqlite3.Connection, t: Talent) -> int:
     cur = conn.execute(
         """INSERT INTO talent
            (name, email, disciplines, credits, location, demo_reel_url,
-            review_status, invite_status, notes, created_at, source, source_url)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            review_status, invite_status, notes, created_at, source, source_url,
+            rate, rate_unit)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             t.name, t.email, json.dumps([d.value for d in t.disciplines]),
             t.credits, t.location, t.demo_reel_url,
             t.review_status.value, t.invite_status.value, t.notes,
             datetime.now(timezone.utc).isoformat(),
             (t.source or "manual"), t.source_url,
+            t.rate, (t.rate_unit or "hourly"),
         ),
     )
     conn.commit()
@@ -2179,14 +2187,16 @@ def update_talent_profile(
     location: str,
     demo_reel_url: str,
     notes: str,
+    rate: Optional[float] = None,
+    rate_unit: str = "hourly",
 ) -> None:
     valid = [d for d in disciplines if d in {m.value for m in MusicDiscipline}]
     conn.execute(
         """UPDATE talent SET name=?, email=?, disciplines=?, credits=?, location=?,
-           demo_reel_url=?, notes=? WHERE id=?""",
+           demo_reel_url=?, notes=?, rate=?, rate_unit=? WHERE id=?""",
         (
             name, email or None, json.dumps(valid), credits, location or None,
-            demo_reel_url or None, notes, talent_id,
+            demo_reel_url or None, notes, rate, (rate_unit or "hourly"), talent_id,
         ),
     )
     conn.commit()
@@ -2273,11 +2283,32 @@ def remove_assignment(conn: sqlite3.Connection, assignment_id: int) -> None:
 
 def list_assignments(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
     return conn.execute(
-        """SELECT a.*, t.name AS talent_name, t.email AS talent_email
+        """SELECT a.*, t.name AS talent_name, t.email AS talent_email,
+                  t.rate AS talent_rate, t.rate_unit AS talent_rate_unit
            FROM assignments a LEFT JOIN talent t ON a.talent_id = t.id
            WHERE a.project_id = ? ORDER BY a.role, a.created_at""",
         (project_id,),
     ).fetchall()
+
+
+def assigned_rate_overrides(conn: sqlite3.Connection, project_id: int) -> dict:
+    """Build the estimate's ``rate_overrides`` map for a project from its
+    assignments: {role: {"rate", "unit", "talent_name"}} for each role whose
+    assigned talent has a non-null rate. First talent with a rate wins per role.
+    """
+    overrides: dict = {}
+    for a in list_assignments(conn, project_id):
+        role = a["role"]
+        rate = a["talent_rate"] if "talent_rate" in a.keys() else None
+        if role in overrides or rate is None:
+            continue
+        unit = (a["talent_rate_unit"] if "talent_rate_unit" in a.keys() else None) or "hourly"
+        overrides[role] = {
+            "rate": float(rate),
+            "unit": unit,
+            "talent_name": a["talent_name"],
+        }
+    return overrides
 
 
 # --- Milestones (delivery progress) --------------------------------------- #
