@@ -1616,6 +1616,7 @@ def opportunity_capabilities(request: Request, opp_id: int):
         deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
         edit=edit, overrides=overrides, chip_library=chip_library,
         custom_chips=custom_chips, delivery_templates=delivery_templates,
+        section_family=SECTION_FAMILY,
     )
 
 

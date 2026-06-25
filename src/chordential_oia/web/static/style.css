@@ -644,3 +644,89 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
   .big-num{font-size:22px}
   .detail-title{font-size:22px}
 }
+
+/* --------------------------------------------------------------------------- */
+/* Editable client document (capabilities_doc.html) — edit-mode affordances.    */
+/* Everything here is screen-only: it never prints into the PDF. The inserted   */
+/* chip CONTENT is styled in the doc's own <style> so it survives print.        */
+/* Brand palette: wine #44161E · orange #E4671F · sand #D8CDB6 · slate #546671. */
+/* --------------------------------------------------------------------------- */
+
+/* The click-to-insert rail of AVAILABLE descriptors + "write your own". */
+.capdoc-edit{
+  margin:10px 0 4px;padding:12px 14px;background:#fbf6f1;
+  border:1px dashed #E4671F;border-radius:10px;
+}
+.capdoc-rail-label{
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:#737469;font-weight:700;margin-bottom:6px;
+}
+.chip-rail{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}
+.chip-rail form{margin:0}
+.chip-token{
+  cursor:pointer;border:1px solid #d8c9bb;background:#fff;color:#44161E;
+  border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:650;
+  line-height:1.2;transition:background .12s,border-color .12s,transform .05s;
+}
+.chip-token:hover{background:#E4671F;color:#fff;border-color:#E4671F}
+.chip-token:active{transform:translateY(1px)}
+.chip-token.is-custom{border-style:dashed;border-color:#546671}
+
+/* the "×" that removes an inserted chip / relevant track. */
+.capdoc-chip-x{
+  cursor:pointer;border:0;background:transparent;color:#9a8e84;
+  font-size:15px;font-weight:800;line-height:1;padding:0 2px;
+}
+.capdoc-chip-x:hover{color:#E4671F}
+
+/* inline + block edit forms (client, understanding, write-your-own, links). */
+.capdoc-inline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.capdoc-block{display:block}
+.capdoc-own{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.capdoc-own form{margin:0}
+.capdoc-in{
+  border:1px solid #d8c9bb;border-radius:7px;padding:6px 9px;font-size:13px;
+  font-family:inherit;color:#1F1E1E;background:#fff;min-width:140px;
+}
+.capdoc-in-wide{flex:1;min-width:220px}
+.capdoc-ta{
+  width:100%;border:1px solid #d8c9bb;border-radius:8px;padding:8px 10px;
+  font-size:14px;font-family:inherit;color:#1F1E1E;background:#fff;line-height:1.5;
+}
+.capdoc-select{
+  border:1px solid #d8c9bb;border-radius:7px;padding:5px 8px;font-size:13px;
+  font-family:inherit;background:#fff;color:#1F1E1E;margin-left:6px;
+}
+.capdoc-add{
+  cursor:pointer;border:0;border-radius:7px;padding:6px 12px;font-size:12.5px;
+  font-weight:700;background:#44161E;color:#fff;
+}
+.capdoc-add:hover{background:#E4671F}
+.capdoc-reset{
+  cursor:pointer;border:0;background:transparent;color:#9a8e84;
+  font-size:12px;font-weight:600;text-decoration:underline;
+}
+.capdoc-reset:hover{color:#E4671F}
+.capdoc-subhead{
+  margin-top:14px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:#546671;font-weight:700;
+}
+
+/* the mandatory assumptions banner (§6) — always prints. */
+.assume-banner{
+  margin-top:12px;background:#fbf3ec;border:1px solid #D8CDB6;
+  border-left:4px solid #E4671F;border-radius:8px;padding:11px 14px;
+  font-size:13.5px;color:#403d3c;
+}
+.assume-banner .assume-tag{
+  display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  font-weight:800;color:#44161E;margin-right:8px;
+}
+
+/* relevant-track screen-only player; the plain link is the print fallback. */
+.relevant-track .track-player{margin:8px 0 4px}
+.relevant-track .track-player iframe{border-radius:8px;border:1px solid #e4ddd8;display:block}
+
+@media print{
+  .capdoc-edit,.capdoc-inline,.capdoc-own,.track-player{display:none !important}
+}

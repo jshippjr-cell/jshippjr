@@ -222,3 +222,67 @@ def test_capabilities_route_still_renders_with_edit_flag(client):
     page = client.get("/opportunity/1/capabilities?edit=1")
     assert page.status_code == 200
     assert "Capabilities" in page.text
+
+
+# --- editable-doc UI: edit mode renders affordances, preview stays clean ----- #
+def test_edit_mode_shows_chip_rails_preview_hides_them(client):
+    edit = client.get("/opportunity/1/capabilities?edit=1").text
+    plain = client.get("/opportunity/1/capabilities").text
+    # the click-to-insert rail + write-your-own only exist in edit mode
+    assert "chip-rail" in edit and "Write your own" in edit
+    assert "chip-rail" not in plain
+    # an edit toggle is offered when not editing, and "Done" when editing
+    assert "?edit=1" in plain
+    assert "Done editing" in edit
+
+
+def test_inserted_chip_sentence_appears_in_doc_body(client):
+    # seed a chip via the save route, then GET the doc (preview, edit off)
+    client.post("/opportunity/1/doc/chip", data={
+        "section": "understanding", "action": "add",
+        "label": "Original composition",
+        "sentence": "Original composition — written for your project."})
+    plain = client.get("/opportunity/1/capabilities").text
+    assert "Original composition — written for your project." in plain
+    # the chip rail itself is still hidden in preview
+    assert "chip-rail" not in plain
+
+
+def test_delivery_assumptions_banner_always_renders(client):
+    # delivery on → the assumptions banner opens the delivery section
+    page = client.get(
+        "/opportunity/1/capabilities?submitted=1&delivery=1&examples=1&call=1"
+    ).text
+    assert "assume-banner" in page
+    assert "Assumed engagement" in page
+
+
+def test_cost_block_renders_after_delivery_section(client):
+    page = client.get(
+        "/opportunity/1/capabilities"
+        "?submitted=1&cost=1&terms=1&delivery=1&examples=1&call=1"
+    ).text
+    delivery_idx = page.find("Delivery Package")
+    invest_idx = page.find("Indicative investment")
+    assert delivery_idx > 0 and invest_idx > 0
+    # price/terms render LAST — after the whole delivery package (§7)
+    assert invest_idx > delivery_idx
+    terms_idx = page.find('class="sec">Terms')   # the Terms section heading, not the toolbar toggle
+    assert terms_idx > invest_idx
+
+
+def test_discovery_doc_shows_no_price(client):
+    # opp 2 seeds as a New (discovery-stage) lead → cost hidden by default
+    page = client.get("/opportunity/2/capabilities").text
+    assert page  # rendered
+    assert "Indicative investment" not in page
+
+
+def test_relevant_link_added_via_route_shows_in_relevant_work(client):
+    client.post("/opportunity/1/doc/link", data={
+        "action": "add", "label": "Close reference",
+        "url": "https://soundcloud.com/chordential/reference"})
+    page = client.get("/opportunity/1/capabilities?submitted=1&examples=1").text
+    assert "Relevant work" in page
+    assert "https://soundcloud.com/chordential/reference" in page
+    assert "Close reference" in page

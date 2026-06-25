@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chordential — Capabilities · {{ doc.client }}</title>
+  <link rel="stylesheet" href="/static/style.css">
   <style>
+    /* This document keeps its own self-contained styling (it's also the print/PDF
+       surface). The editable-doc additions live in static/style.css under the
+       ".capdoc" namespace; everything here is the original doc shell. */
     :root{
       --cream:#FCF7F8; --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F;
       --slate:#546671; --sand:#D8CDB6; --muted:#737469;
@@ -16,6 +20,7 @@
     .toolbar{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;
       display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 20px}
     .toolbar a{color:#fff;text-decoration:none;opacity:.8;font-size:13px}
+    .toolbar a.edit-on{opacity:1;font-weight:700}
     .toolbar .spacer{flex:1}
     .toolbar label{font-size:13px;display:inline-flex;align-items:center;gap:5px;opacity:.92}
     .btn{border:0;border-radius:8px;padding:8px 14px;font-weight:650;cursor:pointer;font-size:13px}
@@ -84,6 +89,17 @@
     .foot{margin-top:30px;padding-top:14px;border-top:1px solid #e4ddd8;
       font-size:12px;color:var(--muted)}
     .placeholder-note{font-size:11px;color:var(--muted);font-style:italic}
+
+    /* --- support-descriptor chips: the INSERTED client-facing content (§1/§4).
+       Styled as tactile, removable tokens (CRO compromise). These print. --- */
+    .chip-lines{list-style:none;margin:10px 0 0;padding:0}
+    .chip-lines li{position:relative;display:flex;align-items:flex-start;gap:9px;
+      padding:8px 12px;margin:6px 0;background:#fff;border:1px solid #e4ddd8;
+      border-left:3px solid var(--orange);border-radius:8px;
+      font-size:14px;color:#33302f;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+    .chip-lines li::before{content:"♪";color:var(--orange);font-weight:800;line-height:1.5}
+    .chip-lines li .chip-rm{margin-left:auto}
+
     @media print{
       body{background:#fff}
       .no-print{display:none !important}
@@ -98,6 +114,7 @@
   <a href="/opportunity/{{ row['id'] }}/outreach">← Back to Outreach</a>
   <form method="get" action="/opportunity/{{ row['id'] }}/capabilities" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <input type="hidden" name="submitted" value="1">
+    {% if edit %}<input type="hidden" name="edit" value="1">{% endif %}
     <label><input type="checkbox" name="examples" value="1" {{ 'checked' if doc.show_examples }}> Work</label>
     <label><input type="checkbox" name="call" value="1" {{ 'checked' if doc.show_call }}> Call invite</label>
     <label><input type="checkbox" name="cost" value="1" {{ 'checked' if doc.show_cost }}> Ballpark cost</label>
@@ -105,6 +122,11 @@
     <label><input type="checkbox" name="delivery" value="1" {{ 'checked' if doc.show_delivery }}> Delivery</label>
     <button class="btn apply" type="submit">Apply</button>
   </form>
+  {% if edit %}
+  <a class="edit-on" href="/opportunity/{{ row['id'] }}/capabilities">✓ Done editing</a>
+  {% else %}
+  <a href="/opportunity/{{ row['id'] }}/capabilities?edit=1">✎ Edit</a>
+  {% endif %}
   <span class="spacer"></span>
   {% if row['delivery_doc_sent_at'] %}
   <span class="sent-mark">✓ Sent {{ row['delivery_doc_sent_at'][:10] }}</span>
@@ -117,12 +139,76 @@
   <button class="btn pdf" type="button" onclick="window.print()">⤓ Save as PDF</button>
 </div>
 
+{# ---- reusable chip macros (insert rail + inserted tokens) ------------------ #}
+{% macro inserted_chips(section) %}
+  {% set items = doc.support_chips.get(section) if doc.support_chips else None %}
+  {% if items %}
+  <ul class="chip-lines">
+    {% for c in items %}
+    <li>
+      <span>{{ c.sentence or c.label }}</span>
+      {% if edit %}
+      <form class="chip-rm no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/chip" style="margin:0">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="label" value="{{ c.label }}">
+        <input type="hidden" name="sentence" value="{{ c.sentence }}">
+        <button class="capdoc-chip-x" type="submit" title="Remove">×</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro chip_rail(section) %}
+  {% if edit %}
+  <div class="capdoc-edit no-print">
+    <div class="capdoc-rail-label">Tap a descriptor to add it</div>
+    <div class="chip-rail">
+      {% for chip in chip_library.get(section, []) %}
+      <form method="post" action="/opportunity/{{ row['id'] }}/doc/chip" style="margin:0">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="add">
+        <input type="hidden" name="label" value="{{ chip.label }}">
+        <input type="hidden" name="sentence" value="{{ chip.sentence }}">
+        <button class="chip-token{{ ' is-custom' if chip.custom }}" type="submit"
+                title="{{ chip.sentence }}">+ {{ chip.label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+    <form class="capdoc-own" method="post" action="/opportunity/{{ row['id'] }}/doc/chip">
+      <input type="hidden" name="section" value="{{ section }}">
+      <input type="hidden" name="action" value="add">
+      <input type="text" name="label" placeholder="Short label" class="capdoc-in">
+      <input type="text" name="sentence" placeholder="Sentence the client reads…" class="capdoc-in capdoc-in-wide">
+      <button class="capdoc-add" type="submit">+ Write your own</button>
+    </form>
+    <form class="capdoc-own" method="post" action="/chips/custom">
+      <input type="hidden" name="family" value="{{ section_family.get(section, section) }}">
+      <input type="text" name="label" placeholder="Save to My chips — label" class="capdoc-in">
+      <input type="text" name="sentence" placeholder="…and the sentence" class="capdoc-in capdoc-in-wide">
+      <button class="capdoc-add" type="submit">Save to My chips</button>
+    </form>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 <div class="page">
   <div class="letterhead">
     <img src="/static/public/wordmark-dark.png" alt="Chordential">
     <div class="doc-kicker">Capabilities &amp; Approach</div>
     <div class="doc-title">{{ doc.need }}</div>
     <div class="doc-sub">Prepared for {{ doc.client }}</div>
+    {% if edit %}
+    <form class="capdoc-inline no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+      <input type="hidden" name="name" value="client">
+      <input type="text" name="value" value="{{ doc.client }}" class="capdoc-in" placeholder="Client name">
+      <button class="capdoc-add" type="submit">Save</button>
+      <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+    </form>
+    {% endif %}
     <span class="stage-badge">{{ doc.stage }} stage</span>
   </div>
 
@@ -135,11 +221,32 @@
     <section class="block">
       <h2 class="sec">What we understand you need</h2>
       <p class="lead">{{ doc.understanding }}</p>
+      {% if edit %}
+      <form class="capdoc-inline capdoc-block no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+        <input type="hidden" name="name" value="understanding">
+        <textarea name="value" class="capdoc-ta" rows="3" placeholder="What we understand you need…">{{ doc.understanding }}</textarea>
+        <div class="capdoc-inline">
+          <button class="capdoc-add" type="submit">Save</button>
+          <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+        </div>
+      </form>
+      {% endif %}
       <ul class="pill-list">
         <li>{{ doc.discipline_label }}</li>
         <li>{{ doc.music_requirement }}</li>
         {% for s in doc.secondary %}<li>{{ s }}</li>{% endfor %}
       </ul>
+
+      {# craft chips — what we'll make #}
+      {{ inserted_chips('understanding') }}
+      {{ chip_rail('understanding') }}
+
+      {# aesthetic sub-area — how it should feel #}
+      {% if edit or (doc.support_chips and doc.support_chips.get('aesthetic')) %}
+      <div class="capdoc-subhead">How it should feel</div>
+      {{ inserted_chips('aesthetic') }}
+      {{ chip_rail('aesthetic') }}
+      {% endif %}
     </section>
 
     <section class="block">
@@ -149,9 +256,56 @@
       </ul>
     </section>
 
-    {% if doc.show_examples and doc.examples %}
+    {% if doc.show_examples %}
     <section class="block">
       <h2 class="sec">Relevant work</h2>
+
+      {# hand-picked tracks for THIS lead outrank the generic reels (§5) #}
+      {% if doc.relevant_links %}
+      {% for link in doc.relevant_links %}
+      <div class="ex relevant-track">
+        <div class="ex-title">{{ link.label }}</div>
+        {% set u = link.url %}
+        {% if 'soundcloud.com' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="120" scrolling="no" frameborder="no"
+            src="https://w.soundcloud.com/player/?url={{ u | urlencode }}&color=%23E4671F&visual=false"></iframe>
+        </div>
+        {% elif 'youtube.com' in u or 'youtu.be' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="200" frameborder="0" allowfullscreen
+            src="{{ u | replace('watch?v=', 'embed/') | replace('youtu.be/', 'www.youtube.com/embed/') }}"></iframe>
+        </div>
+        {% elif 'spotify.com' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media"
+            src="{{ u | replace('/track/', '/embed/track/') | replace('open.spotify.com', 'open.spotify.com') }}"></iframe>
+        </div>
+        {% endif %}
+        <div class="ex-meta"><a href="{{ u }}">{{ u }}</a></div>
+        {% if edit %}
+        <form class="no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/link" style="margin:4px 0 0">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="url" value="{{ u }}">
+          <button class="capdoc-chip-x" type="submit" title="Remove">× remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if edit %}
+      <form class="capdoc-edit no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/link">
+        <input type="hidden" name="action" value="add">
+        <div class="capdoc-inline">
+          <input type="text" name="label" placeholder="Track label" class="capdoc-in">
+          <input type="text" name="url" placeholder="SoundCloud / YouTube / Spotify URL" class="capdoc-in capdoc-in-wide">
+          <button class="capdoc-add" type="submit">+ Add a relevant track</button>
+        </div>
+      </form>
+      {% endif %}
+
+      {# generated showcase reels — the fallback, below the hand-picked tracks #}
       {% for ex in doc.examples %}
       <div class="ex">
         <div class="ex-title">{{ ex.title }}{% if ex.placeholder %} <span class="placeholder-note">— sample reel</span>{% endif %}</div>
@@ -162,52 +316,42 @@
     </section>
     {% endif %}
 
-    {% if doc.show_cost and doc.price_low %}
-    <section class="block">
-      <h2 class="sec">Indicative investment</h2>
-      <div class="price">${{ '{:,}'.format(doc.price_low) }}–${{ '{:,}'.format(doc.price_high) }} <small>ballpark — firmed up after a scoping call</small></div>
-    </section>
-    {% endif %}
-
-    {% if doc.show_terms and doc.terms %}
-    <section class="block">
-      <h2 class="sec">Terms</h2>
-      <ul class="terms">{% for t in doc.terms %}<li>{{ t }}</li>{% endfor %}</ul>
-    </section>
-    {% endif %}
-
-    {% if doc.stage in ('proposal', 'contract') %}
-    <section class="block">
-      <h2 class="sec">Deposit</h2>
-      <div class="pay">
-        <div class="amt">${{ '{:,.0f}'.format(deposit_amount) }} <small>deposit to begin work</small></div>
-        {% if deposit_invoice_id %}
-        <form method="post" action="/invoice/{{ deposit_invoice_id }}/checkout" style="margin:0">
-          <button class="btn pay-btn" type="submit">Pay deposit →</button>
-        </form>
-        {% else %}
-        <span class="placeholder-note">Deposit invoice is generated when the project is spun up.</span>
-        {% endif %}
-      </div>
-    </section>
-    {% endif %}
-
-    {% if doc.show_docusign %}
-    <section class="block">
-      <h2 class="sec">Agreement</h2>
-      <div class="docusign">
-        On your go-ahead, we'll send a countersignable agreement (Terms &amp; Conditions
-        attached) for e-signature on signature — no printing or scanning needed.
-      </div>
-    </section>
-    {% endif %}
-
     {% if doc.show_delivery %}
     <div class="delivery-head">
       <div class="delivery-kicker">Delivery Package</div>
       <div class="delivery-title">What your delivery package includes</div>
       <div class="delivery-note">Personalized to {{ doc.client }} · {{ doc.campaign_label }} — the standard your package is built and delivered against.</div>
     </div>
+
+    {# assumptions banner — mandatory, always rendered (§6) #}
+    {% if doc.delivery_assumptions %}
+    <div class="assume-banner">
+      <span class="assume-tag">Assumed engagement</span>
+      <span class="assume-text">{{ doc.delivery_assumptions }}</span>
+    </div>
+    {% endif %}
+    {% if edit %}
+    <div class="capdoc-edit no-print">
+      <form class="capdoc-inline" method="post" action="/opportunity/{{ row['id'] }}/doc/field" style="margin:0 0 6px">
+        <input type="hidden" name="name" value="delivery_template">
+        <label class="capdoc-rail-label" style="margin:0">Template
+          <select name="value" onchange="this.form.submit()" class="capdoc-select">
+            {% for key, label in delivery_templates.items() %}
+            <option value="{{ key }}" {{ 'selected' if key == doc.delivery_template }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      <form class="capdoc-inline capdoc-block" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+        <input type="hidden" name="name" value="delivery_assumptions">
+        <textarea name="value" class="capdoc-ta" rows="2" placeholder="Assumptions line…">{{ doc.delivery_assumptions }}</textarea>
+        <div class="capdoc-inline">
+          <button class="capdoc-add" type="submit">Save</button>
+          <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
 
     {% if doc.deliverables %}
     <section class="block">
@@ -222,6 +366,10 @@
           {% endfor %}
         </tbody>
       </table>
+
+      {# deliverable chips — what you'll get (template-scoped) #}
+      {{ inserted_chips('deliverables') }}
+      {{ chip_rail('deliverables') }}
     </section>
     {% endif %}
 
@@ -245,6 +393,15 @@
       </div>
     </section>
     {% endif %}
+
+    {# how we work — assurance chips near the close #}
+    {% if edit or (doc.support_chips and doc.support_chips.get('assurance')) %}
+    <section class="block">
+      <h2 class="sec">How we work</h2>
+      {{ inserted_chips('assurance') }}
+      {{ chip_rail('assurance') }}
+    </section>
+    {% endif %}
     {% endif %}
 
     {% if doc.show_call %}
@@ -253,6 +410,48 @@
       <div class="callout">
         Let's spend 20 minutes locking the creative direction and timeline.
         {% if doc.call_url %}<br><a href="{{ doc.call_url }}">Book a time →</a>{% else %}Reply to this and we'll find a slot that works.{% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# --- Price + terms + sign/pay ALWAYS LAST (§7): Investment → Terms →
+           (DocuSign / Pay deposit). Gated on their toggles; off in discovery. --- #}
+    {% if doc.show_cost and doc.price_low %}
+    <section class="block">
+      <h2 class="sec">Indicative investment</h2>
+      <div class="price">${{ '{:,}'.format(doc.price_low) }}–${{ '{:,}'.format(doc.price_high) }} <small>ballpark — firmed up after a scoping call</small></div>
+    </section>
+    {% endif %}
+
+    {% if doc.show_terms and doc.terms %}
+    <section class="block">
+      <h2 class="sec">Terms</h2>
+      <ul class="terms">{% for t in doc.terms %}<li>{{ t }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    {% if doc.show_docusign %}
+    <section class="block">
+      <h2 class="sec">Agreement</h2>
+      <div class="docusign">
+        On your go-ahead, we'll send a countersignable agreement (Terms &amp; Conditions
+        attached) for e-signature on signature — no printing or scanning needed.
+      </div>
+    </section>
+    {% endif %}
+
+    {% if doc.stage in ('proposal', 'contract') %}
+    <section class="block">
+      <h2 class="sec">Deposit</h2>
+      <div class="pay">
+        <div class="amt">${{ '{:,.0f}'.format(deposit_amount) }} <small>deposit to begin work</small></div>
+        {% if deposit_invoice_id %}
+        <form method="post" action="/invoice/{{ deposit_invoice_id }}/checkout" style="margin:0">
+          <button class="btn pay-btn" type="submit">Pay deposit →</button>
+        </form>
+        {% else %}
+        <span class="placeholder-note">Deposit invoice is generated when the project is spun up.</span>
+        {% endif %}
       </div>
     </section>
     {% endif %}
