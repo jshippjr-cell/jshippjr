@@ -216,3 +216,26 @@ renderer + `doc_overrides`; Option A is a body-builder over the existing `_mailt
 Option C, if authorized, requires re-minting Jon's Gmail token with a send scope, a
 MIME-HTML composer with inlined CSS and hosted images, and a per-client render pass —
 and still links out to the page for audio.*
+
+---
+
+## Founder's rulings — 2026-06-25 (Jon Shipp, CEO)
+
+Walked through conversationally; all five settled.
+
+1. **Block composer →** ✅ **Yes** — replace bare "Compose email" with an on/off block
+   composer + live preview, choices persisted per deal, sharing the doc's chip vocabulary.
+2. **Block menu →** ✅ **Default ON:** Warm opener · What we understand you need · One
+   relevant track (named, best-fit) · The call offer · Soft tailored-page link (one
+   low-pressure line — "if useful, here's a short page I put together for your brief") ·
+   Personal sign-off. **Default OFF (opt-in):** second/third example · credibility line ·
+   P.S.
+3. **★ Delivery mechanism →** ✅ **Option B** — a short personal email (sent from Jon's
+   own mail client, Option A's mechanism) carrying **one link to a per-lead tailored
+   "first-touch page"** where the rich content lives. **Option C (Gmail HTML send)
+   deferred** until the page proves engagement; **Option D (ESP) rejected.**
+4. **Default richness →** ✅ **Minimal** — lean defaults, richness opt-in per send.
+5. **Page link role →** ✅ **Bonus, softly on** — the email stands on its own; the page
+   link is present as one low-pressure line, never the centerpiece.
+
+Build plan: see `docs/first-touch-email-build-plan.md`.
