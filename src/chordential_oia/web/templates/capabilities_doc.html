@@ -43,8 +43,11 @@
       font-weight:750;margin:0 0 8px;border-bottom:1px solid #e4ddd8;padding-bottom:5px}
     .lead{font-size:15px;color:#33302f}
     .pill-list{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0;padding:0;list-style:none}
-    .pill-list li{background:rgba(228,103,31,.08);border:1px solid rgba(228,103,31,.30);
+    .pill-list li{display:inline-flex;align-items:center;gap:6px;
+      background:rgba(228,103,31,.08);border:1px solid rgba(228,103,31,.30);
       border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;color:var(--wine)}
+    .pill-rm{display:inline-flex;margin:0}
+    .capdoc-restore{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 0}
     .ex{padding:12px 0;border-bottom:1px solid #ece5e0}
     .ex:last-child{border-bottom:0}
     .ex-title{font-weight:700;color:var(--wine)}
@@ -208,6 +211,37 @@
   {% endif %}
 {% endmacro %}
 
+{# auto-generated pills (discipline, music need, team roles) — deletable per deal #}
+{% macro auto_pills(section, items) %}
+  {% set hidden = (overrides.get('hidden_pills', {}).get(section, [])) if overrides else [] %}
+  <ul class="pill-list">
+    {% for p in items %}
+    {% if p and p not in hidden %}
+    <li>{{ p }}{% if edit %}
+      <form class="pill-rm no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/pill">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="hide">
+        <input type="hidden" name="label" value="{{ p }}">
+        <button class="capdoc-chip-x" type="submit" title="Remove">×</button>
+      </form>{% endif %}</li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% if edit and hidden %}
+  <div class="capdoc-restore no-print">
+    <span class="capdoc-rail-label">Removed — tap to restore</span>
+    {% for p in hidden %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/doc/pill" style="margin:0">
+      <input type="hidden" name="section" value="{{ section }}">
+      <input type="hidden" name="action" value="show">
+      <input type="hidden" name="label" value="{{ p }}">
+      <button class="chip-token" type="submit" title="Restore">+ {{ p }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endmacro %}
+
 <div class="page">
   <div class="letterhead">
     <img src="/static/public/wordmark-dark.png" alt="Chordential">
@@ -244,11 +278,7 @@
         </div>
       </form>
       {% endif %}
-      <ul class="pill-list">
-        <li>{{ doc.discipline_label }}</li>
-        <li>{{ doc.music_requirement }}</li>
-        {% for s in doc.secondary %}<li>{{ s }}</li>{% endfor %}
-      </ul>
+      {{ auto_pills('understanding_pills', [doc.discipline_label, doc.music_requirement] + (doc.secondary or [])) }}
 
       {# craft chips — what we'll make #}
       {{ inserted_chips('understanding') }}
@@ -264,9 +294,7 @@
 
     <section class="block">
       <h2 class="sec">The team we'd put on it</h2>
-      <ul class="pill-list">
-        {% for role in doc.team %}<li>{{ role }}</li>{% else %}<li>Composer · Mixer</li>{% endfor %}
-      </ul>
+      {{ auto_pills('team_pills', doc.team or ['Composer · Mixer']) }}
 
       {# talent descriptors — click-to-insert tokens below the auto role pills #}
       {{ inserted_chips('team') }}

@@ -373,3 +373,27 @@ def test_uploads_route_serves_file_and_rejects_traversal(client):
     # path traversal must not escape the uploads dir
     bad = client.get("/uploads/..%2f..%2fapp.py")
     assert bad.status_code == 404
+
+
+def test_auto_pill_delete_and_restore(client):
+    """Auto-generated pills (discipline/music need/team) can be removed per deal
+    and restored — the founder's 'I should be able to delete the auto bubbles'."""
+    import re
+    # edit mode exposes the per-pill delete control
+    edit = client.get("/opportunity/1/capabilities?edit=1").text
+    assert "/opportunity/1/doc/pill" in edit
+    assert 'value="hide"' in edit
+    # grab a real auto-pill label from the (preview) understanding pill-list
+    plain = client.get("/opportunity/1/capabilities").text
+    label = re.search(r'<ul class="pill-list">\s*<li>([^<]+)', plain).group(1).strip()
+    # hide it → gone from the rendered doc
+    client.post("/opportunity/1/doc/pill", data={
+        "section": "understanding_pills", "action": "hide", "label": label})
+    after = client.get("/opportunity/1/capabilities").text
+    assert "<li>" + label not in after
+    # in edit mode it sits in the restore rail
+    assert "tap to restore" in client.get("/opportunity/1/capabilities?edit=1").text
+    # restore → back in the doc
+    client.post("/opportunity/1/doc/pill", data={
+        "section": "understanding_pills", "action": "show", "label": label})
+    assert "<li>" + label in client.get("/opportunity/1/capabilities").text

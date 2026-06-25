@@ -1709,6 +1709,36 @@ def doc_link(
     return _doc_redirect(opp_id)
 
 
+@app.post("/opportunity/{opp_id}/doc/pill")
+def doc_pill(
+    opp_id: int, section: str = Form(""), action: str = Form(""), label: str = Form(""),
+):
+    """Hide/restore an auto-generated pill (discipline, music need, team role) per
+    deal. Hidden labels live in ``overrides['hidden_pills'][section]``; the builder
+    leaves the generated pills intact, the template just skips the hidden ones, so a
+    'show' fully restores it."""
+    section = (section or "").strip()
+    label = (label or "").strip()
+    if section and label and action in ("hide", "show"):
+        conn = db.connect()
+        try:
+            overrides = db.get_doc_overrides(conn, opp_id)
+            hidden = dict(overrides.get("hidden_pills") or {})
+            current = list(hidden.get(section) or [])
+            if action == "hide" and label not in current:
+                current.append(label)
+            elif action == "show":
+                current = [x for x in current if x != label]
+            if current:
+                hidden[section] = current
+            else:
+                hidden.pop(section, None)
+            db.update_doc_override(conn, opp_id, "hidden_pills", hidden or None)
+        finally:
+            conn.close()
+    return _doc_redirect(opp_id)
+
+
 @app.post("/chips/custom")
 def chips_custom(
     request: Request, family: str = Form(""), label: str = Form(""),
