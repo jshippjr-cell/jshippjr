@@ -188,12 +188,14 @@ COMPOSE_BLOCK_KEYS = [
     "example_more", "credibility", "ps",
 ]
 
-# The soft tailored-page link (Phase 2 builds the real token-gated page). For now
-# the URL is a deterministic stub built from the opp id; Phase 2 wires the token.
-def _page_url(opp_id) -> str:
+# The soft tailored-page link → the Phase 2 token-gated first-touch page. The
+# token is the page's access control: an unguessable per-opp ``share_token`` so the
+# URL is shareable but not enumerable. Falls back to a "preview" stub only when no
+# id/token is available (e.g. a bare preview render).
+def _page_url(opp_id, token=None) -> str:
     ident = opp_id if opp_id is not None else "preview"
-    token = str(ident)
-    return f"/opportunity/{ident}/first-touch?k={token}"
+    k = token if (token and str(token).strip()) else str(ident)
+    return f"/opportunity/{ident}/first-touch?k={k}"
 
 
 def _first_brief_line(opp) -> str:
@@ -211,14 +213,16 @@ def _first_brief_line(opp) -> str:
 
 
 def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
-                         contact_name=None):
+                         contact_name=None, share_token=None):
     """Assemble the ordered list of composer blocks for one opportunity.
 
     Returns a list of ``{key, label, default_on, text}`` dicts. ``overrides`` is
     the per-deal ``doc_overrides`` blob; a ``compose.text`` entry replaces a
     block's generated text (so Jon's hand edits survive). ``opp_id`` is the DB row
-    id used to build the soft page-link URL (Phase 2 wires the real token);
-    ``contact_name`` is the known recipient name for the greeting."""
+    id used to build the soft page-link URL and ``share_token`` is the opp's
+    unguessable token threaded into that URL (so the ``page_link`` block carries the
+    real token-gated link); ``contact_name`` is the known recipient name for the
+    greeting."""
     overrides = overrides or {}
     compose = overrides.get("compose") or {}
     text_over = compose.get("text") or {}
@@ -242,7 +246,7 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
         "stranger isn't always ideal — so if it's easier, I'm happy to walk you "
         "through them on a short call."
     )
-    page_url = _page_url(opp_id)
+    page_url = _page_url(opp_id, share_token)
     page_link = (
         f"If useful, here's a short page I put together for your brief: {page_url}"
     )

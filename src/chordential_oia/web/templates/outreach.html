@@ -50,6 +50,14 @@
       <button class="btn primary" type="submit">Save outreach</button>
     </form>
     <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities" style="margin-top:12px;display:inline-block">📄 Capabilities doc →</a>
+    <p class="muted small" style="margin-top:10px">
+      {% set views = row['first_touch_views'] or 0 %}
+      {% if views %}
+        📈 First-touch page viewed {{ views }}×{% if row['first_touch_viewed_at'] %} · last {{ row['first_touch_viewed_at'][:10] }}{% endif %}
+      {% else %}
+        📈 First-touch page not yet viewed
+      {% endif %}
+    </p>
   </section>
 
   <section class="card">

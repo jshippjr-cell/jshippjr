@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chordential — for {{ client }}</title>
+  <link rel="icon" href="/static/public/wordmark-dark.png">
+  {# SELF-CONTAINED public page: a screen-first intro (not the full capabilities
+     doc, not the admin shell). Brand palette inline so it renders for an external
+     recipient with no admin nav. The compact .cap-audio player markup/CSS/JS and
+     the embed pattern are reused from the capabilities doc. #}
+  <style>
+    :root{
+      --cream:#FCF7F8; --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F;
+      --slate:#546671; --sand:#D8CDB6; --muted:#737469;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:#ece7e3;color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      line-height:1.6;-webkit-font-smoothing:antialiased}
+    .page{max-width:680px;margin:30px auto;background:var(--cream);
+      box-shadow:0 8px 40px rgba(0,0,0,.16);border-radius:8px;overflow:hidden}
+    .letterhead{padding:30px 40px 20px;border-bottom:3px solid var(--orange)}
+    .wordmark{font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--wine)}
+    .wordmark span{color:var(--orange)}
+    .kicker{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;
+      color:var(--muted);margin-top:14px;font-weight:700}
+    .title{font-size:25px;font-weight:760;letter-spacing:-.5px;margin:4px 0 2px;color:var(--wine)}
+    .body{padding:14px 40px 36px}
+    section.block{margin-top:24px}
+    h2.sec{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--orange);
+      font-weight:750;margin:0 0 8px;border-bottom:1px solid #e4ddd8;padding-bottom:5px}
+    .lead{font-size:16px;color:#33302f;margin:0}
+    .ex{padding:12px 0;border-bottom:1px solid #ece5e0}
+    .ex:last-child{border-bottom:0}
+    .ex-title{font-weight:700;color:var(--wine)}
+    .ex-meta{font-size:12px;color:var(--muted)}
+    .track-player{margin:8px 0 4px}
+    .none-note{font-size:14px;color:#403d3c;font-style:italic}
+    .callout{background:#fff;border:1px solid var(--sand);border-left:4px solid var(--orange);
+      border-radius:8px;padding:14px 16px;margin-top:8px}
+    .cta{margin-top:18px}
+    .btn-cta{display:inline-block;background:linear-gradient(135deg,var(--orange),#cc551a);
+      color:#fff;text-decoration:none;font-weight:700;border-radius:8px;padding:11px 20px;font-size:14px}
+    .cta .muted{font-size:13px;color:var(--muted);margin-top:8px}
+    .foot{margin-top:30px;padding:16px 40px;border-top:1px solid #e4ddd8;
+      font-size:12px;color:var(--muted);background:#f6efe9}
+    .foot a{color:var(--orange);font-weight:700;text-decoration:none}
+
+    /* compact, brand-coloured audio player (reused from the capabilities doc) */
+    .cap-audio{display:inline-flex;align-items:center;gap:10px;max-width:340px;width:100%;
+      background:#fff;border:1px solid #e4ddd8;border-radius:999px;padding:4px 12px 4px 4px;margin:8px 0 4px}
+    .cap-audio-btn{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:0;
+      background:var(--orange);color:#fff;font-size:11px;line-height:1;cursor:pointer;
+      display:inline-flex;align-items:center;justify-content:center}
+    .cap-audio-body{flex:1 1 auto;min-width:110px}
+    .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
+    .cap-audio-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:var(--orange)}
+    .cap-audio-time{flex:0 0 auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="letterhead">
+    <div class="wordmark">Chord<span>ential</span></div>
+    <div class="kicker">Prepared for {{ client }}</div>
+    <div class="title">A short page for your brief</div>
+  </div>
+
+  <div class="body">
+    <section class="block">
+      <h2 class="sec">What we understand you need</h2>
+      <p class="lead">{{ understanding }}</p>
+    </section>
+
+    <section class="block">
+      <h2 class="sec">A relevant example</h2>
+
+      {# hand-picked uploads (audio) — the compact brand player #}
+      {% if relevant_uploads %}
+      {% for up in relevant_uploads %}
+      <div class="ex">
+        <div class="ex-title">{{ up.label }}</div>
+        <div class="cap-audio">
+          <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>
+          <div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>
+          <span class="cap-audio-time">0:00</span>
+          <audio preload="none" src="{{ up.url }}"></audio>
+        </div>
+        <div class="ex-meta"><a href="{{ up.url }}">⤓ {{ up.label }} (audio)</a></div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {# hand-picked links (SoundCloud / YouTube / Spotify embeds) #}
+      {% if relevant_links %}
+      {% for link in relevant_links %}
+      <div class="ex">
+        <div class="ex-title">{{ link.label }}</div>
+        {% set u = link.url %}
+        {% if 'soundcloud.com' in u %}
+        <div class="track-player">
+          <iframe width="100%" height="120" scrolling="no" frameborder="no"
+            src="https://w.soundcloud.com/player/?url={{ u | urlencode }}&color=%23E4671F&visual=false"></iframe>
+        </div>
+        {% elif 'youtube.com' in u or 'youtu.be' in u %}
+        <div class="track-player">
+          <iframe width="100%" height="200" frameborder="0" allowfullscreen
+            src="{{ u | replace('watch?v=', 'embed/') | replace('youtu.be/', 'www.youtube.com/embed/') }}"></iframe>
+        </div>
+        {% elif 'spotify.com' in u %}
+        <div class="track-player">
+          <iframe width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media"
+            src="{{ u | replace('/track/', '/embed/track/') }}"></iframe>
+        </div>
+        {% endif %}
+        <div class="ex-meta"><a href="{{ u }}">{{ u }}</a></div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if not relevant_uploads and not relevant_links %}
+      <p class="none-note">A tailored example is available on request — just reply.</p>
+      {% endif %}
+    </section>
+
+    <section class="block">
+      <h2 class="sec">The easiest next step</h2>
+      <div class="callout">
+        I know opening links from a stranger isn't always ideal — so if it's easier,
+        I'm happy to walk you through the work on a short call and talk through how
+        we'd approach {{ client }}'s project specifically.
+      </div>
+      <div class="cta">
+        {% if call_url %}
+        <a class="btn-cta" href="{{ call_url }}" target="_blank" rel="noopener">Book a short call →</a>
+        <div class="muted">Or just reply to my email — whatever's easiest for you.</div>
+        {% else %}
+        <a class="btn-cta" href="mailto:?subject=Re%3A%20{{ client | urlencode }}">Reply to start a conversation →</a>
+        <div class="muted">A quick reply is all it takes — no pressure either way.</div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <div class="foot">
+    Chordential · original music, sound &amp; sonic identity ·
+    <a href="https://chordential.com">chordential.com</a>
+  </div>
+</div>
+
+<script>
+// Compact brand audio player: drive each .cap-audio off its hidden <audio>.
+(function () {
+  function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+  document.querySelectorAll('.cap-audio').forEach(function (p) {
+    var audio = p.querySelector('audio'), btn = p.querySelector('.cap-audio-btn'),
+        fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
+        time = p.querySelector('.cap-audio-time');
+    if (!audio) return;
+    btn.addEventListener('click', function () {
+      if (audio.paused) {
+        document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
+        audio.play();
+      } else { audio.pause(); }
+    });
+    audio.addEventListener('play',  function () { btn.textContent = '❚❚'; });
+    audio.addEventListener('pause', function () { btn.textContent = '▶'; });
+    audio.addEventListener('ended', function () { btn.textContent = '▶'; fill.style.width = '0'; });
+    audio.addEventListener('timeupdate', function () {
+      var d = audio.duration || 0;
+      fill.style.width = (d ? (audio.currentTime / d * 100) : 0) + '%';
+      time.textContent = fmt(audio.currentTime);
+    });
+    bar.addEventListener('click', function (e) {
+      var r = bar.getBoundingClientRect(), d = audio.duration || 0;
+      if (d) audio.currentTime = ((e.clientX - r.left) / r.width) * d;
+    });
+  });
+})();
+</script>
+</body>
+</html>

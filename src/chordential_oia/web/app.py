@@ -18,6 +18,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -37,8 +38,8 @@ from ..outreach import (
     compose_selection, respond_action, _mailto,
 )
 from ..capabilities import (
-    DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, chips_for,
-    default_toggles,
+    DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, build_understanding,
+    chips_for, default_toggles,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
@@ -170,6 +171,16 @@ _PUBLIC_PATHS = frozenset({
 })
 
 
+# The token-gated first-touch page: /opportunity/<id>/first-touch . Matched here
+# (not a fixed string in _PUBLIC_PATHS) because the opp id varies — token check in
+# the route is the real access control.
+_FIRST_TOUCH_RE = re.compile(r"^/opportunity/\d+/first-touch/?$")
+
+
+def _is_first_touch_path(path: str) -> bool:
+    return bool(_FIRST_TOUCH_RE.match(path))
+
+
 def _admin_secret() -> Optional[str]:
     return os.environ.get("CHORDENTIAL_ADMIN_TOKEN") or None
 
@@ -192,6 +203,10 @@ def _is_public_path(path: str) -> bool:
     return (
         path in _PUBLIC_PATHS
         or path.startswith("/static/")
+        # The tailored first-touch page is meant for an external recipient, so it
+        # bypasses the admin login gate — but it stays protected by the unguessable
+        # per-opp share token in the URL (validated in the route), not by login.
+        or _is_first_touch_path(path)
         or path in ("/healthz", "/favicon.ico")
         # PWA install assets — fetched by the browser/OS (sometimes without the
         # admin cookie), and non-sensitive, so they bypass the gate.
@@ -1269,9 +1284,12 @@ def _compose_state(conn, opp_id: int):
     if row is None:
         return None, None, None, None, None, None
     overrides = db.get_doc_overrides(conn, opp_id)
+    # Mint (or fetch) the unguessable share token so the page-link block carries the
+    # real token-gated URL — the same token the first-touch route validates.
+    share_token = db.ensure_share_token(conn, opp_id)
     blocks = build_compose_blocks(
         opp, None, plan, overrides=overrides, opp_id=opp_id,
-        contact_name=row["contact_name"],
+        contact_name=row["contact_name"], share_token=share_token,
     )
     selected = compose_selection(blocks, overrides)
     body = assemble_email(blocks, selected)
@@ -1315,6 +1333,44 @@ async def set_compose(request: Request, opp_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}/compose", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# The tailored first-touch page (Phase 2) — a SELF-CONTAINED public page the
+# soft email link points at. NOT admin-gated (an external recipient opens it);
+# the unguessable per-opp share token in ?k=<token> IS the access control. A
+# valid load also stamps the Phase-3 engagement signal (view count / last seen).
+#
+# Option C (branded HTML send via Gmail) remains DEFERRED — this page + its view
+# measurement are the gate that decides whether Option C is ever worth building.
+# --------------------------------------------------------------------------- #
+@app.get("/opportunity/{opp_id}/first-touch", response_class=HTMLResponse)
+def first_touch_page(request: Request, opp_id: int, k: str = ""):
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        token = row["share_token"] if row is not None else None
+        # Token check is the access control: a missing opp, an unset token, or a
+        # mismatch all 404 identically so the page never leaks an opp's existence.
+        if row is None or not token or not k or not hmac.compare_digest(str(k), str(token)):
+            return HTMLResponse("Not found", status_code=404)
+        opp = db.opportunity_from_row(row)
+        overrides = db.get_doc_overrides(conn, opp_id)
+        # Phase 3: a valid load is the engagement signal surfaced on the outreach view.
+        db.record_first_touch_view(conn, opp_id)
+    finally:
+        conn.close()
+
+    understanding = build_understanding(opp)
+    relevant_uploads = overrides.get("relevant_uploads") or []
+    relevant_links = overrides.get("relevant_links") or []
+    call_url = os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip()
+    return render(
+        request, "first_touch.html", nav="", row=row, opp=opp,
+        client=row["client"], understanding=understanding,
+        relevant_uploads=relevant_uploads, relevant_links=relevant_links,
+        call_url=call_url,
+    )
 
 
 @app.get("/opportunity/{opp_id}/match", response_class=HTMLResponse)

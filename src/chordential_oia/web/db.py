@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import sqlite3
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
@@ -300,6 +301,12 @@ _OUTREACH_COLUMNS = {
     # never queried relationally — the builder reads it on top of the generated
     # defaults so an un-touched deal renders exactly as before.
     "doc_overrides": "TEXT",
+    # First-touch tailored page (Phase 2/3): an unguessable per-opp share token
+    # gates the public page (?k=<token>); the view counters are the engagement
+    # signal that decides whether Option C is ever worth building (Phase 3).
+    "share_token": "TEXT",
+    "first_touch_views": "INTEGER",
+    "first_touch_viewed_at": "TEXT",
 }
 
 
@@ -813,6 +820,46 @@ def update_status(
 
 def update_notes(conn: sqlite3.Connection, opp_id: int, notes: str) -> None:
     conn.execute("UPDATE opportunities SET notes = ? WHERE id = ?", (notes, opp_id))
+    conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# First-touch tailored page — per-opp share token + engagement measurement
+# --------------------------------------------------------------------------- #
+def ensure_share_token(conn: sqlite3.Connection, opp_id: int) -> Optional[str]:
+    """Return the opp's unguessable share token, minting one on first use.
+
+    The token gates the public first-touch page (``?k=<token>``) so the page is
+    shareable with an external recipient but not enumerable. Returns ``None`` only
+    when the opportunity doesn't exist."""
+    row = conn.execute(
+        "SELECT share_token FROM opportunities WHERE id = ?", (opp_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    existing = row["share_token"]
+    if existing and str(existing).strip():
+        return existing
+    token = secrets.token_urlsafe(9)
+    conn.execute(
+        "UPDATE opportunities SET share_token = ? WHERE id = ?", (token, opp_id)
+    )
+    conn.commit()
+    return token
+
+
+def record_first_touch_view(conn: sqlite3.Connection, opp_id: int) -> None:
+    """Increment the first-touch page view counter and stamp the last-viewed time.
+
+    Called only when the page loads with a VALID token — this is the Phase 3
+    engagement signal surfaced on the outreach view (does the buyer click?)."""
+    conn.execute(
+        """UPDATE opportunities
+           SET first_touch_views = COALESCE(first_touch_views, 0) + 1,
+               first_touch_viewed_at = ?
+           WHERE id = ?""",
+        (datetime.now(timezone.utc).isoformat(), opp_id),
+    )
     conn.commit()
 
 
