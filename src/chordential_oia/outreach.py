@@ -151,32 +151,24 @@ def _build_first_touch(opp, qual, contact_name):
     examples, deliverables, and framing to the lead's discipline and brand."""
     disc = qual.discipline
     name = (contact_name or "").strip() or "there"
-    framing = _SYSTEM_FRAMING.get(disc) or (
-        "The scope reads as a unified music system rather than a collection of "
-        f"individual deliverables, and that's where {disc.label.lower()} work like "
-        "this tends to provide the most value."
-    )
     examples = _for_discipline(_EXAMPLE_WORK, disc)
-    deliverables = _for_discipline(_DELIVERABLES, disc)
     ex_lines = "\n".join(f"• {e}" for e in examples)
-    dl_lines = "\n".join(f"• {d}" for d in deliverables)
     return (
         f"Hi {name},\n\n"
-        f"Thank you for the opportunity to be considered for {opp.need}.\n\n"
-        "After reviewing the brief, we're confident this is the type of work "
-        f"Chordential is built for. {framing}\n\n"
-        "I've included a few examples of relevant work below that align closely "
-        "with what you've described:\n\n"
+        f"Thank you for the chance to be considered for {opp.need}. Having read the "
+        "brief, I'm confident this is squarely the kind of work Chordential is built "
+        "for.\n\n"
+        "I've included a few examples below that I believe speak directly to the "
+        "objectives you've outlined:\n\n"
         f"{ex_lines}\n\n"
-        "What stood out to us in your brief is the opportunity to create a musical "
-        f"identity that can extend well beyond this campaign and become an asset "
-        f"{opp.client} can continue to leverage across future content and activations.\n\n"
-        "Based on the information provided, we would anticipate supporting:\n\n"
-        f"{dl_lines}\n\n"
-        "Our team has already begun discussing several creative directions that "
-        "could support the objectives outlined in the brief, and we'd welcome the "
-        "opportunity to walk you through those ideas and better understand your "
-        "goals, timeline, and success criteria."
+        "I also know how much outreach reaches your inbox, and that opening links "
+        "from an unfamiliar sender isn't always ideal. If you'd prefer, I'm glad to "
+        "set up a short call and walk you through the examples myself — the thinking "
+        f"behind each one and how we'd approach {opp.client}'s project specifically. "
+        "My aim is simply to make evaluating us as easy and comfortable as possible "
+        "for your team.\n\n"
+        "Whenever suits, I'd welcome a quick conversation about your goals, timeline, "
+        "and what success looks like."
     )
 
 
@@ -238,19 +230,16 @@ class OutreachPlan:
         return "\n".join(lines)
 
 
-def _linkedin_research_url(target: str, company: str) -> str:
-    """A LinkedIn people-search deep-link for the inferred decision-maker.
-
-    Deterministic lead enrichment: we can't fetch a specific private profile
-    without an external data provider, but we *can* point one click at the
-    person to find — the decision-maker's role at this buyer. Built from the
-    RFP's own facts (the scoring engine's inferred role + the buyer name), with
-    the ``Likely`` qualifier and any parenthetical buyer-type suffix stripped so
-    the search terms are clean.
+def _linkedin_research_url(target: str, company: str, contact_name: str = "") -> str:
+    """A LinkedIn people-search deep-link. Searches the known **contact name** when
+    we have one (the most precise lead), otherwise falls back to the inferred
+    decision-maker role — both scoped to the buyer so the search lands on the right
+    person. The ``Likely`` qualifier and any parenthetical buyer-type suffix are
+    stripped so the search terms stay clean.
     """
-    role = target.replace("Likely ", "").strip()
+    who = (contact_name or "").strip() or target.replace("Likely ", "").strip()
     company_clean = company.split("(")[0].strip()
-    keywords = f"{role} {company_clean}".strip()
+    keywords = f"{who} {company_clean}".strip()
     return (
         "https://www.linkedin.com/search/results/people/?keywords="
         + quote_plus(keywords)
@@ -343,7 +332,7 @@ def build_outreach_plan(
         steps=steps,
         first_touch_message=first_touch_message,
         email_subject=email_subject,
-        linkedin_search_url=_linkedin_research_url(target, opp.client),
+        linkedin_search_url=_linkedin_research_url(target, opp.client, contact_name),
         recommended_examples=recommended_examples,
         qualified=qual.qualified,
         assumptions=[
@@ -352,8 +341,9 @@ def build_outreach_plan(
             f"Contact ({target}) is inferred — confirm the real name/email before sending.",
             "Recommended examples are existing portfolio pieces to attach — "
             "Chordential does not synthesize audio (human craft + Jon-reviewed reels).",
-            "LinkedIn link is an auto-built people search for the decision-maker at "
-            "this buyer — open it to find the person, then paste their profile to lock it in.",
+            "LinkedIn link is an auto-built people search — for the named contact "
+            "when you've entered one, otherwise the inferred decision-maker at this "
+            "buyer — open it to find/verify the person, then paste their profile to lock it in.",
             "Log each touch below; the outcome feeds the win/loss moat.",
         ],
     )

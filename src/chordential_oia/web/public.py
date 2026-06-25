@@ -194,10 +194,10 @@ def public_start_submit(
         signals.notify_new_lead(company.strip() or contact_name.strip(), "website")
     except Exception:
         pass
-    target = "/thanks?kind=project"
-    if band:
-        target += f"&low={band['low']}&high={band['high']}"
-    return RedirectResponse(target, status_code=303)
+    # The indicative band is stored on the lead for the internal quoted-vs-won
+    # moat, but is NOT shown back to the client — quoting a range at intake reads
+    # as untactful (founder call). So the thank-you response carries no price.
+    return RedirectResponse("/thanks?kind=project", status_code=303)
 
 
 @router.get("/book", response_class=HTMLResponse)

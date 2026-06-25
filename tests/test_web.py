@@ -228,7 +228,7 @@ def test_outreach_recommends_examples_and_template_message(client):
     page = client.get("/opportunity/1/outreach").text
     assert "Recommended examples to attach" in page
     assert "Chordential is built for" in page  # template-style first-touch message
-    assert "we would anticipate supporting" in page
+    assert "walk you through the examples" in page  # concise email's call-offer excerpt
 
 
 def test_outreach_page_and_text(client):

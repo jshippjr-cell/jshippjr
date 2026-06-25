@@ -59,7 +59,7 @@ def test_band_is_none_without_input(ctx):
     assert public.public_price_band("", "") is None
 
 
-def test_questionnaire_stores_and_shows_band(ctx):
+def test_questionnaire_stores_band_internally_but_hides_it_from_client(ctx):
     client, db_mod, _ = ctx
     r = client.post(
         "/start",
@@ -71,9 +71,10 @@ def test_questionnaire_stores_and_shows_band(ctx):
     )
     assert r.status_code == 303
     loc = r.headers["location"]
-    assert "low=" in loc and "high=" in loc
+    # The client response must NOT carry a price range (untactful at intake).
+    assert "low=" not in loc and "high=" not in loc
 
-    # Stored on the lead for the quoted-vs-won moat.
+    # …but it's still stored on the lead for the internal quoted-vs-won moat.
     conn = db_mod.connect()
     try:
         row = conn.execute(
@@ -84,10 +85,10 @@ def test_questionnaire_stores_and_shows_band(ctx):
     assert row["shown_price_low"] and row["shown_price_high"]
     assert row["shown_price_low"] < row["shown_price_high"]
 
-    # Thank-you page renders the band.
+    # The thank-you page shows no price band to the client.
     thanks = client.get(loc)
     assert thanks.status_code == 200
-    assert "typically run" in thanks.text
+    assert "typically run" not in thanks.text
 
 
 def test_internal_queue_shows_quoted_band(ctx):

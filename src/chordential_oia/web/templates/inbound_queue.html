@@ -10,10 +10,10 @@
 </p>
 
 <div class="filters card pill-row">
-  <a class="pill-btn {{ 'is-current' if active_status=='' }}" href="/leads">All ({{ counts.total }})</a>
   {% for s in statuses %}
   <a class="pill-btn {{ 'is-current' if active_status==s }}" href="/leads?status={{ s }}">{{ s }} ({{ counts[s] }})</a>
   {% endfor %}
+  <a class="pill-btn {{ 'is-current' if active_status=='' }}" href="/leads">All ({{ counts.total }})</a>
   <span class="muted small" style="margin-left:auto">{{ counts.open }} open</span>
 </div>
 

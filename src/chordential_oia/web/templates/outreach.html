@@ -13,15 +13,9 @@
     <div class="muted">{{ plan.urgency }}</div>
   </div>
   <div class="brief-actions">
-    {% set _blank = not respond.url.startswith('mailto:') %}
-    <a class="btn primary" href="{{ respond.url }}"{% if _blank %} target="_blank" rel="noopener"{% endif %}
-       title="{{ respond.hint }}">↩ {{ respond.label }}</a>
-    <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities">📄 Capabilities doc →</a>
     <button class="btn ghost tiny" type="button" onclick="copyPlan(this)">Copy plan</button>
   </div>
 </div>
-<p class="muted small" style="margin:-4px 2px 10px">↩ <strong>Respond</strong> {{ respond.hint }}
-  <span class="muted">(separate from "↗ Original posting", which just views the post).</span></p>
 
 <div class="cols-2">
   <section class="card">
@@ -35,7 +29,7 @@
     <p class="muted small reach-hint">
       {% if row['contact_email'] %}Email opens your mail client to <strong>{{ row['contact_email'] }}</strong> with the first-touch pitch prefilled.
       {% else %}Email drafts the first-touch pitch in your mail client — add the contact email below to address it.{% endif %}
-      {% if not row['contact_linkedin'] %} LinkedIn is <strong>auto-researched</strong> from the RFP — a people search for the inferred decision-maker ({{ plan.target_contact }}) at {{ row['client'] }}; open it, then paste their profile below to lock it in.{% endif %}
+      {% if not row['contact_linkedin'] %} LinkedIn is <strong>auto-researched</strong> — a people search for <strong>{{ row['contact_name'] or plan.target_contact }}</strong> at {{ row['client'] }}; open it, then paste their profile below to lock it in.{% endif %}
     </p>
 
     <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/outreach">
@@ -55,6 +49,7 @@
       <input id="due" type="date" name="next_action_due" value="{{ row['next_action_due'] or '' }}">
       <button class="btn primary" type="submit">Save outreach</button>
     </form>
+    <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities" style="margin-top:12px;display:inline-block">📄 Capabilities doc →</a>
   </section>
 
   <section class="card">

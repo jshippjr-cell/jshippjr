@@ -37,7 +37,8 @@ def test_plan_assembles_from_engines():
     # The first-touch message is the template-style proposal, adapted to the lead.
     assert "Acme (agency)" in p.first_touch_message
     assert "Chordential is built for" in p.first_touch_message
-    assert "we would anticipate supporting" in p.first_touch_message
+    # The concise email offers a call to walk through the examples (call-offer excerpt).
+    assert "walk you through the examples" in p.first_touch_message
     # Examples are recommended to attach (the "audio examples").
     assert p.recommended_examples
 
@@ -82,6 +83,16 @@ def test_plan_builds_linkedin_research_link():
     assert "linkedin.com/search/results/people" in p.linkedin_search_url
     assert "Acme" in p.linkedin_search_url
     assert "Likely" not in p.linkedin_search_url  # qualifier stripped from terms
+
+
+def test_linkedin_search_prefers_the_contact_name():
+    qual = QualificationEngine().qualify(_agency())
+    scored = ScoringEngine().score(_agency())
+    est = EstimationEngine().estimate(_agency(), qual.team_shape, qual.discipline)
+    strat = assess_strategic_value(_agency())
+    p = build_outreach_plan(_agency(), qual, scored, est, strat, contact_name="Dana Reyes")
+    # With a known contact, the people-search keys off their NAME, not the title.
+    assert "Dana" in p.linkedin_search_url and "Reyes" in p.linkedin_search_url
 
 
 def test_render_text_is_copyable_and_complete():
