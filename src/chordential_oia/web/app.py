@@ -21,7 +21,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -49,6 +49,18 @@ from .public import router as public_router
 
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
+
+# Founder-uploaded audio samples for the "Relevant work" section. Path is
+# overridable (CHORDENTIAL_UPLOAD_DIR) with a module-relative default; created on
+# import so the upload + serve routes can rely on it existing.
+# NOTE (honest persistence caveat): files saved to this local disk are NOT durable
+# on Render once the persistent disk is removed for the zero-downtime (blue-green)
+# cutover — durable storage needs object storage (S3/R2). Acceptable for now.
+UPLOAD_DIR = os.environ.get("CHORDENTIAL_UPLOAD_DIR") or os.path.join(_HERE, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Audio uploads we accept for relevant-work samples.
+_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
 
 # --------------------------------------------------------------------------- #
@@ -1710,6 +1722,108 @@ def chips_custom(
         conn.close()
     back = request.headers.get("referer") or "/"
     return RedirectResponse(back, status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Relevant-work audio uploads — the founder uploads samples from their machine.
+#
+# PERSISTENCE CAVEAT (honest): these files land on the LOCAL disk (UPLOAD_DIR).
+# That is NOT durable on Render once the persistent disk is removed for the
+# zero-downtime (blue-green) cutover — a redeploy/instance swap loses them.
+# Durable storage needs object storage (S3/R2). Acceptable for now; note it.
+# --------------------------------------------------------------------------- #
+@app.get("/uploads/{name}")
+def serve_upload(name: str):
+    """Serve a stored upload by basename. Guards against path traversal — only a
+    bare filename that actually exists inside UPLOAD_DIR is served."""
+    from fastapi.responses import FileResponse
+    base = os.path.basename(name)
+    if not base or base != name:
+        return PlainTextResponse("not found", status_code=404)
+    path = os.path.join(UPLOAD_DIR, base)
+    # Resolve and confirm the file stays inside UPLOAD_DIR (defense in depth).
+    if os.path.realpath(path) != os.path.join(os.path.realpath(UPLOAD_DIR), base):
+        return PlainTextResponse("not found", status_code=404)
+    if not os.path.isfile(path):
+        return PlainTextResponse("not found", status_code=404)
+    return FileResponse(path)
+
+
+@app.post("/opportunity/{opp_id}/doc/upload")
+async def doc_upload(
+    opp_id: int,
+    request: Request,
+    label: str = Form(""),
+    action: str = Form("add"),
+    filename: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """Upload (or remove) a founder audio sample for the Relevant-work section.
+
+    Add: validates the file is audio (by extension or content-type), saves it under
+    a safe unique name in UPLOAD_DIR, and appends {label, url, filename} to
+    ``overrides["relevant_uploads"]``. Remove: drops the entry and unlinks the file
+    best-effort.
+
+    PERSISTENCE CAVEAT: see the note above — local disk is not durable on Render's
+    zero-downtime deploys; durable storage needs S3/R2.
+    """
+    conn = db.connect()
+    try:
+        if action == "remove" and filename.strip():
+            base = os.path.basename(filename.strip())
+            overrides = db.get_doc_overrides(conn, opp_id)
+            uploads = [
+                u for u in list(overrides.get("relevant_uploads") or [])
+                if u.get("filename") != base
+            ]
+            db.update_doc_override(conn, opp_id, "relevant_uploads", uploads or None)
+            try:    # best-effort unlink; never fail the request on a missing file
+                os.remove(os.path.join(UPLOAD_DIR, base))
+            except OSError:
+                pass
+            return _doc_redirect(opp_id)
+
+        if file is None or not (file.filename or "").strip():
+            return _doc_redirect(opp_id)
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        ctype = (file.content_type or "").lower()
+        is_audio = ext in _AUDIO_EXTS or ctype.startswith("audio/")
+        if not is_audio:
+            return PlainTextResponse(
+                "Only audio files are accepted (.mp3, .wav, .m4a, .aac, .ogg, .flac).",
+                status_code=400,
+            )
+        if ext not in _AUDIO_EXTS:
+            ext = ".mp3"   # audio/* with an odd extension → store under a known one
+
+        data = await file.read()
+        # Safe, unique on-disk name: opp-scoped + a counter so re-uploads don't clash.
+        existing = {
+            u.get("filename")
+            for u in (db.get_doc_overrides(conn, opp_id).get("relevant_uploads") or [])
+        }
+        n = 1
+        while f"opp{opp_id}-{n}{ext}" in existing or os.path.exists(
+            os.path.join(UPLOAD_DIR, f"opp{opp_id}-{n}{ext}")
+        ):
+            n += 1
+        safe_name = f"opp{opp_id}-{n}{ext}"
+        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
+            fh.write(data)
+
+        overrides = db.get_doc_overrides(conn, opp_id)
+        uploads = list(overrides.get("relevant_uploads") or [])
+        uploads.append({
+            "label": label.strip() or file.filename,
+            "url": f"/uploads/{safe_name}",
+            "filename": safe_name,
+        })
+        db.update_doc_override(conn, opp_id, "relevant_uploads", uploads)
+    finally:
+        conn.close()
+    return _doc_redirect(opp_id)
 
 
 @app.post("/buyer/{client}/website")

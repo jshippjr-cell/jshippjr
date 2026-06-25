@@ -105,6 +105,7 @@ class CapabilitiesDoc:
     # editable-document additions (the UI pass consumes these)
     support_chips: dict = field(default_factory=dict)   # section name → [{label, sentence}]
     relevant_links: List[dict] = field(default_factory=list)  # [{label, url}]
+    relevant_uploads: List[dict] = field(default_factory=list)  # [{label, url, filename}]
     delivery_template: str = "campaign"        # the chosen engagement-template key
     delivery_template_label: str = ""          # human label for the chosen template
     delivery_assumptions: str = ""             # the mandatory assumptions banner text
@@ -277,6 +278,34 @@ SUPPORT_CHIPS = [
     {"id": "ass-onepartner", "family": "assurance", "label": "One accountable partner",
      "sentence": "One accountable partner from brief to final delivery.",
      "templates": None},
+    # Team / talent descriptors — "who we'd put on it" (universal)
+    {"id": "team-composer", "family": "team", "label": "Composer matched to your genre",
+     "sentence": "A composer whose catalog already lives in your world — not a generalist reaching for it.",
+     "templates": None},
+    {"id": "team-producer", "family": "team", "label": "Hands-on producer",
+     "sentence": "A producer who shapes the record end to end, not just a beat-maker.",
+     "templates": None},
+    {"id": "team-live", "family": "team", "label": "Live instrumentalists",
+     "sentence": "Real players where it counts — live strings, horns, guitars, not just samples.",
+     "templates": None},
+    {"id": "team-mix", "family": "team", "label": "Dedicated mix engineer",
+     "sentence": "A dedicated mix engineer so the master translates everywhere, from cinema to phone.",
+     "templates": None},
+    {"id": "team-editor", "family": "team", "label": "Music editor (to picture)",
+     "sentence": "A music editor to conform every cue to your locked edit.",
+     "templates": None},
+    {"id": "team-vocalist", "family": "team", "label": "Vocalist / topliner",
+     "sentence": "A vocalist and topline writer for a memorable, ownable hook.",
+     "templates": None},
+    {"id": "team-orchestrator", "family": "team", "label": "Orchestrator",
+     "sentence": "An orchestrator to give the score real ensemble depth.",
+     "templates": None},
+    {"id": "team-sounddesign", "family": "team", "label": "Sound designer",
+     "sentence": "A sound designer to weave score and texture into one sonic world.",
+     "templates": None},
+    {"id": "team-lead", "family": "team", "label": "Senior creative lead",
+     "sentence": "A senior creative lead steering taste and consistency across every deliverable.",
+     "templates": None},
 ]
 
 # Which descriptor family an editable section pulls from. The section names are
@@ -286,6 +315,7 @@ SECTION_FAMILY = {
     "aesthetic": "aesthetic",
     "deliverables": "deliverable",
     "assurance": "assurance",
+    "team": "team",
 }
 
 
@@ -501,6 +531,7 @@ def build_capabilities_doc(
     delivery_assumptions = overrides.get("delivery_assumptions") or template["assumptions"]
     support_chips = overrides.get("support_chips") or {}
     relevant_links = overrides.get("relevant_links") or []
+    relevant_uploads = overrides.get("relevant_uploads") or []
 
     return CapabilitiesDoc(
         client=client,
@@ -529,6 +560,7 @@ def build_capabilities_doc(
         rollout=rollout,
         support_chips=support_chips,
         relevant_links=relevant_links,
+        relevant_uploads=relevant_uploads,
         delivery_template=template_key,
         delivery_template_label=template["label"],
         delivery_assumptions=delivery_assumptions,

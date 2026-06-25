@@ -825,6 +825,7 @@ def get_doc_overrides(conn: sqlite3.Connection, opp_id: int) -> dict:
     Keys (all optional): ``client``, ``understanding``, ``delivery_template``,
     ``delivery_assumptions``, ``support_chips`` (section → list of
     {label, sentence}), ``relevant_links`` (list of {label, url}),
+    ``relevant_uploads`` (list of {label, url, filename}),
     ``deliverable_overrides`` (optional list replacing generated deliverables)."""
     row = conn.execute(
         "SELECT doc_overrides FROM opportunities WHERE id = ?", (opp_id,)

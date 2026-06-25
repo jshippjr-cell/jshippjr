@@ -125,7 +125,7 @@ def test_chips_for_craft_is_universal_regardless_of_template():
 
 def test_support_chip_library_shape():
     fams = {c["family"] for c in SUPPORT_CHIPS}
-    assert fams == {"craft", "aesthetic", "deliverable", "assurance"}
+    assert fams == {"craft", "aesthetic", "deliverable", "assurance", "team"}
     # only deliverable chips are template-scoped
     for c in SUPPORT_CHIPS:
         if c["family"] != "deliverable":
@@ -136,6 +136,7 @@ def test_support_chip_library_shape():
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "t.db"))
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "uploads"))
     monkeypatch.delenv("CHORDENTIAL_ADMIN_TOKEN", raising=False)
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
@@ -286,3 +287,89 @@ def test_relevant_link_added_via_route_shows_in_relevant_work(client):
     assert "Relevant work" in page
     assert "https://soundcloud.com/chordential/reference" in page
     assert "Close reference" in page
+
+
+# --- CHANGE 2: team/talent descriptor chips --------------------------------- #
+def test_chips_for_team_returns_talent_descriptors():
+    labels = {c["label"] for c in chips_for("team")}
+    assert "Composer matched to your genre" in labels
+    assert "Dedicated mix engineer" in labels
+    assert "Senior creative lead" in labels
+    # team is universal (templates None) → same set regardless of template
+    assert (
+        {c["label"] for c in chips_for("team", "film_tv")}
+        == {c["label"] for c in chips_for("team", "campaign")}
+    )
+    # every team chip carries the client-facing sentence
+    assert all(c["sentence"] for c in chips_for("team"))
+
+
+def test_inserted_team_chip_sentence_appears_in_doc_body(client):
+    client.post("/opportunity/1/doc/chip", data={
+        "section": "team", "action": "add",
+        "label": "Hands-on producer",
+        "sentence": "A producer who shapes the record end to end, not just a beat-maker."})
+    plain = client.get("/opportunity/1/capabilities").text
+    assert "A producer who shapes the record end to end, not just a beat-maker." in plain
+    # the rail itself stays hidden in preview (edit off)
+    assert "chip-rail" not in plain
+
+
+# --- CHANGE 3: founder audio uploads in Relevant work ----------------------- #
+def test_audio_upload_stores_and_renders_player(client):
+    from chordential_oia.web import db
+    r = client.post(
+        "/opportunity/1/doc/upload",
+        data={"label": "Demo cut", "action": "add"},
+        files={"file": ("demo.mp3", b"ID3fake-audio-bytes", "audio/mpeg")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "edit=1" in r.headers["location"]
+    conn = db.connect()
+    try:
+        ups = db.get_doc_overrides(conn, 1)["relevant_uploads"]
+        assert ups[0]["label"] == "Demo cut"
+        assert ups[0]["url"].startswith("/uploads/")
+    finally:
+        conn.close()
+    # the doc renders an <audio player for the stored sample
+    page = client.get("/opportunity/1/capabilities?submitted=1&examples=1").text
+    assert "<audio" in page
+    assert ups[0]["url"] in page
+
+
+def test_non_audio_upload_is_rejected(client):
+    from chordential_oia.web import db
+    r = client.post(
+        "/opportunity/1/doc/upload",
+        data={"label": "Not audio", "action": "add"},
+        files={"file": ("notes.txt", b"just text", "text/plain")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert "audio" in r.text.lower()
+    conn = db.connect()
+    try:
+        assert "relevant_uploads" not in db.get_doc_overrides(conn, 1)
+    finally:
+        conn.close()
+
+
+def test_uploads_route_serves_file_and_rejects_traversal(client):
+    client.post(
+        "/opportunity/1/doc/upload",
+        data={"label": "Servable", "action": "add"},
+        files={"file": ("demo.wav", b"RIFFfake-wav-bytes", "audio/wav")},
+    )
+    from chordential_oia.web import db
+    conn = db.connect()
+    try:
+        name = db.get_doc_overrides(conn, 1)["relevant_uploads"][0]["filename"]
+    finally:
+        conn.close()
+    got = client.get(f"/uploads/{name}")
+    assert got.status_code == 200
+    assert got.content == b"RIFFfake-wav-bytes"
+    # path traversal must not escape the uploads dir
+    bad = client.get("/uploads/..%2f..%2fapp.py")
+    assert bad.status_code == 404

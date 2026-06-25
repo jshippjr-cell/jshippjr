@@ -91,14 +91,17 @@
     .placeholder-note{font-size:11px;color:var(--muted);font-style:italic}
 
     /* --- support-descriptor chips: the INSERTED client-facing content (§1/§4).
-       Styled as tactile, removable tokens (CRO compromise). These print. --- */
-    .chip-lines{list-style:none;margin:10px 0 0;padding:0}
-    .chip-lines li{position:relative;display:flex;align-items:flex-start;gap:9px;
-      padding:8px 12px;margin:6px 0;background:#fff;border:1px solid #e4ddd8;
-      border-left:3px solid var(--orange);border-radius:8px;
-      font-size:14px;color:#33302f;box-shadow:0 1px 0 rgba(0,0,0,.03)}
-    .chip-lines li::before{content:"♪";color:var(--orange);font-weight:800;line-height:1.5}
-    .chip-lines li .chip-rm{margin-left:auto}
+       Unified with the .pill "bubble" family above them (founder feedback): a soft
+       orange-tinted token with a 1px soft border, rounded, no white card / no left
+       bar / no shadow. Short chips sit pill-like; long sentences wrap cleanly.
+       Laid out as inline-flex wrapping tokens. These print. --- */
+    .chip-lines{list-style:none;margin:10px 0 0;padding:0;
+      display:flex;flex-wrap:wrap;gap:8px}
+    .chip-lines li{display:inline-flex;align-items:baseline;gap:8px;
+      padding:6px 13px;background:rgba(228,103,31,.10);
+      border:1px solid rgba(228,103,31,.30);border-radius:12px;
+      font-size:14px;color:#33302f;line-height:1.45}
+    .chip-lines li .chip-rm{align-self:center}
 
     @media print{
       body{background:#fff}
@@ -254,11 +257,46 @@
       <ul class="pill-list">
         {% for role in doc.team %}<li>{{ role }}</li>{% else %}<li>Composer · Mixer</li>{% endfor %}
       </ul>
+
+      {# talent descriptors — click-to-insert tokens below the auto role pills #}
+      {{ inserted_chips('team') }}
+      {{ chip_rail('team') }}
     </section>
 
     {% if doc.show_examples %}
     <section class="block">
       <h2 class="sec">Relevant work</h2>
+
+      {# founder-uploaded audio samples — hand-picked, outrank the generic reels #}
+      {% if doc.relevant_uploads %}
+      {% for up in doc.relevant_uploads %}
+      <div class="ex relevant-track">
+        <div class="ex-title">{{ up.label }}</div>
+        <audio class="no-print" controls preload="none" src="{{ up.url }}" style="width:100%;margin:8px 0 4px"></audio>
+        <div class="ex-meta"><a href="{{ up.url }}">⤓ {{ up.label }} (audio)</a></div>
+        {% if edit %}
+        <form class="no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/upload" style="margin:4px 0 0">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="filename" value="{{ up.filename }}">
+          <button class="capdoc-chip-x" type="submit" title="Remove">× remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if edit %}
+      <form class="capdoc-edit no-print" method="post" enctype="multipart/form-data"
+            action="/opportunity/{{ row['id'] }}/doc/upload">
+        <input type="hidden" name="action" value="add">
+        <div class="capdoc-rail-label">Upload an audio sample from your machine</div>
+        <div class="capdoc-inline">
+          <input type="text" name="label" placeholder="Track label" class="capdoc-in">
+          <input type="file" name="file" accept="audio/*" class="capdoc-in capdoc-in-wide">
+          <button class="capdoc-add" type="submit">+ Upload audio sample</button>
+        </div>
+      </form>
+      {% endif %}
 
       {# hand-picked tracks for THIS lead outrank the generic reels (§5) #}
       {% if doc.relevant_links %}

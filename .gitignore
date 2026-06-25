@@ -27,3 +27,6 @@ chordential.db
 
 # Generated Veo video clips + assembled film (large binaries; delivered directly)
 capabilities_clips/
+
+# Founder-uploaded relevant-work audio samples (local disk; not durable on Render)
+src/chordential_oia/web/uploads/
