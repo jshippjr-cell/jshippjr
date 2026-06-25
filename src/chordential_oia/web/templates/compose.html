@@ -85,8 +85,23 @@
 </section>
 
 <script>
+// Keep the raw assembled body for copy/mailto (unchanged), but render any URL in
+// the preview as a real clickable hyperlink so the page link is testable here.
+(function () {
+  var el = document.getElementById('compose-body');
+  if (!el) return;
+  el.dataset.raw = el.textContent;   // preserve the plain text for Copy
+  var esc = function (s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  el.innerHTML = esc(el.textContent).replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener">$1</a>'
+  );
+})();
 function copyCompose(btn){
-  var t = document.getElementById('compose-body').textContent;
+  var body = document.getElementById('compose-body');
+  var t = (body && body.dataset.raw) || (body && body.textContent) || '';
   navigator.clipboard.writeText(t).then(function(){
     var old = btn.textContent; btn.textContent = 'Copied ✓';
     setTimeout(function(){ btn.textContent = old; }, 1600);

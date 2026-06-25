@@ -266,8 +266,12 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
         "through them on a short call."
     )
     page_url = _page_url(opp_id, share_token)
+    # Put the URL on its OWN line: a bare, fully-qualified https URL alone on a
+    # line is what mail clients (Gmail / Apple Mail / Outlook) reliably auto-link
+    # into a clickable hyperlink — inline-after-a-colon often isn't detected.
     page_link = (
-        f"If useful, here's a short page I put together for your brief: {page_url}"
+        "If useful, here's a short page I put together for your brief:\n"
+        f"{page_url}"
     )
     signoff = "— Jon Shipp · Chordential"
     if more:
