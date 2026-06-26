@@ -2446,8 +2446,12 @@ def _project_estimate(conn, row):
     return build_estimate(opp, team, qual.discipline, rate_overrides=overrides)
 
 
-def _delivery_view(conn, project_id: int):
-    """Assemble the Delivery OS data for a project (engine docs + state), or None."""
+def _delivery_view(conn, project_id: int, selected_v=None):
+    """Assemble the Delivery OS data for a project (engine docs + state), or None.
+
+    ``selected_v`` (IP2) picks which version the review surface opens — its track
+    loads in the player and its comments filter to that version's number. Defaults
+    to the current (latest) version so the existing behaviour is unchanged."""
     row = db.get_project(conn, project_id)
     if row is None:
         return None
@@ -2474,14 +2478,44 @@ def _delivery_view(conn, project_id: int):
     comments = db.list_review_comments(conn, project_id)
     timeline = build_timeline(row, delivery, comments)
 
-    # The version under review (anti-chaos): the current version's audio drives the
-    # review player; fall back to the first uploaded audio asset for Phase-0
+    current_n = int(current["n"]) if current else 0
+
+    # IP2: the reviewer can open ANY version, not just current. Resolve the
+    # selected version (default = current); its track drives the player and its
+    # comments filter to that version's number, so v1 ↔ v2 is navigable/playable.
+    selected = current
+    if selected_v not in (None, ""):
+        try:
+            want = int(selected_v)
+        except (TypeError, ValueError):
+            want = None
+        if want is not None:
+            match = next((v for v in versions if int(v.get("n") or 0) == want), None)
+            if match is not None:
+                selected = match
+    selected_n = int(selected["n"]) if selected else 0
+
+    # The version under review (anti-chaos): the SELECTED version's audio drives
+    # the review player; fall back to the first uploaded audio asset for Phase-0
     # projects that never logged a version.
-    review_track = current
+    review_track = selected
     if review_track is None:
         assets = delivery.get("assets") or []
         review_track = next((a for a in assets if a.get("kind") == "audio"), None)
-    current_n = int(current["n"]) if current else 0
+
+    # IP2: per-version open/resolved counts for the SELECTED version (kind='comment'
+    # top-level notes only — replies inherit their parent's thread, approvals/change
+    # requests aren't resolvable).
+    sel_open = sel_resolved = 0
+    for c in comments:
+        if (c["kind"] or "comment") != "comment" or c["parent_id"] is not None:
+            continue
+        if selected_n != 0 and str(c["version"]) != str(selected_n):
+            continue
+        if c["resolved"]:
+            sel_resolved += 1
+        else:
+            sel_open += 1
 
     return {
         "row": row,
@@ -2500,6 +2534,11 @@ def _delivery_view(conn, project_id: int):
         "versions": versions,
         "current_version": current,
         "current_n": current_n,
+        # IP2: which version the review surface is showing (default = current).
+        "selected_version": selected,
+        "selected_n": selected_n,
+        "open_count": sel_open,
+        "resolved_count": sel_resolved,
         "review_track": review_track,
         "released_at": delivery.get("released_at"),
         "share_token": token,
@@ -2812,9 +2851,12 @@ def delivery_release(project_id: int):
 
 
 @app.get("/project/{project_id}/delivery-portal", response_class=HTMLResponse)
-def delivery_portal(request: Request, project_id: int, k: str = ""):
+def delivery_portal(request: Request, project_id: int, k: str = "", v: str = ""):
     """The client-facing, token-gated delivery page (?k=token). NOT admin-gated —
-    the per-project share token is the access control (mirrors first-touch)."""
+    the per-project share token is the access control (mirrors first-touch).
+
+    ``?v=<n>`` (IP2) selects which logged version the review surface opens — its
+    track plays and its comments show — so the reviewer can A/B any round."""
     conn = db.connect()
     try:
         row = db.get_project(conn, project_id)
@@ -2822,7 +2864,7 @@ def delivery_portal(request: Request, project_id: int, k: str = ""):
         # A missing project, an unset token, or a mismatch all 404 identically.
         if row is None or not token or not k or not hmac.compare_digest(str(k), str(token)):
             return HTMLResponse("Not found", status_code=404)
-        view = _delivery_view(conn, project_id)
+        view = _delivery_view(conn, project_id, selected_v=v)
     finally:
         conn.close()
     # IP1: prefill the reviewer's remembered identity so they never retype it.
@@ -2931,8 +2973,12 @@ def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""
 def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
+    parent_id: str = Form(""),
 ):
-    """A timecoded comment pinned to the version under review (Frame.io-style)."""
+    """A timecoded comment pinned to the version under review (Frame.io-style).
+
+    ``parent_id`` (IP2) makes this a reply threaded one level under that comment —
+    a reply answers its parent so it carries no timecode of its own."""
     conn = db.connect()
     try:
         if not _review_token_ok(conn, project_id, k):
@@ -2940,22 +2986,56 @@ def review_comment(
         name, mail = _reviewer_identity(request, author, email)
         # Identity is required so events attribute to a real person, not free text.
         if body.strip() and name and mail:
-            try:
-                t_seconds = float(t) if str(t).strip() != "" else None
-            except ValueError:
+            # A reply nests under its parent (no timecode); a top-level note carries
+            # the live playhead's timecode.
+            parent = None
+            if str(parent_id).strip():
+                p = db.get_review_comment(conn, int(parent_id)) \
+                    if str(parent_id).strip().isdigit() else None
+                if p is not None and p["project_id"] == project_id:
+                    parent = int(parent_id)
+            if parent is not None:
                 t_seconds = None
+            else:
+                try:
+                    t_seconds = float(t) if str(t).strip() != "" else None
+                except ValueError:
+                    t_seconds = None
             project = db.get_project(conn, project_id)
             delivery = db.get_delivery(conn, project_id)
             db.add_review_comment(
                 conn, project_id, version=_current_version_tag(delivery),
                 t_seconds=t_seconds, author=name, email=mail, body=body.strip(),
-                kind="comment",
+                kind="comment", parent_id=parent,
             )
+            verb = "replied" if parent is not None else "commented"
             _notify_operator_review(
                 project_id, project,
                 title=f"{_campaign_label(project)} — new note",
-                body=f"{name} commented: {body.strip()[:120]}",
+                body=f"{name} {verb}: {body.strip()[:120]}",
             )
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k, name=name, email=mail)
+
+
+@app.post("/project/{project_id}/review/resolve")
+def review_resolve(
+    request: Request, project_id: int, k: str = Form(""),
+    author: str = Form(""), email: str = Form(""), comment_id: str = Form(""),
+):
+    """Toggle a comment's resolved flag (IP2 — Frame.io's resolve checkbox).
+
+    Token-gated like the other review actions, and (like approve/changes) requires
+    a complete reviewer identity so a resolve is attributable, not anonymous."""
+    conn = db.connect()
+    name, mail = "", ""
+    try:
+        if not _review_token_ok(conn, project_id, k):
+            return HTMLResponse("Not found", status_code=404)
+        name, mail = _reviewer_identity(request, author, email)
+        if name and mail and str(comment_id).strip().isdigit():
+            db.toggle_comment_resolved(conn, project_id, int(comment_id))
     finally:
         conn.close()
     return _review_redirect(project_id, k, name=name, email=mail)

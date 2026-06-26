@@ -877,3 +877,135 @@ def test_review_action_pushes_the_operator(client, monkeypatch):
     assert calls, "operator push was not invoked on a review action"
     # The push is linked to the project's delivery console.
     assert any(f"/project/{pid}/delivery" in str(c) for c in calls)
+
+
+# --------------------------------------------------------------------------- #
+# Delivery OS IP2 (Frame.io review polish) — resolve, reply, version navigation
+# --------------------------------------------------------------------------- #
+def test_resolve_toggles_comment_flag_and_requires_identity(client):
+    """Per-comment resolve flips the resolved flag (and needs a complete identity),
+    and the portal reflects open/resolved state."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    # Seed a comment via a raw db insert (no remembered-identity cookie set on the
+    # client) so the identity guard on resolve can be exercised from a clean state.
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        cid = db_mod.add_review_comment(
+            conn, pid, version="0", t_seconds=5.0, author="Dana",
+            email="dana@agency.com", body="Tighten the intro", kind="comment")
+    finally:
+        conn.close()
+    # A resolve with no identity (no email, no cookie) no-ops (still flagged 0).
+    client.post(f"/project/{pid}/review/resolve",
+                data={"k": token, "author": "Dana", "comment_id": cid})
+    conn = db_mod.connect()
+    try:
+        assert (db_mod.get_review_comment(conn, cid)["resolved"] or 0) == 0
+    finally:
+        conn.close()
+    # A complete identity resolves it.
+    client.post(f"/project/{pid}/review/resolve",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "comment_id": cid})
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_review_comment(conn, cid)["resolved"] == 1
+    finally:
+        conn.close()
+    # The portal reflects it: 0 open · 1 resolved, and a Reopen control appears.
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "0</b> open" in page and "1 resolved" in page
+    assert "Reopen" in page
+    # Toggling again reopens it.
+    client.post(f"/project/{pid}/review/resolve",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "comment_id": cid})
+    conn = db_mod.connect()
+    try:
+        assert (db_mod.get_review_comment(conn, cid)["resolved"] or 0) == 0
+    finally:
+        conn.close()
+
+
+def test_open_and_resolved_counts_render(client):
+    """The 'N open · M resolved' count renders for the version under review."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    for body in ("Note one", "Note two"):
+        client.post(f"/project/{pid}/review/comment",
+                    data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                          "t": "5", "body": body})
+    rows = [c for c in _comments(pid) if c["kind"] == "comment"]
+    assert len(rows) == 2
+    # Resolve one of the two.
+    client.post(f"/project/{pid}/review/resolve",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "comment_id": rows[0]["id"]})
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "1</b> open" in page and "1 resolved" in page
+
+
+def test_reply_nests_under_parent_and_renders_indented(client):
+    """A reply (parent_id) threads one level under its parent and renders in the
+    indented thread block. Replies carry no timecode."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "5", "body": "Drums too loud at 0:34"})
+    parent = next(c for c in _comments(pid) if c["kind"] == "comment")
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Composer", "email": "comp@studio.com",
+                      "body": "Fixed in this pass", "parent_id": parent["id"]})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        rows = db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+    reply = next(c for c in rows if c["body"] == "Fixed in this pass")
+    # It nests under its parent and (being a reply) carries no timecode.
+    assert reply["parent_id"] == parent["id"]
+    assert reply["t_seconds"] is None
+    # The portal renders the reply inside the indented thread block.
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "rc-thread" in page
+    assert "Fixed in this pass" in page
+
+
+def test_selecting_a_version_loads_its_track_and_comments(client):
+    """?v=<n> opens that version: its track is the player src and only its comments
+    show (seed 2 versions with a comment on each)."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    # Two versions, with a comment landing on each as it's the current one.
+    _upload_version(client, pid, "v1.mp3")
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "5", "body": "v1 note about the hook"})
+    _upload_version(client, pid, "v2.mp3")
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "8", "body": "v2 note about the drums"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    versions = d["versions"]
+    v1_url, v2_url = versions[0]["url"], versions[1]["url"]
+
+    # Default (no ?v=): the current version (v2) plays, only v2's comment shows.
+    cur = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert v2_url in cur and v1_url not in cur
+    assert "v2 note about the drums" in cur
+    assert "v1 note about the hook" not in cur
+
+    # ?v=1: v1's track is the player src and only v1's comment shows.
+    sel = client.get(f"/project/{pid}/delivery-portal", params={"k": token, "v": "1"}).text
+    assert v1_url in sel and v2_url not in sel
+    assert "v1 note about the hook" in sel
+    assert "v2 note about the drums" not in sel

@@ -166,7 +166,10 @@ CREATE TABLE IF NOT EXISTS review_comments (
     email TEXT,
     body TEXT,
     kind TEXT DEFAULT 'comment',
-    created_at TEXT
+    created_at TEXT,
+    -- IP2 (Frame.io review polish): per-comment resolve + one level of reply.
+    resolved INTEGER DEFAULT 0,    -- 0 = open, 1 = resolved (toggled by reviewer)
+    parent_id INTEGER              -- a reply nests one level under its parent comment
 );
 
 CREATE TABLE IF NOT EXISTS project_updates (
@@ -656,6 +659,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     rc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(review_comments)")}
     if "email" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN email TEXT")
+    # Delivery OS IP2 (Frame.io review polish): per-comment resolve + one-level
+    # reply. Older DBs predate both columns.
+    if "resolved" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN resolved INTEGER DEFAULT 0")
+    if "parent_id" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN parent_id INTEGER")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -2341,16 +2350,22 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
+    parent_id=None,
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
-    change request. Attributed to the reviewer's name + email. Returns the new id."""
+    change request. Attributed to the reviewer's name + email. Returns the new id.
+
+    ``parent_id`` (IP2) threads a reply one level under an existing comment — a
+    reply answers its parent so it carries no timecode of its own."""
     cur = conn.execute(
         """INSERT INTO review_comments
-           (project_id, version, t_seconds, author, email, body, kind, created_at)
-           VALUES (?,?,?,?,?,?,?,?)""",
+           (project_id, version, t_seconds, author, email, body, kind, created_at,
+            resolved, parent_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (project_id, version or "", t_seconds, author or "Anonymous",
          (email or "").strip() or None, body or "", kind,
-         datetime.now(timezone.utc).isoformat()),
+         datetime.now(timezone.utc).isoformat(),
+         0, int(parent_id) if parent_id not in (None, "") else None),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -2364,6 +2379,36 @@ def list_review_comments(
         "SELECT * FROM review_comments WHERE project_id = ? ORDER BY created_at ASC, id ASC",
         (project_id,),
     ).fetchall()
+
+
+def get_review_comment(
+    conn: sqlite3.Connection, comment_id: int
+) -> Optional[sqlite3.Row]:
+    """One review-comment row by id (None when it doesn't exist)."""
+    return conn.execute(
+        "SELECT * FROM review_comments WHERE id = ?", (comment_id,)
+    ).fetchone()
+
+
+def toggle_comment_resolved(
+    conn: sqlite3.Connection, project_id: int, comment_id: int
+) -> Optional[int]:
+    """Flip a comment's resolved flag (IP2). Scoped to the project so a token for
+    one campaign can't toggle another's. Returns the new resolved value (0/1), or
+    None if the comment doesn't belong to the project."""
+    row = conn.execute(
+        "SELECT resolved FROM review_comments WHERE id = ? AND project_id = ?",
+        (comment_id, project_id),
+    ).fetchone()
+    if row is None:
+        return None
+    new_val = 0 if (row["resolved"] or 0) else 1
+    conn.execute(
+        "UPDATE review_comments SET resolved = ? WHERE id = ? AND project_id = ?",
+        (new_val, comment_id, project_id),
+    )
+    conn.commit()
+    return new_val
 
 
 def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Optional[str]:

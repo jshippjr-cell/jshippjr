@@ -74,7 +74,26 @@
   .vchip{font-size:11px;letter-spacing:.04em;color:var(--slate);border:1px solid var(--line);
     border-radius:999px;padding:4px 11px;background:var(--cream);white-space:nowrap}
   .vchip.cur{background:var(--wine);color:#fff;border-color:var(--wine);font-weight:700}
+  /* IP2: chips are now links — the reviewer can open & play ANY version. */
+  a.vchip{cursor:pointer;text-decoration:none}
+  a.vchip:hover{border-color:var(--wine);color:var(--wine)}
+  a.vchip.cur:hover{color:#fff}
+  .vchip.sel{outline:2px solid var(--orange);outline-offset:1px}
   .vsep{color:var(--muted);font-size:11px}
+  /* IP2: open/resolved count + per-comment resolve + threaded replies. */
+  .rc-counts{font-size:11px;color:var(--slate);margin:0 0 10px;letter-spacing:.02em}
+  .rc-counts b{color:var(--wine)}
+  .rc.done .rc-b{text-decoration:line-through;color:var(--muted)}
+  .rc.done{opacity:.62}
+  .rc-actions{flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:auto}
+  .rc-mini{background:none;border:0;color:var(--orange);font:inherit;font-size:11px;
+    font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
+  .rc-mini.resolve{color:#1d6b43}
+  .rc-reply{margin:6px 0 4px 46px;display:none}
+  .rc-reply.open{display:flex}
+  .rc-thread{margin-left:46px;border-left:2px solid var(--line);padding-left:12px}
+  .rc-thread .rc{padding:5px 0}
+  .rc-thread .rc-t{min-width:0;color:var(--slate)}
   .round{display:inline-block;border:1px solid var(--orange);color:var(--orange);font-size:10px;
     letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:4px;margin-left:8px}
   /* delivery-package-ready card — the payoff moment */
@@ -154,9 +173,18 @@
     <div class="vrail" aria-label="Version history">
       {% for v in versions %}
         {% if not loop.first %}<span class="vsep">·</span>{% endif %}
-        <span class="vchip{% if loop.last %} cur{% endif %}">v{{ v.n }}{% if loop.last %} (current){% endif %}</span>
+        {# IP2: every chip is a link — clicking it opens & plays that version and
+           shows that version's comments (?v=<n>, preserving the share token). #}
+        <a class="vchip{% if loop.last %} cur{% endif %}{% if v.n|string == selected_n|string %} sel{% endif %}"
+           href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}&v={{ v.n }}#review">v{{ v.n }}{% if loop.last %} (current){% endif %}{% if v.n|string == selected_n|string and not loop.last %} (viewing){% endif %}</a>
       {% endfor %}
     </div>
+    {% if selected_n|string != current_n|string and current_n != 0 %}
+    <p class="muted-note" style="margin:-8px 0 12px">
+      You're viewing <b>v{{ selected_n }}</b> — an earlier round.
+      <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}#review" style="color:var(--orange)">Back to current (v{{ current_n }})</a>
+    </p>
+    {% endif %}
     {% endif %}
 
     {% if review_track %}
@@ -171,30 +199,52 @@
     {% endif %}
 
     <div style="margin-top:16px">
-      {% set ns2 = namespace(has=false, prior=false) %}
-      {% for c in comments %}{% if c.kind == 'comment' and (current_n == 0 or c.version|string == current_n|string) %}{% set ns2.has = true %}
-        <div class="rc">
+      {# IP2: open/resolved count for the version being viewed. #}
+      <p class="rc-counts"><b>{{ open_count }}</b> open · {{ resolved_count }} resolved
+        {% if selected_n != 0 %} on v{{ selected_n }}{% endif %}</p>
+
+      {% set ns2 = namespace(has=false) %}
+      {# Top-level notes for the SELECTED version, each with its threaded replies. #}
+      {% for c in comments %}{% if c.kind == 'comment' and c.parent_id is none and (selected_n == 0 or c.version|string == selected_n|string) %}{% set ns2.has = true %}
+        <div class="rc{% if c.resolved %} done{% endif %}">
           {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}</a>{% else %}<span class="rc-t">—</span>{% endif %}
           <span class="rc-a">{{ c.author }}</span>
           <span class="rc-b">{{ c.body }}</span>
+          <span class="rc-actions">
+            <button type="button" class="rc-mini reply-toggle" data-target="reply-{{ c.id }}">Reply</button>
+            <form method="post" action="/project/{{ project['id'] }}/review/resolve" class="review-act" data-need-id="1" style="display:inline">
+              <input type="hidden" name="k" value="{{ share_token }}">
+              <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+              <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
+              <input type="hidden" name="comment_id" value="{{ c.id }}">
+              <button type="submit" class="rc-mini resolve">{% if c.resolved %}Reopen{% else %}Resolve{% endif %}</button>
+            </form>
+          </span>
         </div>
+        {# One level of reply, threaded indented under the parent. #}
+        {% set has_replies = namespace(any=false) %}
+        {% for r in comments %}{% if r.kind == 'comment' and r.parent_id == c.id %}{% set has_replies.any = true %}{% endif %}{% endfor %}
+        {% if has_replies.any %}
+        <div class="rc-thread">
+          {% for r in comments %}{% if r.kind == 'comment' and r.parent_id == c.id %}
+          <div class="rc">
+            <span class="rc-t">↳</span>
+            <span class="rc-a">{{ r.author }}</span>
+            <span class="rc-b">{{ r.body }}</span>
+          </div>
+          {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        <form method="post" action="/project/{{ project['id'] }}/review/comment" class="rc-form rc-reply review-act" id="reply-{{ c.id }}" data-need-id="1">
+          <input type="hidden" name="k" value="{{ share_token }}">
+          <input type="hidden" name="parent_id" value="{{ c.id }}">
+          <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+          <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
+          <input type="text" name="body" placeholder="Reply…" class="rc-in rc-in-wide" required>
+          <button type="submit" class="rc-btn">Reply</button>
+        </form>
       {% endif %}{% endfor %}
       {% if not ns2.has %}<p class="muted-note">No notes on this version yet — scrub the track and drop the first one.</p>{% endif %}
-
-      {# Prior versions' notes stay in the full tape, dimmed below the active list. #}
-      {% for c in comments %}{% if c.kind == 'comment' and current_n != 0 and c.version|string != current_n|string %}{% set ns2.prior = true %}{% endif %}{% endfor %}
-      {% if ns2.prior %}
-      <details style="margin-top:12px">
-        <summary class="muted-note" style="cursor:pointer">Earlier versions' notes</summary>
-        {% for c in comments %}{% if c.kind == 'comment' and current_n != 0 and c.version|string != current_n|string %}
-        <div class="rc" style="opacity:.6">
-          <span class="rc-t">v{{ c.version }}</span>
-          <span class="rc-a">{{ c.author }}</span>
-          <span class="rc-b">{{ c.body }}</span>
-        </div>
-        {% endif %}{% endfor %}
-      </details>
-      {% endif %}
     </div>
 
     {% if review_track %}
@@ -384,6 +434,17 @@
       e.preventDefault();
       ra.currentTime = parseFloat(a.getAttribute('data-t')) || 0;
       ra.play().catch(function () {});
+    });
+  });
+})();
+// IP2: a "Reply" affordance under each top-level comment toggles its reply form.
+(function () {
+  document.querySelectorAll('.reply-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var f = document.getElementById(btn.getAttribute('data-target'));
+      if (!f) return;
+      f.classList.toggle('open');
+      if (f.classList.contains('open')) { var i = f.querySelector('input[name="body"]'); if (i) i.focus(); }
     });
   });
 })();
