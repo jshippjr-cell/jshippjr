@@ -17,21 +17,36 @@
       <source src="{{ h.video }}">
     </video>
     <script>
-    // Mobile autoplay: iOS only autoplays a video that is muted via the *property*
-    // (the muted attribute alone is unreliable) and inline. Force it, retry when the
-    // media is ready, and fall back to the first user gesture if still blocked
-    // (Low-Power / Data-Saver mode blocks autoplay entirely — the poster covers that).
+    // Mobile autoplay. iOS only autoplays a video that is muted via the *property*
+    // (not just the attribute) and inline — and it often won't fire the initial
+    // autoplay until the element is actually in view. The reliable trigger is an
+    // IntersectionObserver that plays it WHEN it's on screen — which is exactly the
+    // "scroll it into view" gesture, done automatically on landing. We also retry on
+    // media-ready and on ANY interaction (kept live, not one-shot) so a single early
+    // blocked attempt never sticks. (Low-Power / Data-Saver block autoplay outright;
+    // the poster covers that.)
     (function () {
       var v = document.querySelector('.hero-video');
       if (!v) return;
       v.muted = true; v.defaultMuted = true; v.setAttribute('muted', '');
-      var play = function () { var p = v.play(); if (p && p.catch) p.catch(function () {}); };
-      play();
-      v.addEventListener('loadeddata', play, { once: true });
-      v.addEventListener('canplay', play, { once: true });
-      ['touchstart', 'pointerdown', 'click'].forEach(function (ev) {
-        document.addEventListener(ev, function () { play(); }, { once: true, passive: true });
+      var kick = function () {
+        if (!v.paused) return;            // already playing — nothing to do
+        var p = v.play();
+        if (p && p.catch) p.catch(function () {});
+      };
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) { if (e.isIntersecting) kick(); });
+        }, { threshold: 0.1 }).observe(v);
+      }
+      ['loadeddata', 'canplay', 'canplaythrough', 'stalled'].forEach(function (ev) {
+        v.addEventListener(ev, kick);
       });
+      // Live (not one-shot) — scrolling/tapping anywhere re-attempts until it sticks.
+      ['touchstart', 'touchend', 'pointerdown', 'click', 'scroll'].forEach(function (ev) {
+        document.addEventListener(ev, kick, { passive: true });
+      });
+      kick();
     })();
     </script>
     {% elif h.loop %}
