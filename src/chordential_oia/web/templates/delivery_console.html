@@ -51,6 +51,18 @@
   .aa-changes{background:#f7e9ec;color:var(--wine,#7a2e3a)}
   .aa-pending{background:#eee;color:var(--muted,#888)}
   @media (max-width:720px){.brief-grid{grid-template-columns:1fr}}
+  /* brief-as-contract — scope reconciliation (brief items vs delivered) */
+  .scope{list-style:none;margin:8px 0 0;padding:0}
+  .scope li{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .scope li:last-child{border-bottom:0}
+  .scope .sc-i{flex:1 1 auto}
+  .scope .sc-m{display:block;font-size:11px;color:var(--muted,#888)}
+  .scope .sc-badge{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;padding:1px 7px;border-radius:4px;white-space:nowrap}
+  .scope .sc-yes{background:#e6f3ec;color:#1d6b43}
+  .scope .sc-no{background:#f5efe6;color:#9a6a18}
+  .scope-roll{font-size:12px;color:var(--slate,#546671);margin:0;font-weight:700}
+  .scope-roll b{color:#44161E}
 </style>
 {% endblock %}
 {% block content %}
@@ -234,6 +246,20 @@
       <button class="btn primary" type="submit">Save brief</button>
     </div>
   </form>
+  {% if brief_items %}
+  <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">
+    <h3 class="small muted" style="margin:0 0 6px;text-transform:uppercase;letter-spacing:.6px">Against the brief — scope reconciliation</h3>
+    <p class="scope-roll"><b>{{ brief_rollup.delivered }} of {{ brief_rollup.total }}</b> brief item{{ 's' if brief_rollup.total != 1 }} delivered</p>
+    <ul class="scope">
+      {% for it in brief_items %}
+      <li>
+        <span class="sc-i">{{ it.item }}{% if it.matched %}<span class="sc-m">↳ matched: {{ it.matched }}</span>{% endif %}</span>
+        {% if it.status == "Delivered" %}<span class="sc-badge sc-yes">✓ Delivered</span>{% else %}<span class="sc-badge sc-no">⧗ Pending</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 </section>
 
 <div class="cols-2">

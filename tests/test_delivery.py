@@ -22,12 +22,15 @@ from fastapi.testclient import TestClient  # noqa: E402
 from chordential_oia.delivery import (  # noqa: E402
     build_clearance_certificate,
     build_cue_sheet,
+    brief_deliverables,
+    brief_rollup,
     build_manifest,
     build_timeline,
     cue_sheet_csv,
     current_version,
     manifest_text,
     metadata_json,
+    reconcile_brief,
     revision_status,
     rights_certificate_text,
     seed_brief,
@@ -168,6 +171,41 @@ def test_seed_brief_defaults_from_opportunity_then_stored_wins():
     brief2 = seed_brief(project, opp, {"brief": {"objective": "Drive trial signups"}})
     assert brief2["objective"] == "Drive trial signups"
     assert brief2["tone"] == "Warm, cinematic, hopeful."  # still seeded
+
+
+# --------------------------------------------------------------------------- #
+# Brief-as-contract (re-review top-5 #5) — parse + reconcile the brief.
+# --------------------------------------------------------------------------- #
+def test_brief_deliverables_parses_comma_and_newline_list():
+    brief = {"deliverables_needed": ":60 master, :30 cutdown; :15 cutdown\nstems"}
+    items = brief_deliverables(brief)
+    assert items == [":60 master", ":30 cutdown", ":15 cutdown", "stems"]
+    # Blanks dropped, duplicates (case-insensitively) collapsed.
+    assert brief_deliverables({"deliverables_needed": "stems,, Stems"}) == ["stems"]
+    assert brief_deliverables({}) == []
+
+
+def test_reconcile_brief_marks_delivered_and_pending():
+    brief = {"deliverables_needed": ":60 master, :06 bumper"}
+    assets = [{"label": "AURORA :60 master broadcast", "kind": "audio"}]
+    recon = reconcile_brief(brief, assets)
+    by_item = {r["item"]: r for r in recon}
+    # The :60 master is plausibly satisfied by the uploaded master.
+    assert by_item[":60 master"]["status"] == "Delivered"
+    assert by_item[":60 master"]["matched"] == "AURORA :60 master broadcast"
+    # The :06 bumper has no plausible asset → Pending, no match.
+    assert by_item[":06 bumper"]["status"] == "Pending"
+    assert by_item[":06 bumper"]["matched"] == ""
+    # Synonym match: "social cutdowns" ↔ a 9:16 vertical cut.
+    recon2 = reconcile_brief(
+        {"deliverables_needed": "social cutdowns"},
+        [{"label": "9:16 vertical cut", "kind": "audio"}],
+    )
+    assert recon2[0]["status"] == "Delivered"
+    # The rollup reads "N of M".
+    roll = brief_rollup(recon)
+    assert roll == {"delivered": 1, "total": 2,
+                    "text": "1 of 2 brief items delivered"}
 
 
 def test_build_timeline_orders_brief_version_comment_and_approval():
@@ -1538,3 +1576,46 @@ def test_per_asset_event_lands_on_tape_and_pushes_operator(client, monkeypatch):
     assert ev["verified"] == 1
     assert ":60 master" in ev["body"]                   # body names the asset
     assert pushed                                       # the operator push fired
+
+
+# --------------------------------------------------------------------------- #
+# Brief-as-contract — the brief on the portal + scope reconciliation (HTTP).
+# --------------------------------------------------------------------------- #
+def test_portal_renders_brief_card_and_scope_checklist(client):
+    """(c)+(d) The client portal shows "The brief" card + a scope checklist with a
+    Delivered and a Pending item, plus the "N of M" rollup. Seed a brief with two
+    deliverables + one matching asset."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    # A brief scoping two deliverables.
+    client.post(f"/project/{pid}/delivery/brief",
+                data={"objective": "Energetic :60 anthem for the launch.",
+                      "deliverables_needed": ":60 master, :06 bumper"},
+                follow_redirects=True)
+    # One uploaded asset that plausibly satisfies the :60 master, not the bumper.
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master broadcast")
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    # The brief card + its agreed-scope copy.
+    assert "The brief" in page
+    assert "Energetic :60 anthem for the launch." in page
+    # The scope checklist: one Delivered, one Pending.
+    assert "✓ Delivered" in page
+    assert "⧗ Pending" in page
+    assert ":06 bumper" in page
+    # The rollup ("N of M brief items delivered").
+    assert "1 of 2" in page
+    assert "brief item" in page
+
+
+def test_console_renders_scope_reconciliation(client):
+    """(e) The operator console shows the brief-vs-delivered scope reconciliation."""
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/delivery/brief",
+                data={"objective": "Anthem", "deliverables_needed": ":60 master, stems"},
+                follow_redirects=True)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Against the brief" in page
+    assert "✓ Delivered" in page
+    assert "⧗ Pending" in page          # stems not delivered
+    assert "1 of 2" in page

@@ -43,9 +43,10 @@ from ..capabilities import (
     chips_for, default_toggles,
 )
 from ..delivery import (
-    build_clearance_certificate, build_cue_sheet, build_delivery_zip,
-    build_manifest, build_timeline, current_version, license_confirmation,
-    merge_license, merge_signatory, revision_status, seed_brief, version_label,
+    brief_rollup, build_clearance_certificate, build_cue_sheet,
+    build_delivery_zip, build_manifest, build_timeline, current_version,
+    license_confirmation, merge_license, merge_signatory, reconcile_brief,
+    revision_status, seed_brief, version_label,
     versions_list, version_name,
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
 )
@@ -2488,6 +2489,10 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     # opportunity behind the project (need → objective, description → references/tone).
     opp_row = db.get_opportunity(conn, row["opp_id"]) if row["opp_id"] is not None else None
     brief = seed_brief(row, opp_row, delivery)
+    # Brief-as-contract: reconcile the brief's deliverables against the delivered
+    # assets so both portal + console show what was promised vs delivered.
+    brief_recon = reconcile_brief(brief, delivery.get("assets") or [])
+    brief_roll = brief_rollup(brief_recon)
     comments = db.list_review_comments(conn, project_id)
     timeline = build_timeline(row, delivery, comments)
 
@@ -2585,6 +2590,9 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         # Creative brief + campaign timeline (Phase 4) — the dashboard's spine.
         "brief": brief,
         "brief_fields": BRIEF_FIELDS,
+        # Brief-as-contract: the reconciliation list + the "N of M" rollup.
+        "brief_items": brief_recon,
+        "brief_rollup": brief_roll,
         "timeline": timeline,
         "version_states": VERSION_STATES,
     }

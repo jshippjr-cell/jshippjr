@@ -128,6 +128,22 @@
     box-shadow:0 4px 14px rgba(0,0,0,.16)}
   .dl-all:hover{background:#f3fff8}
   .ready .honest{font-size:11px;color:rgba(255,255,255,.72);font-style:italic;margin:14px 0 0}
+  /* brief-as-contract — the brief as the buyer's document + the scope checklist */
+  .brief-dl dt{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+    color:var(--wine);margin:14px 0 3px}
+  .brief-dl dt:first-of-type{margin-top:0}
+  .brief-dl dd{margin:0;font-size:14px;color:var(--ink);white-space:pre-wrap}
+  .scope{list-style:none;margin:10px 0 0;padding:0}
+  .scope li{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+  .scope li:first-child{border-top:0}
+  .scope .sc-i{flex:1 1 auto}
+  .scope .sc-m{display:block;font-size:11px;color:var(--muted)}
+  .scope .sc-badge{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;padding:2px 8px;border-radius:4px;white-space:nowrap}
+  .scope .sc-yes{background:#e6f3ec;color:#1d6b43}
+  .scope .sc-no{background:#f5efe6;color:#9a6a18}
+  .scope-roll{font-size:12px;color:var(--slate);margin:0 0 2px;font-weight:600}
+  .scope-roll b{color:var(--wine)}
 </style>
 </head>
 <body>
@@ -380,6 +396,33 @@
   </div>
   {% endif %}
 
+  <!-- THE BRIEF (brief-as-contract) — the agreed scope, the buyer's document -->
+  {% if brief and (brief.objective or brief.references or brief.tone or brief.deadline or brief_items) %}
+  <div class="card" id="brief">
+    <h2>The brief</h2>
+    <p class="sub">The agreed scope for this campaign — what we set out to make, and where it stands against what's delivered.</p>
+    <dl class="brief-dl">
+      {% if brief.objective %}<dt>Objective</dt><dd>{{ brief.objective }}</dd>{% endif %}
+      {% if brief.references %}<dt>References</dt><dd>{{ brief.references }}</dd>{% endif %}
+      {% if brief.tone %}<dt>Tone</dt><dd>{{ brief.tone }}</dd>{% endif %}
+      {% if brief.deadline %}<dt>Deadline</dt><dd>{{ brief.deadline }}</dd>{% endif %}
+    </dl>
+    {% if brief_items %}
+    <div style="margin-top:16px">
+      <p class="scope-roll"><b>{{ brief_rollup.delivered }} of {{ brief_rollup.total }}</b> brief item{{ 's' if brief_rollup.total != 1 }} delivered</p>
+      <ul class="scope">
+        {% for it in brief_items %}
+        <li>
+          <span class="sc-i">{{ it.item }}{% if it.matched %}<span class="sc-m">↳ {{ it.matched }}</span>{% endif %}</span>
+          {% if it.status == "Delivered" %}<span class="sc-badge sc-yes">✓ Delivered</span>{% else %}<span class="sc-badge sc-no">⧗ Pending</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- REVIEW HISTORY (IP1: provenance survives the hand-off, read-only after delivery) -->
   {% if (state == "Delivered" or state == "Released") and comments %}
   <div class="card" id="review-history">
@@ -417,6 +460,9 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if brief_items %}
+    <p class="sub" style="margin-top:14px"><b>Against the brief:</b> {{ brief_rollup.delivered }} of {{ brief_rollup.total }} brief item{{ 's' if brief_rollup.total != 1 }} delivered.{% if brief_rollup.delivered < brief_rollup.total %} See <a href="#brief" style="color:var(--orange)">The brief</a> for the full scope checklist.{% endif %}</p>
+    {% endif %}
   </div>
 
   <!-- ASSETS / PLAYERS -->

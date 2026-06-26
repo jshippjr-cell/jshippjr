@@ -551,6 +551,131 @@ def seed_brief(project, opp=None, delivery: Optional[dict] = None) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Brief-as-contract (re-review top-5 #5) — parse the brief's free-text
+# deliverables into items and reconcile them against the delivered assets so
+# both sides see what was promised vs delivered. The brief stops being a note
+# and becomes the agreed scope the buyer can point to.
+#
+# The matcher is deliberately simple + deterministic: a brief item is Delivered
+# when ANY uploaded asset plausibly satisfies it — a case-insensitive keyword /
+# substring match between the item's significant words and an asset label (e.g.
+# "social cutdowns" ↔ a ":30 cutdown" / "9:16 vertical cuts"). No AI, no scoring.
+# --------------------------------------------------------------------------- #
+
+# Tiny synonym groups so a brief item phrased one way matches an asset labelled
+# another — the words a brief and a filename plausibly share for the same thing.
+_DELIVERABLE_SYNONYMS = [
+    {"master", "anthem", "broadcast", "full", "60", ":60", "hero"},
+    {"cutdown", "cutdowns", "cut", "edit", "edits", "30", ":30", "15", ":15"},
+    {"social", "vertical", "9:16", "9x16", "tiktok", "reel", "reels", "story",
+     "stories", "06", ":06", ":6"},
+    {"stem", "stems", "multitrack", "multi-track"},
+    {"instrumental", "inst", "underscore", "bed"},
+    {"bumper", "sting", "stinger", "tag"},
+    {"vo", "voiceover", "voice-over", "voice"},
+]
+
+# Words too generic to carry a match on their own (every brief says "the", "and").
+_DELIVERABLE_STOPWORDS = {
+    "a", "an", "and", "the", "of", "for", "to", "with", "plus", "or", "version",
+    "versions", "deliverable", "deliverables", "asset", "assets", "file", "files",
+}
+
+
+def _deliverable_tokens(text: str) -> set:
+    """The significant lowercase keyword tokens of a deliverable phrase.
+
+    Splits on non-alphanumerics (keeping ``:30``-style colon tokens), drops the
+    generic stopwords, and expands each token through the synonym groups so a
+    brief item and an asset label that mean the same thing share tokens."""
+    raw = re.findall(r"[0-9a-zA-Z:]+", str(text or "").lower())
+    toks = set()
+    for w in raw:
+        w = w.strip(":")
+        if not w or w in _DELIVERABLE_STOPWORDS:
+            continue
+        toks.add(w)
+        for group in _DELIVERABLE_SYNONYMS:
+            if w in group:
+                toks |= group
+    return toks
+
+
+def brief_deliverables(brief: Optional[dict]) -> List[str]:
+    """The brief's ``deliverables_needed`` parsed into a list of deliverable items.
+
+    Splits the free-text on newlines / commas / semicolons, trims each, and drops
+    blanks (and exact duplicates, case-insensitively) so a prose line like
+    ":60 master, :30/:15 cutdowns; stems" reads as discrete, checkable items.
+    Returns ``[]`` when nothing is scoped."""
+    brief = brief or {}
+    text = str(brief.get("deliverables_needed") or "")
+    out: List[str] = []
+    seen = set()
+    for part in re.split(r"[\n,;]+", text):
+        item = part.strip()
+        if not item:
+            continue
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def reconcile_brief(brief: Optional[dict], assets=None) -> List[dict]:
+    """Reconcile the brief's deliverables against the delivered ``assets``.
+
+    For each item parsed from ``deliverables_needed`` (:func:`brief_deliverables`),
+    matches it against the uploaded asset labels — a case-insensitive keyword /
+    substring + synonym match. Returns ``[{item, status, matched}]`` where
+    ``status`` ∈ {``"Delivered"``, ``"Pending"``} and ``matched`` is the satisfying
+    asset's label (or ``""``). An item counts Delivered the moment ANY asset
+    plausibly satisfies it. Deterministic — the first plausible asset wins."""
+    items = brief_deliverables(brief)
+    labels = [
+        (a.get("label") or a.get("filename") or "").strip()
+        for a in (assets or [])
+    ]
+    labels = [l for l in labels if l]
+    out: List[dict] = []
+    for item in items:
+        item_toks = _deliverable_tokens(item)
+        item_lower = item.lower()
+        matched = ""
+        for label in labels:
+            label_lower = label.lower()
+            # Plausible match: a shared significant token (synonym-expanded), or a
+            # direct substring either way (handles short labels like ":30").
+            if (item_toks & _deliverable_tokens(label)
+                    or item_lower in label_lower or label_lower in item_lower):
+                matched = label
+                break
+        out.append({
+            "item": item,
+            "status": "Delivered" if matched else "Pending",
+            "matched": matched,
+        })
+    return out
+
+
+def brief_rollup(items) -> dict:
+    """The brief-vs-delivered rollup: ``{delivered, total, text}`` for a header line.
+
+    ``text`` reads "N of M brief items delivered" (deterministic) so the portal,
+    console, and package can all show the same one-line contract status."""
+    items = list(items or [])
+    total = len(items)
+    delivered = sum(1 for i in items if i.get("status") == "Delivered")
+    return {
+        "delivered": delivered,
+        "total": total,
+        "text": f"{delivered} of {total} brief item{'s' if total != 1 else ''} delivered",
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Campaign timeline (Phase 4) — the campaign's chronology, merged + sorted.
 #
 # Deterministic assembly from data that already exists: the brief/project start,
@@ -819,12 +944,17 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     return "\n".join(lines)
 
 
-def manifest_text(manifest, asset_approvals: Optional[dict] = None) -> str:
+def manifest_text(manifest, asset_approvals: Optional[dict] = None,
+                  brief_items=None) -> str:
     """The deliverables manifest as readable plain text, grouped by section.
 
     ``asset_approvals`` (``delivery_json['asset_approvals']``) adds a PER-ASSET
     APPROVAL section noting which deliverables a reviewer signed off (and which
-    still await), so the delivered package records the granular sign-off."""
+    still await), so the delivered package records the granular sign-off.
+
+    ``brief_items`` (the :func:`reconcile_brief` list) adds a short AGAINST THE
+    BRIEF section reconciling each scoped brief deliverable against what was
+    delivered — the contract part, recorded in the delivered package."""
     lines: List[str] = []
     lines.append("CHORDENTIAL — DELIVERABLES MANIFEST")
     lines.append("=" * 52)
@@ -851,6 +981,18 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None) -> str:
             tail = f" — {who}" if who else ""
             tail += f" ({on})" if on else ""
             lines.append(f"  {rec['status']}: {key}{tail}")
+    items = list(brief_items or [])
+    if items:
+        roll = brief_rollup(items)
+        lines.append("")
+        lines.append("AGAINST THE BRIEF")
+        lines.append("-" * 52)
+        lines.append(f"  {roll['text']}.")
+        for it in items:
+            mark = "[✓]" if it.get("status") == "Delivered" else "[ ]"
+            matched = (it.get("matched") or "").strip()
+            tail = f" → {matched}" if matched else ""
+            lines.append(f"  {mark} {it.get('item', '')} — {it.get('status', '')}{tail}")
     lines.append("")
     return "\n".join(lines)
 
@@ -990,6 +1132,11 @@ def build_delivery_zip(
     )
     manifest = build_manifest(project, assets=assets, versions=versions)
 
+    # Brief-as-contract: reconcile the brief's deliverables against the delivered
+    # assets so the package records what was promised vs delivered.
+    brief = seed_brief(project, delivery=delivery)
+    brief_items = reconcile_brief(brief, assets)
+
     # The generated documents (stdlib-only — the guaranteed core).
     docs = {
         "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
@@ -998,7 +1145,8 @@ def build_delivery_zip(
             generated_at=built_at),
         "Docs/rights_certificate.txt": rights_certificate_text(cert),
         "Docs/manifest.txt": manifest_text(
-            manifest, asset_approvals=delivery.get("asset_approvals")),
+            manifest, asset_approvals=delivery.get("asset_approvals"),
+            brief_items=brief_items),
     }
 
     slug = _campaign_slug(project)
