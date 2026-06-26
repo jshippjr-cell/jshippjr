@@ -1843,3 +1843,133 @@ def test_console_shows_missing_deliverables_warning_when_incomplete(client):
     # It names a missing deliverable and offers a (partial) build.
     assert "Mix-ready stem package" in page
     assert "(partial)" in page
+
+
+# --------------------------------------------------------------------------- #
+# Branded HTML docs in the delivery ZIP + playable bundled audio
+# --------------------------------------------------------------------------- #
+def _build_zip_names_and_read(client, pid):
+    """Build the package and return (names, ZipFile-opener) for the assembled ZIP."""
+    import os
+    import zipfile as _zip
+    from chordential_oia.web import db as db_mod, app as app_mod
+
+    client.post(f"/project/{pid}/delivery/build", follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+    finally:
+        conn.close()
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
+    return zip_path
+
+
+def test_zip_contains_branded_html_docs_with_playable_audio(client):
+    """The delivery ZIP carries the branded, self-contained HTML docs:
+    (a) Docs/Delivery-Package.html + Docs/Clearance-Certificate.html are present;
+    (b) the package HTML is branded (palette / wordmark data URI, client +
+        campaign, a contributor, the honest no-indemnity certificate text);
+    (c) a bundled local audio asset gets an <audio> element whose src points at
+        the bundled file path;
+    (d) cue_sheet.csv + metadata.json remain present;
+    (e) building doesn't crash without a headless browser (PDF simply absent)."""
+    import re as _re
+    import zipfile as _zip
+
+    pid = _win_and_make_project(client, 1)
+    name = _assign_a_creator(client, pid)          # a contributor for the cert
+    # Seed an uploaded LOCAL audio asset (a real on-disk file, not URL-only).
+    files = {"file": ("anthem_master.wav", b"RIFF....WAVEfakeaudio", "audio/wav")}
+    client.post(f"/project/{pid}/delivery/asset",
+                data={"label": "Anthem :60 master", "action": "add"},
+                files=files, follow_redirects=True)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        stored = db_mod.get_delivery(conn, pid)["assets"][0]["filename"]
+        client_name = db_mod.get_project(conn, pid)["client"]
+    finally:
+        conn.close()
+    assert stored
+
+    zip_path = _build_zip_names_and_read(client, pid)
+    with _zip.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        # (a) The branded HTML docs are present.
+        assert "Docs/Delivery-Package.html" in names
+        assert "Docs/Clearance-Certificate.html" in names
+        pkg = zf.read("Docs/Delivery-Package.html").decode("utf-8")
+        cert = zf.read("Docs/Clearance-Certificate.html").decode("utf-8")
+        # (b) Branded: the wine/orange palette or the wordmark data URI, the
+        # client + campaign, a contributor, the honest "no indemnif" cert text.
+        assert ("44161E" in pkg.upper() or "E4671F" in pkg.upper()
+                or "data:image/png;base64," in pkg)
+        assert client_name in pkg
+        assert name in pkg                         # an assigned contributor
+        assert "indemnif" not in pkg.lower()       # honest — no indemnity at all
+        assert "no third-party" in pkg.lower()     # honest Content-ID language
+        # The standalone certificate is branded + sealed too.
+        assert "data:image/png;base64," in cert or "44161E" in cert.upper()
+        assert "CLEARED" in cert
+        # (c) The bundled audio has an <audio> element pointing at the bundled file.
+        assert "<audio" in pkg
+        assert stored in pkg                       # src references the bundled file
+        assert "../" in pkg                        # relative in-ZIP path
+        m = _re.search(r'<audio[^>]*src="([^"]+)"', pkg)
+        assert m and stored in m.group(1)
+        # The actual audio file is bundled under a folder, matching the src.
+        assert any(n.endswith(stored) for n in names), names
+        # (d) The machine-fileable docs are still present.
+        assert "Docs/cue_sheet.csv" in names
+        assert "Docs/metadata.json" in names
+        # (e) No headless browser in the test env → the PDF is simply absent.
+        assert "Docs/Delivery-Package.pdf" not in names
+
+
+def test_referenced_only_asset_has_no_player_in_branded_html(client):
+    """A remote-URL-only asset (no local file) is listed in the branded package
+    HTML without an <audio> player (it can't be played from inside the ZIP)."""
+    import zipfile as _zip
+    from chordential_oia.web import db as db_mod
+
+    pid = _win_and_make_project(client, 1)
+    conn = db_mod.connect()
+    try:
+        db_mod.update_delivery(conn, pid, "assets", [
+            {"label": "Anthem :60 (demo)", "url": "https://example.com/a.mp3",
+             "filename": "", "kind": "audio"},
+        ])
+    finally:
+        conn.close()
+    zip_path = _build_zip_names_and_read(client, pid)
+    with _zip.ZipFile(zip_path) as zf:
+        pkg = zf.read("Docs/Delivery-Package.html").decode("utf-8")
+    # The referenced asset is named, but there is no playable <audio> for it.
+    assert "Anthem :60 (demo)" in pkg
+    assert "<audio" not in pkg
+
+
+def test_branded_package_html_builder_is_stdlib_and_self_contained():
+    """The package HTML builder produces a self-contained doc (inline CSS + an
+    embedded base64 wordmark) with a playable audio player for a bundled asset."""
+    from chordential_oia.delivery import (
+        build_clearance_certificate as _bcc, build_manifest as _bm,
+        build_cue_sheet as _bcs, delivery_package_html as _dph,
+    )
+
+    proj = _fake_project()
+    assigns = _fake_assignments()
+    cert = _bcc(proj, assigns, {"type": "Full buyout"})
+    assets = [{"label": "Anthem :60 master", "filename": "p1-1.wav", "kind": "audio"}]
+    man = _bm(proj, assets=assets)
+    cues = _bcs(proj, assigns)
+    bundled = {"p1-1.wav": "../Masters/p1-1.wav"}
+    html = _dph(proj, cert, man, cues, assets, state="Released",
+                bundled_audio=bundled)
+    # Self-contained: inline <style> + an embedded base64 wordmark (no external src).
+    assert "<style>" in html
+    assert "data:image/png;base64," in html
+    # The cap-audio player + its inline JS are present and point at the relative src.
+    assert '<audio preload="none" src="../Masters/p1-1.wav">' in html
+    assert "cap-audio" in html
+    assert "addEventListener" in html               # the inline player JS

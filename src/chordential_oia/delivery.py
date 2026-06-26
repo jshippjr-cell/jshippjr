@@ -26,7 +26,9 @@ worldwide exclusive buyout.
 """
 from __future__ import annotations
 
+import base64
 import csv
+import html as _html
 import io
 import json
 import os
@@ -1157,6 +1159,541 @@ def _convert_wav_to_mp3(src_path: str) -> Optional[bytes]:
 
 
 # --------------------------------------------------------------------------- #
+# Branded, self-contained HTML documents (stdlib only — string templating +
+# base64). The delivery ZIP carries pretty, on-brand HTML versions of the
+# package + the standalone clearance certificate, matching the house style of
+# web/templates/delivery_package.html (palette wine #44161E / orange #E4671F /
+# cream #FCF7F8, the wordmark, the seal, the cap-audio player). Everything is
+# inlined so the doc opens stand-alone when the agency unzips it: all CSS is in a
+# <style> block and the Chordential wordmark is embedded as a base64 data URI.
+#
+# Uploaded audio that is actually bundled in the ZIP gets a playable
+# <audio>-backed cap-audio player whose src is a RELATIVE path to the bundled
+# file (e.g. ../Masters/xyz.wav), so it plays when opened locally; a download
+# link is kept too. Referenced-only assets (no local file) are listed without a
+# player.
+# --------------------------------------------------------------------------- #
+
+# The brand palette (mirrors delivery_package.html's :root vars).
+_BRAND = {
+    "ink": "#1F1E1E", "wine": "#44161E", "orange": "#E4671F", "cream": "#FCF7F8",
+    "sand": "#D8CDB6", "slate": "#546671", "line": "#E6DFD2", "muted": "#7a756d",
+}
+
+# The shared CSS for the branded docs — the same look as the web package, inlined
+# so the file is self-contained. Brace-free interpolation of the palette via %.
+_BRANDED_CSS = """
+  *{box-sizing:border-box}
+  body{margin:0;background:#cfc9bf;color:%(ink)s;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .serif{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif}
+  .page{position:relative;width:210mm;min-height:297mm;margin:14px auto;background:#fff;
+    padding:22mm 20mm 26mm;overflow:hidden;box-shadow:0 8px 34px rgba(0,0,0,.22)}
+  .content{position:relative;z-index:1}
+  .lh{display:flex;align-items:center;justify-content:space-between;background:%(wine)s;
+    padding:11px 16px;border-radius:8px;margin-bottom:26px}
+  .lh .logo{height:19px;width:auto;display:block}
+  .lh-meta{font-size:10px;color:#e7c6ba;text-transform:uppercase;letter-spacing:.14em;text-align:right}
+  .doc-kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:%(orange)s;font-weight:700;margin:0 0 6px}
+  h1.doc{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:30px;line-height:1.1;margin:0 0 4px;color:%(ink)s;font-weight:600}
+  .doc-sub{color:%(muted)s;font-size:13px;margin:0 0 22px}
+  .foot{position:absolute;left:20mm;right:20mm;bottom:12mm;display:flex;justify-content:space-between;
+    border-top:1px solid %(line)s;padding-top:8px;font-size:9.5px;color:%(muted)s;
+    text-transform:uppercase;letter-spacing:.1em;z-index:1}
+  table{width:100%%;border-collapse:collapse;font-size:11.5px}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:%(slate)s;
+    border-bottom:2px solid %(wine)s;padding:7px 8px}
+  td{padding:8px;border-bottom:1px solid %(line)s;vertical-align:top}
+  tr.grp td{background:%(cream)s;font-weight:700;color:%(wine)s;text-transform:uppercase;
+    letter-spacing:.08em;font-size:9.5px}
+  .tick{color:%(orange)s;font-weight:800}
+  .chip{display:inline-block;background:%(wine)s;color:#fff;font-size:10px;font-weight:700;
+    letter-spacing:.06em;padding:5px 11px;border-radius:20px}
+  .chip.ok{background:rgba(228,103,31,.14);color:#b5500f}
+  .panel{background:%(cream)s;border:1px solid %(line)s;border-radius:10px;padding:16px 18px}
+  .accent-bar{height:3px;background:linear-gradient(90deg,%(orange)s,%(wine)s);border-radius:3px;margin:0 0 18px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .seal{width:96px;height:96px;border-radius:50%%;border:3px solid %(orange)s;color:%(wine)s;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
+  .seal b{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:15px;letter-spacing:0}
+  .cover{background:radial-gradient(120%% 90%% at 20%% 0%%, #3a1219 0%%, #1f1013 60%%, #160c0e 100%%);
+    color:%(cream)s;padding:0;display:flex;flex-direction:column;justify-content:space-between}
+  .cover .inner{position:relative;z-index:1;padding:30mm 22mm}
+  .cover .logo-cover{height:30px;width:auto;display:block}
+  .cover h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-weight:600;
+    font-size:46px;line-height:1.05;margin:18px 0 6px;color:%(cream)s}
+  .cover .tag{color:%(sand)s;font-size:15px;max-width:70%%}
+  .cover .rule{height:2px;width:120px;background:%(orange)s;margin:26px 0}
+  .cover .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;max-width:80%%;font-size:12.5px}
+  .cover .meta div span{display:block;color:#b89a8c;font-size:9.5px;letter-spacing:.16em;
+    text-transform:uppercase;margin-bottom:2px}
+  .cover .status{display:inline-block;margin-top:26px;border:1px solid %(orange)s;color:%(orange)s;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;padding:8px 16px;border-radius:4px}
+  ul.clean{margin:6px 0;padding-left:18px;font-size:12px;line-height:1.7}
+  .legend{font-size:10.5px;color:%(muted)s}
+  .wine{color:%(wine)s}
+  .label{margin:22px 0 6px;font-weight:700;color:%(wine)s;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  /* compact, brand-coloured audio player */
+  .cap-audio{display:inline-flex;align-items:center;gap:10px;max-width:340px;width:100%%;
+    background:#fff;border:1px solid #e4ddd8;border-radius:999px;padding:4px 12px 4px 4px;margin:8px 0 4px}
+  .cap-audio-btn{flex:0 0 auto;width:28px;height:28px;border-radius:50%%;border:0;
+    background:%(orange)s;color:#fff;font-size:11px;line-height:1;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center}
+  .cap-audio-body{flex:1 1 auto;min-width:110px}
+  .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
+  .cap-audio-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:%(orange)s}
+  .cap-audio-time{flex:0 0 auto;font-size:11px;color:%(muted)s;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+  @media print{
+    body{background:#fff}
+    .page{margin:0;box-shadow:none;width:auto;min-height:auto;page-break-after:always}
+  }
+""" % _BRAND
+
+# The small inline JS that drives the cap-audio players (mirrors the web template).
+_CAP_AUDIO_JS = """
+(function () {
+  function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+  document.querySelectorAll('.cap-audio').forEach(function (p) {
+    var audio = p.querySelector('audio'), btn = p.querySelector('.cap-audio-btn'),
+        fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
+        time = p.querySelector('.cap-audio-time');
+    if (!audio) return;
+    btn.addEventListener('click', function () {
+      if (audio.paused) {
+        document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
+        audio.play();
+      } else { audio.pause(); }
+    });
+    audio.addEventListener('play', function(){ btn.textContent = '\\u275A\\u275A'; });
+    audio.addEventListener('pause', function(){ btn.textContent = '\\u25B6'; });
+    audio.addEventListener('timeupdate', function(){
+      if (audio.duration) { fill.style.width = (100*audio.currentTime/audio.duration) + '%'; }
+      time.textContent = fmt(audio.currentTime);
+    });
+    bar.addEventListener('click', function(e){
+      if (!audio.duration) return;
+      var r = bar.getBoundingClientRect();
+      audio.currentTime = audio.duration * (e.clientX - r.left) / r.width;
+    });
+  });
+})();
+"""
+
+
+def _esc(value) -> str:
+    """HTML-escape a value for safe inlining (empty string for None)."""
+    return _html.escape("" if value is None else str(value), quote=True)
+
+
+# Cache the embedded-wordmark data URI so we read the PNG off disk at most once.
+_WORDMARK_CACHE: dict = {}
+
+
+def _wordmark_data_uri(variant: str = "ko") -> str:
+    """The Chordential wordmark as a base64 ``data:image/png`` URI (embedded).
+
+    ``variant`` ∈ {``"ko"`` (knockout/light, for dark backgrounds), ``"dark"``}.
+    Reads ``web/static/public/wordmark-<variant>.png`` once and caches it; returns
+    ``""`` (never raises) if the asset can't be read, so the doc still renders."""
+    if variant in _WORDMARK_CACHE:
+        return _WORDMARK_CACHE[variant]
+    uri = ""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(here, "web", "static", "public", f"wordmark-{variant}.png")
+        with open(path, "rb") as fh:
+            b64 = base64.b64encode(fh.read()).decode("ascii")
+        uri = f"data:image/png;base64,{b64}"
+    except Exception:
+        uri = ""
+    _WORDMARK_CACHE[variant] = uri
+    return uri
+
+
+def _audio_player_html(label: str, rel_src: str) -> str:
+    """A branded cap-audio player for a bundled audio file at ``rel_src`` (relative).
+
+    The ``<audio src>`` is the RELATIVE in-ZIP path (e.g. ``../Masters/xyz.wav``) so
+    the player works when the agency unzips and opens the doc locally."""
+    s = _esc(rel_src)
+    return (
+        '<div class="cap-audio">'
+        '<button type="button" class="cap-audio-btn" aria-label="Play">▶</button>'
+        '<div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>'
+        '<span class="cap-audio-time">0:00</span>'
+        f'<audio preload="none" src="{s}"></audio>'
+        '</div>'
+    )
+
+
+def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
+                           *, seal_label: str = "CLEARED") -> str:
+    """The inner HTML of the Clearance Certificate (warranty, contributors, grant,
+    seal, honest Content-ID, signatory) — shared by the package + standalone cert."""
+    if cert.contributors:
+        contrib_rows = "".join(
+            f"<tr><td>{_esc(c.role)}</td><td>{_esc(c.name)}</td></tr>"
+            for c in cert.contributors
+        )
+    else:
+        contrib_rows = '<tr><td colspan="2" class="legend">No contributors assigned yet.</td></tr>'
+
+    draft = cert.license_draft
+    grant_title = "Grant of rights" + (" — Draft, pending confirmation" if draft else "")
+    draft_note = (
+        '<p style="margin:0 0 8px;font-size:10.5px;color:#7a756d">'
+        'Standard template terms — not yet confirmed as the deal grant.</p>'
+        if draft else ""
+    )
+    confirmed = ""
+    if cert.license_confirmed:
+        by = _esc(cert.license_confirmed.get("by") or "")
+        date = cert.license_confirmed.get("date") or ""
+        date_part = f" · {_esc(date)}" if date else ""
+        confirmed = (
+            f'<p style="margin:8px 0 0;font-size:10.5px;color:#7a756d">'
+            f'Confirmed by {by}{date_part}.</p>'
+        )
+
+    sig_extra = ""
+    if cert.certified_version:
+        sig_extra += f"<li><b>Certifies:</b> {_esc(cert.certified_version)}</li>"
+    if cert.certified_date:
+        sig_extra += f"<li><b>Date:</b> {_esc(cert.certified_date)}</li>"
+
+    signer = _esc(cert.signatory.get("signer", ""))
+    title = cert.signatory.get("title", "")
+    signer_line = signer + (f", {_esc(title)}" if title else "")
+
+    return f"""
+    <div class="panel" style="margin-bottom:18px">
+      <p style="margin:0;font-size:12.5px;line-height:1.6">{_esc(cert.warranty)}</p>
+    </div>
+
+    <p class="label" style="margin-top:0">Contributors &amp; chain of title</p>
+    <table style="margin-bottom:18px">
+      <thead><tr><th>Role</th><th>Contributor</th></tr></thead>
+      <tbody>{contrib_rows}</tbody>
+    </table>
+
+    <div class="two">
+      <div class="panel">
+        <p class="label" style="margin-top:0">{_esc(grant_title)}</p>
+        {draft_note}
+        <ul class="clean">
+          <li><b>Type:</b> {_esc(cert.license.get('type', ''))}</li>
+          <li><b>Territory:</b> {_esc(cert.license.get('territory', ''))}</li>
+          <li><b>Term:</b> {_esc(cert.license.get('term', ''))}</li>
+          <li><b>Exclusivity:</b> {_esc(cert.license.get('exclusivity', ''))}</li>
+          <li><b>Content-ID:</b> {_esc(cert.content_id)}</li>
+        </ul>
+        {confirmed}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+        <div class="seal"><span>Chordential</span><b>{_esc(seal_label)}</b><span>{_esc(pkgid)}</span></div>
+        <p style="font-size:10.5px;color:#7a756d;margin:12px 0 0;max-width:230px">{_esc(cert.clearance_line)}</p>
+      </div>
+    </div>
+    <p style="margin:14px 0 0;font-size:11px;color:#7a756d">{_esc(CONTENT_ID_HONEST)}</p>
+
+    <div class="panel" style="margin-top:16px">
+      <p class="label" style="margin-top:0">Signatory</p>
+      <ul class="clean">
+        <li><b>Entity:</b> {_esc(cert.signatory.get('entity', ''))}</li>
+        <li><b>Authorized:</b> {signer_line}</li>
+        {sig_extra}
+      </ul>
+      <p style="margin:14px 0 0;font-size:11px;color:#7a756d">Signature: ________________________________</p>
+    </div>
+    """
+
+
+def clearance_certificate_html(
+    cert: "ClearanceCertificate", *, pkgid: str = "", project=None,
+) -> str:
+    """The standalone branded Clearance Certificate as a self-contained HTML string.
+
+    All CSS inline, the Chordential wordmark embedded as a base64 data URI, the
+    seal, and the honest (no-indemnity) certificate body. ``pkgid`` defaults to a
+    ``CHD-PROJ-NNNN`` id derived from the project when given."""
+    if not pkgid:
+        pid = _val(project, "id")
+        pkgid = f"CHD-PROJ-{int(pid):04d}" if pid is not None else "CHD-PROJ"
+    logo = _wordmark_data_uri("ko")
+    body = _certificate_body_html(cert, pkgid)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Clearance Certificate · {_esc(cert.client)}</title>
+<style>{_BRANDED_CSS}</style>
+</head>
+<body>
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="{logo}" alt="Chordential"><div class="lh-meta">Clearance Certificate · {_esc(pkgid)}</div></div>
+    <p class="doc-kicker">Clearance</p>
+    <h1 class="doc">Clearance Certificate</h1>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery for {_esc(cert.client)}.</p>
+    <div class="accent-bar"></div>
+    {body}
+  </div>
+  <div class="foot"><span>{_esc(pkgid)} · {_esc(cert.campaign)}</span><span>Prepared by Chordential</span></div>
+</section>
+</body>
+</html>"""
+
+
+def delivery_package_html(
+    project, cert: "ClearanceCertificate", manifest, cues, assets,
+    *, pkgid: str = "", state: str = "", version_state: str = "",
+    released_at: str = "", brief_items=None, bundled_audio=None,
+) -> str:
+    """The full branded delivery package as a self-contained HTML string.
+
+    Cover (campaign · client), the deliverables manifest, the Clearance
+    Certificate, the cue-sheet table, the version/"against the brief" recap, and a
+    delivered-assets block. All CSS inline + the wordmark embedded as a base64 data
+    URI (stdlib only).
+
+    ``bundled_audio`` maps an asset's identity (its ``filename`` and its ``label``)
+    to the RELATIVE in-ZIP path of the bundled file (e.g. ``../Masters/xyz.wav``);
+    a bundled audio asset gets a playable ``<audio>``-backed cap-audio player whose
+    src is that relative path (plus a download link). Referenced-only assets (no
+    bundled file) are listed without a player."""
+    if not pkgid:
+        pid = _val(project, "id")
+        pkgid = f"CHD-PROJ-{int(pid):04d}" if pid is not None else "CHD-PROJ"
+    bundled_audio = bundled_audio or {}
+    logo_ko = _wordmark_data_uri("ko")
+
+    def lh() -> str:
+        return (
+            f'<div class="lh"><img class="logo" src="{logo_ko}" alt="Chordential">'
+            f'<div class="lh-meta">Delivery Package · {_esc(pkgid)}</div></div>'
+        )
+
+    def foot() -> str:
+        return (
+            f'<div class="foot"><span>{_esc(pkgid)} · {_esc(cert.campaign)}</span>'
+            f'<span>Prepared by Chordential</span></div>'
+        )
+
+    # --- Cover -------------------------------------------------------------- #
+    status_line = _esc(state) + (f" · {_esc(version_state)}" if version_state else "")
+    released_meta = (
+        f'<div><span>Released</span>{_esc(released_at)}</div>' if released_at else ""
+    )
+    cover = f"""
+<section class="page cover">
+  <div class="inner">
+    <img class="logo-cover" src="{logo_ko}" alt="Chordential">
+    <div class="rule"></div>
+    <p class="doc-kicker" style="color:{_BRAND['orange']}">Delivery Package</p>
+    <h1>{_esc(cert.campaign)}</h1>
+    <p class="tag">Original music — composed, produced, and cleared for {_esc(cert.client)}.</p>
+    <div class="status">{status_line}</div>
+    <div class="rule" style="margin:34px 0 22px"></div>
+    <div class="meta">
+      <div><span>Client / Brand</span>{_esc(cert.client)}</div>
+      <div><span>Campaign</span>{_esc(cert.campaign)}</div>
+      <div><span>Package ID</span>{_esc(pkgid)}</div>
+      <div><span>Status</span>{_esc(state)}</div>
+      <div><span>Locked Version</span>{_esc(version_state)}</div>
+      {released_meta}
+    </div>
+  </div>
+  <div class="foot" style="color:#9b8276;border-color:rgba(255,255,255,.12)">
+    <span>{_esc(pkgid)} · {_esc(cert.campaign)}</span><span>Prepared by Chordential</span></div>
+</section>"""
+
+    # --- Manifest ----------------------------------------------------------- #
+    man_rows = []
+    grp = None
+    for r in manifest:
+        if r.group != grp:
+            man_rows.append(f'<tr class="grp"><td colspan="3">{_esc(r.group)}</td></tr>')
+            grp = r.group
+        status_cell = (
+            '<span class="tick">✓</span> Delivered' if r.status == "Delivered"
+            else _esc(r.status)
+        )
+        man_rows.append(
+            f"<tr><td>{_esc(r.asset)}</td><td>{_esc(r.spec)}</td><td>{status_cell}</td></tr>"
+        )
+    n_assets = len(list(assets or []))
+    manifest_page = f"""
+<section class="page">
+  <div class="content">
+    {lh()}
+    <p class="doc-kicker">Document 01</p>
+    <h1 class="doc">Deliverables Manifest</h1>
+    <p class="doc-sub">Everything scoped, accounted for in one place.
+      <span class="chip ok" style="margin-left:8px">{n_assets} asset{'' if n_assets == 1 else 's'} uploaded</span></p>
+    <table>
+      <thead><tr><th>Asset</th><th>Format / Spec</th><th>Status</th></tr></thead>
+      <tbody>{''.join(man_rows)}</tbody>
+    </table>
+    <p class="legend" style="margin-top:14px">Scoped rows are the standard asset types for this engagement; Delivered rows are the files uploaded into this package.</p>
+  </div>
+  {foot()}
+</section>"""
+
+    # --- Clearance certificate ---------------------------------------------- #
+    cert_page = f"""
+<section class="page">
+  <div class="content">
+    {lh()}
+    <p class="doc-kicker">Document 02</p>
+    <h1 class="doc">Clearance Certificate</h1>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery.</p>
+    <div class="accent-bar"></div>
+    {_certificate_body_html(cert, pkgid)}
+  </div>
+  {foot()}
+</section>"""
+
+    # --- Cue sheet ---------------------------------------------------------- #
+    cue_rows = "".join(
+        f"<tr><td>{_esc(q.cue)}</td><td>{_esc(q.usage)}</td>"
+        f"<td>{_esc(q.duration or '—')}</td><td>{_esc(q.isrc or '—')}</td>"
+        f"<td>{_esc(q.iswc or '—')}</td><td>{_esc(q.composers)}</td>"
+        f"<td>{_esc(q.publisher)}</td><td>{_esc(q.pro)}</td><td>{_esc(q.share)}</td></tr>"
+        for q in (cues or [])
+    )
+    cue_page = f"""
+<section class="page">
+  <div class="content">
+    {lh()}
+    <p class="doc-kicker">Document 03</p>
+    <h1 class="doc">Cue Sheet</h1>
+    <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
+    <table>
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <tbody>{cue_rows}</tbody>
+    </table>
+    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
+  </div>
+  {foot()}
+</section>"""
+
+    # --- Delivered assets (with playable audio) + against-the-brief --------- #
+    asset_blocks = []
+    for a in (assets or []):
+        label = a.get("label") or a.get("filename") or "Asset"
+        kind = a.get("kind") or "file"
+        fname = (a.get("filename") or "").strip()
+        rel = bundled_audio.get(fname) if fname else None
+        if not rel:
+            rel = bundled_audio.get(f"label:{label}")
+        block = [f'<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:600">{_esc(label)}</div>']
+        if kind == "audio" and rel:
+            block.append(_audio_player_html(label, rel))
+            block.append(f'<div class="legend"><a href="{_esc(rel)}">⤓ {_esc(label)}</a></div>')
+        elif rel:
+            block.append(f'<div class="legend"><a href="{_esc(rel)}">⤓ {_esc(label)}</a></div>')
+        else:
+            url = (a.get("url") or "").strip()
+            if url:
+                block.append(f'<div class="legend"><a href="{_esc(url)}">⤓ {_esc(label)}</a> — referenced (not bundled)</div>')
+            else:
+                block.append('<div class="legend">Referenced — not bundled in this package.</div>')
+        block.append("</div>")
+        asset_blocks.append("".join(block))
+    assets_section = ""
+    if asset_blocks:
+        assets_section = (
+            '<p class="label">Delivered assets</p>' + "".join(asset_blocks)
+        )
+
+    brief_section = ""
+    items = list(brief_items or [])
+    if items:
+        roll = brief_rollup(items)
+        li = []
+        for it in items:
+            mark = "✓" if it.get("status") == "Delivered" else "—"
+            matched = (it.get("matched") or "").strip()
+            tail = f" → {_esc(matched)}" if matched else ""
+            li.append(
+                f'<li><span class="tick">{mark}</span> {_esc(it.get("item", ""))} — '
+                f'{_esc(it.get("status", ""))}{tail}</li>'
+            )
+        brief_section = (
+            '<p class="label">Against the brief</p>'
+            f'<p class="legend">{_esc(roll["text"])}.</p>'
+            f'<ul class="clean">{"".join(li)}</ul>'
+        )
+
+    recap_page = f"""
+<section class="page">
+  <div class="content">
+    {lh()}
+    <p class="doc-kicker">Document 04</p>
+    <h1 class="doc">Assets &amp; Version State</h1>
+    <p class="doc-sub">Controlled variation, a clean sign-off, and the delivered files in hand.</p>
+    <div class="accent-bar"></div>
+    <p class="legend">Current state: <b>{_esc(version_state or state)}</b>.</p>
+    {assets_section}
+    {brief_section}
+    <div class="panel" style="text-align:center;padding:26px 22px;margin-top:24px;border-color:{_BRAND['orange']}">
+      <div class="seal" style="margin:0 auto 14px;width:100px;height:100px">
+        <span>Chordential</span><b>{'RELEASED' if state == 'Released' else 'IN PROGRESS'}</b>
+        <span>{_esc('for release' if state == 'Released' else (state or 'in progress'))}</span></div>
+      <p class="serif" style="font-size:20px;color:{_BRAND['wine']};margin:0 0 4px">{_esc(cert.campaign)}</p>
+      <p style="color:#7a756d;font-size:12px;margin:0">{_esc(cert.client)}</p>
+      {f'<p style="margin:12px 0 0;font-size:12.5px">Released <b>{_esc(released_at)}</b></p>' if released_at else ''}
+    </div>
+  </div>
+  {foot()}
+</section>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Delivery Package · {_esc(cert.client)}</title>
+<style>{_BRANDED_CSS}</style>
+</head>
+<body>
+{cover}
+{manifest_page}
+{cert_page}
+{cue_page}
+{recap_page}
+<script>{_CAP_AUDIO_JS}</script>
+</body>
+</html>"""
+
+
+def _render_pdf_from_html(html_str: str) -> Optional[bytes]:
+    """Best-effort render of ``html_str`` to PDF bytes via a headless browser.
+
+    OPTIONAL — only runs if Playwright (+ a chromium binary) is already importable
+    at runtime; wrapped in try/except so a missing browser simply returns ``None``
+    (the HTML is the guaranteed deliverable). NEVER raises, NEVER a hard dependency."""
+    try:
+        from playwright.sync_api import sync_playwright  # type: ignore
+    except Exception:
+        return None
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page()
+                page.set_content(html_str, wait_until="load")
+                pdf = page.pdf(print_background=True, format="A4")
+            finally:
+                browser.close()
+        return pdf or None
+    except Exception:
+        return None
+
+
+# --------------------------------------------------------------------------- #
 # The delivery ZIP — organise + document + (optionally) convert + package
 # --------------------------------------------------------------------------- #
 def _campaign_slug(project) -> str:
@@ -1232,10 +1769,19 @@ def build_delivery_zip(
 
     AUTOMATION, NOT AI. Organises the uploaded deliverables into named folders
     (``Masters/`` ``Cutdowns/`` ``Social/`` ``Stems/`` ``Assets/``), writes the
-    generated docs into ``Docs/`` (cue_sheet.csv, metadata.json,
-    rights_certificate.txt, manifest.txt), best-effort-converts each WAV to MP3 320
-    (skipped silently when ffmpeg is unavailable), and packages everything as one
-    ``<CampaignSlug>_Delivery.zip``.
+    generated docs into ``Docs/`` — the primary, BRANDED, self-contained HTML
+    (``Delivery-Package.html`` with playable audio + ``Clearance-Certificate.html``),
+    plus the machine-fileable ``cue_sheet.csv`` / ``metadata.json`` (an agency's
+    coordinator files those) and the plain-text ``rights_certificate.txt`` /
+    ``manifest.txt``. Best-effort-converts each WAV to MP3 320 (skipped silently
+    when ffmpeg is unavailable), best-effort-renders the package HTML to
+    ``Delivery-Package.pdf`` if a headless browser is importable (skipped silently
+    otherwise), and packages everything as one ``<CampaignSlug>_Delivery.zip``.
+
+    The branded HTML is stdlib-only (string templating + base64 wordmark). Each
+    bundled audio deliverable gets a playable ``<audio>``-backed player in the
+    package HTML whose src is a relative in-ZIP path (e.g. ``../Masters/xyz.wav``)
+    so it plays when the agency unzips and opens the doc locally.
 
     Returns ``{"filename", "url", "built_at", "checklist", "items", "converted"}``.
     ``checklist`` is the founder's payoff list (the deliverable labels + the docs +
@@ -1259,6 +1805,7 @@ def build_delivery_zip(
         certified_date=built_at[:10],
     )
     manifest = build_manifest(project, assets=assets, versions=versions)
+    cue_rows_for_docs = build_cue_sheet(project, assignments, delivery=delivery)
 
     # Brief-as-contract: reconcile the brief's deliverables against the delivered
     # assets so the package records what was promised vs delivered.
@@ -1270,18 +1817,6 @@ def build_delivery_zip(
     # honest "Partial delivery — N of M" labelling on the descriptor + README.
     completeness = delivery_completeness(project, delivery)
 
-    # The generated documents (stdlib-only — the guaranteed core).
-    docs = {
-        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
-        "Docs/metadata.json": metadata_json(
-            project, assignments, license=license, versions=versions,
-            generated_at=built_at),
-        "Docs/rights_certificate.txt": rights_certificate_text(cert),
-        "Docs/manifest.txt": manifest_text(
-            manifest, asset_approvals=delivery.get("asset_approvals"),
-            brief_items=brief_items),
-    }
-
     slug = _campaign_slug(project)
     zip_name = f"{slug}_Delivery.zip"
     zip_path = os.path.join(upload_dir, zip_name)
@@ -1290,6 +1825,9 @@ def build_delivery_zip(
     converted: List[str] = []      # which assets also got an MP3 (best-effort)
     referenced: List[dict] = []    # assets present-by-URL but not bundled (no local file)
     used_names: set = set()
+    # filename → relative in-ZIP path (from Docs/) of the bundled audio file, so the
+    # branded package HTML can give each bundled audio a playable <audio> player.
+    bundled_audio: dict = {}
 
     def _unique(arcname: str) -> str:
         # Guard against two assets landing on the same arcname inside the zip.
@@ -1304,6 +1842,58 @@ def build_delivery_zip(
         used_names.add(out)
         return out
 
+    # Plan the bundled-file layout up front (which assets land where) so the branded
+    # HTML docs can reference each bundled audio by its relative in-ZIP path before
+    # we write the bytes. Mirrors the asset-write loop's folder + uniqueness logic.
+    asset_arcs: List[tuple] = []   # (asset, src, arc) for the writable assets
+    for asset in assets:
+        fname = os.path.basename((asset.get("filename") or "").strip())
+        src = os.path.join(upload_dir, fname) if fname else ""
+        if not fname or not os.path.isfile(src):
+            referenced.append(asset)
+            continue
+        folder = asset_folder(asset)
+        arc = _unique(f"{folder}/{fname}")
+        asset_arcs.append((asset, src, arc))
+        items.append(asset.get("label") or fname)
+        if (asset.get("kind") or "") == "audio":
+            # Docs/ live one level deep, so the relative path back out is "../<arc>".
+            rel = "../" + arc
+            bundled_audio[asset.get("filename") or fname] = rel
+            label = asset.get("label") or asset.get("filename") or "Asset"
+            bundled_audio.setdefault(f"label:{label}", rel)
+
+    # The branded, self-contained HTML docs (stdlib only — the primary deliverable).
+    package_html = delivery_package_html(
+        project, cert, manifest, cues=cue_rows_for_docs, assets=assets,
+        pkgid=f"CHD-PROJ-{int(_val(project, 'id') or 0):04d}",
+        state=(delivery.get("state") or "").strip(),
+        version_state=(delivery.get("version_state") or "").strip(),
+        released_at=(delivery.get("released_at") or "").strip(),
+        brief_items=brief_items, bundled_audio=bundled_audio,
+    )
+    cert_html = clearance_certificate_html(cert, project=project)
+
+    # The generated documents (stdlib-only — the guaranteed core). The branded HTML
+    # is the primary, pretty deliverable; the CSV + JSON stay machine-fileable.
+    docs = {
+        "Docs/Delivery-Package.html": package_html,
+        "Docs/Clearance-Certificate.html": cert_html,
+        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
+        "Docs/metadata.json": metadata_json(
+            project, assignments, license=license, versions=versions,
+            generated_at=built_at),
+        "Docs/rights_certificate.txt": rights_certificate_text(cert),
+        "Docs/manifest.txt": manifest_text(
+            manifest, asset_approvals=delivery.get("asset_approvals"),
+            brief_items=brief_items),
+    }
+
+    # Best-effort PDF of the branded package (OPTIONAL — only if a headless browser
+    # is importable; never a hard dependency, never aborts the package).
+    pdf_bytes = _render_pdf_from_html(package_html)
+    pdf_written = False
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # 1) The uploaded deliverables — the actual LOCAL files, organised into
@@ -1311,16 +1901,9 @@ def build_delivery_zip(
         # filename or no on-disk file (e.g. a remote-URL-only demo seed) is NOT
         # silently dropped — it's recorded for the Docs/README.txt as
         # "referenced, not bundled" so "download everything" is honest.
-        for asset in assets:
-            fname = os.path.basename((asset.get("filename") or "").strip())
-            src = os.path.join(upload_dir, fname) if fname else ""
-            if not fname or not os.path.isfile(src):
-                referenced.append(asset)
-                continue
-            folder = asset_folder(asset)
-            arc = _unique(f"{folder}/{fname}")
+        for asset, src, arc in asset_arcs:
             zf.write(src, arc)
-            items.append(asset.get("label") or fname)
+            fname = os.path.basename(arc)
             # Best-effort: WAV → MP3 320 alongside under Cutdowns/ (never fails).
             if fname.lower().endswith(".wav"):
                 mp3 = _convert_wav_to_mp3(src)
@@ -1342,6 +1925,9 @@ def build_delivery_zip(
         # 3) The generated documents.
         for arc, content in docs.items():
             zf.writestr(arc, content)
+        if pdf_bytes:
+            zf.writestr("Docs/Delivery-Package.pdf", pdf_bytes)
+            pdf_written = True
         # 4) A Docs/README.txt — what's bundled, plus any assets that are
         # referenced-by-URL only (not local files) so nothing is silently dropped.
         zf.writestr("Docs/README.txt", _readme_text(
@@ -1352,7 +1938,8 @@ def build_delivery_zip(
 
     # The founder's payoff checklist: the deliverables + the generated docs + ZIP.
     checklist = list(items)
-    checklist += ["Cue Sheet", "Metadata", "Rights Certificate", "Delivery ZIP"]
+    checklist += ["Branded Delivery Package", "Clearance Certificate",
+                  "Cue Sheet", "Metadata", "Rights Certificate", "Delivery ZIP"]
 
     # Honest partial labelling: when the package shipped incomplete, the descriptor
     # carries a "Partial delivery — N of M deliverables" line (not "everything")
@@ -1390,4 +1977,7 @@ def build_delivery_zip(
             "text": completeness.get("text", ""),
         },
         "descriptor": descriptor_text,
+        # Best-effort PDF render of the branded package (absent when no headless
+        # browser is available — the HTML is always the guaranteed deliverable).
+        "pdf": pdf_written,
     }
