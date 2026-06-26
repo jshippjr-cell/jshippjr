@@ -18,8 +18,14 @@ clause** (a single muted "available on request" line, never a promise).
 """
 from __future__ import annotations
 
+import csv
+import io
+import json
+import os
 import re
+import zipfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from .capabilities import _RIGHTS_SUMMARY, _deliverables_for, Deliverable
@@ -402,3 +408,313 @@ def revision_status(project, estimate_or_scoped=None, delivery: Optional[dict] =
 def rights_basis() -> List[str]:
     """The standard grant-of-rights summary lines (from ``capabilities``)."""
     return list(_RIGHTS_SUMMARY)
+
+
+# --------------------------------------------------------------------------- #
+# Delivery automation (Phase 3) — document generators + the delivery ZIP.
+#
+# AUTOMATION, NOT AI. These functions ORGANISE, DOCUMENT, CONVERT, and PACKAGE
+# the deliverables the composer already uploaded. They never synthesise audio.
+# The ZIP + the generated docs are stdlib-only (zipfile/csv/json/io) — the
+# GUARANTEED core. Audio format-conversion (WAV→MP3) is OPTIONAL/best-effort: it
+# runs only if an ffmpeg binary is reachable via imageio_ffmpeg, and a failure
+# never aborts the package (the originals are always included).
+# --------------------------------------------------------------------------- #
+
+# The folder structure of the delivery ZIP — auto-organised by asset kind/label.
+DELIVERY_FOLDERS = ["Masters", "Cutdowns", "Social", "Stems", "Assets", "Docs"]
+
+
+def asset_folder(asset: dict) -> str:
+    """The named ZIP folder an uploaded asset belongs in, by a label/kind heuristic.
+
+    Masters / Cutdowns / Social / Stems by keyword in the label; anything else
+    (including non-audio files) lands in the catch-all ``Assets/``."""
+    label = (asset.get("label") or asset.get("filename") or "").lower()
+    if any(w in label for w in ("stem", "stems", "multitrack", "multi-track")):
+        return "Stems"
+    if any(w in label for w in ("social", "vertical", ":15", ":06", ":6", "9x16", "9:16", "tiktok", "reel", "story")):
+        return "Social"
+    if any(w in label for w in ("cutdown", "cut-down", "cut down", ":30", ":15", ":06", "edit", "instrumental", "inst", "vo", "voiceover")):
+        return "Cutdowns"
+    if any(w in label for w in ("master", "broadcast", ":60", "anthem", "full")):
+        return "Masters"
+    # Non-audio (docs, art, etc.) and anything unclassified.
+    if (asset.get("kind") or "") == "audio":
+        return "Masters"
+    return "Assets"
+
+
+def cue_sheet_csv(project, assignments) -> str:
+    """The PRO cue sheet as CSV text (header + one row per cue).
+
+    Columns: Cue, Usage, Duration, Composer, Publisher, PRO, Share%. Built from
+    the same :func:`build_cue_sheet` rows the package renders — deterministic, no
+    fabricated specifics."""
+    rows = build_cue_sheet(project, assignments)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Cue", "Usage", "Duration", "Composer", "Publisher", "PRO", "Share%"])
+    for r in rows:
+        writer.writerow([r.cue, r.usage, r.duration, r.composers, r.publisher, r.pro, r.share])
+    return buf.getvalue()
+
+
+def metadata_json(project, assignments, license=None, versions=None,
+                  generated_at: Optional[str] = None) -> str:
+    """A clean metadata JSON document (campaign, client, contributors, license,
+    versions, generated_at) as a pretty-printed string.
+
+    ``generated_at`` is passed in (deterministic for tests); defaults to now."""
+    cert = build_clearance_certificate(project, assignments, license)
+    versions = versions or []
+    doc = {
+        "campaign": cert.campaign,
+        "client": cert.client,
+        "publisher": PUBLISHER,
+        "pro": DEFAULT_PRO,
+        "contributors": [{"name": c.name, "role": c.role} for c in cert.contributors],
+        "license": cert.license,
+        "content_id": cert.content_id,
+        "versions": [
+            {"n": v.get("n"), "label": v.get("label"), "name": v.get("name"),
+             "file": v.get("filename")}
+            for v in versions
+        ],
+        "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
+        "generated_by": "Chordential Delivery OS — automated assembly",
+    }
+    return json.dumps(doc, indent=2, ensure_ascii=False)
+
+
+def rights_certificate_text(cert: ClearanceCertificate) -> str:
+    """The Clearance Certificate as readable plain text.
+
+    States the client + campaign, the chain of title (contributors), the
+    original-work warranty, the license grant, the Content-ID-safe status, and the
+    "documented & original" cleared line. Carries NO indemnification clause (scope:
+    "documented & original, indemnity later") — only the muted available-on-request
+    note. Deterministic from the certificate data."""
+    lines: List[str] = []
+    lines.append("CHORDENTIAL — CLEARANCE CERTIFICATE")
+    lines.append("=" * 52)
+    lines.append("")
+    lines.append(f"Client:    {cert.client}")
+    lines.append(f"Campaign:  {cert.campaign}")
+    lines.append("")
+    lines.append("CHAIN OF TITLE / CONTRIBUTORS")
+    lines.append("-" * 52)
+    if cert.contributors:
+        for c in cert.contributors:
+            lines.append(f"  • {c.name} — {c.role}")
+    else:
+        lines.append("  • Chordential Music")
+    lines.append("")
+    lines.append("ORIGINAL-WORK WARRANTY")
+    lines.append("-" * 52)
+    lines.append(cert.warranty)
+    lines.append("")
+    lines.append("GRANT OF RIGHTS / LICENSE")
+    lines.append("-" * 52)
+    lines.append(f"  Type:        {cert.license.get('type', '')}")
+    lines.append(f"  Territory:   {cert.license.get('territory', '')}")
+    lines.append(f"  Term:        {cert.license.get('term', '')}")
+    lines.append(f"  Exclusivity: {cert.license.get('exclusivity', '')}")
+    lines.append(f"  Content-ID:  {cert.content_id}")
+    lines.append("")
+    lines.append("CLEARANCE")
+    lines.append("-" * 52)
+    lines.append(cert.clearance_line)
+    lines.append("Documented & original — Chordential holds clean chain of title.")
+    lines.append("")
+    lines.append(cert.indemnity_note)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def manifest_text(manifest) -> str:
+    """The deliverables manifest as readable plain text, grouped by section."""
+    lines: List[str] = []
+    lines.append("CHORDENTIAL — DELIVERABLES MANIFEST")
+    lines.append("=" * 52)
+    lines.append("")
+    group = None
+    for r in manifest:
+        if r.group != group:
+            lines.append("")
+            lines.append(r.group.upper())
+            lines.append("-" * 52)
+            group = r.group
+        mark = "[✓]" if r.status == "Delivered" else "[ ]"
+        lines.append(f"  {mark} {r.asset}  ({r.spec}) — {r.status}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Best-effort WAV → MP3 conversion (OPTIONAL — never a hard dependency)
+# --------------------------------------------------------------------------- #
+def ffmpeg_available() -> bool:
+    """True only if an ffmpeg binary is reachable via imageio_ffmpeg (no new dep)."""
+    return _ffmpeg_exe() is not None
+
+
+def _ffmpeg_exe() -> Optional[str]:
+    try:
+        import imageio_ffmpeg  # optional; only present in some environments
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        return exe if exe and os.path.exists(exe) else None
+    except Exception:
+        return None
+
+
+def _convert_wav_to_mp3(src_path: str) -> Optional[bytes]:
+    """Best-effort transcode of a WAV file to MP3 320k via ffmpeg → bytes.
+
+    Returns ``None`` (never raises) when ffmpeg is unavailable or the conversion
+    fails for any reason — the caller then packages the original untouched."""
+    exe = _ffmpeg_exe()
+    if not exe:
+        return None
+    import subprocess
+    import tempfile
+    out_path = None
+    try:
+        fd, out_path = tempfile.mkstemp(suffix=".mp3")
+        os.close(fd)
+        subprocess.run(
+            [exe, "-y", "-i", src_path, "-b:a", "320k", out_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120,
+            check=True,
+        )
+        with open(out_path, "rb") as fh:
+            data = fh.read()
+        return data or None
+    except Exception:
+        return None
+    finally:
+        if out_path:
+            try:
+                os.remove(out_path)
+            except OSError:
+                pass
+
+
+# --------------------------------------------------------------------------- #
+# The delivery ZIP — organise + document + (optionally) convert + package
+# --------------------------------------------------------------------------- #
+def _campaign_slug(project) -> str:
+    """A filesystem-safe campaign slug for the ZIP name (e.g. ``FindYourHorizon``)."""
+    campaign = (_val(project, "need") or "Campaign").strip() or "Campaign"
+    token = re.sub(r"[^0-9a-zA-Z]+", "", campaign)
+    return token or "Campaign"
+
+
+def build_delivery_zip(
+    project, assignments, delivery: dict, upload_dir: str,
+    *, generated_at: Optional[str] = None,
+) -> dict:
+    """Assemble the delivery ZIP and write it to ``upload_dir``; return its descriptor.
+
+    AUTOMATION, NOT AI. Organises the uploaded deliverables into named folders
+    (``Masters/`` ``Cutdowns/`` ``Social/`` ``Stems/`` ``Assets/``), writes the
+    generated docs into ``Docs/`` (cue_sheet.csv, metadata.json,
+    rights_certificate.txt, manifest.txt), best-effort-converts each WAV to MP3 320
+    (skipped silently when ffmpeg is unavailable), and packages everything as one
+    ``<CampaignSlug>_Delivery.zip``.
+
+    Returns ``{"filename", "url", "built_at", "checklist", "items", "converted"}``.
+    ``checklist`` is the founder's payoff list (the deliverable labels + the docs +
+    the ZIP). The engine logic is here; the route just calls it and stores the
+    descriptor on ``delivery_json``."""
+    delivery = delivery or {}
+    assets = list(delivery.get("assets") or [])
+    versions = versions_list(delivery)
+    license = delivery.get("license") or {}
+    built_at = generated_at or datetime.now(timezone.utc).isoformat()
+
+    cert = build_clearance_certificate(project, assignments, license)
+    manifest = build_manifest(project, assets=assets, versions=versions)
+
+    # The generated documents (stdlib-only — the guaranteed core).
+    docs = {
+        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments),
+        "Docs/metadata.json": metadata_json(
+            project, assignments, license=license, versions=versions,
+            generated_at=built_at),
+        "Docs/rights_certificate.txt": rights_certificate_text(cert),
+        "Docs/manifest.txt": manifest_text(manifest),
+    }
+
+    slug = _campaign_slug(project)
+    zip_name = f"{slug}_Delivery.zip"
+    zip_path = os.path.join(upload_dir, zip_name)
+
+    items: List[str] = []          # human labels of everything packaged
+    converted: List[str] = []      # which assets also got an MP3 (best-effort)
+    used_names: set = set()
+
+    def _unique(arcname: str) -> str:
+        # Guard against two assets landing on the same arcname inside the zip.
+        if arcname not in used_names:
+            used_names.add(arcname)
+            return arcname
+        stem, ext = os.path.splitext(arcname)
+        i = 2
+        while f"{stem}-{i}{ext}" in used_names:
+            i += 1
+        out = f"{stem}-{i}{ext}"
+        used_names.add(out)
+        return out
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # 1) The uploaded deliverables — organised into named folders.
+        for asset in assets:
+            fname = os.path.basename(asset.get("filename") or "")
+            if not fname:
+                continue
+            src = os.path.join(upload_dir, fname)
+            if not os.path.isfile(src):
+                continue
+            folder = asset_folder(asset)
+            arc = _unique(f"{folder}/{fname}")
+            zf.write(src, arc)
+            items.append(asset.get("label") or fname)
+            # Best-effort: WAV → MP3 320 alongside under Cutdowns/ (never fails).
+            if fname.lower().endswith(".wav"):
+                mp3 = _convert_wav_to_mp3(src)
+                if mp3:
+                    mp3_arc = _unique("Cutdowns/" + os.path.splitext(fname)[0] + ".mp3")
+                    zf.writestr(mp3_arc, mp3)
+                    converted.append(asset.get("label") or fname)
+        # 2) The logged versions (the v1/v2/v3 ladder), under Masters/.
+        for v in versions:
+            fname = os.path.basename(v.get("filename") or "")
+            if not fname:
+                continue
+            src = os.path.join(upload_dir, fname)
+            if not os.path.isfile(src):
+                continue
+            disp = (v.get("name") or os.path.splitext(fname)[0]) + os.path.splitext(fname)[1]
+            arc = _unique(f"Masters/{disp}")
+            zf.write(src, arc)
+        # 3) The generated documents.
+        for arc, content in docs.items():
+            zf.writestr(arc, content)
+
+    with open(zip_path, "wb") as fh:
+        fh.write(buf.getvalue())
+
+    # The founder's payoff checklist: the deliverables + the generated docs + ZIP.
+    checklist = list(items)
+    checklist += ["Cue Sheet", "Metadata", "Rights Certificate", "Delivery ZIP"]
+
+    return {
+        "filename": zip_name,
+        "url": f"/uploads/{zip_name}",
+        "built_at": built_at,
+        "checklist": checklist,
+        "items": items,
+        "converted": converted,
+    }

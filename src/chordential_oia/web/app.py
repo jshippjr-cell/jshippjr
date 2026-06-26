@@ -42,9 +42,9 @@ from ..capabilities import (
     chips_for, default_toggles,
 )
 from ..delivery import (
-    build_clearance_certificate, build_cue_sheet, build_manifest,
-    current_version, merge_license, revision_status, version_label,
-    versions_list, version_name, DELIVERY_STATES, VERSION_STATES,
+    build_clearance_certificate, build_cue_sheet, build_delivery_zip,
+    build_manifest, current_version, merge_license, revision_status,
+    version_label, versions_list, version_name, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
@@ -2494,6 +2494,9 @@ def _delivery_view(conn, project_id: int):
         "released_at": delivery.get("released_at"),
         "share_token": token,
         "comments": db.list_review_comments(conn, project_id),
+        # Delivery automation (Phase 3): the assembled ZIP + the payoff checklist.
+        "delivery_zip": delivery.get("delivery_zip"),
+        "delivery_checklist": delivery.get("delivery_checklist") or [],
     }
 
 
@@ -2709,8 +2712,8 @@ async def delivery_version(
         })
         db.update_delivery(conn, project_id, "versions", versions)
         db.update_delivery(conn, project_id, "version_state", label)
-        # A new version supersedes any prior approval — reopen to review.
-        if (delivery.get("state") or "") == "Approved":
+        # A new version supersedes any prior approval/delivery — reopen to review.
+        if (delivery.get("state") or "") in ("Approved", "Delivered"):
             db.update_delivery(conn, project_id, "state", "In review")
     finally:
         conn.close()
@@ -2820,10 +2823,36 @@ def review_comment(
     return _review_redirect(project_id, k)
 
 
+def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
+    """Delivery automation (Phase 3): assemble the delivery ZIP for a project and
+    store its descriptor + checklist on ``delivery_json``. Returns the descriptor
+    (or None if the project is gone). Deterministic + best-effort: the stdlib ZIP +
+    docs always build; audio conversion is attempted only if ffmpeg is available.
+
+    Stored shape::
+
+        delivery_json['delivery_zip']       = {filename, url, built_at}
+        delivery_json['delivery_checklist'] = [item, …]   (founder's payoff list)
+    """
+    row = db.get_project(conn, project_id)
+    if row is None:
+        return None
+    assignments = db.list_assignments(conn, project_id)
+    delivery = db.get_delivery(conn, project_id)
+    pkg = build_delivery_zip(row, assignments, delivery, UPLOAD_DIR)
+    db.update_delivery(conn, project_id, "delivery_zip", {
+        "filename": pkg["filename"], "url": pkg["url"], "built_at": pkg["built_at"],
+    })
+    db.update_delivery(conn, project_id, "delivery_checklist", pkg["checklist"])
+    return pkg
+
+
 @app.post("/project/{project_id}/review/approve")
 def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
-    """The agency approves the current version — the trigger Delivery Automation
-    will hang off of (Phase 3). For now it records the sign-off + sets state."""
+    """The agency approves the current version — the trigger for Delivery
+    Automation (Phase 3). Records the sign-off, locks the FINAL version, then
+    **assembles the delivery package** (organise → document → convert → ZIP) and
+    flips state to Delivered with the founder's payoff checklist + ZIP url stored."""
     conn = db.connect()
     try:
         if not _review_token_ok(conn, project_id, k):
@@ -2842,10 +2871,30 @@ def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
             versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
             db.update_delivery(conn, project_id, "versions", versions)
             db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-        db.update_delivery(conn, project_id, "state", "Approved")
+        # Auto-assemble the delivery package the instant APPROVE is pressed — the
+        # payoff moment. Never let a packaging hiccup block recording the approval.
+        try:
+            _build_delivery_package(conn, project_id)
+            db.update_delivery(conn, project_id, "state", "Delivered")
+        except Exception:
+            db.update_delivery(conn, project_id, "state", "Approved")
     finally:
         conn.close()
     return _review_redirect(project_id, k)
+
+
+@app.post("/project/{project_id}/delivery/build")
+def delivery_build(project_id: int):
+    """Admin: (re)build the delivery package by hand — same automation as APPROVE
+    triggers, for when assets/versions changed after delivery (idempotent rebuild)."""
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, project_id)
+        if pkg is None:
+            return HTMLResponse("Project not found", status_code=404)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
 
 
 @app.post("/project/{project_id}/review/changes")

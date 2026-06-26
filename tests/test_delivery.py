@@ -23,8 +23,12 @@ from chordential_oia.delivery import (  # noqa: E402
     build_clearance_certificate,
     build_cue_sheet,
     build_manifest,
+    cue_sheet_csv,
     current_version,
+    manifest_text,
+    metadata_json,
     revision_status,
+    rights_certificate_text,
     version_label,
     version_name,
 )
@@ -141,6 +145,69 @@ def test_manifest_shows_deterministic_version_named_files():
     assert all(r.asset.startswith("FIND") for r in version_rows)
     # The latest is flagged current.
     assert any("current" in r.asset for r in version_rows)
+
+
+# --------------------------------------------------------------------------- #
+# Delivery automation (Phase 3) — document generators (deterministic, stdlib)
+# --------------------------------------------------------------------------- #
+def test_cue_sheet_csv_has_header_and_rows():
+    import csv as _csv
+    import io as _io
+
+    text = cue_sheet_csv(_fake_project(), _fake_assignments())
+    rows = list(_csv.reader(_io.StringIO(text)))
+    assert rows[0] == ["Cue", "Usage", "Duration", "Composer", "Publisher", "PRO", "Share%"]
+    # The primary cue carries the campaign + the assigned composer(s).
+    body = "\n".join(",".join(r) for r in rows[1:])
+    assert "Find Your Horizon" in body
+    assert "J. Shipp" in body
+    assert "Chordential Music" in body
+    assert "100%" in body
+
+
+def test_metadata_json_is_clean_and_complete():
+    import json as _json
+
+    text = metadata_json(
+        _fake_project(), _fake_assignments(),
+        license={"type": "Full buyout"},
+        versions=[{"n": 1, "label": "v1 Concept", "name": "FIND_Master_v1", "filename": "proj1-v1.wav"}],
+        generated_at="2026-06-26T00:00:00+00:00",
+    )
+    doc = _json.loads(text)
+    assert doc["campaign"] == "Find Your Horizon"
+    assert doc["client"] == "AURORA Outdoor Co."
+    assert doc["license"]["type"] == "Full buyout"
+    assert {c["name"] for c in doc["contributors"]} == {"J. Shipp", "A. Reyes"}
+    assert doc["versions"][0]["n"] == 1
+    assert doc["generated_at"] == "2026-06-26T00:00:00+00:00"
+
+
+def test_rights_certificate_text_has_contributors_license_no_indemnif():
+    cert = build_clearance_certificate(
+        _fake_project(), _fake_assignments(), {"type": "Full buyout"})
+    text = rights_certificate_text(cert)
+    # Contributors / chain of title.
+    assert "J. Shipp" in text and "A. Reyes" in text
+    # License grant present.
+    assert "Full buyout" in text
+    assert "Content-ID" in text
+    # The original-work / cleared framing.
+    assert "original" in text.lower()
+    # SCOPE: NO indemnification clause anywhere except the muted note.
+    assert "indemnif" not in text.lower().replace(
+        "indemnification available on request.", "")
+
+
+def test_manifest_text_renders_groups_and_status():
+    rows = build_manifest(
+        _fake_project(),
+        assets=[{"label": "Anthem master", "filename": "proj1-1.wav", "kind": "audio"}],
+    )
+    text = manifest_text(rows)
+    assert "DELIVERABLES MANIFEST" in text
+    assert "Anthem master" in text
+    assert "Delivered" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -330,7 +397,8 @@ def test_client_approve_sets_state_via_portal(client):
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
-        assert db_mod.get_delivery(conn, pid).get("state") == "Approved"
+        # Phase 3: APPROVE auto-assembles the package and delivers it.
+        assert db_mod.get_delivery(conn, pid).get("state") == "Delivered"
         kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
     finally:
         conn.close()
@@ -393,7 +461,8 @@ def test_new_version_reopens_an_approved_delivery(client):
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
-        assert db_mod.get_delivery(conn, pid).get("state") == "Approved"
+        # Phase 3: approve delivers (auto-assembles the package).
+        assert db_mod.get_delivery(conn, pid).get("state") == "Delivered"
     finally:
         conn.close()
     # A new version supersedes the approval → back to In review.
@@ -450,3 +519,133 @@ def test_approve_locks_current_version_to_final(client):
         conn.close()
     assert "FINAL" in d["versions"][-1]["label"]
     assert "FINAL" in (d.get("version_state") or "")
+
+
+# --------------------------------------------------------------------------- #
+# Delivery automation (Phase 3) — APPROVE → assemble → ZIP → "download everything"
+# --------------------------------------------------------------------------- #
+def _seed_asset(client, pid, name="anthem.mp3", label="Broadcast Mix",
+                ctype="audio/mpeg"):
+    files = {"file": (name, b"ID3fakeaudio-deliverable", ctype)}
+    client.post(f"/project/{pid}/delivery/asset",
+                data={"label": label, "action": "add"},
+                files=files, follow_redirects=True)
+
+
+def test_approving_via_portal_builds_a_delivery_zip(client):
+    import zipfile as _zip
+
+    pid = _win_and_make_project(client, 1)
+    name = _assign_a_creator(client, pid)          # contributor for the docs
+    _seed_asset(client, pid)                       # an uploaded deliverable
+    token = _project_token(client, pid)
+    # The agency presses APPROVE on the token-gated portal — the trigger.
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+
+    from chordential_oia.web import db as db_mod, app as app_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    # State flipped to Delivered + descriptor + checklist stored.
+    assert d.get("state") == "Delivered"
+    zip_desc = d.get("delivery_zip")
+    assert zip_desc and zip_desc["url"].startswith("/uploads/")
+    assert zip_desc["built_at"]
+    checklist = d.get("delivery_checklist")
+    assert "Broadcast Mix" in checklist
+    assert "Cue Sheet" in checklist and "Rights Certificate" in checklist
+    assert "Delivery ZIP" in checklist
+
+    # The ZIP on disk contains the docs + at least one uploaded asset.
+    import os
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(zip_desc["url"]))
+    assert os.path.isfile(zip_path)
+    with _zip.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        assert "Docs/cue_sheet.csv" in names
+        assert "Docs/rights_certificate.txt" in names
+        assert "Docs/metadata.json" in names
+        # At least one uploaded asset is packaged into a named folder.
+        assert any(n.startswith(("Masters/", "Cutdowns/", "Social/", "Stems/", "Assets/"))
+                   and not n.startswith("Docs/") for n in names)
+        # The rights cert text inside the ZIP carries the contributor, no indemnif.
+        cert_txt = zf.read("Docs/rights_certificate.txt").decode("utf-8")
+        assert name in cert_txt
+        assert "indemnif" not in cert_txt.lower().replace(
+            "indemnification available on request.", "")
+
+
+def test_portal_shows_package_ready_and_download_everything(client):
+    pid = _win_and_make_project(client, 1)
+    _assign_a_creator(client, pid)
+    _seed_asset(client, pid)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "Your delivery package is ready" in page
+    assert "Download everything" in page
+    # The big button links to the assembled ZIP.
+    assert "_Delivery.zip" in page
+    # The checklist items are ticked.
+    assert "Broadcast Mix" in page
+    assert "Rights Certificate" in page
+
+
+def test_delivery_zip_is_served_by_uploads_route(client):
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+    finally:
+        conn.close()
+    r = client.get(url)
+    assert r.status_code == 200
+    # It's a real ZIP (PK magic bytes).
+    assert r.content[:2] == b"PK"
+
+
+def test_admin_rebuild_route_reassembles_package(client):
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid)
+    r = client.post(f"/project/{pid}/delivery/build", follow_redirects=False)
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("delivery_zip")
+    finally:
+        conn.close()
+
+
+def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
+    # Force the "no ffmpeg" path — conversion is skipped, originals still packaged.
+    import chordential_oia.delivery as deliv
+    monkeypatch.setattr(deliv, "_ffmpeg_exe", lambda: None)
+    pid = _win_and_make_project(client, 1)
+    # Seed a WAV so the conversion branch is exercised (then skipped).
+    _seed_asset(client, pid, name="master.wav", label="Broadcast Mix",
+                ctype="audio/wav")
+    token = _project_token(client, pid)
+    r = client.post(f"/project/{pid}/review/approve",
+                    data={"k": token, "author": "Dana"}, follow_redirects=False)
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod, app as app_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("state") == "Delivered"
+    import os, zipfile as _zip
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(d["delivery_zip"]["url"]))
+    with _zip.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        # The original WAV is present; no MP3 was produced (conversion skipped).
+        assert any(n.endswith(".wav") for n in names)
+        assert not any(n.endswith(".mp3") for n in names)
