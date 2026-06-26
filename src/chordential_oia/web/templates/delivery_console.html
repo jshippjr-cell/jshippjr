@@ -135,7 +135,7 @@
 </section>
 
 <!-- ACTION TOOLBAR -->
-<section class="card">
+<section class="card" id="delivery">
   <div class="card-head"><h2>Command center</h2></div>
   <div class="toolbar">
     {% if share_token %}
@@ -218,8 +218,57 @@
   </form>
 </section>
 
+<div class="cols-2">
+  <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
+  <section class="card">
+    <div class="card-head"><h2>Versions &amp; review activity</h2></div>
+    {% if versions %}
+    <div class="vrail" aria-label="Version history">
+      {% for v in versions %}
+      <span class="vchip{% if loop.last %} cur{% endif %}">{{ v.label }}{% if loop.last %} · current{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted small">No versions logged yet — upload the first master below.</p>
+    {% endif %}
+
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
+    <ul class="rc-feed">
+      {% for c in comments %}
+      <li class="rc-ev">
+        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
+        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
+        <span class="rc-a">{{ c['author'] }}</span>
+        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
+      </li>
+      {% else %}
+      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <!-- CAMPAIGN TIMELINE -->
+  <section class="card">
+    <div class="card-head"><h2>Campaign timeline</h2></div>
+    <ul class="timeline">
+      {% for e in timeline %}
+      <li class="tl-row">
+        <span class="tl-ico">{{ e.icon }}</span>
+        <div class="tl-body">
+          <div class="tl-label">{{ e.label }}</div>
+          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
+        </div>
+        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
+      </li>
+      {% else %}
+      <li class="muted small">The timeline fills in as the campaign progresses.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
 <!-- CREATIVE BRIEF -->
-<section class="card">
+<section class="card" id="brief">
   <div class="card-head"><h2>Creative brief <span class="muted">— the start of the record</span></h2></div>
   <form method="post" action="/project/{{ project['id'] }}/delivery/brief" class="brief-grid">
     <div class="full">
@@ -262,58 +311,9 @@
   {% endif %}
 </section>
 
-<div class="cols-2">
-  <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
-  <section class="card">
-    <div class="card-head"><h2>Versions &amp; review activity</h2></div>
-    {% if versions %}
-    <div class="vrail" aria-label="Version history">
-      {% for v in versions %}
-      <span class="vchip{% if loop.last %} cur{% endif %}">v{{ v.n }} {{ v.label }}{% if loop.last %} · current{% endif %}</span>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted small">No versions logged yet — upload the first master below.</p>
-    {% endif %}
-
-    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
-    <ul class="rc-feed">
-      {% for c in comments %}
-      <li class="rc-ev">
-        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
-        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
-        <span class="rc-a">{{ c['author'] }}</span>
-        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
-      </li>
-      {% else %}
-      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <!-- CAMPAIGN TIMELINE -->
-  <section class="card">
-    <div class="card-head"><h2>Campaign timeline</h2></div>
-    <ul class="timeline">
-      {% for e in timeline %}
-      <li class="tl-row">
-        <span class="tl-ico">{{ e.icon }}</span>
-        <div class="tl-body">
-          <div class="tl-label">{{ e.label }}</div>
-          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
-        </div>
-        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
-      </li>
-      {% else %}
-      <li class="muted small">The timeline fills in as the campaign progresses.</li>
-      {% endfor %}
-    </ul>
-  </section>
-</div>
-
 <!-- DELIVERABLE ASSETS + UPLOAD CONTROLS -->
 <div class="cols-2">
-  <section class="card">
+  <section class="card" id="assets">
     <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ asset_rollup.approved }}/{{ asset_rollup.total }} approved · {{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
     {% for a in assets %}
     <div class="asset-row">
@@ -362,7 +362,7 @@
   </section>
 
   <!-- RIGHTS / LICENSE -->
-  <section class="card">
+  <section class="card" id="license">
     <div class="card-head"><h2>License &amp; rights <span class="muted">— Rights agent</span></h2></div>
     <p class="small {% if license_confirmed %}ok{% else %}pend{% endif %}" style="margin:0 0 8px">
       {% if license_confirmed %}License terms <b>CONFIRMED</b> by {{ license_confirmed.by }}{% if license_confirmed.date %} · {{ license_confirmed.date }}{% endif %}.{% else %}License terms read as <b>DRAFT — pending confirmation</b>. Saving edits the terms; confirming asserts them.{% endif %}

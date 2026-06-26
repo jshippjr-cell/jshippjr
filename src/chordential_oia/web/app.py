@@ -2646,7 +2646,7 @@ def delivery_set_brief(
         db.update_delivery(conn, project_id, "brief", brief or None)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#brief", status_code=303)
 
 
 @app.get("/project/{project_id}/delivery-package", response_class=HTMLResponse)
@@ -2690,7 +2690,7 @@ def delivery_set_license(
         db.update_delivery(conn, project_id, "license_confirmed", None)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/signatory")
@@ -2714,7 +2714,7 @@ def delivery_set_signatory(
         db.update_delivery(conn, project_id, "signatory", signatory or None)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/reviewer")
@@ -2740,7 +2740,7 @@ def delivery_reviewer(
             )
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/license/confirm")
@@ -2760,7 +2760,7 @@ def delivery_confirm_license(project_id: int, by: str = Form("")):
         })
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/asset/folder")
@@ -2789,7 +2789,7 @@ def delivery_set_asset_folder(
             db.update_delivery(conn, project_id, "assets", assets or None)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/cue")
@@ -2822,7 +2822,7 @@ def delivery_set_cue_meta(
             db.update_delivery(conn, project_id, "cue_meta", cue_meta or None)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/revision")
@@ -2871,10 +2871,10 @@ async def delivery_asset(
                 os.remove(os.path.join(UPLOAD_DIR, base))
             except OSError:
                 pass
-            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
         if file is None or not (file.filename or "").strip():
-            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
         ext = os.path.splitext(file.filename)[1].lower()
         ctype = (file.content_type or "").lower()
@@ -2907,7 +2907,7 @@ async def delivery_asset(
         db.update_delivery(conn, project_id, "assets", assets)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 
 def _next_version_label(delivery: dict, *, final: bool = False) -> tuple:
@@ -2954,10 +2954,10 @@ async def delivery_version(
                     dropped.get("filename") or "")))
             except OSError:
                 pass
-            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
         if file is None or not (file.filename or "").strip():
-            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
         ext = os.path.splitext(file.filename)[1].lower()
         data = await file.read()
@@ -2993,7 +2993,7 @@ async def delivery_version(
             db.update_delivery(conn, project_id, "state", "In review")
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/approve")
@@ -3034,14 +3034,14 @@ def delivery_release(project_id: int):
         delivery = db.get_delivery(conn, project_id)
         if license_confirmation(delivery) is None:
             return RedirectResponse(
-                f"/project/{project_id}/delivery?release=needs_license",
+                f"/project/{project_id}/delivery?release=needs_license#delivery",
                 status_code=303,
             )
         db.update_delivery(conn, project_id, "state", "Released")
         db.update_delivery(conn, project_id, "released_at", _date.today().isoformat())
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
 @app.get("/project/{project_id}/delivery-portal", response_class=HTMLResponse)
@@ -3417,7 +3417,7 @@ def delivery_build(project_id: int):
             return HTMLResponse("Project not found", status_code=404)
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
 @app.post("/project/{project_id}/review/changes")

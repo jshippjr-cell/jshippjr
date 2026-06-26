@@ -452,6 +452,70 @@ def test_license_and_revision_mutations(client):
 
 
 # --------------------------------------------------------------------------- #
+# Console UX fixes — anchor redirects, brief moved down, no doubled version chips
+# --------------------------------------------------------------------------- #
+def test_brief_mutation_redirects_to_brief_anchor(client):
+    """FIX 1: a console mutation lands back on the card it acted in (not the top)."""
+    pid = _win_and_make_project(client, 1)
+    r = client.post(f"/project/{pid}/delivery/brief",
+                    data={"objective": "Original music for the launch."},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("#brief")
+
+
+def test_console_anchor_redirects_per_card(client):
+    """FIX 1: each mutation redirects to the matching card anchor."""
+    pid = _win_and_make_project(client, 1)
+    cases = [
+        ("delivery/license",
+         {"type": "Buyout", "territory": "Worldwide", "term": "Perpetuity",
+          "exclusivity": "Exclusive", "content_id": "Registrable"}, "#license"),
+        ("delivery/signatory",
+         {"entity": "Chordential", "signer": "Jon", "title": "Founder"}, "#license"),
+        ("delivery/reviewer",
+         {"action": "add", "name": "Dana", "email": "d@x.com", "role": "Producer"},
+         "#reviewers"),
+        ("delivery/license/confirm", {"by": "Jon"}, "#license"),
+        ("delivery/cue", {"cue": "Launch", "duration": "0:60"}, "#license"),
+        ("delivery/build", {}, "#delivery"),
+        ("delivery/release", {}, "#delivery"),
+    ]
+    for path, data, anchor in cases:
+        r = client.post(f"/project/{pid}/{path}", data=data, follow_redirects=False)
+        assert r.status_code == 303, path
+        assert r.headers["location"].endswith(anchor), (path, r.headers["location"])
+
+
+def test_console_brief_card_below_versions_and_timeline(client):
+    """FIX 2: the Creative brief card sits AFTER the Versions/timeline section."""
+    pid = _win_and_make_project(client, 1)
+    html = client.get(f"/project/{pid}/delivery").text
+    timeline_pos = html.find("Campaign timeline")
+    brief_pos = html.find("Creative brief")
+    assert timeline_pos != -1 and brief_pos != -1
+    # The campaign-timeline marker appears before the creative-brief marker.
+    assert timeline_pos < brief_pos
+
+
+def test_console_version_rail_has_no_doubled_v_prefix(client):
+    """FIX 3: version chips render as the label only (no "v1 v1" doubling)."""
+    pid = _win_and_make_project(client, 1)
+    # Log two versions of the master so the rail has multiple chips.
+    for _ in range(2):
+        client.post(f"/project/{pid}/delivery/version",
+                    data={"action": "add"},
+                    files={"file": ("master.mp3", b"ID3fakeaudio", "audio/mpeg")},
+                    follow_redirects=True)
+    html = client.get(f"/project/{pid}/delivery").text
+    assert "v1 v1" not in html
+    assert "v2 v2" not in html
+    # The single, correct label is present, and the latest reads as current.
+    assert "v1 Concept" in html
+    assert "· current" in html
+
+
+# --------------------------------------------------------------------------- #
 # Review Portal (Phase 1) — timestamped comments + approve / request-changes
 # --------------------------------------------------------------------------- #
 def _project_token(client, pid):
