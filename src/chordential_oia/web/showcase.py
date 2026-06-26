@@ -85,8 +85,8 @@ HERO = {
     # Hero motion source. "loop" = the animated WebP (always animates on mobile,
     # no autoplay policy, never a play button). "video" = the Cloudinary clip
     # below (higher fidelity, but iOS may refuse to autoplay it on landing).
-    # ↺ TO REVERT to the video: set this to "video" (or delete this line).
-    "motion": "loop",
+    # ↺ Set to "loop" to use the always-animating WebP instead (no iOS play button).
+    "motion": "video",
     # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on
     # Cloudinary. f_auto,q_auto = optimal codec + visually-lossless quality, so it's
     # a smaller, faster-starting file with NO visible quality loss.
