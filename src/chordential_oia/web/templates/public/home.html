@@ -13,9 +13,27 @@
     {% if h.video %}
     {# Poster shows instantly while the Cloudinary-optimized video buffers, on all
        devices. No `type` on the source so f_auto can deliver the best codec. #}
-    <video class="hero-video" autoplay muted loop playsinline {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
+    <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="auto" {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
       <source src="{{ h.video }}">
     </video>
+    <script>
+    // Mobile autoplay: iOS only autoplays a video that is muted via the *property*
+    // (the muted attribute alone is unreliable) and inline. Force it, retry when the
+    // media is ready, and fall back to the first user gesture if still blocked
+    // (Low-Power / Data-Saver mode blocks autoplay entirely — the poster covers that).
+    (function () {
+      var v = document.querySelector('.hero-video');
+      if (!v) return;
+      v.muted = true; v.defaultMuted = true; v.setAttribute('muted', '');
+      var play = function () { var p = v.play(); if (p && p.catch) p.catch(function () {}); };
+      play();
+      v.addEventListener('loadeddata', play, { once: true });
+      v.addEventListener('canplay', play, { once: true });
+      ['touchstart', 'pointerdown', 'click'].forEach(function (ev) {
+        document.addEventListener(ev, function () { play(); }, { once: true, passive: true });
+      });
+    })();
+    </script>
     {% elif h.loop %}
     {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}
     <div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>
