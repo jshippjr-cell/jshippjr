@@ -21,15 +21,33 @@ one screen.
 
 ---
 
+## Before you start — what you're looking at
+
+> **The screenshots in this manual show a fully set-up *example* campaign** ("Vance
+> Athletic," at version v2, with comments and reviewers already in place). **Your own
+> campaigns start empty** and fill in as you complete the steps below — so if a new
+> project shows no version ("v—"), no comments, and an empty checklist, that's normal:
+> you just haven't uploaded a master or added a brief *yet*.
+>
+> **To click through the exact example campaigns pictured here**, turn on demo mode: in
+> **Render → your service → Environment**, add `CHORDENTIAL_SEED_DEMO` = `1`, save, and
+> let it redeploy. The *Lumen Health*, *Vance Athletic*, and *Northwind Coffee*
+> campaigns then appear, fully populated. Set it back off to return to your real data
+> only. (Production hides demo data on purpose — it shows *your* campaigns, not samples.)
+
+---
+
 # Part 1 — For the Operator (you)
 
 ## 1.1 Find your campaigns
 
-Log in to the back-office and open **Projects** in the left nav. Every won deal that
-you've spun up a project for lives here. (On a fresh production site this list is your
-real projects only; the demo campaigns — **Lumen Health — Brand Refresh** (just
-briefed), **Vance Athletic — Summer Launch** (in review), **Northwind Coffee — Holiday
-Anthem** (delivered) — appear only when demo mode is on.)
+Log in to Chordential (the admin side — the same place as your **Today** and
+**Pipeline** dashboard) and open **Projects** in the left nav. Every won deal that
+you've spun up a project for lives here. On your live site this list is **your real
+projects only** — it starts empty until you create one (win an opportunity →
+**"spin up project"**). The demo campaigns pictured throughout this manual — **Lumen
+Health** (just briefed), **Vance Athletic** (in review), **Northwind Coffee**
+(delivered) — appear only when demo mode is on (see "Before you start" above).
 
 ![Projects list](manual-img/01-projects.png)
 
