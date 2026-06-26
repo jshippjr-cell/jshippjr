@@ -189,10 +189,13 @@ def _is_first_touch_path(path: str) -> bool:
 # pattern as first-touch — the per-project share token (?k=<token>) checked in the
 # route is the access control, so the path bypasses the admin login gate.
 _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
+# The review-portal client actions (comment / approve / request-changes) are posted
+# by the agency from the same token-gated link — token-validated in the route.
+_REVIEW_ACTION_RE = re.compile(r"^/project/\d+/review/(comment|approve|changes)/?$")
 
 
 def _is_delivery_portal_path(path: str) -> bool:
-    return bool(_DELIVERY_PORTAL_RE.match(path))
+    return bool(_DELIVERY_PORTAL_RE.match(path) or _REVIEW_ACTION_RE.match(path))
 
 
 def _admin_secret() -> Optional[str]:
@@ -2471,6 +2474,7 @@ def _delivery_view(conn, project_id: int):
         "assets": delivery.get("assets") or [],
         "released_at": delivery.get("released_at"),
         "share_token": token,
+        "comments": db.list_review_comments(conn, project_id),
     }
 
 
@@ -2660,6 +2664,90 @@ def delivery_portal(request: Request, project_id: int, k: str = ""):
     finally:
         conn.close()
     return render(request, "delivery_portal.html", nav="", **view)
+
+
+def _review_token_ok(conn, project_id: int, k: str) -> bool:
+    """The per-project share token is the access control for client review actions."""
+    row = db.get_project(conn, project_id)
+    if row is None:
+        return False
+    token = db.ensure_project_share_token(conn, project_id)
+    return bool(token and k and hmac.compare_digest(str(k), str(token)))
+
+
+def _review_redirect(project_id: int, k: str):
+    return RedirectResponse(
+        f"/project/{project_id}/delivery-portal?k={k}#review", status_code=303
+    )
+
+
+@app.post("/project/{project_id}/review/comment")
+def review_comment(
+    project_id: int, k: str = Form(""), author: str = Form(""),
+    t: str = Form(""), body: str = Form(""),
+):
+    """A timecoded comment pinned to the version under review (Frame.io-style)."""
+    conn = db.connect()
+    try:
+        if not _review_token_ok(conn, project_id, k):
+            return HTMLResponse("Not found", status_code=404)
+        if body.strip():
+            try:
+                t_seconds = float(t) if str(t).strip() != "" else None
+            except ValueError:
+                t_seconds = None
+            delivery = db.get_delivery(conn, project_id)
+            db.add_review_comment(
+                conn, project_id, version=delivery.get("version_state") or "",
+                t_seconds=t_seconds, author=author.strip(), body=body.strip(),
+                kind="comment",
+            )
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k)
+
+
+@app.post("/project/{project_id}/review/approve")
+def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
+    """The agency approves the current version — the trigger Delivery Automation
+    will hang off of (Phase 3). For now it records the sign-off + sets state."""
+    conn = db.connect()
+    try:
+        if not _review_token_ok(conn, project_id, k):
+            return HTMLResponse("Not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        db.add_review_comment(
+            conn, project_id, version=delivery.get("version_state") or "",
+            author=author.strip(), body="Approved the current version.",
+            kind="approval",
+        )
+        db.update_delivery(conn, project_id, "state", "Approved")
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k)
+
+
+@app.post("/project/{project_id}/review/changes")
+def review_changes(
+    project_id: int, k: str = Form(""), author: str = Form(""), note: str = Form(""),
+):
+    """The agency requests changes — logs the request and bumps the revision count."""
+    conn = db.connect()
+    try:
+        if not _review_token_ok(conn, project_id, k):
+            return HTMLResponse("Not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        db.add_review_comment(
+            conn, project_id, version=delivery.get("version_state") or "",
+            author=author.strip(), body=(note.strip() or "Requested changes."),
+            kind="change_request",
+        )
+        db.update_delivery(conn, project_id, "revisions_used",
+                           int(delivery.get("revisions_used") or 0) + 1)
+        db.update_delivery(conn, project_id, "state", "In production")
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k)
 
 
 # --------------------------------------------------------------------------- #

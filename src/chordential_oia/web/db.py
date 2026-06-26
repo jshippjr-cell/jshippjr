@@ -155,6 +155,19 @@ CREATE TABLE IF NOT EXISTS milestones (
     updated_at TEXT
 );
 
+-- Delivery OS Review Portal: timestamped feedback + approve/request-changes on the
+-- version under review. kind: 'comment' (timecoded), 'approval', 'change_request'.
+CREATE TABLE IF NOT EXISTS review_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    version TEXT,
+    t_seconds REAL,
+    author TEXT,
+    body TEXT,
+    kind TEXT DEFAULT 'comment',
+    created_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS project_updates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -2317,6 +2330,33 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
         delivery[key] = value
     save_delivery(conn, project_id, delivery)
     return delivery
+
+
+def add_review_comment(
+    conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
+    author: str = "", body: str = "", kind: str = "comment",
+) -> int:
+    """Append a review-portal event: a timecoded comment, an approval, or a
+    change request. Returns the new id."""
+    cur = conn.execute(
+        """INSERT INTO review_comments
+           (project_id, version, t_seconds, author, body, kind, created_at)
+           VALUES (?,?,?,?,?,?,?)""",
+        (project_id, version or "", t_seconds, author or "Anonymous",
+         body or "", kind, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_review_comments(
+    conn: sqlite3.Connection, project_id: int
+) -> List[sqlite3.Row]:
+    """All review events for a project, oldest first (the campaign's feedback tape)."""
+    return conn.execute(
+        "SELECT * FROM review_comments WHERE project_id = ? ORDER BY created_at ASC, id ASC",
+        (project_id,),
+    ).fetchall()
 
 
 def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Optional[str]:

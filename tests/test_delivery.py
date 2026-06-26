@@ -234,3 +234,75 @@ def test_license_and_revision_mutations(client):
     assert delivery["version_state"] == "v2 Direction-lock"
     pkg = client.get(f"/project/{pid}/delivery-package").text
     assert "Cross-channel buyout" in pkg
+
+
+# --------------------------------------------------------------------------- #
+# Review Portal (Phase 1) — timestamped comments + approve / request-changes
+# --------------------------------------------------------------------------- #
+def _project_token(client, pid):
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        return db_mod.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+
+
+def test_review_comment_requires_valid_token(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    # Wrong token → 404, no comment stored.
+    bad = client.post(f"/project/{pid}/review/comment",
+                      data={"k": "nope", "author": "X", "t": "12", "body": "hi"},
+                      follow_redirects=False)
+    assert bad.status_code == 404
+    # Right token → 303 back to the portal.
+    ok = client.post(f"/project/{pid}/review/comment",
+                     data={"k": token, "author": "Dana (Agency)", "t": "12.4",
+                           "body": "Can we remove percussion?"},
+                     follow_redirects=False)
+    assert ok.status_code == 303
+
+
+def test_timestamped_comment_renders_on_portal(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "t": "12.4",
+                      "body": "Can we remove percussion?"})
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "Review &amp; approve" in page          # the Frame.io-for-music section
+    assert "Can we remove percussion?" in page     # the comment body
+    assert "0:12" in page                          # the timecode (12.4s → 0:12)
+    assert 'name="k"' in page                      # forms carry the token
+
+
+def test_client_approve_sets_state_via_portal(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/approve",
+                data={"k": token, "author": "Dana (Agency)"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("state") == "Approved"
+        kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
+    finally:
+        conn.close()
+    assert "approval" in kinds
+
+
+def test_request_changes_logs_and_bumps_revisions(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/changes",
+                data={"k": token, "author": "CD", "note": "Strings should swell at 0:34"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+        rows = db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("revisions_used") == 1
+    assert any(c["kind"] == "change_request" and "swell" in c["body"] for c in rows)
