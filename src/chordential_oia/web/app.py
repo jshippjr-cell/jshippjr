@@ -43,7 +43,8 @@ from ..capabilities import (
 )
 from ..delivery import (
     build_clearance_certificate, build_cue_sheet, build_manifest,
-    merge_license, revision_status, DELIVERY_STATES, VERSION_STATES,
+    current_version, merge_license, revision_status, version_label,
+    versions_list, version_name, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
@@ -2452,11 +2453,25 @@ def _delivery_view(conn, project_id: int):
     license = delivery.get("license") or {}
     estimate = _project_estimate(conn, row)
 
+    versions = versions_list(delivery)
+    current = current_version(delivery)
+
     cert = build_clearance_certificate(row, assignments, license)
     cues = build_cue_sheet(row, assignments)
-    manifest = build_manifest(row, assets=delivery.get("assets") or [])
+    manifest = build_manifest(
+        row, assets=delivery.get("assets") or [], versions=versions
+    )
     revisions = revision_status(row, estimate, delivery)
     token = db.ensure_project_share_token(conn, project_id)
+
+    # The version under review (anti-chaos): the current version's audio drives the
+    # review player; fall back to the first uploaded audio asset for Phase-0
+    # projects that never logged a version.
+    review_track = current
+    if review_track is None:
+        assets = delivery.get("assets") or []
+        review_track = next((a for a in assets if a.get("kind") == "audio"), None)
+    current_n = int(current["n"]) if current else 0
 
     return {
         "row": row,
@@ -2472,6 +2487,10 @@ def _delivery_view(conn, project_id: int):
         "license": cert.license,
         "approvals": delivery.get("approvals") or [],
         "assets": delivery.get("assets") or [],
+        "versions": versions,
+        "current_version": current,
+        "current_n": current_n,
+        "review_track": review_track,
         "released_at": delivery.get("released_at"),
         "share_token": token,
         "comments": db.list_review_comments(conn, project_id),
@@ -2612,6 +2631,92 @@ async def delivery_asset(
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
 
 
+def _next_version_label(delivery: dict, *, final: bool = False) -> tuple:
+    """The next version's ``(n, label)`` for a logged version upload.
+
+    n is one past the latest logged version (1 for the first). The label follows
+    the v1 Concept → v2 Direction-lock → v3 FINAL ladder, forced to FINAL when the
+    delivery is being released/approved (``final=True``)."""
+    n = len(versions_list(delivery)) + 1
+    return n, version_label(n, final=final)
+
+
+@app.post("/project/{project_id}/delivery/version")
+async def delivery_version(
+    project_id: int,
+    request: Request,
+    action: str = Form("add"),
+    filename: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """Revisions + Assets agents: log a new **version** of the master.
+
+    Uploads an audio file into the project's ``delivery_json['versions']`` ladder
+    (reusing the local UPLOAD_DIR + /uploads/{name} mechanism), names it
+    deterministically, advances ``version_state`` to the new label, and — if the
+    delivery had been Approved — reopens it to "In review" (a new version means the
+    prior approval no longer stands). ``action=remove`` drops the newest version."""
+    from datetime import datetime as _dt, timezone as _tz
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        versions = versions_list(delivery)
+
+        # Remove the newest version (optional housekeeping).
+        if action == "remove" and versions:
+            dropped = versions[-1]
+            db.update_delivery(conn, project_id, "versions", versions[:-1] or None)
+            remaining = versions_list(db.get_delivery(conn, project_id))
+            new_state = (remaining[-1]["label"] if remaining
+                         else VERSION_STATES[0])
+            db.update_delivery(conn, project_id, "version_state", new_state)
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, os.path.basename(
+                    dropped.get("filename") or "")))
+            except OSError:
+                pass
+            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+        if file is None or not (file.filename or "").strip():
+            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        data = await file.read()
+        safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
+
+        n, label = _next_version_label(delivery)
+        # Deterministic on-disk + display name for the version.
+        row = db.get_project(conn, project_id)
+        campaign = (row["need"] if row is not None else "") or "Campaign"
+        stem = version_name(campaign, "Master", 60, "Master", n,
+                            "FINAL" if "FINAL" in label.upper() else f"v{n}")
+        safe_name = f"proj{project_id}-v{n}{safe_ext}"
+        # Avoid clobbering on a re-log at the same n.
+        bump = 1
+        while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
+            safe_name = f"proj{project_id}-v{n}-{bump}{safe_ext}"
+            bump += 1
+        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
+            fh.write(data)
+
+        versions.append({
+            "n": n,
+            "label": label,
+            "url": f"/uploads/{safe_name}",
+            "filename": safe_name,
+            "name": stem,
+            "created_at": _dt.now(_tz.utc).isoformat(),
+        })
+        db.update_delivery(conn, project_id, "versions", versions)
+        db.update_delivery(conn, project_id, "version_state", label)
+        # A new version supersedes any prior approval — reopen to review.
+        if (delivery.get("state") or "") == "Approved":
+            db.update_delivery(conn, project_id, "state", "In review")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
 @app.post("/project/{project_id}/delivery/approve")
 def delivery_approve(
     project_id: int,
@@ -2666,6 +2771,14 @@ def delivery_portal(request: Request, project_id: int, k: str = ""):
     return render(request, "delivery_portal.html", nav="", **view)
 
 
+def _current_version_tag(delivery: dict) -> str:
+    """The version number a comment/approval is tagged with: the current version's
+    ``n`` (anti-chaos — feedback always lands on the version it was made against).
+    Falls back to ``"0"`` for a Phase-0 project that never logged a version."""
+    cur = current_version(delivery)
+    return str(cur["n"]) if cur else "0"
+
+
 def _review_token_ok(conn, project_id: int, k: str) -> bool:
     """The per-project share token is the access control for client review actions."""
     row = db.get_project(conn, project_id)
@@ -2698,7 +2811,7 @@ def review_comment(
                 t_seconds = None
             delivery = db.get_delivery(conn, project_id)
             db.add_review_comment(
-                conn, project_id, version=delivery.get("version_state") or "",
+                conn, project_id, version=_current_version_tag(delivery),
                 t_seconds=t_seconds, author=author.strip(), body=body.strip(),
                 kind="comment",
             )
@@ -2717,10 +2830,18 @@ def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
             return HTMLResponse("Not found", status_code=404)
         delivery = db.get_delivery(conn, project_id)
         db.add_review_comment(
-            conn, project_id, version=delivery.get("version_state") or "",
+            conn, project_id, version=_current_version_tag(delivery),
             author=author.strip(), body="Approved the current version.",
             kind="approval",
         )
+        # Approve locks the FINAL version: stamp the current version's label and
+        # the version_state to FINAL so the agency sees the version is final.
+        versions = versions_list(delivery)
+        if versions:
+            versions[-1] = dict(versions[-1])
+            versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
+            db.update_delivery(conn, project_id, "versions", versions)
+            db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
         db.update_delivery(conn, project_id, "state", "Approved")
     finally:
         conn.close()
@@ -2738,7 +2859,7 @@ def review_changes(
             return HTMLResponse("Not found", status_code=404)
         delivery = db.get_delivery(conn, project_id)
         db.add_review_comment(
-            conn, project_id, version=delivery.get("version_state") or "",
+            conn, project_id, version=_current_version_tag(delivery),
             author=author.strip(), body=(note.strip() or "Requested changes."),
             kind="change_request",
         )

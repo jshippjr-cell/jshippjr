@@ -68,6 +68,14 @@
   .rc-decide form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .rc-approve{background:#1d6b43;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
   .rc-changes{background:#fff;color:var(--wine);border:1px solid var(--wine);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
+  /* version rail — the anti-chaos "which version am I on" strip */
+  .vrail{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
+  .vchip{font-size:11px;letter-spacing:.04em;color:var(--slate);border:1px solid var(--line);
+    border-radius:999px;padding:4px 11px;background:var(--cream);white-space:nowrap}
+  .vchip.cur{background:var(--wine);color:#fff;border-color:var(--wine);font-weight:700}
+  .vsep{color:var(--muted);font-size:11px}
+  .round{display:inline-block;border:1px solid var(--orange);color:var(--orange);font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:4px;margin-left:8px}
 </style>
 </head>
 <body>
@@ -86,10 +94,20 @@
 
   <!-- REVIEW & APPROVE (Frame.io for music) -->
   {% if state != "Released" %}
-  {% set review_track = (assets | selectattr('kind','equalto','audio') | list | first) %}
   <div class="card" id="review">
-    <h2>Review &amp; approve</h2>
+    <h2>Review &amp; approve
+      <span class="round">Round {{ revisions.used + 1 if revisions.remaining > 0 else revisions.scoped }} of {{ revisions.scoped }}</span>
+    </h2>
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
+
+    {% if versions %}
+    <div class="vrail" aria-label="Version history">
+      {% for v in versions %}
+        {% if not loop.first %}<span class="vsep">·</span>{% endif %}
+        <span class="vchip{% if loop.last %} cur{% endif %}">v{{ v.n }}{% if loop.last %} (current){% endif %}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% if review_track %}
     <div class="cap-audio" style="max-width:none">
@@ -103,15 +121,30 @@
     {% endif %}
 
     <div style="margin-top:16px">
-      {% set ns2 = namespace(has=false) %}
-      {% for c in comments %}{% if c.kind == 'comment' %}{% set ns2.has = true %}
+      {% set ns2 = namespace(has=false, prior=false) %}
+      {% for c in comments %}{% if c.kind == 'comment' and (current_n == 0 or c.version|string == current_n|string) %}{% set ns2.has = true %}
         <div class="rc">
           {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}</a>{% else %}<span class="rc-t">—</span>{% endif %}
           <span class="rc-a">{{ c.author }}</span>
           <span class="rc-b">{{ c.body }}</span>
         </div>
       {% endif %}{% endfor %}
-      {% if not ns2.has %}<p class="muted-note">No notes yet — scrub the track and drop the first one.</p>{% endif %}
+      {% if not ns2.has %}<p class="muted-note">No notes on this version yet — scrub the track and drop the first one.</p>{% endif %}
+
+      {# Prior versions' notes stay in the full tape, dimmed below the active list. #}
+      {% for c in comments %}{% if c.kind == 'comment' and current_n != 0 and c.version|string != current_n|string %}{% set ns2.prior = true %}{% endif %}{% endfor %}
+      {% if ns2.prior %}
+      <details style="margin-top:12px">
+        <summary class="muted-note" style="cursor:pointer">Earlier versions' notes</summary>
+        {% for c in comments %}{% if c.kind == 'comment' and current_n != 0 and c.version|string != current_n|string %}
+        <div class="rc" style="opacity:.6">
+          <span class="rc-t">v{{ c.version }}</span>
+          <span class="rc-a">{{ c.author }}</span>
+          <span class="rc-b">{{ c.body }}</span>
+        </div>
+        {% endif %}{% endfor %}
+      </details>
+      {% endif %}
     </div>
 
     {% if review_track %}

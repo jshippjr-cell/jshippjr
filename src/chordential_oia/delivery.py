@@ -18,6 +18,7 @@ clause** (a single muted "available on request" line, never a promise).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -33,6 +34,10 @@ DEFAULT_PRO = "BMI"
 VERSION_STATES = ["v1 Concept", "v2 Direction-lock", "v3 FINAL"]
 # Delivery lifecycle states.
 DELIVERY_STATES = ["In production", "In review", "Delivered", "Released"]
+
+# Per-round human-readable label words (Revisions agent's v1→v2→v3 ladder). The
+# last logged version reads as FINAL once the delivery is released/approved.
+VERSION_LABELS = {1: "Concept", 2: "Direction-lock", 3: "FINAL"}
 
 # Sensible license defaults — Chordential's own standard terms (fine to state),
 # matching the rights summary in the static delivery sample. The license dict in
@@ -90,6 +95,85 @@ def merge_license(license: Optional[dict]) -> dict:
         if v is not None and str(v).strip():
             out[k] = str(v).strip()
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic version naming (Metadata + Revisions agents)
+#
+# The founder's anti-chaos point: every file carries a deterministic, human-
+# readable name — CAMPAIGN_CUE_LEN_ROLE_vN_STATE (e.g. AURORA_Anthem_60_MASTER_
+# v3_FINAL) — so nobody ever reviews "the wrong version" again.
+# --------------------------------------------------------------------------- #
+def slug_token(value, default: str = "") -> str:
+    """One naming token: uppercased, non-alphanumerics collapsed to nothing.
+
+    ``Aurora Outdoor Co.`` → ``AURORAOUTDOORCO``; multi-word campaigns are squashed
+    into a single token so the underscore only ever separates the naming *fields*."""
+    text = re.sub(r"[^0-9a-zA-Z]+", "", str(value or "")).upper()
+    return text or default
+
+
+def slug_campaign(campaign) -> str:
+    """The campaign's short naming token (first significant word, uppercased).
+
+    Keeps the filename legible — ``Aurora Outdoor — Summer Anthem`` → ``AURORA`` —
+    falling back to the whole slug when there's only one word."""
+    words = re.findall(r"[0-9a-zA-Z]+", str(campaign or ""))
+    if not words:
+        return "CAMPAIGN"
+    return words[0].upper()
+
+
+def version_name(campaign, cue, length, role, n, state) -> str:
+    """The deterministic delivery filename stem ``CAMPAIGN_CUE_LEN_ROLE_vN_STATE``.
+
+    e.g. ``version_name("Aurora Outdoor", "Anthem", 60, "Master", 3, "FINAL")`` →
+    ``AURORA_Anthem_60_MASTER_v3_FINAL``. Each token is slugged (alnum only); the
+    cue keeps its original casing (it's the human-recognisable bit), everything
+    else is uppercased. Blank fields are skipped so the stem never has ``__``."""
+    cue_tok = re.sub(r"[^0-9a-zA-Z]+", "", str(cue or "")) or "Cue"
+    parts = [slug_campaign(campaign), cue_tok]
+    length_tok = slug_token(length)
+    if length_tok:
+        parts.append(length_tok)
+    role_tok = slug_token(role)
+    if role_tok:
+        parts.append(role_tok)
+    parts.append(f"v{int(n) if str(n).strip() else 1}")
+    state_tok = slug_token(state)
+    if state_tok:
+        parts.append(state_tok)
+    return "_".join(parts)
+
+
+# --------------------------------------------------------------------------- #
+# Version model (Revisions agent) — the real v1/v2/v3 ladder on delivery_json
+# --------------------------------------------------------------------------- #
+def version_label(n: int, *, final: bool = False) -> str:
+    """The human label for version ``n`` (``v1 Concept`` … ``v3 FINAL``).
+
+    ``final=True`` forces the FINAL label (used for the released/approved version
+    regardless of how many rounds were logged)."""
+    n = max(1, int(n or 1))
+    if final:
+        return f"v{n} FINAL"
+    word = VERSION_LABELS.get(n, "Revision")
+    return f"v{n} {word}"
+
+
+def versions_list(delivery: Optional[dict]) -> List[dict]:
+    """The ordered version list from ``delivery_json`` (``[]`` when none)."""
+    delivery = delivery or {}
+    versions = delivery.get("versions")
+    return list(versions) if isinstance(versions, list) else []
+
+
+def current_version(delivery: Optional[dict]) -> Optional[dict]:
+    """The version under review — the latest entry in ``delivery_json['versions']``.
+
+    Returns ``None`` when no version has been logged yet (Phase-0 projects)."""
+    versions = versions_list(delivery)
+    return versions[-1] if versions else None
 
 
 # --------------------------------------------------------------------------- #
@@ -226,25 +310,50 @@ def _standard_deliverables(project) -> List[Deliverable]:
     return list(_BASE_DELIVERABLES)
 
 
-def build_manifest(project, deliverables=None, assets=None) -> List[ManifestRow]:
+def build_manifest(
+    project, deliverables=None, assets=None, versions=None
+) -> List[ManifestRow]:
     """The deliverables manifest: standard asset *types* + the real uploaded assets.
 
     ``deliverables`` (a list of :class:`capabilities.Deliverable`) overrides the
     auto-derived standard list. ``assets`` is the project's uploaded asset list
     (from ``delivery_json['assets']``); each uploaded file appears as a Delivered
-    row grouped under "Uploaded assets"."""
+    row grouped under "Uploaded assets" carrying its **deterministic version name**
+    (``CAMPAIGN_CUE_LEN_ROLE_vN_STATE``) so the manifest reads as real filenames.
+    ``versions`` (``delivery_json['versions']``) are listed as their own Delivered
+    rows under "Versions" — the v1/v2/v3 ladder, latest marked current."""
+    campaign = (_val(project, "need") or "Campaign").strip() or "Campaign"
     std = deliverables if deliverables is not None else _standard_deliverables(project)
     rows = [
         ManifestRow(group=d.group, asset=d.asset, spec=d.spec, status="Scoped")
         for d in std
     ]
+    versions = versions or []
+    last = len(versions)
+    for i, v in enumerate(versions, start=1):
+        n = v.get("n", i)
+        label = v.get("label") or version_label(n)
+        # FINAL once it's the released name; the deterministic stem is the file.
+        state = "FINAL" if "FINAL" in label.upper() else f"v{n}"
+        name = version_name(campaign, "Master", 60, "Master", n, state)
+        suffix = " · current" if i == last else ""
+        rows.append(ManifestRow(
+            group="Versions", asset=f"{name} — {label}{suffix}",
+            spec="Audio", status="Delivered",
+        ))
     for asset in assets or []:
         label = (asset.get("label") or asset.get("filename") or "Asset").strip()
         kind = asset.get("kind") or "file"
         spec = "Audio" if kind == "audio" else "File"
-        rows.append(
-            ManifestRow(group="Uploaded assets", asset=label, spec=spec, status="Delivered")
+        # Deterministic version name for the uploaded file (campaign + asset + v1).
+        name = version_name(
+            campaign, label, "", "Master" if kind == "audio" else "",
+            1, "MASTER" if kind == "audio" else "FILE",
         )
+        rows.append(ManifestRow(
+            group="Uploaded assets", asset=f"{name} — {label}",
+            spec=spec, status="Delivered",
+        ))
     return rows
 
 

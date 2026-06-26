@@ -23,7 +23,10 @@ from chordential_oia.delivery import (  # noqa: E402
     build_clearance_certificate,
     build_cue_sheet,
     build_manifest,
+    current_version,
     revision_status,
+    version_label,
+    version_name,
 )
 
 
@@ -96,6 +99,48 @@ def test_revision_status_scoped_used_remaining():
                                                "version_state": "v3 FINAL"})
     assert rs2["remaining"] == 0
     assert rs2["state"] == "v3 FINAL"
+
+
+def test_version_name_is_deterministic_and_formatted():
+    # The founder's canonical example.
+    assert version_name("Aurora Outdoor", "Anthem", 60, "Master", 3, "FINAL") == \
+        "AURORA_Anthem_60_MASTER_v3_FINAL"
+    # Campaign slugs to its first significant word, uppercased.
+    assert version_name("Vance Athletic — Launch", "Hook", 30, "Inst", 1, "MASTER") == \
+        "VANCE_Hook_30_INST_v1_MASTER"
+    # Blank length/role/state fields are skipped (no double underscores).
+    nm = version_name("Aurora", "Master", "", "", 2, "")
+    assert nm == "AURORA_Master_v2"
+    assert "__" not in nm
+
+
+def test_version_label_ladder_and_current_version_helper():
+    assert version_label(1) == "v1 Concept"
+    assert version_label(2) == "v2 Direction-lock"
+    assert version_label(3) == "v3 FINAL"
+    # final=True forces FINAL regardless of n.
+    assert version_label(2, final=True) == "v2 FINAL"
+    # current_version is the latest entry (or None for Phase-0).
+    assert current_version({}) is None
+    d = {"versions": [{"n": 1}, {"n": 2}, {"n": 3}]}
+    assert current_version(d)["n"] == 3
+
+
+def test_manifest_shows_deterministic_version_named_files():
+    versions = [
+        {"n": 1, "label": "v1 Concept"},
+        {"n": 2, "label": "v2 Direction-lock"},
+    ]
+    rows = build_manifest(_fake_project(), versions=versions)
+    version_rows = [r for r in rows if r.group == "Versions"]
+    assert len(version_rows) == 2
+    # Deterministic, version-named filenames in the manifest.
+    assert any("_v1_" in r.asset for r in version_rows)
+    assert any("_v2_" in r.asset for r in version_rows)
+    # The campaign token leads the filename.
+    assert all(r.asset.startswith("FIND") for r in version_rows)
+    # The latest is flagged current.
+    assert any("current" in r.asset for r in version_rows)
 
 
 # --------------------------------------------------------------------------- #
@@ -306,3 +351,102 @@ def test_request_changes_logs_and_bumps_revisions(client):
         conn.close()
     assert d.get("revisions_used") == 1
     assert any(c["kind"] == "change_request" and "swell" in c["body"] for c in rows)
+
+
+# --------------------------------------------------------------------------- #
+# Versions + revisions + naming (Phase 2)
+# --------------------------------------------------------------------------- #
+def _upload_version(client, pid, name="cue.mp3"):
+    files = {"file": (name, b"ID3fakeaudio-version", "audio/mpeg")}
+    return client.post(f"/project/{pid}/delivery/version",
+                       data={"action": "add"}, files=files, follow_redirects=True)
+
+
+def test_second_version_becomes_current_review_track_and_advances_label(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    _upload_version(client, pid, "v2.mp3")
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    versions = d.get("versions")
+    assert versions and len(versions) == 2
+    assert versions[-1]["n"] == 2
+    # The label advanced along the ladder.
+    assert d.get("version_state") == "v2 Direction-lock"
+    assert versions[-1]["label"] == "v2 Direction-lock"
+    # The latest version is the review track on the portal (its URL is the player src).
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert versions[-1]["url"] in page
+    assert versions[0]["url"] not in page  # the prior version is no longer the player
+
+
+def test_new_version_reopens_an_approved_delivery(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("state") == "Approved"
+    finally:
+        conn.close()
+    # A new version supersedes the approval → back to In review.
+    _upload_version(client, pid, "v2.mp3")
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("state") == "In review"
+
+
+def test_comment_is_tagged_with_current_version_number(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    _upload_version(client, pid, "v2.mp3")
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "t": "5", "body": "Tighten the intro"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        rows = db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+    note = next(c for c in rows if c["kind"] == "comment")
+    # Tagged with the current version NUMBER (2), not the version label string.
+    assert str(note["version"]) == "2"
+
+
+def test_portal_renders_version_rail_and_round_of(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    _upload_version(client, pid, "v2.mp3")
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    # The version rail shows which version they're on.
+    assert "(current)" in page
+    assert "Version history" in page
+    # "Round X of Y" surfaces the scoped-vs-used revision rounds.
+    assert re.search(r"Round\s+\d+\s+of\s+\d+", page)
+
+
+def test_approve_locks_current_version_to_final(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert "FINAL" in d["versions"][-1]["label"]
+    assert "FINAL" in (d.get("version_state") or "")
