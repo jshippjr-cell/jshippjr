@@ -13,9 +13,11 @@
     {% if h.video %}
     {# Poster shows instantly while the Cloudinary-optimized video buffers, on all
        devices. No `type` on the source so f_auto can deliver the best codec. #}
-    <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="auto" {% if h.poster %}poster="{{ h.poster }}"{% endif %}>
-      <source src="{{ h.video }}">
-    </video>
+    {# src is set DIRECTLY on <video> (not a child <source>): iOS Safari is
+       unreliable about autoplaying from a <source> child — a direct src is the
+       documented fix. f_auto in the Cloudinary URL still picks the codec. #}
+    <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="auto"
+           src="{{ h.video }}" {% if h.poster %}poster="{{ h.poster }}"{% endif %}></video>
     <script>
     // Mobile autoplay. iOS only autoplays a video that is muted via the *property*
     // (not just the attribute) and inline — and it often won't fire the initial
