@@ -1403,3 +1403,138 @@ def test_console_shows_signatory_and_license_confirm_control(client):
     assert "Confirm license terms" in page
     assert "Certificate signatory" in page
     assert "DRAFT — pending confirmation" in page
+
+
+# --------------------------------------------------------------------------- #
+# Per-asset approval — granular sign-off (the :60 master Approved while the :30
+# cutdown still awaits), not just the whole-version Approve.
+# --------------------------------------------------------------------------- #
+def _asset_keys(pid):
+    """The stable per-asset approval keys for a project's deliverable assets,
+    in upload order (each is the asset's stored filename)."""
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assets = db_mod.get_delivery(conn, pid).get("assets") or []
+        return [db_mod.asset_key(a) for a in assets]
+    finally:
+        conn.close()
+
+
+def test_verified_reviewer_approves_one_asset(client):
+    """(a) A verified reviewer approves a single deliverable → that asset's
+    asset_approvals[key].status == "Approved" with the ROSTER identity, while a
+    second asset stays Pending (granular, not whole-version)."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    _seed_asset(client, pid, name="cut30.mp3", label=":30 cutdown")
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com", role="Senior Producer")
+    key60, key30 = _asset_keys(pid)
+    # Approve ONLY the :60 master (a spoofed name is ignored — roster identity wins).
+    r = client.post(f"/project/{pid}/review/asset",
+                    data={"r": rtoken, "filename": key60, "action": "approve",
+                          "author": "Imposter", "email": "evil@x.com"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        store = db_mod.get_delivery(conn, pid).get("asset_approvals") or {}
+    finally:
+        conn.close()
+    assert store[key60]["status"] == "Approved"
+    assert store[key60]["by"] == "Dana Whitfield"     # roster identity, not spoof
+    assert store[key60]["email"] == "dana@agency.com"
+    assert store[key60]["date"]                        # today stamped
+    # The :30 cutdown was NOT touched — still Pending.
+    assert key30 not in store
+
+
+def test_verified_reviewer_requests_changes_on_an_asset(client):
+    """(b) Requesting changes on a different asset records "Changes requested"."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    _seed_asset(client, pid, name="cut30.mp3", label=":30 cutdown")
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com")
+    key60, key30 = _asset_keys(pid)
+    client.post(f"/project/{pid}/review/asset",
+                data={"r": rtoken, "filename": key60, "action": "approve"})
+    client.post(f"/project/{pid}/review/asset",
+                data={"r": rtoken, "filename": key30, "action": "changes",
+                      "note": "Trim the tail by half a second"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        store = db_mod.get_delivery(conn, pid).get("asset_approvals") or {}
+    finally:
+        conn.close()
+    assert store[key60]["status"] == "Approved"
+    assert store[key30]["status"] == "Changes requested"
+
+
+def test_guest_cannot_change_per_asset_status(client):
+    """(c) A guest on the generic ?k= link (no ?r=) cannot change a per-asset status
+    — the route no-ops, no record is written."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    token = _project_token(client, pid)
+    (key60,) = tuple(_asset_keys(pid))
+    r = client.post(f"/project/{pid}/review/asset",
+                    data={"k": token, "filename": key60, "action": "approve",
+                          "author": "Guest", "email": "guest@agency.com"},
+                    follow_redirects=False)
+    # Valid share token → not a 404, but a no-op (303 back to the portal).
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        store = db_mod.get_delivery(conn, pid).get("asset_approvals") or {}
+        kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
+    finally:
+        conn.close()
+    assert store == {}                                  # nothing recorded
+    assert "asset_approval" not in kinds                # nothing on the review tape
+
+
+def test_per_asset_rollup_renders_n_of_m(client):
+    """(d) The per-asset rollup ("N of M approved") renders on the verified portal."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    _seed_asset(client, pid, name="cut30.mp3", label=":30 cutdown")
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com")
+    key60, _ = _asset_keys(pid)
+    client.post(f"/project/{pid}/review/asset",
+                data={"r": rtoken, "filename": key60, "action": "approve"})
+    page = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken}).text
+    assert "Deliverable sign-off" in page
+    assert "1 of 2" in page                             # 1 of 2 deliverables approved
+
+
+def test_per_asset_event_lands_on_tape_and_pushes_operator(client, monkeypatch):
+    """(e) The per-asset event lands in the review tape (kind asset_approval) AND the
+    operator push fires (reuse of _notify_operator_review)."""
+    import chordential_oia.web.app as app_mod
+    pushed = []
+    monkeypatch.setattr(app_mod, "_notify_operator_review",
+                        lambda *a, **k: pushed.append((a, k)))
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label=":60 master")
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com")
+    (key60,) = tuple(_asset_keys(pid))
+    client.post(f"/project/{pid}/review/asset",
+                data={"r": rtoken, "filename": key60, "action": "approve"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        rows = db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+    ev = next(c for c in rows if c["kind"] == "asset_approval")
+    assert ev["author"] == "Dana Whitfield"
+    assert ev["verified"] == 1
+    assert ":60 master" in ev["body"]                   # body names the asset
+    assert pushed                                       # the operator push fired

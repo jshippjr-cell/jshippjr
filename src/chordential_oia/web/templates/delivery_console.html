@@ -45,6 +45,11 @@
   .rc-t{flex:0 0 auto;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
   .asset-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
   .asset-row:last-child{border-bottom:0}
+  .aa-badge{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px}
+  .aa-approved{background:#e6f3ec;color:#1d6b43}
+  .aa-changes{background:#f7e9ec;color:var(--wine,#7a2e3a)}
+  .aa-pending{background:#eee;color:var(--muted,#888)}
   @media (max-width:720px){.brief-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
@@ -283,10 +288,14 @@
 <!-- DELIVERABLE ASSETS + UPLOAD CONTROLS -->
 <div class="cols-2">
   <section class="card">
-    <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
+    <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ asset_rollup.approved }}/{{ asset_rollup.total }} approved · {{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
     {% for a in assets %}
     <div class="asset-row">
       <span>{% if a.kind == 'audio' %}🎵{% else %}📄{% endif %} <a class="link" href="{{ a.url }}">{{ a.label }}</a>
+        {% set st = a.approval.status if a.approval else "Pending" %}
+        {% if st == "Approved" %}<span class="aa-badge aa-approved" title="Approved{% if a.approval.by %} by {{ a.approval.by }}{% endif %}{% if a.approval.date %} · {{ a.approval.date }}{% endif %}">✓ Approved</span>
+        {% elif st == "Changes requested" %}<span class="aa-badge aa-changes" title="Changes requested{% if a.approval.by %} by {{ a.approval.by }}{% endif %}{% if a.approval.date %} · {{ a.approval.date }}{% endif %}">↻ Changes</span>
+        {% else %}<span class="aa-badge aa-pending">Pending</span>{% endif %}
         {% if not a.filename %}<span class="muted small" title="No local file — referenced by link, listed in the ZIP README as not bundled">· referenced only</span>{% endif %}
       </span>
       <span class="inline">

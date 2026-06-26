@@ -2491,6 +2491,17 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     comments = db.list_review_comments(conn, project_id)
     timeline = build_timeline(row, delivery, comments)
 
+    # Per-asset approval (granular sign-off): attach each deliverable asset's
+    # current per-asset status + stable key so the portal/console can render a
+    # badge and the reviewer can Approve / Request changes one asset at a time.
+    assets_for_approval = list(delivery.get("assets") or [])
+    assets_with_approval = []
+    for a in assets_for_approval:
+        a2 = dict(a)
+        a2["approval"] = db.get_asset_approval(delivery, a)
+        a2["asset_key"] = db.asset_key(a)
+        assets_with_approval.append(a2)
+
     current_n = int(current["n"]) if current else 0
 
     # IP2: the reviewer can open ANY version, not just current. Resolve the
@@ -2551,7 +2562,11 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         # Verified-identity approval: the operator-invited reviewer roster — each has
         # a personal ?r= invite link (the only way to approve).
         "reviewers": delivery.get("reviewers") or [],
-        "assets": delivery.get("assets") or [],
+        "assets": assets_with_approval,
+        # Per-asset approval rollup ("N of M deliverables approved") — surfaced
+        # next to the whole-version Approve so the gap is visible.
+        "asset_rollup": db.asset_approval_rollup(delivery, assets_for_approval),
+        "asset_approval_states": db.ASSET_APPROVAL_STATES,
         "versions": versions,
         "current_version": current,
         "current_n": current_n,
@@ -3434,6 +3449,75 @@ def review_changes(
             title=f"{_campaign_label(project)} — changes requested by {name}",
             body=note_text[:160],
         )
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k, name=name, email=mail, r=r)
+
+
+@app.post("/project/{project_id}/review/asset")
+def review_asset(
+    request: Request, project_id: int, k: str = Form(""),
+    filename: str = Form(""), action: str = Form(""), note: str = Form(""),
+    r: str = Form(""),
+):
+    """Per-asset approval: a VERIFIED reviewer signs off (or requests changes on) a
+    single deliverable — the :60 master Approved while the :30 cutdown still awaits.
+
+    Gated exactly like the version-level Approve: a valid verified reviewer link
+    (``?r=``) is required. A share-link guest (``?k=`` only) sees per-asset status
+    read-only — this route no-ops for them, so they cannot change a per-asset state.
+
+    ``filename`` is the asset's stable key (its filename, or ``label:<slug>`` for a
+    referenced-only asset). ``action`` is ``approve`` or ``changes``. The status is
+    recorded with the roster identity + current version + date, logged into the
+    review tape (kind ``asset_approval`` / ``asset_change``, body naming the asset),
+    and the operator push fires."""
+    conn = db.connect()
+    name, mail = "", ""
+    try:
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return HTMLResponse("Not found", status_code=404)
+        # Per-asset sign-off is gated like the whole-version Approve: a verified
+        # reviewer is required. A guest (?k= only) is a no-op — no state change.
+        if reviewer is None:
+            return _review_redirect(project_id, k, r=r)
+        name = (reviewer.get("name") or "").strip()
+        mail = (reviewer.get("email") or "").strip()
+        key = (filename or "").strip()
+        if not name or not key:
+            return _review_redirect(project_id, k, r=r)
+        delivery = db.get_delivery(conn, project_id)
+        # Resolve the asset's display label for the tape (fall back to the key).
+        label = key
+        for a in (delivery.get("assets") or []):
+            if db.asset_key(a) == key:
+                label = (a.get("label") or a.get("filename") or key)
+                break
+        version = _current_version_tag(delivery)
+        if action == "changes":
+            status, kind = "Changes requested", "asset_change"
+            note_text = note.strip() or "Requested changes."
+            body = f"Changes requested on {label}: {note_text}"
+        else:
+            status, kind = "Approved", "asset_approval"
+            body = f"Approved {label}."
+        rec = db.set_asset_approval(
+            conn, project_id, key, status=status, by=name, email=mail,
+            version=version,
+        )
+        if rec is not None:
+            project = db.get_project(conn, project_id)
+            db.add_review_comment(
+                conn, project_id, version=version, author=name, email=mail,
+                body=body, kind=kind, verified=True,
+            )
+            verb = "requested changes on" if action == "changes" else "approved"
+            _notify_operator_review(
+                project_id, project,
+                title=f"{_campaign_label(project)} — {label} {status.lower()}",
+                body=f"{name} {verb} {label}.",
+            )
     finally:
         conn.close()
     return _review_redirect(project_id, k, name=name, email=mail, r=r)

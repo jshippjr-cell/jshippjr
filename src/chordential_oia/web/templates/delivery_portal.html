@@ -89,6 +89,24 @@
   .rc-mini{background:none;border:0;color:var(--orange);font:inherit;font-size:11px;
     font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
   .rc-mini.resolve{color:#1d6b43}
+  /* Per-asset approval (granular sign-off). */
+  .aa-block{margin:14px 0;padding:12px 14px;background:var(--paper,#fbf9f5);
+    border:1px solid var(--line);border-radius:8px}
+  .aa-h{font-size:13px;margin:0 0 4px;letter-spacing:.02em}
+  .aa-roll{font-size:12px;color:var(--slate);margin:0 0 10px}
+  .aa-roll b{color:var(--wine)}
+  .aa-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0;
+    border-top:1px solid var(--line)}
+  .aa-nm{font-size:13px;font-weight:600;flex:0 1 auto}
+  .aa-acts{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
+  .aa-note{font-size:12px;padding:3px 6px;max-width:180px}
+  .aa-approve{color:#1d6b43}
+  .aa-changes-btn{color:var(--wine)}
+  .aa-badge{font-size:10.5px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;padding:2px 7px;border-radius:4px;white-space:nowrap}
+  .aa-approved{background:#e6f3ec;color:#1d6b43}
+  .aa-changes{background:#f7e9ec;color:var(--wine)}
+  .aa-pending{background:#eee;color:var(--muted)}
   .rc-reply{margin:6px 0 4px 46px;display:none}
   .rc-reply.open{display:flex}
   .rc-thread{margin-left:46px;border-left:2px solid var(--line);padding-left:12px}
@@ -287,18 +305,61 @@
     </form>
     {% endif %}
 
+    {# Per-asset approval: sign off the :60 master while the :30 cutdown still
+       awaits — granular, not just the whole-version button. Verified reviewers get
+       Approve / Request-changes per asset; a guest sees the status read-only. #}
+    {% set approvable = assets|selectattr('asset_key')|list %}
+    {% if approvable %}
+    <div class="aa-block">
+      <h3 class="aa-h">Deliverable sign-off</h3>
+      <p class="aa-roll"><b>{{ asset_rollup.approved }} of {{ asset_rollup.total }}</b> deliverable{{ 's' if asset_rollup.total != 1 }} approved{% if asset_rollup.changes %} · {{ asset_rollup.changes }} with changes requested{% endif %}{% if asset_rollup.pending %} · {{ asset_rollup.pending }} pending{% endif %}.</p>
+      {% for a in approvable %}
+      <div class="aa-row">
+        <span class="aa-nm">{{ a.label }}</span>
+        {% set st = a.approval.status if a.approval else "Pending" %}
+        {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Approved{% if a.approval.by %} · {{ a.approval.by }}{% endif %}</span>
+        {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">↻ Changes requested{% if a.approval.by %} · {{ a.approval.by }}{% endif %}</span>
+        {% else %}<span class="aa-badge aa-pending">Pending</span>{% endif %}
+        {% if verified %}
+        <span class="aa-acts">
+          <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
+            <input type="hidden" name="k" value="{{ share_token }}">
+            <input type="hidden" name="r" value="{{ reviewer_token }}">
+            <input type="hidden" name="filename" value="{{ a.asset_key }}">
+            <input type="hidden" name="action" value="approve">
+            <button type="submit" class="rc-mini aa-approve">Approve</button>
+          </form>
+          <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
+            <input type="hidden" name="k" value="{{ share_token }}">
+            <input type="hidden" name="r" value="{{ reviewer_token }}">
+            <input type="hidden" name="filename" value="{{ a.asset_key }}">
+            <input type="hidden" name="action" value="changes">
+            <input type="text" name="note" placeholder="What needs to change?" class="rc-in aa-note">
+            <button type="submit" class="rc-mini aa-changes-btn">Request changes</button>
+          </form>
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if not verified %}
+      <p class="muted-note" style="margin:6px 0 0">Per-deliverable sign-off requires your personal review link — ask Chordential to send you one.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div class="rc-decide">
       {# Verified-identity approval: APPROVE locks FINAL + auto-builds the delivery
          ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
          sees a disabled control + a note — they can view + comment, not approve. #}
       {% if verified %}
+      {% set unapproved = asset_rollup.total - asset_rollup.approved %}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
-            onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');">
+            {% if unapproved > 0 %}onsubmit="return confirm('{{ unapproved }} of {{ asset_rollup.total }} deliverable{{ 's' if asset_rollup.total != 1 }} aren\'t approved yet — approve the campaign anyway? This locks v{{ current_n }} as FINAL and assembles your delivery package.');"{% else %}onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');"{% endif %}>
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
-        <button type="submit" class="rc-approve">✓ Approve</button>
+        <button type="submit" class="rc-approve">✓ Approve &amp; deliver{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} signed off)</span>{% endif %}</button>
       </form>
       {% else %}
       <div style="flex:1 1 240px">
@@ -363,9 +424,15 @@
   <div class="card">
     <h2>Your files</h2>
     <p class="sub">Stream or download — yours to keep.</p>
+    {% macro asset_badge(ap) %}
+      {% set st = ap.status if ap else "Pending" %}
+      {% if st == "Approved" %}<span class="aa-badge aa-approved" title="Signed off{% if ap.by %} by {{ ap.by }}{% endif %}{% if ap.date %} · {{ ap.date }}{% endif %}">✓ Approved</span>
+      {% elif st == "Changes requested" %}<span class="aa-badge aa-changes" title="Changes requested{% if ap.by %} by {{ ap.by }}{% endif %}{% if ap.date %} · {{ ap.date }}{% endif %}">↻ Changes requested</span>
+      {% else %}<span class="aa-badge aa-pending">Pending</span>{% endif %}
+    {% endmacro %}
     {% for a in assets %}
       <div class="asset">
-        <div class="nm">{{ a.label }}</div>
+        <div class="nm">{{ a.label }} {{ asset_badge(a.approval) }}</div>
         {% if a.kind == "audio" %}
         <div class="cap-audio">
           <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>

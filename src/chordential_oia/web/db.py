@@ -2475,6 +2475,93 @@ def remove_delivery_reviewer(
     return True
 
 
+# --------------------------------------------------------------------------- #
+# Per-asset approval — granular sign-off (the :60 master approved while the :30
+# cutdown still awaits), not just the whole-version Approve. Stored on
+# ``delivery_json['asset_approvals']`` keyed by the asset's stable id (its
+# filename, or a slug of its label when the filename is blank) →
+# ``{status, by, email, date, version}`` with status in ASSET_APPROVAL_STATES.
+# --------------------------------------------------------------------------- #
+ASSET_APPROVAL_STATES = ["Pending", "Approved", "Changes requested"]
+
+
+def asset_key(asset: dict) -> str:
+    """A stable id for an asset's per-asset approval record: its filename, or a
+    slug of its label when the filename is blank (referenced-only assets). Empty
+    only when the asset has neither — those can't carry a per-asset status."""
+    if not isinstance(asset, dict):
+        return ""
+    fname = (asset.get("filename") or "").strip()
+    if fname:
+        return fname
+    label = (asset.get("label") or "").strip()
+    if not label:
+        return ""
+    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+    return f"label:{slug}" if slug else ""
+
+
+def get_asset_approval(delivery: dict, asset: dict) -> dict:
+    """The per-asset approval record for an asset (``{status, by, email, date,
+    version}``), defaulting to a Pending record when none is stored."""
+    key = asset_key(asset)
+    store = (delivery or {}).get("asset_approvals") or {}
+    rec = store.get(key) if key else None
+    if not isinstance(rec, dict):
+        return {"status": ASSET_APPROVAL_STATES[0], "by": "", "email": "",
+                "date": "", "version": ""}
+    out = {"status": rec.get("status") or ASSET_APPROVAL_STATES[0],
+           "by": rec.get("by") or "", "email": rec.get("email") or "",
+           "date": rec.get("date") or "", "version": rec.get("version") or ""}
+    return out
+
+
+def set_asset_approval(
+    conn: sqlite3.Connection, project_id: int, asset_key_value: str, *,
+    status: str, by: str = "", email: str = "", version: str = "",
+) -> Optional[dict]:
+    """Record a per-asset approval/change-request. ``asset_key_value`` is the asset's
+    stable id (see :func:`asset_key`). Returns the stored record, or None when the
+    key is blank or the status is unknown."""
+    key = (asset_key_value or "").strip()
+    if not key or status not in ASSET_APPROVAL_STATES:
+        return None
+    delivery = get_delivery(conn, project_id)
+    store = dict(delivery.get("asset_approvals") or {})
+    rec = {
+        "status": status,
+        "by": (by or "").strip(),
+        "email": (email or "").strip(),
+        "date": date.today().isoformat(),
+        "version": str(version or ""),
+    }
+    store[key] = rec
+    update_delivery(conn, project_id, "asset_approvals", store or None)
+    return rec
+
+
+def asset_approval_rollup(delivery: dict, assets: Optional[List[dict]] = None) -> dict:
+    """Roll up per-asset approval across a project's deliverable assets:
+    ``{approved, changes, pending, total}``. ``assets`` defaults to the delivery's
+    own asset list; only assets that can carry a status (a non-blank key) count."""
+    assets = assets if assets is not None else ((delivery or {}).get("assets") or [])
+    approved = changes = pending = 0
+    total = 0
+    for a in assets:
+        if not asset_key(a):
+            continue
+        total += 1
+        status = get_asset_approval(delivery, a)["status"]
+        if status == "Approved":
+            approved += 1
+        elif status == "Changes requested":
+            changes += 1
+        else:
+            pending += 1
+    return {"approved": approved, "changes": changes, "pending": pending,
+            "total": total}
+
+
 def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Optional[str]:
     """Return the project's share token, minting one on first use.
 

@@ -819,8 +819,12 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     return "\n".join(lines)
 
 
-def manifest_text(manifest) -> str:
-    """The deliverables manifest as readable plain text, grouped by section."""
+def manifest_text(manifest, asset_approvals: Optional[dict] = None) -> str:
+    """The deliverables manifest as readable plain text, grouped by section.
+
+    ``asset_approvals`` (``delivery_json['asset_approvals']``) adds a PER-ASSET
+    APPROVAL section noting which deliverables a reviewer signed off (and which
+    still await), so the delivered package records the granular sign-off."""
     lines: List[str] = []
     lines.append("CHORDENTIAL — DELIVERABLES MANIFEST")
     lines.append("=" * 52)
@@ -834,6 +838,19 @@ def manifest_text(manifest) -> str:
             group = r.group
         mark = "[✓]" if r.status == "Delivered" else "[ ]"
         lines.append(f"  {mark} {r.asset}  ({r.spec}) — {r.status}")
+    recorded = {k: v for k, v in (asset_approvals or {}).items()
+                if isinstance(v, dict) and v.get("status")
+                and v.get("status") != "Pending"}
+    if recorded:
+        lines.append("")
+        lines.append("PER-ASSET APPROVAL")
+        lines.append("-" * 52)
+        for key, rec in recorded.items():
+            who = (rec.get("by") or "").strip()
+            on = (rec.get("date") or "").strip()
+            tail = f" — {who}" if who else ""
+            tail += f" ({on})" if on else ""
+            lines.append(f"  {rec['status']}: {key}{tail}")
     lines.append("")
     return "\n".join(lines)
 
@@ -980,7 +997,8 @@ def build_delivery_zip(
             project, assignments, license=license, versions=versions,
             generated_at=built_at),
         "Docs/rights_certificate.txt": rights_certificate_text(cert),
-        "Docs/manifest.txt": manifest_text(manifest),
+        "Docs/manifest.txt": manifest_text(
+            manifest, asset_approvals=delivery.get("asset_approvals")),
     }
 
     slug = _campaign_slug(project)
