@@ -9,15 +9,22 @@
 {% endif %}
 {% set h = show.hero %}
 <section class="hero">
-  <div class="hero-media">
+  {# The poster is painted as the hero BACKGROUND so a still, finished-looking hero
+     is always on screen. The video layers on top and only fades in once it's truly
+     playing — so when autoplay is blocked (Low-Power / Data-Saver / in-app webview)
+     the visitor sees a clean still hero, never the native play-button placeholder. #}
+  <div class="hero-media"{% if h.poster and h.video and h.get('motion', 'video') != 'loop' %} style="background-image:url('{{ h.poster }}');background-size:cover;background-position:center"{% endif %}>
     {% if h.video and h.get('motion', 'video') != 'loop' %}
-    {# Poster shows instantly while the Cloudinary-optimized video buffers, on all
-       devices. No `type` on the source so f_auto can deliver the best codec. #}
+    {# Poster (CSS background above) shows instantly while the Cloudinary-optimized
+       video buffers, on all devices. No `type` on the source so f_auto can deliver
+       the best codec. #}
     {# src is set DIRECTLY on <video> (not a child <source>): iOS Safari is
        unreliable about autoplaying from a <source> child — a direct src is the
        documented fix. f_auto in the Cloudinary URL still picks the codec. #}
+    {# No `poster` attribute on the <video> itself: a poster on a blocked <video>
+       is what iOS decorates with the play button. The CSS background covers that. #}
     <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="auto"
-           src="{{ h.video }}" {% if h.poster %}poster="{{ h.poster }}"{% endif %}></video>
+           src="{{ h.video }}"></video>
     <script>
     // Mobile autoplay. iOS only autoplays a video that is muted via the *property*
     // (not just the attribute) and inline — and it often won't fire the initial
@@ -31,6 +38,10 @@
       var v = document.querySelector('.hero-video');
       if (!v) return;
       v.muted = true; v.defaultMuted = true; v.setAttribute('muted', '');
+      // Reveal the video ONLY once it's genuinely playing — until then the CSS
+      // poster background is what's on screen. If autoplay is blocked the video
+      // stays hidden (opacity:0) and the still hero is shown with no play button.
+      v.addEventListener('playing', function () { v.classList.add('is-playing'); });
       var kick = function () {
         if (!v.paused) return;            // already playing — nothing to do
         var p = v.play();
