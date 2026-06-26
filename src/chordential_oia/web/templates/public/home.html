@@ -52,8 +52,11 @@
     })();
     </script>
     {% elif h.loop %}
-    {# Generated motion placeholder (animated WebP); drop a real .mp4 into h.video to replace. #}
-    <div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>
+    {# Animated WebP loop — rendered as an <img> (animates reliably on mobile,
+       unlike a CSS background) so the hero always has motion with no autoplay. #}
+    <img class="hero-loop-img" src="{{ h.loop }}" alt="" aria-hidden="true" decoding="async">
+    {# Legacy background fallback kept for any caller that still sets only h.loop. #}
+    {% if false %}<div class="hero-loop" style="background-image:url('{{ h.loop }}')" aria-hidden="true"></div>{% endif %}
     {% else %}
     <div class="hero-placeholder" aria-hidden="true"></div>
     {% endif %}

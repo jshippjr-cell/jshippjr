@@ -85,8 +85,8 @@ HERO = {
     # Hero motion source. "loop" = the animated WebP (always animates on mobile,
     # no autoplay policy, never a play button). "video" = the Cloudinary clip
     # below (higher fidelity, but iOS may refuse to autoplay it on landing).
-    # ↺ Set to "loop" to use the always-animating WebP instead (no iOS play button).
-    "motion": "video",
+    # ↺ TO REVERT to the video: set this to "video" (or delete this line).
+    "motion": "loop",
     # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on
     # Cloudinary. f_auto,q_auto = optimal codec + visually-lossless quality, so it's
     # a smaller, faster-starting file with NO visible quality loss.
@@ -95,7 +95,10 @@ HERO = {
     # lighter. The hero is decorative; it never needs sound.
     "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto,ac_none/v1782271309/herospliced_lbtrdp.mp4",
     "poster": "/static/public/hero-spliced-poster.jpg?v=1",
-    "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
+    # High-quality animated loop rendered from the real hero footage
+    # (hero-spliced.mp4 → 1000px, 12fps, ~1.8MB). Always animates on mobile — no
+    # autoplay policy, no play button — so it's the motion source when motion="loop".
+    "loop": "/static/public/hero-loop-hq.webp?v=2",
 }
 
 # Honest market reach — NOT fabricated client logos, NOT narrow verticals. These

@@ -91,6 +91,7 @@ body.pub a{color:inherit;text-decoration:none}
 .hero-media{position:absolute;inset:0;overflow:hidden;background:var(--dark)}
 .hero-video{width:100%;height:100%;object-fit:cover}
 .hero-loop{position:absolute;inset:0;background-size:cover;background-position:center}
+.hero-loop-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
 .hero-placeholder{position:absolute;inset:0;background:
   radial-gradient(1100px 560px at 72% 4%, rgba(228,103,31,.22), rgba(228,103,31,0) 60%),
   radial-gradient(900px 620px at 16% 100%, rgba(84,102,113,.20), rgba(84,102,113,0) 55%),
