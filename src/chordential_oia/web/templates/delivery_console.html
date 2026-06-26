@@ -75,8 +75,9 @@
     <div class="agent">
       <div class="ah"><span class="ico">⚖</span> Rights</div>
       <div class="lines">
-        License: {% if delivery.get('license') %}<span class="ok">set ✓</span>{% else %}<span class="pend">standard terms</span>{% endif %}<br>
+        License: {% if license_confirmed %}<span class="ok">confirmed ✓</span>{% elif delivery.get('license') %}<span class="pend">draft — confirm to certify</span>{% else %}<span class="pend">draft — standard terms</span>{% endif %}<br>
         Content-ID: <span class="k">{{ cert.content_id }}</span><br>
+        Signatory: <span class="k">{{ signatory.signer }}{% if signatory.title %}, {{ signatory.title }}{% endif %}</span><br>
         Contributors: {{ cert.contributors|length }}{% if cert.contributors %} <span class="k">— {{ cert.contributors|map(attribute='name')|join(', ') }}</span>{% endif %}
       </div>
     </div>
@@ -127,10 +128,25 @@
     <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline">
       <button class="btn" type="submit">📦 Build delivery package</button>
     </form>
-    <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline">
-      <button class="btn primary" type="submit">🚀 Mark released</button>
+    {% if not license_confirmed %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline">
+      <input type="hidden" name="by" value="{{ signatory.signer }}">
+      <button class="btn" type="submit">✍ Confirm license terms</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline"
+          {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% endif %}>
+      <button class="btn primary" type="submit"{% if not license_confirmed %} title="Confirm the license terms before releasing"{% endif %}>🚀 Mark released</button>
     </form>
   </div>
+  {% if release_flag == 'needs_license' %}
+  <p class="small" style="margin-top:10px;color:var(--wine)"><b>Release refused</b> — confirm the license terms first (no silent buyout-by-default). Press <b>Confirm license terms</b> above.</p>
+  {% endif %}
+  {% if license_confirmed %}
+  <p class="small muted" style="margin-top:10px">License confirmed by {{ license_confirmed.by }}{% if license_confirmed.date %} · {{ license_confirmed.date }}{% endif %} — the certificate now asserts the grant.</p>
+  {% else %}
+  <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
+  {% endif %}
   {% if delivery_zip %}
   <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="{{ delivery_zip.url }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}</p>
   {% endif %}
@@ -221,12 +237,27 @@
     <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
     {% for a in assets %}
     <div class="asset-row">
-      <span>{% if a.kind == 'audio' %}🎵{% else %}📄{% endif %} <a class="link" href="{{ a.url }}">{{ a.label }}</a></span>
-      <form method="post" action="/project/{{ project['id'] }}/delivery/asset" class="inline">
-        <input type="hidden" name="action" value="remove">
-        <input type="hidden" name="filename" value="{{ a.filename }}">
-        <button class="btn tiny" type="submit">Remove</button>
-      </form>
+      <span>{% if a.kind == 'audio' %}🎵{% else %}📄{% endif %} <a class="link" href="{{ a.url }}">{{ a.label }}</a>
+        {% if not a.filename %}<span class="muted small" title="No local file — referenced by link, listed in the ZIP README as not bundled">· referenced only</span>{% endif %}
+      </span>
+      <span class="inline">
+        {# IP3: operator-assigned delivery folder (else the keyword heuristic). #}
+        <form method="post" action="/project/{{ project['id'] }}/delivery/asset/folder" class="inline">
+          <input type="hidden" name="filename" value="{{ a.filename }}">
+          <select name="folder" onchange="this.form.submit()" class="folder-sel" {% if not a.filename %}disabled title="No local file to file in a folder"{% endif %}>
+            <option value="">Folder: auto</option>
+            {% for f in assignable_folders %}
+            <option value="{{ f }}"{% if a.folder == f %} selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+          </select>
+          <noscript><button class="btn tiny" type="submit">Set</button></noscript>
+        </form>
+        <form method="post" action="/project/{{ project['id'] }}/delivery/asset" class="inline">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="filename" value="{{ a.filename }}">
+          <button class="btn tiny" type="submit">Remove</button>
+        </form>
+      </span>
     </div>
     {% else %}
     <p class="muted small">No deliverable files uploaded yet.</p>
@@ -249,6 +280,9 @@
   <!-- RIGHTS / LICENSE -->
   <section class="card">
     <div class="card-head"><h2>License &amp; rights <span class="muted">— Rights agent</span></h2></div>
+    <p class="small {% if license_confirmed %}ok{% else %}pend{% endif %}" style="margin:0 0 8px">
+      {% if license_confirmed %}License terms <b>CONFIRMED</b> by {{ license_confirmed.by }}{% if license_confirmed.date %} · {{ license_confirmed.date }}{% endif %}.{% else %}License terms read as <b>DRAFT — pending confirmation</b>. Saving edits the terms; confirming asserts them.{% endif %}
+    </p>
     <form method="post" action="/project/{{ project['id'] }}/delivery/license" class="stack">
       <label>Type</label>
       <input type="text" name="type" value="{{ license.type }}">
@@ -258,10 +292,43 @@
       <input type="text" name="term" value="{{ license.term }}">
       <label>Exclusivity</label>
       <input type="text" name="exclusivity" value="{{ license.exclusivity }}">
-      <label>Content-ID</label>
+      <label>Content-ID state</label>
       <input type="text" name="content_id" value="{{ cert.content_id }}">
-      <button class="btn primary" type="submit" style="margin-top:6px">Save license</button>
+      <button class="btn primary" type="submit" style="margin-top:6px">Save license (sets to draft)</button>
     </form>
+    {% if not license_confirmed %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline" style="margin-top:8px">
+      <input type="hidden" name="by" value="{{ signatory.signer }}">
+      <button class="btn" type="submit">✍ Confirm license terms</button>
+    </form>
+    {% endif %}
+
+    <h3 class="small muted" style="margin:18px 0 4px;text-transform:uppercase;letter-spacing:.6px">Certificate signatory</h3>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/signatory" class="stack">
+      <label>Entity</label>
+      <input type="text" name="entity" value="{{ signatory.entity }}">
+      <label>Authorized signer</label>
+      <input type="text" name="signer" value="{{ signatory.signer }}">
+      <label>Title</label>
+      <input type="text" name="title" value="{{ signatory.title }}">
+      <button class="btn" type="submit" style="margin-top:6px">Save signatory</button>
+    </form>
+
+    <h3 class="small muted" style="margin:18px 0 4px;text-transform:uppercase;letter-spacing:.6px">Cue sheet — Duration / ISRC / ISWC</h3>
+    <p class="small muted" style="margin:0 0 8px">Fillable so a music coordinator can file it. Blank is allowed.</p>
+    {% for q in cues %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/cue" class="stack" style="margin-bottom:10px;border-top:1px solid var(--border);padding-top:8px">
+      <input type="hidden" name="cue" value="{{ q.cue }}">
+      <div class="small"><b>{{ q.cue }}</b></div>
+      <label>Duration</label>
+      <input type="text" name="duration" value="{{ q.duration }}" placeholder="e.g. 0:60">
+      <label>ISRC</label>
+      <input type="text" name="isrc" value="{{ q.isrc }}" placeholder="e.g. US-ABC-26-00001">
+      <label>ISWC</label>
+      <input type="text" name="iswc" value="{{ q.iswc }}" placeholder="e.g. T-123.456.789-0">
+      <button class="btn tiny" type="submit" style="margin-top:6px">Save cue</button>
+    </form>
+    {% endfor %}
     {% if approvals %}
     <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Sign-offs</h3>
     <table class="table compact">

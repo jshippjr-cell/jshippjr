@@ -402,6 +402,11 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
             "versions": versions_c,
             "share_token": token_c,
             "license": license_c,
+            # IP3: a released campaign has its license explicitly confirmed (so the
+            # certificate asserts the grant, not a "DRAFT — pending confirmation").
+            "license_confirmed": {"by": "Jon Shipp", "date": _iso(7)[:10]},
+            "signatory": {"entity": "Chordential Music", "signer": "Jon Shipp",
+                          "title": "Founder"},
             "approvals": [{
                 "asset": "Anthem :60 — FINAL",
                 "approver": "Priya Okonkwo (Creative Director — Northwind Coffee)",

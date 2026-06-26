@@ -67,14 +67,16 @@ def test_clearance_certificate_has_contributors_license_and_no_indemnity():
     # The original-work warranty + cleared line are stated.
     assert "original" in cert.warranty.lower()
     assert "no samples" in cert.clearance_line.lower()
-    # SCOPE: documented & original, indemnity later — NO indemnification clause.
+    # IP3 SCOPE: documented & original, indemnity later — NO indemnification clause
+    # AND no indemnity mention anywhere (the half-promise is removed entirely).
     blob = " ".join([
         cert.warranty, cert.clearance_line, str(cert.license),
-        cert.content_id,
+        cert.content_id, str(cert.signatory),
     ]).lower()
     assert "indemnif" not in blob
-    # The only indemnity mention is the muted "available on request" note.
-    assert cert.indemnity_note == "Indemnification available on request."
+    # IP3: a signatory block is present (entity + an authorized signer).
+    assert cert.signatory["entity"]
+    assert cert.signatory["signer"]
 
 
 def test_cue_sheet_rows_from_project_data():
@@ -214,7 +216,9 @@ def test_cue_sheet_csv_has_header_and_rows():
 
     text = cue_sheet_csv(_fake_project(), _fake_assignments())
     rows = list(_csv.reader(_io.StringIO(text)))
-    assert rows[0] == ["Cue", "Usage", "Duration", "Composer", "Publisher", "PRO", "Share%"]
+    # IP3: fileable cue sheet — Duration / ISRC / ISWC columns present.
+    assert rows[0] == ["Cue", "Usage", "Duration", "ISRC", "ISWC",
+                       "Composer", "Publisher", "PRO", "Share%"]
     # The primary cue carries the campaign + the assigned composer(s).
     body = "\n".join(",".join(r) for r in rows[1:])
     assert "Find Your Horizon" in body
@@ -363,6 +367,9 @@ def test_approve_and_release_mutate_state(client):
     client.post(f"/project/{pid}/delivery/approve",
                 data={"asset": ":60 master", "approver": "Client Lead"},
                 follow_redirects=True)
+    # IP3: release is refused until the license is explicitly confirmed.
+    client.post(f"/project/{pid}/delivery/license/confirm",
+                data={"by": "Jon Shipp"}, follow_redirects=True)
     # Release flips state to Released + stamps released_at.
     client.post(f"/project/{pid}/delivery/release", follow_redirects=True)
     from chordential_oia.web import db as db_mod
@@ -848,6 +855,9 @@ def test_review_history_survives_after_released(client):
                       "t": "5", "body": "Bring up the strings at 0:34"})
     client.post(f"/project/{pid}/review/approve",
                 data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    # IP3: confirm the license before release (release is refused otherwise).
+    client.post(f"/project/{pid}/delivery/license/confirm",
+                data={"by": "Jon Shipp"}, follow_redirects=True)
     client.post(f"/project/{pid}/delivery/release", follow_redirects=True)
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
@@ -1009,3 +1019,254 @@ def test_selecting_a_version_loads_its_track_and_comments(client):
     assert v1_url in sel and v2_url not in sel
     assert "v1 note about the hook" in sel
     assert "v2 note about the drums" not in sel
+
+
+# --------------------------------------------------------------------------- #
+# Improvement Pass 3 — Defensible rights + finished package
+# --------------------------------------------------------------------------- #
+def test_rights_cert_text_has_signatory_version_no_indemnif_honest_content_id():
+    """IP3: the cert text shows a signatory block + the version it certifies, NO
+    indemnity mention at all, and honest Content-ID language."""
+    from chordential_oia.delivery import build_clearance_certificate as _bcc
+
+    cert = _bcc(
+        _fake_project(), _fake_assignments(), {"type": "Full buyout"},
+        signatory={"entity": "Chordential Music", "signer": "Jon Shipp",
+                   "title": "Founder"},
+        certified_version="v3 FINAL", certified_date="2026-06-26",
+    )
+    text = rights_certificate_text(cert)
+    # Signatory block: entity + authorized signer present.
+    assert "SIGNATORY" in text
+    assert "Chordential Music" in text
+    assert "Jon Shipp" in text
+    # The version it certifies + the date.
+    assert "v3 FINAL" in text
+    assert "2026-06-26" in text
+    # NO indemnity mention anywhere (the half-promise is removed entirely).
+    assert "indemnif" not in text.lower()
+    # Honest Content-ID language — not a bare "Content-ID-safe" claim.
+    assert "no third-party content-id claims" in text.lower()
+    assert "registrable with content id" in text.lower()
+
+
+def test_rights_cert_license_reads_as_draft_until_confirmed():
+    """IP3: unconfirmed → the grant reads DRAFT; confirmed → it asserts the grant."""
+    from chordential_oia.delivery import build_clearance_certificate as _bcc
+
+    draft = _bcc(_fake_project(), _fake_assignments())
+    assert draft.license_draft is True
+    assert "DRAFT — pending confirmation" in rights_certificate_text(draft)
+
+    confirmed = _bcc(
+        _fake_project(), _fake_assignments(),
+        license_confirmed={"by": "Jon Shipp", "date": "2026-06-26"},
+    )
+    assert confirmed.license_draft is False
+    txt = rights_certificate_text(confirmed)
+    assert "DRAFT — pending confirmation" not in txt
+    assert "Confirmed:" in txt and "Jon Shipp" in txt
+
+
+def test_release_refused_until_license_confirmed_then_succeeds(client):
+    """IP3: /delivery/release is REFUSED until the license is explicitly confirmed,
+    then succeeds after the operator confirms."""
+    from chordential_oia.web import db as db_mod
+
+    pid = _win_and_make_project(client, 1)
+    # Release with no confirmation → refused (state not Released; flagged on bounce).
+    r = client.post(f"/project/{pid}/delivery/release", follow_redirects=False)
+    assert r.status_code == 303
+    assert "release=needs_license" in r.headers["location"]
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("state") != "Released"
+    finally:
+        conn.close()
+    # Confirm the license terms (records who + when).
+    client.post(f"/project/{pid}/delivery/license/confirm",
+                data={"by": "Jon Shipp"}, follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        conf = db_mod.get_delivery(conn, pid).get("license_confirmed")
+    finally:
+        conn.close()
+    assert conf and conf["by"] == "Jon Shipp" and conf["date"]
+    # Now release succeeds.
+    client.post(f"/project/{pid}/delivery/release", follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("state") == "Released"
+    finally:
+        conn.close()
+
+
+def test_editing_license_invalidates_a_prior_confirmation(client):
+    """IP3: re-editing the license terms drops the confirmation so the operator must
+    re-confirm the new terms before they're asserted (release refused again)."""
+    from chordential_oia.web import db as db_mod
+
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/delivery/license/confirm",
+                data={"by": "Jon Shipp"}, follow_redirects=True)
+    # Editing the license clears the confirmation.
+    client.post(f"/project/{pid}/delivery/license",
+                data={"type": "Limited 12-month", "territory": "US"},
+                follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("license_confirmed") is None
+    finally:
+        conn.close()
+    # So release is refused again until re-confirmed.
+    r = client.post(f"/project/{pid}/delivery/release", follow_redirects=False)
+    assert "release=needs_license" in r.headers["location"]
+
+
+def test_uploaded_local_audio_is_in_the_zip(client):
+    """IP3: an uploaded LOCAL audio asset is actually inside the built ZIP."""
+    import os
+    import zipfile as _zip
+    from chordential_oia.web import db as db_mod, app as app_mod
+
+    pid = _win_and_make_project(client, 1)
+    files = {"file": ("anthem_master.wav", b"RIFF....WAVEfakeaudio", "audio/wav")}
+    client.post(f"/project/{pid}/delivery/asset",
+                data={"label": "Anthem :60 master", "action": "add"},
+                files=files, follow_redirects=True)
+    # The stored on-disk filename for the asset.
+    conn = db_mod.connect()
+    try:
+        asset = db_mod.get_delivery(conn, pid)["assets"][0]
+    finally:
+        conn.close()
+    stored = asset["filename"]
+    assert stored  # a real local file, not URL-only
+    # Build the package and open the ZIP — the local file is a member.
+    client.post(f"/project/{pid}/delivery/build", follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+    finally:
+        conn.close()
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
+    with _zip.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        # The actual uploaded audio file is bundled under a folder.
+        assert any(n.endswith(stored) for n in names), names
+
+
+def test_referenced_only_asset_listed_in_zip_readme(client):
+    """IP3: a remote-URL-only asset (blank filename) is listed in Docs/README.txt as
+    'referenced, not bundled' rather than silently dropped — and doesn't crash."""
+    import os
+    import zipfile as _zip
+    from chordential_oia.web import db as db_mod, app as app_mod
+
+    pid = _win_and_make_project(client, 1)
+    # Inject a URL-only asset (mirrors the demo seed) with a blank filename.
+    conn = db_mod.connect()
+    try:
+        db_mod.update_delivery(conn, pid, "assets", [
+            {"label": "Anthem :60 (demo)", "url": "https://example.com/a.mp3",
+             "filename": "", "kind": "audio"},
+        ])
+    finally:
+        conn.close()
+    # Build does not crash on the blank filename.
+    client.post(f"/project/{pid}/delivery/build", follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+    finally:
+        conn.close()
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
+    with _zip.ZipFile(zip_path) as zf:
+        readme = zf.read("Docs/README.txt").decode("utf-8")
+    assert "REFERENCED, NOT BUNDLED" in readme
+    assert "Anthem :60 (demo)" in readme
+    assert "https://example.com/a.mp3" in readme
+
+
+def test_operator_assigned_folder_places_asset_in_that_folder(client):
+    """IP3: an operator-assigned folder files the asset in that folder in the ZIP,
+    overriding the keyword heuristic."""
+    import os
+    import zipfile as _zip
+    from chordential_oia.web import db as db_mod, app as app_mod
+
+    pid = _win_and_make_project(client, 1)
+    # Label says nothing folder-ish, but the operator assigns it to Stems.
+    files = {"file": ("track01.wav", b"RIFFfakeaudio", "audio/wav")}
+    client.post(f"/project/{pid}/delivery/asset",
+                data={"label": "Track One", "action": "add"},
+                files=files, follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        stored = db_mod.get_delivery(conn, pid)["assets"][0]["filename"]
+    finally:
+        conn.close()
+    # Assign the folder explicitly.
+    client.post(f"/project/{pid}/delivery/asset/folder",
+                data={"filename": stored, "folder": "Stems"}, follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid)["assets"][0]["folder"] == "Stems"
+    finally:
+        conn.close()
+    client.post(f"/project/{pid}/delivery/build", follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+    finally:
+        conn.close()
+    zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
+    with _zip.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+    assert f"Stems/{stored}" in names, names
+
+
+def test_cue_sheet_csv_has_isrc_iswc_duration_columns_fillable(client):
+    """IP3: cue_sheet_csv has ISRC/ISWC/Duration columns, and per-cue meta set on the
+    console fills them."""
+    import csv as _csv
+    import io as _io
+    from chordential_oia.web import db as db_mod
+    from chordential_oia.delivery import build_cue_sheet as _bcs
+
+    pid = _win_and_make_project(client, 1)
+    # Resolve the project's primary cue name to set its meta.
+    conn = db_mod.connect()
+    try:
+        proj = db_mod.get_project(conn, pid)
+        assigns = db_mod.list_assignments(conn, pid)
+    finally:
+        conn.close()
+    primary_cue = _bcs(proj, assigns)[0].cue
+    client.post(f"/project/{pid}/delivery/cue",
+                data={"cue": primary_cue, "duration": "0:60",
+                      "isrc": "US-ABC-26-00001", "iswc": "T-123.456.789-0"},
+                follow_redirects=True)
+    conn = db_mod.connect()
+    try:
+        delivery = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    text = cue_sheet_csv(proj, assigns, delivery=delivery)
+    rows = list(_csv.reader(_io.StringIO(text)))
+    assert rows[0] == ["Cue", "Usage", "Duration", "ISRC", "ISWC",
+                       "Composer", "Publisher", "PRO", "Share%"]
+    body = "\n".join(",".join(r) for r in rows[1:])
+    assert "0:60" in body
+    assert "US-ABC-26-00001" in body
+    assert "T-123.456.789-0" in body
+
+
+def test_console_shows_signatory_and_license_confirm_control(client):
+    """IP3: the console renders the signatory block + a confirm-license control, and
+    the rights agent shows the license as draft until confirmed."""
+    pid = _win_and_make_project(client, 1)
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Confirm license terms" in page
+    assert "Certificate signatory" in page
+    assert "DRAFT — pending confirmation" in page

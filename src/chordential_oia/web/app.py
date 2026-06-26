@@ -44,9 +44,10 @@ from ..capabilities import (
 )
 from ..delivery import (
     build_clearance_certificate, build_cue_sheet, build_delivery_zip,
-    build_manifest, build_timeline, current_version, merge_license,
-    revision_status, seed_brief, version_label, versions_list, version_name,
-    BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
+    build_manifest, build_timeline, current_version, license_confirmation,
+    merge_license, merge_signatory, revision_status, seed_brief, version_label,
+    versions_list, version_name,
+    ASSIGNABLE_FOLDERS, BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
@@ -2463,8 +2464,20 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     versions = versions_list(delivery)
     current = current_version(delivery)
 
-    cert = build_clearance_certificate(row, assignments, license)
-    cues = build_cue_sheet(row, assignments)
+    # IP3 (defensible rights): the certificate carries a signatory block, the
+    # version it certifies, the date, and reads the license grant as a draft until
+    # the operator explicitly confirms the terms (no silent buyout-by-default).
+    from datetime import date as _date
+    license_conf = license_confirmation(delivery)
+    certified_version = (current.get("label") if current else "") or ""
+    cert = build_clearance_certificate(
+        row, assignments, license,
+        signatory=delivery.get("signatory"),
+        license_confirmed=license_conf,
+        certified_version=certified_version,
+        certified_date=_date.today().isoformat(),
+    )
+    cues = build_cue_sheet(row, assignments, delivery=delivery)
     manifest = build_manifest(
         row, assets=delivery.get("assets") or [], versions=versions
     )
@@ -2529,6 +2542,11 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "manifest": manifest,
         "revisions": revisions,
         "license": cert.license,
+        # IP3 — defensible rights: signatory block + explicit license confirmation.
+        "signatory": merge_signatory(delivery.get("signatory")),
+        "license_confirmed": license_conf,
+        "assignable_folders": ASSIGNABLE_FOLDERS,
+        "cue_meta": delivery.get("cue_meta") or {},
         "approvals": delivery.get("approvals") or [],
         "assets": delivery.get("assets") or [],
         "versions": versions,
@@ -2555,13 +2573,16 @@ def _delivery_view(conn, project_id: int, selected_v=None):
 
 
 @app.get("/project/{project_id}/delivery", response_class=HTMLResponse)
-def delivery_console(request: Request, project_id: int):
+def delivery_console(request: Request, project_id: int, release: str = ""):
     """The Campaign Dashboard / Delivery Console (Phase 4) — the operator's command
     center for one campaign. One screen tying the creative brief, the five-agent
     status row, the version rail, the review activity feed, the campaign timeline,
     the deliverable assets + upload controls, and the action toolbar (client review
     link, delivery package, build, release) together. The delivery mutation routes
-    all redirect here, so it renders the console (no longer a bounce to the package)."""
+    all redirect here, so it renders the console (no longer a bounce to the package).
+
+    ``release=needs_license`` (IP3) flags that a release was refused because the
+    license has not been explicitly confirmed yet."""
     conn = db.connect()
     try:
         view = _delivery_view(conn, project_id)
@@ -2569,6 +2590,7 @@ def delivery_console(request: Request, project_id: int):
             return HTMLResponse("Project not found", status_code=404)
     finally:
         conn.close()
+    view["release_flag"] = release
     return render(request, "delivery_console.html", nav="projects", **view)
 
 
@@ -2637,6 +2659,115 @@ def delivery_set_license(
         # Drop blank fields so the engine falls back to the standard term.
         license = {k: v for k, v in license.items() if v}
         db.update_delivery(conn, project_id, "license", license or None)
+        # IP3: editing the license terms invalidates a prior confirmation — the
+        # operator must re-confirm the new terms before the cert asserts them.
+        db.update_delivery(conn, project_id, "license_confirmed", None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/signatory")
+def delivery_set_signatory(
+    project_id: int,
+    entity: str = Form(""),
+    signer: str = Form(""),
+    title: str = Form(""),
+):
+    """IP3 (Rights agent): set the Clearance Certificate's signatory block —
+    entity, authorized signer, and title. Stored raw on
+    ``delivery_json['signatory']`` (blank fields drop to the Chordential default)."""
+    conn = db.connect()
+    try:
+        signatory = {
+            "entity": entity.strip(),
+            "signer": signer.strip(),
+            "title": title.strip(),
+        }
+        signatory = {k: v for k, v in signatory.items() if v}
+        db.update_delivery(conn, project_id, "signatory", signatory or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/license/confirm")
+def delivery_confirm_license(project_id: int, by: str = Form("")):
+    """IP3 (Rights agent): the operator explicitly confirms the license terms —
+    records who + when on ``delivery_json['license_confirmed']``. Until this is
+    pressed the certificate shows the grant as "DRAFT — pending confirmation"
+    (no silent buyout-by-default), and release is refused."""
+    from datetime import date as _date
+    conn = db.connect()
+    try:
+        signer = by.strip() or merge_signatory(
+            db.get_delivery(conn, project_id).get("signatory")).get("signer", "")
+        db.update_delivery(conn, project_id, "license_confirmed", {
+            "by": signer or "Operator",
+            "date": _date.today().isoformat(),
+        })
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/asset/folder")
+def delivery_set_asset_folder(
+    project_id: int,
+    filename: str = Form(""),
+    folder: str = Form(""),
+):
+    """IP3 (Assets agent): assign an uploaded asset's delivery folder so the ZIP
+    files it where the operator says, not by keyword guess. Stored on the asset's
+    ``folder`` key; a value outside ``ASSIGNABLE_FOLDERS`` clears it (back to the
+    heuristic)."""
+    conn = db.connect()
+    try:
+        base = os.path.basename((filename or "").strip())
+        if base:
+            delivery = db.get_delivery(conn, project_id)
+            assets = list(delivery.get("assets") or [])
+            chosen = folder.strip() if folder.strip() in ASSIGNABLE_FOLDERS else ""
+            for a in assets:
+                if a.get("filename") == base:
+                    if chosen:
+                        a["folder"] = chosen
+                    else:
+                        a.pop("folder", None)
+            db.update_delivery(conn, project_id, "assets", assets or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cue")
+def delivery_set_cue_meta(
+    project_id: int,
+    cue: str = Form(""),
+    duration: str = Form(""),
+    isrc: str = Form(""),
+    iswc: str = Form(""),
+):
+    """IP3 (Metadata agent): set a cue's Duration / ISRC / ISWC so the cue sheet is
+    fileable. Stored on ``delivery_json['cue_meta']`` keyed by the cue name (blank
+    fields drop, so an all-blank submit clears that cue's meta)."""
+    conn = db.connect()
+    try:
+        key = (cue or "").strip()
+        if key:
+            delivery = db.get_delivery(conn, project_id)
+            cue_meta = dict(delivery.get("cue_meta") or {})
+            row = {
+                "duration": duration.strip(),
+                "isrc": isrc.strip(),
+                "iswc": iswc.strip(),
+            }
+            row = {k: v for k, v in row.items() if v}
+            if row:
+                cue_meta[key] = row
+            else:
+                cue_meta.pop(key, None)
+            db.update_delivery(conn, project_id, "cue_meta", cue_meta or None)
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
@@ -2839,10 +2970,21 @@ def delivery_approve(
 
 @app.post("/project/{project_id}/delivery/release")
 def delivery_release(project_id: int):
-    """Approvals agent: mark the delivery Released (state + released_at stamp)."""
+    """Approvals agent: mark the delivery Released (state + released_at stamp).
+
+    IP3: REFUSES to release until the license has been explicitly confirmed (the
+    "Confirm license terms" console action). Without confirmation the certificate
+    would assert a silent perpetual/worldwide/exclusive buyout — so we bounce back
+    to the console with a flag instead of releasing."""
     from datetime import date as _date
     conn = db.connect()
     try:
+        delivery = db.get_delivery(conn, project_id)
+        if license_confirmation(delivery) is None:
+            return RedirectResponse(
+                f"/project/{project_id}/delivery?release=needs_license",
+                status_code=303,
+            )
         db.update_delivery(conn, project_id, "state", "Released")
         db.update_delivery(conn, project_id, "released_at", _date.today().isoformat())
     finally:

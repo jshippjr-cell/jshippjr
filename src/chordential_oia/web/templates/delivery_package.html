@@ -180,7 +180,10 @@
 
     <div class="two">
       <div class="panel">
-        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights</p>
+        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} — Draft, pending confirmation{% endif %}</p>
+        {% if cert.license_draft %}
+        <p style="margin:0 0 8px;font-size:10.5px;color:var(--muted)">Standard template terms — not yet confirmed as the deal grant.</p>
+        {% endif %}
         <ul class="clean">
           <li><b>Type:</b> {{ cert.license.type }}</li>
           <li><b>Territory:</b> {{ cert.license.territory }}</li>
@@ -188,6 +191,7 @@
           <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
           <li><b>Content-ID:</b> {{ cert.content_id }}</li>
         </ul>
+        {% if cert.license_confirmed %}<p style="margin:8px 0 0;font-size:10.5px;color:var(--muted)">Confirmed by {{ cert.license_confirmed.by }}{% if cert.license_confirmed.date %} · {{ cert.license_confirmed.date }}{% endif %}.</p>{% endif %}
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
         <div class="seal"><span>Chordential</span><b>CLEARED</b><span>{{ pkgid }}</span></div>
@@ -195,7 +199,19 @@
           {{ cert.clearance_line }}</p>
       </div>
     </div>
-    <p class="muted-note">{{ cert.indemnity_note }}</p>
+    <p style="margin:14px 0 0;font-size:11px;color:var(--muted)">Original work — no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
+
+    <!-- IP3 — signatory block: warranty attaches to a named signer, version + date -->
+    <div class="panel" style="margin-top:16px">
+      <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signatory</p>
+      <ul class="clean">
+        <li><b>Entity:</b> {{ cert.signatory.entity }}</li>
+        <li><b>Authorized:</b> {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}</li>
+        {% if cert.certified_version %}<li><b>Certifies:</b> {{ cert.certified_version }}</li>{% endif %}
+        {% if cert.certified_date %}<li><b>Date:</b> {{ cert.certified_date }}</li>{% endif %}
+      </ul>
+      <p style="margin:14px 0 0;font-size:11px;color:var(--muted)">Signature: ________________________________</p>
+    </div>
   </div>
   <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
 </section>
@@ -208,15 +224,16 @@
     <h1 class="doc">Cue Sheet</h1>
     <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
     <table>
-      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
       <tbody>
         {% for q in cues %}
-          <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration }}</td>
+          <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration or '—' }}</td>
+            <td>{{ q.isrc or '—' }}</td><td>{{ q.iswc or '—' }}</td>
             <td>{{ q.composers }}</td><td>{{ q.publisher }}</td><td>{{ q.pro }}</td><td>{{ q.share }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue.</p>
+    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
   </div>
   <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
 </section>

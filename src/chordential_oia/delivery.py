@@ -13,8 +13,16 @@ data — client, contributors, the actually-uploaded files — drives the rest.
 
 Scope decision (founder-locked): **"documented & original, indemnity later."**
 The Clearance Certificate states the original-work warranty, chain of title, the
-license grant, and Content-ID-safe status — but carries **NO indemnification
-clause** (a single muted "available on request" line, never a promise).
+license grant, and honest Content-ID language — but carries **NO indemnification
+clause and NO indemnity mention at all** (founder chose indemnity-later; a
+half-promise reads worse than silence, so the word is absent entirely).
+
+IP3 (defensible rights): the certificate carries a **signatory block** (entity,
+authorized signer, title) tied to the version it certifies, and the license grant
+only reads as an asserted grant once the operator has **explicitly confirmed** it
+(``delivery_json['license_confirmed']``); until then it reads as
+"DRAFT — pending confirmation" rather than silently asserting a perpetual
+worldwide exclusive buyout.
 """
 from __future__ import annotations
 
@@ -30,11 +38,18 @@ from typing import List, Optional
 
 from .capabilities import _RIGHTS_SUMMARY, _deliverables_for, Deliverable
 
-# Indemnity is deliberately out of scope for Phase 0 — surfaced, never promised.
-INDEMNITY_NOTE = "Indemnification available on request."
-
 PUBLISHER = "Chordential Music"
 DEFAULT_PRO = "BMI"
+
+# IP3 — the certificate signatory block defaults (operator-editable per deal).
+DEFAULT_SIGNATORY = {
+    "entity": "Chordential Music",
+    "signer": "Jon Shipp",
+    "title": "Founder",
+}
+
+# IP3 — until the license is explicitly confirmed, the grant reads as a draft.
+LICENSE_DRAFT_NOTE = "DRAFT — pending confirmation"
 
 # Version states (Revisions agent) — the bounded v1→v2→v3 ladder.
 VERSION_STATES = ["v1 Concept", "v2 Direction-lock", "v3 FINAL"]
@@ -53,8 +68,20 @@ DEFAULT_LICENSE = {
     "territory": "Worldwide",
     "term": "Perpetuity",
     "exclusivity": "Exclusive to client for the campaign category",
-    "content_id": "Content-ID-safe",
+    # IP3 — an honest Content-ID *state* the operator can set, not a bare claim.
+    # "Registrable" is the truthful default: an original work with no third-party
+    # masters/samples can be registered with Content ID by the rights-holder.
+    "content_id": "Registrable with Content ID",
 }
+
+# IP3 — the honest Content-ID line: original work, no third-party masters/samples,
+# so there are no third-party Content-ID claims to clear, and the work is itself
+# registrable with Content ID. NOT a bare "Content-ID-safe" assertion.
+CONTENT_ID_HONEST = (
+    "Original work — no third-party masters or samples, so no third-party "
+    "Content-ID claims; the recording is registrable with Content ID by the "
+    "rights-holder."
+)
 
 
 def _val(row, key, default=None):
@@ -101,6 +128,31 @@ def merge_license(license: Optional[dict]) -> dict:
         if v is not None and str(v).strip():
             out[k] = str(v).strip()
     return out
+
+
+def merge_signatory(signatory: Optional[dict]) -> dict:
+    """The effective certificate signatory: per-deal overrides on the defaults.
+
+    {entity, signer, title} — a blank field falls back to the Chordential default so
+    the signatory block is always complete (entity + an authorized signer)."""
+    out = dict(DEFAULT_SIGNATORY)
+    for k, v in (signatory or {}).items():
+        if k in out and v is not None and str(v).strip():
+            out[k] = str(v).strip()
+    return out
+
+
+def license_confirmation(delivery: Optional[dict]) -> Optional[dict]:
+    """The explicit license confirmation ({by, date}) or ``None`` if unconfirmed.
+
+    IP3: the license only reads as an asserted grant once the operator has
+    confirmed the terms (the "Confirm license terms" console action). Until then
+    the certificate shows the grant as a draft, never a silent buyout-by-default."""
+    delivery = delivery or {}
+    conf = delivery.get("license_confirmed")
+    if isinstance(conf, dict) and (conf.get("by") or conf.get("date")):
+        return {"by": (conf.get("by") or "").strip(), "date": (conf.get("date") or "").strip()}
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -199,20 +251,41 @@ class ClearanceCertificate:
     warranty: str                       # the original-work warranty statement
     license: dict                       # effective grant of rights (merged)
     clearance_line: str                 # the "100% original & cleared" line
-    content_id: str                     # Content-ID-safe status
-    indemnity_note: str = INDEMNITY_NOTE  # muted, NOT a promise — see scope note
-    # NOTE: there is intentionally NO indemnification field/clause here.
+    content_id: str                     # honest Content-ID language (not a bare claim)
+    # IP3 — defensible rights.
+    signatory: dict = field(default_factory=lambda: dict(DEFAULT_SIGNATORY))
+    license_confirmed: Optional[dict] = None  # {by, date} once explicitly confirmed
+    certified_version: str = ""         # the version label this certificate attaches to
+    certified_date: str = ""            # the date stamped at render/release
+    # NOTE: there is intentionally NO indemnification field/clause/mention here.
+
+    @property
+    def license_status(self) -> str:
+        """``CONFIRMED`` once the operator confirmed the terms, else ``DRAFT``."""
+        return "CONFIRMED" if self.license_confirmed else "DRAFT"
+
+    @property
+    def license_draft(self) -> bool:
+        """True while the grant is unconfirmed — render it as a draft, not a grant."""
+        return self.license_confirmed is None
 
 
 def build_clearance_certificate(
-    project, assignments, license: Optional[dict] = None
+    project, assignments, license: Optional[dict] = None,
+    *, signatory: Optional[dict] = None, license_confirmed: Optional[dict] = None,
+    certified_version: str = "", certified_date: str = "",
 ) -> ClearanceCertificate:
     """Assemble the Clearance Certificate from real project + assignment data.
 
     States the original-work warranty, the chain of title (contributors from the
-    assignments), the license grant (merged license dict + defaults), and the
-    Content-ID-safe status. Carries NO indemnification clause (founder scope:
-    "documented & original, indemnity later")."""
+    assignments), the license grant (merged license dict + defaults), and honest
+    Content-ID language. Carries NO indemnification clause and no indemnity mention
+    (founder scope: "documented & original, indemnity later").
+
+    IP3: ``signatory`` ({entity, signer, title}) drives the signatory block;
+    ``license_confirmed`` ({by, date}) makes the grant read as an asserted grant
+    (else it reads "DRAFT — pending confirmation"); ``certified_version`` /
+    ``certified_date`` stamp the version + date the certificate attaches to."""
     client = (_val(project, "client") or "the client").strip() or "the client"
     campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
     contributors = _contributors(assignments)
@@ -235,7 +308,12 @@ def build_clearance_certificate(
         warranty=warranty,
         license=eff,
         clearance_line=clearance_line,
-        content_id=eff.get("content_id", "Content-ID-safe"),
+        content_id=eff.get("content_id", "Registrable with Content ID"),
+        signatory=merge_signatory(signatory),
+        license_confirmed=license_confirmation({"license_confirmed": license_confirmed})
+        if license_confirmed else None,
+        certified_version=(certified_version or "").strip(),
+        certified_date=(certified_date or "").strip(),
     )
 
 
@@ -251,26 +329,54 @@ class CueRow:
     publisher: str
     pro: str
     share: str
+    # IP3 — fileable cue identification (operator-fillable; blank allowed).
+    isrc: str = ""       # International Standard Recording Code
+    iswc: str = ""       # International Standard Musical Work Code
 
 
-def build_cue_sheet(project, assignments, deliverables=None) -> List[CueRow]:
+def _cue_meta(delivery: Optional[dict], cue: str) -> dict:
+    """The operator-set duration/ISRC/ISWC for a cue (from ``delivery['cue_meta']``).
+
+    Keyed by the cue name; returns ``{}`` when nothing has been filled in so the
+    column stays present-but-blank (an agency's music coordinator fills it)."""
+    meta = (delivery or {}).get("cue_meta")
+    if isinstance(meta, dict):
+        row = meta.get(cue)
+        if isinstance(row, dict):
+            return row
+    return {}
+
+
+def build_cue_sheet(project, assignments, deliverables=None,
+                    delivery: Optional[dict] = None) -> List[CueRow]:
     """The cue-sheet rows the client files for backend (PRO) royalties.
 
     One row for the primary cue plus a row for the cutdowns, attributing the
-    assigned contributors as composer(s). Durations are placeholders ("—" / "var.")
-    — no fabricated specifics — with the publisher/PRO/share filled from standard
-    terms. Returns at least the primary row even with no assignments."""
+    assigned contributors as composer(s). IP3: per-cue **Duration / ISRC / ISWC**
+    are operator-fillable (``delivery_json['cue_meta']`` keyed by cue) — blank is
+    allowed, but the columns are always present and structurally complete so an
+    agency's music coordinator can file the sheet. Returns at least the primary row
+    even with no assignments."""
     campaign = (_val(project, "need") or "Main cue").strip() or "Main cue"
     contributors = _contributors(assignments)
     composers = ", ".join(c.name for c in contributors) or "Chordential"
+    cutdowns_cue = f"{campaign} — cutdowns"
+    m_main = _cue_meta(delivery, campaign)
+    m_cut = _cue_meta(delivery, cutdowns_cue)
     rows = [
         CueRow(
-            cue=campaign, usage="VV", duration="—",
+            cue=campaign, usage="VV",
+            duration=(m_main.get("duration") or "").strip(),
             composers=composers, publisher=PUBLISHER, pro=DEFAULT_PRO, share="100%",
+            isrc=(m_main.get("isrc") or "").strip(),
+            iswc=(m_main.get("iswc") or "").strip(),
         ),
         CueRow(
-            cue=f"{campaign} — cutdowns", usage="BI", duration="var.",
+            cue=cutdowns_cue, usage="BI",
+            duration=(m_cut.get("duration") or "").strip(),
             composers=composers, publisher=PUBLISHER, pro=DEFAULT_PRO, share="100%",
+            isrc=(m_cut.get("isrc") or "").strip(),
+            iswc=(m_cut.get("iswc") or "").strip(),
         ),
     ]
     return rows
@@ -556,15 +662,22 @@ def rights_basis() -> List[str]:
 # never aborts the package (the originals are always included).
 # --------------------------------------------------------------------------- #
 
-# The folder structure of the delivery ZIP — auto-organised by asset kind/label.
-DELIVERY_FOLDERS = ["Masters", "Cutdowns", "Social", "Stems", "Assets", "Docs"]
+# The folder structure of the delivery ZIP — operator-assignable, else auto-organised.
+DELIVERY_FOLDERS = ["Masters", "Cutdowns", "Social", "Stems", "Docs", "Other"]
+# The folders the operator may assign an asset to on the console.
+ASSIGNABLE_FOLDERS = ["Masters", "Cutdowns", "Social", "Stems", "Docs", "Other"]
 
 
 def asset_folder(asset: dict) -> str:
-    """The named ZIP folder an uploaded asset belongs in, by a label/kind heuristic.
+    """The named ZIP folder an uploaded asset belongs in.
 
-    Masters / Cutdowns / Social / Stems by keyword in the label; anything else
-    (including non-audio files) lands in the catch-all ``Assets/``."""
+    IP3: an operator-assigned ``folder`` wins (one of ``ASSIGNABLE_FOLDERS``);
+    otherwise it falls back to the label/kind keyword heuristic — Masters /
+    Cutdowns / Social / Stems by keyword in the label; anything else (including
+    non-audio files) lands in the catch-all ``Assets/``."""
+    assigned = (asset.get("folder") or "").strip()
+    if assigned in ASSIGNABLE_FOLDERS:
+        return assigned
     label = (asset.get("label") or asset.get("filename") or "").lower()
     if any(w in label for w in ("stem", "stems", "multitrack", "multi-track")):
         return "Stems"
@@ -580,18 +693,25 @@ def asset_folder(asset: dict) -> str:
     return "Assets"
 
 
-def cue_sheet_csv(project, assignments) -> str:
+def cue_sheet_csv(project, assignments, delivery: Optional[dict] = None) -> str:
     """The PRO cue sheet as CSV text (header + one row per cue).
 
-    Columns: Cue, Usage, Duration, Composer, Publisher, PRO, Share%. Built from
-    the same :func:`build_cue_sheet` rows the package renders — deterministic, no
-    fabricated specifics."""
-    rows = build_cue_sheet(project, assignments)
+    Columns: Cue, Usage, Duration, ISRC, ISWC, Composer, Publisher, PRO, Share%.
+    IP3 adds the fileable Duration / ISRC / ISWC columns (operator-fillable, blank
+    allowed) so a music coordinator can file the sheet with the PRO. Built from the
+    same :func:`build_cue_sheet` rows the package renders — deterministic."""
+    rows = build_cue_sheet(project, assignments, delivery=delivery)
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["Cue", "Usage", "Duration", "Composer", "Publisher", "PRO", "Share%"])
+    writer.writerow([
+        "Cue", "Usage", "Duration", "ISRC", "ISWC",
+        "Composer", "Publisher", "PRO", "Share%",
+    ])
     for r in rows:
-        writer.writerow([r.cue, r.usage, r.duration, r.composers, r.publisher, r.pro, r.share])
+        writer.writerow([
+            r.cue, r.usage, r.duration, r.isrc, r.iswc,
+            r.composers, r.publisher, r.pro, r.share,
+        ])
     return buf.getvalue()
 
 
@@ -625,17 +745,24 @@ def metadata_json(project, assignments, license=None, versions=None,
 def rights_certificate_text(cert: ClearanceCertificate) -> str:
     """The Clearance Certificate as readable plain text.
 
-    States the client + campaign, the chain of title (contributors), the
-    original-work warranty, the license grant, the Content-ID-safe status, and the
-    "documented & original" cleared line. Carries NO indemnification clause (scope:
-    "documented & original, indemnity later") — only the muted available-on-request
-    note. Deterministic from the certificate data."""
+    IP3 (defensible rights): states the client + campaign, the **version it
+    certifies** + date, the chain of title (contributors), the original-work
+    warranty, the license grant (shown as **"DRAFT — pending confirmation"** until
+    the operator explicitly confirms it, never a silent buyout-by-default), honest
+    Content-ID language, the "documented & original" cleared line, and a
+    **signatory block** (entity, authorized signer, title, date). Carries NO
+    indemnification clause and **no indemnity mention at all** (founder scope:
+    "documented & original, indemnity later"). Deterministic from the cert data."""
     lines: List[str] = []
     lines.append("CHORDENTIAL — CLEARANCE CERTIFICATE")
     lines.append("=" * 52)
     lines.append("")
-    lines.append(f"Client:    {cert.client}")
-    lines.append(f"Campaign:  {cert.campaign}")
+    lines.append(f"Client:     {cert.client}")
+    lines.append(f"Campaign:   {cert.campaign}")
+    if cert.certified_version:
+        lines.append(f"Certifies:  {cert.certified_version}")
+    if cert.certified_date:
+        lines.append(f"Date:       {cert.certified_date}")
     lines.append("")
     lines.append("CHAIN OF TITLE / CONTRIBUTORS")
     lines.append("-" * 52)
@@ -649,20 +776,45 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     lines.append("-" * 52)
     lines.append(cert.warranty)
     lines.append("")
-    lines.append("GRANT OF RIGHTS / LICENSE")
+    if cert.license_draft:
+        lines.append(f"GRANT OF RIGHTS / LICENSE — {LICENSE_DRAFT_NOTE}")
+    else:
+        lines.append("GRANT OF RIGHTS / LICENSE")
     lines.append("-" * 52)
+    if cert.license_draft:
+        lines.append(
+            "  Terms below are the standard template — NOT yet asserted as the "
+            "deal grant. Confirm the license to certify these terms."
+        )
     lines.append(f"  Type:        {cert.license.get('type', '')}")
     lines.append(f"  Territory:   {cert.license.get('territory', '')}")
     lines.append(f"  Term:        {cert.license.get('term', '')}")
     lines.append(f"  Exclusivity: {cert.license.get('exclusivity', '')}")
     lines.append(f"  Content-ID:  {cert.content_id}")
+    if cert.license_confirmed:
+        by = cert.license_confirmed.get("by") or ""
+        date = cert.license_confirmed.get("date") or ""
+        stamp = " · ".join(p for p in (by, date) if p)
+        lines.append(f"  Confirmed:   {stamp}".rstrip())
     lines.append("")
     lines.append("CLEARANCE")
     lines.append("-" * 52)
     lines.append(cert.clearance_line)
+    lines.append(CONTENT_ID_HONEST)
     lines.append("Documented & original — Chordential holds clean chain of title.")
     lines.append("")
-    lines.append(cert.indemnity_note)
+    lines.append("SIGNATORY")
+    lines.append("-" * 52)
+    lines.append(f"  Entity:      {cert.signatory.get('entity', '')}")
+    signer = cert.signatory.get("signer", "")
+    title = cert.signatory.get("title", "")
+    signer_line = signer + (f", {title}" if title else "")
+    lines.append(f"  Authorized:  {signer_line}")
+    lines.append(f"  Signature:   ________________________________")
+    if cert.certified_date:
+        lines.append(f"  Date:        {cert.certified_date}")
+    else:
+        lines.append(f"  Date:        ____________________")
     lines.append("")
     return "\n".join(lines)
 
@@ -745,6 +897,46 @@ def _campaign_slug(project) -> str:
     return token or "Campaign"
 
 
+def _readme_text(project, bundled: List[str], referenced: List[dict],
+                 built_at: str) -> str:
+    """The Docs/README.txt — what the package bundles, and what's referenced only.
+
+    IP3: any asset present by remote URL but with no local file to bundle (e.g. the
+    demo seed) is listed here as "referenced, not bundled" with its URL, so
+    "download everything" is honest about what is and isn't inside the ZIP."""
+    campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
+    lines: List[str] = []
+    lines.append("CHORDENTIAL — DELIVERY PACKAGE README")
+    lines.append("=" * 52)
+    lines.append("")
+    lines.append(f"Campaign: {campaign}")
+    lines.append(f"Assembled: {built_at}")
+    lines.append("")
+    lines.append("BUNDLED IN THIS PACKAGE")
+    lines.append("-" * 52)
+    if bundled:
+        for label in bundled:
+            lines.append(f"  • {label}")
+    else:
+        lines.append("  (No local deliverable files were bundled — see below.)")
+    lines.append("")
+    if referenced:
+        lines.append("REFERENCED, NOT BUNDLED")
+        lines.append("-" * 52)
+        lines.append(
+            "These assets are referenced by link and are NOT inside this ZIP "
+            "(no local file was available to bundle):")
+        for a in referenced:
+            label = (a.get("label") or a.get("filename") or "Asset").strip()
+            url = (a.get("url") or "").strip()
+            lines.append(f"  • {label}" + (f" — {url}" if url else ""))
+        lines.append("")
+    lines.append("The Docs/ folder holds the cue sheet, metadata, the clearance")
+    lines.append("certificate, and the deliverables manifest.")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def build_delivery_zip(
     project, assignments, delivery: dict, upload_dir: str,
     *, generated_at: Optional[str] = None,
@@ -768,12 +960,22 @@ def build_delivery_zip(
     license = delivery.get("license") or {}
     built_at = generated_at or datetime.now(timezone.utc).isoformat()
 
-    cert = build_clearance_certificate(project, assignments, license)
+    # IP3 — the certificate stamps the version it certifies + the build date, and
+    # reads the grant as a draft until the operator explicitly confirmed it.
+    cur = current_version(delivery)
+    certified_version = (cur.get("label") if cur else "") or ""
+    cert = build_clearance_certificate(
+        project, assignments, license,
+        signatory=delivery.get("signatory"),
+        license_confirmed=license_confirmation(delivery),
+        certified_version=certified_version,
+        certified_date=built_at[:10],
+    )
     manifest = build_manifest(project, assets=assets, versions=versions)
 
     # The generated documents (stdlib-only — the guaranteed core).
     docs = {
-        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments),
+        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
         "Docs/metadata.json": metadata_json(
             project, assignments, license=license, versions=versions,
             generated_at=built_at),
@@ -787,6 +989,7 @@ def build_delivery_zip(
 
     items: List[str] = []          # human labels of everything packaged
     converted: List[str] = []      # which assets also got an MP3 (best-effort)
+    referenced: List[dict] = []    # assets present-by-URL but not bundled (no local file)
     used_names: set = set()
 
     def _unique(arcname: str) -> str:
@@ -804,13 +1007,16 @@ def build_delivery_zip(
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # 1) The uploaded deliverables — organised into named folders.
+        # 1) The uploaded deliverables — the actual LOCAL files, organised into
+        # named (operator-assigned, else heuristic) folders. An asset with a blank
+        # filename or no on-disk file (e.g. a remote-URL-only demo seed) is NOT
+        # silently dropped — it's recorded for the Docs/README.txt as
+        # "referenced, not bundled" so "download everything" is honest.
         for asset in assets:
-            fname = os.path.basename(asset.get("filename") or "")
-            if not fname:
-                continue
-            src = os.path.join(upload_dir, fname)
-            if not os.path.isfile(src):
+            fname = os.path.basename((asset.get("filename") or "").strip())
+            src = os.path.join(upload_dir, fname) if fname else ""
+            if not fname or not os.path.isfile(src):
+                referenced.append(asset)
                 continue
             folder = asset_folder(asset)
             arc = _unique(f"{folder}/{fname}")
@@ -837,6 +1043,9 @@ def build_delivery_zip(
         # 3) The generated documents.
         for arc, content in docs.items():
             zf.writestr(arc, content)
+        # 4) A Docs/README.txt — what's bundled, plus any assets that are
+        # referenced-by-URL only (not local files) so nothing is silently dropped.
+        zf.writestr("Docs/README.txt", _readme_text(project, items, referenced, built_at))
 
     with open(zip_path, "wb") as fh:
         fh.write(buf.getvalue())
@@ -852,4 +1061,10 @@ def build_delivery_zip(
         "checklist": checklist,
         "items": items,
         "converted": converted,
+        # IP3 — assets present-by-URL only (not bundled), surfaced for honesty.
+        "referenced": [
+            {"label": (a.get("label") or a.get("filename") or "Asset").strip(),
+             "url": (a.get("url") or "").strip()}
+            for a in referenced
+        ],
     }

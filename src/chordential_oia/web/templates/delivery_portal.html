@@ -344,6 +344,10 @@
     <p class="sub">Music your legal team can defend.</p>
     <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
       <div style="flex:1 1 320px">
+        <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} — Draft, pending confirmation{% endif %}</p>
+        {% if cert.license_draft %}
+        <p class="legend" style="margin:0 0 8px">Standard template terms — not yet confirmed as the deal grant.</p>
+        {% endif %}
         <ul class="clean">
           <li><b>Type:</b> {{ cert.license.type }}</li>
           <li><b>Territory:</b> {{ cert.license.territory }}</li>
@@ -351,8 +355,9 @@
           <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
           <li><b>Content-ID:</b> {{ cert.content_id }}</li>
         </ul>
+        {% if cert.license_confirmed %}<p class="legend" style="margin-top:6px">Confirmed by {{ cert.license_confirmed.by }}{% if cert.license_confirmed.date %} · {{ cert.license_confirmed.date }}{% endif %}.</p>{% endif %}
         <p class="legend" style="margin-top:8px">{{ cert.clearance_line }}</p>
-        <p class="muted-note">{{ cert.indemnity_note }}</p>
+        <p class="legend" style="margin-top:6px">Original work — no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
       </div>
       <div style="flex:0 0 auto;text-align:center">
         <div class="seal"><span>Chordential</span><b>CLEARED</b><span>original work</span></div>
@@ -364,6 +369,12 @@
       {% for c in cert.contributors %}<li>{{ c.name }} — {{ c.role }}</li>{% endfor %}
     </ul>
     {% endif %}
+    <!-- IP3 — signatory block: warranty attaches to a named signer, version + date -->
+    <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Certified by</p>
+    <ul class="clean">
+      <li><b>{{ cert.signatory.entity }}</b>{% if cert.signatory.signer %} — {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}{% endif %}</li>
+      {% if cert.certified_version %}<li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>{% endif %}
+    </ul>
   </div>
 
   {% set ns_ap = namespace(any=false) %}
