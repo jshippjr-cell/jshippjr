@@ -137,13 +137,27 @@
 <!-- ACTION TOOLBAR -->
 <section class="card" id="delivery">
   <div class="card-head"><h2>Command center</h2></div>
+
+  {# Delivery-completeness gate: a visible warning that scoped deliverables aren't
+     uploaded, so the operator can't silently ship a partial package as "everything".
+     We DON'T hard-block them (they may deliver partial deliberately) — build /
+     release stay enabled but require an explicit confirm() naming the gap. #}
+  {% if completeness and not completeness.complete %}
+  <div class="gate-warn" style="margin:0 0 14px;padding:11px 13px;border:1px solid #c08a2e;border-radius:6px;background:#fff9ee">
+    <p style="margin:0;font-weight:700;color:#8a5a00">⚠ Incomplete package — {{ completeness.text }}</p>
+    <p class="small" style="margin:5px 0 0;color:#8a5a00">Not uploaded yet: <b>{{ completeness.missing|join(', ') }}</b>. Building or releasing now ships a <b>partial</b> package (README flags the gap). Upload the missing deliverables, or confirm a partial delivery deliberately.</p>
+  </div>
+  {% endif %}
+
   <div class="toolbar">
     {% if share_token %}
     <a class="btn" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">↗ Open client review link</a>
     {% endif %}
     <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
-    <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline">
-      <button class="btn" type="submit">📦 Build delivery package</button>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline"
+          {% if completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Build a PARTIAL delivery package anyway? It ships only what\'s uploaded.')"{% endif %}>
+      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
+      <button class="btn" type="submit">📦 Build delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
     </form>
     {% if not license_confirmed %}
     <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline">
@@ -152,7 +166,8 @@
     </form>
     {% endif %}
     <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline"
-          {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% endif %}>
+          {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% elif completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Mark this PARTIAL package released anyway?')"{% endif %}>
+      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
       <button class="btn primary" type="submit"{% if not license_confirmed %} title="Confirm the license terms before releasing"{% endif %}>🚀 Mark released</button>
     </form>
   </div>
@@ -165,7 +180,7 @@
   <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
   {% endif %}
   {% if delivery_zip %}
-  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="{{ delivery_zip.url }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}</p>
+  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="{{ delivery_zip.url }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
   {% endif %}
 </section>
 

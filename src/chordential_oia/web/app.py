@@ -45,8 +45,9 @@ from ..capabilities import (
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet,
     build_delivery_zip, build_manifest, build_timeline, current_version,
+    delivery_completeness,
     license_confirmation, merge_license, merge_signatory, reconcile_brief,
-    revision_status, seed_brief, version_label,
+    revision_status, scoped_deliverables, seed_brief, version_label,
     versions_list, version_name,
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
 )
@@ -2493,6 +2494,11 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     # assets so both portal + console show what was promised vs delivered.
     brief_recon = reconcile_brief(brief, delivery.get("assets") or [])
     brief_roll = brief_rollup(brief_recon)
+    # Delivery-completeness gate: which scoped, upload-required deliverables have a
+    # real uploaded asset vs which are silently missing — drives the portal/console
+    # warnings + the honest partial labelling so we never ship "everything" when the
+    # cutdowns/stems were never uploaded.
+    completeness = delivery_completeness(row, delivery)
     comments = db.list_review_comments(conn, project_id)
     timeline = build_timeline(row, delivery, comments)
 
@@ -2506,6 +2512,39 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         a2["approval"] = db.get_asset_approval(delivery, a)
         a2["asset_key"] = db.asset_key(a)
         assets_with_approval.append(a2)
+
+    # Make per-asset approval discoverable on the client portal: surface EVERY
+    # scoped deliverable with a clear status — ✓ uploaded (carrying the matching
+    # asset's per-asset-approval row + stable key, so verified reviewers get the
+    # Approve / Request-changes controls) vs ⧗ not uploaded yet ("waiting on
+    # Chordential"). Most demo deliverables are referenced-only, so showing only
+    # uploaded assets hid the per-deliverable controls; this surfaces the full list.
+    _by_label = {}
+    for a in assets_with_approval:
+        lbl = (a.get("label") or a.get("filename") or "").strip()
+        if lbl and lbl not in _by_label:
+            _by_label[lbl] = a
+    scoped_list = []
+    n_scoped_approved = 0
+    for d in scoped_deliverables(row, delivery):
+        item = dict(d)
+        match_asset = _by_label.get(d.get("match") or "")
+        if match_asset is not None:
+            item["asset_key"] = match_asset.get("asset_key")
+            item["approval"] = match_asset.get("approval")
+            item["url"] = match_asset.get("url")
+            item["kind"] = match_asset.get("kind")
+            if (match_asset.get("approval") or {}).get("status") == "Approved":
+                n_scoped_approved += 1
+        else:
+            item["asset_key"] = ""
+            item["approval"] = None
+        scoped_list.append(item)
+    scoped_rollup = {
+        "approved": n_scoped_approved,
+        "total": len(scoped_list),
+        "uploaded": sum(1 for s in scoped_list if s.get("uploaded")),
+    }
 
     current_n = int(current["n"]) if current else 0
 
@@ -2572,6 +2611,13 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         # next to the whole-version Approve so the gap is visible.
         "asset_rollup": db.asset_approval_rollup(delivery, assets_for_approval),
         "asset_approval_states": db.ASSET_APPROVAL_STATES,
+        # Delivery-completeness gate: {expected, uploaded, missing, complete, text}
+        # — drives the warnings + honest partial labelling on portal + console.
+        "completeness": completeness,
+        # The FULL scoped deliverable list with per-item upload status (✓/⧗) +
+        # per-asset approval controls on the uploaded ones, + an N-of-M rollup.
+        "scoped_deliverables": scoped_list,
+        "scoped_rollup": scoped_rollup,
         "versions": versions,
         "current_version": current,
         "current_n": current_n,
@@ -3212,13 +3258,17 @@ def _campaign_label(project) -> str:
 
 
 def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
-                     r: str = ""):
+                     r: str = "", flag: str = ""):
     """Bounce back to the portal after an action. A verified reviewer link (``r``)
-    is preserved so the reviewer stays verified; otherwise the share token (``k``)."""
+    is preserved so the reviewer stays verified; otherwise the share token (``k``).
+
+    ``flag`` (e.g. ``incomplete``) surfaces a portal notice — used by the
+    delivery-completeness gate to explain why an approve did NOT deliver."""
+    extra = f"&gate={flag}" if (flag or "").strip() else ""
     if (r or "").strip():
-        url = f"/project/{project_id}/delivery-portal?r={r}#review"
+        url = f"/project/{project_id}/delivery-portal?r={r}{extra}#review"
     else:
-        url = f"/project/{project_id}/delivery-portal?k={k}#review"
+        url = f"/project/{project_id}/delivery-portal?k={k}{extra}#review"
     resp = RedirectResponse(url, status_code=303)
     # Only remember a *guest's* self-typed identity in the cookie — a verified
     # reviewer's identity lives on the roster, not the device.
@@ -3332,6 +3382,11 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     pkg = build_delivery_zip(row, assignments, delivery, UPLOAD_DIR)
     db.update_delivery(conn, project_id, "delivery_zip", {
         "filename": pkg["filename"], "url": pkg["url"], "built_at": pkg["built_at"],
+        # Honest partial labelling: the portal card + ZIP descriptor read "Partial
+        # delivery — N of M deliverables" (not "everything") when incomplete.
+        "partial": pkg.get("partial", False),
+        "descriptor": pkg.get("descriptor", ""),
+        "completeness": pkg.get("completeness", {}),
     })
     db.update_delivery(conn, project_id, "delivery_checklist", pkg["checklist"])
     return pkg
@@ -3341,6 +3396,7 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
 def review_approve(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), r: str = Form(""),
+    deliver_partial: str = Form(""),
 ):
     """The agency approves the current version — the trigger for Delivery
     Automation (Phase 3). Records the sign-off, locks the FINAL version, then
@@ -3374,6 +3430,15 @@ def review_approve(
             return _review_redirect(project_id, k, r=r)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
+        # Delivery-completeness gate: do NOT silently ship an incomplete package as
+        # "everything". If scoped deliverables (cutdowns/stems/verticals) were never
+        # uploaded, refuse to deliver UNLESS the client explicitly opted into a
+        # PARTIAL delivery (deliver_partial=1 — set by the Approve form's confirm()).
+        # Without the opt-in this is a no-op: nothing is locked, no approval logged,
+        # state unchanged — we bounce back with a flag so the portal explains why.
+        completeness = delivery_completeness(project, delivery)
+        if not completeness["complete"] and str(deliver_partial).strip() not in ("1", "true", "on", "yes"):
+            return _review_redirect(project_id, k, r=r, flag="incomplete")
         approved_n = _current_version_tag(delivery)
         db.add_review_comment(
             conn, project_id, version=approved_n,

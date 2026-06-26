@@ -163,16 +163,27 @@
 
   <!-- DELIVERY PACKAGE READY (Phase 3 payoff) -->
   {% if delivery_zip and (state == "Delivered" or state == "Released") %}
-  <div class="ready" id="package">
+  {% set is_partial = delivery_zip.partial %}
+  <div class="ready{% if is_partial %} partial{% endif %}" id="package">
+    {% if is_partial %}
+    <h2>Your delivery package is ready — {{ delivery_zip.descriptor }}</h2>
+    <p class="sub"><b>This is a partial delivery.</b> We assembled and documented everything that was uploaded, but some scoped deliverables aren't in this package yet:</p>
+    {% if delivery_zip.completeness and delivery_zip.completeness.missing %}
+    <ul class="pack pack-missing">
+      {% for m in delivery_zip.completeness.missing %}<li><b>⧗</b> {{ m }} — not uploaded yet</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}
     <h2>Your delivery package is ready</h2>
     <p class="sub">Approved — so we assembled everything, organised it into folders, and generated your paperwork. Download it all in one ZIP.</p>
+    {% endif %}
     {% if delivery_checklist %}
     <ul class="pack">
       {% for item in delivery_checklist %}<li><b>✓</b> {{ item }}</li>{% endfor %}
     </ul>
     {% endif %}
-    <a class="dl-all" href="{{ delivery_zip.url }}">⤓ Download everything</a>
-    <p class="honest">Organised, documented, converted, and packaged by Chordential — the music is your composer's original work.</p>
+    <a class="dl-all" href="{{ delivery_zip.url }}">⤓ Download {% if is_partial %}what's ready{% else %}everything{% endif %}</a>
+    <p class="honest">Organised, documented, converted, and packaged by Chordential — the music is your composer's original work.{% if is_partial %} The missing deliverables will be added once Chordential uploads them.{% endif %}</p>
   </div>
   {% endif %}
 
@@ -183,6 +194,20 @@
       <span class="round">Round {{ revisions.used + 1 if revisions.remaining > 0 else revisions.scoped }} of {{ revisions.scoped }}</span>
     </h2>
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
+
+    {# Delivery-completeness gate: an Approve with an incomplete package and NO
+       opt-in does not deliver — we land back here with ?gate=incomplete to explain. #}
+    {% if request.query_params.get('gate') == 'incomplete' %}
+    <p class="gate-notice" style="margin:-2px 0 12px;padding:10px 12px;border:1px solid var(--wine);border-radius:6px;color:var(--wine);background:#fff5f5">
+      <b>Some deliverables aren't uploaded yet</b> — ask Chordential before approving, or use the confirm prompt to deliver a partial package on purpose.
+    </p>
+    {% endif %}
+    {% if completeness and not completeness.complete %}
+    <div class="gate-warn" style="margin:0 0 14px;padding:10px 12px;border:1px solid #c08a2e;border-radius:6px;background:#fff9ee">
+      <p style="margin:0;font-weight:600;color:#8a5a00">Incomplete package — {{ completeness.text }}</p>
+      <p class="muted-note" style="margin:4px 0 0">Not uploaded yet: {{ completeness.missing|join(', ') }}. Approving now ships a <b>partial</b> package.</p>
+    </div>
+    {% endif %}
 
     {# Verified-identity approval: a reviewer who arrived on their PERSONAL invite
        link (?r=) is verified — their name + email are LOCKED to the roster (not
@@ -321,39 +346,45 @@
     </form>
     {% endif %}
 
-    {# Per-asset approval: sign off the :60 master while the :30 cutdown still
-       awaits — granular, not just the whole-version button. Verified reviewers get
-       Approve / Request-changes per asset; a guest sees the status read-only. #}
-    {% set approvable = assets|selectattr('asset_key')|list %}
-    {% if approvable %}
+    {# Per-asset approval, made discoverable: show EVERY scoped deliverable with a
+       clear status — ✓ uploaded (with Approve / Request-changes controls for
+       verified reviewers) vs ⧗ not uploaded yet ("waiting on Chordential"). The
+       founder couldn't find per-deliverable approval because only uploaded assets
+       had controls and most demo deliverables are referenced-only; this surfaces
+       the full scoped list + an "N of M deliverables approved" rollup. #}
+    {% if scoped_deliverables %}
     <div class="aa-block">
       <h3 class="aa-h">Deliverable sign-off</h3>
-      <p class="aa-roll"><b>{{ asset_rollup.approved }} of {{ asset_rollup.total }}</b> deliverable{{ 's' if asset_rollup.total != 1 }} approved{% if asset_rollup.changes %} · {{ asset_rollup.changes }} with changes requested{% endif %}{% if asset_rollup.pending %} · {{ asset_rollup.pending }} pending{% endif %}.</p>
-      {% for a in approvable %}
-      <div class="aa-row">
-        <span class="aa-nm">{{ a.label }}</span>
-        {% set st = a.approval.status if a.approval else "Pending" %}
-        {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Approved{% if a.approval.by %} · {{ a.approval.by }}{% endif %}</span>
-        {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">↻ Changes requested{% if a.approval.by %} · {{ a.approval.by }}{% endif %}</span>
-        {% else %}<span class="aa-badge aa-pending">Pending</span>{% endif %}
+      <p class="aa-roll"><b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> deliverable{{ 's' if scoped_rollup.total != 1 }} approved · {{ scoped_rollup.uploaded }} of {{ scoped_rollup.total }} uploaded.</p>
+      {% for d in scoped_deliverables %}
+      <div class="aa-row{% if not d.uploaded %} aa-waiting{% endif %}"{% if not d.uploaded %} style="opacity:.55"{% endif %}>
+        <span class="aa-nm">{{ d.asset }} <span class="muted-note" style="font-weight:400">· {{ d.group }}</span></span>
+        {% if not d.uploaded %}
+        <span class="aa-badge aa-pending" title="Not uploaded yet">⧗ Not uploaded yet — waiting on Chordential</span>
+        {% else %}
+        {% set st = d.approval.status if d.approval else "Pending" %}
+        {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Uploaded · Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+        {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">✓ Uploaded · ↻ Changes requested{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+        {% else %}<span class="aa-badge aa-pending">✓ Uploaded · awaiting sign-off</span>{% endif %}
         {% if verified %}
         <span class="aa-acts">
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
             <input type="hidden" name="r" value="{{ reviewer_token }}">
-            <input type="hidden" name="filename" value="{{ a.asset_key }}">
+            <input type="hidden" name="filename" value="{{ d.asset_key }}">
             <input type="hidden" name="action" value="approve">
             <button type="submit" class="rc-mini aa-approve">Approve</button>
           </form>
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
             <input type="hidden" name="r" value="{{ reviewer_token }}">
-            <input type="hidden" name="filename" value="{{ a.asset_key }}">
+            <input type="hidden" name="filename" value="{{ d.asset_key }}">
             <input type="hidden" name="action" value="changes">
             <input type="text" name="note" placeholder="What needs to change?" class="rc-in aa-note">
             <button type="submit" class="rc-mini aa-changes-btn">Request changes</button>
           </form>
         </span>
+        {% endif %}
         {% endif %}
       </div>
       {% endfor %}
@@ -369,13 +400,20 @@
          sees a disabled control + a note — they can view + comment, not approve. #}
       {% if verified %}
       {% set unapproved = asset_rollup.total - asset_rollup.approved %}
+      {% set incomplete = completeness and not completeness.complete %}
+      {# Delivery-completeness gate (the strongest gate): when scoped deliverables
+         aren't uploaded, the confirm() NAMES them and the form posts
+         deliver_partial=1 so the server is allowed to ship a PARTIAL package — the
+         only way past the server-side no-op. When complete, the prior per-asset-
+         approval / plain confirm copy is kept. #}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
-            {% if unapproved > 0 %}onsubmit="return confirm('{{ unapproved }} of {{ asset_rollup.total }} deliverable{{ 's' if asset_rollup.total != 1 }} aren\'t approved yet — approve the campaign anyway? This locks v{{ current_n }} as FINAL and assembles your delivery package.');"{% else %}onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');"{% endif %}>
+            {% if incomplete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'isn\'t' if completeness.missing|length == 1 else 'aren\'t' }} uploaded yet — approve and deliver a PARTIAL package anyway? This locks v{{ current_n }} as FINAL and ships only what\'s uploaded.');"{% elif unapproved > 0 %}onsubmit="return confirm('{{ unapproved }} of {{ asset_rollup.total }} deliverable{{ 's' if asset_rollup.total != 1 }} aren\'t approved yet — approve the campaign anyway? This locks v{{ current_n }} as FINAL and assembles your delivery package.');"{% else %}onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');"{% endif %}>
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
+        {% if incomplete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
-        <button type="submit" class="rc-approve">✓ Approve &amp; deliver{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} signed off)</span>{% endif %}</button>
+        <button type="submit" class="rc-approve">{% if incomplete %}✓ Approve &amp; deliver partial{% else %}✓ Approve &amp; deliver{% endif %}{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} signed off)</span>{% endif %}</button>
       </form>
       {% else %}
       <div style="flex:1 1 240px">

@@ -576,7 +576,10 @@ def test_timestamped_comment_renders_on_portal(client):
 def test_client_approve_sets_state_via_portal(client):
     pid = _win_and_make_project(client, 1)
     rtoken = _add_reviewer(client, pid, name="Dana (Agency)")
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    # Delivery-completeness gate: a fresh project has no uploaded deliverables, so
+    # delivering means opting into a partial package (deliver_partial=1).
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -618,8 +621,10 @@ def test_verified_reviewer_approve_records_roster_identity(client):
     rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
                            email="dana@agency.com", role="Senior Producer")
     # A spoofed name + email is posted alongside the verified token — it's ignored.
+    # deliver_partial opts past the completeness gate (fresh project, no uploads).
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "author": "Imposter", "email": "evil@x.com"})
+                data={"r": rtoken, "author": "Imposter", "email": "evil@x.com",
+                      "deliver_partial": "1"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -752,7 +757,8 @@ def test_new_version_reopens_an_approved_delivery(client):
     pid = _win_and_make_project(client, 1)
     rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -806,7 +812,8 @@ def test_approve_locks_current_version_to_final(client):
     pid = _win_and_make_project(client, 1)
     rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -836,7 +843,9 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
     _seed_asset(client, pid)                       # an uploaded deliverable
     rtoken = _add_reviewer(client, pid)
     # The agency presses APPROVE on their verified personal review link — the trigger.
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    # (One seeded asset doesn't cover every scoped deliverable, so opt into partial.)
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
 
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -879,10 +888,11 @@ def test_portal_shows_package_ready_and_download_everything(client):
     _seed_asset(client, pid)
     token = _project_token(client, pid)
     rtoken = _add_reviewer(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Your delivery package is ready" in page
-    assert "Download everything" in page
+    assert "Download " in page
     # The big button links to the assembled ZIP.
     assert "_Delivery.zip" in page
     # The checklist items are ticked.
@@ -894,7 +904,8 @@ def test_delivery_zip_is_served_by_uploads_route(client):
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
     rtoken = _add_reviewer(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -930,7 +941,8 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
                 ctype="audio/wav")
     rtoken = _add_reviewer(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
-                    data={"r": rtoken}, follow_redirects=False)
+                    data={"r": rtoken, "deliver_partial": "1"},
+                    follow_redirects=False)
     assert r.status_code == 303
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -1043,9 +1055,11 @@ def test_approve_without_identity_is_rejected(client):
     client.post(f"/project/{pid}/review/approve",
                 data={"k": token, "author": "Dana", "email": "dana@agency.com"})
     assert not any(c["kind"] == "approval" for c in _comments(pid))
-    # The verified reviewer's personal token DOES approve.
+    # The verified reviewer's personal token DOES approve (partial opt-in: the
+    # seeded asset doesn't cover every scoped deliverable).
     rtoken = _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
-    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
     assert any(c["kind"] == "approval" for c in _comments(pid))
 
 
@@ -1683,3 +1697,149 @@ def test_console_renders_scope_reconciliation(client):
     assert "✓ Delivered" in page
     assert "⧗ Pending" in page          # stems not delivered
     assert "1 of 2" in page
+
+
+# --------------------------------------------------------------------------- #
+# Delivery-completeness gate — honest partial labelling + the deliver gate
+# --------------------------------------------------------------------------- #
+from chordential_oia.delivery import delivery_completeness, scoped_deliverables  # noqa: E402
+
+
+def _seed_full_deliverables(client, pid):
+    """Upload assets that satisfy every scoped, upload-required deliverable so the
+    completeness gate reports the package COMPLETE (no missing deliverables)."""
+    for label in ("Final master", "Instrumental TV mix", ":30 cutdown",
+                  "9:16 vertical", "Mix-ready stem package"):
+        _seed_asset(client, pid, name=f"{label.replace(' ', '_')}.mp3", label=label)
+
+
+def test_delivery_completeness_missing_list_and_counts():
+    """(a) delivery_completeness returns the right missing list + counts when some
+    scoped deliverables have no uploaded asset, and excludes the auto-generated docs."""
+    proj = _fake_project()
+    # No uploads at all → everything scoped is missing, and complete is False.
+    empty = delivery_completeness(proj, {"assets": []})
+    assert empty["complete"] is False
+    assert "Final master" in empty["missing"]
+    assert ":30 / :15 / :06 cutdowns" in empty["missing"]
+    # The auto-generated docs (cue sheet / rights cert) are NOT expected — they're
+    # always produced, never an uploaded deliverable.
+    assert all("cue sheet" not in m.lower() for m in empty["expected"])
+    assert all("rights" not in m.lower() for m in empty["expected"])
+    total = len(empty["expected"])
+    assert empty["text"] == f"0 of {total} deliverables uploaded"
+
+    # Upload one matching asset → that deliverable is uploaded, the rest still missing.
+    one = delivery_completeness(proj, {"assets": [{"label": "Final master", "kind": "audio"}]})
+    assert "Final master" in one["uploaded"]
+    assert "Final master" not in one["missing"]
+    assert one["complete"] is False
+    assert one["text"] == f"1 of {total} deliverables uploaded"
+
+
+def test_completeness_complete_when_all_uploaded():
+    """delivery_completeness reports complete (no missing) once every scoped
+    deliverable has a plausibly-matching uploaded asset."""
+    proj = _fake_project()
+    assets = [
+        {"label": "Final master", "kind": "audio"},
+        {"label": "Instrumental TV mix", "kind": "audio"},
+        {"label": ":30 cutdown", "kind": "audio"},
+        {"label": "9:16 vertical", "kind": "audio"},
+        {"label": "Mix-ready stem package", "kind": "audio"},
+    ]
+    c = delivery_completeness(proj, {"assets": assets})
+    assert c["complete"] is True
+    assert c["missing"] == []
+    assert "5 of 5" in c["text"]
+
+
+def test_approve_incomplete_without_partial_does_not_deliver(client):
+    """(b) A client Approve with an incomplete package and NO deliver_partial does
+    NOT deliver — state unchanged, no approval recorded, redirect carries the flag."""
+    pid = _win_and_make_project(client, 1)
+    rtoken = _add_reviewer(client, pid)
+    r = client.post(f"/project/{pid}/review/approve",
+                    data={"r": rtoken}, follow_redirects=False)
+    # No-op (303 back to the portal with the gate flag), state did NOT advance.
+    assert r.status_code == 303
+    assert "gate=incomplete" in r.headers["location"]
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+        kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
+    finally:
+        conn.close()
+    assert d.get("state") != "Delivered"
+    assert "approval" not in kinds
+
+
+def test_approve_incomplete_with_partial_delivers_and_marks_partial(client):
+    """(b) With deliver_partial=1 the incomplete package delivers, and the stored
+    descriptor is marked Partial with the missing-deliverable list."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label="Final master")
+    rtoken = _add_reviewer(client, pid)
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "deliver_partial": "1"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("state") == "Delivered"
+    zip_desc = d.get("delivery_zip")
+    assert zip_desc["partial"] is True
+    assert "Partial delivery" in zip_desc["descriptor"]
+    # The missing deliverables are recorded on the descriptor.
+    assert ":30 / :15 / :06 cutdowns" in zip_desc["completeness"]["missing"]
+
+
+def test_complete_package_approves_and_is_not_partial(client):
+    """(c) A complete package approves + delivers normally and is NOT marked partial."""
+    pid = _win_and_make_project(client, 1)
+    _seed_full_deliverables(client, pid)
+    rtoken = _add_reviewer(client, pid)
+    # No deliver_partial needed — the package is complete, the gate is satisfied.
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("state") == "Delivered"
+    zip_desc = d.get("delivery_zip")
+    assert zip_desc["partial"] is False
+    assert zip_desc["completeness"]["missing"] == []
+
+
+def test_portal_shows_scoped_deliverables_with_status_and_rollup(client):
+    """(d) The client portal surfaces the full scoped deliverable list with ✓/⧗
+    statuses + an N-of-M rollup, even for not-yet-uploaded deliverables."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label="Final master")
+    rtoken = _add_reviewer(client, pid)
+    page = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken}).text
+    # The whole scoped list is shown — the uploaded one is ✓, the missing ones ⧗.
+    assert "Final master" in page
+    assert "Mix-ready stem package" in page          # a not-yet-uploaded deliverable
+    assert "Not uploaded yet" in page                # the ⧗ waiting-on-Chordential state
+    # The "N of M deliverables approved / uploaded" rollup line.
+    assert "of 5 deliverable" in page
+    # The incomplete-package warning naming the missing deliverables.
+    assert "Incomplete package" in page
+
+
+def test_console_shows_missing_deliverables_warning_when_incomplete(client):
+    """(e) The operator console shows the missing-deliverables warning on the
+    build/release toolbar when the package is incomplete."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid, name="master60.mp3", label="Final master")
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Incomplete package" in page
+    # It names a missing deliverable and offers a (partial) build.
+    assert "Mix-ready stem package" in page
+    assert "(partial)" in page
