@@ -23,12 +23,14 @@ from chordential_oia.delivery import (  # noqa: E402
     build_clearance_certificate,
     build_cue_sheet,
     build_manifest,
+    build_timeline,
     cue_sheet_csv,
     current_version,
     manifest_text,
     metadata_json,
     revision_status,
     rights_certificate_text,
+    seed_brief,
     version_label,
     version_name,
 )
@@ -145,6 +147,62 @@ def test_manifest_shows_deterministic_version_named_files():
     assert all(r.asset.startswith("FIND") for r in version_rows)
     # The latest is flagged current.
     assert any("current" in r.asset for r in version_rows)
+
+
+# --------------------------------------------------------------------------- #
+# Creative brief + campaign timeline (Phase 4) — deterministic engine tests
+# --------------------------------------------------------------------------- #
+def test_seed_brief_defaults_from_opportunity_then_stored_wins():
+    project = {"id": 1, "need": "Find Your Horizon", "deadline": "2026-07-15",
+               "opp_id": 9}
+    opp = {"need": "Find Your Horizon", "description": "Warm, cinematic, hopeful."}
+    # No stored brief → seeded from the opportunity/project.
+    brief = seed_brief(project, opp, {})
+    assert "Find Your Horizon" in brief["objective"]
+    assert brief["references"] == "Warm, cinematic, hopeful."
+    assert brief["tone"] == "Warm, cinematic, hopeful."
+    assert brief["deadline"] == "2026-07-15"
+    # A stored brief wins field-by-field.
+    brief2 = seed_brief(project, opp, {"brief": {"objective": "Drive trial signups"}})
+    assert brief2["objective"] == "Drive trial signups"
+    assert brief2["tone"] == "Warm, cinematic, hopeful."  # still seeded
+
+
+def test_build_timeline_orders_brief_version_comment_and_approval():
+    project = {"id": 1, "need": "Find Your Horizon",
+               "created_at": "2026-06-20T09:00:00+00:00"}
+    delivery = {
+        "versions": [
+            {"n": 1, "label": "v1 Concept", "name": "FIND_Master_v1",
+             "created_at": "2026-06-22T10:00:00+00:00"},
+        ],
+        "delivery_zip": {"built_at": "2026-06-26T12:00:00+00:00"},
+        "released_at": "2026-06-27",
+    }
+    comments = [
+        {"kind": "comment", "author": "Dana", "body": "Tighten the intro",
+         "t_seconds": 5.0, "version": "1", "created_at": "2026-06-23T11:00:00+00:00"},
+        {"kind": "approval", "author": "Dana", "body": "Approved.",
+         "t_seconds": None, "version": "1", "created_at": "2026-06-25T15:00:00+00:00"},
+    ]
+    tl = build_timeline(project, delivery, comments)
+    labels = [e["label"] for e in tl]
+    # The version, comment, and approval all appear.
+    assert any("Creative brief" in l for l in labels)
+    assert any("Version" in l for l in labels)
+    assert any("Comment from Dana" in l for l in labels)
+    assert any("Approved by Dana" in l for l in labels)
+    # Time-ordered (oldest first): brief < version < comment < approval < zip.
+    whens = [e["when"] for e in tl]
+    assert whens == sorted(whens)
+    brief_i = next(i for i, e in enumerate(tl) if "Creative brief" in e["label"])
+    ver_i = next(i for i, e in enumerate(tl) if e["label"].startswith("Version"))
+    com_i = next(i for i, e in enumerate(tl) if "Comment from" in e["label"])
+    app_i = next(i for i, e in enumerate(tl) if "Approved by" in e["label"])
+    assert brief_i < ver_i < com_i < app_i
+    # The comment carries its timecode in the detail.
+    com = tl[com_i]
+    assert "0:05" in com["detail"]
 
 
 # --------------------------------------------------------------------------- #
@@ -649,3 +707,62 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
         # The original WAV is present; no MP3 was produced (conversion skipped).
         assert any(n.endswith(".wav") for n in names)
         assert not any(n.endswith(".mp3") for n in names)
+
+
+# --------------------------------------------------------------------------- #
+# Campaign Dashboard / Delivery Console (Phase 4)
+# --------------------------------------------------------------------------- #
+def test_delivery_console_renders_with_campaign_agents_and_brief(client):
+    pid = _win_and_make_project(client, 1)
+    name = _assign_a_creator(client, pid)
+    # The project's campaign name (from its linked opportunity) anchors the page.
+    project_need = client.get(f"/project/{pid}").text
+    campaign = re.search(r'class="detail-title">([^<]+)<', project_need).group(1).strip()
+    r = client.get(f"/project/{pid}/delivery")
+    assert r.status_code == 200
+    body = r.text
+    # The campaign + the contributor + the five-agent labels.
+    assert campaign in body
+    assert name in body
+    for label in ("Rights", "Revisions", "Metadata", "Approvals", "Assets"):
+        assert label in body
+    # The creative brief section is present (seeded from the opportunity's need).
+    assert "Creative brief" in body
+    assert campaign in body  # objective seeded from the need
+
+
+def test_console_brief_edit_persists_and_shows(client):
+    pid = _win_and_make_project(client, 1)
+    client.post(f"/project/{pid}/delivery/brief",
+                data={"objective": "Drive summer trial signups",
+                      "references": "Warm, anthemic", "tone": "Hopeful",
+                      "deliverables_needed": ":60, :30, stems", "deadline": "2026-07-15"},
+                follow_redirects=True)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d["brief"]["objective"] == "Drive summer trial signups"
+    assert d["brief"]["deadline"] == "2026-07-15"
+    # And it renders back on the console.
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Drive summer trial signups" in page
+    assert ":60, :30, stems" in page
+
+
+def test_console_shows_client_review_link_and_version_rail(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    _upload_version(client, pid, "v2.mp3")
+    page = client.get(f"/project/{pid}/delivery").text
+    # The client review link (the token portal URL) is on the toolbar.
+    assert f"/project/{pid}/delivery-portal?k={token}" in page
+    assert "Open client review link" in page
+    # The version rail shows the v1/v2 ladder with the current version marked.
+    assert "Version history" in page
+    assert "current" in page
+    # The campaign timeline is present.
+    assert "Campaign timeline" in page

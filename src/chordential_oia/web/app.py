@@ -43,8 +43,9 @@ from ..capabilities import (
 )
 from ..delivery import (
     build_clearance_certificate, build_cue_sheet, build_delivery_zip,
-    build_manifest, current_version, merge_license, revision_status,
-    version_label, versions_list, version_name, DELIVERY_STATES, VERSION_STATES,
+    build_manifest, build_timeline, current_version, merge_license,
+    revision_status, seed_brief, version_label, versions_list, version_name,
+    BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
@@ -2464,6 +2465,13 @@ def _delivery_view(conn, project_id: int):
     revisions = revision_status(row, estimate, delivery)
     token = db.ensure_project_share_token(conn, project_id)
 
+    # The creative brief (Phase 4): the logged brief, or defaults seeded from the
+    # opportunity behind the project (need → objective, description → references/tone).
+    opp_row = db.get_opportunity(conn, row["opp_id"]) if row["opp_id"] is not None else None
+    brief = seed_brief(row, opp_row, delivery)
+    comments = db.list_review_comments(conn, project_id)
+    timeline = build_timeline(row, delivery, comments)
+
     # The version under review (anti-chaos): the current version's audio drives the
     # review player; fall back to the first uploaded audio asset for Phase-0
     # projects that never logged a version.
@@ -2493,19 +2501,63 @@ def _delivery_view(conn, project_id: int):
         "review_track": review_track,
         "released_at": delivery.get("released_at"),
         "share_token": token,
-        "comments": db.list_review_comments(conn, project_id),
+        "comments": comments,
         # Delivery automation (Phase 3): the assembled ZIP + the payoff checklist.
         "delivery_zip": delivery.get("delivery_zip"),
         "delivery_checklist": delivery.get("delivery_checklist") or [],
+        # Creative brief + campaign timeline (Phase 4) — the dashboard's spine.
+        "brief": brief,
+        "brief_fields": BRIEF_FIELDS,
+        "timeline": timeline,
+        "version_states": VERSION_STATES,
     }
 
 
-@app.get("/project/{project_id}/delivery")
-def delivery_console(project_id: int):
-    """The Delivery Console lands in Pass B (the operator UI). For now the mutation
-    routes redirect here; send the operator to the generated package (the artifact)
-    so the link is live until the console ships."""
-    return RedirectResponse(f"/project/{project_id}/delivery-package", status_code=303)
+@app.get("/project/{project_id}/delivery", response_class=HTMLResponse)
+def delivery_console(request: Request, project_id: int):
+    """The Campaign Dashboard / Delivery Console (Phase 4) — the operator's command
+    center for one campaign. One screen tying the creative brief, the five-agent
+    status row, the version rail, the review activity feed, the campaign timeline,
+    the deliverable assets + upload controls, and the action toolbar (client review
+    link, delivery package, build, release) together. The delivery mutation routes
+    all redirect here, so it renders the console (no longer a bounce to the package)."""
+    conn = db.connect()
+    try:
+        view = _delivery_view(conn, project_id)
+        if view is None:
+            return HTMLResponse("Project not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "delivery_console.html", nav="projects", **view)
+
+
+@app.post("/project/{project_id}/delivery/brief")
+def delivery_set_brief(
+    project_id: int,
+    objective: str = Form(""),
+    references: str = Form(""),
+    tone: str = Form(""),
+    deliverables_needed: str = Form(""),
+    deadline: str = Form(""),
+):
+    """Creative brief (Phase 4): log/edit the brief that opens the campaign record.
+
+    Stored raw on ``delivery_json['brief']`` (blank fields dropped so the engine
+    falls back to the opportunity-seeded default for that field)."""
+    conn = db.connect()
+    try:
+        brief = {
+            "objective": objective.strip(),
+            "references": references.strip(),
+            "tone": tone.strip(),
+            "deliverables_needed": deliverables_needed.strip(),
+            "deadline": deadline.strip(),
+        }
+        brief = {k: v for k, v in brief.items() if v}
+        db.update_delivery(conn, project_id, "brief", brief or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
 
 
 @app.get("/project/{project_id}/delivery-package", response_class=HTMLResponse)

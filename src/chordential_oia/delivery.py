@@ -403,6 +403,141 @@ def revision_status(project, estimate_or_scoped=None, delivery: Optional[dict] =
 
 
 # --------------------------------------------------------------------------- #
+# Creative brief (Phase 4) — the object that opens the campaign record.
+#
+# A small, all-optional dict on delivery_json['brief']: {objective, references,
+# tone, deliverables_needed, deadline}. The brief is the start of the record (the
+# founder's "creative brief seeds the package"); when none is logged yet we seed
+# sensible defaults from the linked opportunity behind the project — the need →
+# objective, the description → references/tone — so the console is never blank.
+# --------------------------------------------------------------------------- #
+BRIEF_FIELDS = ["objective", "references", "tone", "deliverables_needed", "deadline"]
+
+
+def seed_brief(project, opp=None, delivery: Optional[dict] = None) -> dict:
+    """The effective creative brief: the logged ``delivery_json['brief']`` if present,
+    otherwise sensible defaults seeded from the project + linked opportunity.
+
+    All five fields (``objective``, ``references``, ``tone``,
+    ``deliverables_needed``, ``deadline``) are optional strings. Defaults: the
+    opportunity ``need`` (or the project need) → objective; the opportunity
+    ``description`` → references and tone; the project ``deadline`` → deadline.
+    A stored brief always wins field-by-field over the seeded defaults."""
+    delivery = delivery or {}
+    need = (_val(opp, "need") or _val(project, "need") or "").strip()
+    description = (_val(opp, "description") or "").strip()
+    deadline = (_val(project, "deadline") or "").strip()
+    seeded = {
+        "objective": (
+            f"Original music for {need}." if need else ""
+        ),
+        "references": description,
+        "tone": description,
+        "deliverables_needed": "",
+        "deadline": deadline,
+    }
+    stored = delivery.get("brief") if isinstance(delivery.get("brief"), dict) else {}
+    out = {}
+    for f in BRIEF_FIELDS:
+        v = stored.get(f)
+        out[f] = (str(v).strip() if v is not None and str(v).strip() else seeded.get(f, ""))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Campaign timeline (Phase 4) — the campaign's chronology, merged + sorted.
+#
+# Deterministic assembly from data that already exists: the brief/project start,
+# each logged version upload, each review comment / change-request / approval,
+# the delivery-ZIP build, and the release. One chronological tape the operator
+# reads top-to-bottom: brief → v1 → notes → v2 → approval → delivered → released.
+# --------------------------------------------------------------------------- #
+def _ts(value) -> str:
+    """A sortable ISO-ish string for an event ``when`` (empty sorts first)."""
+    return str(value or "")
+
+
+def build_timeline(project, delivery: Optional[dict] = None, comments=None) -> List[dict]:
+    """The campaign timeline: a chronological list of ``{when, icon, label, detail}``.
+
+    Merges + sorts (oldest first) the events already recorded across the Delivery
+    OS: the campaign opening (project ``created_at``), each logged version upload
+    (``versions[].created_at``), each review comment / change request / approval
+    (``review_comments`` carrying kind + author + body + timecode), the delivery
+    ZIP build (``delivery_zip.built_at``), and the release (``released_at``).
+    Purely deterministic — no fabricated specifics, no AI."""
+    delivery = delivery or {}
+    events: List[dict] = []
+
+    # 1) The campaign opened (the brief is the start of the record).
+    created = _val(project, "created_at")
+    campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
+    events.append({
+        "when": _ts(created), "icon": "✎", "label": "Creative brief",
+        "detail": f"Campaign opened — {campaign}.",
+    })
+
+    # 2) Each logged version upload (the v1/v2/v3 ladder).
+    for v in versions_list(delivery):
+        n = v.get("n")
+        label = v.get("label") or version_label(n or 1)
+        name = v.get("name") or f"v{n}"
+        events.append({
+            "when": _ts(v.get("created_at")), "icon": "♪",
+            "label": f"Version {label}",
+            "detail": f"{name} uploaded.",
+        })
+
+    # 3) Review events — comments, change requests, approvals (with timecode).
+    for c in comments or []:
+        kind = (_val(c, "kind") or "comment")
+        author = (_val(c, "author") or "Anonymous").strip() or "Anonymous"
+        body = (_val(c, "body") or "").strip()
+        t = _val(c, "t_seconds")
+        when = _ts(_val(c, "created_at"))
+        if kind == "approval":
+            icon, label = "✓", f"Approved by {author}"
+            detail = body or "Approved the current version."
+        elif kind == "change_request":
+            icon, label = "↻", f"Changes requested by {author}"
+            detail = body or "Requested changes."
+        else:
+            icon, label = "💬", f"Comment from {author}"
+            tc = ""
+            if t is not None:
+                try:
+                    s = int(float(t))
+                    tc = f"[{s // 60}:{s % 60:02d}] "
+                except (TypeError, ValueError):
+                    tc = ""
+            detail = f"{tc}{body}".strip()
+        events.append({"when": when, "icon": icon, "label": label, "detail": detail})
+
+    # 4) The delivery ZIP assembled (the payoff moment).
+    zip_desc = delivery.get("delivery_zip") if isinstance(delivery.get("delivery_zip"), dict) else None
+    if zip_desc and zip_desc.get("built_at"):
+        events.append({
+            "when": _ts(zip_desc.get("built_at")), "icon": "📦",
+            "label": "Delivery package assembled",
+            "detail": "Organised, documented, converted, and zipped — ready to download.",
+        })
+
+    # 5) Released.
+    released_at = delivery.get("released_at")
+    if released_at:
+        events.append({
+            "when": _ts(released_at), "icon": "🚀",
+            "label": "Released",
+            "detail": "Marked released — final hand-off complete.",
+        })
+
+    # Sort oldest-first; events without a timestamp keep their insertion order
+    # (stable sort) so the brief still leads even when created_at is blank.
+    events.sort(key=lambda e: e["when"])
+    return events
+
+
+# --------------------------------------------------------------------------- #
 # Standard rights basis (reused for the certificate's media line)
 # --------------------------------------------------------------------------- #
 def rights_basis() -> List[str]:

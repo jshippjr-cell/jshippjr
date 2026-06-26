@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}{{ project['need'] }} · Delivery Console{% endblock %}
+{% block heading %}<a class="crumb" href="/projects">Projects</a> / <a class="crumb" href="/project/{{ project['id'] }}">{{ project['need'][:30] }}</a> / Delivery{% endblock %}
+{% block head %}
+<style>
+  /* Five-agent status row — the plan's mockup, made live. */
+  .agent-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:4px 0 0}
+  .agent{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--card)}
+  .agent .ah{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;color:var(--wine,#44161E)}
+  .agent .ah .ico{font-size:16px}
+  .agent .lines{margin:8px 0 0;font-size:12.5px;color:var(--ink);line-height:1.7}
+  .agent .lines .ok{color:#1d6b43;font-weight:700}
+  .agent .lines .pend{color:#B5500F;font-weight:700}
+  .agent .lines .k{color:var(--muted)}
+  /* Action toolbar */
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 0}
+  /* Timeline */
+  .timeline{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .tl-row{display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)}
+  .tl-row:last-child{border-bottom:0}
+  .tl-ico{flex:0 0 auto;width:24px;text-align:center;font-size:15px}
+  .tl-body{flex:1 1 auto}
+  .tl-label{font-weight:680;font-size:13px}
+  .tl-detail{font-size:12.5px;color:var(--ink);margin-top:1px}
+  .tl-when{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* Version rail */
+  .vrail{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0}
+  .vchip{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:4px 11px;background:var(--panel);white-space:nowrap}
+  .vchip.cur{background:#44161E;color:#fff;border-color:#44161E;font-weight:700}
+  /* Brief grid */
+  .brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .brief-grid .full{grid-column:1 / -1}
+  .brief-grid label{display:block;font-size:11px;color:var(--muted2,#7a756d);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+  .brief-grid textarea,.brief-grid input{width:100%;background:var(--white,#fff);border:1px solid var(--border2);border-radius:8px;padding:9px 11px;font:inherit;resize:vertical}
+  .brief-grid textarea:focus,.brief-grid input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,103,31,.12)}
+  .rc-feed{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .rc-ev{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .rc-ev:last-child{border-bottom:0}
+  .rc-kind{flex:0 0 auto;font-weight:800;min-width:54px;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .rc-kind.k-approval{color:#1d6b43}
+  .rc-kind.k-change_request{color:#B5500F}
+  .rc-kind.k-comment{color:var(--slate,#546671)}
+  .rc-a{flex:0 0 auto;font-weight:700;color:#44161E}
+  .rc-b{flex:1 1 auto}
+  .rc-t{flex:0 0 auto;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+  .asset-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .asset-row:last-child{border-bottom:0}
+  @media (max-width:720px){.brief-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+
+<!-- HEADER -->
+<div class="detail-head card">
+  <div>
+    <div class="pill-row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="pill st-won">{{ state }}</span>
+      <span class="pill ghost">{{ version_state }}</span>
+      <span class="pill ghost">Round {{ revisions.used + 1 if revisions.remaining > 0 else revisions.scoped }} of {{ revisions.scoped }}</span>
+      <a class="pill ghost" href="/project/{{ project['id'] }}">← Project</a>
+    </div>
+    <h1 class="detail-title">{{ project['need'] }}</h1>
+    <div class="detail-buyer"><a href="/buyer/{{ project['client']|urlencode }}">{{ project['client'] }}</a> · Campaign delivery — everything in one place.</div>
+  </div>
+  <div class="detail-fit">
+    <div class="big-num">v{{ current_n or '—' }}</div>
+    <div class="muted">current version</div>
+  </div>
+</div>
+
+<!-- FIVE-AGENT STATUS ROW -->
+<section class="card">
+  <div class="card-head"><h2>The five agents <span class="muted">— live state</span></h2></div>
+  <div class="agent-row">
+    <div class="agent">
+      <div class="ah"><span class="ico">⚖</span> Rights</div>
+      <div class="lines">
+        License: {% if delivery.get('license') %}<span class="ok">set ✓</span>{% else %}<span class="pend">standard terms</span>{% endif %}<br>
+        Content-ID: <span class="k">{{ cert.content_id }}</span><br>
+        Contributors: {{ cert.contributors|length }}{% if cert.contributors %} <span class="k">— {{ cert.contributors|map(attribute='name')|join(', ') }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">↻</span> Revisions</div>
+      <div class="lines">
+        Round {{ revisions.used }} of {{ revisions.scoped }} <span class="k">({{ revisions.remaining }} left)</span><br>
+        State: {{ version_state }}<br>
+        Versions logged: {{ versions|length }}
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">🗂</span> Metadata</div>
+      <div class="lines">
+        Cue sheet <span class="ok">✓</span> · Manifest <span class="ok">✓</span><br>
+        Stems: {{ assets|selectattr('label','defined')|list|length }} file{{ 's' if assets|length != 1 }}<br>
+        Naming: <span class="ok">deterministic ✓</span>
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">✓</span> Approvals</div>
+      <div class="lines">
+        {% set last_approval = none %}
+        {% for c in comments %}{% if c['kind'] == 'approval' %}{% set last_approval = c %}{% endif %}{% endfor %}
+        {% if last_approval %}<span class="ok">Approved</span> by {{ last_approval['author'] }}<br>{% else %}<span class="pend">Awaiting sign-off</span><br>{% endif %}
+        Sign-offs: {{ approvals|length }}<br>
+        {% if released_at %}<span class="ok">Released {{ released_at }}</span>{% else %}<span class="k">Not released</span>{% endif %}
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">🎧</span> Assets</div>
+      <div class="lines">
+        {{ assets|length }} file{{ 's' if assets|length != 1 }} · v{{ current_n or '—' }}<br>
+        {% if share_token %}<a class="link" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">Open client portal ↗</a>{% else %}<span class="k">No portal token</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ACTION TOOLBAR -->
+<section class="card">
+  <div class="card-head"><h2>Command center</h2></div>
+  <div class="toolbar">
+    {% if share_token %}
+    <a class="btn" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">↗ Open client review link</a>
+    {% endif %}
+    <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline">
+      <button class="btn" type="submit">📦 Build delivery package</button>
+    </form>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline">
+      <button class="btn primary" type="submit">🚀 Mark released</button>
+    </form>
+  </div>
+  {% if delivery_zip %}
+  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="{{ delivery_zip.url }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}</p>
+  {% endif %}
+</section>
+
+<!-- CREATIVE BRIEF -->
+<section class="card">
+  <div class="card-head"><h2>Creative brief <span class="muted">— the start of the record</span></h2></div>
+  <form method="post" action="/project/{{ project['id'] }}/delivery/brief" class="brief-grid">
+    <div class="full">
+      <label>Objective</label>
+      <textarea name="objective" rows="2" placeholder="What is this music for?">{{ brief.objective }}</textarea>
+    </div>
+    <div>
+      <label>References</label>
+      <textarea name="references" rows="3" placeholder="Tracks / moods to reference">{{ brief.references }}</textarea>
+    </div>
+    <div>
+      <label>Tone</label>
+      <textarea name="tone" rows="3" placeholder="The emotional read">{{ brief.tone }}</textarea>
+    </div>
+    <div>
+      <label>Deliverables needed</label>
+      <textarea name="deliverables_needed" rows="2" placeholder=":60 master, :30, :15, instrumental, stems…">{{ brief.deliverables_needed }}</textarea>
+    </div>
+    <div>
+      <label>Deadline</label>
+      <input type="text" name="deadline" value="{{ brief.deadline }}" placeholder="e.g. 2026-07-15">
+    </div>
+    <div class="full">
+      <button class="btn primary" type="submit">Save brief</button>
+    </div>
+  </form>
+</section>
+
+<div class="cols-2">
+  <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
+  <section class="card">
+    <div class="card-head"><h2>Versions &amp; review activity</h2></div>
+    {% if versions %}
+    <div class="vrail" aria-label="Version history">
+      {% for v in versions %}
+      <span class="vchip{% if loop.last %} cur{% endif %}">v{{ v.n }} {{ v.label }}{% if loop.last %} · current{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted small">No versions logged yet — upload the first master below.</p>
+    {% endif %}
+
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
+    <ul class="rc-feed">
+      {% for c in comments %}
+      <li class="rc-ev">
+        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
+        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
+        <span class="rc-a">{{ c['author'] }}</span>
+        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
+      </li>
+      {% else %}
+      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <!-- CAMPAIGN TIMELINE -->
+  <section class="card">
+    <div class="card-head"><h2>Campaign timeline</h2></div>
+    <ul class="timeline">
+      {% for e in timeline %}
+      <li class="tl-row">
+        <span class="tl-ico">{{ e.icon }}</span>
+        <div class="tl-body">
+          <div class="tl-label">{{ e.label }}</div>
+          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
+        </div>
+        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
+      </li>
+      {% else %}
+      <li class="muted small">The timeline fills in as the campaign progresses.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<!-- DELIVERABLE ASSETS + UPLOAD CONTROLS -->
+<div class="cols-2">
+  <section class="card">
+    <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
+    {% for a in assets %}
+    <div class="asset-row">
+      <span>{% if a.kind == 'audio' %}🎵{% else %}📄{% endif %} <a class="link" href="{{ a.url }}">{{ a.label }}</a></span>
+      <form method="post" action="/project/{{ project['id'] }}/delivery/asset" class="inline">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="filename" value="{{ a.filename }}">
+        <button class="btn tiny" type="submit">Remove</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted small">No deliverable files uploaded yet.</p>
+    {% endfor %}
+
+    <form method="post" action="/project/{{ project['id'] }}/delivery/asset" enctype="multipart/form-data" class="stack" style="margin-top:14px">
+      <label>Upload a deliverable</label>
+      <input type="text" name="label" placeholder="Label (e.g. :60 Broadcast Mix)">
+      <input type="file" name="file" required>
+      <button class="btn primary" type="submit">Upload asset</button>
+    </form>
+
+    <form method="post" action="/project/{{ project['id'] }}/delivery/version" enctype="multipart/form-data" class="stack" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+      <label>Log a new version of the master</label>
+      <input type="file" name="file" required>
+      <button class="btn" type="submit">Upload version</button>
+    </form>
+  </section>
+
+  <!-- RIGHTS / LICENSE -->
+  <section class="card">
+    <div class="card-head"><h2>License &amp; rights <span class="muted">— Rights agent</span></h2></div>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/license" class="stack">
+      <label>Type</label>
+      <input type="text" name="type" value="{{ license.type }}">
+      <label>Territory</label>
+      <input type="text" name="territory" value="{{ license.territory }}">
+      <label>Term</label>
+      <input type="text" name="term" value="{{ license.term }}">
+      <label>Exclusivity</label>
+      <input type="text" name="exclusivity" value="{{ license.exclusivity }}">
+      <label>Content-ID</label>
+      <input type="text" name="content_id" value="{{ cert.content_id }}">
+      <button class="btn primary" type="submit" style="margin-top:6px">Save license</button>
+    </form>
+    {% if approvals %}
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Sign-offs</h3>
+    <table class="table compact">
+      <thead><tr><th>Asset</th><th>Approved by</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for ap in approvals %}<tr><td>{{ ap.asset }}</td><td>{{ ap.approver }}</td><td>{{ ap.date }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+</div>
+
+{% endblock %}
