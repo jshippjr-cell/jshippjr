@@ -10,7 +10,7 @@
 {% set h = show.hero %}
 <section class="hero">
   <div class="hero-media">
-    {% if h.video %}
+    {% if h.video and h.get('motion', 'video') != 'loop' %}
     {# Poster shows instantly while the Cloudinary-optimized video buffers, on all
        devices. No `type` on the source so f_auto can deliver the best codec. #}
     {# src is set DIRECTLY on <video> (not a child <source>): iOS Safari is
