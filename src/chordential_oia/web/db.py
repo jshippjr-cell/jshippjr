@@ -132,7 +132,9 @@ CREATE TABLE IF NOT EXISTS projects (
     deadline TEXT,
     status TEXT DEFAULT 'Active',
     roles TEXT,                  -- JSON list of required role names
-    created_at TEXT
+    created_at TEXT,
+    delivery_json TEXT,          -- Delivery OS (Phase 0) per-project state (JSON)
+    share_token TEXT             -- token gating the client delivery portal
 );
 
 CREATE TABLE IF NOT EXISTS assignments (
@@ -278,6 +280,18 @@ _INBOUND_COLUMNS = {
     "shown_price_high": "REAL",
     "phone": "TEXT",
     "contact_linkedin": "TEXT",
+}
+
+# Delivery OS (Phase 0) columns added to projects after the table first shipped —
+# migrated onto an existing DB the same idempotent way the others are.
+_PROJECT_COLUMNS = {
+    # The thin per-project Delivery OS state, a JSON blob (see get_delivery for the
+    # shape). Display/workflow data only — never queried relationally — so an
+    # untouched project renders exactly as before.
+    "delivery_json": "TEXT",
+    # Unguessable per-project share token gating the client delivery portal
+    # (?k=<token>), mirroring the opportunities.share_token first-touch pattern.
+    "share_token": "TEXT",
 }
 
 # Provenance columns on talent — migrated onto an existing roster the same way.
@@ -528,9 +542,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             opp_id INTEGER, client TEXT, need TEXT,
             budget_min REAL, budget_max REAL, deadline TEXT,
-            status TEXT DEFAULT 'Active', roles TEXT, created_at TEXT
+            status TEXT DEFAULT 'Active', roles TEXT, created_at TEXT,
+            delivery_json TEXT, share_token TEXT
         )"""
     )
+    project_cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
+    for name, decl in _PROJECT_COLUMNS.items():
+        if name not in project_cols:
+            conn.execute(f"ALTER TABLE projects ADD COLUMN {name} {decl}")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS assignments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2246,6 +2265,80 @@ def project_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.R
 
 def get_project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.Row]:
     return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# Delivery OS (Phase 0) — thin per-project state on projects.delivery_json
+#
+# A single JSON blob, edited the same way doc_overrides is (merge one key at a
+# time): the deterministic engine + a few logged human calls (license terms,
+# approvals, release). Shape (all optional):
+#   state         : "In production" | "In review" | "Delivered" | "Released"
+#   version_state : "v1 Concept" | "v2 Direction-lock" | "v3 FINAL"
+#   revisions_used: int (rounds logged)
+#   license       : {type, territory, term, exclusivity, content_id}
+#   approvals     : [{asset, approver, date}]
+#   released_at   : ISO date stamp set on release
+#   assets        : [{label, url, filename, kind}]  (kind: "audio" | "file")
+#   share_token   : the client-portal token (mirrors opportunities.share_token)
+# --------------------------------------------------------------------------- #
+def get_delivery(conn: sqlite3.Connection, project_id: int) -> dict:
+    """The project's Delivery OS state as a dict ({} when none/blank)."""
+    row = conn.execute(
+        "SELECT delivery_json FROM projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    if row is None:
+        return {}
+    raw = row["delivery_json"]
+    if not raw or not str(raw).strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_delivery(conn: sqlite3.Connection, project_id: int, delivery: dict) -> None:
+    """Write the full delivery dict back as JSON (empty dict clears the column)."""
+    blob = json.dumps(delivery) if delivery else None
+    conn.execute(
+        "UPDATE projects SET delivery_json = ? WHERE id = ?", (blob, project_id)
+    )
+    conn.commit()
+
+
+def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) -> dict:
+    """Merge a single delivery key (None removes it). Returns the updated dict."""
+    delivery = get_delivery(conn, project_id)
+    if value is None:
+        delivery.pop(key, None)
+    else:
+        delivery[key] = value
+    save_delivery(conn, project_id, delivery)
+    return delivery
+
+
+def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Optional[str]:
+    """Return the project's share token, minting one on first use.
+
+    Gates the client-facing delivery portal (``?k=<token>``) so the page is
+    shareable with the client but not enumerable. Mirrors :func:`ensure_share_token`.
+    Returns ``None`` only when the project doesn't exist."""
+    row = conn.execute(
+        "SELECT share_token FROM projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    existing = row["share_token"]
+    if existing and str(existing).strip():
+        return existing
+    token = secrets.token_urlsafe(9)
+    conn.execute(
+        "UPDATE projects SET share_token = ? WHERE id = ?", (token, project_id)
+    )
+    conn.commit()
+    return token
 
 
 def list_projects(conn: sqlite3.Connection) -> List[sqlite3.Row]:

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Delivery — {{ cert.campaign }} · Chordential</title>
+<style>
+  :root{
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
+    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:780px;margin:0 auto;padding:0 20px 64px}
+  .hero{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
+    padding:46px 0 40px;margin-bottom:30px}
+  .hero .wrap{padding-top:0}
+  .logo{height:26px;width:auto;display:block;margin-bottom:22px}
+  .kick{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 8px}
+  h1{font-family:var(--serif);font-weight:600;font-size:38px;line-height:1.08;margin:0 0 8px}
+  .hero .tag{color:var(--sand);font-size:15px;max-width:90%;margin:0}
+  .status{display:inline-block;margin-top:22px;border:1px solid var(--orange);color:var(--orange);
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;padding:7px 14px;border-radius:4px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+  h2{font-family:var(--serif);font-size:22px;color:var(--wine);margin:0 0 4px;font-weight:600}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);
+    border-bottom:2px solid var(--wine);padding:7px 6px}
+  td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr.grp td{background:var(--cream);font-weight:700;color:var(--wine);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px}
+  .tick{color:var(--orange);font-weight:800}
+  ul.clean{margin:6px 0;padding-left:18px;font-size:13px;line-height:1.8}
+  .legend{font-size:12px;color:var(--muted)}
+  .muted-note{font-size:11px;color:var(--muted);font-style:italic;margin-top:12px}
+  .seal{width:90px;height:90px;border-radius:50%;border:3px solid var(--orange);color:var(--wine);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
+  .seal b{font-family:var(--serif);font-size:14px;letter-spacing:0}
+  .asset{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .asset:last-child{border-bottom:0}
+  .asset .nm{font-weight:600;font-size:14px}
+  .dl{color:var(--orange);text-decoration:none;font-weight:700;font-size:13px}
+  /* compact, brand-coloured audio player */
+  .cap-audio{display:inline-flex;align-items:center;gap:10px;max-width:380px;width:100%;
+    background:var(--cream);border:1px solid #e4ddd8;border-radius:999px;padding:5px 14px 5px 5px}
+  .cap-audio-btn{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:0;
+    background:var(--orange);color:#fff;font-size:12px;line-height:1;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center}
+  .cap-audio-body{flex:1 1 auto;min-width:110px}
+  .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
+  .cap-audio-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:var(--orange)}
+  .cap-audio-time{flex:0 0 auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+  .foot{text-align:center;color:var(--muted);font-size:11px;margin-top:34px;letter-spacing:.04em}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="wrap">
+    <img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential">
+    <p class="kick">Your Delivery</p>
+    <h1>{{ cert.campaign }}</h1>
+    <p class="tag">Original music — composed, produced, and cleared for {{ cert.client }}.</p>
+    <span class="status">{{ state }}{% if version_state %} · {{ version_state }}{% endif %}</span>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <!-- WHAT YOU BOUGHT -->
+  <div class="card">
+    <h2>What you bought</h2>
+    <p class="sub">Everything in your delivery, in one place.</p>
+    <table>
+      <thead><tr><th>Asset</th><th>Format</th><th>Status</th></tr></thead>
+      <tbody>
+        {% set ns = namespace(grp="") %}
+        {% for r in manifest %}
+          {% if r.group != ns.grp %}
+            <tr class="grp"><td colspan="3">{{ r.group }}</td></tr>
+            {% set ns.grp = r.group %}
+          {% endif %}
+          <tr><td>{{ r.asset }}</td><td>{{ r.spec }}</td>
+            <td>{% if r.status == "Delivered" %}<span class="tick">✓</span> Delivered{% else %}{{ r.status }}{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ASSETS / PLAYERS -->
+  {% if assets %}
+  <div class="card">
+    <h2>Your files</h2>
+    <p class="sub">Stream or download — yours to keep.</p>
+    {% for a in assets %}
+      <div class="asset">
+        <div class="nm">{{ a.label }}</div>
+        {% if a.kind == "audio" %}
+        <div class="cap-audio">
+          <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>
+          <div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>
+          <span class="cap-audio-time">0:00</span>
+          <audio preload="none" src="{{ a.url }}"></audio>
+        </div>
+        {% endif %}
+        <a class="dl" href="{{ a.url }}">⤓ Download {{ a.label }}</a>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- CLEARANCE SUMMARY -->
+  <div class="card">
+    <h2>Cleared &amp; original</h2>
+    <p class="sub">Music your legal team can defend.</p>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:1 1 320px">
+        <ul class="clean">
+          <li><b>Type:</b> {{ cert.license.type }}</li>
+          <li><b>Territory:</b> {{ cert.license.territory }}</li>
+          <li><b>Term:</b> {{ cert.license.term }}</li>
+          <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
+          <li><b>Content-ID:</b> {{ cert.content_id }}</li>
+        </ul>
+        <p class="legend" style="margin-top:8px">{{ cert.clearance_line }}</p>
+        <p class="muted-note">{{ cert.indemnity_note }}</p>
+      </div>
+      <div style="flex:0 0 auto;text-align:center">
+        <div class="seal"><span>Chordential</span><b>CLEARED</b><span>original work</span></div>
+      </div>
+    </div>
+    {% if cert.contributors %}
+    <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Created by</p>
+    <ul class="clean">
+      {% for c in cert.contributors %}<li>{{ c.name }} — {{ c.role }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {% if approvals %}
+  <div class="card">
+    <h2>Sign-off</h2>
+    <table>
+      <thead><tr><th>Asset</th><th>Approved by</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for ap in approvals %}<tr><td>{{ ap.asset }}</td><td>{{ ap.approver }}</td><td>{{ ap.date }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <p class="foot">Prepared by Chordential · {{ cert.client }}{% if released_at %} · Released {{ released_at }}{% endif %}</p>
+</div>
+
+<script>
+(function () {
+  function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+  document.querySelectorAll('.cap-audio').forEach(function (p) {
+    var audio = p.querySelector('audio'), btn = p.querySelector('.cap-audio-btn'),
+        fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
+        time = p.querySelector('.cap-audio-time');
+    if (!audio) return;
+    btn.addEventListener('click', function () {
+      if (audio.paused) {
+        document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
+        audio.play();
+      } else { audio.pause(); }
+    });
+    audio.addEventListener('play', function(){ btn.textContent = '❚❚'; });
+    audio.addEventListener('pause', function(){ btn.textContent = '▶'; });
+    audio.addEventListener('timeupdate', function(){
+      if (audio.duration) { fill.style.width = (100*audio.currentTime/audio.duration) + '%'; }
+      time.textContent = fmt(audio.currentTime);
+    });
+    bar.addEventListener('click', function(e){
+      if (!audio.duration) return;
+      var r = bar.getBoundingClientRect();
+      audio.currentTime = audio.duration * (e.clientX - r.left) / r.width;
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

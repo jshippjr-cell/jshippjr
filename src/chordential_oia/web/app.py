@@ -41,6 +41,10 @@ from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, build_understanding,
     chips_for, default_toggles,
 )
+from ..delivery import (
+    build_clearance_certificate, build_cue_sheet, build_manifest,
+    merge_license, revision_status, DELIVERY_STATES, VERSION_STATES,
+)
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
@@ -181,6 +185,16 @@ def _is_first_touch_path(path: str) -> bool:
     return bool(_FIRST_TOUCH_RE.match(path))
 
 
+# The token-gated client delivery portal: /project/<id>/delivery-portal . Same
+# pattern as first-touch — the per-project share token (?k=<token>) checked in the
+# route is the access control, so the path bypasses the admin login gate.
+_DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
+
+
+def _is_delivery_portal_path(path: str) -> bool:
+    return bool(_DELIVERY_PORTAL_RE.match(path))
+
+
 def _admin_secret() -> Optional[str]:
     return os.environ.get("CHORDENTIAL_ADMIN_TOKEN") or None
 
@@ -207,6 +221,9 @@ def _is_public_path(path: str) -> bool:
         # bypasses the admin login gate — but it stays protected by the unguessable
         # per-opp share token in the URL (validated in the route), not by login.
         or _is_first_touch_path(path)
+        # The client delivery portal is opened by the buyer — same token-gated
+        # exemption as first-touch (the per-project share token IS the access control).
+        or _is_delivery_portal_path(path)
         or path in ("/healthz", "/favicon.ico")
         # PWA install assets — fetched by the browser/OS (sometimes without the
         # admin cookie), and non-sensitive, so they bypass the gate.
@@ -2397,6 +2414,252 @@ def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Delivery OS (Phase 0, Pass A) — the delivery engine + generated package +
+# client-facing portal. Deterministic assembly; Jon presses the human buttons
+# (license terms, log a revision, approve, release). See chordential_oia.delivery.
+# --------------------------------------------------------------------------- #
+def _project_estimate(conn, row):
+    """The estimate behind a project (for scoped revision rounds), or None.
+
+    Rebuilt from the linked opportunity the same way the project view does — used
+    only to read the revision multiplier. None when there's no linked opp."""
+    opp_id = row["opp_id"] if "opp_id" in row.keys() else None
+    if opp_id is None:
+        return None
+    opp_row = db.get_opportunity(conn, opp_id)
+    if opp_row is None:
+        return None
+    opp = db.opportunity_from_row(opp_row)
+    qual, _ = evaluate(opp)
+    team = list(qual.team_shape or qual.discipline.team_shape)
+    overrides = db.assigned_rate_overrides(conn, row["id"])
+    return build_estimate(opp, team, qual.discipline, rate_overrides=overrides)
+
+
+def _delivery_view(conn, project_id: int):
+    """Assemble the Delivery OS data for a project (engine docs + state), or None."""
+    row = db.get_project(conn, project_id)
+    if row is None:
+        return None
+    assignments = db.list_assignments(conn, project_id)
+    delivery = db.get_delivery(conn, project_id)
+    license = delivery.get("license") or {}
+    estimate = _project_estimate(conn, row)
+
+    cert = build_clearance_certificate(row, assignments, license)
+    cues = build_cue_sheet(row, assignments)
+    manifest = build_manifest(row, assets=delivery.get("assets") or [])
+    revisions = revision_status(row, estimate, delivery)
+    token = db.ensure_project_share_token(conn, project_id)
+
+    return {
+        "row": row,
+        "project": row,
+        "assignments": assignments,
+        "delivery": delivery,
+        "state": delivery.get("state") or DELIVERY_STATES[0],
+        "version_state": revisions["state"],
+        "cert": cert,
+        "cues": cues,
+        "manifest": manifest,
+        "revisions": revisions,
+        "license": cert.license,
+        "approvals": delivery.get("approvals") or [],
+        "assets": delivery.get("assets") or [],
+        "released_at": delivery.get("released_at"),
+        "share_token": token,
+    }
+
+
+@app.get("/project/{project_id}/delivery")
+def delivery_console(project_id: int):
+    """The Delivery Console lands in Pass B (the operator UI). For now the mutation
+    routes redirect here; send the operator to the generated package (the artifact)
+    so the link is live until the console ships."""
+    return RedirectResponse(f"/project/{project_id}/delivery-package", status_code=303)
+
+
+@app.get("/project/{project_id}/delivery-package", response_class=HTMLResponse)
+def delivery_package(request: Request, project_id: int):
+    """THE artifact — the generated, on-brand Clearance-Certified delivery package
+    (print-to-PDF). Admin-gated; this is the proof-of-concept."""
+    conn = db.connect()
+    try:
+        view = _delivery_view(conn, project_id)
+        if view is None:
+            return HTMLResponse("Project not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "delivery_package.html", nav="projects", **view)
+
+
+@app.post("/project/{project_id}/delivery/license")
+def delivery_set_license(
+    project_id: int,
+    type: str = Form(""),
+    territory: str = Form(""),
+    term: str = Form(""),
+    exclusivity: str = Form(""),
+    content_id: str = Form(""),
+):
+    """Log the license grant (Rights agent). Stored raw; the engine merges defaults."""
+    conn = db.connect()
+    try:
+        license = {
+            "type": type.strip(),
+            "territory": territory.strip(),
+            "term": term.strip(),
+            "exclusivity": exclusivity.strip(),
+            "content_id": content_id.strip(),
+        }
+        # Drop blank fields so the engine falls back to the standard term.
+        license = {k: v for k, v in license.items() if v}
+        db.update_delivery(conn, project_id, "license", license or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/revision")
+def delivery_revision(
+    project_id: int,
+    action: str = Form("log"),
+    version_state: str = Form(""),
+):
+    """Revisions agent: log a round (increment used) or set the version state."""
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        if action == "version" and version_state in VERSION_STATES:
+            db.update_delivery(conn, project_id, "version_state", version_state)
+        else:  # log a revision round
+            used = int(delivery.get("revisions_used") or 0) + 1
+            db.update_delivery(conn, project_id, "revisions_used", used)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/asset")
+async def delivery_asset(
+    project_id: int,
+    request: Request,
+    label: str = Form(""),
+    action: str = Form("add"),
+    filename: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """Assets agent: upload (or remove) a deliverable file into the project's
+    ``delivery_json['assets']`` list. Reuses the doc_upload audio/file handling and
+    the local UPLOAD_DIR + /uploads/{name} mechanism (no S3/R2)."""
+    conn = db.connect()
+    try:
+        if action == "remove" and filename.strip():
+            base = os.path.basename(filename.strip())
+            delivery = db.get_delivery(conn, project_id)
+            assets = [
+                a for a in list(delivery.get("assets") or [])
+                if a.get("filename") != base
+            ]
+            db.update_delivery(conn, project_id, "assets", assets or None)
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, base))
+            except OSError:
+                pass
+            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+        if file is None or not (file.filename or "").strip():
+            return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        ctype = (file.content_type or "").lower()
+        kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
+        data = await file.read()
+
+        # Safe, unique on-disk name: project-scoped + a counter so re-uploads don't clash.
+        existing = {
+            a.get("filename")
+            for a in (db.get_delivery(conn, project_id).get("assets") or [])
+        }
+        safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
+        n = 1
+        while f"proj{project_id}-{n}{safe_ext}" in existing or os.path.exists(
+            os.path.join(UPLOAD_DIR, f"proj{project_id}-{n}{safe_ext}")
+        ):
+            n += 1
+        safe_name = f"proj{project_id}-{n}{safe_ext}"
+        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
+            fh.write(data)
+
+        delivery = db.get_delivery(conn, project_id)
+        assets = list(delivery.get("assets") or [])
+        assets.append({
+            "label": label.strip() or file.filename,
+            "url": f"/uploads/{safe_name}",
+            "filename": safe_name,
+            "kind": kind,
+        })
+        db.update_delivery(conn, project_id, "assets", assets)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/approve")
+def delivery_approve(
+    project_id: int,
+    asset: str = Form(...),
+    approver: str = Form(...),
+):
+    """Approvals agent: log a sign-off (approved_by + today's date) per asset."""
+    from datetime import date as _date
+    conn = db.connect()
+    try:
+        if asset.strip() and approver.strip():
+            delivery = db.get_delivery(conn, project_id)
+            approvals = list(delivery.get("approvals") or [])
+            approvals.append({
+                "asset": asset.strip(),
+                "approver": approver.strip(),
+                "date": _date.today().isoformat(),
+            })
+            db.update_delivery(conn, project_id, "approvals", approvals)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/release")
+def delivery_release(project_id: int):
+    """Approvals agent: mark the delivery Released (state + released_at stamp)."""
+    from datetime import date as _date
+    conn = db.connect()
+    try:
+        db.update_delivery(conn, project_id, "state", "Released")
+        db.update_delivery(conn, project_id, "released_at", _date.today().isoformat())
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.get("/project/{project_id}/delivery-portal", response_class=HTMLResponse)
+def delivery_portal(request: Request, project_id: int, k: str = ""):
+    """The client-facing, token-gated delivery page (?k=token). NOT admin-gated —
+    the per-project share token is the access control (mirrors first-touch)."""
+    conn = db.connect()
+    try:
+        row = db.get_project(conn, project_id)
+        token = db.ensure_project_share_token(conn, project_id) if row is not None else None
+        # A missing project, an unset token, or a mismatch all 404 identically.
+        if row is None or not token or not k or not hmac.compare_digest(str(k), str(token)):
+            return HTMLResponse("Not found", status_code=404)
+        view = _delivery_view(conn, project_id)
+    finally:
+        conn.close()
+    return render(request, "delivery_portal.html", nav="", **view)
 
 
 # --------------------------------------------------------------------------- #

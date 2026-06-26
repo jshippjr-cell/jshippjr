@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Delivery Package · {{ project["client"] }}</title>
+<style>
+  :root{
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
+    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#cfc9bf;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  .page{position:relative;width:210mm;min-height:297mm;margin:14px auto;background:#fff;
+    padding:22mm 20mm 20mm;overflow:hidden;box-shadow:0 8px 34px rgba(0,0,0,.22)}
+  .content{position:relative;z-index:1}
+  .lh{display:flex;align-items:center;justify-content:space-between;background:var(--wine);
+    padding:11px 16px;border-radius:8px;margin-bottom:26px}
+  .lh .logo{height:19px;width:auto;display:block}
+  .lh-meta{font-size:10px;color:#e7c6ba;text-transform:uppercase;letter-spacing:.14em;text-align:right}
+  .doc-kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 6px}
+  h1.doc{font-family:var(--serif);font-size:30px;line-height:1.1;margin:0 0 4px;color:var(--ink);font-weight:600}
+  .doc-sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+  .foot{position:absolute;left:20mm;right:20mm;bottom:12mm;display:flex;justify-content:space-between;
+    border-top:1px solid var(--line);padding-top:8px;font-size:9.5px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.1em;z-index:1}
+  table{width:100%;border-collapse:collapse;font-size:11.5px}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);
+    border-bottom:2px solid var(--wine);padding:7px 8px}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr.grp td{background:var(--cream);font-weight:700;color:var(--wine);text-transform:uppercase;
+    letter-spacing:.08em;font-size:9.5px}
+  .tick{color:var(--orange);font-weight:800}
+  .chip{display:inline-block;background:var(--wine);color:#fff;font-size:10px;font-weight:700;
+    letter-spacing:.06em;padding:5px 11px;border-radius:20px}
+  .chip.ok{background:rgba(228,103,31,.14);color:#b5500f}
+  .mono{font-family:var(--mono);font-size:11px}
+  .panel{background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .accent-bar{height:3px;background:linear-gradient(90deg,var(--orange),var(--wine));border-radius:3px;margin:0 0 18px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .seal{width:96px;height:96px;border-radius:50%;border:3px solid var(--orange);color:var(--wine);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
+  .seal b{font-family:var(--serif);font-size:15px;letter-spacing:0}
+  .cover{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
+    padding:0;display:flex;flex-direction:column;justify-content:space-between}
+  .cover .inner{position:relative;z-index:1;padding:30mm 22mm}
+  .cover .logo-cover{height:30px;width:auto;display:block}
+  .cover h1{font-family:var(--serif);font-weight:600;font-size:46px;line-height:1.05;margin:18px 0 6px}
+  .cover .tag{color:var(--sand);font-size:15px;max-width:70%}
+  .cover .rule{height:2px;width:120px;background:var(--orange);margin:26px 0}
+  .cover .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;max-width:80%;font-size:12.5px}
+  .cover .meta div span{display:block;color:#b89a8c;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:2px}
+  .cover .status{display:inline-block;margin-top:26px;border:1px solid var(--orange);color:var(--orange);
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;padding:8px 16px;border-radius:4px}
+  .tree{display:flex;align-items:center;gap:0;margin:8px 0 6px}
+  .node{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;min-width:140px;text-align:center}
+  .node .v{font-family:var(--serif);font-size:16px;color:var(--wine)}
+  .node.final{border-color:var(--orange);box-shadow:0 0 0 3px rgba(228,103,31,.16)}
+  .node.cur{border-color:var(--orange)}
+  .arr{flex:1;height:2px;background:var(--wine);position:relative;min-width:26px}
+  .arr:after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--wine)}
+  ul.clean{margin:6px 0;padding-left:18px;font-size:12px;line-height:1.7}
+  .legend{font-size:10.5px;color:var(--muted)}
+  .muted-note{font-size:10px;color:var(--muted);font-style:italic;margin-top:10px}
+  .sig{margin-top:14px;border-top:1.5px solid var(--ink);padding-top:6px;font-size:11px}
+  .sig span{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.1em}
+  /* compact, brand-coloured audio player */
+  .cap-audio{display:inline-flex;align-items:center;gap:10px;max-width:340px;width:100%;
+    background:#fff;border:1px solid #e4ddd8;border-radius:999px;padding:4px 12px 4px 4px;margin:8px 0 4px}
+  .cap-audio-btn{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:0;
+    background:var(--orange);color:#fff;font-size:11px;line-height:1;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center}
+  .cap-audio-body{flex:1 1 auto;min-width:110px}
+  .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
+  .cap-audio-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:var(--orange)}
+  .cap-audio-time{flex:0 0 auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+  @media print{
+    body{background:#fff}
+    .page{margin:0;box-shadow:none;width:auto;min-height:auto;page-break-after:always}
+    .toolbar,.no-print{display:none}
+  }
+  .toolbar{position:sticky;top:0;z-index:9;background:var(--wine);color:#fff;display:flex;align-items:center;gap:14px;justify-content:space-between;padding:10px 18px;font-size:12.5px}
+  .tb-link{color:#f0b487;text-decoration:none;font-weight:700;white-space:nowrap}
+  .tb-actions{display:flex;gap:8px}
+  .tb-btn{background:var(--orange);color:#fff;border:0;border-radius:6px;padding:7px 13px;font:inherit;font-weight:700;font-size:12px;text-decoration:none;cursor:pointer;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a class="tb-link" href="/project/{{ project["id"] }}">← Project</a>
+  <span>Clearance-Certified delivery package — {{ project["client"] }} · {{ state }}</span>
+  <span class="tb-actions"><button class="tb-btn" onclick="window.print()">Save as PDF</button></span>
+</div>
+
+{% set pkgid = "CHD-PROJ-%04d"|format(project["id"]) %}
+
+<!-- 1 — COVER -->
+<section class="page cover">
+  <div class="inner">
+    <img class="logo-cover" src="/static/public/wordmark-ko.png" alt="Chordential">
+    <div class="rule"></div>
+    <p class="doc-kicker" style="color:var(--orange)">Delivery Package</p>
+    <h1>{{ cert.campaign }}</h1>
+    <p class="tag">Original music — composed, produced, and cleared for {{ cert.client }}.</p>
+    <div class="status">{{ state }}{% if version_state %} · {{ version_state }}{% endif %}</div>
+    <div class="rule" style="margin:34px 0 22px"></div>
+    <div class="meta">
+      <div><span>Client / Brand</span>{{ cert.client }}</div>
+      <div><span>Campaign</span>{{ cert.campaign }}</div>
+      <div><span>Package ID</span>{{ pkgid }}</div>
+      <div><span>Status</span>{{ state }}</div>
+      <div><span>Locked Version</span>{{ version_state }}</div>
+      {% if released_at %}<div><span>Released</span>{{ released_at }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="foot" style="color:#9b8276;border-color:rgba(255,255,255,.12)">
+    <span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
+</section>
+
+<!-- 2 — DELIVERABLES MANIFEST -->
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
+    <p class="doc-kicker">Document 01</p>
+    <h1 class="doc">Deliverables Manifest</h1>
+    <p class="doc-sub">Everything scoped, accounted for in one place.
+      <span class="chip ok" style="margin-left:8px">{{ assets|length }} asset{{ '' if assets|length == 1 else 's' }} uploaded</span></p>
+    <table>
+      <thead><tr><th>Asset</th><th>Format / Spec</th><th>Status</th></tr></thead>
+      <tbody>
+        {% set ns = namespace(grp="") %}
+        {% for r in manifest %}
+          {% if r.group != ns.grp %}
+            <tr class="grp"><td colspan="3">{{ r.group }}</td></tr>
+            {% set ns.grp = r.group %}
+          {% endif %}
+          <tr>
+            <td>{{ r.asset }}</td>
+            <td>{{ r.spec }}</td>
+            <td>
+              {% if r.status == "Delivered" %}<span class="tick">✓</span> Delivered{% else %}{{ r.status }}{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="legend" style="margin-top:14px">Scoped rows are the standard asset types for this engagement; Delivered rows are the files uploaded into this package.</p>
+  </div>
+  <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
+</section>
+
+<!-- 3 — CLEARANCE CERTIFICATE -->
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
+    <p class="doc-kicker">Document 02</p>
+    <h1 class="doc">Clearance Certificate</h1>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery.</p>
+    <div class="accent-bar"></div>
+
+    <div class="panel" style="margin-bottom:18px">
+      <p style="margin:0;font-size:12.5px;line-height:1.6">{{ cert.warranty }}</p>
+    </div>
+
+    <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Contributors &amp; chain of title</p>
+    <table style="margin-bottom:18px">
+      <thead><tr><th>Role</th><th>Contributor</th></tr></thead>
+      <tbody>
+        {% for c in cert.contributors %}
+          <tr><td>{{ c.role }}</td><td>{{ c.name }}</td></tr>
+        {% else %}
+          <tr><td colspan="2" class="legend">No contributors assigned yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="two">
+      <div class="panel">
+        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights</p>
+        <ul class="clean">
+          <li><b>Type:</b> {{ cert.license.type }}</li>
+          <li><b>Territory:</b> {{ cert.license.territory }}</li>
+          <li><b>Term:</b> {{ cert.license.term }}</li>
+          <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
+          <li><b>Content-ID:</b> {{ cert.content_id }}</li>
+        </ul>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+        <div class="seal"><span>Chordential</span><b>CLEARED</b><span>{{ pkgid }}</span></div>
+        <p style="font-size:10.5px;color:var(--muted);margin:12px 0 0;max-width:230px">
+          {{ cert.clearance_line }}</p>
+      </div>
+    </div>
+    <p class="muted-note">{{ cert.indemnity_note }}</p>
+  </div>
+  <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
+</section>
+
+<!-- 4 — CUE SHEET -->
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
+    <p class="doc-kicker">Document 03</p>
+    <h1 class="doc">Cue Sheet</h1>
+    <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
+    <table>
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <tbody>
+        {% for q in cues %}
+          <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration }}</td>
+            <td>{{ q.composers }}</td><td>{{ q.publisher }}</td><td>{{ q.pro }}</td><td>{{ q.share }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue.</p>
+  </div>
+  <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
+</section>
+
+<!-- 5 — VERSION STATE + ASSETS + APPROVAL -->
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
+    <p class="doc-kicker">Document 04</p>
+    <h1 class="doc">Version State &amp; Approval</h1>
+    <p class="doc-sub">Controlled variation — bounded rounds, a clean sign-off.</p>
+    <div class="accent-bar"></div>
+
+    <div class="tree">
+      <div class="node {{ 'cur' if version_state == 'v1 Concept' else '' }}"><div class="v">v1</div><div class="l">Concept</div></div>
+      <div class="arr"></div>
+      <div class="node {{ 'cur' if version_state == 'v2 Direction-lock' else '' }}"><div class="v">v2</div><div class="l">Direction-lock</div></div>
+      <div class="arr"></div>
+      <div class="node {{ 'final' if version_state == 'v3 FINAL' else '' }}"><div class="v">v3</div><div class="l">FINAL</div></div>
+    </div>
+    <p class="legend" style="margin-top:8px">Revision rounds — {{ revisions.used }} used of {{ revisions.scoped }} scoped · {{ revisions.remaining }} remaining. Current state: <b>{{ version_state }}</b>.</p>
+
+    {% if assets %}
+    <p style="margin:22px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Delivered assets</p>
+    {% for a in assets %}
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600">{{ a.label }}</div>
+        {% if a.kind == "audio" %}
+        <div class="cap-audio no-print">
+          <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>
+          <div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>
+          <span class="cap-audio-time">0:00</span>
+          <audio preload="none" src="{{ a.url }}"></audio>
+        </div>
+        {% endif %}
+        <div class="legend"><a href="{{ a.url }}">⤓ {{ a.label }}</a></div>
+      </div>
+    {% endfor %}
+    {% endif %}
+
+    <p style="margin:22px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Sign-off record</p>
+    <table>
+      <thead><tr><th>Asset</th><th>Approved by</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for ap in approvals %}
+          <tr><td>{{ ap.asset }}</td><td>{{ ap.approver }}</td><td>{{ ap.date }}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="legend">No approvals logged yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="panel" style="text-align:center;padding:26px 22px;margin-top:24px;border-color:var(--orange)">
+      <div class="seal" style="margin:0 auto 14px;width:100px;height:100px">
+        <span>Chordential</span><b>{{ 'RELEASED' if state == 'Released' else 'IN PROGRESS' }}</b><span>{{ 'for release' if state == 'Released' else state }}</span></div>
+      <p style="font-family:var(--serif);font-size:20px;color:var(--wine);margin:0 0 4px">{{ cert.campaign }}</p>
+      <p style="color:var(--muted);font-size:12px;margin:0">{{ cert.client }}</p>
+      {% if released_at %}<p style="margin:12px 0 0;font-size:12.5px">Released <b>{{ released_at }}</b> · Locked <b>{{ version_state }}</b></p>{% endif %}
+    </div>
+  </div>
+  <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
+</section>
+
+<script>
+(function () {
+  function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+  document.querySelectorAll('.cap-audio').forEach(function (p) {
+    var audio = p.querySelector('audio'), btn = p.querySelector('.cap-audio-btn'),
+        fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
+        time = p.querySelector('.cap-audio-time');
+    if (!audio) return;
+    btn.addEventListener('click', function () {
+      if (audio.paused) {
+        document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
+        audio.play();
+      } else { audio.pause(); }
+    });
+    audio.addEventListener('play', function(){ btn.textContent = '❚❚'; });
+    audio.addEventListener('pause', function(){ btn.textContent = '▶'; });
+    audio.addEventListener('timeupdate', function(){
+      if (audio.duration) { fill.style.width = (100*audio.currentTime/audio.duration) + '%'; }
+      time.textContent = fmt(audio.currentTime);
+    });
+    bar.addEventListener('click', function(e){
+      if (!audio.duration) return;
+      var r = bar.getBoundingClientRect();
+      audio.currentTime = audio.duration * (e.clientX - r.left) / r.width;
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
