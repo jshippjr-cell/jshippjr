@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List
 
+from ..delivery import build_delivery_zip, version_label, version_name
 from ..estimation import build_estimate
 from ..intake import parse_email_path
 from ..models import MusicDiscipline, Opportunity
@@ -19,6 +20,7 @@ from ..sources import AVAILABLE_SOURCES
 from ..talent import InviteStatus, ReviewStatus, Talent
 from ..talent_sources import AVAILABLE_TALENT_SOURCES
 from . import db
+from . import showcase as _showcase  # demo audio URLs (review players play)
 from .evaluate import evaluate
 
 # A small starter roster so the supply side isn't empty on first run, and so the
@@ -171,6 +173,301 @@ def seed_demo_pipeline(conn: sqlite3.Connection) -> bool:
     for role, t in zip(roles, matchable):
         db.add_assignment(conn, pid, role, t.id)
     return True
+
+
+# --------------------------------------------------------------------------- #
+# Delivery OS (Phase 5) — seed fictional campaigns at different lifecycle stages
+#
+# Three invented-but-realistic campaigns so the whole delivery experience is
+# walkable end to end: a just-briefed one (brief, no comments yet), an in-review
+# one (the Frame.io-for-music portal: two versions, timestamped agency comments, a
+# change request, Round 2 of 3), and an approved+delivered one (FINAL locked, the
+# delivery ZIP built, full timeline). HONESTY: invented brands only — never real
+# trademarks (see docs/capability-demos-council.md). The version/asset audio reuse
+# the showcase Cloudinary mp3s so the review players actually PLAY in the demo.
+# --------------------------------------------------------------------------- #
+# A marker so the seed is idempotent and identifiable as demo data.
+_DELIVERY_DEMO_CLIENTS = ("Lumen Health", "Vance Athletic", "Northwind Coffee")
+
+# Standard license terms for the delivered demo (Chordential's own defaults).
+_DELIVERY_DEMO_LICENSE = {
+    "type": "Full buyout / work-made-for-hire",
+    "territory": "Worldwide",
+    "term": "Perpetuity",
+    "exclusivity": "Exclusive to client for the campaign category",
+    "content_id": "Content-ID-safe",
+}
+
+# Cloudinary mp3s from the showcase — real, playable, copyright-clean demo audio.
+_DEMO_AUDIO = [d.audio_url for d in _showcase.DEMOS if d.audio_url]
+
+
+def _demo_audio(i: int) -> str:
+    """A playable showcase mp3 URL (cycles through the four demos)."""
+    return _DEMO_AUDIO[i % len(_DEMO_AUDIO)] if _DEMO_AUDIO else ""
+
+
+def _demo_talent_id(conn: sqlite3.Connection, name: str, email: str,
+                    disciplines, credits: str) -> int:
+    """Find-or-create a named demo creator; return their talent id."""
+    row = conn.execute(
+        "SELECT id FROM talent WHERE name = ? LIMIT 1", (name,)
+    ).fetchone()
+    if row is not None:
+        return int(row[0])
+    return db.insert_talent(conn, Talent(
+        name=name, email=email, disciplines=disciplines, credits=credits,
+        review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.JOINED,
+        source="demo_delivery",
+    ))
+
+
+def _iso(days_ago: int, *, hour: int = 12, minute: int = 0) -> str:
+    """An ISO-8601 UTC timestamp ``days_ago`` days before now (deterministic-ish)."""
+    when = datetime.now(timezone.utc).replace(
+        hour=hour, minute=minute, second=0, microsecond=0
+    ) - timedelta(days=days_ago)
+    return when.isoformat()
+
+
+def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
+    """Seed three fictional campaigns at different Delivery OS lifecycle stages.
+
+    (a) Just briefed — a fresh brief, v1 Concept, no comments yet.
+    (b) In review, mid-revision — v1 + v2 uploaded, timestamped agency comments,
+        one change request, Round 2 of 3, state In review (the review portal).
+    (c) Approved & delivered — FINAL locked, the delivery ZIP built + checklist,
+        state Released, full timeline.
+
+    Idempotent (a no-op once its campaigns exist) and fail-soft (never blocks
+    startup). Returns True only when it created the campaigns this call."""
+    db.init_db(conn)
+    try:
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM projects WHERE client IN (?,?,?)",
+            _DELIVERY_DEMO_CLIENTS,
+        ).fetchone()[0]
+        if existing:
+            return False  # already seeded — touch nothing
+
+        from datetime import date as _date
+        from ..models import MusicDiscipline as _MD
+
+        # Named creators (chain of title on the certificates / cue sheets).
+        composer_a = _demo_talent_id(
+            conn, "Mara Velez", "mara@velezsound.com",
+            [_MD.COMPOSITION, _MD.ARRANGEMENT],
+            "Composer for brand campaigns; orchestral-hybrid scores.")
+        composer_b = _demo_talent_id(
+            conn, "Ezra Cole", "ezra@coleaudio.com",
+            [_MD.COMPOSITION, _MD.SONIC_BRANDING],
+            "Composer + sonic-branding lead for national spots.")
+        mixer = _demo_talent_id(
+            conn, "Priya Nair", "priya@nairmix.com",
+            [_MD.SOUND_DESIGN, _MD.COMPOSITION],
+            "Mix engineer; broadcast masters and stem delivery.")
+
+        # ----------------------------------------------------------------- #
+        # (a) Just briefed — Lumen Health — Brand Refresh.
+        # ----------------------------------------------------------------- #
+        pid_a = db.insert_project(
+            conn, None, "Lumen Health", "Brand Refresh",
+            12000.0, 18000.0, ["Composer"],
+            deadline=(_date.today() + timedelta(days=21)).isoformat(),
+        )
+        db.add_assignment(conn, pid_a, "Composer", composer_a)
+        db.save_delivery(conn, pid_a, {
+            "state": "In production",
+            "version_state": "v1 Concept",
+            "revisions_used": 0,
+            "brief": {
+                "objective": "A calm, trustworthy sonic identity for Lumen Health's "
+                             "brand refresh — to carry across app, explainer, and OOH.",
+                "references": "Warm, human, unhurried — modern healthcare without the "
+                              "clinical coldness.",
+                "tone": "Reassuring, clear, optimistic.",
+                "deliverables_needed": ":60 anthem, :30 + :15 cutdowns, sonic logo, stems.",
+                "deadline": (_date.today() + timedelta(days=21)).isoformat(),
+            },
+        })
+
+        # ----------------------------------------------------------------- #
+        # (b) In review, mid-revision — Vance Athletic — Summer Launch.
+        #     v1 + v2 uploaded (playable showcase audio), timestamped agency
+        #     comments + one change request, Round 2 of 3, state In review.
+        # ----------------------------------------------------------------- #
+        pid_b = db.insert_project(
+            conn, None, "Vance Athletic", "Summer Launch",
+            22000.0, 30000.0, ["Composer", "Mixer"],
+            deadline=(_date.today() + timedelta(days=10)).isoformat(),
+        )
+        db.add_assignment(conn, pid_b, "Composer", composer_b)
+        db.add_assignment(conn, pid_b, "Mixer", mixer)
+        versions_b = [
+            {
+                "n": 1, "label": version_label(1),
+                "url": _demo_audio(2), "filename": "",
+                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 1, "v1"),
+                "created_at": _iso(6, hour=10),
+            },
+            {
+                "n": 2, "label": version_label(2),
+                "url": _demo_audio(0), "filename": "",
+                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 2, "v2"),
+                "created_at": _iso(2, hour=15),
+            },
+        ]
+        token_b = db.ensure_project_share_token(conn, pid_b)
+        db.save_delivery(conn, pid_b, {
+            "state": "In review",
+            "version_state": version_label(2),
+            "revisions_used": 1,           # Round 2 of 3 (one round used).
+            "versions": versions_b,
+            "share_token": token_b,
+            "assets": [
+                {"label": "Anthem :60 (v2)", "url": _demo_audio(0),
+                 "filename": "", "kind": "audio"},
+            ],
+            "brief": {
+                "objective": "An energetic :60 anthem for Vance Athletic's Summer "
+                             "Launch — broadcast plus social cutdowns.",
+                "references": "Driving, optimistic, momentum-forward; organic meets "
+                              "modern production.",
+                "tone": "Bold, kinetic, confident.",
+                "deliverables_needed": ":60 anthem, :30/:15 cutdowns, :06 bumper, stems.",
+                "deadline": (_date.today() + timedelta(days=10)).isoformat(),
+            },
+        })
+        # Timestamped review activity from named agency people (the portal tape).
+        db.add_review_comment(
+            conn, pid_b, version="v1 Concept", t_seconds=12,
+            author="Dana Whitfield (Producer)",
+            body="Love the energy out of the gate — the :12 lift is exactly the hook "
+                 "we pitched. Can we hold it two beats longer?", kind="comment")
+        db.add_review_comment(
+            conn, pid_b, version="v1 Concept", t_seconds=34,
+            author="Marcus Lindell (Creative Director)",
+            body="At 0:34 the drums get a touch busy under the VO bed — pull them "
+                 "back so the line breathes.", kind="comment")
+        db.add_review_comment(
+            conn, pid_b, version="v1 Concept", t_seconds=None,
+            author="Marcus Lindell (Creative Director)",
+            body="Direction's right. For v2: lengthen the hook, thin the percussion "
+                 "under the VO, and brighten the final chorus. That gets us to lock.",
+            kind="change_request")
+        db.add_review_comment(
+            conn, pid_b, version="v2 Direction-lock", t_seconds=48,
+            author="Sofia Reyes (Client — Vance Athletic)",
+            body="v2 is close. The 0:48 chorus lands much better now. One more pass on "
+                 "the ending and I think we're there.", kind="comment")
+
+        # ----------------------------------------------------------------- #
+        # (c) Approved & delivered — Northwind Coffee — Holiday Anthem.
+        #     Approved, FINAL locked, the delivery ZIP built + checklist,
+        #     state Released, full timeline.
+        # ----------------------------------------------------------------- #
+        pid_c = db.insert_project(
+            conn, None, "Northwind Coffee", "Holiday Anthem",
+            16000.0, 24000.0, ["Composer", "Mixer"],
+            deadline=(_date.today() - timedelta(days=3)).isoformat(),
+        )
+        db.add_assignment(conn, pid_c, "Composer", composer_a)
+        db.add_assignment(conn, pid_c, "Mixer", mixer)
+        versions_c = [
+            {
+                "n": 1, "label": version_label(1),
+                "url": _demo_audio(0), "filename": "",
+                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 1, "v1"),
+                "created_at": _iso(20, hour=11),
+            },
+            {
+                "n": 2, "label": version_label(2),
+                "url": _demo_audio(3), "filename": "",
+                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 2, "v2"),
+                "created_at": _iso(14, hour=16),
+            },
+            {
+                "n": 3, "label": version_label(3, final=True),
+                "url": _demo_audio(0), "filename": "",
+                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 3, "FINAL"),
+                "created_at": _iso(8, hour=13),
+            },
+        ]
+        token_c = db.ensure_project_share_token(conn, pid_c)
+        license_c = dict(_DELIVERY_DEMO_LICENSE)
+        delivery_c = {
+            "state": "Delivered",          # bumped to Released after the ZIP builds.
+            "version_state": version_label(3, final=True),
+            "revisions_used": 2,
+            "versions": versions_c,
+            "share_token": token_c,
+            "license": license_c,
+            "approvals": [{
+                "asset": "Anthem :60 — FINAL",
+                "approver": "Priya Okonkwo (Creative Director — Northwind Coffee)",
+                "date": _iso(7)[:10],
+            }],
+            "assets": [
+                {"label": "Anthem :60 master", "url": _demo_audio(0),
+                 "filename": "", "kind": "audio"},
+                {"label": "Anthem :30 cutdown", "url": _demo_audio(3),
+                 "filename": "", "kind": "audio"},
+            ],
+            "brief": {
+                "objective": "A warm, nostalgic :60 holiday anthem for Northwind "
+                             "Coffee — broadcast plus social cutdowns.",
+                "references": "Cozy, cinematic, celebratory; strings and a memorable "
+                              "melodic theme without seasonal cliché.",
+                "tone": "Warm, generous, hopeful.",
+                "deliverables_needed": ":60 anthem, :30/:15 cutdowns, stems, cue sheet.",
+                "deadline": (_date.today() - timedelta(days=3)).isoformat(),
+            },
+        }
+        db.save_delivery(conn, pid_c, delivery_c)
+        # Review tape: comments → change request → approval → release.
+        db.add_review_comment(
+            conn, pid_c, version="v1 Concept", t_seconds=8,
+            author="Will Hartley (Producer)",
+            body="Gorgeous opening — the strings at 0:08 set the whole mood.",
+            kind="comment")
+        db.add_review_comment(
+            conn, pid_c, version="v1 Concept", t_seconds=None,
+            author="Priya Okonkwo (Creative Director)",
+            body="One round of notes: lift the final chorus and tighten the :30 edit.",
+            kind="change_request")
+        db.add_review_comment(
+            conn, pid_c, version="v3 FINAL", t_seconds=None,
+            author="Priya Okonkwo (Creative Director — Northwind Coffee)",
+            body="Approved the current version.", kind="approval")
+
+        # Build the real delivery ZIP + checklist (Phase 3 automation). The docs
+        # (cue sheet, metadata, rights certificate, manifest) are generated
+        # deterministically even though the demo audio is remote-referenced — the
+        # docs are real. Fail-soft: a packaging hiccup never blocks the seed.
+        try:
+            upload_dir = (os.environ.get("CHORDENTIAL_UPLOAD_DIR")
+                          or os.path.join(os.path.dirname(__file__), "uploads"))
+            os.makedirs(upload_dir, exist_ok=True)
+            project_c = db.get_project(conn, pid_c)
+            assignments_c = db.list_assignments(conn, pid_c)
+            pkg = build_delivery_zip(
+                project_c, assignments_c, db.get_delivery(conn, pid_c), upload_dir,
+                generated_at=_iso(7),
+            )
+            db.update_delivery(conn, pid_c, "delivery_zip", {
+                "filename": pkg["filename"], "url": pkg["url"],
+                "built_at": pkg["built_at"],
+            })
+            db.update_delivery(conn, pid_c, "delivery_checklist", pkg["checklist"])
+        except Exception:
+            pass  # fail-soft — the campaign is still walkable without the ZIP
+        # The hand-off is complete — mark it Released with a release stamp.
+        db.update_delivery(conn, pid_c, "state", "Released")
+        db.update_delivery(conn, pid_c, "released_at", _iso(6)[:10])
+        return True
+    except Exception:
+        # Never block startup on a demo-seed failure.
+        return False
 
 
 def reset_and_seed(db_path: str = db.DEFAULT_DB_PATH) -> int:

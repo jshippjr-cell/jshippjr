@@ -137,6 +137,7 @@ async def lifespan(app: FastAPI):
         seed.seed_talent(conn)
         seed.ingest_talent_prospects(conn)
         seed.seed_demo_pipeline(conn)
+        seed.seed_delivery_demo(conn)  # P5: fictional campaigns at every stage
     else:                            # production: clean slate — real data only
         seed.purge_demo_data(conn)
     conn.execute("DELETE FROM signals WHERE signal_type = 'indicator'")  # feature dropped
