@@ -12,6 +12,7 @@ after the fixture, exactly as in the running demo.
 
 import importlib
 import json
+import zipfile
 
 import pytest
 
@@ -122,6 +123,76 @@ def test_delivered_campaign_is_released_with_zip_and_checklist(tmp_path, monkeyp
     checklist = delivery["delivery_checklist"]
     assert "Rights Certificate" in checklist
     assert "Cue Sheet" in checklist
+
+
+def test_delivered_zip_bundles_real_audio(tmp_path, monkeypatch):
+    """Showcase honesty: Northwind's "Download everything" ZIP contains a REAL
+    audio member (a bundled local master), not just the Docs/ folder."""
+    upload_dir = tmp_path / "uploads"
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(upload_dir))
+    upload_dir.mkdir()
+    from chordential_oia.web import db as db_mod
+    from chordential_oia.web import seed as seed_mod
+    conn = db_mod.connect(str(tmp_path / "seed.db"))
+    db_mod.init_db(conn)
+    seed_mod.seed_delivery_demo(conn)
+
+    northwind = _by_client(conn, "Northwind Coffee")
+    delivery = json.loads(northwind["delivery_json"])
+    zip_name = delivery["delivery_zip"]["filename"]
+    zip_path = upload_dir / zip_name
+    assert zip_path.is_file()
+    with zipfile.ZipFile(str(zip_path)) as zf:
+        names = zf.namelist()
+    audio = [n for n in names if n.lower().endswith((".mp3", ".wav"))]
+    # A real audio file is bundled (not just the generated Docs/).
+    assert audio, f"ZIP has no audio member — only {names}"
+    assert any(n.startswith("Masters/") for n in audio)
+
+
+def test_delivered_certificate_uses_honest_content_id(tmp_path, monkeypatch):
+    """Showcase honesty: the delivered clearance certificate drops the bare
+    "Content-ID-safe" claim and uses the engine's honest IP3 language."""
+    upload_dir = tmp_path / "uploads"
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(upload_dir))
+    upload_dir.mkdir()
+    from chordential_oia.web import db as db_mod
+    from chordential_oia.web import seed as seed_mod
+    conn = db_mod.connect(str(tmp_path / "seed.db"))
+    db_mod.init_db(conn)
+    seed_mod.seed_delivery_demo(conn)
+
+    northwind = _by_client(conn, "Northwind Coffee")
+    delivery = json.loads(northwind["delivery_json"])
+    zip_path = upload_dir / delivery["delivery_zip"]["filename"]
+    with zipfile.ZipFile(str(zip_path)) as zf:
+        cert_text = zf.read("Docs/rights_certificate.txt").decode("utf-8")
+    assert "Content-ID-safe" not in cert_text
+    assert "registrable with Content ID" in cert_text
+
+
+def test_in_review_default_view_shows_comment_and_change_request(client):
+    """Showcase honesty: the in-review portal's DEFAULT view (no ``v=``) shows a
+    seeded timestamped comment body + the standing change request — not "no notes
+    yet" — because the discussion is tagged to the current under-review version."""
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    vance = _by_client(conn, "Vance Athletic")
+    token = db_mod.connect().execute(
+        "SELECT share_token FROM projects WHERE id = ?", (vance["id"],)
+    ).fetchone()["share_token"]
+    portal = client.get(f"/project/{vance['id']}/delivery-portal?k={token}")
+    assert portal.status_code == 200
+    body = portal.text
+    # A current-version timestamped comment body is visible by default.
+    assert "the drums get a touch busy under the VO bed" in body
+    # The standing change request is visible by default (not just post-delivery).
+    assert "lengthen the hook" in body
+    assert "changes requested" in body
+    # A prior-version note stays on v1 (history navigation), not the default view.
+    assert "Love the energy out of the gate" not in body
+    earlier = client.get(f"/project/{vance['id']}/delivery-portal?k={token}&v=1")
+    assert "Love the energy out of the gate" in earlier.text
 
 
 def test_just_briefed_campaign_has_brief_no_comments(tmp_path, monkeypatch):

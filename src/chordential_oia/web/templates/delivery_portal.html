@@ -245,6 +245,17 @@
         </form>
       {% endif %}{% endfor %}
       {% if not ns2.has %}<p class="muted-note">No notes on this version yet — scrub the track and drop the first one.</p>{% endif %}
+
+      {# The standing change request(s) for the SELECTED version — the "what still
+         needs to change" the round is held to, surfaced inline (not buried in the
+         post-delivery history) so it's visible the moment the portal opens. #}
+      {% for c in comments %}{% if c.kind == 'change_request' and (selected_n == 0 or c.version|string == selected_n|string) %}
+        <div class="rc rc-changereq">
+          <span class="rc-t" style="color:var(--wine)">↻</span>
+          <span class="rc-a">{{ c.author }} — changes requested</span>
+          <span class="rc-b">{{ c.body }}</span>
+        </div>
+      {% endif %}{% endfor %}
     </div>
 
     {% if review_track %}

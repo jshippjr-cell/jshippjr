@@ -190,21 +190,48 @@ def seed_demo_pipeline(conn: sqlite3.Connection) -> bool:
 _DELIVERY_DEMO_CLIENTS = ("Lumen Health", "Vance Athletic", "Northwind Coffee")
 
 # Standard license terms for the delivered demo (Chordential's own defaults).
+# NOTE (showcase honesty): no ``content_id`` override here — the delivered demo's
+# clearance certificate uses the engine's honest IP3 default ("Registrable with
+# Content ID"), never the bare "Content-ID-safe" claim the engine was rebuilt to kill.
 _DELIVERY_DEMO_LICENSE = {
     "type": "Full buyout / work-made-for-hire",
     "territory": "Worldwide",
     "term": "Perpetuity",
     "exclusivity": "Exclusive to client for the campaign category",
-    "content_id": "Content-ID-safe",
 }
 
 # Cloudinary mp3s from the showcase — real, playable, copyright-clean demo audio.
 _DEMO_AUDIO = [d.audio_url for d in _showcase.DEMOS if d.audio_url]
 
+# A small, copyright-clean demo master committed into the repo (a soft two-note
+# pad rendered once with ffmpeg). It's bundled into UPLOAD_DIR so the delivered
+# demo's "Download everything" ZIP contains a REAL local audio file, not just docs.
+_BUNDLED_DEMO_AUDIO = os.path.join(
+    os.path.dirname(__file__), "static", "public", "demo-anthem.mp3"
+)
+
 
 def _demo_audio(i: int) -> str:
     """A playable showcase mp3 URL (cycles through the four demos)."""
     return _DEMO_AUDIO[i % len(_DEMO_AUDIO)] if _DEMO_AUDIO else ""
+
+
+def _stage_bundled_master(upload_dir: str, filename: str) -> bool:
+    """Copy the committed demo master into ``upload_dir`` under ``filename``.
+
+    Lets ``build_delivery_zip`` bundle a REAL local audio file (it only packages
+    on-disk files with a real ``filename``). Returns True on success. Fail-soft:
+    a missing source or a copy error returns False and never raises, so seeding
+    never crashes if the bundle is absent."""
+    try:
+        if not os.path.isfile(_BUNDLED_DEMO_AUDIO):
+            return False
+        import shutil
+        os.makedirs(upload_dir, exist_ok=True)
+        shutil.copyfile(_BUNDLED_DEMO_AUDIO, os.path.join(upload_dir, filename))
+        return True
+    except Exception:
+        return False
 
 
 def _demo_talent_id(conn: sqlite3.Connection, name: str, email: str,
@@ -339,27 +366,33 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
             },
         })
         # Timestamped review activity from named agency people (the portal tape).
+        # The portal tags every comment with the version NUMBER it was made against
+        # (anti-chaos — matches the running app's ``_current_version_tag``) and the
+        # default portal view filters to the CURRENT version. So the live
+        # discussion + change request land on v2 (the current under-review version),
+        # appearing by default when the portal opens; one earlier note stays on v1
+        # to demonstrate the version-history navigation (?v=1).
         db.add_review_comment(
-            conn, pid_b, version="v1 Concept", t_seconds=12,
+            conn, pid_b, version="1", t_seconds=12,
             author="Dana Whitfield (Producer)",
             body="Love the energy out of the gate — the :12 lift is exactly the hook "
                  "we pitched. Can we hold it two beats longer?", kind="comment")
         db.add_review_comment(
-            conn, pid_b, version="v1 Concept", t_seconds=34,
+            conn, pid_b, version="2", t_seconds=34,
             author="Marcus Lindell (Creative Director)",
             body="At 0:34 the drums get a touch busy under the VO bed — pull them "
                  "back so the line breathes.", kind="comment")
         db.add_review_comment(
-            conn, pid_b, version="v1 Concept", t_seconds=None,
-            author="Marcus Lindell (Creative Director)",
-            body="Direction's right. For v2: lengthen the hook, thin the percussion "
-                 "under the VO, and brighten the final chorus. That gets us to lock.",
-            kind="change_request")
-        db.add_review_comment(
-            conn, pid_b, version="v2 Direction-lock", t_seconds=48,
+            conn, pid_b, version="2", t_seconds=48,
             author="Sofia Reyes (Client — Vance Athletic)",
             body="v2 is close. The 0:48 chorus lands much better now. One more pass on "
                  "the ending and I think we're there.", kind="comment")
+        db.add_review_comment(
+            conn, pid_b, version="2", t_seconds=None,
+            author="Marcus Lindell (Creative Director)",
+            body="Direction's right. For the next pass: lengthen the hook, thin the "
+                 "percussion under the VO, and brighten the final chorus. That gets "
+                 "us to lock.", kind="change_request")
 
         # ----------------------------------------------------------------- #
         # (c) Approved & delivered — Northwind Coffee — Holiday Anthem.
@@ -395,6 +428,27 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
         ]
         token_c = db.ensure_project_share_token(conn, pid_c)
         license_c = dict(_DELIVERY_DEMO_LICENSE)
+
+        # Showcase honesty: stage the committed demo master into UPLOAD_DIR under a
+        # real filename so build_delivery_zip bundles ACTUAL local audio (it only
+        # packages on-disk files with a real ``filename``). Fail-soft — if the copy
+        # fails, the asset simply has no local file and is recorded as referenced.
+        upload_dir = (os.environ.get("CHORDENTIAL_UPLOAD_DIR")
+                      or os.path.join(os.path.dirname(__file__), "uploads"))
+        master_filename = "demo-northwind-master.mp3"
+        staged = _stage_bundled_master(upload_dir, master_filename)
+
+        assets_c = [
+            {"label": "Anthem :30 cutdown", "url": _demo_audio(3),
+             "filename": "", "kind": "audio"},
+        ]
+        # The :60 master — a real local file (when staged) so the ZIP is non-empty.
+        assets_c.insert(0, {
+            "label": "Anthem :60 master", "url": _demo_audio(0),
+            "filename": master_filename if staged else "",
+            "kind": "audio", "folder": "Masters",
+        })
+
         delivery_c = {
             "state": "Delivered",          # bumped to Released after the ZIP builds.
             "version_state": version_label(3, final=True),
@@ -412,12 +466,7 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
                 "approver": "Priya Okonkwo (Creative Director — Northwind Coffee)",
                 "date": _iso(7)[:10],
             }],
-            "assets": [
-                {"label": "Anthem :60 master", "url": _demo_audio(0),
-                 "filename": "", "kind": "audio"},
-                {"label": "Anthem :30 cutdown", "url": _demo_audio(3),
-                 "filename": "", "kind": "audio"},
-            ],
+            "assets": assets_c,
             "brief": {
                 "objective": "A warm, nostalgic :60 holiday anthem for Northwind "
                              "Coffee — broadcast plus social cutdowns.",
@@ -447,11 +496,10 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
 
         # Build the real delivery ZIP + checklist (Phase 3 automation). The docs
         # (cue sheet, metadata, rights certificate, manifest) are generated
-        # deterministically even though the demo audio is remote-referenced — the
-        # docs are real. Fail-soft: a packaging hiccup never blocks the seed.
+        # deterministically; the :60 master is a real bundled local file (the
+        # cutdown is remote-referenced) so "Download everything" yields real audio.
+        # Fail-soft: a packaging hiccup never blocks the seed.
         try:
-            upload_dir = (os.environ.get("CHORDENTIAL_UPLOAD_DIR")
-                          or os.path.join(os.path.dirname(__file__), "uploads"))
             os.makedirs(upload_dir, exist_ok=True)
             project_c = db.get_project(conn, pid_c)
             assignments_c = db.list_assignments(conn, pid_c)
