@@ -14,7 +14,7 @@ keywords = ["music", "opportunities", "rfp", "procurement", "scoring", "agent"]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "httpx>=0.24"]
+dev = ["pytest>=7.0", "httpx>=0.24", "pytest-xdist>=3.0"]
 # pywebpush ships with the web stack: native phone alerts are a web-app feature,
 # and bundling it here means it installs on any deploy that runs the web app —
 # regardless of whether the build command remembers the separate "push" extra.
@@ -74,3 +74,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Run the suite in parallel (pytest-xdist). Cuts ~170s → ~70s; the tests are
+# isolated (per-test tmp DBs/upload dirs), so this is safe. Override with `-n0`
+# for serial debugging of a single failure.
+addopts = "-n auto"
