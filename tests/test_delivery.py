@@ -438,8 +438,8 @@ def test_timestamped_comment_renders_on_portal(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     client.post(f"/project/{pid}/review/comment",
-                data={"k": token, "author": "Dana", "t": "12.4",
-                      "body": "Can we remove percussion?"})
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "12.4", "body": "Can we remove percussion?"})
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Review &amp; approve" in page          # the Frame.io-for-music section
     assert "Can we remove percussion?" in page     # the comment body
@@ -451,7 +451,7 @@ def test_client_approve_sets_state_via_portal(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     client.post(f"/project/{pid}/review/approve",
-                data={"k": token, "author": "Dana (Agency)"})
+                data={"k": token, "author": "Dana (Agency)", "email": "dana@agency.com"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -467,7 +467,8 @@ def test_request_changes_logs_and_bumps_revisions(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     client.post(f"/project/{pid}/review/changes",
-                data={"k": token, "author": "CD", "note": "Strings should swell at 0:34"})
+                data={"k": token, "author": "CD", "email": "cd@agency.com",
+                      "note": "Strings should swell at 0:34"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -515,7 +516,7 @@ def test_new_version_reopens_an_approved_delivery(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -539,7 +540,8 @@ def test_comment_is_tagged_with_current_version_number(client):
     _upload_version(client, pid, "v1.mp3")
     _upload_version(client, pid, "v2.mp3")
     client.post(f"/project/{pid}/review/comment",
-                data={"k": token, "author": "Dana", "t": "5", "body": "Tighten the intro"})
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "5", "body": "Tighten the intro"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -568,7 +570,7 @@ def test_approve_locks_current_version_to_final(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -598,7 +600,7 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
     _seed_asset(client, pid)                       # an uploaded deliverable
     token = _project_token(client, pid)
     # The agency presses APPROVE on the token-gated portal — the trigger.
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
 
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -640,7 +642,7 @@ def test_portal_shows_package_ready_and_download_everything(client):
     _assign_a_creator(client, pid)
     _seed_asset(client, pid)
     token = _project_token(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Your delivery package is ready" in page
     assert "Download everything" in page
@@ -655,7 +657,7 @@ def test_delivery_zip_is_served_by_uploads_route(client):
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
     token = _project_token(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana"})
+    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -691,7 +693,7 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
                 ctype="audio/wav")
     token = _project_token(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
-                    data={"k": token, "author": "Dana"}, follow_redirects=False)
+                    data={"k": token, "author": "Dana", "email": "dana@agency.com"}, follow_redirects=False)
     assert r.status_code == 303
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -766,3 +768,112 @@ def test_console_shows_client_review_link_and_version_rail(client):
     assert "current" in page
     # The campaign timeline is present.
     assert "Campaign timeline" in page
+
+
+# --------------------------------------------------------------------------- #
+# Improvement Pass 1 — Trust & coordination (identity, approve-guard, push,
+# provenance after delivery)
+# --------------------------------------------------------------------------- #
+def _comments(pid):
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        return db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+
+
+def test_approve_without_identity_is_rejected(client):
+    """Only a complete identity (name + email) may approve — the action that locks
+    FINAL + builds the ZIP. A bare name no-ops (no approval, no delivery)."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid)
+    token = _project_token(client, pid)
+    # No email → server-side guard no-ops (still a 303 redirect).
+    r = client.post(f"/project/{pid}/review/approve",
+                    data={"k": token, "author": "Dana"}, follow_redirects=False)
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert d.get("state") != "Delivered"
+    assert not any(c["kind"] == "approval" for c in _comments(pid))
+    # A complete identity DOES approve.
+    client.post(f"/project/{pid}/review/approve",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    assert any(c["kind"] == "approval" for c in _comments(pid))
+
+
+def test_comment_stores_email_and_renders_attribution(client):
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Marcus (CD)", "email": "marcus@agency.com",
+                      "t": "12.4", "body": "Lift the hook"})
+    rows = _comments(pid)
+    note = next(c for c in rows if c["kind"] == "comment")
+    # The email is persisted on the review_comments row.
+    assert note["email"] == "marcus@agency.com"
+    assert note["author"] == "Marcus (CD)"
+
+
+def test_reviewer_cookie_prefills_identity(client):
+    """First action sets the cdl_reviewer cookie; a later GET prefills the name/email."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    r = client.post(f"/project/{pid}/review/comment",
+                    data={"k": token, "author": "Dana Whitfield",
+                          "email": "dana@agency.com", "t": "3", "body": "Warmer pads"},
+                    follow_redirects=False)
+    # The cookie is set on the first action.
+    assert "cdl_reviewer" in r.headers.get("set-cookie", "")
+    # And it's remembered on the client, so a subsequent GET prefills the identity.
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "Dana Whitfield" in page
+    assert "dana@agency.com" in page
+    # The hidden identity fields carry the remembered values.
+    assert 'class="ident-email"' in page
+
+
+def test_review_history_survives_after_released(client):
+    """Provenance: once Delivered/Released the comment + approval tape stays visible."""
+    pid = _win_and_make_project(client, 1)
+    _seed_asset(client, pid)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com",
+                      "t": "5", "body": "Bring up the strings at 0:34"})
+    client.post(f"/project/{pid}/review/approve",
+                data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    client.post(f"/project/{pid}/delivery/release", follow_redirects=True)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert db_mod.get_delivery(conn, pid).get("state") == "Released"
+    finally:
+        conn.close()
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    # The read-only review history is shown with the prior comment + the approval.
+    assert "Review history" in page
+    assert "Bring up the strings at 0:34" in page
+    assert "dana@agency.com" in page          # attribution by email survives
+
+
+def test_review_action_pushes_the_operator(client, monkeypatch):
+    """The operator (Jon) gets a push when the agency comments / requests changes /
+    approves — the coordination signal 'one link, no email' would otherwise drop."""
+    from chordential_oia.web import app as app_mod
+    calls = []
+    monkeypatch.setattr(app_mod.webpush, "send_web_push",
+                        lambda *a, **k: calls.append((a, k)) or {"sent": 1})
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/changes",
+                data={"k": token, "author": "Marcus", "email": "marcus@agency.com",
+                      "note": "Punch up the drums"})
+    assert calls, "operator push was not invoked on a review action"
+    # The push is linked to the project's delivery console.
+    assert any(f"/project/{pid}/delivery" in str(c) for c in calls)

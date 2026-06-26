@@ -68,6 +68,7 @@
   .rc-decide form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .rc-approve{background:#1d6b43;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
   .rc-changes{background:#fff;color:var(--wine);border:1px solid var(--wine);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
+  .whois{background:var(--cream);border:1px dashed #d9cfc2;border-radius:10px;padding:12px 14px;margin:0 0 14px}
   /* version rail — the anti-chaos "which version am I on" strip */
   .vrail{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
   .vchip{font-size:11px;letter-spacing:.04em;color:var(--slate);border:1px solid var(--line);
@@ -130,6 +131,25 @@
     </h2>
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
 
+    {# IP1: capture the reviewer's identity once (name + email), then remember it
+       in a cookie so every action is attributed and never retyped. #}
+    <div class="whois" id="whois"{% if reviewer and reviewer.known %} hidden{% endif %}>
+      <p class="sub" style="margin:0 0 8px">Who's reviewing? Set your name &amp; email once — we'll remember you on this device.</p>
+      <div class="rc-form" style="margin-top:0">
+        <input type="text" id="who-name" placeholder="Your name" class="rc-in"
+               value="{{ reviewer.name if reviewer else '' }}">
+        <input type="email" id="who-email" placeholder="you@agency.com" class="rc-in rc-in-wide"
+               value="{{ reviewer.email if reviewer else '' }}">
+        <button type="button" class="rc-btn" id="who-save">Save</button>
+      </div>
+    </div>
+    {% if reviewer and reviewer.known %}
+    <p class="sub" id="whoami" style="margin:-6px 0 10px">
+      Reviewing as <b>{{ reviewer.name }}</b> &lt;{{ reviewer.email }}&gt; —
+      <a href="#" id="whois-edit" style="color:var(--orange)">change</a>
+    </p>
+    {% endif %}
+
     {% if versions %}
     <div class="vrail" aria-label="Version history">
       {% for v in versions %}
@@ -178,28 +198,51 @@
     </div>
 
     {% if review_track %}
-    <form method="post" action="/project/{{ project['id'] }}/review/comment" class="rc-form">
+    <form method="post" action="/project/{{ project['id'] }}/review/comment" class="rc-form review-act" data-need-id="1">
       <input type="hidden" name="k" value="{{ share_token }}">
       <input type="hidden" name="t" id="rc-t-val" value="0">
-      <input type="text" name="author" placeholder="Your name" class="rc-in" required>
+      <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+      <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
       <input type="text" name="body" placeholder="Comment at the current time…" class="rc-in rc-in-wide" required>
       <button type="submit" class="rc-btn">Comment at <span id="rc-time">0:00</span></button>
     </form>
     {% endif %}
 
     <div class="rc-decide">
-      <form method="post" action="/project/{{ project['id'] }}/review/approve">
+      <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
+            onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');">
         <input type="hidden" name="k" value="{{ share_token }}">
-        <input type="text" name="author" placeholder="Your name" class="rc-in" required>
+        <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+        <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
         <button type="submit" class="rc-approve">✓ Approve</button>
       </form>
-      <form method="post" action="/project/{{ project['id'] }}/review/changes">
+      <form method="post" action="/project/{{ project['id'] }}/review/changes" class="review-act" data-need-id="1">
         <input type="hidden" name="k" value="{{ share_token }}">
-        <input type="text" name="author" placeholder="Your name" class="rc-in" required>
-        <input type="text" name="note" placeholder="What needs to change?" class="rc-in rc-in-wide">
+        <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+        <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
+        <input type="text" name="note" placeholder="What needs to change?" class="rc-in rc-in-wide" required>
         <button type="submit" class="rc-changes">Request changes</button>
       </form>
     </div>
+  </div>
+  {% endif %}
+
+  <!-- REVIEW HISTORY (IP1: provenance survives the hand-off, read-only after delivery) -->
+  {% if (state == "Delivered" or state == "Released") and comments %}
+  <div class="card" id="review-history">
+    <h2>Review history</h2>
+    <p class="sub">The full record of how this delivery reached FINAL — comments, change requests, and approvals.</p>
+    {% for c in comments %}
+    <div class="rc">
+      {% if c.kind == 'approval' %}<span class="rc-t" style="color:#1d6b43">✓</span>
+      {% elif c.kind == 'change_request' %}<span class="rc-t" style="color:var(--wine)">↻</span>
+      {% elif c.t_seconds is not none %}<span class="rc-t">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}</span>
+      {% else %}<span class="rc-t">—</span>{% endif %}
+      <span class="rc-a">{{ c.author }}{% if c.email %} &lt;{{ c.email }}&gt;{% endif %}</span>
+      <span class="rc-b">{{ c.body }}{% if c.version %} <span class="vsep">· v{{ c.version }}</span>{% endif %}
+        <span class="vsep" style="display:block;font-size:11px">{{ c.created_at[:10] }}</span></span>
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
 
@@ -273,15 +316,26 @@
     {% endif %}
   </div>
 
-  {% if approvals %}
+  {% set ns_ap = namespace(any=false) %}
+  {% for c in comments %}{% if c.kind == 'approval' %}{% set ns_ap.any = true %}{% endif %}{% endfor %}
+  {% if approvals or ns_ap.any %}
   <div class="card">
     <h2>Sign-off</h2>
+    {# IP1: clearly-attributed approval — name + email + version + date. #}
+    {% for c in comments %}{% if c.kind == 'approval' %}
+    <p class="sub" style="margin:0 0 10px">
+      <span class="tick">✓</span> Approved by <b>{{ c.author }}</b>{% if c.email %} &lt;{{ c.email }}&gt;{% endif %}
+      {% if c.version %} · v{{ c.version }}{% endif %} · {{ c.created_at[:10] }}
+    </p>
+    {% endif %}{% endfor %}
+    {% if approvals %}
     <table>
       <thead><tr><th>Asset</th><th>Approved by</th><th>Date</th></tr></thead>
       <tbody>
         {% for ap in approvals %}<tr><td>{{ ap.asset }}</td><td>{{ ap.approver }}</td><td>{{ ap.date }}</td></tr>{% endfor %}
       </tbody>
     </table>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -330,6 +384,47 @@
       e.preventDefault();
       ra.currentTime = parseFloat(a.getAttribute('data-t')) || 0;
       ra.play().catch(function () {});
+    });
+  });
+})();
+// IP1: capture the reviewer's identity ONCE. The server remembers it in a cookie;
+// this fills the hidden author/email fields and gates the actions until set.
+(function () {
+  var whois = document.getElementById('whois');
+  if (!whois) return;
+  var nameIn = document.getElementById('who-name'),
+      emailIn = document.getElementById('who-email'),
+      save = document.getElementById('who-save'),
+      whoami = document.getElementById('whoami'),
+      edit = document.getElementById('whois-edit');
+  function fields(){ return document.querySelectorAll('.review-act'); }
+  function applyIdentity(name, email){
+    document.querySelectorAll('.ident-name').forEach(function(i){ i.value = name; });
+    document.querySelectorAll('.ident-email').forEach(function(i){ i.value = email; });
+  }
+  function known(){ return (nameIn.value || '').trim() && (emailIn.value || '').trim(); }
+  save.addEventListener('click', function(){
+    var n = (nameIn.value || '').trim(), e = (emailIn.value || '').trim();
+    if (!n || !e) { alert('Add your name and email so your notes are attributed.'); return; }
+    applyIdentity(n, e);
+    whois.hidden = true;
+    if (whoami) whoami.hidden = false;
+  });
+  if (edit) edit.addEventListener('click', function(ev){
+    ev.preventDefault(); whois.hidden = false; if (whoami) whoami.hidden = true;
+  });
+  // Before any review action, make sure identity is set (belt-and-suspenders to
+  // the server-side guard) so the reviewer never fires an unattributed action.
+  fields().forEach(function(f){
+    f.addEventListener('submit', function(ev){
+      var n = document.querySelector('.ident-name'), e = document.querySelector('.ident-email');
+      if (!(n && (n.value || '').trim() && e && (e.value || '').trim())){
+        ev.preventDefault();
+        whois.hidden = false;
+        if (whoami) whoami.hidden = true;
+        nameIn.focus();
+        alert('Tell us who\'s reviewing first — set your name and email above.');
+      }
     });
   });
 })();

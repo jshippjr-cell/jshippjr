@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS review_comments (
     version TEXT,
     t_seconds REAL,
     author TEXT,
+    email TEXT,
     body TEXT,
     kind TEXT DEFAULT 'comment',
     created_at TEXT
@@ -650,6 +651,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN signal_type TEXT DEFAULT 'gig'")
     if "contact_handle" not in sig_cols:   # poster's handle (e.g. reddit author)
         conn.execute("ALTER TABLE signals ADD COLUMN contact_handle TEXT")
+    # Delivery OS IP1 (trust & coordination): attribute every review event to a
+    # real email, not just a free-typed name. Older DBs predate the column.
+    rc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(review_comments)")}
+    if "email" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN email TEXT")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -2334,16 +2340,17 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
 
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
-    author: str = "", body: str = "", kind: str = "comment",
+    author: str = "", email: str = "", body: str = "", kind: str = "comment",
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
-    change request. Returns the new id."""
+    change request. Attributed to the reviewer's name + email. Returns the new id."""
     cur = conn.execute(
         """INSERT INTO review_comments
-           (project_id, version, t_seconds, author, body, kind, created_at)
-           VALUES (?,?,?,?,?,?,?)""",
+           (project_id, version, t_seconds, author, email, body, kind, created_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
         (project_id, version or "", t_seconds, author or "Anonymous",
-         body or "", kind, datetime.now(timezone.utc).isoformat()),
+         (email or "").strip() or None, body or "", kind,
+         datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
     return int(cur.lastrowid)

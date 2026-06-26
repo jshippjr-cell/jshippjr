@@ -21,6 +21,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from typing import List, Optional
+from urllib.parse import quote, unquote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
@@ -2824,6 +2825,10 @@ def delivery_portal(request: Request, project_id: int, k: str = ""):
         view = _delivery_view(conn, project_id)
     finally:
         conn.close()
+    # IP1: prefill the reviewer's remembered identity so they never retype it.
+    r_name, r_email = _reviewer_identity(request)
+    view["reviewer"] = {"name": r_name, "email": r_email,
+                        "known": bool(r_name and r_email)}
     return render(request, "delivery_portal.html", nav="", **view)
 
 
@@ -2844,36 +2849,116 @@ def _review_token_ok(conn, project_id: int, k: str) -> bool:
     return bool(token and k and hmac.compare_digest(str(k), str(token)))
 
 
-def _review_redirect(project_id: int, k: str):
-    return RedirectResponse(
+# Delivery OS IP1 (trust & coordination): the reviewer sets their identity (name +
+# email) once; we remember it in a cookie so they never retype it, and every
+# comment/approve/change-request is attributed to a real email, not free text.
+REVIEWER_COOKIE = "cdl_reviewer"
+
+
+def _reviewer_identity(request: Request, author: str = "", email: str = ""):
+    """Resolve the reviewer's (name, email): a freshly-posted identity wins, else
+    fall back to the remembered cookie. Returns ``(name, email)`` (either blank)."""
+    name = (author or "").strip()
+    mail = (email or "").strip()
+    if not name or not mail:
+        cookie = request.cookies.get(REVIEWER_COOKIE) or ""
+        if cookie:
+            try:
+                saved = json.loads(unquote(cookie))
+                name = name or (saved.get("name") or "").strip()
+                mail = mail or (saved.get("email") or "").strip()
+            except Exception:  # noqa: BLE001 — a malformed cookie just means "ask again"
+                pass
+    return name, mail
+
+
+def _set_reviewer_cookie(resp, name: str, email: str) -> None:
+    """Remember the reviewer's identity so they set it once, not per action."""
+    if not (name and email):
+        return
+    value = quote(json.dumps({"name": name, "email": email}))
+    resp.set_cookie(
+        REVIEWER_COOKIE, value, samesite="lax", max_age=60 * 60 * 24 * 180,
+    )
+
+
+def _delivery_console_url(project_id: int) -> str:
+    return f"/project/{project_id}/delivery"
+
+
+def _notify_operator_review(project_id: int, project, title: str, body: str) -> None:
+    """Push the operator (Jon) when the agency comments / requests changes /
+    approves — the coordination signal that 'one link, no email' would otherwise
+    drop. Best-effort, never blocks the request (mirrors notify_new_gig).
+
+    Operator-direction only. Agency-direction email (notify the reviewer when a new
+    version is uploaded) needs the deferred outbound-send infra that doesn't exist
+    yet — see the TODO below; we do NOT fake it here.
+
+    TODO(delivery-os): agency-direction notifications. When a new version is
+    uploaded or the operator replies, email the reviewer at their captured
+    ``review_comments.email``. Requires a transactional send channel (deferred
+    outbound email infra) — not wired yet, so left unimplemented rather than faked.
+    """
+    url = _delivery_console_url(project_id)
+    try:
+        webpush.send_web_push(title, body=body, url=url)
+    except Exception:  # noqa: BLE001 — push is best-effort, never block the action
+        pass
+    try:
+        signals.send_push(title, body=body, click_url=url)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _campaign_label(project) -> str:
+    """A short campaign label for the operator push (client / need)."""
+    try:
+        return (project["need"] or project["client"] or "Campaign").strip()
+    except Exception:  # noqa: BLE001
+        return "Campaign"
+
+
+def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""):
+    resp = RedirectResponse(
         f"/project/{project_id}/delivery-portal?k={k}#review", status_code=303
     )
+    _set_reviewer_cookie(resp, name, email)
+    return resp
 
 
 @app.post("/project/{project_id}/review/comment")
 def review_comment(
-    project_id: int, k: str = Form(""), author: str = Form(""),
-    t: str = Form(""), body: str = Form(""),
+    request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
+    email: str = Form(""), t: str = Form(""), body: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style)."""
     conn = db.connect()
     try:
         if not _review_token_ok(conn, project_id, k):
             return HTMLResponse("Not found", status_code=404)
-        if body.strip():
+        name, mail = _reviewer_identity(request, author, email)
+        # Identity is required so events attribute to a real person, not free text.
+        if body.strip() and name and mail:
             try:
                 t_seconds = float(t) if str(t).strip() != "" else None
             except ValueError:
                 t_seconds = None
+            project = db.get_project(conn, project_id)
             delivery = db.get_delivery(conn, project_id)
             db.add_review_comment(
                 conn, project_id, version=_current_version_tag(delivery),
-                t_seconds=t_seconds, author=author.strip(), body=body.strip(),
+                t_seconds=t_seconds, author=name, email=mail, body=body.strip(),
                 kind="comment",
+            )
+            _notify_operator_review(
+                project_id, project,
+                title=f"{_campaign_label(project)} — new note",
+                body=f"{name} commented: {body.strip()[:120]}",
             )
     finally:
         conn.close()
-    return _review_redirect(project_id, k)
+    return _review_redirect(project_id, k, name=name, email=mail)
 
 
 def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
@@ -2901,19 +2986,36 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
 
 
 @app.post("/project/{project_id}/review/approve")
-def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
+def review_approve(
+    request: Request, project_id: int, k: str = Form(""),
+    author: str = Form(""), email: str = Form(""),
+):
     """The agency approves the current version — the trigger for Delivery
     Automation (Phase 3). Records the sign-off, locks the FINAL version, then
     **assembles the delivery package** (organise → document → convert → ZIP) and
-    flips state to Delivered with the founder's payoff checklist + ZIP url stored."""
+    flips state to Delivered with the founder's payoff checklist + ZIP url stored.
+
+    Deliberate by design (IP1): a complete identity (name + email) is required —
+    approve no-ops without it — so the sign-off that locks FINAL + builds the ZIP
+    is attributable, not pressable by anyone with the link signed as any typed name.
+    """
     conn = db.connect()
+    name, mail = "", ""
     try:
         if not _review_token_ok(conn, project_id, k):
             return HTMLResponse("Not found", status_code=404)
+        name, mail = _reviewer_identity(request, author, email)
+        # Server-side guard: only a complete identity may approve (the native
+        # onsubmit confirm() is the UI half; this is the real gate).
+        if not (name and mail):
+            return _review_redirect(project_id, k, name=name, email=mail)
         delivery = db.get_delivery(conn, project_id)
+        project = db.get_project(conn, project_id)
+        approved_n = _current_version_tag(delivery)
         db.add_review_comment(
-            conn, project_id, version=_current_version_tag(delivery),
-            author=author.strip(), body="Approved the current version.",
+            conn, project_id, version=approved_n,
+            author=name, email=mail,
+            body=f"Approved v{approved_n} for delivery.",
             kind="approval",
         )
         # Approve locks the FINAL version: stamp the current version's label and
@@ -2931,9 +3033,14 @@ def review_approve(project_id: int, k: str = Form(""), author: str = Form("")):
             db.update_delivery(conn, project_id, "state", "Delivered")
         except Exception:
             db.update_delivery(conn, project_id, "state", "Approved")
+        _notify_operator_review(
+            project_id, project,
+            title=f"{_campaign_label(project)} — approved by {name}",
+            body=f"v{approved_n} approved — delivery package building.",
+        )
     finally:
         conn.close()
-    return _review_redirect(project_id, k)
+    return _review_redirect(project_id, k, name=name, email=mail)
 
 
 @app.post("/project/{project_id}/delivery/build")
@@ -2952,25 +3059,37 @@ def delivery_build(project_id: int):
 
 @app.post("/project/{project_id}/review/changes")
 def review_changes(
-    project_id: int, k: str = Form(""), author: str = Form(""), note: str = Form(""),
+    request: Request, project_id: int, k: str = Form(""),
+    author: str = Form(""), email: str = Form(""), note: str = Form(""),
 ):
-    """The agency requests changes — logs the request and bumps the revision count."""
+    """The agency requests changes — logs the request and bumps the revision count.
+    Requires a complete identity (name + email) so the request is attributable."""
     conn = db.connect()
+    name, mail = "", ""
     try:
         if not _review_token_ok(conn, project_id, k):
             return HTMLResponse("Not found", status_code=404)
+        name, mail = _reviewer_identity(request, author, email)
+        if not (name and mail):
+            return _review_redirect(project_id, k, name=name, email=mail)
         delivery = db.get_delivery(conn, project_id)
+        project = db.get_project(conn, project_id)
+        note_text = note.strip() or "Requested changes."
         db.add_review_comment(
             conn, project_id, version=_current_version_tag(delivery),
-            author=author.strip(), body=(note.strip() or "Requested changes."),
-            kind="change_request",
+            author=name, email=mail, body=note_text, kind="change_request",
         )
         db.update_delivery(conn, project_id, "revisions_used",
                            int(delivery.get("revisions_used") or 0) + 1)
         db.update_delivery(conn, project_id, "state", "In production")
+        _notify_operator_review(
+            project_id, project,
+            title=f"{_campaign_label(project)} — changes requested by {name}",
+            body=note_text[:160],
+        )
     finally:
         conn.close()
-    return _review_redirect(project_id, k)
+    return _review_redirect(project_id, k, name=name, email=mail)
 
 
 # --------------------------------------------------------------------------- #
