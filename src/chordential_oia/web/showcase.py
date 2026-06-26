@@ -85,7 +85,10 @@ HERO = {
     # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on
     # Cloudinary. f_auto,q_auto = optimal codec + visually-lossless quality, so it's
     # a smaller, faster-starting file with NO visible quality loss.
-    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto/v1782271309/herospliced_lbtrdp.mp4",
+    # ac_none strips the audio track entirely at delivery (no re-upload) — a truly
+    # silent video is the most reliable to autoplay on mobile and loads a touch
+    # lighter. The hero is decorative; it never needs sound.
+    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto,ac_none/v1782271309/herospliced_lbtrdp.mp4",
     "poster": "/static/public/hero-spliced-poster.jpg?v=1",
     "loop": "/static/public/hero-loop.webp",  # fallback if video is cleared
 }
