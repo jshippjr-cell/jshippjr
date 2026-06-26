@@ -192,6 +192,13 @@
     only way to <b>approve</b> (which locks FINAL and assembles the delivery package).
     The generic client link can view &amp; comment as a guest, but cannot approve.
   </p>
+  <p class="small" style="margin:0 0 12px">
+    {% if mail_configured %}
+    <b style="color:var(--green,#2e7d32)">Email notifications: on</b> — reviewers are emailed their link on invite and when a new version is uploaded.
+    {% else %}
+    <b class="muted">Email notifications: off</b> — copy links manually (set the SMTP env vars to turn this on).
+    {% endif %}
+  </p>
   {% if reviewers %}
   <table class="table compact">
     <thead><tr><th>Reviewer</th><th>Role</th><th>Personal review link</th><th></th></tr></thead>

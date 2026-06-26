@@ -730,6 +730,94 @@ def _upload_version(client, pid, name="cue.mp3"):
                        data={"action": "add"}, files=files, follow_redirects=True)
 
 
+def test_new_version_emails_each_reviewer_with_email(client, monkeypatch):
+    """Agency-direction notification: uploading a new version calls the mailer for
+    each roster reviewer WITH an email, passing their personal ?r= link. A reviewer
+    with no email is skipped."""
+    pid = _win_and_make_project(client, 1)
+    _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
+    _add_reviewer(client, pid, name="Sam", email="sam@agency.com", role="Producer")
+    _add_reviewer(client, pid, name="NoEmail", email="", role="Observer")
+
+    calls = []
+    from chordential_oia.web import app as app_mod
+    monkeypatch.setattr(app_mod.mailer, "send_email",
+                        lambda to, subject, text, html=None: calls.append((to, subject, text)) or "sent")
+
+    r = _upload_version(client, pid, "v1.mp3")
+    assert r.status_code == 200  # follow_redirects landed on the console
+
+    recipients = [c[0] for c in calls]
+    assert "dana@agency.com" in recipients
+    assert "sam@agency.com" in recipients
+    # The reviewer with no email is skipped.
+    assert len(calls) == 2
+    # Each carries that reviewer's personal ?r= review link in the body.
+    for to, subject, text in calls:
+        assert "?r=" in text
+        assert "/delivery-portal" in text
+        assert "New version ready" in subject
+
+
+def test_new_version_upload_unaffected_when_mailer_raises(client, monkeypatch):
+    """Best-effort: even if the mailer raises, the upload still succeeds (303)."""
+    pid = _win_and_make_project(client, 1)
+    _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
+
+    def _boom(*a, **k):
+        raise RuntimeError("mail server down")
+
+    from chordential_oia.web import app as app_mod
+    monkeypatch.setattr(app_mod.mailer, "send_email", _boom)
+
+    files = {"file": ("v1.mp3", b"ID3fakeaudio-version", "audio/mpeg")}
+    r = client.post(f"/project/{pid}/delivery/version",
+                    data={"action": "add"}, files=files, follow_redirects=False)
+    assert r.status_code == 303
+    # The version was still logged despite the mail failure.
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        assert len(db_mod.get_delivery(conn, pid).get("versions") or []) == 1
+    finally:
+        conn.close()
+
+
+def test_invite_sends_link_only_when_mail_configured(client, monkeypatch):
+    """Cheap win: adding a reviewer auto-emails their link ONLY when configured;
+    unconfigured (default null) → no send, behavior unchanged."""
+    pid = _win_and_make_project(client, 1)
+    from chordential_oia.web import app as app_mod
+
+    calls = []
+    monkeypatch.setattr(app_mod.mailer, "send_email",
+                        lambda to, subject, text, html=None: calls.append(to) or "sent")
+
+    # Default (null) → mail_configured False → no auto-send on invite.
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: False)
+    _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
+    assert calls == []
+
+    # Configured → invite auto-sends the reviewer their link.
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    _add_reviewer(client, pid, name="Sam", email="sam@agency.com")
+    assert "sam@agency.com" in calls
+
+
+def test_reviewers_card_shows_email_status(client, monkeypatch):
+    """The honest indicator on the reviewers card reflects mail_configured()."""
+    pid = _win_and_make_project(client, 1)
+    from chordential_oia.web import app as app_mod
+
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: False)
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Email notifications: off" in page
+
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Email notifications: on" in page
+
+
 def test_second_version_becomes_current_review_track_and_advances_label(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)

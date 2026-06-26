@@ -30,6 +30,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..estimation import ROLE_RATES, RoleLine
 from ..invoicing import build_invoice
+from .. import mailer
 from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
@@ -2606,6 +2607,10 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         # Verified-identity approval: the operator-invited reviewer roster — each has
         # a personal ?r= invite link (the only way to approve).
         "reviewers": delivery.get("reviewers") or [],
+        # Outbound-email status: honest indicator on the reviewers card — whether
+        # invites / new-version notices go out automatically or links are copied
+        # by hand (mailer is null/unconfigured until SMTP env is set).
+        "mail_configured": mailer.mail_configured(),
         "assets": assets_with_approval,
         # Per-asset approval rollup ("N of M deliverables approved") — surfaced
         # next to the whole-version Approve so the gap is visible.
@@ -2775,17 +2780,30 @@ def delivery_reviewer(
     cannot). ``action=remove`` drops a reviewer by their token (their link stops
     working). Stored on ``delivery_json['reviewers']``."""
     conn = db.connect()
+    invited = None
+    campaign = "Campaign"
     try:
-        if db.get_project(conn, project_id) is None:
+        project = db.get_project(conn, project_id)
+        if project is None:
             return HTMLResponse("Project not found", status_code=404)
         if action == "remove":
             db.remove_delivery_reviewer(conn, project_id, token)
         elif name.strip():
-            db.add_delivery_reviewer(
+            invited = db.add_delivery_reviewer(
                 conn, project_id, name=name, email=email, role=role
             )
+            campaign = _campaign_label(project)
     finally:
         conn.close()
+    # Cheap win: if the mailer is configured, send the new reviewer their personal
+    # link automatically. If it isn't, behavior is unchanged — the operator copies
+    # the link by hand (nothing breaks today). Best-effort, never blocks the route.
+    if invited and mailer.mail_configured():
+        _email_reviewer_link(
+            project_id, invited, campaign,
+            subject=f"Your review link — {campaign}",
+            lead="You've been invited to review the work.",
+        )
     return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
 
 
@@ -3037,8 +3055,13 @@ async def delivery_version(
         # A new version supersedes any prior approval/delivery — reopen to review.
         if (delivery.get("state") or "") in ("Approved", "Delivered"):
             db.update_delivery(conn, project_id, "state", "In review")
+        # Agency-direction notification (the documented TODO): email each named
+        # reviewer their personal review link so coordination stops leaking to
+        # manual messaging. Best-effort, per reviewer — never blocks the upload.
+        reviewers = db.list_delivery_reviewers(conn, project_id)
     finally:
         conn.close()
+    _notify_reviewers_new_version(project_id, campaign, label, reviewers)
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 
@@ -3222,6 +3245,61 @@ def _set_reviewer_cookie(resp, name: str, email: str) -> None:
 
 def _delivery_console_url(project_id: int) -> str:
     return f"/project/{project_id}/delivery"
+
+
+def _public_base() -> str:
+    """Absolute public base for links that land in an email (a relative path is
+    dead in a mail client). Uses the configured domain; chordential.com default —
+    matching the payments seam and outreach._page_url."""
+    return os.environ.get(
+        "CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com"
+    ).rstrip("/")
+
+
+def _reviewer_review_url(project_id: int, token: str) -> str:
+    """A reviewer's PERSONAL review link as an absolute URL (the ``?r=`` invite)."""
+    return f"{_public_base()}/project/{project_id}/delivery-portal?r={token}"
+
+
+def _email_reviewer_link(project_id: int, reviewer: dict, campaign: str,
+                         *, subject: str, lead: str) -> str:
+    """Best-effort: email one roster reviewer their personal review link.
+
+    Skips reviewers without an email and never raises (the mailer itself is
+    best-effort). Returns the mailer status for the caller's bookkeeping."""
+    email = (reviewer.get("email") or "").strip()
+    token = (reviewer.get("token") or "").strip()
+    if not email or not token:
+        return "skipped"
+    url = _reviewer_review_url(project_id, token)
+    name = (reviewer.get("name") or "there").strip() or "there"
+    text = (
+        f"Hi {name},\n\n{lead}\n\n"
+        f"Campaign: {campaign}\n\n"
+        f"Open your personal review link to listen, comment, and approve:\n{url}\n\n"
+        "This link is yours — it's how you sign off on the work.\n\n"
+        "— Chordential"
+    )
+    try:
+        return mailer.send_email(email, subject, text)
+    except Exception:  # noqa: BLE001 — mail is additive + best-effort, never block
+        return "error"
+
+
+def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
+                                  reviewers: list) -> None:
+    """Agency-direction notification: when a new version is uploaded, email each
+    roster reviewer (who has an email) their personal review link. Best-effort,
+    per reviewer — never blocks the upload (this was the documented TODO)."""
+    subject = f"New version ready — {campaign}"
+    lead = (
+        f"A new version ({label}) is ready for your review."
+    )
+    for rv in (reviewers or []):
+        try:
+            _email_reviewer_link(project_id, rv, campaign, subject=subject, lead=lead)
+        except Exception:  # noqa: BLE001 — one reviewer's failure must not stop the rest
+            pass
 
 
 def _notify_operator_review(project_id: int, project, title: str, body: str) -> None:
