@@ -152,6 +152,55 @@
   {% endif %}
 </section>
 
+<!-- REVIEWERS (verified-identity approval) -->
+<section class="card" id="reviewers">
+  <div class="card-head"><h2>Reviewers <span class="muted">— verified-identity approval</span></h2></div>
+  <p class="small muted" style="margin:0 0 12px">
+    Invite named reviewers. Each gets a <b>personal review link</b> — that link is the
+    only way to <b>approve</b> (which locks FINAL and assembles the delivery package).
+    The generic client link can view &amp; comment as a guest, but cannot approve.
+  </p>
+  {% if reviewers %}
+  <table class="table compact">
+    <thead><tr><th>Reviewer</th><th>Role</th><th>Personal review link</th><th></th></tr></thead>
+    <tbody>
+      {% for rv in reviewers %}
+      <tr>
+        <td><b>{{ rv.name }}</b>{% if rv.email %}<br><span class="muted small">{{ rv.email }}</span>{% endif %}</td>
+        <td>{{ rv.role or '—' }}</td>
+        <td>
+          {% set rurl = '/project/' ~ project['id'] ~ '/delivery-portal?r=' ~ rv.token %}
+          <input type="text" class="reviewer-link" readonly value="{{ rurl }}"
+                 style="width:100%;font-size:11px;font-family:monospace"
+                 onclick="this.select()">
+          <button type="button" class="btn tiny copy-link" data-link="{{ rurl }}" style="margin-top:4px">Copy link</button>
+          <a class="link small" href="{{ rurl }}" target="_blank" style="margin-left:8px">Open ↗</a>
+        </td>
+        <td>
+          <form method="post" action="/project/{{ project['id'] }}/delivery/reviewer" class="inline">
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="token" value="{{ rv.token }}">
+            <button class="btn tiny" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted small">No reviewers invited yet — add the agency's named reviewer below so they can approve.</p>
+  {% endif %}
+
+  <form method="post" action="/project/{{ project['id'] }}/delivery/reviewer" class="stack" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+    <input type="hidden" name="action" value="add">
+    <label>Invite a reviewer</label>
+    <input type="text" name="name" placeholder="Name (e.g. Dana Whitfield)" required>
+    <input type="email" name="email" placeholder="dana@agency.com">
+    <input type="text" name="role" placeholder="Role (e.g. Senior Producer)">
+    <button class="btn primary" type="submit">Add reviewer &amp; mint link</button>
+  </form>
+</section>
+
 <!-- CREATIVE BRIEF -->
 <section class="card">
   <div class="card-head"><h2>Creative brief <span class="muted">— the start of the record</span></h2></div>
@@ -340,5 +389,25 @@
     {% endif %}
   </section>
 </div>
+
+<script>
+// Reviewers: copy a reviewer's personal ?r= review link to the clipboard.
+(function () {
+  document.querySelectorAll('.copy-link').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var link = btn.getAttribute('data-link') || '';
+      var abs = location.origin + link;
+      function done() { var t = btn.textContent; btn.textContent = 'Copied ✓';
+        setTimeout(function () { btn.textContent = t; }, 1400); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(abs).then(done, function () {});
+      } else {
+        var row = btn.closest('td'); var inp = row && row.querySelector('.reviewer-link');
+        if (inp) { inp.select(); try { document.execCommand('copy'); done(); } catch (e) {} }
+      }
+    });
+  });
+})();
+</script>
 
 {% endblock %}

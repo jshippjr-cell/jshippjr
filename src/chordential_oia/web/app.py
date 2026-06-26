@@ -2548,6 +2548,9 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "assignable_folders": ASSIGNABLE_FOLDERS,
         "cue_meta": delivery.get("cue_meta") or {},
         "approvals": delivery.get("approvals") or [],
+        # Verified-identity approval: the operator-invited reviewer roster — each has
+        # a personal ?r= invite link (the only way to approve).
+        "reviewers": delivery.get("reviewers") or [],
         "assets": delivery.get("assets") or [],
         "versions": versions,
         "current_version": current,
@@ -2686,6 +2689,32 @@ def delivery_set_signatory(
         }
         signatory = {k: v for k, v in signatory.items() if v}
         db.update_delivery(conn, project_id, "signatory", signatory or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/reviewer")
+def delivery_reviewer(
+    project_id: int, action: str = Form("add"), name: str = Form(""),
+    email: str = Form(""), role: str = Form(""), token: str = Form(""),
+):
+    """Verified-identity approval (operator side): manage the reviewer roster.
+
+    ``action=add`` invites a named reviewer and mints their unique personal token
+    (their ``?r=`` invite link is how the agency approves — a generic share link
+    cannot). ``action=remove`` drops a reviewer by their token (their link stops
+    working). Stored on ``delivery_json['reviewers']``."""
+    conn = db.connect()
+    try:
+        if db.get_project(conn, project_id) is None:
+            return HTMLResponse("Project not found", status_code=404)
+        if action == "remove":
+            db.remove_delivery_reviewer(conn, project_id, token)
+        elif name.strip():
+            db.add_delivery_reviewer(
+                conn, project_id, name=name, email=email, role=role
+            )
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
@@ -2993,9 +3022,18 @@ def delivery_release(project_id: int):
 
 
 @app.get("/project/{project_id}/delivery-portal", response_class=HTMLResponse)
-def delivery_portal(request: Request, project_id: int, k: str = "", v: str = ""):
-    """The client-facing, token-gated delivery page (?k=token). NOT admin-gated —
-    the per-project share token is the access control (mirrors first-touch).
+def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
+                    r: str = ""):
+    """The client-facing, token-gated delivery page. NOT admin-gated — access is by
+    one of two tokens:
+
+    * ``?k=<share_token>`` — the generic share link: view + comment as a **guest**
+      (still name + email), but the Approve control is disabled.
+    * ``?r=<reviewer_token>`` — a **verified** reviewer's personal invite link:
+      their name + email are taken (locked) from the roster and they may approve.
+
+    ``r`` is itself an access token (it grants the same view as ``k``), so a valid
+    ``r`` works on its own — no ``k`` required.
 
     ``?v=<n>`` (IP2) selects which logged version the review surface opens — its
     track plays and its comments show — so the reviewer can A/B any round."""
@@ -3003,16 +3041,36 @@ def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "")
     try:
         row = db.get_project(conn, project_id)
         token = db.ensure_project_share_token(conn, project_id) if row is not None else None
-        # A missing project, an unset token, or a mismatch all 404 identically.
-        if row is None or not token or not k or not hmac.compare_digest(str(k), str(token)):
+        delivery = db.get_delivery(conn, project_id) if row is not None else {}
+        verified = reviewer_from_token(delivery, r)
+        k_ok = bool(token and k and hmac.compare_digest(str(k), str(token)))
+        # A verified reviewer token grants access on its own; otherwise the share
+        # token must match. A missing project / no valid token 404s identically.
+        if row is None or not (k_ok or verified is not None):
             return HTMLResponse("Not found", status_code=404)
         view = _delivery_view(conn, project_id, selected_v=v)
     finally:
         conn.close()
-    # IP1: prefill the reviewer's remembered identity so they never retype it.
-    r_name, r_email = _reviewer_identity(request)
-    view["reviewer"] = {"name": r_name, "email": r_email,
-                        "known": bool(r_name and r_email)}
+    # The share token is what the page's generic forms carry. If the reviewer
+    # arrived only via ?r= (no k), surface the project share token so guest forms
+    # still work; verified actions carry ?r= instead.
+    view["share_token"] = view.get("share_token") or token
+    if verified is not None:
+        # Verified reviewer: identity is LOCKED to the roster (not editable, not
+        # spoofable by typing a different name) and Approve is enabled.
+        view["reviewer_token"] = verified["token"]
+        view["verified"] = True
+        view["reviewer"] = {
+            "name": verified.get("name") or "", "email": verified.get("email") or "",
+            "role": verified.get("role") or "", "known": True, "verified": True,
+        }
+    else:
+        # Guest (share-link) mode: free-entry identity for commenting, no approve.
+        view["reviewer_token"] = ""
+        view["verified"] = False
+        r_name, r_email = _reviewer_identity(request)
+        view["reviewer"] = {"name": r_name, "email": r_email,
+                            "known": bool(r_name and r_email), "verified": False}
     return render(request, "delivery_portal.html", nav="", **view)
 
 
@@ -3031,6 +3089,33 @@ def _review_token_ok(conn, project_id: int, k: str) -> bool:
         return False
     token = db.ensure_project_share_token(conn, project_id)
     return bool(token and k and hmac.compare_digest(str(k), str(token)))
+
+
+def reviewer_from_token(delivery: dict, r: str):
+    """Resolve a verified reviewer from their personal token (``?r=``), or None.
+
+    The roster (``delivery_json['reviewers']``) is the set of named, operator-invited
+    reviewers; a matching token means the reviewer is *verified* — their name + email
+    come from the roster (not free-typed) and they may approve. Constant-time match."""
+    r = (r or "").strip()
+    if not r:
+        return None
+    for rv in (delivery.get("reviewers") or []):
+        tok = (rv.get("token") or "") if isinstance(rv, dict) else ""
+        if tok and hmac.compare_digest(str(r), str(tok)):
+            return rv
+    return None
+
+
+def _access_ok(conn, project_id: int, k: str, r: str):
+    """Resolve portal-action access: either a valid share token (``k``, guest) or a
+    verified reviewer token (``r``). Returns ``(ok, reviewer_or_None)`` — ``reviewer``
+    is the roster dict when the request came in on a verified ``?r=`` link."""
+    delivery = db.get_delivery(conn, project_id)
+    reviewer = reviewer_from_token(delivery, r)
+    if reviewer is not None:
+        return True, reviewer
+    return _review_token_ok(conn, project_id, k), None
 
 
 # Delivery OS IP1 (trust & coordination): the reviewer sets their identity (name +
@@ -3103,11 +3188,19 @@ def _campaign_label(project) -> str:
         return "Campaign"
 
 
-def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""):
-    resp = RedirectResponse(
-        f"/project/{project_id}/delivery-portal?k={k}#review", status_code=303
-    )
-    _set_reviewer_cookie(resp, name, email)
+def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
+                     r: str = ""):
+    """Bounce back to the portal after an action. A verified reviewer link (``r``)
+    is preserved so the reviewer stays verified; otherwise the share token (``k``)."""
+    if (r or "").strip():
+        url = f"/project/{project_id}/delivery-portal?r={r}#review"
+    else:
+        url = f"/project/{project_id}/delivery-portal?k={k}#review"
+    resp = RedirectResponse(url, status_code=303)
+    # Only remember a *guest's* self-typed identity in the cookie — a verified
+    # reviewer's identity lives on the roster, not the device.
+    if not (r or "").strip():
+        _set_reviewer_cookie(resp, name, email)
     return resp
 
 
@@ -3115,17 +3208,25 @@ def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""
 def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
-    parent_id: str = Form(""),
+    parent_id: str = Form(""), r: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style).
+
+    Accepts either a share token (``k``, guest) or a verified reviewer token
+    (``r``). When verified, the comment is attributed to the roster identity and
+    marked verified (not free-typed).
 
     ``parent_id`` (IP2) makes this a reply threaded one level under that comment —
     a reply answers its parent so it carries no timecode of its own."""
     conn = db.connect()
     try:
-        if not _review_token_ok(conn, project_id, k):
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
             return HTMLResponse("Not found", status_code=404)
-        name, mail = _reviewer_identity(request, author, email)
+        if reviewer is not None:
+            name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
+        else:
+            name, mail = _reviewer_identity(request, author, email)
         # Identity is required so events attribute to a real person, not free text.
         if body.strip() and name and mail:
             # A reply nests under its parent (no timecode); a top-level note carries
@@ -3148,7 +3249,7 @@ def review_comment(
             db.add_review_comment(
                 conn, project_id, version=_current_version_tag(delivery),
                 t_seconds=t_seconds, author=name, email=mail, body=body.strip(),
-                kind="comment", parent_id=parent,
+                kind="comment", parent_id=parent, verified=reviewer is not None,
             )
             verb = "replied" if parent is not None else "commented"
             _notify_operator_review(
@@ -3158,29 +3259,35 @@ def review_comment(
             )
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
 @app.post("/project/{project_id}/review/resolve")
 def review_resolve(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), comment_id: str = Form(""),
+    r: str = Form(""),
 ):
     """Toggle a comment's resolved flag (IP2 — Frame.io's resolve checkbox).
 
-    Token-gated like the other review actions, and (like approve/changes) requires
-    a complete reviewer identity so a resolve is attributable, not anonymous."""
+    Token-gated like the other review actions (share token ``k`` guest OR verified
+    reviewer ``r``), and (like approve/changes) requires a complete reviewer
+    identity so a resolve is attributable, not anonymous."""
     conn = db.connect()
     name, mail = "", ""
     try:
-        if not _review_token_ok(conn, project_id, k):
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
             return HTMLResponse("Not found", status_code=404)
-        name, mail = _reviewer_identity(request, author, email)
+        if reviewer is not None:
+            name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
+        else:
+            name, mail = _reviewer_identity(request, author, email)
         if name and mail and str(comment_id).strip().isdigit():
             db.toggle_comment_resolved(conn, project_id, int(comment_id))
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
 def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
@@ -3210,27 +3317,38 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
 @app.post("/project/{project_id}/review/approve")
 def review_approve(
     request: Request, project_id: int, k: str = Form(""),
-    author: str = Form(""), email: str = Form(""),
+    author: str = Form(""), email: str = Form(""), r: str = Form(""),
 ):
     """The agency approves the current version — the trigger for Delivery
     Automation (Phase 3). Records the sign-off, locks the FINAL version, then
     **assembles the delivery package** (organise → document → convert → ZIP) and
     flips state to Delivered with the founder's payoff checklist + ZIP url stored.
 
-    Deliberate by design (IP1): a complete identity (name + email) is required —
-    approve no-ops without it — so the sign-off that locks FINAL + builds the ZIP
-    is attributable, not pressable by anyone with the link signed as any typed name.
+    Verified-identity gate: Approve — the single most consequential action (it locks
+    FINAL + auto-builds the delivery ZIP) — requires a **verified reviewer link**
+    (``?r=<reviewer_token>``). The generic share link (``?k=``) can view + comment as
+    a guest but CANNOT approve, and a posted free-typed name + email is ignored — the
+    sign-off is recorded with the reviewer's LOCKED roster name + email. Approve is no
+    longer pressable by anyone with the share token, signed as any typed name.
     """
     conn = db.connect()
     name, mail = "", ""
     try:
-        if not _review_token_ok(conn, project_id, k):
+        # Access still resolves on either token (so a stale ?k= form 404s vs no-ops
+        # consistently with the other actions); the *approve gate* is stricter below.
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
             return HTMLResponse("Not found", status_code=404)
-        name, mail = _reviewer_identity(request, author, email)
-        # Server-side guard: only a complete identity may approve (the native
-        # onsubmit confirm() is the UI half; this is the real gate).
-        if not (name and mail):
-            return _review_redirect(project_id, k, name=name, email=mail)
+        # The verified-identity gate: approve REQUIRES a valid verified reviewer
+        # token. A share-link guest (no/invalid ?r=) is refused — no-op, no state
+        # change — even if a name + email are posted.
+        if reviewer is None:
+            return _review_redirect(project_id, k, r=r)
+        # The sign-off is recorded with the VERIFIED roster identity, not free text.
+        name = (reviewer.get("name") or "").strip()
+        mail = (reviewer.get("email") or "").strip()
+        if not name:
+            return _review_redirect(project_id, k, r=r)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
         approved_n = _current_version_tag(delivery)
@@ -3238,7 +3356,7 @@ def review_approve(
             conn, project_id, version=approved_n,
             author=name, email=mail,
             body=f"Approved v{approved_n} for delivery.",
-            kind="approval",
+            kind="approval", verified=True,
         )
         # Approve locks the FINAL version: stamp the current version's label and
         # the version_state to FINAL so the agency sees the version is final.
@@ -3262,7 +3380,7 @@ def review_approve(
         )
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
 @app.post("/project/{project_id}/delivery/build")
@@ -3283,23 +3401,30 @@ def delivery_build(project_id: int):
 def review_changes(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), note: str = Form(""),
+    r: str = Form(""),
 ):
     """The agency requests changes — logs the request and bumps the revision count.
-    Requires a complete identity (name + email) so the request is attributable."""
+    Accepts a share token (``k``, guest) or a verified reviewer token (``r``);
+    requires a complete identity (name + email) so the request is attributable."""
     conn = db.connect()
     name, mail = "", ""
     try:
-        if not _review_token_ok(conn, project_id, k):
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
             return HTMLResponse("Not found", status_code=404)
-        name, mail = _reviewer_identity(request, author, email)
+        if reviewer is not None:
+            name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
+        else:
+            name, mail = _reviewer_identity(request, author, email)
         if not (name and mail):
-            return _review_redirect(project_id, k, name=name, email=mail)
+            return _review_redirect(project_id, k, name=name, email=mail, r=r)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
         note_text = note.strip() or "Requested changes."
         db.add_review_comment(
             conn, project_id, version=_current_version_tag(delivery),
             author=name, email=mail, body=note_text, kind="change_request",
+            verified=reviewer is not None,
         )
         db.update_delivery(conn, project_id, "revisions_used",
                            int(delivery.get("revisions_used") or 0) + 1)
@@ -3311,7 +3436,7 @@ def review_changes(
         )
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
 # --------------------------------------------------------------------------- #

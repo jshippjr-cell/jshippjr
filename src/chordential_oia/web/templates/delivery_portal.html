@@ -150,8 +150,20 @@
     </h2>
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
 
-    {# IP1: capture the reviewer's identity once (name + email), then remember it
-       in a cookie so every action is attributed and never retyped. #}
+    {# Verified-identity approval: a reviewer who arrived on their PERSONAL invite
+       link (?r=) is verified — their name + email are LOCKED to the roster (not
+       editable, not spoofable by typing a different name), and they may approve.
+       The free-entry "Who's reviewing?" block is only shown to share-link guests. #}
+    {% if verified %}
+    <p class="sub" id="whoami-verified" style="margin:-2px 0 12px">
+      <span style="display:inline-block;border:1px solid #1d6b43;color:#1d6b43;font-size:10px;
+        letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px">✓ Verified reviewer</span>
+      Reviewing as <b>{{ reviewer.name }}</b>{% if reviewer.email %} &lt;{{ reviewer.email }}&gt;{% endif %}{% if reviewer.role %} · {{ reviewer.role }}{% endif %}.
+      <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link — your identity is verified, so only you can approve as you.</span>
+    </p>
+    {% else %}
+    {# IP1: capture the GUEST's identity once (name + email), then remember it in a
+       cookie so every comment is attributed and never retyped. #}
     <div class="whois" id="whois"{% if reviewer and reviewer.known %} hidden{% endif %}>
       <p class="sub" style="margin:0 0 8px">Who's reviewing? Set your name &amp; email once — we'll remember you on this device.</p>
       <div class="rc-form" style="margin-top:0">
@@ -168,6 +180,7 @@
       <a href="#" id="whois-edit" style="color:var(--orange)">change</a>
     </p>
     {% endif %}
+    {% endif %}
 
     {% if versions %}
     <div class="vrail" aria-label="Version history">
@@ -175,14 +188,16 @@
         {% if not loop.first %}<span class="vsep">·</span>{% endif %}
         {# IP2: every chip is a link — clicking it opens & plays that version and
            shows that version's comments (?v=<n>, preserving the share token). #}
+        {# Preserve the access token across version navigation: a verified reviewer
+           keeps their ?r= link; a guest keeps ?k=. #}
         <a class="vchip{% if loop.last %} cur{% endif %}{% if v.n|string == selected_n|string %} sel{% endif %}"
-           href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}&v={{ v.n }}#review">v{{ v.n }}{% if loop.last %} (current){% endif %}{% if v.n|string == selected_n|string and not loop.last %} (viewing){% endif %}</a>
+           href="/project/{{ project['id'] }}/delivery-portal?{% if reviewer_token %}r={{ reviewer_token }}{% else %}k={{ share_token }}{% endif %}&v={{ v.n }}#review">v{{ v.n }}{% if loop.last %} (current){% endif %}{% if v.n|string == selected_n|string and not loop.last %} (viewing){% endif %}</a>
       {% endfor %}
     </div>
     {% if selected_n|string != current_n|string and current_n != 0 %}
     <p class="muted-note" style="margin:-8px 0 12px">
       You're viewing <b>v{{ selected_n }}</b> — an earlier round.
-      <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}#review" style="color:var(--orange)">Back to current (v{{ current_n }})</a>
+      <a href="/project/{{ project['id'] }}/delivery-portal?{% if reviewer_token %}r={{ reviewer_token }}{% else %}k={{ share_token }}{% endif %}#review" style="color:var(--orange)">Back to current (v{{ current_n }})</a>
     </p>
     {% endif %}
     {% endif %}
@@ -214,6 +229,7 @@
             <button type="button" class="rc-mini reply-toggle" data-target="reply-{{ c.id }}">Reply</button>
             <form method="post" action="/project/{{ project['id'] }}/review/resolve" class="review-act" data-need-id="1" style="display:inline">
               <input type="hidden" name="k" value="{{ share_token }}">
+              <input type="hidden" name="r" value="{{ reviewer_token }}">
               <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
               <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
               <input type="hidden" name="comment_id" value="{{ c.id }}">
@@ -237,6 +253,7 @@
         {% endif %}
         <form method="post" action="/project/{{ project['id'] }}/review/comment" class="rc-form rc-reply review-act" id="reply-{{ c.id }}" data-need-id="1">
           <input type="hidden" name="k" value="{{ share_token }}">
+          <input type="hidden" name="r" value="{{ reviewer_token }}">
           <input type="hidden" name="parent_id" value="{{ c.id }}">
           <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
           <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
@@ -261,6 +278,7 @@
     {% if review_track %}
     <form method="post" action="/project/{{ project['id'] }}/review/comment" class="rc-form review-act" data-need-id="1">
       <input type="hidden" name="k" value="{{ share_token }}">
+      <input type="hidden" name="r" value="{{ reviewer_token }}">
       <input type="hidden" name="t" id="rc-t-val" value="0">
       <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
       <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
@@ -270,15 +288,28 @@
     {% endif %}
 
     <div class="rc-decide">
+      {# Verified-identity approval: APPROVE locks FINAL + auto-builds the delivery
+         ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
+         sees a disabled control + a note — they can view + comment, not approve. #}
+      {% if verified %}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
             onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');">
         <input type="hidden" name="k" value="{{ share_token }}">
+        <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
         <button type="submit" class="rc-approve">✓ Approve</button>
       </form>
+      {% else %}
+      <div style="flex:1 1 240px">
+        <button type="button" class="rc-approve" disabled
+                style="opacity:.5;cursor:not-allowed" title="Approval requires your personal review link">✓ Approve</button>
+        <p class="muted-note" style="margin:6px 0 0">Approval requires your personal review link — ask Chordential to send you one.</p>
+      </div>
+      {% endif %}
       <form method="post" action="/project/{{ project['id'] }}/review/changes" class="review-act" data-need-id="1">
         <input type="hidden" name="k" value="{{ share_token }}">
+        <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
         <input type="text" name="note" placeholder="What needs to change?" class="rc-in rc-in-wide" required>

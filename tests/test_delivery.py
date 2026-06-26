@@ -425,6 +425,23 @@ def _project_token(client, pid):
         conn.close()
 
 
+def _add_reviewer(client, pid, name="Dana", email="dana@agency.com",
+                  role="Senior Producer"):
+    """Verified-identity approval: invite a named reviewer via the admin route and
+    return their minted personal token (used as ``?r=`` to approve)."""
+    client.post(f"/project/{pid}/delivery/reviewer",
+                data={"action": "add", "name": name, "email": email, "role": role},
+                follow_redirects=True)
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        roster = db_mod.list_delivery_reviewers(conn, pid)
+    finally:
+        conn.close()
+    match = next(r for r in roster if r["name"] == name)
+    return match["token"]
+
+
 def test_review_comment_requires_valid_token(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
@@ -456,9 +473,8 @@ def test_timestamped_comment_renders_on_portal(client):
 
 def test_client_approve_sets_state_via_portal(client):
     pid = _win_and_make_project(client, 1)
-    token = _project_token(client, pid)
-    client.post(f"/project/{pid}/review/approve",
-                data={"k": token, "author": "Dana (Agency)", "email": "dana@agency.com"})
+    rtoken = _add_reviewer(client, pid, name="Dana (Agency)")
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -468,6 +484,117 @@ def test_client_approve_sets_state_via_portal(client):
     finally:
         conn.close()
     assert "approval" in kinds
+
+
+def test_approve_with_share_token_only_is_refused(client):
+    """(a) The generic share link (?k=) cannot approve — even with a posted
+    name + email, state does not advance. Approval requires a verified ?r= link."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    r = client.post(f"/project/{pid}/review/approve",
+                    data={"k": token, "author": "Anyone", "email": "x@x.com"},
+                    follow_redirects=False)
+    # Not a 404 (the share token is valid for viewing/commenting) — it just no-ops.
+    assert r.status_code == 303
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+        kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
+    finally:
+        conn.close()
+    # State did NOT advance, and no approval was recorded.
+    assert d.get("state") != "Delivered"
+    assert "approval" not in kinds
+
+
+def test_verified_reviewer_approve_records_roster_identity(client):
+    """(b) A reviewer added via /delivery/reviewer can approve via their ?r= token:
+    it locks FINAL, builds the ZIP, and records the ROSTER name + email — not a
+    free-typed name posted on the form."""
+    pid = _win_and_make_project(client, 1)
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com", role="Senior Producer")
+    # A spoofed name + email is posted alongside the verified token — it's ignored.
+    client.post(f"/project/{pid}/review/approve",
+                data={"r": rtoken, "author": "Imposter", "email": "evil@x.com"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+        approval = next(c for c in db_mod.list_review_comments(conn, pid)
+                        if c["kind"] == "approval")
+    finally:
+        conn.close()
+    assert d.get("state") == "Delivered"          # built the ZIP (locks FINAL)
+    assert d.get("delivery_zip")
+    # The sign-off carries the LOCKED roster identity, not the free-typed spoof.
+    assert approval["author"] == "Dana Whitfield"
+    assert approval["email"] == "dana@agency.com"
+    assert approval["verified"] == 1
+
+
+def test_guest_can_still_comment_with_share_token(client):
+    """(c) A guest on the generic ?k= link can still post a comment."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Guest", "email": "guest@agency.com",
+                      "t": "8", "body": "Love the intro"})
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    try:
+        rows = db_mod.list_review_comments(conn, pid)
+    finally:
+        conn.close()
+    note = next(c for c in rows if c["kind"] == "comment")
+    assert note["body"] == "Love the intro"
+    assert note["verified"] == 0                  # a guest comment is not verified
+
+
+def test_portal_guest_vs_verified_identity(client):
+    """(d) Guest mode shows the "approval requires your personal link" note and a
+    free-entry identity block; reviewer mode locks the identity (no free-entry name
+    field) and enables Approve."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com", role="Senior Producer")
+    # Guest (share link): the approval-requires-personal-link note + free-entry.
+    guest = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "Approval requires your personal review link" in guest
+    assert 'id="who-name"' in guest                # free-entry name field is shown
+    # Verified (personal link): identity is locked, no free-entry name field.
+    rev = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken}).text
+    assert "Verified reviewer" in rev
+    assert "Dana Whitfield" in rev
+    assert 'id="who-name"' not in rev              # no free-entry name field
+    assert "Approval requires your personal review link" not in rev
+
+
+def test_console_renders_reviewer_roster_and_link(client):
+    """(e) The console renders the reviewer roster + a copyable ?r= personal link."""
+    pid = _win_and_make_project(client, 1)
+    rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
+                           email="dana@agency.com", role="Senior Producer")
+    page = client.get(f"/project/{pid}/delivery").text
+    assert "Reviewers" in page
+    assert "Dana Whitfield" in page
+    assert f"?r={rtoken}" in page                  # the copyable personal link
+    assert "Copy link" in page
+
+
+def test_reviewer_link_works_without_share_token(client):
+    """A reviewer's ?r= link is itself an access token — it opens the portal on its
+    own (no ?k= needed) and is exempt/validated like the share token."""
+    pid = _win_and_make_project(client, 1)
+    rtoken = _add_reviewer(client, pid)
+    ok = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken})
+    assert ok.status_code == 200
+    assert "Your Delivery" in ok.text
+    # A bogus reviewer token with no share token → 404.
+    bad = client.get(f"/project/{pid}/delivery-portal", params={"r": "nope"})
+    assert bad.status_code == 404
 
 
 def test_request_changes_logs_and_bumps_revisions(client):
@@ -521,9 +648,9 @@ def test_second_version_becomes_current_review_track_and_advances_label(client):
 
 def test_new_version_reopens_an_approved_delivery(client):
     pid = _win_and_make_project(client, 1)
-    token = _project_token(client, pid)
+    rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -575,9 +702,9 @@ def test_portal_renders_version_rail_and_round_of(client):
 
 def test_approve_locks_current_version_to_final(client):
     pid = _win_and_make_project(client, 1)
-    token = _project_token(client, pid)
+    rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -605,9 +732,9 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
     pid = _win_and_make_project(client, 1)
     name = _assign_a_creator(client, pid)          # contributor for the docs
     _seed_asset(client, pid)                       # an uploaded deliverable
-    token = _project_token(client, pid)
-    # The agency presses APPROVE on the token-gated portal — the trigger.
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    rtoken = _add_reviewer(client, pid)
+    # The agency presses APPROVE on their verified personal review link — the trigger.
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
 
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -649,7 +776,8 @@ def test_portal_shows_package_ready_and_download_everything(client):
     _assign_a_creator(client, pid)
     _seed_asset(client, pid)
     token = _project_token(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    rtoken = _add_reviewer(client, pid)
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Your delivery package is ready" in page
     assert "Download everything" in page
@@ -663,8 +791,8 @@ def test_portal_shows_package_ready_and_download_everything(client):
 def test_delivery_zip_is_served_by_uploads_route(client):
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
-    token = _project_token(client, pid)
-    client.post(f"/project/{pid}/review/approve", data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    rtoken = _add_reviewer(client, pid)
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -698,9 +826,9 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
     # Seed a WAV so the conversion branch is exercised (then skipped).
     _seed_asset(client, pid, name="master.wav", label="Broadcast Mix",
                 ctype="audio/wav")
-    token = _project_token(client, pid)
+    rtoken = _add_reviewer(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
-                    data={"k": token, "author": "Dana", "email": "dana@agency.com"}, follow_redirects=False)
+                    data={"r": rtoken}, follow_redirects=False)
     assert r.status_code == 303
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -791,12 +919,13 @@ def _comments(pid):
 
 
 def test_approve_without_identity_is_rejected(client):
-    """Only a complete identity (name + email) may approve — the action that locks
-    FINAL + builds the ZIP. A bare name no-ops (no approval, no delivery)."""
+    """Approve — the action that locks FINAL + builds the ZIP — now requires a
+    VERIFIED reviewer link (?r=). A share-link guest no-ops even with a complete
+    free-typed name + email; only the verified reviewer's token approves."""
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
     token = _project_token(client, pid)
-    # No email → server-side guard no-ops (still a 303 redirect).
+    # A bare name over the share token → no-op (still a 303 redirect).
     r = client.post(f"/project/{pid}/review/approve",
                     data={"k": token, "author": "Dana"}, follow_redirects=False)
     assert r.status_code == 303
@@ -808,9 +937,13 @@ def test_approve_without_identity_is_rejected(client):
         conn.close()
     assert d.get("state") != "Delivered"
     assert not any(c["kind"] == "approval" for c in _comments(pid))
-    # A complete identity DOES approve.
+    # Even a COMPLETE free-typed identity over the share token cannot approve.
     client.post(f"/project/{pid}/review/approve",
                 data={"k": token, "author": "Dana", "email": "dana@agency.com"})
+    assert not any(c["kind"] == "approval" for c in _comments(pid))
+    # The verified reviewer's personal token DOES approve.
+    rtoken = _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     assert any(c["kind"] == "approval" for c in _comments(pid))
 
 

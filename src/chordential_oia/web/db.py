@@ -169,7 +169,10 @@ CREATE TABLE IF NOT EXISTS review_comments (
     created_at TEXT,
     -- IP2 (Frame.io review polish): per-comment resolve + one level of reply.
     resolved INTEGER DEFAULT 0,    -- 0 = open, 1 = resolved (toggled by reviewer)
-    parent_id INTEGER              -- a reply nests one level under its parent comment
+    parent_id INTEGER,             -- a reply nests one level under its parent comment
+    -- Verified-identity approval: 1 when posted from a verified reviewer's personal
+    -- invite link (?r=) — name + email are the locked roster identity, not free text.
+    verified INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS project_updates (
@@ -665,6 +668,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE review_comments ADD COLUMN resolved INTEGER DEFAULT 0")
     if "parent_id" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN parent_id INTEGER")
+    # Verified-identity approval: an event posted from a verified reviewer's personal
+    # invite link (?r=) is marked verified — its name + email came from the roster,
+    # not free text. Older DBs predate the column.
+    if "verified" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN verified INTEGER DEFAULT 0")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -2350,22 +2358,26 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
-    parent_id=None,
+    parent_id=None, verified: bool = False,
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
     change request. Attributed to the reviewer's name + email. Returns the new id.
 
     ``parent_id`` (IP2) threads a reply one level under an existing comment — a
-    reply answers its parent so it carries no timecode of its own."""
+    reply answers its parent so it carries no timecode of its own.
+
+    ``verified`` marks the event as posted from a verified reviewer's personal
+    invite link (``?r=``) — its name + email are the locked roster identity."""
     cur = conn.execute(
         """INSERT INTO review_comments
            (project_id, version, t_seconds, author, email, body, kind, created_at,
-            resolved, parent_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            resolved, parent_id, verified)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (project_id, version or "", t_seconds, author or "Anonymous",
          (email or "").strip() or None, body or "", kind,
          datetime.now(timezone.utc).isoformat(),
-         0, int(parent_id) if parent_id not in (None, "") else None),
+         0, int(parent_id) if parent_id not in (None, "") else None,
+         1 if verified else 0),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -2409,6 +2421,58 @@ def toggle_comment_resolved(
     )
     conn.commit()
     return new_val
+
+
+def list_delivery_reviewers(conn: sqlite3.Connection, project_id: int) -> List[dict]:
+    """The verified-reviewer roster for a project (``delivery_json['reviewers']``).
+
+    Each entry is ``{token, name, email, role}`` — the operator invites named
+    reviewers and each gets a unique personal link (``?r=<token>``). Returns ``[]``
+    when none."""
+    delivery = get_delivery(conn, project_id)
+    roster = delivery.get("reviewers")
+    return roster if isinstance(roster, list) else []
+
+
+def add_delivery_reviewer(
+    conn: sqlite3.Connection, project_id: int, *, name: str, email: str = "",
+    role: str = "",
+) -> Optional[dict]:
+    """Mint a verified reviewer + their personal access token, append to the roster.
+
+    Returns the new reviewer dict ``{token, name, email, role}`` (or None when the
+    project is gone or no name was given). The token gates Approve — a verified
+    reviewer link is required to lock FINAL + build the ZIP (a generic ``?k=`` share
+    link can only view + comment as a guest)."""
+    name = (name or "").strip()
+    if get_project(conn, project_id) is None or not name:
+        return None
+    roster = list_delivery_reviewers(conn, project_id)
+    reviewer = {
+        "token": secrets.token_urlsafe(9),
+        "name": name,
+        "email": (email or "").strip(),
+        "role": (role or "").strip(),
+    }
+    roster.append(reviewer)
+    update_delivery(conn, project_id, "reviewers", roster)
+    return reviewer
+
+
+def remove_delivery_reviewer(
+    conn: sqlite3.Connection, project_id: int, token: str
+) -> bool:
+    """Drop a reviewer from the roster by their token. Returns True if one was
+    removed (their personal link stops working)."""
+    token = (token or "").strip()
+    if not token:
+        return False
+    roster = list_delivery_reviewers(conn, project_id)
+    kept = [r for r in roster if (r.get("token") or "") != token]
+    if len(kept) == len(roster):
+        return False
+    update_delivery(conn, project_id, "reviewers", kept)
+    return True
 
 
 def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Optional[str]:
