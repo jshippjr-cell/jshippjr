@@ -159,3 +159,33 @@ def test_ingest_empty_paste_is_safe(app_db):
     r = client.post("/agencies/ingest", data={"source": "thedrum", "html": ""},
                     follow_redirects=True)
     assert r.status_code == 200      # no crash, just nothing ingested
+
+
+# --------------------------------------------------------------------------- #
+# One-click import of the agencies recovered from the setup pastes.
+# --------------------------------------------------------------------------- #
+def test_setup_seed_loads_real_agencies(app_db):
+    client, app_mod = app_db
+    from chordential_oia.web import setup_agencies
+    assert setup_agencies.setup_count() >= 150          # recovered from real pastes
+    conn = app_mod.db.connect()
+    try:
+        res = setup_agencies.load(conn)
+        assert res["total"] == setup_agencies.setup_count()
+        # idempotent: a second load adds no new rows
+        again = setup_agencies.load(conn)
+        assert again["new"] == 0
+        total = app_mod.db.count_agencies(conn)
+    finally:
+        conn.close()
+    assert total >= 150
+
+
+def test_import_setup_route_populates_db(app_db):
+    client, app_mod = app_db
+    r = client.post("/agencies/import-setup", follow_redirects=True)
+    assert r.status_code == 200
+    # real names from the recovered set show up in the list
+    assert "Bader Rutter" in r.text or "Locomotive" in r.text
+    from chordential_oia.web import setup_agencies
+    assert app_mod.db.count_agencies(app_mod.db.connect()) >= setup_agencies.setup_count()
