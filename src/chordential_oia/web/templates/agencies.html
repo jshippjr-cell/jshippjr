@@ -99,17 +99,24 @@
     <tbody>
       {% for c in crawl_states %}
       <tr>
-        <td><strong>{{ c.key }}</strong>{% if c.detail %}<div class="muted small">{{ c.detail }}</div>{% endif %}</td>
+        <td><strong>{{ c.key }}</strong>
+          {% if not c.crawlable %}<div class="muted small">⚠ paste-only — {{ c.note }}</div>
+          {% elif c.detail %}<div class="muted small">{{ c.detail }}</div>{% endif %}</td>
         <td>
-          {% if c.status == 'complete' %}<span class="dot won"></span> complete
+          {% if not c.crawlable %}<span class="muted">n/a</span>
+          {% elif c.status == 'complete' %}<span class="dot won"></span> complete
           {% elif c.status == 'running' %}<span class="dot review"></span> in progress
           {% elif c.status == 'error' %}<span class="dot pursue"></span> error
           {% else %}<span class="muted">idle</span>{% endif %}
         </td>
-        <td>{{ c.pages_done }}{% if c.total_pages %} / {{ c.total_pages }}{% endif %}</td>
+        <td>{{ c.pages_done if c.crawlable else '' }}{% if c.crawlable and c.total_pages %} / {{ c.total_pages }}{% endif %}</td>
         <td>{{ c.stored }}</td>
+        {% if c.crawlable %}
         <td><form method="post" action="/agencies/crawl" style="margin:0"><input type="hidden" name="source" value="{{ c.key }}"><button class="btn btn-small" type="submit">Crawl {{ pages_per_click }}</button></form></td>
         <td><form method="post" action="/agencies/crawl" style="margin:0"><input type="hidden" name="source" value="{{ c.key }}"><input type="hidden" name="reset" value="1"><button class="btn btn-small" type="submit">Restart</button></form></td>
+        {% else %}
+        <td colspan="2" class="muted small">Use “Add agencies → paste a directory page” above.</td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>

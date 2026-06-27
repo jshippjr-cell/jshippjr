@@ -541,6 +541,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                 "records_new": (st["records_new"] if st else 0) or 0,
                 "detail": (st["detail"] if st else "") or "",
                 "stored": db.count_agencies(conn, key),
+                "crawlable": key not in directory_parsers.PASTE_ONLY_SOURCES,
+                "note": directory_parsers.PASTE_ONLY_SOURCES.get(key, ""),
             })
     finally:
         conn.close()

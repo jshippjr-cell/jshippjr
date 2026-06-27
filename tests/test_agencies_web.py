@@ -316,3 +316,13 @@ def test_crawl_panel_stays_open_after_crawl(app_db):
                     follow_redirects=True)
     assert 'id="crawl-panel"' in r.text
     assert 'id="crawl-panel" class="card" style="margin:14px 0" open' in r.text
+
+
+def test_adforum_marked_paste_only_in_crawl_panel(app_db):
+    # AdForum can't be server-crawled (403 + infinite scroll); the panel should
+    # say so and not offer a Crawl button for it.
+    client, _ = app_db
+    r = client.get("/agencies")
+    assert "paste-only" in r.text
+    from chordential_oia.web import directory_parsers as dp
+    assert "adforum" in dp.PASTE_ONLY_SOURCES
