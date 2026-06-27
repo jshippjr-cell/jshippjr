@@ -17,6 +17,46 @@
   {% endif %}
 </div>
 
+{% if ingested %}
+<p class="small" style="margin:10px 0;color:var(--green,#2e8b57)">✓ Parsed <strong>{{ ingested }}</strong> agencies from the pasted page — <strong>{{ new }}</strong> new, the rest already on file.</p>
+{% endif %}
+{% if added == '1' %}
+<p class="small" style="margin:10px 0;color:var(--green,#2e8b57)">✓ Agency added — press <strong>Enrich</strong> on its row below.</p>
+{% endif %}
+
+<details class="card" style="margin:14px 0" {{ 'open' if total == 0 }}>
+  <summary style="cursor:pointer;font-weight:600">➕ Add agencies to the database</summary>
+
+  <div style="margin-top:16px">
+    <p class="muted small" style="margin-bottom:8px"><strong>Quick:</strong> add one agency by hand, then Enrich it.</p>
+    <form method="post" action="/agencies/add" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <label class="small">Company<br><input type="text" name="company" required placeholder="AURORA Studio" style="min-width:180px"></label>
+      <label class="small">Website<br><input type="text" name="website" placeholder="https://aurora.example" style="min-width:220px"></label>
+      <label class="small">Location<br><input type="text" name="location" placeholder="London" style="min-width:140px"></label>
+      <button class="btn" type="submit">Add agency</button>
+    </form>
+  </div>
+
+  <hr style="margin:18px 0;border:none;border-top:1px solid var(--border-gray,#ededed)">
+
+  <div>
+    <p class="muted small" style="margin-bottom:8px"><strong>Bulk:</strong> paste a directory/listing page's HTML (Ctrl+U → Ctrl+A → Ctrl+C on the source), pick the source, and it parses every agency on the page into the database.</p>
+    <form method="post" action="/agencies/ingest">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <label class="small">Source
+          <select name="source" required>
+            {% for key, label in ingest_sources %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="btn" type="submit">Parse &amp; store</button>
+      </div>
+      <textarea name="html" rows="6" placeholder="Paste the full page HTML here…" style="width:100%;font-family:monospace;font-size:12px"></textarea>
+    </form>
+  </div>
+</details>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">

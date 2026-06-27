@@ -631,3 +631,23 @@ def test_thedrum_source_reports_error_when_scraping_disabled(tmp_path, monkeypat
     summary = dc.run_crawl(conn, "thedrum", dp.make_thedrum_source("https://www.thedrum.com/b2b-agencies"))
     assert summary["outcome"] == "error"
     assert dbm.count_agencies(conn, "thedrum") == 0
+
+
+# --------------------------------------------------------------------------- #
+# parse_listing dispatch — turns a pasted page into records for DB ingest.
+# --------------------------------------------------------------------------- #
+def test_parse_listing_dispatches_by_source():
+    drum = dp.parse_listing("thedrum", THEDRUM_HTML)
+    assert [r.company for r in drum] == ["Bader Rutter", "Marketbridge"]
+    aw = dp.parse_listing("awwwards", AWWWARDS_HTML)
+    assert aw and aw[0].company == "Locomotive"
+
+
+def test_parse_listing_aaaa_single_profile():
+    recs = dp.parse_listing("aaaa", AAAA_PROFILE_HTML)
+    assert len(recs) == 1 and recs[0].company == "&Barr"
+
+
+def test_parse_listing_unknown_or_empty_is_safe():
+    assert dp.parse_listing("nope", THEDRUM_HTML) == []
+    assert dp.parse_listing("thedrum", "") == []

@@ -55,7 +55,10 @@ from ..delivery import (
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, enrichment, scheduler, seed, signals, sources, triage, webpush
+from . import (
+    db, directory_parsers, discovery, enrichment, scheduler, seed, signals,
+    sources, triage, webpush,
+)
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -469,7 +472,8 @@ def _enrichment_status(conn, agency_id: int) -> str:
 
 
 @app.get("/agencies", response_class=HTMLResponse)
-def agencies_page(request: Request, source: str = "", enriched: str = ""):
+def agencies_page(request: Request, source: str = "", enriched: str = "",
+                  ingested: str = "", new: str = "", added: str = ""):
     """The harvested agencies, with enrichment status and per-row Enrich."""
     conn = db.connect()
     try:
@@ -496,7 +500,49 @@ def agencies_page(request: Request, source: str = "", enriched: str = ""):
     return render(request, "agencies.html", nav="agencies", agencies=agencies,
                   sources=all_sources, source=source, enriched=enriched,
                   pending=pending, total=total,
+                  ingest_sources=directory_parsers.INGEST_SOURCES,
+                  ingested=ingested, new=new, added=added,
                   scrape_on=enrichment.scrape_enabled())
+
+
+@app.post("/agencies/ingest")
+def agencies_ingest(source: str = Form(...), html: str = Form("")):
+    """Parse a pasted directory/listing page with that source's parser and store
+    the agencies in the Master Company Database. Deterministic — it reads only the
+    page you paste, so it never depends on the directory site being reachable."""
+    records = directory_parsers.parse_listing(source, html or "")
+    new_count = 0
+    conn = db.connect()
+    try:
+        for rec in records:
+            if db.upsert_agency(conn, source, rec.to_db()):
+                new_count += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/agencies?source={source}&ingested={len(records)}&new={new_count}",
+        status_code=303)
+
+
+@app.post("/agencies/add")
+def agencies_add(company: str = Form(...), website: str = Form(""),
+                 location: str = Form("")):
+    """Add a single agency by hand (source 'manual') — the quickest way to seed a
+    row you can immediately Enrich."""
+    from .directory_crawl import AgencyRecord
+    rec = AgencyRecord(company=company.strip(), website=website.strip(),
+                       location=location.strip())
+    ok = bool(rec.company)
+    if ok:
+        conn = db.connect()
+        try:
+            db.upsert_agency(conn, "manual", rec.to_db())
+            conn.commit()
+        finally:
+            conn.close()
+    return RedirectResponse(
+        f"/agencies?source=manual&added={'1' if ok else '0'}", status_code=303)
 
 
 @app.get("/agencies/{agency_id}", response_class=HTMLResponse)

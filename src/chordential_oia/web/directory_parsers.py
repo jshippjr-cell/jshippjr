@@ -657,3 +657,41 @@ SOURCE_FACTORIES = {
     "awwwards": (make_awwwards_source, "https://www.awwwards.com/directory/"),
     "thedrum": (make_thedrum_source, "https://www.thedrum.com/b2b-agencies"),
 }
+
+
+# --------------------------------------------------------------------------- #
+# Paste-a-page ingest. Map a source key to the parser for its *listing* page so
+# a pasted directory page can be turned into AgencyRecords and stored directly —
+# the same workflow used to fit the parsers, now writing to the live database.
+# (This is the reliable path: it never depends on the directory site being
+# reachable, only on the page you paste.)
+# --------------------------------------------------------------------------- #
+LISTING_PARSERS = {
+    "adforum": parse_adforum_listing,
+    "designrush": parse_designrush_listing,
+    "awwwards": parse_awwwards_listing,
+    "canneslions": parse_lovethework_entries,
+    "thedrum": parse_thedrum_list,
+}
+
+# (key, human label) for the ingest picker — listing parsers plus the 4A's
+# single-profile case, in the order they're easiest to paste.
+INGEST_SOURCES = [
+    ("thedrum", "The Drum (ranked list)"),
+    ("awwwards", "Awwwards directory"),
+    ("designrush", "DesignRush directory"),
+    ("adforum", "AdForum search results"),
+    ("canneslions", "Cannes Lions / lovethework winners"),
+    ("aaaa", "4A's agency profile (one page)"),
+]
+
+
+def parse_listing(source_key: str, html: str) -> List[AgencyRecord]:
+    """Parse one pasted page for ``source_key`` into AgencyRecords. 4A's pastes
+    are a single agency-profile page; the rest are multi-agency listing pages.
+    Unknown source or unparseable page -> []."""
+    if source_key == "aaaa":
+        rec = parse_aaaa_profile(html or "")
+        return [rec] if rec else []
+    fn = LISTING_PARSERS.get(source_key)
+    return fn(html or "") if fn else []
