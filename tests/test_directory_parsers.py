@@ -728,6 +728,23 @@ def _wrap_single_agencyspotter(agency):
     return ("<script>self.__next_f.push([1," + json.dumps(flight) + "])</script>")
 
 
+def test_make_agencyspotter_source_drives_engine_offline(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    # page 1 serves the listing; later pages are empty so the crawl terminates
+    monkeypatch.setattr(dp, "_fetch", lambda url, timeout=15.0: (
+        (AGENCYSPOTTER_HTML, True) if "page=" not in url else ("<html></html>", True)))
+
+    conn = dbm.connect(str(tmp_path / "as.db"))
+    dbm.init_db(conn)
+    src = dp.make_agencyspotter_source(
+        "https://www.agencyspotter.com/media/video-production")
+    summary = dc.run_crawl(conn, "agencyspotter", src, max_pages=3)
+
+    assert dbm.count_agencies(conn, "agencyspotter") == 2
+    rows = {r["company"]: r for r in dbm.list_agencies(conn, "agencyspotter")}
+    assert rows["Sociallyin"]["source_url"] == "https://www.agencyspotter.com/sociallyin"
+
+
 def test_agencyspotter_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
     conn = dbm.connect(str(tmp_path / "as.db"))
@@ -739,11 +756,12 @@ def test_agencyspotter_source_reports_error_when_scraping_disabled(tmp_path, mon
     assert dbm.count_agencies(conn, "agencyspotter") == 0
 
 
-def test_agencyspotter_is_registered_for_paste_and_marked_paste_only():
+def test_agencyspotter_is_registered_for_paste_and_live_crawl():
     assert ("agencyspotter", "Agency Spotter category page") in dp.INGEST_SOURCES
     assert "agencyspotter" in dp.LISTING_PARSERS
     assert "agencyspotter" in dp.SOURCE_FACTORIES
-    assert "agencyspotter" in dp.PASTE_ONLY_SOURCES
+    # not paste-only: it paginates by ?page=N, so we let the live crawl try
+    assert "agencyspotter" not in dp.PASTE_ONLY_SOURCES
 
 
 # --------------------------------------------------------------------------- #
