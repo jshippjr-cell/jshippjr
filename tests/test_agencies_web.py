@@ -306,3 +306,13 @@ def test_agencies_pagination(app_db, monkeypatch):
     p2 = client.get("/agencies", params={"page": 2})
     assert "Page 1 of" in p1.text
     assert p1.text != p2.text                # different slices
+
+
+def test_crawl_panel_stays_open_after_crawl(app_db):
+    # After pressing Crawl, the redirect carries cstatus, so the crawl accordion
+    # re-renders OPEN instead of collapsing shut.
+    client, app_mod = app_db
+    r = client.post("/agencies/crawl", data={"source": "thedrum"},
+                    follow_redirects=True)
+    assert 'id="crawl-panel"' in r.text
+    assert 'id="crawl-panel" class="card" style="margin:14px 0" open' in r.text
