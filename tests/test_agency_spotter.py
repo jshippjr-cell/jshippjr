@@ -6,12 +6,25 @@ records, no network) and the fetch is exercised by monkeypatching the one HTTP
 seam (``_get_with_meta``) so nothing here ever touches the network.
 """
 
+import importlib
+import importlib.util
+import pathlib
 import urllib.parse
 
 import pytest
 
 from chordential_oia.web import crawl_adapters as ca
 from chordential_oia.web import discovery_sources as catalog
+
+
+def _load_exporter():
+    """Load the standalone export script as a module (it isn't a package)."""
+    path = (pathlib.Path(__file__).resolve().parent.parent
+            / "scripts" / "export_agency_spotter_pdf.py")
+    spec = importlib.util.spec_from_file_location("export_agency_spotter_pdf", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # --------------------------------------------------------------------------- #
@@ -178,3 +191,64 @@ def test_dispatch_off_when_scrape_disabled(monkeypatch):
     res = ca.fetch_opportunity_records(target)
     assert res["outcome"] == "off"
     assert res["records"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Agency-need recognition + the PDF exporter's row selection
+# --------------------------------------------------------------------------- #
+def test_is_agency_need():
+    assert ca.is_agency_need("Agency — branding, video") is True
+    assert ca.is_agency_need(ca.AGENCY_NEED_DEFAULT) is True
+    assert ca.is_agency_need("Brand spot music") is False
+    assert ca.is_agency_need("") is False
+    assert ca.is_agency_need(None) is False
+
+
+def _seed_leads(db):
+    """A DB with two Agency Spotter leads, one other crawl lead, one website lead."""
+    conn = db.connect()
+    db.init_db(conn)
+    db.insert_inbound_lead(conn, contact_name="(discovered)", company="AURORA Creative",
+                           project_type="Agency — branding, video", source="crawl")
+    db.insert_inbound_lead(conn, contact_name="(discovered)", company="Vance Athletic",
+                           project_type=ca.AGENCY_NEED_DEFAULT, source="crawl")
+    db.insert_inbound_lead(conn, contact_name="(discovered)", company="IndieGameCo",
+                           project_type="Composer for trailer", source="crawl")
+    db.insert_inbound_lead(conn, contact_name="Jane", company="BrandX",
+                           project_type="Spot music", source="questionnaire")
+    conn.commit()
+    return conn
+
+
+def test_select_agency_leads_filters_to_agencies(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "x.db"))
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    conn = _seed_leads(db_mod)
+
+    exporter = _load_exporter()
+    agencies = exporter.select_agency_leads(conn)
+    names = {l["company"] for l in agencies}
+    assert names == {"AURORA Creative", "Vance Athletic"}   # only agency-need crawl leads
+
+    all_crawl = {l["company"] for l in exporter.select_agency_leads(conn, all_crawl=True)}
+    assert all_crawl == {"AURORA Creative", "Vance Athletic", "IndieGameCo"}  # not BrandX
+
+
+def test_build_pdf_smoke(tmp_path, monkeypatch):
+    pytest.importorskip("reportlab")            # optional [pdf] extra; skip if absent
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "x.db"))
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    conn = _seed_leads(db_mod)
+
+    exporter = _load_exporter()
+    out = str(tmp_path / "findings.pdf")
+    exporter.build_pdf(exporter.select_agency_leads(conn), out)
+    data = pathlib.Path(out).read_bytes()
+    assert data[:5] == b"%PDF-" and b"%%EOF" in data[-2048:]
+
+    # Empty result still renders a valid (single-page "nothing yet") PDF.
+    empty_out = str(tmp_path / "empty.pdf")
+    exporter.build_pdf([], empty_out)
+    assert pathlib.Path(empty_out).read_bytes()[:5] == b"%PDF-"

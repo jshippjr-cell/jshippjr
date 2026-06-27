@@ -40,6 +40,10 @@ postgres = ["psycopg[binary]>=3.1"]
 # Standalone tooling, imported lazily inside the script, so the app/CI/sandbox
 # never depend on it — only a machine actually generating clips installs it.
 veo = ["google-genai>=0.3"]
+# PDF export of discovery findings (scripts/export_agency_spotter_pdf.py).
+# Imported lazily inside the renderer, so the app/CI/sandbox never depend on it —
+# only a machine actually producing the report installs it.
+pdf = ["reportlab>=4.0"]
 
 [project.scripts]
 chordential-oia = "chordential_oia.cli:main"

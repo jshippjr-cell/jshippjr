@@ -202,6 +202,19 @@ _AS_UA = "ChordentialDiscoveryBot/1.0 (+https://chordential.com)"
 _AS_DEFAULT_MAX_PAGES = 50
 _AS_DEFAULT_DELAY = 1.0
 
+# The "need" text the agency parser stamps on every record. Exposed as constants
+# so downstream readers (e.g. the PDF exporter) can recognize an Agency Spotter
+# lead from the persisted ``project_type`` alone — crawl leads don't store a
+# source key — without the two sides drifting apart.
+AGENCY_NEED_PREFIX = "Agency — "
+AGENCY_NEED_DEFAULT = "Creative agency (potential music buyer)"
+
+
+def is_agency_need(need: Optional[str]) -> bool:
+    """True if a lead's ``project_type`` was minted by the Agency Spotter parser."""
+    n = (need or "").strip()
+    return n.startswith(AGENCY_NEED_PREFIX) or n == AGENCY_NEED_DEFAULT
+
 
 def is_agency_spotter(target) -> bool:
     return ("agencyspotter" in (target["source_key"] or "")
@@ -266,8 +279,8 @@ class _AgencyListingParser(HTMLParser):
         # Fold specialties + location into the standard opportunity-lead shape so
         # downstream ingestion (insert_inbound_lead) needs no special-casing.
         need = (
-            f"Agency — {specialties.replace(',', ', ')}"
-            if specialties else "Creative agency (potential music buyer)"
+            AGENCY_NEED_PREFIX + specialties.replace(",", ", ")
+            if specialties else AGENCY_NEED_DEFAULT
         )
         description = " · ".join(p for p in (location, desc) if p)
         self.records.append({
