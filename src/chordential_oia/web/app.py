@@ -1095,6 +1095,37 @@ def agencies_import():
     )
 
 
+@app.get("/agencies/report", response_class=HTMLResponse)
+def agencies_report(request: Request):
+    """A clean, readable report of the last discovery run — the agencies it pulled
+    plus a plain-English summary. Printable straight to PDF (browser print dialog →
+    Save as PDF), matching how the rest of the app produces PDFs."""
+    conn = db.connect()
+    try:
+        last_run = db.latest_agency_run(conn)
+        db_agencies = db.list_agencies(conn)
+        counts = db.count_agencies(conn)
+    finally:
+        conn.close()
+    from datetime import datetime, timezone
+    # Prefer the last run's pulled set (what was discovered); fall back to the
+    # agencies saved in the database if there's no run export on disk.
+    pulled, from_export = [], False
+    if last_run and last_run["export_path"] and os.path.exists(last_run["export_path"]):
+        try:
+            with open(last_run["export_path"], encoding="utf-8") as fh:
+                pulled = json.load(fh).get("agencies") or []
+            from_export = True
+        except Exception:
+            pulled = []
+    generated_at = datetime.now(timezone.utc).isoformat()
+    return render(
+        request, "agencies_report.html", last_run=last_run, pulled=pulled,
+        from_export=from_export, db_agencies=db_agencies, counts=counts,
+        generated_at=generated_at,
+    )
+
+
 @app.get("/agencies/export.json")
 def agencies_export_download():
     """Download the last run's JSON export for offline verification."""

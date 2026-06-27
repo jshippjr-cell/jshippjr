@@ -415,6 +415,23 @@ def test_agencies_console_renders_and_run_is_gated(client):
     assert r.status_code == 200
 
 
+def test_report_page_is_readable_and_printable(client, monkeypatch):
+    c, db_mod, app_mod = client
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    pages = {agent.page_url(1): PAGE_1, agent.page_url(2): PAGE_2}
+    monkeypatch.setattr(app_mod.agency_discovery, "_fetch_url",
+                        lambda url, timeout=10.0: pages[url])
+    # Before any run, the report still renders (with a "no run yet" note).
+    assert c.get("/agencies/report").status_code == 200
+    # After a preview run it shows the pulled agencies + a Save-as-PDF control.
+    c.post("/agencies/run", follow_redirects=True)
+    r = c.get("/agencies/report")
+    assert r.status_code == 200
+    assert "Save as PDF" in r.text
+    assert "Northwind Studio" in r.text
+    assert "Agencies pulled in this run" in r.text
+
+
 def test_web_preview_then_import_then_decide(client, monkeypatch):
     c, db_mod, app_mod = client
     monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")

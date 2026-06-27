@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agency Discovery — Report</title>
+  <style>
+    :root{ --ink:#1d2330; --muted:#6b7280; --line:#e5e2dd; --orange:#e4671f; --wine:#7a2e3a; }
+    *{ box-sizing:border-box; }
+    body{ font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      color:var(--ink); background:#f4f2ef; margin:0; padding:24px; }
+    .page{ max-width:980px; margin:0 auto; background:#fff; border-radius:12px;
+      box-shadow:0 2px 18px rgba(0,0,0,.08); padding:34px 38px; }
+    h1{ font-size:24px; margin:0 0 2px; }
+    .sub{ color:var(--muted); margin:0 0 18px; }
+    .summary{ background:rgba(228,103,31,.06); border:1px solid rgba(228,103,31,.22);
+      border-radius:10px; padding:16px 18px; margin:0 0 22px; }
+    .summary p{ margin:0 0 6px; }
+    .summary p:last-child{ margin-bottom:0; }
+    .stat-row{ display:flex; flex-wrap:wrap; gap:22px; margin:14px 0 4px; }
+    .stat .n{ font-size:22px; font-weight:700; line-height:1; }
+    .stat .l{ font-size:12px; color:var(--muted); margin-top:3px; }
+    table{ width:100%; border-collapse:collapse; margin-top:10px; font-size:13.5px; }
+    th,td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);
+      vertical-align:top; }
+    th{ font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+    tr.dup td{ color:#9aa0aa; }
+    .tag{ display:inline-block; font-size:11px; font-weight:700; padding:1px 7px;
+      border-radius:999px; }
+    .tag.new{ background:rgba(46,125,50,.12); color:#2e7d32; }
+    .tag.dup{ background:rgba(0,0,0,.06); color:#6b7280; }
+    a{ color:var(--wine); }
+    .toolbar{ max-width:980px; margin:0 auto 14px; display:flex; gap:12px; align-items:center; }
+    .btn{ background:var(--orange); color:#fff; border:0; border-radius:8px;
+      padding:9px 16px; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; }
+    .btn.ghost{ background:#fff; color:var(--ink); border:1px solid var(--line); }
+    .foot{ color:var(--muted); font-size:12px; margin-top:22px; border-top:1px solid var(--line);
+      padding-top:12px; }
+    @media print{
+      body{ background:#fff; padding:0; }
+      .no-print{ display:none !important; }
+      .page{ box-shadow:none; border-radius:0; max-width:none; padding:0; }
+      @page{ margin:14mm; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar no-print">
+  <a class="btn ghost" href="/agencies">← Back</a>
+  <button class="btn" type="button" onclick="window.print()">⤓ Save as PDF / Print</button>
+  <span style="color:#6b7280;font-size:13px">Tip: in the print window, choose “Save as PDF” as the destination.</span>
+</div>
+
+<div class="page">
+  <h1>Agency Discovery — Report</h1>
+  <p class="sub">Generated {{ generated_at[:16].replace('T',' ') }} UTC</p>
+
+  {% if last_run %}
+  <div class="summary">
+    <p>
+      <strong>Run #{{ last_run.id }}</strong>
+      ({{ 'preview — not yet saved to your list' if last_run.dry_run else 'live — saved to your list' }})
+      ran on {{ (last_run.started_at or '')[:16].replace('T',' ') }} UTC and
+      {% if last_run.status == 'completed' %}finished normally{% elif last_run.status == 'interrupted' %}was interrupted (can be resumed){% else %}is {{ last_run.status }}{% endif %}.
+    </p>
+    <p>
+      It looked through <strong>{{ last_run.last_page or 0 }}{% if last_run.total_pages %} of {{ last_run.total_pages }}{% endif %}</strong>
+      page(s) of the directory and found <strong>{{ last_run.found or 0 }}</strong> agencies —
+      <strong>{{ last_run.new_count or 0 }}</strong> new and
+      <strong>{{ last_run.duplicate_count or 0 }}</strong> already on your list.
+      {% if not last_run.dry_run %}<strong>{{ last_run.imported_count or 0 }}</strong> were saved.{% endif %}
+      {% if last_run.failed_pages and last_run.failed_pages not in ('[]', None) %}
+        ({{ last_run.failed_pages }} page(s) couldn’t be read.)
+      {% endif %}
+    </p>
+    <div class="stat-row">
+      <div class="stat"><div class="n">{{ last_run.found or 0 }}</div><div class="l">Agencies found</div></div>
+      <div class="stat"><div class="n">{{ last_run.new_count or 0 }}</div><div class="l">New</div></div>
+      <div class="stat"><div class="n">{{ last_run.duplicate_count or 0 }}</div><div class="l">Already on list</div></div>
+      <div class="stat"><div class="n">{{ counts.total }}</div><div class="l">Total in your list</div></div>
+    </div>
+  </div>
+  {% else %}
+  <div class="summary"><p>No discovery run yet. Press <strong>Run discovery</strong> on the
+    Agency Discovery page, then come back here to read and save the results.</p></div>
+  {% endif %}
+
+  {% if pulled %}
+  <h2 style="font-size:17px;margin:18px 0 2px">Agencies pulled in this run</h2>
+  <p class="sub">{{ pulled|length }} listed{% if last_run and last_run.dry_run %} · this was a preview, so “new” ones aren’t saved until you import them{% endif %}.</p>
+  {% set rows = pulled %}
+  {% elif db_agencies %}
+  <h2 style="font-size:17px;margin:18px 0 2px">Agencies saved in your list</h2>
+  <p class="sub">{{ db_agencies|length }} listed (no recent run file found, so showing what’s saved).</p>
+  {% set rows = db_agencies %}
+  {% else %}
+  {% set rows = [] %}
+  {% endif %}
+
+  {% if rows %}
+  <table>
+    <thead>
+      <tr><th>#</th><th>Company</th><th>Website</th><th>City</th><th>Employees</th>
+          <th>Services</th><th>Clutch</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for a in rows %}
+      {% set is_dup = (a.status == 'duplicate') %}
+      <tr class="{{ 'dup' if is_dup }}">
+        <td>{{ loop.index }}</td>
+        <td><strong>{{ a.company }}</strong></td>
+        <td>{% if a.website %}<a href="{{ a.website }}">{{ a.website }}</a>{% else %}—{% endif %}</td>
+        <td>{{ a.city or '—' }}</td>
+        <td>{{ a.employees or '—' }}</td>
+        <td>{{ a.services or '—' }}</td>
+        <td>{% if a.clutch_url %}<a href="{{ a.clutch_url }}">profile ↗</a>{% else %}—{% endif %}</td>
+        <td>
+          {% if from_export %}
+            {% if is_dup %}<span class="tag dup">already on list</span>{% else %}<span class="tag new">new</span>{% endif %}
+          {% else %}<span class="tag dup">{{ a.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="sub">No agencies to show yet.</p>
+  {% endif %}
+
+  <p class="foot">
+    Chordential · Agency Discovery Agent. This report is generated from your own
+    discovery run — the music is always human-made; this tool only finds and
+    organizes prospective agencies for you to review.
+  </p>
+</div>
+
+</body>
+</html>
