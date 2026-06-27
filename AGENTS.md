@@ -13,6 +13,11 @@
 > Tier (§4.2): **T1** deterministic engine · **T2** connector/job · **T3** assistive AI.
 > Governance (§4.3): **Gated** (proposes only) · **Auto** (autonomous into a review
 > queue / read-only) · **Action** (performs an authorized outbound/irreversible action).
+>
+> **Collectors** are source adapters in the **Intelligence Collection Pipeline** (§3.1):
+> they Acquire via the escalation ladder + collection mode and obey the seven acquisition
+> guardrails (§2.2). Their entries carry a **Mode** (`Open · Browser Assisted ·
+> Authenticated · Human Assisted · Unavailable`).
 
 ---
 
@@ -40,6 +45,7 @@
 | Delivery: Assets Agent | 🟢 | T1 | Delivery OS | Gated |
 | Scheduler / Auto-Fetcher | 🟢 | T2 | Scheduler | Auto |
 | Notification Dispatcher | 🟡 | T2 | Notification System | Action |
+| Browser Collection Agent | ⚪ | T2 | Intelligence Collection | Gated |
 | Company Intelligence Agent | ⚪ | T2/T3 | Company Intelligence | Auto |
 | Contact Discovery Agent | ⚪ | T2 | Contact Discovery | Gated |
 | Relationship Intelligence Agent | ⚪ | T1 | Relationship Intelligence | Auto |
@@ -66,8 +72,12 @@
   human-gated).
 - **Frequency:** Manual (no scheduler by decision, during pipeline validation).
 - **Triggers:** Operator presses *Run discovery*; *Resume* for an interrupted run.
-- **Notes:** Reference implementation of idempotent + resumable + observable (ADR-0004).
-  Preview→verify(JSON/report/PDF)→import flow keeps the human in the loop.
+- **Collection mode:** `Open` (Tier 1 HTTP) today. Follows the escalation ladder +
+  guardrails (§2.2); stop conditions per §3.1 (today: last-page / no-new; ⚪ duplicate-
+  threshold + rate-limit + explicit manual-stop).
+- **Notes:** **Reference implementation** of the Intelligence Collection Pipeline (§3.1)
+  and of idempotent + resumable + observable (ADR-0004). Preview→verify(JSON/report/PDF)→
+  import keeps the human in the loop. To generalize into the shared ICP next.
 
 ### Discovery Crawler (Talent + Opportunity) — 🟢 Production · T2 · Gated
 - **Purpose:** Fetch talent and opportunity records from an operator-approved catalog of
@@ -77,6 +87,9 @@
 - **Owner module:** Discovery / Talent. **Dependencies:** Database, Config, Scheduler.
 - **Frequency:** Scheduled auto-fetch + manual. **Triggers:** Approved target on an
   active source; auto-fetch cycle.
+- **Collection mode:** mixed per source — `Open` for public boards; login-gated sources
+  are auto-demoted to `Authenticated → Human Assisted` (manual-assist) and never
+  auto-fetched. Obeys the ladder + guardrails (§2.2).
 
 ### Signal Engine — 🟢 Production · T2 · Auto→Gated
 - **Purpose:** Ingest opportunity signals from feeds (RSS/email/paste) and rank by
@@ -157,6 +170,19 @@
 ---
 
 ## Planned agents (designed, not yet built)
+
+### Browser Collection Agent — ⚪ · T2 · Gated · **(Collection mode: Browser Assisted)**
+- **Purpose:** Render and collect from **public, robots-allowed** pages that a plain HTTP
+  fetch can't parse (JS-heavy directories) — Tier 2 of the escalation ladder (§2.2).
+- **Inputs:** A collection target the Tier-1 collector marked `empty`/needs-render;
+  robots/permission decision. **Outputs:** parsed records into the same pipeline (stages
+  2–7); a collection-audit record per attempt.
+- **Owner module:** Intelligence Collection. **Dependencies:** Collection/Acquisition
+  service (browser pool — Chromium is present in the runtime), robots preflight, Database.
+- **Frequency:** On-escalation. **Triggers:** a Tier-1 collector classifies a permitted
+  source as `Browser Assisted`.
+- **Hard limits:** **never** used on Authenticated / CAPTCHA / bot-protected pages (those
+  go to Human Assisted); renders public content only — never circumvents a control.
 
 ### Company Intelligence Agent — ⚪ · T2/T3 · Auto
 - **Purpose:** Enrich a discovered agency into firmographics (size, sector, locations,

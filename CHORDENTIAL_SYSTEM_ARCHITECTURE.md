@@ -1,6 +1,6 @@
 # CHORDENTIAL — System Architecture
 
-> **Status:** Living document · v1.1 · 2026-06-27 (ADR-0008: multi-tenant + UUID foundation shipped)
+> **Status:** Living document · v1.2 · 2026-06-27 (ADR-0008: multi-tenant + UUID foundation shipped · ADR-0009: Intelligence Collection Pipeline)
 > **Authority:** This is the architectural **constitution** for Chordential. Every
 > future development chat, implementation agent, and human contributor treats it as
 > authoritative. Code that contradicts this document is a bug in the code *or* a
@@ -143,6 +143,90 @@ layer** every agent runs inside:
 This layer is the reason "dozens of autonomous agents" is **safe** rather than
 reckless: autonomy is bounded by governed gates, not by hope.
 
+### 2.2 Intelligence Collection — Acquisition Ethics, Modes & the Escalation Ladder (ADR-0009)
+Chordential does **not "scrape the web."** It runs an **Intelligence Collection Pipeline**
+(§3.1) that turns the outside world into governed, deduplicated, provenance-stamped
+**intelligence**. Acquisition — the pipeline's first stage — is the platform's largest
+**legal and reputational** risk surface, so it is *governed*, not a free-for-all. **Every
+collector** (T2 — Agency Discovery, Company Intelligence, Contact Discovery, RFP
+Ingestion, the Discovery Crawler) acquires through **one escalation ladder**, with each
+source carrying a **collection mode**, bounded by **non-negotiable guardrails**. Part of
+the Governance & Trust Layer (§2.1).
+
+**Collection modes** — *how* a given source may be collected. A per-source state the
+pipeline **learns and records**; the ladder promotes a source toward `Open` and demotes
+it toward `Unavailable` as evidence arrives:
+
+| Mode | Meaning | Tier | Default action |
+|------|---------|------|----------------|
+| **Open** | Public, robots-allowed, parsable over HTTP | Tier 1 | Automated collection |
+| **Browser Assisted** | Public + robots-allowed but needs JS rendering | Tier 2 | Browser automation *(when permitted)* |
+| **Authenticated** | Behind a login / ToS gate | → Tier 3 | Route to Human Assisted; **never auto-authenticate** |
+| **Human Assisted** | Collected only in the operator's authorized session | Tier 3 | Queue for human |
+| **Unavailable** | Not permitted (robots disallow / hard-blocked / CAPTCHA / ToS) | — | **Do not collect**; record as Unavailable |
+
+Examples of mode transitions (all logged, guardrail 7): a Tier-1 fetch that hits a login
+wall → demote to **Authenticated → Human Assisted**; an `empty` page that needs rendering
+→ **Browser Assisted**; a `403`/CAPTCHA → **Unavailable**. Today the `login_gated` flag +
+`classify_outcome` are the seed of this; the full mode model is ⚪ (see §3.1).
+
+**The ladder** — escalate a rung *only* when the prior one is **legitimately** blocked,
+**never to defeat a control**:
+
+```
+        Discovery / Collection Agent
+                  │
+   Tier 0 ── Preflight & politeness
+        │     robots.txt (when appropriate) · rate-limit · honest User-Agent
+        │     not permitted?  → stop / human review   (never force)
+        ▼
+   Tier 1 ── Automated HTTP collection         ← default; flag-gated, fail-soft
+        │     parse response; if blocked, classify WHY ↓
+        ▼
+   Tier 2 ── Browser automation (rendered)     ← ONLY when permitted
+        │     public, robots-allowed pages that merely need JS rendering
+        │     NOT auth walls / CAPTCHA / bot-protection
+        ▼
+   Tier 3 ── Human approval queue              ← authenticated / ToS-sensitive
+        │     operator decides &, if appropriate, collects in their OWN session
+        ▼
+   Resume automatically from the last checkpoint  (ADR-0004)
+```
+
+**The *reason* for a block decides the route** (reusing the existing
+`classify_outcome`: `ok | empty | login | blocked | error`):
+- **empty / needs-JS-render** → Tier 2 browser automation **if permitted** — a legitimate
+  rendering need, *not* evasion.
+- **login (authenticated page)** → Tier 3 human approval. Never auto-authenticate.
+- **blocked (403 / 429 / CAPTCHA / bot-protection)** → **stop escalating.** Back off,
+  respect the signal, queue for human review. We do **not** climb the ladder to defeat a
+  control. *(This is the refinement that keeps the ladder lawful: "browser automation when
+  blocked" means rendering, never circumvention.)*
+- **error / transient** → retry with backoff (ADR-0004); persistent → Tier 3.
+
+**Hard guardrails — compliance invariants. Violating one is a Sev-1 defect, not a
+trade-off:**
+1. **Respect `robots.txt`** where appropriate, plus rate limits and a truthful,
+   identifying User-Agent.
+2. **Browser automation only when permitted** — public, robots-allowed content that needs
+   rendering. Never to bypass access controls.
+3. **Authenticated pages require human approval** — collected only via the operator's own
+   authorized session and judgment.
+4. **Never bypass authentication illegally.**
+5. **Never evade CAPTCHAs** or anti-bot challenges — a challenge is a "no"; honor it.
+6. **Never impersonate a user** or misrepresent identity.
+7. **Log every collection attempt** — URL, agent/run, tier, robots decision, outcome,
+   timestamp — to the collection audit trail (§6). *If it isn't logged, it didn't happen.*
+
+**Resume.** When a human resolves a Tier-3 item, the agent **resumes automatically from
+its checkpoint** — no full re-run (ADR-0004 / the Agency Discovery resume pattern).
+
+**Status:** Tier 1 🟢 (live: flag-gated fetch + `classify_outcome` + login-wall →
+manual-assist). Tier 3 🟡 (login-gated sources route to manual-assist; auto-resume-after-
+approval partial). Tier 0 robots preflight ⚪, Tier 2 browser automation ⚪ (Chromium is
+present in the runtime), unified per-URL collection audit ⚪. These are the next
+manifest-first builds — see §11 (Collection service) and `AGENTS.md`.
+
 ---
 
 ## 3. Core Platform Modules
@@ -181,6 +265,61 @@ states the boundary it may not cross.
 **Identify → Enrich → Contact → Rank → Qualify → Estimate → Prepare → Outreach →
 Win/Loss → Deliver.** Each arrow is a typed handoff between modules (§9), never a
 reach-in.
+
+**Collectors & the ICP.** Modules 1–5 (and RFP Ingestion) are **collectors** — source
+adapters feeding the shared **Intelligence Collection Pipeline (§3.1)** under the
+Acquisition Policy (§2.2). They *acquire*; the pipeline *validates, deduplicates,
+resolves, enriches, persists, and queues for review.* "Agency Discovery" is a collector,
+not a standalone scraper.
+
+### 3.1 The Intelligence Collection Pipeline (ICP)
+*Chordential's framing for all external data acquisition — an **intelligence pipeline**,
+not a web scraper.* Where a scraper "pulls pages," the ICP **turns the outside world into
+governed, deduplicated, provenance-stamped intelligence** the mission spine can act on.
+Every collector is a **source adapter** that differs only at stage 1; the rest of the
+pipeline is shared.
+
+**Pipeline stages** (each is a seam):
+```
+ Source ─► 1 Acquire ─► 2 Parse ─► 3 Validate ─► 4 Dedupe/Resolve ─► 5 Enrich ─► 6 Persist ─► 7 Review
+            ladder+modes   pure     schema +        stable-key +        optional     tenant-      human
+            (§2.2)         fns      honesty         Identity Res. (§11)  (T2/T3)      scoped(ADR-8) gate(§2.1)
+```
+1. **Acquire** — fetch via the escalation ladder + collection mode (§2.2). Flag-gated,
+   fail-soft, rate-limited, robots-aware, **logged**.
+2. **Parse** — pure functions (HTML/JSON → records), unit-tested against fixtures, no network.
+3. **Validate** — schema + honesty checks (required fields present; provenance attached;
+   demo data uses invented brands).
+4. **Deduplicate / Resolve** — stable-key dedupe within the store; cross-source **Identity
+   Resolution (§11)** merges the *same* real-world entity arriving from multiple collectors.
+5. **Enrich** — optional firmographic / contact / graph enrichment (Company, Contact,
+   Relationship Intelligence). Advisory; never the decision-of-record.
+6. **Persist** — write **tenant-scoped, UUID-keyed** rows (ADR-0008) to the entity's store.
+7. **Review** — land as `New` in a human review queue. *The machine proposes; Jon disposes.*
+
+**Collection targets & stop conditions.** A run is driven by a **target** (e.g. "collect
+every agency in directory X") and **terminates on the first** of these — each recorded as
+the run's `stopped_reason`, with interrupted runs resuming from checkpoint (ADR-0004):
+
+| Stop condition | Meaning | Today |
+|----------------|---------|-------|
+| **Last page reached** | No next page advertised | 🟢 `no_more_pages` |
+| **No new agencies found** | A page — or *N consecutive* pages — yields nothing new | 🟢 `empty_page` · ⚪ N-consecutive-no-new |
+| **Duplicate threshold exceeded** | Duplicate ratio over a window crosses a configured limit (incremental-collection efficiency) | ⚪ |
+| **Manual stop** | Operator halts the run | 🟡 manual-run · ⚪ explicit stop control |
+| **Rate limit encountered** | `429` / throttle → pause, back off, stop **resumably** | 🟡 (`blocked`→interrupted) · ⚪ explicit 429 handling |
+
+**Reference implementation:** the **Agency Discovery Agent** already embodies stages 1–4
++ 6–7, progress (page X/Y) + counters, failed-page tracking, resume-from-checkpoint, and
+JSON export-before-import. Generalizing it into the shared ICP (modes, robots preflight,
+browser tier, duplicate-threshold + rate-limit stops, unified collection audit) is the
+near-term backlog (§11, `AGENTS.md`).
+
+**Why this framing matters (CTO note).** "Intelligence Collection Pipeline" instead of
+"scraper" is not cosmetic: it (a) puts **ethics, modes, and audit** at the center rather
+than "get the data"; (b) makes every collector a uniform **adapter**, so the next source
+is *stage-1 work only*; and (c) elevates **dedupe, identity resolution, and provenance**
+to first-class stages — which is exactly what keeps the CRM trustworthy as collection scales.
 
 ---
 
@@ -523,6 +662,8 @@ is a seam: a stable interface with a null/local default and a real impl when con
 | **Metrics** | Counters/timings/attribution for agents & funnel | per-run counters, source attribution | 🟡 |
 | **Email/Payments providers** | External seams, null-by-default | `mailer.py`, `payments/` | 🟢 |
 | **Identity Resolution** | Cross-source entity dedupe/merge | per-store dedupe only | ⚪ |
+| **Collection / Acquisition** | Robots preflight, rate-limit, browser-automation pool, collection-mode classification + escalation (§2.2) | `login_gated`→manual-assist, `classify_outcome` | 🟡 |
+| **Collection Audit** | One record per acquisition attempt (URL, agent/run, tier, mode, robots decision, outcome, timestamp) — guardrail 7 | per-run logs (`agency_runs`) | 🟡 |
 | **PDF/Doc rendering** | Deterministic doc → PDF | browser print-to-PDF (best-effort) | 🟡 |
 
 **Known gaps (do not assume these exist):** durable object storage (S3/R2 — local disk
@@ -661,6 +802,37 @@ Consequences · Date.** New ADRs append; superseded ones are marked, never delet
   Open follow-ups: wire `current_tenant_id()` to real auth; enforce scoping in
   repositories at that time; validate the trigger approach at the Postgres cutover.
 
+**ADR-0009 — Intelligence Collection Pipeline (not a web scraper).** *(2026-06-27)*
+- **Decision:** Frame and build **all** external data acquisition as one governed
+  **Intelligence Collection Pipeline** — *Acquire → Parse → Validate → Dedupe/Resolve →
+  Enrich → Persist → Review* (§3.1). Collectors are **source adapters**; only stage 1
+  differs. Acquisition follows a 4-tier **escalation ladder** (preflight → HTTP →
+  browser-when-permitted → human approval → auto-resume, §2.2) with a per-source
+  **collection mode** (`Open · Browser Assisted · Authenticated · Human Assisted ·
+  Unavailable`). A run is driven by a **target** and **stops on the first** of: *last page
+  reached · no new found (incl. N-consecutive) · duplicate threshold exceeded · manual
+  stop · rate limit encountered.* The whole pipeline is bounded by **seven hard
+  guardrails**: respect robots.txt; browser automation only when permitted; human approval
+  for authenticated pages; never bypass authentication illegally; never evade CAPTCHAs;
+  never impersonate users; **log every collection attempt.**
+- **Reasoning:** "Scraper" framing optimizes for *get the data* and accrues legal,
+  ethical, and data-quality debt. "Intelligence pipeline" puts **ethics, provenance,
+  deduplication, and identity resolution at the center**, makes collectors uniform
+  adapters (next source = stage-1 work), and scales trustworthily. Critically,
+  distinguishing *needs-rendering* from *behind-a-control* keeps escalation **lawful** —
+  browser automation renders permitted public pages; it never circumvents access controls.
+- **Alternatives considered:** (a) *Aggressive scraping / evasion* — rejected: illegal,
+  unethical, brand-fatal, contradicts the trust promise. (b) *HTTP-only forever* —
+  rejected: misses legitimate JS-rendered public sources. (c) *Always-human collection* —
+  rejected: doesn't scale. (d) *Keep the "scraper" framing* — rejected: wrong incentives,
+  hides the ethics/quality stages.
+- **Consequences:** every collector shares one pipeline, one acquisition policy, and one
+  audit trail. The new rungs/modes/stops (robots preflight, browser tier, duplicate-
+  threshold + rate-limit stops, collection-mode model, unified per-URL collection audit,
+  auto-resume-after-approval) are scoped, **manifest-first** builds, not a rewrite —
+  Agency Discovery is the reference implementation to generalize. Compliance guardrails
+  are Sev-1 invariants enforced by the Governance Layer (§2.1), not per-agent goodwill.
+
 > **ADR process:** propose → discuss → record here with the five fields → implement.
 > Significant = changes a boundary, a gate, a shared service, a data-model entity, or a
 > cross-module contract. When in doubt, write the ADR.
@@ -721,6 +893,15 @@ than wait for the first second user, the `tenants` root + `tenant_id` on every t
 `uuid` on every entity were built **now**, while single-tenant. The expensive,
 touches-everything part (the schema) is done; what remains is wiring `current_tenant_id()`
 to real auth and enforcing scoping in repositories — additive work, not a redesign.
+
+**Challenge 9 — "Web scraper" framing is a liability.** Treating collection as scraping
+optimizes for *get the data* and quietly accrues legal, ethical, and CRM-quality debt
+(no ethics gate, no provenance, dedupe as an afterthought). **Refinement (✅ acted on —
+ADR-0009):** reframed all acquisition as an **Intelligence Collection Pipeline** (§3.1)
+with ethics/modes/audit at the center, an escalation ladder that distinguishes *rendering*
+from *circumvention* (so it stays lawful), explicit collection modes + stop conditions,
+and dedupe/identity-resolution as first-class stages. Collection is now a governed
+pipeline, not a scraper.
 
 **Remaining known weaknesses (tracked, not yet solved):** no formal RBAC; storage on
 local disk (durability risk for assets/exports); PDF rendering best-effort; no
