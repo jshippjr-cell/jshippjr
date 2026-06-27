@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Agency Discovery{% endblock %}
+{% block heading %}Agency Discovery · paginating directory crawler{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  The Agency Discovery Agent searches a B2B agency directory (Clutch), paginating
+  from page 1 to the last page. It extracts <strong>Company, Website, City,
+  Employees, Services</strong> and the <strong>Clutch URL</strong>, skips agencies
+  already stored, and saves the rest here. <em>The machine proposes, you dispose</em>
+  — discovered agencies wait as <strong>New</strong> until you review or dismiss them.
+</div>
+
+{% if scrape_on %}
+<div class="callout" style="margin-top:12px;border-left:4px solid var(--won,#2e7d32)">
+  <span class="callout-ico">▶</span>
+  <strong>Crawling is enabled</strong> — running the agent will fetch live directory pages.
+</div>
+{% else %}
+<div class="callout" style="margin-top:12px;border-left:4px solid var(--lost,#b71c1c)">
+  <span class="callout-ico">⏸</span>
+  <strong>Crawling is OFF</strong> — set <code>CHORDENTIAL_ENABLE_SCRAPE=1</code> in the
+  environment to let the agent reach the network. Running it now is a safe no-op.
+</div>
+{% endif %}
+
+{% if last_run %}
+<div class="callout" style="margin-top:12px;border-left:4px solid var(--accent,#3b6ef5)">
+  <span class="callout-ico">✓</span>
+  Last run — scanned <strong>{{ last_run.pages_scanned }}</strong> page(s),
+  found <strong>{{ last_run.found }}</strong>, saved <strong>{{ last_run.saved }}</strong> new,
+  skipped <strong>{{ last_run.skipped }}</strong> existing.
+  Stopped: <code>{{ last_run.stopped_reason }}</code>.
+</div>
+{% endif %}
+
+<div class="pill-row" style="margin:14px 0;align-items:center">
+  <form method="post" action="/agencies/run" style="margin:0">
+    <button class="btn" type="submit">⟳ Run discovery now</button>
+  </form>
+  <span class="muted small" style="margin-left:auto">
+    {{ counts.total }} discovered ·
+    {{ counts.New }} new · {{ counts.Reviewed }} reviewed · {{ counts.Dismissed }} dismissed
+  </span>
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <h2>🏢 Discovered agencies</h2>
+    <span class="muted small">newest first · New &amp; Reviewed on top</span>
+  </div>
+  {% if agencies %}
+  <table class="table compact">
+    <thead>
+      <tr>
+        <th>Company</th><th>Website</th><th>City</th><th>Employees</th>
+        <th>Services</th><th>Clutch</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in agencies %}
+      <tr>
+        <td><strong>{{ a.company }}</strong></td>
+        <td>
+          {% if a.website %}<a href="{{ a.website }}" target="_blank" rel="noopener">{{ a.website }}</a>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td>{{ a.city or "—" }}</td>
+        <td>{{ a.employees or "—" }}</td>
+        <td class="small">{{ a.services or "—" }}</td>
+        <td>
+          {% if a.clutch_url %}<a href="{{ a.clutch_url }}" target="_blank" rel="noopener">profile ↗</a>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td><span class="pill small">{{ a.status }}</span></td>
+        <td style="white-space:nowrap">
+          {% if a.status != 'Reviewed' %}
+          <form method="post" action="/agencies/{{ a.id }}/status" style="display:inline">
+            <input type="hidden" name="status" value="Reviewed">
+            <button class="btn ghost small" type="submit">Keep</button>
+          </form>
+          {% endif %}
+          {% if a.status != 'Dismissed' %}
+          <form method="post" action="/agencies/{{ a.id }}/status" style="display:inline">
+            <input type="hidden" name="status" value="Dismissed">
+            <button class="btn ghost small" type="submit">Dismiss</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No agencies discovered yet. Run the agent above to populate this list.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

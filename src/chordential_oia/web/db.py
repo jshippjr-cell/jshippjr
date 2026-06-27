@@ -286,6 +286,25 @@ CREATE TABLE IF NOT EXISTS custom_chips (
     sentence TEXT,                         -- the sentence inserted into the doc
     created_at TEXT
 );
+
+-- Agencies discovered by the Agency Discovery Agent (a paginating crawler over a
+-- B2B agency directory, e.g. Clutch). Each row is a candidate buyer the machine
+-- surfaced; a human still qualifies/dismisses it ("machine proposes, Jon
+-- disposes"). Deduped on a normalized company name so re-runs don't pile up.
+CREATE TABLE IF NOT EXISTS agencies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company TEXT NOT NULL,                  -- agency name (as listed)
+    company_key TEXT,                       -- normalized name used for dedupe
+    website TEXT,                           -- the agency's own site
+    city TEXT,                              -- headquarters city/location
+    employees TEXT,                         -- size band as listed (e.g. "50-249")
+    services TEXT,                          -- comma-joined service lines
+    clutch_url TEXT,                        -- the directory profile it was found on
+    source TEXT DEFAULT 'clutch',           -- which directory produced it
+    status TEXT DEFAULT 'New',              -- New | Reviewed | Dismissed
+    discovered_at TEXT,
+    notes TEXT DEFAULT ''
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -709,6 +728,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         """CREATE TABLE IF NOT EXISTS custom_chips (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             family TEXT, label TEXT, sentence TEXT, created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agencies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company TEXT NOT NULL, company_key TEXT, website TEXT, city TEXT,
+            employees TEXT, services TEXT, clutch_url TEXT,
+            source TEXT DEFAULT 'clutch', status TEXT DEFAULT 'New',
+            discovered_at TEXT, notes TEXT DEFAULT ''
         )"""
     )
     conn.commit()
@@ -1443,6 +1471,104 @@ def inbound_counts(conn: sqlite3.Connection) -> Dict[str, int]:
 # --------------------------------------------------------------------------- #
 CRAWL_KINDS = ["talent", "opportunity"]
 CRAWL_STATES = ["Proposed", "Approved", "Fetched", "Dismissed"]
+
+# Agency-discovery review lifecycle. A discovered agency enters as New; a human
+# Reviews (keeps) or Dismisses it — the engine never auto-qualifies.
+AGENCY_STATES = ["New", "Reviewed", "Dismissed"]
+
+
+def _agency_key(company: str) -> str:
+    """Normalize a company name for dedupe: lowercased, collapsed whitespace, and
+    common corporate suffixes/punctuation dropped so "Acme, Inc." and "acme inc"
+    are one agency. Pure — no network, no DB."""
+    import re
+
+    s = (company or "").strip().lower()
+    s = re.sub(r"[.,]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # Trailing legal-entity suffixes don't make two listings distinct.
+    s = re.sub(r"\b(inc|llc|ltd|co|corp|corporation|company|group|agency)\b", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def agency_exists(conn: sqlite3.Connection, company: str) -> bool:
+    """True if an agency with this (normalized) company name is already stored —
+    the "skip if it already exists" gate the discovery loop checks per record."""
+    row = conn.execute(
+        "SELECT 1 FROM agencies WHERE company_key = ? LIMIT 1",
+        (_agency_key(company),),
+    ).fetchone()
+    return row is not None
+
+
+def insert_agency(
+    conn: sqlite3.Connection,
+    company: str,
+    website: str = "",
+    city: str = "",
+    employees: str = "",
+    services: str = "",
+    clutch_url: str = "",
+    source: str = "clutch",
+) -> Optional[int]:
+    """Store one discovered agency (status New). Returns None if an agency with the
+    same normalized company name already exists (the dedupe/skip rule), so a
+    re-scan never piles up duplicates. No evaluation happens here — a human
+    qualifies it later (precision-bias rule)."""
+    if not (company or "").strip():
+        return None
+    if agency_exists(conn, company):
+        return None
+    cur = conn.execute(
+        """INSERT INTO agencies
+           (company, company_key, website, city, employees, services, clutch_url,
+            source, status, discovered_at)
+           VALUES (?,?,?,?,?,?,?,?,'New',?)""",
+        (
+            company.strip(), _agency_key(company), website or None, city or None,
+            employees or None, services or None, clutch_url or None, source,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_agencies(
+    conn: sqlite3.Connection, status: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Discovered agencies for the review queue. Open (New/Reviewed) surface first;
+    newest discovery first within a status."""
+    clause = " WHERE status = ?" if status else ""
+    params = (status,) if status else ()
+    return conn.execute(
+        f"""SELECT * FROM agencies{clause}
+            ORDER BY
+              CASE status WHEN 'New' THEN 0 WHEN 'Reviewed' THEN 1 ELSE 2 END,
+              discovered_at DESC""",
+        params,
+    ).fetchall()
+
+
+def count_agencies(conn: sqlite3.Connection) -> Dict[str, int]:
+    """Totals for the agencies dashboard: total + a count per status."""
+    out: Dict[str, int] = {"total": 0}
+    for s in AGENCY_STATES:
+        out[s] = 0
+    for r in conn.execute("SELECT status, COUNT(*) c FROM agencies GROUP BY status"):
+        out[r["status"]] = r["c"]
+        out["total"] += r["c"]
+    return out
+
+
+def update_agency_status(conn: sqlite3.Connection, agency_id: int, status: str) -> None:
+    """Human decision on a discovered agency (keep → Reviewed, or Dismissed)."""
+    if status not in AGENCY_STATES:
+        raise ValueError(f"Unknown agency status {status!r}")
+    conn.execute(
+        "UPDATE agencies SET status = ? WHERE id = ?", (status, agency_id)
+    )
+    conn.commit()
 
 # Discovery sites (the curated industry catalog) approval lifecycle. Established +
 # Approved are active (crawlable); Suggested awaits Jon; Rejected is parked.

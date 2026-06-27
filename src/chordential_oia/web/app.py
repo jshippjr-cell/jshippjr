@@ -56,6 +56,7 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import db, discovery, scheduler, seed, signals, sources, triage, webpush
+from . import agency_discovery
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -1008,6 +1009,63 @@ def discovery_fetch(target_id: int, kind: str = Form("talent")):
     finally:
         conn.close()
     return RedirectResponse(f"/discovery?kind={kind}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Agency Discovery Agent — paginating directory crawler (machine proposes)
+# --------------------------------------------------------------------------- #
+@app.get("/agencies", response_class=HTMLResponse)
+def agencies_page(request: Request, ran: str = ""):
+    """The Agency Discovery console: discovered agencies awaiting your call, plus
+    a one-click run of the agent (gated by CHORDENTIAL_ENABLE_SCRAPE)."""
+    conn = db.connect()
+    try:
+        agencies = db.list_agencies(conn)
+        counts = db.count_agencies(conn)
+    finally:
+        conn.close()
+    # The last run's summary, if we just ran (round-trips through the query string).
+    last_run = None
+    if ran:
+        keys = ["pages_scanned", "found", "saved", "skipped", "stopped_reason"]
+        parts = dict(p.split("=", 1) for p in ran.split(",") if "=" in p)
+        last_run = {k: parts.get(k, "") for k in keys}
+    return render(
+        request, "agencies.html", nav="agencies",
+        agencies=agencies, counts=counts, last_run=last_run,
+        scrape_on=agency_discovery.scrape_enabled(),
+        agency_states=db.AGENCY_STATES,
+    )
+
+
+@app.post("/agencies/run")
+def agencies_run():
+    """Run the Agency Discovery Agent now: paginate the directory, save new
+    agencies, skip ones already stored, stop at the last page. No-op (with a clear
+    reason) when scraping is disabled — the network is never touched there."""
+    conn = db.connect()
+    try:
+        report = agency_discovery.run(conn)
+    finally:
+        conn.close()
+    d = report.as_dict()
+    flash = ",".join(
+        f"{k}={d[k]}"
+        for k in ("pages_scanned", "found", "saved", "skipped", "stopped_reason")
+    )
+    return RedirectResponse(f"/agencies?ran={flash}", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/status")
+def agencies_decide(agency_id: int, status: str = Form(...)):
+    """Your decision on a discovered agency (Reviewed = keep, Dismissed = drop)."""
+    conn = db.connect()
+    try:
+        if status in db.AGENCY_STATES:
+            db.update_agency_status(conn, agency_id, status)
+    finally:
+        conn.close()
+    return RedirectResponse("/agencies", status_code=303)
 
 
 # --------------------------------------------------------------------------- #
