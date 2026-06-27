@@ -38,7 +38,7 @@
 </div>
 {% endif %}
 
-<details class="card" style="margin:14px 0" {{ 'open' if total == 0 }}>
+<details id="add-panel" class="card" style="margin:14px 0" {{ 'open' if total == 0 or ingested or added }}>
   <summary style="cursor:pointer;font-weight:600">➕ Add more agencies to the database</summary>
 
   {% if setup_count %}
@@ -85,7 +85,7 @@
 </p>
 {% endif %}
 
-<details class="card" style="margin:14px 0">
+<details id="crawl-panel" class="card" style="margin:14px 0" {{ 'open' if cstatus or crawled }}>
   <summary style="cursor:pointer;font-weight:600">🛰 Crawl directories live (paginate the source sites)</summary>
   <p class="muted small" style="margin-top:14px">
     Each click walks up to <strong>{{ pages_per_click }}</strong> pages and is <strong>resumable</strong> — press again to continue.

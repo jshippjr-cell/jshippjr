@@ -576,7 +576,7 @@ def agencies_ingest(source: str = Form(...), html: str = Form("")):
     finally:
         conn.close()
     return RedirectResponse(
-        f"/agencies?source={source}&ingested={len(records)}&new={new_count}",
+        f"/agencies?source={source}&ingested={len(records)}&new={new_count}#add-panel",
         status_code=303)
 
 
@@ -608,7 +608,7 @@ def agencies_crawl(source: str = Form(...), reset: str = Form("")):
         conn.close()
     return RedirectResponse(
         f"/agencies?source={source}&crawled={summary['records_new']}"
-        f"&pages={summary['pages_done']}&cstatus={summary['outcome']}",
+        f"&pages={summary['pages_done']}&cstatus={summary['outcome']}#crawl-panel",
         status_code=303)
 
 
@@ -663,7 +663,8 @@ def agencies_add(company: str = Form(...), website: str = Form(""),
         finally:
             conn.close()
     return RedirectResponse(
-        f"/agencies?source=manual&added={'1' if ok else '0'}", status_code=303)
+        f"/agencies?source=manual&added={'1' if ok else '0'}#add-panel",
+        status_code=303)
 
 
 @app.get("/agencies/{agency_id}", response_class=HTMLResponse)
