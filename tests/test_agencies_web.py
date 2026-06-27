@@ -121,3 +121,41 @@ def test_enrich_action_blocked_when_scraping_off(app_db):
 def test_agency_detail_404(app_db):
     client, _ = app_db
     assert client.get("/agencies/99999").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Populating the Master Company Database from the dashboard.
+# --------------------------------------------------------------------------- #
+def test_add_one_agency_by_hand(app_db):
+    client, app_mod = app_db
+    r = client.post("/agencies/add", data={
+        "company": "AURORA Studio", "website": "https://aurora.example",
+        "location": "London"}, follow_redirects=True)
+    assert r.status_code == 200 and "AURORA Studio" in r.text
+    conn = app_mod.db.connect()
+    try:
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM agencies WHERE company='AURORA Studio'"
+        ).fetchone()["c"] == 1
+    finally:
+        conn.close()
+
+
+def test_ingest_pasted_directory_page(app_db):
+    client, app_mod = app_db
+    from tests.test_directory_parsers import THEDRUM_HTML
+    before = app_mod.db.count_agencies(app_mod.db.connect(), "thedrum")
+    r = client.post("/agencies/ingest", data={
+        "source": "thedrum", "html": THEDRUM_HTML}, follow_redirects=True)
+    assert r.status_code == 200
+    # both agencies from the pasted Drum list are now stored + listed
+    assert "Bader Rutter" in r.text and "Marketbridge" in r.text
+    after = app_mod.db.count_agencies(app_mod.db.connect(), "thedrum")
+    assert after - before == 2
+
+
+def test_ingest_empty_paste_is_safe(app_db):
+    client, _ = app_db
+    r = client.post("/agencies/ingest", data={"source": "thedrum", "html": ""},
+                    follow_redirects=True)
+    assert r.status_code == 200      # no crash, just nothing ingested
