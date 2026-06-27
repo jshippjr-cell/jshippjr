@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -92,8 +93,9 @@ def triage_status() -> dict:
 # bounded batch of not-yet-complete agencies, so the Master Company Database
 # fills in quality over time without anyone pressing Enrich.
 _enrich_status = {"last_run": None, "last_completed": 0, "total_completed": 0,
-                  "cycles": 0, "pending": 0}
+                  "cycles": 0, "pending": 0, "running": False}
 _last_enrich_mono = 0.0
+_enrich_lock = threading.Lock()
 
 
 def enrich_enabled() -> bool:
@@ -117,18 +119,47 @@ def _enrich_batch_size() -> int:
 
 
 def run_enrich_cycle(batch: int = 0) -> int:
-    """One autonomous enrichment pass — enriches up to ``batch`` not-yet-complete
-    agencies (default from env). Blocking; runs in a worker thread. Returns the
-    number that completed this pass and refreshes the pending count."""
+    """One enrichment pass — enriches up to ``batch`` enrichable agencies (default
+    from env). Blocking; meant to run in a worker thread. Updates the shared status
+    (so both the autonomous loop and the manual nudge report the same progress) and
+    refreshes the pending count. Returns the number that completed this pass.
+
+    Guarded by a lock + a ``running`` flag so two passes never overlap: a manual
+    nudge while one is in flight is a no-op rather than a double run on the DB."""
     from . import enrichment
     limit = batch or _enrich_batch_size()
-    conn = db.connect()
+    if not _enrich_lock.acquire(blocking=False):
+        return 0                              # a pass is already running
+    _enrich_status["running"] = True
     try:
-        res = enrichment.enrich_batch(conn, limit=limit)
-        _enrich_status["pending"] = len(db.agencies_needing_enrichment(conn))
+        conn = db.connect()
+        try:
+            res = enrichment.enrich_batch(conn, limit=limit)
+            _enrich_status["pending"] = len(db.agencies_needing_enrichment(conn))
+        finally:
+            conn.close()
+        completed = res.get("completed", 0)
+        _enrich_status["cycles"] += 1
+        _enrich_status["last_completed"] = completed
+        _enrich_status["total_completed"] += completed
+        _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return completed
     finally:
-        conn.close()
-    return res.get("completed", 0)
+        _enrich_status["running"] = False
+        _enrich_lock.release()
+
+
+def start_manual_enrich(batch: int = 0) -> bool:
+    """Kick a one-off enrichment pass in a background thread and return at once —
+    enriching a batch of live sites takes minutes, far longer than an HTTP request
+    can wait. Returns True if a pass was started, False if one was already running
+    or enrichment is disabled here. Progress shows up in ``enrich_status``."""
+    if not enrich_enabled():
+        return False
+    if _enrich_status.get("running"):
+        return False
+    threading.Thread(target=run_enrich_cycle, args=(batch,), daemon=True).start()
+    return True
 
 
 def enrich_status() -> dict:
@@ -353,11 +384,7 @@ async def run_loop() -> None:
             if now_mono - _last_enrich_mono >= _enrich_interval_seconds():
                 _last_enrich_mono = now_mono
                 try:
-                    completed = await asyncio.to_thread(run_enrich_cycle)
-                    _enrich_status["cycles"] += 1
-                    _enrich_status["last_completed"] = completed
-                    _enrich_status["total_completed"] += completed
-                    _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+                    await asyncio.to_thread(run_enrich_cycle)  # self-bookkeeping
                 except Exception:
                     pass
         if triage_enabled():                 # Phase B2 — autonomous Gmail triage

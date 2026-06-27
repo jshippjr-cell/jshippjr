@@ -1453,13 +1453,22 @@ def reset_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> None:
 def agencies_needing_enrichment(
     conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100000
 ) -> List[sqlite3.Row]:
-    """Agency rows not yet fully enriched (enrichment status != 'complete'),
-    oldest first. A resumable batch re-selects these each run, so finished
-    agencies are skipped while interrupted / errored / blocked ones are retried."""
+    """Agency rows that can still be enriched, oldest first. "Can still be" means:
+    a website is on record (no site → nothing to visit), and the enrichment isn't
+    finished or terminally failed (status not in 'complete'/'error'). A 'blocked'
+    row (scraping was off) IS retried — it becomes enrichable once scraping is on.
+
+    This is what a resumable batch re-selects each run, so the queue actually
+    advances: finished rows are skipped, and rows that can never enrich (no site,
+    or already errored) don't clog the front of the line and starve the batch.
+    Directories that list no outbound website (e.g. The Drum, Cannes Lions) thus
+    don't count as 'awaiting' — they'd only ever error."""
     clause = " WHERE source = ?" if source else ""
     params = ((source,) if source else ())
     out: List[sqlite3.Row] = []
     for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        if not (r["website"] or "").strip():
+            continue                          # no site → nothing to enrich
         raw = r["enrichment_json"]
         status = ""
         if raw:
@@ -1467,10 +1476,11 @@ def agencies_needing_enrichment(
                 status = (json.loads(raw) or {}).get("status", "")
             except (json.JSONDecodeError, TypeError):
                 status = ""
-        if status != "complete":
-            out.append(r)
-            if len(out) >= limit:
-                break
+        if status in ("complete", "error"):
+            continue                          # done, or terminally failed
+        out.append(r)
+        if len(out) >= limit:
+            break
     return out
 
 

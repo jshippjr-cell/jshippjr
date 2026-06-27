@@ -272,22 +272,29 @@ def test_scheduler_run_enrich_cycle_enriches_pending(app_db, monkeypatch):
     assert app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)["status"] == "complete"
 
 
-def test_manual_enrich_pending_route(app_db, monkeypatch):
+def test_manual_enrich_pending_route_fires_background_pass(app_db, monkeypatch):
+    # The route is fire-and-forget (a live batch takes minutes, longer than an
+    # HTTP request can wait): it delegates to the background starter and reports
+    # whether a pass began, rather than enriching inline.
     client, app_mod = app_db
-    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
-    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    calls = {}
+    monkeypatch.setattr(app_mod.scheduler, "start_manual_enrich",
+                        lambda n=0: calls.setdefault("n", n) or True)
     r = client.post("/agencies/enrich-pending", data={"limit": "10"},
-                    follow_redirects=True)
-    assert r.status_code == 200
-    aid = _agency_id(app_mod, "Acme")
-    assert app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)["status"] == "complete"
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "eb_started=1" in r.headers["location"]
+    assert calls["n"] == 10
 
 
 def test_accordion_shows_enriched_profile_inline(app_db, monkeypatch):
     client, app_mod = app_db
     monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
     monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
-    client.post("/agencies/enrich-pending", data={"limit": "10"})
+    # drive the engine synchronously (the route fires it in the background)
+    conn = app_mod.db.connect()
+    app_mod.enrichment.enrich_batch(conn, limit=10)
+    conn.close()
     r = client.get("/agencies")
     # the enriched facts render inside the accordion row, not just on the detail page
     assert "Brand Strategy" in r.text and "Web Design" in r.text

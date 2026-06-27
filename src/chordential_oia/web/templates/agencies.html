@@ -133,15 +133,18 @@
     <div class="muted small">
       {% if auto_enrich.enabled %}
         The agent enriches pending agencies on its own in the background — no clicking needed.
+        {% if auto_enrich.running %}<strong>A pass is running now…</strong> {% endif %}
         {% if auto_enrich.last_run %}Last pass completed {{ auto_enrich.last_completed }} · {{ auto_enrich.total_completed }} total this session.{% endif %}
+        {{ pending }} agencies awaiting enrichment.
       {% else %}
         Runs automatically on Render (live fetching on). {{ pending }} agencies awaiting enrichment.
       {% endif %}
     </div>
   </div>
-  {% if eb_done %}<span class="small" style="color:var(--green,#2e8b57)">✓ Enriched {{ eb_done }} just now</span>{% endif %}
+  {% if eb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Enriching up to {{ eb_n }} in the background — refresh to see progress</span>
+  {% elif eb_started == "0" %}<span class="small muted">A pass is already running — refresh to see progress</span>{% endif %}
   <form method="post" action="/agencies/enrich-pending" style="margin:0">
-    <button class="btn" type="submit">Enrich {{ pending if pending < 25 else 25 }} now</button>
+    <button class="btn" type="submit"{% if auto_enrich.running %} disabled{% endif %}>Enrich {{ pending if pending < 25 else 25 }} now</button>
   </form>
 </div>
 
