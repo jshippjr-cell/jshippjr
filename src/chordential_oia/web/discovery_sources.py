@@ -213,6 +213,24 @@ CATALOG: List[SourceSite] = [
         "Local/indie music gigs; noisy and per-market.", STATUS_SUGGESTED,
         [("opportunity", "Creative gigs", "https://www.craigslist.org/search/crg?query={q}")],
     ),
+    SourceSite(
+        "agencyspotter", "Agency Spotter", "https://www.agencyspotter.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Directory of marketing/creative/production agencies — the demand side: "
+        "agencies commission music for brand campaigns and hire composers for "
+        "client work. The Agency Spotter Agent walks the directory page-by-page so "
+        "each agency lands in the lead queue as a buyer to qualify. Sign-in is "
+        "required to browse the full directory and the ToS restricts automated "
+        "extraction, so this stays manual-assist (Jon opens it in his own logged-in "
+        "browser) until approved per-target.", STATUS_SUGGESTED,
+        [
+            ("opportunity", "Directory",
+             "https://www.agencyspotter.com/agencies"),
+            ("opportunity", "Search",
+             "https://www.agencyspotter.com/search?keywords={q}"),
+        ],
+        login_gated=True,
+    ),
 ]
 
 # Sources removed from the catalog — deleted from existing DBs on sync so they
