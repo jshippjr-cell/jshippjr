@@ -265,8 +265,99 @@ def make_designrush_source(base_url: str, per_page: int = 50):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# 4A's  (American Association of Advertising Agencies)
+# --------------------------------------------------------------------------- #
+# Two surfaces, two stories:
+#   * The agency *search* (my.aaaa.org "Community Hub") is a login-walled,
+#     JavaScript-rendered Salesforce community — no agency data in the HTML, so
+#     it can't be engine-enumerated. That stays manual-assist (login_gated).
+#   * Each agency *profile* (www.aaaa.org/agency-profile/<sfid>/<slug>/) is a
+#     plain server-rendered WordPress page that carries ALL six fields. The
+#     parser below extracts them; the engine then crawls a SUPPLIED list of
+#     profile URLs (operator pulls the list from the member directory — the
+#     profiles are member/login-tagged content, so scraping them is the
+#     operator's ToS call, same caveat as every other public directory here).
+_AAAA_OGURL = re.compile(r'<meta\s+property="og:url"\s+content="([^"]+)"', re.S)
+_AAAA_HEADER = re.compile(r'module full-width-drawer(.*?)<h2>\s*Overview\s*</h2>', re.S)
+_AAAA_NAME = re.compile(r'<h1[^>]*>(.*?)</h1>', re.S)
+_AAAA_SITE = re.compile(r'href="(https?://[^"]+)"', re.S)
+_AAAA_OWNER = re.compile(r'Ownership:\s*([^<]+)', re.S)
+_AAAA_SIZE = re.compile(r'Size:\s*([^<]+)', re.S)
+_AAAA_SUMMARY = re.compile(r'<h3>\s*Company Summary\s*</h3>\s*<p>(.*?)</p>', re.S)
+_AAAA_CONTACT = re.compile(r'<h3>\s*Contact\s*</h3>\s*<p>(.*?)</p>', re.S)
+_AAAA_INDUSTRY = re.compile(r'<h2>\s*Industry Experience\s*</h2>\s*<p>(.*?)</p>', re.S)
+_BR_SPLIT = re.compile(r'</?br\s*/?>', re.I)
+_ZIP_TAIL = re.compile(r'\s+\d{5}(?:-\d{4})?$')
+
+
+def _aaaa_location(contact_block: str) -> str:
+    """The Contact <p> is address-line / city-state-zip / phone / fax. Take the
+    city-state line and drop the trailing ZIP."""
+    lines = [_text(p) for p in _BR_SPLIT.split(contact_block)]
+    lines = [l for l in lines if l]
+    if len(lines) < 2:
+        return ""
+    return _ZIP_TAIL.sub("", lines[1]).strip()
+
+
+def parse_aaaa_profile(html: str) -> Optional[AgencyRecord]:
+    """One 4A's agency-profile page -> AgencyRecord (all six fields). Pure, no
+    network. Returns None if the page has no agency name (not a profile page)."""
+    header_m = _AAAA_HEADER.search(html or "")
+    header = header_m.group(1) if header_m else ""
+    name_m = _AAAA_NAME.search(header)
+    name = _text(name_m.group(1)) if name_m else ""
+    if not name:
+        return None
+
+    site_m = _AAAA_SITE.search(header)
+    size_m = _AAAA_SIZE.search(header)
+    summary_m = _AAAA_SUMMARY.search(html or "")
+    contact_m = _AAAA_CONTACT.search(html or "")
+    industry_m = _AAAA_INDUSTRY.search(html or "")
+    og_m = _AAAA_OGURL.search(html or "")
+
+    industries = ""
+    if industry_m:
+        parts = [_text(p) for p in _BR_SPLIT.split(industry_m.group(1))]
+        industries = ", ".join(p for p in parts if p)
+
+    return AgencyRecord(
+        company=name,
+        website=_html.unescape(site_m.group(1)).strip() if site_m else "",
+        employees=_text(size_m.group(1)) if size_m else "",
+        location=_aaaa_location(contact_m.group(1)) if contact_m else "",
+        description=(_text(summary_m.group(1))[:1000]) if summary_m else "",
+        industries=industries,
+        source_url=_html.unescape(og_m.group(1)).strip() if og_m else "",
+    )
+
+
+def make_aaaa_source(profile_urls):
+    """Return a ``page_source(page)`` that walks a SUPPLIED list of 4A's profile
+    URLs (one per page), so the resumable engine gives this source the same
+    resume / dedup / progress as the others. The list is the operator's input
+    (the 4A's search that would enumerate it is login/JS-walled)."""
+    urls = list(profile_urls)
+
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        if page > len(urls):
+            return PageResult(records=[], total_pages=len(urls), ok=True)
+        text, ok = _fetch(urls[page - 1])
+        if not ok:
+            return PageResult(ok=False, detail="fetch failed")
+        rec = parse_aaaa_profile(text)
+        return PageResult(records=[rec] if rec else [], total_pages=len(urls), ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
+# (4A's is intentionally absent — its profiles crawl from a supplied URL list
+# via make_aaaa_source, not a self-enumerating base URL.)
 SOURCE_FACTORIES = {
     "adforum": (make_adforum_source,
                 "https://www.adforum.com/agency/search?location=country_strkey:COU149"),

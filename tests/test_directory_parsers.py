@@ -287,3 +287,73 @@ def test_designrush_source_reports_error_when_scraping_disabled(tmp_path, monkey
     summary = dc.run_crawl(conn, "designrush", src)
     assert summary["outcome"] == "error"
     assert dbm.count_agencies(conn, "designrush") == 0
+
+
+# --------------------------------------------------------------------------- #
+# 4A's agency *profile* pages (server-rendered WordPress; all six fields).
+# The search that lists them is login/JS-walled, so the engine crawls a
+# supplied list of profile URLs rather than self-enumerating.
+# --------------------------------------------------------------------------- #
+# A trimmed-but-faithful slice of a real 4A's /agency-profile/ page (&Barr).
+AAAA_PROFILE_HTML = """
+<meta property="og:url" content="https://www.aaaa.org/agency-profile/a4O5Y000001ukuQ/barr/">
+<div class="module full-width-drawer style--multi-button"><div class="module__wrap font-color--white background--primary-two py-4"><div class="wrapper">
+<h1 class="font-color--white" style="padding-bottom:10px;">&amp;Barr</h1>
+<p>Last Modified: 06-18-2026</p>
+<p><a href="http://www.andbarr.co">http://www.andbarr.co</a><br/>Ownership: Privately Held<br/>Size: 51-100</p>
+</div></div>
+<div class="module__wrap py-4"><div class="wrapper">
+<h2>Overview</h2><h3>Company Summary</h3><p>&amp;Barr is a full-service advertising agency providing integrated services, including branding; creative; and public relations. Celebrating more than 69 years in business, &amp;Barr&#8217;s headquarters is in Orlando, Fla.</p>
+<div class="sp-3-col"><h3>Contact</h3><p>600 East Washington St.<br/>Orlando, FL 32801-2938<br/>P: 407-849-0100<br/>F: 407-849-0817</p></div>
+<h2>Industry Experience</h2><p>Media | publishing</br>Agriculture</br>Financial services | investments</br>Travel | airlines</br>Restaurants</br></p>
+</div></div></div>
+"""
+
+
+def test_parse_aaaa_profile_extracts_all_six_fields():
+    rec = dp.parse_aaaa_profile(AAAA_PROFILE_HTML)
+    assert rec.company == "&Barr"
+    assert rec.website == "http://www.andbarr.co"
+    assert rec.employees == "51-100"                       # "Size:" in the header
+    assert rec.location == "Orlando, FL"                   # city/state, ZIP dropped
+    assert rec.description.startswith("&Barr is a full-service advertising agency")
+    assert rec.industries == ("Media | publishing, Agriculture, "
+                              "Financial services | investments, Travel | airlines, Restaurants")
+    assert rec.source_url == "https://www.aaaa.org/agency-profile/a4O5Y000001ukuQ/barr/"
+
+
+def test_aaaa_profile_dedup_key_uses_profile_url():
+    rec = dp.parse_aaaa_profile(AAAA_PROFILE_HTML)
+    assert rec.dedup_key() == "www.aaaa.org/agency-profile/a4o5y000001ukuq/barr"
+
+
+def test_parse_aaaa_profile_returns_none_when_not_a_profile():
+    assert dp.parse_aaaa_profile("<html><body>no agency here</body></html>") is None
+
+
+def test_make_aaaa_source_walks_url_list_through_engine(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(dp, "_fetch", lambda url, timeout=15.0: (AAAA_PROFILE_HTML, True))
+
+    conn = dbm.connect(str(tmp_path / "aaaa.db"))
+    dbm.init_db(conn)
+    # Two URLs, but both resolve to the same agency here → dedup collapses them.
+    urls = ["https://www.aaaa.org/agency-profile/a4O5Y000001ukuQ/barr/",
+            "https://www.aaaa.org/agency-profile/a4O5Y000001ukuQ/barr/"]
+    summary = dc.run_crawl(conn, "aaaa_directory", dp.make_aaaa_source(urls))
+
+    assert summary["outcome"] == "complete"
+    assert summary["pages_done"] == 2          # both URLs visited
+    assert dbm.count_agencies(conn, "aaaa_directory") == 1   # &Barr stored once
+    row = dbm.list_agencies(conn, "aaaa_directory")[0]
+    assert row["employees"] == "51-100" and row["location"] == "Orlando, FL"
+
+
+def test_aaaa_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
+    conn = dbm.connect(str(tmp_path / "aaaa.db"))
+    dbm.init_db(conn)
+    src = dp.make_aaaa_source(["https://www.aaaa.org/agency-profile/x/y/"])
+    summary = dc.run_crawl(conn, "aaaa_directory", src)
+    assert summary["outcome"] == "error"
+    assert dbm.count_agencies(conn, "aaaa_directory") == 0
