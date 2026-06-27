@@ -673,3 +673,25 @@ def test_source_surfaces_fetch_reason_in_detail(monkeypatch):
     monkeypatch.setattr(dp, "_LAST_FETCH_ERROR", "HTTP 403", raising=False)
     res = dp.make_adforum_source("https://www.adforum.com/x")(1)
     assert res.ok is False and "403" in res.detail
+
+
+def test_fetch_sends_browser_user_agent(monkeypatch):
+    # Directories 403 self-identified bots; the crawler must present as a browser.
+    captured = {}
+
+    class _Resp:
+        headers = type("H", (), {"get_content_charset": staticmethod(lambda: "utf-8")})()
+        def read(self): return b"<html>ok</html>"
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=15.0):
+        captured["ua"] = req.get_header("User-agent")
+        captured["accept"] = req.get_header("Accept")
+        return _Resp()
+    monkeypatch.setattr(dp.urllib.request, "urlopen", fake_urlopen)
+    text, ok = dp._fetch("https://www.adforum.com/x")
+    assert ok is True
+    assert "Mozilla/5.0" in captured["ua"] and "Chrome" in captured["ua"]
+    assert "ChordentialDirectoryBot" not in captured["ua"]
+    assert captured["accept"]

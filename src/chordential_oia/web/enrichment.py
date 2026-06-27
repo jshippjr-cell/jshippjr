@@ -38,7 +38,16 @@ from urllib.parse import urljoin, urlsplit
 from ..talent_sources.scraped import scrape_enabled
 from . import db
 
-_UA = "ChordentialEnrichmentBot/1.0 (+https://chordential.com)"
+# A real-browser UA + Accept headers; agency sites (and CDNs in front of them)
+# frequently 403 a self-identified bot even for their public pages.
+_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_HEADERS = {
+    "User-Agent": _UA,
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+               "image/avif,image/webp,*/*;q=0.8"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 # A fetch seam: given a URL, return (html, ok). Injected in tests; the default
 # only touches the network when scraping is enabled.
@@ -540,7 +549,7 @@ MICRO_AGENTS: List[_Agent] = [
 # Default fetcher (network only when scraping is enabled)
 # --------------------------------------------------------------------------- #
 def _default_fetch(url: str, timeout: float = 15.0) -> Tuple[str, bool]:
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    req = urllib.request.Request(url, headers=_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             charset = resp.headers.get_content_charset() or "utf-8"
