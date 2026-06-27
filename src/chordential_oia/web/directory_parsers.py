@@ -17,6 +17,7 @@ import html as _html
 import json
 import math
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import List, Optional
@@ -126,14 +127,33 @@ def make_adforum_enricher():
     return enrich
 
 
+# Last fetch failure reason, surfaced in the crawl status so a blocked directory
+# reads "fetch failed (HTTP 403)" instead of a silent "fetch failed".
+_LAST_FETCH_ERROR = ""
+
+
+def last_fetch_error() -> str:
+    return _LAST_FETCH_ERROR
+
+
 def _fetch(url: str, timeout: float = 15.0):
-    """GET (text, ok). Only reached when the scrape flag is on."""
+    """GET (text, ok). Only reached when the scrape flag is on. Records why a
+    fetch failed (HTTP code / unreachable reason) in _LAST_FETCH_ERROR."""
+    global _LAST_FETCH_ERROR
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             charset = resp.headers.get_content_charset() or "utf-8"
+            _LAST_FETCH_ERROR = ""
             return resp.read().decode(charset, errors="replace"), True
-    except Exception:
+    except urllib.error.HTTPError as e:        # blocked / not found / rate-limited
+        _LAST_FETCH_ERROR = f"HTTP {e.code}"
+        return "", False
+    except urllib.error.URLError as e:         # DNS / TLS / connection refused
+        _LAST_FETCH_ERROR = f"unreachable: {e.reason}"
+        return "", False
+    except Exception as e:                      # timeout, decode, anything else
+        _LAST_FETCH_ERROR = type(e).__name__
         return "", False
 
 
@@ -156,7 +176,7 @@ def make_adforum_source(base_url: str, per_page: int = _PER_PAGE_DEFAULT):
         url = base_url if page == 1 else f"{base_url}{sep}page={page}"
         text, ok = _fetch(url)
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         records = parse_adforum_listing(text)
         total = adforum_total_results(text)
         total_pages = math.ceil(total / per_page) if total else None
@@ -256,7 +276,7 @@ def make_designrush_source(base_url: str, per_page: int = 50):
         url = base_url if page == 1 else f"{base_url}{sep}page={page}"
         text, ok = _fetch(url)
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         records = parse_designrush_listing(text)
         total_pages = designrush_total_pages(text)
         if total_pages is None:
@@ -349,7 +369,7 @@ def make_aaaa_source(profile_urls):
             return PageResult(records=[], total_pages=len(urls), ok=True)
         text, ok = _fetch(urls[page - 1])
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         rec = parse_aaaa_profile(text)
         return PageResult(records=[rec] if rec else [], total_pages=len(urls), ok=True)
     return page_source
@@ -504,7 +524,7 @@ def make_lovethework_source(base_url: str):
         url = base_url if page == 1 else f"{base_url}{sep}page={page}"
         text, ok = _fetch(url)
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         return PageResult(records=parse_lovethework_entries(text),
                           total_pages=lovethework_total_pages(text), ok=True)
     return page_source
@@ -582,7 +602,7 @@ def make_awwwards_source(base_url: str, per_page: int = 24):
         url = base_url if page == 1 else f"{base_url}{sep}page={page}"
         text, ok = _fetch(url)
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         records = parse_awwwards_listing(text)
         total = awwwards_total_results(text)
         total_pages = math.ceil(total / per_page) if total else None
@@ -639,7 +659,7 @@ def make_thedrum_source(base_url: str):
             return PageResult(records=[], total_pages=1, ok=True)
         text, ok = _fetch(base_url)
         if not ok:
-            return PageResult(ok=False, detail="fetch failed")
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
         return PageResult(records=parse_thedrum_list(text), total_pages=1, ok=True)
     return page_source
 

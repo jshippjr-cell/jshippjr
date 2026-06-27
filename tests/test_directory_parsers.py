@@ -651,3 +651,25 @@ def test_parse_listing_aaaa_single_profile():
 def test_parse_listing_unknown_or_empty_is_safe():
     assert dp.parse_listing("nope", THEDRUM_HTML) == []
     assert dp.parse_listing("thedrum", "") == []
+
+
+# --------------------------------------------------------------------------- #
+# Fetch failure reporting — the crawl says WHY (HTTP 403 / unreachable / ...).
+# --------------------------------------------------------------------------- #
+def test_fetch_records_http_error_reason(monkeypatch):
+    import urllib.error
+
+    def boom(req, timeout=15.0):
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+    monkeypatch.setattr(dp.urllib.request, "urlopen", boom)
+    text, ok = dp._fetch("https://example.com/x")
+    assert ok is False and text == ""
+    assert dp.last_fetch_error() == "HTTP 403"
+
+
+def test_source_surfaces_fetch_reason_in_detail(monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(dp, "_fetch", lambda url, timeout=15.0: ("", False))
+    monkeypatch.setattr(dp, "_LAST_FETCH_ERROR", "HTTP 403", raising=False)
+    res = dp.make_adforum_source("https://www.adforum.com/x")(1)
+    assert res.ok is False and "403" in res.detail
