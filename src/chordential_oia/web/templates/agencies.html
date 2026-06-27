@@ -81,7 +81,8 @@
 {% if crawled or cstatus %}
 <p class="small" style="margin:10px 0;{{ 'color:var(--green,#2e8b57)' if cstatus == 'complete' else 'color:var(--color-errors,#fa5d29)' if cstatus == 'error' else '' }}">
   Crawl: <strong>{{ pages }}</strong> page(s) this run, <strong>{{ crawled }}</strong> new agencies — {{ cstatus }}.
-  {% if cstatus == 'error' %} The directory didn't return a page (blocked, or scraping is off here). Live crawling runs on Render; many directories also block automated fetches.{% endif %}
+  {% if cstatus == 'error' %} The fetch failed — see the reason in the Status column below (e.g. "HTTP 403" = the directory blocked the server; "unreachable" = network). Many directories block server-side crawls; those need a headless browser.{% endif %}
+  {% if cstatus == 'complete' and pages == '0' %} The page was fetched but <strong>0 agencies were parsed</strong> — the listing is likely JavaScript-rendered or behind a bot challenge, so plain fetching sees an empty shell. That source needs a headless browser.{% endif %}
 </p>
 {% endif %}
 
