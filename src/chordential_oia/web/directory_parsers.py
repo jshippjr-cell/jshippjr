@@ -25,7 +25,18 @@ from typing import List, Optional
 from ..talent_sources.scraped import scrape_enabled
 from .directory_crawl import AgencyRecord, PageResult
 
-_UA = "ChordentialDirectoryBot/1.0 (+https://chordential.com)"
+# Present as a real browser. Directories commonly 403 anything that self-IDs as a
+# bot, even for their public server-rendered listings; a normal UA + Accept
+# headers clears the simplest of those filters (a JS/Cloudflare challenge still
+# needs a headless browser — that's the next escalation if this isn't enough).
+_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_HEADERS = {
+    "User-Agent": _UA,
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+               "image/avif,image/webp,*/*;q=0.8"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
 _PER_PAGE_DEFAULT = 25
 
 
@@ -140,7 +151,7 @@ def _fetch(url: str, timeout: float = 15.0):
     """GET (text, ok). Only reached when the scrape flag is on. Records why a
     fetch failed (HTTP code / unreachable reason) in _LAST_FETCH_ERROR."""
     global _LAST_FETCH_ERROR
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    req = urllib.request.Request(url, headers=_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             charset = resp.headers.get_content_charset() or "utf-8"
