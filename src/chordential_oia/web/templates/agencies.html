@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Agencies{% endblock %}
+{% block heading %}Agencies — harvested companies & enrichment{% endblock %}
+{% block content %}
+
+<div class="callout">
+  <span class="callout-ico">🛈</span>
+  These are the agencies harvested by the directory agents (the <strong>Master Company
+  Database</strong>). Press <strong>Enrich</strong> on a row to run the Company Enrichment
+  Engine on that one agency — it visits the agency's own website, discovers the
+  relevant pages and extracts a factual Agency Profile.
+  {% if scrape_on %}
+    Live fetching is <strong>ON</strong> here, so Enrich reads the real site.
+  {% else %}
+    Live fetching is <strong>OFF</strong> in this environment (no outbound access), so
+    Enrich will record <strong>“blocked”</strong> rather than fetch — it runs for real on Render.
+  {% endif %}
+</div>
+
+<form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
+  <label class="muted small">Source
+    <select name="source" onchange="this.form.submit()">
+      <option value="">All sources</option>
+      {% for s in sources %}
+      <option value="{{ s }}" {{ 'selected' if s == source }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="muted small">Status
+    <select name="enriched" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not enriched }}>All</option>
+      <option value="yes" {{ 'selected' if enriched == 'yes' }}>Enriched</option>
+      <option value="no" {{ 'selected' if enriched == 'no' }}>Not enriched</option>
+    </select>
+  </label>
+  <span class="muted small" style="margin-left:auto">
+    {{ total }} agencies · {{ pending }} awaiting enrichment
+  </span>
+</form>
+
+<div class="card no-pad" style="margin:14px 0;overflow-x:auto">
+<table class="table" style="max-width:100%">
+  <thead>
+    <tr>
+      <th>Company</th><th>Website</th><th>Location</th>
+      <th style="width:1%">Source</th><th style="width:1%">Enrichment</th>
+      <th style="width:1%"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in agencies %}
+    <tr>
+      <td><a href="/agencies/{{ a.id }}"><strong>{{ a.company or '—' }}</strong></a></td>
+      <td>{% if a.website %}<a href="{{ a.website }}" target="_blank" rel="noopener noreferrer">{{ a.website | displayurl }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{{ a.location or '' }}</td>
+      <td><span class="muted small">{{ a.source }}</span></td>
+      <td>
+        {% if a.status == 'complete' %}<span class="dot won"></span> complete
+        {% elif a.status == 'running' %}<span class="dot review"></span> partial
+        {% elif a.status == 'blocked' %}<span class="muted">blocked</span>
+        {% elif a.status == 'error' %}<span class="dot pursue"></span> error
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/agencies/{{ a.id }}/enrich" style="margin:0">
+          <button class="btn btn-small" type="submit">Enrich</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted" style="padding:20px">No agencies harvested yet — run the directory agents first.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% endblock %}

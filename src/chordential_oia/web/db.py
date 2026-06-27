@@ -314,6 +314,15 @@ _PROJECT_COLUMNS = {
     "share_token": "TEXT",
 }
 
+# Company Enrichment Engine state, migrated onto an existing agencies table the
+# same idempotent way. A single JSON blob (see get_agency_enrichment for the
+# shape): the normalized Agency Profile + the resumable per-agent checkpoint.
+# Display/workflow data only — never queried relationally — so an un-enriched
+# agency row renders exactly as before.
+_AGENCY_COLUMNS = {
+    "enrichment_json": "TEXT",
+}
+
 # Provenance columns on talent — migrated onto an existing roster the same way.
 _TALENT_COLUMNS = {
     "source": "TEXT",
@@ -709,6 +718,39 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         """CREATE TABLE IF NOT EXISTS custom_chips (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             family TEXT, label TEXT, sentence TEXT, created_at TEXT
+        )"""
+    )
+    # Harvested agency directory records (AdForum, Cannes Lions, 4A's, Awwwards,
+    # DesignRush, The Drum, …). One row per agency per source; duplicates within a
+    # source are collapsed on (source, dedup_key) so a re-run / resume never piles
+    # up copies. ``dedup_key`` is a normalized website host (or name+location).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agencies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT, dedup_key TEXT,
+            company TEXT, website TEXT, employees TEXT, location TEXT,
+            description TEXT, industries TEXT, source_url TEXT,
+            enrichment_json TEXT,
+            created_at TEXT, updated_at TEXT,
+            UNIQUE(source, dedup_key)
+        )"""
+    )
+    agency_cols = {r["name"] for r in conn.execute("PRAGMA table_info(agencies)")}
+    for name, decl in _AGENCY_COLUMNS.items():
+        if name not in agency_cols:
+            conn.execute(f"ALTER TABLE agencies ADD COLUMN {name} {decl}")
+    # Per-source crawl checkpoint: lets a directory agent resume exactly where it
+    # left off after an interruption, and powers the live progress read-out.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS crawl_state (
+            source_key TEXT PRIMARY KEY,
+            status TEXT DEFAULT 'idle',
+            next_page INTEGER DEFAULT 1,
+            total_pages INTEGER,
+            pages_done INTEGER DEFAULT 0,
+            records_new INTEGER DEFAULT 0,
+            records_seen INTEGER DEFAULT 0,
+            last_url TEXT, detail TEXT DEFAULT '', updated_at TEXT
         )"""
     )
     conn.commit()
@@ -1291,6 +1333,145 @@ def inbound_lead_exists(
         (source, company or "", project_type or ""),
     ).fetchone()
     return row is not None
+
+
+# --------------------------------------------------------------------------- #
+# Harvested agencies + per-source crawl checkpoint (directory agents)
+# --------------------------------------------------------------------------- #
+def upsert_agency(conn: sqlite3.Connection, source: str, rec: Dict) -> bool:
+    """Insert an agency, or refresh it if (source, dedup_key) already exists.
+    Returns True if a NEW row was created, False if an existing one was updated —
+    so a crawl can report new-vs-duplicate without piling up copies."""
+    key = (rec.get("dedup_key") or "").strip().lower()
+    now = datetime.now(timezone.utc).isoformat()
+    exists = conn.execute(
+        "SELECT id FROM agencies WHERE source = ? AND dedup_key = ?", (source, key)
+    ).fetchone()
+    cols = ("company", "website", "employees", "location", "description",
+            "industries", "source_url")
+    vals = [rec.get(c) or "" for c in cols]
+    if exists:
+        conn.execute(
+            f"UPDATE agencies SET {', '.join(f'{c}=?' for c in cols)}, updated_at=? "
+            "WHERE id=?", (*vals, now, exists["id"]),
+        )
+        return False
+    conn.execute(
+        f"INSERT INTO agencies (source, dedup_key, {', '.join(cols)}, created_at, updated_at) "
+        f"VALUES (?,?,{','.join('?' * len(cols))},?,?)",
+        (source, key, *vals, now, now),
+    )
+    return True
+
+
+def count_agencies(conn: sqlite3.Connection, source: Optional[str] = None) -> int:
+    if source:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM agencies WHERE source = ?", (source,)
+        ).fetchone()["n"]
+    return conn.execute("SELECT COUNT(*) AS n FROM agencies").fetchone()["n"]
+
+
+def list_agencies(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 1000
+) -> List[sqlite3.Row]:
+    clause = " WHERE source = ?" if source else ""
+    params = ((source, limit) if source else (limit,))
+    return conn.execute(
+        f"SELECT * FROM agencies{clause} ORDER BY company COLLATE NOCASE LIMIT ?", params
+    ).fetchall()
+
+
+def get_crawl_state(conn: sqlite3.Connection, source_key: str) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM crawl_state WHERE source_key = ?", (source_key,)
+    ).fetchone()
+
+
+def save_crawl_state(conn: sqlite3.Connection, source_key: str, **fields) -> None:
+    """Upsert a source's crawl checkpoint. Committed by the caller (the engine
+    commits after every page so an interruption resumes from the next page)."""
+    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if get_crawl_state(conn, source_key) is None:
+        conn.execute("INSERT INTO crawl_state (source_key) VALUES (?)", (source_key,))
+    if fields:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(
+            f"UPDATE crawl_state SET {sets} WHERE source_key=?",
+            (*fields.values(), source_key),
+        )
+
+
+def reset_crawl_state(conn: sqlite3.Connection, source_key: str) -> None:
+    """Start a source's crawl over from page 1 (clears the checkpoint counters)."""
+    save_crawl_state(conn, source_key, status="idle", next_page=1, total_pages=None,
+                     pages_done=0, records_new=0, records_seen=0, last_url="", detail="")
+
+
+def get_agency(conn: sqlite3.Connection, agency_id: int) -> Optional[sqlite3.Row]:
+    """One harvested agency by id — the Company Enrichment Engine's input record."""
+    return conn.execute(
+        "SELECT * FROM agencies WHERE id = ?", (agency_id,)
+    ).fetchone()
+
+
+def get_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's enrichment state blob (agencies.enrichment_json), or {}.
+
+    Shape (written by the Company Enrichment Engine):
+      {"status": str, "steps_done": [str], "detail": str,
+       "links": [[url, anchor, concept], ...],   # discovered page map
+       "profile": {...AgencyProfile.to_dict()}}
+    Committing after each micro-agent is what makes enrichment resumable."""
+    row = conn.execute(
+        "SELECT enrichment_json FROM agencies WHERE id = ?", (agency_id,)
+    ).fetchone()
+    if not row or not row["enrichment_json"]:
+        return {}
+    try:
+        return json.loads(row["enrichment_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_agency_enrichment(
+    conn: sqlite3.Connection, agency_id: int, state: dict
+) -> None:
+    """Persist the agency's enrichment state. The caller commits (the engine
+    commits after every micro-agent so an interruption resumes mid-pipeline)."""
+    conn.execute(
+        "UPDATE agencies SET enrichment_json = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(state), datetime.now(timezone.utc).isoformat(), agency_id),
+    )
+
+
+def reset_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> None:
+    """Clear an agency's enrichment so the next run starts from the homepage."""
+    save_agency_enrichment(conn, agency_id, {})
+
+
+def agencies_needing_enrichment(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100000
+) -> List[sqlite3.Row]:
+    """Agency rows not yet fully enriched (enrichment status != 'complete'),
+    oldest first. A resumable batch re-selects these each run, so finished
+    agencies are skipped while interrupted / errored / blocked ones are retried."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        raw = r["enrichment_json"]
+        status = ""
+        if raw:
+            try:
+                status = (json.loads(raw) or {}).get("status", "")
+            except (json.JSONDecodeError, TypeError):
+                status = ""
+        if status != "complete":
+            out.append(r)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def list_inbound_leads(

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlencode
 
 # A board is one searchable/browsable surface on a site:
 #   (applies_to_kind, label, url_template)   -- {q} in the template => keyworded.
@@ -71,6 +71,43 @@ EXCLUDE_TERMS = [
     "hobby", "revshare", '"rev share"', "royalty", "unpaid",
     '"not paying"', '"for hire"', "collab",
 ]
+
+
+# --------------------------------------------------------------------------- #
+# LinkedIn company-search deep link (MANUAL-ASSIST ONLY)
+#
+# LinkedIn requires login and its User Agreement forbids automated scraping, so
+# the "LinkedIn Search Agent" never fetches — it builds the exact filtered
+# Companies search and the human opens it in their own logged-in browser, then
+# hand-captures leads. This is the "machine proposes, Jon disposes" rule taken to
+# its logical end for a login/ToS-walled source.
+#
+# LinkedIn's well-known facet codes (stable enough to deep-link, but LinkedIn
+# does revise them — refine in the UI if a filter doesn't stick):
+#   geoUrn 103644278 = United States; companySize letters A:1, B:2-10, C:11-50,
+#   D:51-200, E:201-500, F:501-1000, G:1001-5000, H:5001-10000, I:10001+.
+# --------------------------------------------------------------------------- #
+LINKEDIN_US_GEO_URN = "103644278"
+LINKEDIN_COMPANY_SIZES = {
+    "1-10": "B", "11-50": "C", "51-200": "D", "201-500": "E",
+    "501-1000": "F", "1001-5000": "G", "5001-10000": "H", "10001+": "I",
+}
+
+
+def linkedin_company_search_url(
+    keywords: str = "advertising agency",
+    geo_urn: Optional[str] = LINKEDIN_US_GEO_URN,
+    size_codes: Tuple[str, ...] = ("C",),
+) -> str:
+    """Build a LinkedIn *Companies* search deep link with the given filters. Pure
+    string construction — no network. Defaults to the requested search: US
+    advertising agencies with 11–50 staff."""
+    params = {"keywords": keywords}
+    if size_codes:
+        params["companySize"] = "[" + ",".join(f'"{c}"' for c in size_codes) + "]"
+    if geo_urn:
+        params["geoUrn"] = f'["{geo_urn}"]'
+    return "https://www.linkedin.com/search/results/companies/?" + urlencode(params)
 
 
 # --------------------------------------------------------------------------- #
@@ -192,6 +229,20 @@ CATALOG: List[SourceSite] = [
         login_gated=True,
     ),
     SourceSite(
+        "linkedin_companies", "LinkedIn · Advertising agencies (US, 11–50)",
+        "https://www.linkedin.com",
+        "opportunity", "Professional network", "Competitive Intelligence Analyst",
+        "Demand-side prospecting — US advertising agencies with 11–50 staff: buyers "
+        "that commission music for campaigns. LinkedIn requires login and its User "
+        "Agreement prohibits automated scraping, so this is MANUAL-ASSIST only: the "
+        "agent builds the exact filtered Companies search and Jon opens it in his own "
+        "logged-in browser, then hand-captures the agencies worth pursuing. Never "
+        "auto-fetched.", STATUS_SUGGESTED,
+        [("opportunity", "Companies · Advertising / US / 11–50",
+          linkedin_company_search_url())],
+        login_gated=True,
+    ),
+    SourceSite(
         "x_gigs", "X/Twitter · gig hashtags", "https://x.com",
         "opportunity", "Social", "Demand-Gen Manager",
         "Real-time indie gig calls (#composerwanted, #gameaudiojobs). High noise.",
@@ -212,6 +263,80 @@ CATALOG: List[SourceSite] = [
         "opportunity", "Classifieds", "Demand-Gen Manager",
         "Local/indie music gigs; noisy and per-market.", STATUS_SUGGESTED,
         [("opportunity", "Creative gigs", "https://www.craigslist.org/search/crg?query={q}")],
+    ),
+    # --- Agency directories (harvested by the resumable directory-crawl engine) -
+    # Each is its own agent/search. Public directories are active with the same
+    # courtesy rails + operator-ToS caveat as Agency Spotter; 4A's is a
+    # member/login directory, so it stays manual-assist. The per-site extraction
+    # parser is fitted from each site's real markup before a live run.
+    SourceSite(
+        "adforum", "AdForum · Agencies", "https://www.adforum.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Global agency profiles directory. Public; the directory agent walks every "
+        "page and stores company/website/employees/location/description/industries. "
+        "Operator confirms bulk use under AdForum's terms.", STATUS_SUGGESTED,
+        [("opportunity", "US agency search",
+          "https://www.adforum.com/agency/search?location=country_strkey:COU149")],
+    ),
+    SourceSite(
+        "canneslions", "Cannes Lions · Agencies", "https://www.canneslions.com",
+        "opportunity", "Awards directory", "Competitive Intelligence Analyst",
+        "Cannes Lions entrant/winner agencies — high-end creative buyers. The agent "
+        "walks the agency listing page by page. Operator confirms bulk use under "
+        "the site's terms.", STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.canneslions.com/")],
+    ),
+    SourceSite(
+        "aaaa_directory", "4A's · Agency Search", "https://www.aaaa.org",
+        "opportunity", "Trade-body directory", "Competitive Intelligence Analyst",
+        "American Association of Advertising Agencies member directory. Member/login "
+        "gated, so this is MANUAL-ASSIST: open the search in a logged-in browser and "
+        "hand-capture, like LinkedIn.", STATUS_SUGGESTED,
+        [("opportunity", "Agency search", "https://www.aaaa.org/agency-search/")],
+        login_gated=True,
+    ),
+    SourceSite(
+        "awwwards", "Awwwards · Agencies", "https://www.awwwards.com",
+        "opportunity", "Design directory", "Competitive Intelligence Analyst",
+        "Award-winning digital/design studios — creative buyers. The agent walks the "
+        "agencies listing page by page. Operator confirms bulk use under the site's "
+        "terms.", STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.awwwards.com/agencies/")],
+    ),
+    SourceSite(
+        "designrush", "DesignRush · Agencies", "https://www.designrush.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Large public agency marketplace/directory. The agent walks every page and "
+        "stores the six fields. Operator confirms bulk use under DesignRush's terms.",
+        STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.designrush.com/agency")],
+    ),
+    SourceSite(
+        "thedrum", "The Drum · Recommends", "https://www.thedrum.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "The Drum Recommends agency directory. The agent walks the directory page by "
+        "page. Operator confirms bulk use under The Drum's terms.", STATUS_SUGGESTED,
+        [("opportunity", "Directory", "https://www.thedrum.com/recommends/agencies")],
+    ),
+    SourceSite(
+        "agencyspotter", "Agency Spotter", "https://www.agencyspotter.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Directory of marketing/creative/production agencies — the demand side: "
+        "agencies commission music for brand campaigns and hire composers for "
+        "client work. The Agency Spotter Agent reads each listing page's embedded "
+        "data and walks the whole directory page-by-page (using the site's own "
+        "page count to stop at the end), so every agency lands in the lead queue "
+        "as a buyer to qualify. The directory is public (no login); the page cap "
+        "+ polite delay keep the crawl courteous. Operator confirms bulk use is "
+        "OK under Agency Spotter's User Agreement.", STATUS_ESTABLISHED,
+        [
+            ("opportunity", "Directory (all)",
+             "https://www.agencyspotter.com/all"),
+            ("opportunity", "Video Production",
+             "https://www.agencyspotter.com/media/video-production"),
+            ("opportunity", "Search",
+             "https://www.agencyspotter.com/search?keywords={q}"),
+        ],
     ),
 ]
 

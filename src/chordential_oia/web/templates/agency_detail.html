@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ agency.company or 'Agency' }}{% endblock %}
+{% block heading %}{{ agency.company or 'Agency' }} — Agency Profile{% endblock %}
+{% block content %}
+
+<p class="muted small" style="margin:6px 0 14px"><a href="/agencies">← All agencies</a></p>
+
+<div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+  <form method="post" action="/agencies/{{ agency.id }}/enrich" style="margin:0">
+    <button class="btn" type="submit">{{ 'Re-run enrichment' if status else 'Enrich now' }}</button>
+  </form>
+  {% if status %}
+  <form method="post" action="/agencies/{{ agency.id }}/enrich" style="margin:0">
+    <input type="hidden" name="reset" value="1">
+    <button class="btn btn-small" type="submit">Reset & re-enrich</button>
+  </form>
+  {% endif %}
+  <span class="muted small">
+    Status:
+    {% if status == 'complete' %}<strong style="color:var(--green,#2e8b57)">complete</strong>
+    {% elif status %}<strong>{{ status }}</strong>{% else %}<strong>not run</strong>{% endif %}
+    {% if detail %} — {{ detail }}{% endif %}
+  </span>
+  {% if not scrape_on %}
+  <span class="muted small" style="margin-left:auto">live fetching OFF here — runs for real on Render</span>
+  {% endif %}
+</div>
+
+{% macro field(label, value) %}
+  {% if value %}
+  <div class="kv"><div class="kv-k">{{ label }}</div><div class="kv-v">{{ value }}</div></div>
+  {% endif %}
+{% endmacro %}
+
+{% macro listfield(label, items) %}
+  {% if items %}
+  <div class="kv"><div class="kv-k">{{ label }}</div>
+    <div class="kv-v"><ul class="tight">{% for it in items %}<li>{{ it }}</li>{% endfor %}</ul></div></div>
+  {% endif %}
+{% endmacro %}
+
+<div class="card">
+  {{ field("Website", profile.website) }}
+  {{ field("Founded", profile.founded_year) }}
+  {{ field("Description", profile.description) }}
+  {{ listfield("Services", profile.services) }}
+  {{ listfield("Industries", profile.industries) }}
+  {{ listfield("Work / Portfolio", profile.portfolio) }}
+  {{ listfield("Awards", profile.awards) }}
+  {{ listfield("Offices", profile.offices) }}
+
+  {% if profile.leadership %}
+  <div class="kv"><div class="kv-k">Leadership</div>
+    <div class="kv-v"><ul class="tight">
+      {% for p in profile.leadership %}<li><strong>{{ p.name }}</strong>{% if p.title %} — {{ p.title }}{% endif %}</li>{% endfor %}
+    </ul></div></div>
+  {% endif %}
+
+  {% if profile.careers_url %}
+  <div class="kv"><div class="kv-k">Careers</div>
+    <div class="kv-v"><a href="{{ profile.careers_url }}" target="_blank" rel="noopener noreferrer">{{ profile.careers_url | displayurl }}</a>
+      {% if profile.open_roles %}<ul class="tight">{% for r in profile.open_roles %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+    </div></div>
+  {% endif %}
+
+  {% if profile.news %}
+  <div class="kv"><div class="kv-k">News</div>
+    <div class="kv-v"><ul class="tight">
+      {% for n in profile.news %}<li><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">{{ n.title }}</a></li>{% endfor %}
+    </ul></div></div>
+  {% endif %}
+
+  {{ field("Email", profile.email) }}
+  {{ field("Phone", profile.phone) }}
+
+  {% if profile.social_links %}
+  <div class="kv"><div class="kv-k">Social</div>
+    <div class="kv-v">{% for k, v in profile.social_links.items() %}<a href="{{ v }}" target="_blank" rel="noopener noreferrer" style="margin-right:10px">{{ k }}</a>{% endfor %}</div></div>
+  {% endif %}
+</div>
+
+{% if profile.sources %}
+<div class="card" style="margin-top:14px">
+  <div class="muted small" style="margin-bottom:8px">Provenance — which page each fact came from (factual, not inferred):</div>
+  <ul class="tight">
+    {% for concept, url in profile.sources.items() %}
+    <li><strong>{{ concept }}</strong>: <a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url | displayurl }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if status and status != 'complete' %}
+<p class="muted small" style="margin-top:12px">
+  {% if status == 'blocked' %}This environment can't fetch external sites. Deploy to Render (where live fetching is on) and press Enrich there.
+  {% elif status == 'running' %}Enrichment was interrupted mid-pipeline — press Enrich again to resume from where it stopped ({{ steps_done | length }} steps done).
+  {% endif %}
+</p>
+{% endif %}
+
+{% endblock %}
