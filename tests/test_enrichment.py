@@ -325,3 +325,39 @@ def test_enrich_batch_blocked_when_scraping_disabled(tmp_path, monkeypatch):
     conn = _seed_many(tmp_path)
     summary = en.enrich_batch(conn)               # no fetch + scraping off
     assert summary["total"] == 2 and summary["blocked"] == 2 and summary["completed"] == 0
+
+
+def test_needing_enrichment_skips_no_website_and_errored(tmp_path):
+    # Directories like The Drum list no outbound website; those rows can never be
+    # enriched, so they must NOT count as awaiting (else they clog the queue and a
+    # fixed-size batch makes zero forward progress). An errored row is terminal too.
+    conn = dbm.connect(str(tmp_path / "q.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "thedrum", {            # no website
+        "dedup_key": "nosite", "company": "No Site Co", "website": ""})
+    dbm.upsert_agency(conn, "awwwards", {           # enrichable
+        "dedup_key": "acme.example", "company": "Acme", "website": "https://acme.example"})
+
+    needing = dbm.agencies_needing_enrichment(conn)
+    assert [r["company"] for r in needing] == ["Acme"]   # the no-website row is skipped
+
+    # Acme's site is unreachable here -> the pass marks it 'error'; it must then
+    # drop out of the queue rather than be retried forever.
+    en.enrich_batch(conn, fetch=lambda url, timeout=15.0: ("", False))
+    assert dbm.agencies_needing_enrichment(conn) == []
+
+
+def test_start_manual_enrich_is_non_blocking_and_guarded(tmp_path, monkeypatch):
+    from chordential_oia.web import scheduler as sch
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
+    monkeypatch.setenv("CHORDENTIAL_AUTOENRICH", "1")
+    # disabled here -> returns False, starts nothing
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: False)
+    assert sch.start_manual_enrich(5) is False
+    # while a pass is already running, a second nudge is a no-op
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
+    sch._enrich_status["running"] = True
+    try:
+        assert sch.start_manual_enrich(5) is False
+    finally:
+        sch._enrich_status["running"] = False

@@ -495,7 +495,7 @@ def _profile_from_row(row) -> dict:
 def agencies_page(request: Request, source: str = "", enriched: str = "",
                   page: int = 1, ingested: str = "", new: str = "", added: str = "",
                   crawled: str = "", pages: str = "", cstatus: str = "",
-                  eb_done: str = "", eb_total: str = ""):
+                  eb_started: str = "", eb_n: str = ""):
     """Paginated accordion of harvested agencies; each row expands to its enriched
     Agency Profile inline. Filter/paginate happen in SQL so this scales to
     thousands of rows."""
@@ -557,7 +557,7 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   setup_count=setup_agencies.setup_count(),
                   crawl_states=crawl_states, crawled=crawled, pages=pages,
                   cstatus=cstatus, pages_per_click=PAGES_PER_CRAWL_CLICK,
-                  eb_done=eb_done, eb_total=eb_total,
+                  eb_started=eb_started, eb_n=eb_n,
                   auto_enrich=scheduler.enrich_status(),
                   scrape_on=enrichment.scrape_enabled())
 
@@ -616,21 +616,21 @@ def agencies_crawl(source: str = Form(...), reset: str = Form("")):
 
 @app.post("/agencies/enrich-pending")
 def agencies_enrich_pending(limit: str = Form("")):
-    """Manually nudge the agent to enrich a batch of not-yet-complete agencies
-    now (the background scheduler does this on its own; this is the on-demand
-    push). Bounded so the request returns; re-press to continue."""
-    n = 10
+    """Manually nudge the agent to enrich a batch of enrichable agencies now (the
+    background scheduler does this on its own; this is the on-demand push).
+
+    Fire-and-forget: a batch of live-site enrichments takes minutes — far longer
+    than an HTTP request can wait — so we kick it off in a background thread and
+    return immediately. Progress shows up in the auto-enrichment status card on
+    refresh. Re-press to queue more once the running pass finishes."""
+    n = 25
     try:
         n = max(1, min(50, int(limit)))
     except (TypeError, ValueError):
-        n = 10
-    conn = db.connect()
-    try:
-        res = enrichment.enrich_batch(conn, limit=n)
-    finally:
-        conn.close()
+        n = 25
+    started = scheduler.start_manual_enrich(n)
     return RedirectResponse(
-        f"/agencies?eb_done={res['completed']}&eb_total={res['total']}",
+        f"/agencies?eb_started={'1' if started else '0'}&eb_n={n}",
         status_code=303)
 
 
