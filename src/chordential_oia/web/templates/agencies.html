@@ -24,8 +24,29 @@
 <p class="small" style="margin:10px 0;color:var(--green,#2e8b57)">✓ Agency added — press <strong>Enrich</strong> on its row below.</p>
 {% endif %}
 
+{% if setup_count and total == 0 %}
+<div class="card" style="margin:14px 0;background:var(--alert-green,#e0f4d9)">
+  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <strong>{{ setup_count }} agencies were collected from the directory pages you pasted during setup.</strong>
+      <div class="muted small">AdForum, Awwwards, Cannes Lions, DesignRush and The Drum — recovered and ready to load. One click, no re-paste.</div>
+    </div>
+    <form method="post" action="/agencies/import-setup" style="margin:0">
+      <button class="btn" type="submit">📥 Import {{ setup_count }} agencies</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <details class="card" style="margin:14px 0" {{ 'open' if total == 0 }}>
-  <summary style="cursor:pointer;font-weight:600">➕ Add agencies to the database</summary>
+  <summary style="cursor:pointer;font-weight:600">➕ Add more agencies to the database</summary>
+
+  {% if setup_count %}
+  <p class="muted small" style="margin-top:14px">Already imported the setup set? Use these to add more.
+    (Re-importing the setup set is safe — it refreshes rather than duplicates:
+    <form method="post" action="/agencies/import-setup" style="display:inline;margin:0"><button class="btn btn-small" type="submit">re-import {{ setup_count }}</button></form>)
+  </p>
+  {% endif %}
 
   <div style="margin-top:16px">
     <p class="muted small" style="margin-bottom:8px"><strong>Quick:</strong> add one agency by hand, then Enrich it.</p>

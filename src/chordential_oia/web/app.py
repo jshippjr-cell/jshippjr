@@ -497,11 +497,13 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
         total = db.count_agencies(conn, source or None)
     finally:
         conn.close()
+    from . import setup_agencies
     return render(request, "agencies.html", nav="agencies", agencies=agencies,
                   sources=all_sources, source=source, enriched=enriched,
                   pending=pending, total=total,
                   ingest_sources=directory_parsers.INGEST_SOURCES,
                   ingested=ingested, new=new, added=added,
+                  setup_count=setup_agencies.setup_count(),
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -523,6 +525,20 @@ def agencies_ingest(source: str = Form(...), html: str = Form("")):
     return RedirectResponse(
         f"/agencies?source={source}&ingested={len(records)}&new={new_count}",
         status_code=303)
+
+
+@app.post("/agencies/import-setup")
+def agencies_import_setup():
+    """Load the agencies recovered from the directory pages pasted during setup
+    (committed seed) into the Master Company Database — the one-click populate."""
+    from . import setup_agencies
+    conn = db.connect()
+    try:
+        res = setup_agencies.load(conn)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/agencies?ingested={res['total']}&new={res['new']}", status_code=303)
 
 
 @app.post("/agencies/add")

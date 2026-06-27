@@ -57,6 +57,7 @@ where = ["src"]
 "chordential_oia.web" = [
     "templates/*.html",
     "templates/public/*.html",
+    "data/*.json",
     "static/*.css",
     "static/*.js",
     "static/*.png",
