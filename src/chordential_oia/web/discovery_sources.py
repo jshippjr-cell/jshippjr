@@ -218,18 +218,20 @@ CATALOG: List[SourceSite] = [
         "opportunity", "Agency directory", "Competitive Intelligence Analyst",
         "Directory of marketing/creative/production agencies — the demand side: "
         "agencies commission music for brand campaigns and hire composers for "
-        "client work. The Agency Spotter Agent walks the directory page-by-page so "
-        "each agency lands in the lead queue as a buyer to qualify. Sign-in is "
-        "required to browse the full directory and the ToS restricts automated "
-        "extraction, so this stays manual-assist (Jon opens it in his own logged-in "
-        "browser) until approved per-target.", STATUS_SUGGESTED,
+        "client work. The Agency Spotter Agent reads each listing page's embedded "
+        "data and walks the whole directory page-by-page (using the site's own "
+        "page count to stop at the end), so every agency lands in the lead queue "
+        "as a buyer to qualify. The directory is public (no login); the page cap "
+        "+ polite delay keep the crawl courteous. Operator confirms bulk use is "
+        "OK under Agency Spotter's User Agreement.", STATUS_ESTABLISHED,
         [
-            ("opportunity", "Directory",
-             "https://www.agencyspotter.com/agencies"),
+            ("opportunity", "Directory (all)",
+             "https://www.agencyspotter.com/all"),
+            ("opportunity", "Video Production",
+             "https://www.agencyspotter.com/media/video-production"),
             ("opportunity", "Search",
              "https://www.agencyspotter.com/search?keywords={q}"),
         ],
-        login_gated=True,
     ),
 ]
 

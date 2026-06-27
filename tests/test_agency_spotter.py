@@ -1,13 +1,15 @@
-"""The Agency Spotter Agent — catalog entry, pure parser, and the paginating,
-human-gated fetch that walks the agency directory page by page.
+"""The Agency Spotter Agent — catalog entry, the Next.js flight-JSON parser, and
+the paginating fetch that walks the whole directory and saves to the database.
 
-Mirrors the test discipline of the rest of discovery: the parser is pure (HTML →
-records, no network) and the fetch is exercised by monkeypatching the one HTTP
-seam (``_get_with_meta``) so nothing here ever touches the network.
+Agency Spotter is a Next.js app, so the listing data lives in embedded RSC
+"flight" payloads, not visible markup. The parser is pure (HTML string → records
++ page counts) and the fetch is exercised by monkeypatching the one HTTP seam
+(``_get_with_meta``), so nothing here touches the network.
 """
 
 import importlib
 import importlib.util
+import json
 import pathlib
 import urllib.parse
 
@@ -28,144 +30,146 @@ def _load_exporter():
 
 
 # --------------------------------------------------------------------------- #
-# Catalog entry
+# Flight-JSON fixtures (mimic Agency Spotter's __next_f script chunks)
 # --------------------------------------------------------------------------- #
-def test_agency_spotter_in_catalog_as_gated_opportunity_source():
+def _agency(name, slug, **kw):
+    a = {"name": name, "slug": slug, "url": f"https://{slug}.com",
+         "email": f"hi@{slug}.com", "city": "Austin", "state": "TX",
+         "country": "United States", "size": "10 - 49", "services": ["Video Production"],
+         "budget_min": 5000, "budget_mid": 20000, "avg_rating": 5, "review_count": 7,
+         "client_list": "Nike\nApple"}
+    a.update(kw)
+    return a
+
+
+def _flight_html(agencies, current=1, total=1, count=None, split=False):
+    """Build page HTML carrying ``agencies`` in RSC flight chunks (optionally split
+    across two chunks to exercise reconstruction)."""
+    if count is None:
+        count = len(agencies)
+    flight = ('d:["$","$L1c",null,{"value":{"agencies":' + json.dumps(agencies)
+              + ',"currentPage":%d,"totalPages":%d,"count":%d,"groupName":"Video Production"}}]'
+              % (current, total, count))
+    chunks = ([flight[:len(flight) // 2], flight[len(flight) // 2:]] if split else [flight])
+    return "".join('<script>self.__next_f.push([1,%s])</script>' % json.dumps(c) for c in chunks)
+
+
+# --------------------------------------------------------------------------- #
+# Catalog entry — now an active, public (non-gated) source
+# --------------------------------------------------------------------------- #
+def test_agency_spotter_is_active_public_source():
     site = catalog.get_site("agencyspotter")
     assert site is not None
-    assert site.kind == "opportunity"          # agencies are the demand side
-    assert site.status == catalog.STATUS_SUGGESTED
-    assert site.login_gated is True            # sign-in / ToS → manual-assist
-    # A keywordable search board and a fixed browse-the-whole-directory board.
-    templates = [tmpl for (_kind, _label, tmpl) in site.boards]
-    assert any("{q}" in t for t in templates)
-    assert any(t.endswith("/agencies") for t in templates)
+    assert site.kind == "opportunity"
+    assert site.status == catalog.STATUS_ESTABLISHED   # auto-fetched, not manual-assist
+    assert site.login_gated is False                   # public directory, no login
+    templates = [t for (_k, _l, t) in site.boards]
+    assert any(t.endswith("/all") for t in templates)          # walk the whole directory
+    assert any("{q}" in t for t in templates)                  # keyworded search board
 
 
-def test_directory_target_paginates_from_a_fixed_board():
-    """The fixed directory board has no {q}; site_targets emits a plain listing
-    target the agent can then walk page by page."""
+def test_directory_target_is_recognized():
     site = catalog.get_site("agencyspotter")
     targets = catalog.site_targets(site, "opportunity")
-    dir_target = next(t for t in targets if t["url"].endswith("/agencies"))
-    assert dir_target["source_key"] == "agencyspotter"
+    dir_target = next(t for t in targets if t["url"].endswith("/all"))
     assert ca.is_agency_spotter(dir_target) is True
 
 
 # --------------------------------------------------------------------------- #
-# Pure parser
+# Pure flight-JSON parser
 # --------------------------------------------------------------------------- #
-def test_parse_agency_spotter_html_shape():
-    html = (
-        '<ul>'
-        '<li class="agency" data-name="AURORA Creative" '
-        'data-specialties="branding,video" data-location="Austin, TX" '
-        'data-url="https://www.agencyspotter.com/aurora" '
-        'data-description="Full-service brand studio."></li>'
-        '<li class="agency" data-name="Vance Athletic Agency" '
-        'data-url="https://www.agencyspotter.com/vance"></li>'
-        '<li class="not-an-agency" data-name="ignore me"></li>'
-        '</ul>'
-    )
-    recs = ca.parse_agency_spotter_html(html)
-    assert len(recs) == 2                       # the non-agency element is ignored
+def test_parse_agency_spotter_page_shape():
+    html = _flight_html(
+        [_agency("AURORA Creative", "aurora", city="Los Angeles", state="CA",
+                 services=["Video Production", "Branding"], avg_rating=5, review_count=9)],
+        current=1, total=21, count=602)
+    page = ca.parse_agency_spotter_page(html)
+    assert page["total_pages"] == 21 and page["count"] == 602 and page["current_page"] == 1
+    assert len(page["records"]) == 1
 
-    a = recs[0]
-    assert a["company"] == "AURORA Creative"
-    assert a["need"] == "Agency — branding, video"
-    assert a["description"] == "Austin, TX · Full-service brand studio."
-    assert a["url"] == "https://www.agencyspotter.com/aurora"
-
-    # No specialties → a sensible default need; no location/desc → empty string.
-    b = recs[1]
-    assert b["company"] == "Vance Athletic Agency"
-    assert b["need"] == "Creative agency (potential music buyer)"
-    assert b["description"] == ""
+    r = page["records"][0]
+    assert r["company"] == "AURORA Creative"
+    assert r["need"] == "Agency — Video Production, Branding"  # is_agency_need recognizes this
+    assert r["url"] == "https://www.agencyspotter.com/aurora"  # profile, from slug
+    assert "Los Angeles, CA, United States" in r["description"]
+    assert "https://aurora.com" in r["description"]            # agency website kept in desc
+    assert "clients: Nike, Apple" in r["description"]
 
 
-def test_parse_skips_nameless_and_handles_garbage():
-    assert ca.parse_agency_spotter_html("") == []
-    assert ca.parse_agency_spotter_html('<li class="agency"></li>') == []   # no name
-    assert ca.parse_agency_spotter_html("<li class='agency' data-name") == []  # malformed
+def test_parse_handles_split_chunks_and_garbage():
+    html = _flight_html([_agency("Split Co", "splitco")], split=True)
+    assert [r["company"] for r in ca.parse_agency_spotter(html)] == ["Split Co"]
+    assert ca.parse_agency_spotter("<html>no flight here</html>") == []
+    assert ca.parse_agency_spotter("") == []
+
+
+def test_parse_skips_nameless_and_flight_reference_clients():
+    html = _flight_html([
+        _agency("", "noname"),                       # dropped (no name)
+        _agency("Ref Co", "refco", client_list="$1e"),  # flight ref → clients omitted
+    ])
+    recs = ca.parse_agency_spotter(html)
+    assert [r["company"] for r in recs] == ["Ref Co"]
+    assert "clients:" not in recs[0]["description"]
 
 
 # --------------------------------------------------------------------------- #
 # Page-URL builder (pure)
 # --------------------------------------------------------------------------- #
 def test_agency_spotter_page_url_sets_and_replaces_page():
-    base = "https://www.agencyspotter.com/agencies"
-    assert "page=2" in ca.agency_spotter_page_url(base, 2)
-
-    # Existing params preserved; existing page replaced (not duplicated).
-    u = ca.agency_spotter_page_url(
-        "https://www.agencyspotter.com/search?keywords=video&page=1", 3)
+    assert "page=2" in ca.agency_spotter_page_url("https://www.agencyspotter.com/all", 2)
+    u = ca.agency_spotter_page_url("https://www.agencyspotter.com/search?keywords=video&page=1", 3)
     q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query))
-    assert q["page"] == "3"
-    assert q["keywords"] == "video"
+    assert q["page"] == "3" and q["keywords"] == "video"
 
 
 # --------------------------------------------------------------------------- #
-# Paginating fetch — walks every page, dedupes, reports honestly
+# Paginating fetch — walks the whole directory via totalPages, dedupes
 # --------------------------------------------------------------------------- #
-def _page_html(agencies):
-    return "".join(
-        f'<li class="agency" data-name="{n}" data-url="{u}"></li>' for n, u in agencies
-    )
-
-
 def _paged_fetcher(pages):
-    """Return a _get_with_meta stand-in serving ``pages`` keyed by page number
-    (page 1 = no/blank page param). Any page past the list returns empty HTML —
-    the natural end-of-directory signal."""
     def fake(url, headers, timeout=10.0):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
         page = int(q.get("page", "1") or "1")
-        html = pages.get(page, "")
-        return html, 200, url
+        return pages.get(page, _flight_html([], current=page, total=len(pages))), 200, url
     return fake
 
 
-def test_fetch_walks_all_pages_and_dedupes(monkeypatch):
+def test_fetch_walks_to_total_pages_and_dedupes(monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_AGENCYSPOTTER_DELAY", "0")
     pages = {
-        1: _page_html([("Alpha", "u/alpha"), ("Beta", "u/beta")]),
-        2: _page_html([("Gamma", "u/gamma"), ("Beta", "u/beta")]),   # Beta repeats
-        3: _page_html([("Delta", "u/delta")]),
-        # page 4 absent → empty → stop
+        1: _flight_html([_agency("Alpha", "alpha"), _agency("Beta", "beta")], current=1, total=2, count=3),
+        2: _flight_html([_agency("Gamma", "gamma"), _agency("Alpha", "alpha")], current=2, total=2, count=3),
     }
     monkeypatch.setattr(ca, "_get_with_meta", _paged_fetcher(pages))
 
-    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/agencies")
+    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/all")
     assert res["outcome"] == "ok"
-    companies = [r["company"] for r in res["records"]]
-    assert companies == ["Alpha", "Beta", "Gamma", "Delta"]   # Beta deduped once
-    assert "Walked 4 page(s)" in res["detail"]                 # 3 with data + 1 empty
-    assert "cap" not in res["detail"]
+    assert [r["company"] for r in res["records"]] == ["Alpha", "Beta", "Gamma"]  # Alpha deduped
+    assert "Walked 2 of 2 page(s)" in res["detail"]
+    assert "3 agencies" in res["detail"] and "cap" not in res["detail"]
 
 
 def test_fetch_respects_page_cap_and_reports_it(monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_AGENCYSPOTTER_DELAY", "0")
     monkeypatch.setenv("CHORDENTIAL_AGENCYSPOTTER_MAX_PAGES", "2")
-    # Every page returns fresh data forever — only the cap can stop the walk.
+
     def endless(url, headers, timeout=10.0):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
         page = int(q.get("page", "1") or "1")
-        return _page_html([(f"Agency{page}", f"u/{page}")]), 200, url
+        return _flight_html([_agency(f"Agency{page}", f"a{page}")], current=page, total=10, count=10), 200, url
     monkeypatch.setattr(ca, "_get_with_meta", endless)
 
-    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/agencies")
-    assert len(res["records"]) == 2                 # capped at 2 pages
-    assert "2-page cap" in res["detail"]            # truncation reported, not hidden
+    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/all")
+    assert len(res["records"]) == 2
+    assert "2-page cap" in res["detail"] and "of 10 page(s)" in res["detail"]
 
 
-def test_fetch_login_wall_outcome(monkeypatch):
+def test_fetch_login_or_block_outcome(monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_AGENCYSPOTTER_DELAY", "0")
     wall = '<html><form><input type="password"></form>Please log in</html>'
-    monkeypatch.setattr(ca, "_get_with_meta",
-                        lambda url, headers, timeout=10.0: (wall, 200, url))
-    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/agencies")
-    assert res["records"] == []
-    assert res["outcome"] == "login"                # diagnosed from the first page
+    monkeypatch.setattr(ca, "_get_with_meta", lambda url, headers, timeout=10.0: (wall, 200, url))
+    res = ca.fetch_agency_spotter("https://www.agencyspotter.com/all")
+    assert res["records"] == [] and res["outcome"] == "login"
 
 
 # --------------------------------------------------------------------------- #
@@ -174,42 +178,37 @@ def test_fetch_login_wall_outcome(monkeypatch):
 def test_dispatch_routes_to_agency_spotter_when_enabled(monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
     monkeypatch.setenv("CHORDENTIAL_AGENCYSPOTTER_DELAY", "0")
-    pages = {1: _page_html([("Solo", "u/solo")])}
+    pages = {1: _flight_html([_agency("Solo", "solo")], current=1, total=1, count=1)}
     monkeypatch.setattr(ca, "_get_with_meta", _paged_fetcher(pages))
-
     target = {"source_key": "agencyspotter",
-              "url": "https://www.agencyspotter.com/agencies", "kind": "opportunity"}
+              "url": "https://www.agencyspotter.com/all", "kind": "opportunity"}
     res = ca.fetch_opportunity_records(target)
-    assert res["outcome"] == "ok"
-    assert [r["company"] for r in res["records"]] == ["Solo"]
+    assert res["outcome"] == "ok" and [r["company"] for r in res["records"]] == ["Solo"]
 
 
 def test_dispatch_off_when_scrape_disabled(monkeypatch):
     monkeypatch.delenv("CHORDENTIAL_ENABLE_SCRAPE", raising=False)
     target = {"source_key": "agencyspotter",
-              "url": "https://www.agencyspotter.com/agencies", "kind": "opportunity"}
+              "url": "https://www.agencyspotter.com/all", "kind": "opportunity"}
     res = ca.fetch_opportunity_records(target)
-    assert res["outcome"] == "off"
-    assert res["records"] == []
+    assert res["outcome"] == "off" and res["records"] == []
 
 
 # --------------------------------------------------------------------------- #
 # Agency-need recognition + the PDF exporter's row selection
 # --------------------------------------------------------------------------- #
 def test_is_agency_need():
-    assert ca.is_agency_need("Agency — branding, video") is True
+    assert ca.is_agency_need("Agency — Video Production") is True
     assert ca.is_agency_need(ca.AGENCY_NEED_DEFAULT) is True
     assert ca.is_agency_need("Brand spot music") is False
-    assert ca.is_agency_need("") is False
-    assert ca.is_agency_need(None) is False
+    assert ca.is_agency_need("") is False and ca.is_agency_need(None) is False
 
 
 def _seed_leads(db):
-    """A DB with two Agency Spotter leads, one other crawl lead, one website lead."""
     conn = db.connect()
     db.init_db(conn)
     db.insert_inbound_lead(conn, contact_name="(discovered)", company="AURORA Creative",
-                           project_type="Agency — branding, video", source="crawl")
+                           project_type="Agency — Video Production", source="crawl")
     db.insert_inbound_lead(conn, contact_name="(discovered)", company="Vance Athletic",
                            project_type=ca.AGENCY_NEED_DEFAULT, source="crawl")
     db.insert_inbound_lead(conn, contact_name="(discovered)", company="IndieGameCo",
@@ -227,16 +226,14 @@ def test_select_agency_leads_filters_to_agencies(tmp_path, monkeypatch):
     conn = _seed_leads(db_mod)
 
     exporter = _load_exporter()
-    agencies = exporter.select_agency_leads(conn)
-    names = {l["company"] for l in agencies}
-    assert names == {"AURORA Creative", "Vance Athletic"}   # only agency-need crawl leads
-
+    names = {l["company"] for l in exporter.select_agency_leads(conn)}
+    assert names == {"AURORA Creative", "Vance Athletic"}
     all_crawl = {l["company"] for l in exporter.select_agency_leads(conn, all_crawl=True)}
-    assert all_crawl == {"AURORA Creative", "Vance Athletic", "IndieGameCo"}  # not BrandX
+    assert all_crawl == {"AURORA Creative", "Vance Athletic", "IndieGameCo"}
 
 
 def test_build_pdf_smoke(tmp_path, monkeypatch):
-    pytest.importorskip("reportlab")            # optional [pdf] extra; skip if absent
+    pytest.importorskip("reportlab")
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "x.db"))
     from chordential_oia.web import db as db_mod
     importlib.reload(db_mod)
@@ -247,8 +244,6 @@ def test_build_pdf_smoke(tmp_path, monkeypatch):
     exporter.build_pdf(exporter.select_agency_leads(conn), out)
     data = pathlib.Path(out).read_bytes()
     assert data[:5] == b"%PDF-" and b"%%EOF" in data[-2048:]
-
-    # Empty result still renders a valid (single-page "nothing yet") PDF.
-    empty_out = str(tmp_path / "empty.pdf")
-    exporter.build_pdf([], empty_out)
-    assert pathlib.Path(empty_out).read_bytes()[:5] == b"%PDF-"
+    empty = str(tmp_path / "empty.pdf")
+    exporter.build_pdf([], empty)
+    assert pathlib.Path(empty).read_bytes()[:5] == b"%PDF-"

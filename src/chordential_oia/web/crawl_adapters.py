@@ -18,10 +18,10 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 import urllib.parse
 import urllib.request
-from html.parser import HTMLParser
 from typing import List, Optional
 
 from ..talent_sources.scraped import scrape_enabled
@@ -195,8 +195,10 @@ def fetch_reddit(url: str) -> dict:
 #     infinite paginator can't loop forever — and when the cap is hit we SAY SO
 #     in ``detail`` instead of silently pretending we got everything; and
 #   - a polite inter-page delay (CHORDENTIAL_AGENCYSPOTTER_DELAY seconds).
-# Whether the agent runs at all is still the human gate (Approved target +
-# scrape flag) — Agency Spotter ships login-gated, i.e. manual-assist.
+# Whether the agent runs at all is still the human gate (Approved target + scrape
+# flag). The directory is public (no login), so the source is active rather than
+# manual-assist — but bulk extraction is the operator's call against Agency
+# Spotter's User Agreement; the page cap + delay keep the crawl courteous.
 # --------------------------------------------------------------------------- #
 _AS_UA = "ChordentialDiscoveryBot/1.0 (+https://chordential.com)"
 _AS_DEFAULT_MAX_PAGES = 50
@@ -249,59 +251,126 @@ def agency_spotter_page_url(url: str, page: int) -> str:
     )
 
 
-class _AgencyListingParser(HTMLParser):
-    """Extract agency records from a documented listing structure::
-
-        <li class="agency" data-name="AURORA Creative"
-            data-specialties="branding,video,advertising"
-            data-location="Austin, TX" data-url="https://.../aurora-creative"
-            data-description="Full-service brand studio."></li>
-
-    Only elements whose class includes ``agency`` are read, so page chrome,
-    filters, and pagination controls are ignored. Mirrors the structured-listing
-    convention used by the talent and opportunity parsers.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.records: List[dict] = []
-
-    def handle_starttag(self, tag, attrs):
-        a = dict(attrs)
-        if "agency" not in (a.get("class") or "").split():
-            return
-        name = (a.get("data-name") or "").strip()
-        if not name:
-            return
-        specialties = (a.get("data-specialties") or "").strip()
-        location = (a.get("data-location") or "").strip()
-        desc = (a.get("data-description") or "").strip()
-        # Fold specialties + location into the standard opportunity-lead shape so
-        # downstream ingestion (insert_inbound_lead) needs no special-casing.
-        need = (
-            AGENCY_NEED_PREFIX + specialties.replace(",", ", ")
-            if specialties else AGENCY_NEED_DEFAULT
-        )
-        description = " · ".join(p for p in (location, desc) if p)
-        self.records.append({
-            "company": name,
-            "need": need[:200],
-            "description": description[:1000],
-            "url": (a.get("data-url") or "").strip() or None,
-        })
+# Agency Spotter is a Next.js app: the listing data is NOT in the visible HTML
+# (data-* attributes) but embedded as React Server Component "flight" payloads in
+# <script>self.__next_f.push([1,"…"])</script> chunks, which concatenate into one
+# JSON-ish stream carrying ``{"agencies":[…],"currentPage":N,"totalPages":M,
+# "count":K}``. We reconstruct that stream and read the agency objects + the page
+# count straight from it — far more reliable than scraping rendered markup.
+_FLIGHT_RE = re.compile(r'self\.__next_f\.push\(\[1,(".*?)\]\)</script>', re.S)
+_AS_BASE = "https://www.agencyspotter.com"
 
 
-def parse_agency_spotter_html(html: str) -> List[dict]:
-    """Pure parser: one directory page's HTML → agency lead dicts. No network.
+def _flight_text(html: str) -> str:
+    """Concatenate every RSC flight chunk into one string. Each chunk is a JSON
+    string literal, so ``json.loads`` un-escapes it back to raw flight text."""
+    parts: List[str] = []
+    for m in _FLIGHT_RE.finditer(html or ""):
+        try:
+            parts.append(json.loads(m.group(1)))
+        except Exception:
+            continue
+    return "".join(parts)
 
-    Output records are the SAME shape every opportunity source emits
-    (``company`` / ``need`` / ``description`` / ``url``)."""
-    parser = _AgencyListingParser()
+
+def _match_bracket(text: str, start: int) -> int:
+    """Index just past the ``]`` matching the ``[`` at ``text[start]`` (string- and
+    escape-aware). Returns -1 if unbalanced."""
+    depth = 0
+    in_str = esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return -1
+
+
+def _agency_record(a: dict) -> Optional[dict]:
+    """Map one Agency Spotter agency object onto the standard opportunity-lead
+    shape (``company`` / ``need`` / ``description`` / ``url``). Returns None for
+    a nameless row."""
+    name = (a.get("name") or "").strip()
+    if not name:
+        return None
+    services = [s for s in (a.get("services") or []) if isinstance(s, str)]
+    need = AGENCY_NEED_PREFIX + ", ".join(services) if services else AGENCY_NEED_DEFAULT
+    loc = ", ".join(p for p in (
+        (a.get("city") or "").strip(), (a.get("state") or "").strip(),
+        (a.get("country") or "").strip()) if p)
+    website = (a.get("url") or "").strip()
+    slug = (a.get("slug") or "").strip()
+    profile = f"{_AS_BASE}/{slug}" if slug else (website or None)
+    # client_list can be a flight reference ("$1e") for very long lists — skip those.
+    clients = a.get("client_list")
+    clients = clients.replace("\n", ", ").strip() if isinstance(clients, str) and not clients.startswith("$") else ""
+    bmin, bmid = a.get("budget_min"), a.get("budget_mid")
+    bits = []
+    if loc:
+        bits.append(loc)
+    if a.get("size"):
+        bits.append(f"{a['size']} people")
+    if a.get("avg_rating") and a.get("review_count"):
+        bits.append(f"{a['avg_rating']}★ ({a['review_count']} reviews)")
     try:
-        parser.feed(html or "")
-    except Exception:  # malformed markup — keep whatever parsed cleanly
+        if bmin or bmid:
+            bits.append(f"typical ${int(float(bmin or bmid)):,}–${int(float(bmid or bmin)):,}")
+    except (TypeError, ValueError):
         pass
-    return parser.records
+    if website:
+        bits.append(website)
+    if clients:
+        bits.append("clients: " + clients[:200])
+    return {
+        "company": name,
+        "need": need[:200],
+        "description": " · ".join(bits)[:1000],
+        "url": profile,
+    }
+
+
+def parse_agency_spotter_page(html: str) -> dict:
+    """Pure parser: one directory/category page's HTML → ``{"records": [...],
+    "current_page", "total_pages", "count"}``. No network. ``records`` are the
+    standard opportunity-lead shape; the page counts drive pagination."""
+    out = {"records": [], "current_page": None, "total_pages": None, "count": None}
+    text = _flight_text(html)
+    key = '"agencies":['
+    idx = text.find(key)
+    if idx == -1:
+        return out
+    arr_start = idx + len(key) - 1            # points at '['
+    arr_end = _match_bracket(text, arr_start)
+    if arr_end == -1:
+        return out
+    try:
+        agencies = json.loads(text[arr_start:arr_end])
+    except Exception:
+        return out
+    out["records"] = [r for r in (_agency_record(a) for a in agencies if isinstance(a, dict)) if r]
+    tail = text[arr_end:arr_end + 300]        # "...],"currentPage":1,"totalPages":21,"count":602..."
+    for field, dest in (("currentPage", "current_page"), ("totalPages", "total_pages"), ("count", "count")):
+        m = re.search(rf'"{field}":(\d+)', tail)
+        if m:
+            out[dest] = int(m.group(1))
+    return out
+
+
+def parse_agency_spotter(html: str) -> List[dict]:
+    """Convenience: just the lead records from one page (see parse_agency_spotter_page)."""
+    return parse_agency_spotter_page(html)["records"]
 
 
 def _as_dedupe_key(rec: dict) -> str:
@@ -309,13 +378,13 @@ def _as_dedupe_key(rec: dict) -> str:
 
 
 def fetch_agency_spotter(url: str) -> dict:
-    """Walk the Agency Spotter directory from ``url``, page by page, accumulating
-    every agency reachable within the page cap. Returns the standard
-    ``{"records", "outcome", "detail"}`` contract, deduped within the run.
+    """Walk an Agency Spotter directory/category from ``url`` page by page,
+    accumulating every agency. Uses the page's own ``totalPages`` to stop exactly
+    at the end (or the configurable page cap, whichever comes first). Returns the
+    standard ``{"records", "outcome", "detail"}`` contract, deduped within the run.
 
-    Stops when a page yields no new agencies (the end of the directory) or the
-    page cap is reached — the latter is reported in ``detail`` so a truncated
-    sweep never masquerades as a complete one."""
+    A page cap that truncates the walk — and the total it stopped short of — is
+    reported in ``detail`` so a partial sweep never masquerades as a complete one."""
     max_pages = _as_max_pages()
     delay = _as_page_delay()
     headers = {"User-Agent": _AS_UA}
@@ -324,6 +393,7 @@ def fetch_agency_spotter(url: str) -> dict:
     seen: set = set()
     first_text, first_status, first_final = "", 0, url
     pages_walked = 0
+    total_pages = count = None
     cap_hit = False
 
     page = 1
@@ -337,7 +407,11 @@ def fetch_agency_spotter(url: str) -> dict:
             first_text, first_status, first_final = text, status, final_url
         pages_walked = page
 
-        fresh = [r for r in parse_agency_spotter_html(text)
+        parsed = parse_agency_spotter_page(text)
+        if total_pages is None:
+            total_pages, count = parsed["total_pages"], parsed["count"]
+
+        fresh = [r for r in parsed["records"]
                  if _as_dedupe_key(r) and _as_dedupe_key(r) not in seen]
         if not fresh:
             break  # empty / repeated page → end of directory
@@ -345,19 +419,24 @@ def fetch_agency_spotter(url: str) -> dict:
             seen.add(_as_dedupe_key(r))
         records.extend(fresh)
 
+        if total_pages and page >= total_pages:
+            break  # walked the whole directory
         page += 1
-        if delay and page <= max_pages:
+        if delay and page <= max_pages and (not total_pages or page <= total_pages):
             time.sleep(delay)
 
+    if cap_hit and total_pages and total_pages > max_pages:
+        pass  # cap_hit already set
     if records:
         outcome = "ok"
     else:
-        # Nothing came back — diagnose the first page (login wall? block?).
         outcome = classify_outcome(first_text, first_status, first_final, 0)
 
-    detail = f"Walked {pages_walked} page(s); {len(records)} agencies."
+    total_str = f" of {total_pages}" if total_pages else ""
+    count_str = f" of {count}" if count else ""
+    detail = f"Walked {pages_walked}{total_str} page(s); {len(records)}{count_str} agencies."
     if cap_hit:
-        detail += (f" Stopped at the {max_pages}-page cap — more may remain "
+        detail += (f" Stopped at the {max_pages}-page cap — more remain "
                    f"(raise CHORDENTIAL_AGENCYSPOTTER_MAX_PAGES to go deeper).")
     return {"records": records, "outcome": outcome, "detail": detail}
 
