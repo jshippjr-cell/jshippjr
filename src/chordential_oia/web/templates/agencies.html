@@ -195,6 +195,7 @@
       {{ li("Services", p.services) }}
       {{ li("Industries", p.industries) }}
       {{ li("Work", p.portfolio) }}
+      {{ li("Notable clients", p.clients) }}
       {{ li("Awards", p.awards) }}
       {{ li("Offices", p.offices) }}
       {% if p.leadership %}<div class="kv"><div class="kv-k">Leadership</div><div class="kv-v">{% for person in p.leadership %}{{ person.name }}{% if person.title %} ({{ person.title }}){% endif %}{{ '; ' if not loop.last }}{% endfor %}</div></div>{% endif %}
