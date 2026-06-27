@@ -78,6 +78,44 @@
   </div>
 </details>
 
+{% if crawled or cstatus %}
+<p class="small" style="margin:10px 0;{{ 'color:var(--green,#2e8b57)' if cstatus == 'complete' else 'color:var(--color-errors,#fa5d29)' if cstatus == 'error' else '' }}">
+  Crawl: <strong>{{ pages }}</strong> page(s) this run, <strong>{{ crawled }}</strong> new agencies — {{ cstatus }}.
+  {% if cstatus == 'error' %} The directory didn't return a page (blocked, or scraping is off here). Live crawling runs on Render; many directories also block automated fetches.{% endif %}
+</p>
+{% endif %}
+
+<details class="card" style="margin:14px 0">
+  <summary style="cursor:pointer;font-weight:600">🛰 Crawl directories live (paginate the source sites)</summary>
+  <p class="muted small" style="margin-top:14px">
+    Each click walks up to <strong>{{ pages_per_click }}</strong> pages and is <strong>resumable</strong> — press again to continue.
+    {% if scrape_on %}Live fetching is ON here.{% else %}Live fetching is OFF in this environment, so a crawl will report an error rather than fetch — it runs for real on Render.{% endif %}
+    Note: some directories block server-side crawls; the status will say so honestly if so.
+  </p>
+  <div class="no-pad" style="overflow-x:auto">
+  <table class="table" style="max-width:100%">
+    <thead><tr><th>Source</th><th style="width:1%">Status</th><th style="width:1%">Pages</th><th style="width:1%">Stored</th><th style="width:1%"></th><th style="width:1%"></th></tr></thead>
+    <tbody>
+      {% for c in crawl_states %}
+      <tr>
+        <td><strong>{{ c.key }}</strong>{% if c.detail %}<div class="muted small">{{ c.detail }}</div>{% endif %}</td>
+        <td>
+          {% if c.status == 'complete' %}<span class="dot won"></span> complete
+          {% elif c.status == 'running' %}<span class="dot review"></span> in progress
+          {% elif c.status == 'error' %}<span class="dot pursue"></span> error
+          {% else %}<span class="muted">idle</span>{% endif %}
+        </td>
+        <td>{{ c.pages_done }}{% if c.total_pages %} / {{ c.total_pages }}{% endif %}</td>
+        <td>{{ c.stored }}</td>
+        <td><form method="post" action="/agencies/crawl" style="margin:0"><input type="hidden" name="source" value="{{ c.key }}"><button class="btn btn-small" type="submit">Crawl {{ pages_per_click }}</button></form></td>
+        <td><form method="post" action="/agencies/crawl" style="margin:0"><input type="hidden" name="source" value="{{ c.key }}"><input type="hidden" name="reset" value="1"><button class="btn btn-small" type="submit">Restart</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">

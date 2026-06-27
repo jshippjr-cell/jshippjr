@@ -56,8 +56,8 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
-    db, directory_parsers, discovery, enrichment, scheduler, seed, signals,
-    sources, triage, webpush,
+    db, directory_crawl, directory_parsers, discovery, enrichment, scheduler,
+    seed, signals, sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -473,7 +473,8 @@ def _enrichment_status(conn, agency_id: int) -> str:
 
 @app.get("/agencies", response_class=HTMLResponse)
 def agencies_page(request: Request, source: str = "", enriched: str = "",
-                  ingested: str = "", new: str = "", added: str = ""):
+                  ingested: str = "", new: str = "", added: str = "",
+                  crawled: str = "", pages: str = "", cstatus: str = ""):
     """The harvested agencies, with enrichment status and per-row Enrich."""
     conn = db.connect()
     try:
@@ -495,6 +496,19 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
             })
         pending = len(db.agencies_needing_enrichment(conn, source=source or None))
         total = db.count_agencies(conn, source or None)
+        # Live-crawl status per self-crawling directory source.
+        crawl_states = []
+        for key in directory_parsers.SOURCE_FACTORIES:
+            st = db.get_crawl_state(conn, key)
+            crawl_states.append({
+                "key": key,
+                "status": (st["status"] if st else "idle"),
+                "pages_done": (st["pages_done"] if st else 0) or 0,
+                "total_pages": (st["total_pages"] if st else None),
+                "records_new": (st["records_new"] if st else 0) or 0,
+                "detail": (st["detail"] if st else "") or "",
+                "stored": db.count_agencies(conn, key),
+            })
     finally:
         conn.close()
     from . import setup_agencies
@@ -504,6 +518,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   ingest_sources=directory_parsers.INGEST_SOURCES,
                   ingested=ingested, new=new, added=added,
                   setup_count=setup_agencies.setup_count(),
+                  crawl_states=crawl_states, crawled=crawled, pages=pages,
+                  cstatus=cstatus, pages_per_click=PAGES_PER_CRAWL_CLICK,
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -524,6 +540,38 @@ def agencies_ingest(source: str = Form(...), html: str = Form("")):
         conn.close()
     return RedirectResponse(
         f"/agencies?source={source}&ingested={len(records)}&new={new_count}",
+        status_code=303)
+
+
+# How many directory pages one "Crawl" click walks. Bounded so the request
+# returns quickly; the crawl is resumable (checkpointed per page), so pressing
+# Crawl again continues from where it stopped.
+PAGES_PER_CRAWL_CLICK = 5
+
+
+@app.post("/agencies/crawl")
+def agencies_crawl(source: str = Form(...), reset: str = Form("")):
+    """Run the LIVE paginating directory crawl for one source, a bounded number
+    of pages per click (resumable). Actually fetches the directory only where
+    scraping is enabled (Render); in the sandbox, or if the directory blocks the
+    request, it reports the failure honestly rather than inventing rows."""
+    factory_base = directory_parsers.SOURCE_FACTORIES.get(source)
+    if not factory_base:
+        return RedirectResponse("/agencies", status_code=303)
+    factory, base = factory_base
+    conn = db.connect()
+    try:
+        do_reset = bool(reset)
+        st = db.get_crawl_state(conn, source)
+        start = 1 if do_reset else ((st["next_page"] if st and st["next_page"] else 1))
+        summary = directory_crawl.run_crawl(
+            conn, source, factory(base),
+            max_pages=start + PAGES_PER_CRAWL_CLICK - 1, reset=do_reset)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/agencies?source={source}&crawled={summary['records_new']}"
+        f"&pages={summary['pages_done']}&cstatus={summary['outcome']}",
         status_code=303)
 
 

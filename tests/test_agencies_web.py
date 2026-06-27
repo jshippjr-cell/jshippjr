@@ -189,3 +189,69 @@ def test_import_setup_route_populates_db(app_db):
     assert "Bader Rutter" in r.text or "Locomotive" in r.text
     from chordential_oia.web import setup_agencies
     assert app_mod.db.count_agencies(app_mod.db.connect()) >= setup_agencies.setup_count()
+
+
+# --------------------------------------------------------------------------- #
+# Live directory crawl trigger (bounded + resumable). Network is faked.
+# --------------------------------------------------------------------------- #
+# A 2-page DesignRush-style listing: page 1 has two agencies + says "of 2",
+# page 2 has one. Proves the button paginates and accumulates across clicks.
+def _designrush_page(names, total_pages):
+    cards = "".join(
+        f'<article data-agency-name="{n}">'
+        f'<a class="gtm-agency-website-link" href="https://{n.lower()}.example">site</a>'
+        f'<a class="gtm-agency-profile-link" href="/agency/profile/{n.lower()}">p</a>'
+        f'<div class="i-region">United States</div>'
+        f'<div class="i-employees">10 - 49</div>'
+        f'<div class="item-description">Desc for {n}.</div></article>'
+        for n in names)
+    return (f'<div id="paginator" data-count="of {total_pages}"></div>'
+            f'<span>120 Companies</span>{cards}')
+
+
+def test_live_crawl_button_paginates_and_resumes(app_db, monkeypatch):
+    client, app_mod = app_db
+    monkeypatch.setattr(app_mod.directory_parsers, "scrape_enabled", lambda: True)
+    pages = {1: ["Alpha", "Beta"], 2: ["Gamma"]}
+
+    def fake_fetch(url, timeout=15.0):
+        pg = 2 if "page=2" in url else 1
+        return (_designrush_page(pages[pg], 2), True)
+    monkeypatch.setattr(app_mod.directory_parsers, "_fetch", fake_fetch)
+
+    # One click walks up to PAGES_PER_CRAWL_CLICK pages; this tiny site (2 pages)
+    # finishes in a single click.
+    r = client.post("/agencies/crawl", data={"source": "designrush"},
+                    follow_redirects=True)
+    assert r.status_code == 200
+    conn = app_mod.db.connect()
+    try:
+        rows = {row["company"] for row in app_mod.db.list_agencies(conn, "designrush")}
+    finally:
+        conn.close()
+    assert {"Alpha", "Beta", "Gamma"} <= rows
+
+
+def test_live_crawl_reports_error_when_fetch_blocked(app_db, monkeypatch):
+    # Scraping on, but the directory refuses (simulating a bot block): the engine
+    # records an error rather than inventing rows.
+    client, app_mod = app_db
+    monkeypatch.setattr(app_mod.directory_parsers, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(app_mod.directory_parsers, "_fetch",
+                        lambda url, timeout=15.0: ("", False))
+    r = client.post("/agencies/crawl", data={"source": "adforum"},
+                    follow_redirects=True)
+    assert r.status_code == 200
+    st = app_mod.db.get_crawl_state(app_mod.db.connect(), "adforum")
+    assert st["status"] == "error"
+    assert app_mod.db.count_agencies(app_mod.db.connect(), "adforum") == 0
+
+
+def test_live_crawl_blocked_when_scraping_off(app_db):
+    # Default sandbox case: scraping off -> the source reports not-ok -> error.
+    client, app_mod = app_db
+    r = client.post("/agencies/crawl", data={"source": "thedrum"},
+                    follow_redirects=True)
+    assert r.status_code == 200
+    st = app_mod.db.get_crawl_state(app_mod.db.connect(), "thedrum")
+    assert st["status"] == "error"
