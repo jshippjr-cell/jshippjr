@@ -675,6 +675,199 @@ def make_thedrum_source(base_url: str):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# Agency Spotter  (Next.js; the listing rides in the React Flight payload)
+# --------------------------------------------------------------------------- #
+# A category page (e.g. /media/video-production) server-renders its agency data
+# into the React Flight stream — a series of self.__next_f.push([1,"<chunk>"])
+# calls whose decoded chunks concatenate into one buffer. That buffer holds a
+# "agencies":[{...}] array (one rich object per agency) plus the page meta
+# ("currentPage"/"totalPages"/"count"/"groupName"). Each agency object states a
+# lot first-hand: name, the agency's own website (url, carrying Agency Spotter
+# utm tags we strip), city/state/country, employee band (size), the disciplines
+# it lists (services), an about blurb and the profile slug. Honesty rule: we copy
+# only what the JSON states and leave the rest blank.
+#
+# Two wrinkles the decode has to survive: (1) the agencies array is split across
+# several push chunks, so we decode each chunk and concatenate the results; and
+# (2) some about/portfolio blurbs carry markdown escapes (\], \), \() that are
+# invalid JSON, so we lenient-fix lone backslashes and brace-match the array with
+# a string-aware scan (brackets inside blurbs don't fool it).
+_AS_BASE = "https://www.agencyspotter.com"
+_AS_PUSH_MARK = 'self.__next_f.push([1,"'
+_AS_LONE_BSLASH = re.compile(r'\\(?!["\\/bfnrtu])')
+
+
+def _as_raw_chunks(html: str) -> List[str]:
+    """The raw (still-escaped) string payload of every __next_f.push([1,"…"]).
+
+    We scan rather than regex so a chunk that ends mid-escape (the boundary the
+    Flight stream picks is arbitrary) is captured whole: the terminator is the
+    first un-escaped quote immediately followed by ``])``."""
+    out: List[str] = []
+    i = 0
+    n = len(html)
+    while True:
+        j = html.find(_AS_PUSH_MARK, i)
+        if j < 0:
+            break
+        k = j + len(_AS_PUSH_MARK)
+        while k < n:
+            c = html[k]
+            if c == "\\":
+                k += 2
+                continue
+            if c == '"' and html[k + 1:k + 3] == "])":
+                out.append(html[j + len(_AS_PUSH_MARK):k])
+                break
+            k += 1
+        i = k + 3
+    return out
+
+
+def _as_decode_chunk(payload: str) -> str:
+    """Decode one Flight chunk's JS-string escapes. Most chunks are clean JSON
+    strings; a few carry invalid escapes (markdown), so fall back to a lenient
+    fix and finally to dropping unknown backslash escapes."""
+    for cand in (payload, _AS_LONE_BSLASH.sub(r"\\\\", payload)):
+        try:
+            return json.loads('"' + cand + '"')
+        except Exception:
+            pass
+    return re.sub(r"\\(.)", lambda m: {
+        "n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/",
+    }.get(m.group(1), m.group(1)), payload)
+
+
+def _as_buffer(html: str) -> str:
+    """The decoded, concatenated Flight buffer for one Agency Spotter page."""
+    return "".join(_as_decode_chunk(p) for p in _as_raw_chunks(html or ""))
+
+
+def _as_extract_array(buf: str) -> list:
+    """Pull the "agencies":[…] array out of the decoded buffer. A string-aware
+    bracket scan finds the array bounds (brackets inside blurbs are ignored);
+    json.loads parses it, with the lenient backslash fix as a fallback."""
+    k = buf.find('"agencies":')
+    if k < 0:
+        return []
+    start = buf.find("[", k)
+    if start < 0:
+        return []
+    depth = 0
+    instr = esc = False
+    end = None
+    for idx in range(start, len(buf)):
+        c = buf[idx]
+        if instr:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                instr = False
+        elif c == '"':
+            instr = True
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                end = idx
+                break
+    if end is None:
+        return []
+    sub = buf[start:end + 1]
+    for cand in (sub, _AS_LONE_BSLASH.sub(r"\\\\", sub)):
+        try:
+            data = json.loads(cand)
+            return data if isinstance(data, list) else []
+        except Exception:
+            continue
+    return []
+
+
+def _as_clean_url(url: str) -> str:
+    """The agency's own site, minus the Agency Spotter utm_* tracking params."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    try:
+        sp = urllib.parse.urlsplit(url)
+    except Exception:
+        return url
+    kept = [(k, v) for k, v in urllib.parse.parse_qsl(sp.query)
+            if not k.lower().startswith("utm_")]
+    return urllib.parse.urlunsplit(
+        (sp.scheme, sp.netloc, sp.path, urllib.parse.urlencode(kept), sp.fragment))
+
+
+def _as_location(a: dict) -> str:
+    """city, state, country -> a single 'City, State, Country' string."""
+    parts = [_text(a.get(k) or "") for k in ("city", "state", "country")]
+    return ", ".join(p for p in parts if p)
+
+
+def _as_industries(a: dict) -> str:
+    """The disciplines the agency lists (services), comma-joined."""
+    svc = a.get("services")
+    if not isinstance(svc, list):
+        return ""
+    return ", ".join(_text(s) for s in svc if isinstance(s, str) and _text(s))
+
+
+def agencyspotter_total_pages(html: str) -> Optional[int]:
+    """Pages in this category listing, from the page meta's totalPages."""
+    m = re.search(r'"totalPages":\s*(\d+)', _as_buffer(html))
+    return int(m.group(1)) if m else None
+
+
+def parse_agencyspotter_listing(html: str) -> List[AgencyRecord]:
+    """One Agency Spotter category page -> AgencyRecords (one per agency).
+
+    Each record carries company, the agency's website (utm-stripped), employee
+    band, location, listed disciplines (industries) and the about blurb; the
+    profile URL is the page's identity. Fields the JSON doesn't state stay blank.
+    """
+    records: List[AgencyRecord] = []
+    for a in _as_extract_array(_as_buffer(html)):
+        if not isinstance(a, dict):
+            continue
+        name = _text(a.get("name") or "")
+        if not name:
+            continue
+        slug = (a.get("slug") or "").strip().strip("/")
+        desc = _text(a.get("about_body") or a.get("portfolio_description") or "")
+        records.append(AgencyRecord(
+            company=name,
+            website=_as_clean_url(a.get("url") or ""),
+            employees=_text(a.get("size") or ""),
+            location=_as_location(a),
+            description=desc,
+            industries=_as_industries(a),
+            source_url=f"{_AS_BASE}/{slug}" if slug else "",
+        ))
+    return records
+
+
+def make_agencyspotter_source(base_url: str, per_page: int = 30):
+    """Return a ``page_source(page)`` for an Agency Spotter category listing.
+    Pagination appends ``?page=N``; total pages come from the page meta. Network
+    is gated like the other sources (Agency Spotter sits behind Cloudflare, so a
+    live crawl usually 403s — the paste path is the reliable one)."""
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        sep = "&" if "?" in base_url else "?"
+        url = base_url if page == 1 else f"{base_url}{sep}page={page}"
+        text, ok = _fetch(url)
+        if not ok:
+            return PageResult(ok=False, detail=f"fetch failed ({last_fetch_error()})")
+        return PageResult(records=parse_agencyspotter_listing(text),
+                          total_pages=agencyspotter_total_pages(text), ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
 # (4A's is intentionally absent — its profiles crawl from a supplied URL list
@@ -687,6 +880,8 @@ SOURCE_FACTORIES = {
     "canneslions": (make_lovethework_source, _LTW_BASE),
     "awwwards": (make_awwwards_source, "https://www.awwwards.com/directory/"),
     "thedrum": (make_thedrum_source, "https://www.thedrum.com/b2b-agencies"),
+    "agencyspotter": (make_agencyspotter_source,
+                      "https://www.agencyspotter.com/media/video-production"),
 }
 
 
@@ -703,12 +898,14 @@ LISTING_PARSERS = {
     "awwwards": parse_awwwards_listing,
     "canneslions": parse_lovethework_entries,
     "thedrum": parse_thedrum_list,
+    "agencyspotter": parse_agencyspotter_listing,
 }
 
 # (key, human label) for the ingest picker — listing parsers plus the 4A's
 # single-profile case, in the order they're easiest to paste.
 INGEST_SOURCES = [
     ("thedrum", "The Drum (ranked list)"),
+    ("agencyspotter", "Agency Spotter category page"),
     ("awwwards", "Awwwards directory"),
     ("designrush", "DesignRush directory"),
     ("adforum", "AdForum search results"),
@@ -727,6 +924,10 @@ PASTE_ONLY_SOURCES = {
     "adforum": "AdForum blocks server crawls (HTTP 403) and loads results by "
                "infinite scroll — crawl it with a headless browser / scraping "
                "API, or paste the page.",
+    "agencyspotter": "Agency Spotter sits behind a Cloudflare challenge that "
+                     "blocks server crawls — paste the category page (it "
+                     "paginates with ?page=N, so paste each page), or crawl it "
+                     "with a headless browser / scraping API.",
 }
 
 

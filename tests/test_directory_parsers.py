@@ -4,6 +4,7 @@ fetch seam is monkeypatched so the engine integration test stays offline.
 """
 
 import importlib
+import json
 
 from chordential_oia.web import db as dbm
 from chordential_oia.web import directory_crawl as dc
@@ -634,6 +635,118 @@ def test_thedrum_source_reports_error_when_scraping_disabled(tmp_path, monkeypat
 
 
 # --------------------------------------------------------------------------- #
+# Agency Spotter (Next.js React-Flight payload, split across push() chunks)
+# --------------------------------------------------------------------------- #
+# Built the way the real page emits it: a "agencies":[...] array embedded in a
+# self.__next_f.push([1,"<chunk>"]) Flight stream, split across two chunks (the
+# real array spans several), one blurb carrying markdown-escape leaks (\] \()
+# that are invalid JSON, one agency missing city/state, a utm-tagged website,
+# and the page meta (currentPage/totalPages/count) on its own chunk.
+def _agencyspotter_fixture():
+    agencies = [
+        {"id": 26725, "name": "Sociallyin",
+         "url": "http://sociallyin.com/?utm_campaign=Agency%20Spotter&utm_source=Agency%20Spotter",
+         "email": "keith@sociallyin.com", "city": "Atlanta", "state": "Georgia",
+         "country": "United States", "size": "50 - 100",
+         "about_body": "Sociallyin is THE social media agency.",
+         "services": ["Animation", "Video Production", "Social Media"],
+         "slug": "sociallyin"},
+        {"id": 31002, "name": "Video Brothers",
+         "url": "http://www.thevideobrothers.com", "email": "hi@thevideobrothers.com",
+         "city": "", "state": "", "country": "United States", "size": "10 - 49",
+         "about_body": "We make brand films and stories.",
+         "services": ["Video Production"], "slug": "videobrothers"},
+    ]
+    inner = json.dumps({"value": {"agencies": agencies}}, separators=(",", ":"))
+    flight = 'd:["$","$L1c",null,' + inner + "]"
+    # leak markdown escapes into a blurb (invalid JSON the lenient decode must fix)
+    flight = flight.replace("social media agency.",
+                            "social media agency. See \\]more\\) here.")
+    meta = "e:" + json.dumps(
+        {"currentPage": 1, "totalPages": 21, "count": 602,
+         "groupName": "Video Production"}, separators=(",", ":"))
+
+    def push(s):
+        return "self.__next_f.push([1," + json.dumps(s) + "])"
+
+    cut = flight.find("brand films")            # split mid-second-agency
+    return (
+        "<!DOCTYPE html><html><head><title>Video Production Agencies</title></head><body>"
+        "<script>" + push('1:HL["/_next/static/x.css"]') + "</script>"
+        "<script>" + push(flight[:cut]) + "</script>"
+        "<script>" + push(flight[cut:]) + "</script>"
+        "<script>" + push(meta) + "</script>"
+        '<div hidden id="S:1"><a href="/sociallyin">Sociallyin</a></div>'
+        "</body></html>"
+    )
+
+
+AGENCYSPOTTER_HTML = _agencyspotter_fixture()
+
+
+def test_parse_agencyspotter_extracts_fields_across_split_chunks():
+    recs = dp.parse_agencyspotter_listing(AGENCYSPOTTER_HTML)
+    assert [r.company for r in recs] == ["Sociallyin", "Video Brothers"]
+    s = recs[0]
+    # the agency's own site, with Agency Spotter's utm_* params stripped
+    assert s.website == "http://sociallyin.com/"
+    assert s.employees == "50 - 100"
+    assert s.location == "Atlanta, Georgia, United States"
+    assert s.industries == "Animation, Video Production, Social Media"
+    assert s.source_url == "https://www.agencyspotter.com/sociallyin"
+    assert "social media agency" in s.description     # markdown-escape blurb survived
+    # a row missing city/state keeps only the country, not faked
+    assert recs[1].location == "United States"
+
+
+def test_agencyspotter_total_pages_from_meta():
+    assert dp.agencyspotter_total_pages(AGENCYSPOTTER_HTML) == 21
+
+
+def test_agencyspotter_dedup_key_uses_profile_url():
+    rec = dp.parse_agencyspotter_listing(AGENCYSPOTTER_HTML)[0]
+    assert rec.dedup_key() == "www.agencyspotter.com/sociallyin"
+
+
+def test_parse_agencyspotter_empty_page_is_safe():
+    assert dp.parse_agencyspotter_listing("<html><body>nothing</body></html>") == []
+    assert dp.parse_agencyspotter_listing("") == []
+
+
+def test_agencyspotter_url_clean_drops_only_utm():
+    # non-utm query params are preserved; only utm_* tracking is removed
+    a = {"name": "X", "slug": "x",
+         "url": "https://x.com/a?ref=keep&utm_source=as&utm_campaign=as"}
+    rec = dp.parse_agencyspotter_listing(
+        _wrap_single_agencyspotter(a))[0]
+    assert rec.website == "https://x.com/a?ref=keep"
+
+
+def _wrap_single_agencyspotter(agency):
+    inner = json.dumps({"value": {"agencies": [agency]}}, separators=(",", ":"))
+    flight = 'd:["$","$L1c",null,' + inner + "]"
+    return ("<script>self.__next_f.push([1," + json.dumps(flight) + "])</script>")
+
+
+def test_agencyspotter_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
+    conn = dbm.connect(str(tmp_path / "as.db"))
+    dbm.init_db(conn)
+    src = dp.make_agencyspotter_source(
+        "https://www.agencyspotter.com/media/video-production")
+    summary = dc.run_crawl(conn, "agencyspotter", src)
+    assert summary["outcome"] == "error"
+    assert dbm.count_agencies(conn, "agencyspotter") == 0
+
+
+def test_agencyspotter_is_registered_for_paste_and_marked_paste_only():
+    assert ("agencyspotter", "Agency Spotter category page") in dp.INGEST_SOURCES
+    assert "agencyspotter" in dp.LISTING_PARSERS
+    assert "agencyspotter" in dp.SOURCE_FACTORIES
+    assert "agencyspotter" in dp.PASTE_ONLY_SOURCES
+
+
+# --------------------------------------------------------------------------- #
 # parse_listing dispatch — turns a pasted page into records for DB ingest.
 # --------------------------------------------------------------------------- #
 def test_parse_listing_dispatches_by_source():
@@ -641,6 +754,8 @@ def test_parse_listing_dispatches_by_source():
     assert [r.company for r in drum] == ["Bader Rutter", "Marketbridge"]
     aw = dp.parse_listing("awwwards", AWWWARDS_HTML)
     assert aw and aw[0].company == "Locomotive"
+    asp = dp.parse_listing("agencyspotter", AGENCYSPOTTER_HTML)
+    assert [r.company for r in asp] == ["Sociallyin", "Video Brothers"]
 
 
 def test_parse_listing_aaaa_single_profile():
