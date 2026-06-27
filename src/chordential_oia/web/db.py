@@ -314,6 +314,15 @@ _PROJECT_COLUMNS = {
     "share_token": "TEXT",
 }
 
+# Company Enrichment Engine state, migrated onto an existing agencies table the
+# same idempotent way. A single JSON blob (see get_agency_enrichment for the
+# shape): the normalized Agency Profile + the resumable per-agent checkpoint.
+# Display/workflow data only — never queried relationally — so an un-enriched
+# agency row renders exactly as before.
+_AGENCY_COLUMNS = {
+    "enrichment_json": "TEXT",
+}
+
 # Provenance columns on talent — migrated onto an existing roster the same way.
 _TALENT_COLUMNS = {
     "source": "TEXT",
@@ -721,10 +730,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             source TEXT, dedup_key TEXT,
             company TEXT, website TEXT, employees TEXT, location TEXT,
             description TEXT, industries TEXT, source_url TEXT,
+            enrichment_json TEXT,
             created_at TEXT, updated_at TEXT,
             UNIQUE(source, dedup_key)
         )"""
     )
+    agency_cols = {r["name"] for r in conn.execute("PRAGMA table_info(agencies)")}
+    for name, decl in _AGENCY_COLUMNS.items():
+        if name not in agency_cols:
+            conn.execute(f"ALTER TABLE agencies ADD COLUMN {name} {decl}")
     # Per-source crawl checkpoint: lets a directory agent resume exactly where it
     # left off after an interruption, and powers the live progress read-out.
     conn.execute(
@@ -1392,6 +1406,48 @@ def reset_crawl_state(conn: sqlite3.Connection, source_key: str) -> None:
     """Start a source's crawl over from page 1 (clears the checkpoint counters)."""
     save_crawl_state(conn, source_key, status="idle", next_page=1, total_pages=None,
                      pages_done=0, records_new=0, records_seen=0, last_url="", detail="")
+
+
+def get_agency(conn: sqlite3.Connection, agency_id: int) -> Optional[sqlite3.Row]:
+    """One harvested agency by id — the Company Enrichment Engine's input record."""
+    return conn.execute(
+        "SELECT * FROM agencies WHERE id = ?", (agency_id,)
+    ).fetchone()
+
+
+def get_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's enrichment state blob (agencies.enrichment_json), or {}.
+
+    Shape (written by the Company Enrichment Engine):
+      {"status": str, "steps_done": [str], "detail": str,
+       "links": [[url, anchor, concept], ...],   # discovered page map
+       "profile": {...AgencyProfile.to_dict()}}
+    Committing after each micro-agent is what makes enrichment resumable."""
+    row = conn.execute(
+        "SELECT enrichment_json FROM agencies WHERE id = ?", (agency_id,)
+    ).fetchone()
+    if not row or not row["enrichment_json"]:
+        return {}
+    try:
+        return json.loads(row["enrichment_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_agency_enrichment(
+    conn: sqlite3.Connection, agency_id: int, state: dict
+) -> None:
+    """Persist the agency's enrichment state. The caller commits (the engine
+    commits after every micro-agent so an interruption resumes mid-pipeline)."""
+    conn.execute(
+        "UPDATE agencies SET enrichment_json = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(state), datetime.now(timezone.utc).isoformat(), agency_id),
+    )
+
+
+def reset_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> None:
+    """Clear an agency's enrichment so the next run starts from the homepage."""
+    save_agency_enrichment(conn, agency_id, {})
 
 
 def list_inbound_leads(
