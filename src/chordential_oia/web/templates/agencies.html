@@ -116,6 +116,27 @@
   </div>
 </details>
 
+<!-- Auto-enrichment: the agent enriches on its own. This is the status + a manual nudge. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Auto-enrichment:
+      {% if auto_enrich.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      {% if auto_enrich.enabled %}
+        The agent enriches pending agencies on its own in the background — no clicking needed.
+        {% if auto_enrich.last_run %}Last pass completed {{ auto_enrich.last_completed }} · {{ auto_enrich.total_completed }} total this session.{% endif %}
+      {% else %}
+        Runs automatically on Render (live fetching on). {{ pending }} agencies awaiting enrichment.
+      {% endif %}
+    </div>
+  </div>
+  {% if eb_done %}<span class="small" style="color:var(--green,#2e8b57)">✓ Enriched {{ eb_done }} just now</span>{% endif %}
+  <form method="post" action="/agencies/enrich-pending" style="margin:0">
+    <button class="btn" type="submit">Enrich {{ pending if pending < 25 else 25 }} now</button>
+  </form>
+</div>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">
@@ -133,44 +154,62 @@
     </select>
   </label>
   <span class="muted small" style="margin-left:auto">
-    {{ total }} agencies · {{ pending }} awaiting enrichment
+    {{ matched }} match{{ '' if matched == 1 else 'es' }} · {{ total }} total · {{ pending }} awaiting enrichment
   </span>
 </form>
 
-<div class="card no-pad" style="margin:14px 0;overflow-x:auto">
-<table class="table" style="max-width:100%">
-  <thead>
-    <tr>
-      <th>Company</th><th>Website</th><th>Location</th>
-      <th style="width:1%">Source</th><th style="width:1%">Enrichment</th>
-      <th style="width:1%"></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for a in agencies %}
-    <tr>
-      <td><a href="/agencies/{{ a.id }}"><strong>{{ a.company or '—' }}</strong></a></td>
-      <td>{% if a.website %}<a href="{{ a.website }}" target="_blank" rel="noopener noreferrer">{{ a.website | displayurl }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>{{ a.location or '' }}</td>
-      <td><span class="muted small">{{ a.source }}</span></td>
-      <td>
-        {% if a.status == 'complete' %}<span class="dot won"></span> complete
+{% macro li(label, items) %}{% if items %}<div class="kv"><div class="kv-k">{{ label }}</div><div class="kv-v">{{ items | join(', ') }}</div></div>{% endif %}{% endmacro %}
+
+<div class="accordion" style="margin:14px 0">
+  {% for a in agencies %}
+  <details class="card" style="margin-bottom:8px">
+    <summary style="cursor:pointer;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <strong style="flex:1;min-width:160px">{{ a.company or '—' }}</strong>
+      <span class="muted small">{{ a.source }}</span>
+      <span class="small">
+        {% if a.status == 'complete' %}<span class="dot won"></span> enriched
         {% elif a.status == 'running' %}<span class="dot review"></span> partial
         {% elif a.status == 'blocked' %}<span class="muted">blocked</span>
         {% elif a.status == 'error' %}<span class="dot pursue"></span> error
-        {% else %}<span class="muted">—</span>{% endif %}
-      </td>
-      <td>
-        <form method="post" action="/agencies/{{ a.id }}/enrich" style="margin:0">
-          <button class="btn btn-small" type="submit">Enrich</button>
-        </form>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6" class="muted" style="padding:20px">No agencies harvested yet — run the directory agents first.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+        {% else %}<span class="muted">not yet</span>{% endif %}
+      </span>
+    </summary>
+
+    <div style="margin-top:14px">
+      {% set p = a.profile %}
+      <div class="kv"><div class="kv-k">Website</div><div class="kv-v">{% if p.website %}<a href="{{ p.website }}" target="_blank" rel="noopener noreferrer">{{ p.website | displayurl }}</a>{% else %}<span class="muted">—</span>{% endif %}</div></div>
+      {% if a.location %}<div class="kv"><div class="kv-k">Location</div><div class="kv-v">{{ a.location }}</div></div>{% endif %}
+      {% if p.founded_year %}<div class="kv"><div class="kv-k">Founded</div><div class="kv-v">{{ p.founded_year }}</div></div>{% endif %}
+      {% if p.description %}<div class="kv"><div class="kv-k">Description</div><div class="kv-v">{{ p.description }}</div></div>{% endif %}
+      {{ li("Services", p.services) }}
+      {{ li("Industries", p.industries) }}
+      {{ li("Work", p.portfolio) }}
+      {{ li("Awards", p.awards) }}
+      {{ li("Offices", p.offices) }}
+      {% if p.leadership %}<div class="kv"><div class="kv-k">Leadership</div><div class="kv-v">{% for person in p.leadership %}{{ person.name }}{% if person.title %} ({{ person.title }}){% endif %}{{ '; ' if not loop.last }}{% endfor %}</div></div>{% endif %}
+      {% if p.email %}<div class="kv"><div class="kv-k">Email</div><div class="kv-v">{{ p.email }}</div></div>{% endif %}
+      {% if p.phone %}<div class="kv"><div class="kv-k">Phone</div><div class="kv-v">{{ p.phone }}</div></div>{% endif %}
+
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <a class="btn btn-small" href="/agencies/{{ a.id }}">Full profile →</a>
+        {% if a.status != 'complete' %}
+        <form method="post" action="/agencies/{{ a.id }}/enrich" style="margin:0"><button class="btn btn-small" type="submit">Enrich now</button></form>
+        {% endif %}
+      </div>
+    </div>
+  </details>
+  {% else %}
+  <div class="card muted" style="padding:20px">No agencies yet — import the setup set or crawl a directory above.</div>
+  {% endfor %}
 </div>
+
+{% if page_count > 1 %}
+<div class="pagination" style="display:flex;gap:10px;align-items:center;justify-content:center;margin:18px 0">
+  {% set qs = '&source=' ~ source ~ '&enriched=' ~ enriched %}
+  {% if page > 1 %}<a class="btn btn-small" href="/agencies?page={{ page - 1 }}{{ qs }}">← Prev</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ page_count }}</span>
+  {% if page < page_count %}<a class="btn btn-small" href="/agencies?page={{ page + 1 }}{{ qs }}">Next →</a>{% endif %}
+</div>
+{% endif %}
 
 {% endblock %}

@@ -87,6 +87,56 @@ def triage_status() -> dict:
     return s
 
 
+# Autonomous Company Enrichment (the agent enriches on its own). On when
+# scraping is enabled and not explicitly disabled. Each due cycle enriches a
+# bounded batch of not-yet-complete agencies, so the Master Company Database
+# fills in quality over time without anyone pressing Enrich.
+_enrich_status = {"last_run": None, "last_completed": 0, "total_completed": 0,
+                  "cycles": 0, "pending": 0}
+_last_enrich_mono = 0.0
+
+
+def enrich_enabled() -> bool:
+    return discovery.scrape_enabled() and (
+        os.environ.get("CHORDENTIAL_AUTOENRICH", "1").strip().lower() not in _FALSEY
+    )
+
+
+def _enrich_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_AUTOENRICH_INTERVAL", "300")))
+    except ValueError:
+        return 300
+
+
+def _enrich_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOENRICH_BATCH", "10")))
+    except ValueError:
+        return 10
+
+
+def run_enrich_cycle(batch: int = 0) -> int:
+    """One autonomous enrichment pass — enriches up to ``batch`` not-yet-complete
+    agencies (default from env). Blocking; runs in a worker thread. Returns the
+    number that completed this pass and refreshes the pending count."""
+    from . import enrichment
+    limit = batch or _enrich_batch_size()
+    conn = db.connect()
+    try:
+        res = enrichment.enrich_batch(conn, limit=limit)
+        _enrich_status["pending"] = len(db.agencies_needing_enrichment(conn))
+    finally:
+        conn.close()
+    return res.get("completed", 0)
+
+
+def enrich_status() -> dict:
+    s = dict(_enrich_status)
+    s["enabled"] = enrich_enabled()
+    return s
+
+
 def _interval_seconds() -> int:
     try:
         return max(60, int(os.environ.get("CHORDENTIAL_AUTOFETCH_INTERVAL", "900")))
@@ -297,6 +347,19 @@ async def run_loop() -> None:
                 pass
             finally:
                 _status["running"] = False
+        if enrich_enabled():                 # autonomous Company Enrichment
+            global _last_enrich_mono
+            now_mono = time.monotonic()
+            if now_mono - _last_enrich_mono >= _enrich_interval_seconds():
+                _last_enrich_mono = now_mono
+                try:
+                    completed = await asyncio.to_thread(run_enrich_cycle)
+                    _enrich_status["cycles"] += 1
+                    _enrich_status["last_completed"] = completed
+                    _enrich_status["total_completed"] += completed
+                    _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+                except Exception:
+                    pass
         if triage_enabled():                 # Phase B2 — autonomous Gmail triage
             global _last_triage_mono
             now_mono = time.monotonic()

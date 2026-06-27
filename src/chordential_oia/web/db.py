@@ -1373,13 +1373,13 @@ def count_agencies(conn: sqlite3.Connection, source: Optional[str] = None) -> in
 
 
 def list_agencies(
-    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 1000
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 1000,
+    offset: int = 0
 ) -> List[sqlite3.Row]:
     clause = " WHERE source = ?" if source else ""
-    params = ((source, limit) if source else (limit,))
-    return conn.execute(
-        f"SELECT * FROM agencies{clause} ORDER BY company COLLATE NOCASE LIMIT ?", params
-    ).fetchall()
+    tail = " ORDER BY company COLLATE NOCASE LIMIT ? OFFSET ?"
+    params = ((source, limit, offset) if source else (limit, offset))
+    return conn.execute(f"SELECT * FROM agencies{clause}{tail}", params).fetchall()
 
 
 def get_crawl_state(conn: sqlite3.Connection, source_key: str) -> Optional[sqlite3.Row]:

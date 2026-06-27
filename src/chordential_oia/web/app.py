@@ -467,36 +467,69 @@ def sources_clear_tests():
 # website when CHORDENTIAL_ENABLE_SCRAPE is on, i.e. on Render). This is the
 # one-agency smoke test: click Enrich on Render, then read the profile.
 # --------------------------------------------------------------------------- #
-def _enrichment_status(conn, agency_id: int) -> str:
-    return (db.get_agency_enrichment(conn, agency_id) or {}).get("status", "")
+AGENCIES_PAGE_SIZE = 50
+# Marker the enrichment state blob carries when an agency is fully enriched —
+# lets us filter/paginate by status in SQL without an N+1 over thousands of rows.
+_COMPLETE_MARKER = '%"status": "complete"%'
+
+
+def _profile_from_row(row) -> dict:
+    """Parse the stored Agency Profile (+ status) off an agencies row's JSON blob,
+    with no extra query — so a page of 50 costs 50 zero-DB parses, not 50 reads."""
+    raw = row["enrichment_json"]
+    state = {}
+    if raw:
+        try:
+            state = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            state = {}
+    profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
+    if not profile.get("company"):
+        profile["company"] = row["company"] or ""
+    if not profile.get("website"):
+        profile["website"] = row["website"] or ""
+    return {"status": state.get("status", ""), "profile": profile}
 
 
 @app.get("/agencies", response_class=HTMLResponse)
 def agencies_page(request: Request, source: str = "", enriched: str = "",
-                  ingested: str = "", new: str = "", added: str = "",
-                  crawled: str = "", pages: str = "", cstatus: str = ""):
-    """The harvested agencies, with enrichment status and per-row Enrich."""
+                  page: int = 1, ingested: str = "", new: str = "", added: str = "",
+                  crawled: str = "", pages: str = "", cstatus: str = "",
+                  eb_done: str = "", eb_total: str = ""):
+    """Paginated accordion of harvested agencies; each row expands to its enriched
+    Agency Profile inline. Filter/paginate happen in SQL so this scales to
+    thousands of rows."""
+    page = max(1, page)
     conn = db.connect()
     try:
         all_sources = [r["source"] for r in conn.execute(
             "SELECT DISTINCT source FROM agencies WHERE source IS NOT NULL "
             "ORDER BY source")]
-        rows = db.list_agencies(conn, source=source or None, limit=500)
+        where, params = [], []
+        if source:
+            where.append("source = ?"); params.append(source)
+        if enriched == "yes":
+            where.append("enrichment_json LIKE ?"); params.append(_COMPLETE_MARKER)
+        elif enriched == "no":
+            where.append("(enrichment_json IS NULL OR enrichment_json NOT LIKE ?)")
+            params.append(_COMPLETE_MARKER)
+        wsql = (" WHERE " + " AND ".join(where)) if where else ""
+        matched = conn.execute(
+            f"SELECT COUNT(*) c FROM agencies{wsql}", params).fetchone()["c"]
+        offset = (page - 1) * AGENCIES_PAGE_SIZE
+        rows = conn.execute(
+            f"SELECT * FROM agencies{wsql} ORDER BY company COLLATE NOCASE "
+            "LIMIT ? OFFSET ?", (*params, AGENCIES_PAGE_SIZE, offset)).fetchall()
         agencies = []
         for r in rows:
-            status = _enrichment_status(conn, r["id"])
-            if enriched == "yes" and status != "complete":
-                continue
-            if enriched == "no" and status == "complete":
-                continue
+            pp = _profile_from_row(r)
             agencies.append({
                 "id": r["id"], "company": r["company"], "website": r["website"],
                 "location": r["location"], "source": r["source"],
-                "status": status or "—",
+                "status": pp["status"] or "—", "profile": pp["profile"],
             })
         pending = len(db.agencies_needing_enrichment(conn, source=source or None))
         total = db.count_agencies(conn, source or None)
-        # Live-crawl status per self-crawling directory source.
         crawl_states = []
         for key in directory_parsers.SOURCE_FACTORIES:
             st = db.get_crawl_state(conn, key)
@@ -511,15 +544,19 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
             })
     finally:
         conn.close()
+    page_count = max(1, -(-matched // AGENCIES_PAGE_SIZE))  # ceil
     from . import setup_agencies
     return render(request, "agencies.html", nav="agencies", agencies=agencies,
                   sources=all_sources, source=source, enriched=enriched,
-                  pending=pending, total=total,
+                  pending=pending, total=total, matched=matched,
+                  page=page, page_count=page_count,
                   ingest_sources=directory_parsers.INGEST_SOURCES,
                   ingested=ingested, new=new, added=added,
                   setup_count=setup_agencies.setup_count(),
                   crawl_states=crawl_states, crawled=crawled, pages=pages,
                   cstatus=cstatus, pages_per_click=PAGES_PER_CRAWL_CLICK,
+                  eb_done=eb_done, eb_total=eb_total,
+                  auto_enrich=scheduler.enrich_status(),
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -572,6 +609,26 @@ def agencies_crawl(source: str = Form(...), reset: str = Form("")):
     return RedirectResponse(
         f"/agencies?source={source}&crawled={summary['records_new']}"
         f"&pages={summary['pages_done']}&cstatus={summary['outcome']}",
+        status_code=303)
+
+
+@app.post("/agencies/enrich-pending")
+def agencies_enrich_pending(limit: str = Form("")):
+    """Manually nudge the agent to enrich a batch of not-yet-complete agencies
+    now (the background scheduler does this on its own; this is the on-demand
+    push). Bounded so the request returns; re-press to continue."""
+    n = 10
+    try:
+        n = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        n = 10
+    conn = db.connect()
+    try:
+        res = enrichment.enrich_batch(conn, limit=n)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/agencies?eb_done={res['completed']}&eb_total={res['total']}",
         status_code=303)
 
 
