@@ -163,9 +163,113 @@ def make_adforum_source(base_url: str, per_page: int = _PER_PAGE_DEFAULT):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# DesignRush  (server-rendered HTML; one <article ... js-agency-item> per agency)
+# --------------------------------------------------------------------------- #
+# Unlike AdForum, DesignRush puts all six requested fields on the *listing* page
+# (company, website, employees, location, description, services), so no per-agency
+# profile sub-fetch is needed. Non-agency cards (help/trend/ad boxes) lack the
+# data-agency-name attribute, so splitting on it skips them for free.
+_DR_BASE = "https://www.designrush.com"
+_DR_COUNT = re.compile(r'([\d,]+)\s*Companies', re.S)
+_DR_PAGES = re.compile(r'id="paginator"[^>]*data-count="of\s*([\d,]+)"', re.S)
+_DR_NAME_SPLIT = 'data-agency-name="'
+_DR_REGION = re.compile(r'i-region[^"]*"[^>]*>(.*?)</div>', re.S)
+_DR_EMPLOYEES = re.compile(r'i-employees[^"]*"[^>]*>(.*?)</div>', re.S)
+_DR_DESC = re.compile(r'class="item-description"[^>]*>(.*?)</div>', re.S)
+_DR_SERVICES_UL = re.compile(r'<ul[^>]*inner-tags--services[^>]*>(.*?)</ul>', re.S)
+_DR_SERVICES_BOX = re.compile(r'class="item-services"[^>]*>(.*?)</div>', re.S)
+_DR_LI = re.compile(r'<li[^>]*>(.*?)</li>', re.S)
+
+
+def _dr_href_for_class(block: str, cls: str) -> str:
+    """Find an element carrying ``cls`` and return its href, tolerating either
+    attribute order (class-before-href or href-before-class)."""
+    m = re.search(r'class="[^"]*' + cls + r'[^"]*"[^>]*href="([^"]+)"', block)
+    if not m:
+        m = re.search(r'href="([^"]+)"[^>]*class="[^"]*' + cls + r'[^"]*"', block)
+    return _html.unescape(m.group(1)).strip() if m else ""
+
+
+def _dr_clean_website(url: str) -> str:
+    """Drop the utm tracking query DesignRush appends to outbound website links."""
+    if not url:
+        return ""
+    p = urllib.parse.urlsplit(url)
+    if not p.netloc:
+        return url
+    return urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", "")).rstrip("/")
+
+
+def _dr_services(block: str) -> str:
+    m = _DR_SERVICES_UL.search(block) or _DR_SERVICES_BOX.search(block)
+    if not m:
+        return ""
+    items = [_text(li) for li in _DR_LI.findall(m.group(1))]
+    return ", ".join(s for s in items if s)
+
+
+def parse_designrush_listing(html: str) -> List[AgencyRecord]:
+    """One DesignRush agency-category page -> AgencyRecords (all six fields)."""
+    out: List[AgencyRecord] = []
+    for block in (html or "").split(_DR_NAME_SPLIT)[1:]:
+        name = _text(block.split('"', 1)[0])
+        if not name:
+            continue
+        region = _DR_REGION.search(block)
+        emp = _DR_EMPLOYEES.search(block)
+        desc = _DR_DESC.search(block)
+        out.append(AgencyRecord(
+            company=name,
+            website=_dr_clean_website(_dr_href_for_class(block, "gtm-agency-website-link")),
+            employees=_text(emp.group(1)) if emp else "",
+            location=_text(region.group(1)) if region else "",
+            description=(_text(desc.group(1))[:1000]) if desc else "",
+            industries=_dr_services(block),
+            source_url=urllib.parse.urljoin(
+                _DR_BASE, _dr_href_for_class(block, "gtm-agency-profile-link")),
+        ))
+    return out
+
+
+def designrush_total_results(html: str) -> Optional[int]:
+    m = _DR_COUNT.search(html or "")
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def designrush_total_pages(html: str) -> Optional[int]:
+    """DesignRush reports its last page directly (paginator data-count="of N")."""
+    m = _DR_PAGES.search(html or "")
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def make_designrush_source(base_url: str, per_page: int = 50):
+    """Return a ``page_source(page)`` for the engine. ``base_url`` is a category
+    page (e.g. ``/agency/digital-marketing/us``); pagination appends ``?page=N``.
+    Total pages come from the paginator when present, else from the result count.
+    """
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        sep = "&" if "?" in base_url else "?"
+        url = base_url if page == 1 else f"{base_url}{sep}page={page}"
+        text, ok = _fetch(url)
+        if not ok:
+            return PageResult(ok=False, detail="fetch failed")
+        records = parse_designrush_listing(text)
+        total_pages = designrush_total_pages(text)
+        if total_pages is None:
+            total = designrush_total_results(text)
+            total_pages = math.ceil(total / per_page) if total else None
+        return PageResult(records=records, total_pages=total_pages, ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
 SOURCE_FACTORIES = {
     "adforum": (make_adforum_source,
                 "https://www.adforum.com/agency/search?location=country_strkey:COU149"),
+    "designrush": (make_designrush_source,
+                   "https://www.designrush.com/agency/digital-marketing/us"),
 }
