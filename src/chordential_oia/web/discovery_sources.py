@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlencode
 
 # A board is one searchable/browsable surface on a site:
 #   (applies_to_kind, label, url_template)   -- {q} in the template => keyworded.
@@ -71,6 +71,43 @@ EXCLUDE_TERMS = [
     "hobby", "revshare", '"rev share"', "royalty", "unpaid",
     '"not paying"', '"for hire"', "collab",
 ]
+
+
+# --------------------------------------------------------------------------- #
+# LinkedIn company-search deep link (MANUAL-ASSIST ONLY)
+#
+# LinkedIn requires login and its User Agreement forbids automated scraping, so
+# the "LinkedIn Search Agent" never fetches — it builds the exact filtered
+# Companies search and the human opens it in their own logged-in browser, then
+# hand-captures leads. This is the "machine proposes, Jon disposes" rule taken to
+# its logical end for a login/ToS-walled source.
+#
+# LinkedIn's well-known facet codes (stable enough to deep-link, but LinkedIn
+# does revise them — refine in the UI if a filter doesn't stick):
+#   geoUrn 103644278 = United States; companySize letters A:1, B:2-10, C:11-50,
+#   D:51-200, E:201-500, F:501-1000, G:1001-5000, H:5001-10000, I:10001+.
+# --------------------------------------------------------------------------- #
+LINKEDIN_US_GEO_URN = "103644278"
+LINKEDIN_COMPANY_SIZES = {
+    "1-10": "B", "11-50": "C", "51-200": "D", "201-500": "E",
+    "501-1000": "F", "1001-5000": "G", "5001-10000": "H", "10001+": "I",
+}
+
+
+def linkedin_company_search_url(
+    keywords: str = "advertising agency",
+    geo_urn: Optional[str] = LINKEDIN_US_GEO_URN,
+    size_codes: Tuple[str, ...] = ("C",),
+) -> str:
+    """Build a LinkedIn *Companies* search deep link with the given filters. Pure
+    string construction — no network. Defaults to the requested search: US
+    advertising agencies with 11–50 staff."""
+    params = {"keywords": keywords}
+    if size_codes:
+        params["companySize"] = "[" + ",".join(f'"{c}"' for c in size_codes) + "]"
+    if geo_urn:
+        params["geoUrn"] = f'["{geo_urn}"]'
+    return "https://www.linkedin.com/search/results/companies/?" + urlencode(params)
 
 
 # --------------------------------------------------------------------------- #
@@ -189,6 +226,20 @@ CATALOG: List[SourceSite] = [
         "search. Login-gated; treat as a suggestion.", STATUS_SUGGESTED,
         [("opportunity", "Jobs search",
           "https://www.linkedin.com/jobs/search/?keywords={q}")],
+        login_gated=True,
+    ),
+    SourceSite(
+        "linkedin_companies", "LinkedIn · Advertising agencies (US, 11–50)",
+        "https://www.linkedin.com",
+        "opportunity", "Professional network", "Competitive Intelligence Analyst",
+        "Demand-side prospecting — US advertising agencies with 11–50 staff: buyers "
+        "that commission music for campaigns. LinkedIn requires login and its User "
+        "Agreement prohibits automated scraping, so this is MANUAL-ASSIST only: the "
+        "agent builds the exact filtered Companies search and Jon opens it in his own "
+        "logged-in browser, then hand-captures the agencies worth pursuing. Never "
+        "auto-fetched.", STATUS_SUGGESTED,
+        [("opportunity", "Companies · Advertising / US / 11–50",
+          linkedin_company_search_url())],
         login_gated=True,
     ),
     SourceSite(
