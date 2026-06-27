@@ -305,6 +305,32 @@ CREATE TABLE IF NOT EXISTS agencies (
     discovered_at TEXT,
     notes TEXT DEFAULT ''
 );
+
+-- One row per Agency Discovery Agent run. Checkpointed after every successful
+-- page so an interrupted run can be resumed from the last good page, and so the
+-- console can report progress, counters, failures, and timing.
+CREATE TABLE IF NOT EXISTS agency_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT,
+    base_url TEXT,
+    status TEXT DEFAULT 'running',          -- running | completed | interrupted
+    dry_run INTEGER DEFAULT 0,              -- 1 = preview (no DB import)
+    start_page INTEGER,
+    last_page INTEGER,                      -- last page completed successfully
+    total_pages INTEGER,                    -- best-known total (NULL if unknown)
+    pages_scanned INTEGER DEFAULT 0,
+    found INTEGER DEFAULT 0,                -- records parsed
+    new_count INTEGER DEFAULT 0,            -- unique agencies not already stored
+    duplicate_count INTEGER DEFAULT 0,      -- skipped as already-existing
+    imported_count INTEGER DEFAULT 0,       -- actually written to the DB
+    failed_pages TEXT DEFAULT '[]',         -- JSON list of page numbers that failed
+    stopped_reason TEXT,
+    export_path TEXT,                       -- JSON export written for verification
+    elapsed_seconds REAL,
+    started_at TEXT,
+    updated_at TEXT,
+    finished_at TEXT
+);
 """
 
 PROJECT_STATES = ["Active", "Delivered"]
@@ -737,6 +763,19 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             employees TEXT, services TEXT, clutch_url TEXT,
             source TEXT DEFAULT 'clutch', status TEXT DEFAULT 'New',
             discovered_at TEXT, notes TEXT DEFAULT ''
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agency_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT, base_url TEXT, status TEXT DEFAULT 'running',
+            dry_run INTEGER DEFAULT 0, start_page INTEGER, last_page INTEGER,
+            total_pages INTEGER, pages_scanned INTEGER DEFAULT 0,
+            found INTEGER DEFAULT 0, new_count INTEGER DEFAULT 0,
+            duplicate_count INTEGER DEFAULT 0, imported_count INTEGER DEFAULT 0,
+            failed_pages TEXT DEFAULT '[]', stopped_reason TEXT,
+            export_path TEXT, elapsed_seconds REAL,
+            started_at TEXT, updated_at TEXT, finished_at TEXT
         )"""
     )
     conn.commit()
@@ -1569,6 +1608,95 @@ def update_agency_status(conn: sqlite3.Connection, agency_id: int, status: str) 
         "UPDATE agencies SET status = ? WHERE id = ?", (status, agency_id)
     )
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Agency-discovery run state — checkpointed so a run can resume + report
+# --------------------------------------------------------------------------- #
+AGENCY_RUN_STATES = ["running", "completed", "interrupted"]
+
+
+def start_agency_run(
+    conn: sqlite3.Connection, source: str, base_url: str,
+    start_page: int, dry_run: bool,
+) -> int:
+    """Open a new run row (status 'running'). Returns its id."""
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO agency_runs
+           (source, base_url, status, dry_run, start_page, last_page,
+            started_at, updated_at)
+           VALUES (?,?,'running',?,?,?,?,?)""",
+        (source, base_url, 1 if dry_run else 0, start_page,
+         start_page - 1, now, now),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def checkpoint_agency_run(conn: sqlite3.Connection, run_id: int, **fields) -> None:
+    """Persist progress after a successful page. Accepts any run column as a
+    keyword (last_page, total_pages, pages_scanned, found, new_count,
+    duplicate_count, imported_count, failed_pages, elapsed_seconds, …) and always
+    bumps updated_at, so an interrupted process leaves a resumable checkpoint."""
+    allowed = {
+        "last_page", "total_pages", "pages_scanned", "found", "new_count",
+        "duplicate_count", "imported_count", "failed_pages", "stopped_reason",
+        "export_path", "elapsed_seconds", "status",
+    }
+    sets, params = [], []
+    for k, v in fields.items():
+        if k not in allowed:
+            raise ValueError(f"Unknown agency_run field {k!r}")
+        sets.append(f"{k} = ?")
+        params.append(v)
+    sets.append("updated_at = ?")
+    params.append(datetime.now(timezone.utc).isoformat())
+    params.append(run_id)
+    conn.execute(f"UPDATE agency_runs SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+
+
+def finish_agency_run(
+    conn: sqlite3.Connection, run_id: int, status: str, **fields
+) -> None:
+    """Close a run with a terminal-ish status ('completed' or 'interrupted'),
+    stamping finished_at. Extra fields are persisted alongside (same as
+    checkpoint)."""
+    if status not in AGENCY_RUN_STATES:
+        raise ValueError(f"Unknown agency run status {status!r}")
+    now = datetime.now(timezone.utc).isoformat()
+    fields["status"] = status
+    checkpoint_agency_run(conn, run_id, **fields)
+    conn.execute(
+        "UPDATE agency_runs SET finished_at = ? WHERE id = ?", (now, run_id)
+    )
+    conn.commit()
+
+
+def get_agency_run(conn: sqlite3.Connection, run_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+
+
+def latest_agency_run(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_runs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+
+def latest_resumable_agency_run(
+    conn: sqlite3.Connection, source: str
+) -> Optional[sqlite3.Row]:
+    """The most recent interrupted run for a source — the one a resume continues.
+    Completed runs are never resumed (a fresh run starts from page 1)."""
+    return conn.execute(
+        """SELECT * FROM agency_runs
+           WHERE source = ? AND status = 'interrupted'
+           ORDER BY id DESC LIMIT 1""",
+        (source,),
+    ).fetchone()
 
 # Discovery sites (the curated industry catalog) approval lifecycle. Established +
 # Approved are active (crawlable); Suggested awaits Jon; Rejected is parked.

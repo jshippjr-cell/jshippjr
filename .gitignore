@@ -30,3 +30,6 @@ capabilities_clips/
 
 # Founder-uploaded relevant-work audio samples (local disk; not durable on Render)
 src/chordential_oia/web/uploads/
+
+# Agency Discovery JSON exports (local disk; verify-before-import artifacts)
+src/chordential_oia/web/exports/

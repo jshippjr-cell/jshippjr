@@ -1014,46 +1014,101 @@ def discovery_fetch(target_id: int, kind: str = Form("talent")):
 # --------------------------------------------------------------------------- #
 # Agency Discovery Agent — paginating directory crawler (machine proposes)
 # --------------------------------------------------------------------------- #
+def _agency_run_log(run_row) -> list:
+    """Pull the captured log + record preview from a run's JSON export, if any —
+    so the console can show detailed per-page logging after the fact."""
+    if run_row is None or not run_row["export_path"]:
+        return []
+    try:
+        with open(run_row["export_path"], encoding="utf-8") as fh:
+            return (json.load(fh).get("log") or [])
+    except Exception:
+        return []
+
+
 @app.get("/agencies", response_class=HTMLResponse)
-def agencies_page(request: Request, ran: str = ""):
-    """The Agency Discovery console: discovered agencies awaiting your call, plus
-    a one-click run of the agent (gated by CHORDENTIAL_ENABLE_SCRAPE)."""
+def agencies_page(request: Request, imported: str = ""):
+    """The Agency Discovery console: the last run's progress + counters + log, the
+    JSON export awaiting verification, and the discovered agencies queue."""
     conn = db.connect()
     try:
         agencies = db.list_agencies(conn)
         counts = db.count_agencies(conn)
+        last_run = db.latest_agency_run(conn)
+        resumable = db.latest_resumable_agency_run(conn, "clutch")
     finally:
         conn.close()
-    # The last run's summary, if we just ran (round-trips through the query string).
-    last_run = None
-    if ran:
-        keys = ["pages_scanned", "found", "saved", "skipped", "stopped_reason"]
-        parts = dict(p.split("=", 1) for p in ran.split(",") if "=" in p)
-        last_run = {k: parts.get(k, "") for k in keys}
+    run_log = _agency_run_log(last_run)
+    export_ready = bool(
+        last_run and last_run["export_path"]
+        and os.path.exists(last_run["export_path"])
+    )
     return render(
         request, "agencies.html", nav="agencies",
         agencies=agencies, counts=counts, last_run=last_run,
-        scrape_on=agency_discovery.scrape_enabled(),
+        run_log=run_log[-40:], resumable=resumable, export_ready=export_ready,
+        import_result=imported, scrape_on=agency_discovery.scrape_enabled(),
         agency_states=db.AGENCY_STATES,
     )
 
 
 @app.post("/agencies/run")
 def agencies_run():
-    """Run the Agency Discovery Agent now: paginate the directory, save new
-    agencies, skip ones already stored, stop at the last page. No-op (with a clear
-    reason) when scraping is disabled — the network is never touched there."""
+    """Run the agent in PREVIEW mode: paginate the directory, dedupe, and write the
+    discovered agencies to a JSON export for verification — without importing
+    anything to the database yet. No-op (with a clear reason) when scraping is
+    disabled. Verify the export, then POST /agencies/import to load it."""
     conn = db.connect()
     try:
-        report = agency_discovery.run(conn)
+        agency_discovery.run(conn, dry_run=True)
     finally:
         conn.close()
-    d = report.as_dict()
-    flash = ",".join(
-        f"{k}={d[k]}"
-        for k in ("pages_scanned", "found", "saved", "skipped", "stopped_reason")
+    return RedirectResponse("/agencies", status_code=303)
+
+
+@app.post("/agencies/resume")
+def agencies_resume():
+    """Resume the most recent interrupted preview run from its last good page."""
+    conn = db.connect()
+    try:
+        agency_discovery.run(conn, dry_run=True, resume=True)
+    finally:
+        conn.close()
+    return RedirectResponse("/agencies", status_code=303)
+
+
+@app.post("/agencies/import")
+def agencies_import():
+    """Import the last run's verified JSON export into the database (deduped)."""
+    conn = db.connect()
+    try:
+        last_run = db.latest_agency_run(conn)
+        path = last_run["export_path"] if last_run else None
+        if not path or not os.path.exists(path):
+            return RedirectResponse("/agencies?imported=none", status_code=303)
+        result = agency_discovery.import_from_json(conn, path)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/agencies?imported={result['imported']}-{result['skipped']}",
+        status_code=303,
     )
-    return RedirectResponse(f"/agencies?ran={flash}", status_code=303)
+
+
+@app.get("/agencies/export.json")
+def agencies_export_download():
+    """Download the last run's JSON export for offline verification."""
+    from fastapi.responses import FileResponse, JSONResponse
+    conn = db.connect()
+    try:
+        last_run = db.latest_agency_run(conn)
+        path = last_run["export_path"] if last_run else None
+    finally:
+        conn.close()
+    if not path or not os.path.exists(path):
+        return JSONResponse({"error": "no export available"}, status_code=404)
+    return FileResponse(path, media_type="application/json",
+                        filename=os.path.basename(path))
 
 
 @app.post("/agencies/{agency_id}/status")

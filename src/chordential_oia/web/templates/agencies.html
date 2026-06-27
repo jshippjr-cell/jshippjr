@@ -8,8 +8,9 @@
   The Agency Discovery Agent searches a B2B agency directory (Clutch), paginating
   from page 1 to the last page. It extracts <strong>Company, Website, City,
   Employees, Services</strong> and the <strong>Clutch URL</strong>, skips agencies
-  already stored, and saves the rest here. <em>The machine proposes, you dispose</em>
-  — discovered agencies wait as <strong>New</strong> until you review or dismiss them.
+  already stored, and writes the rest to a <strong>JSON export for you to verify
+  before importing</strong>. It runs only when you press the button — no scheduler.
+  <em>The machine proposes, you dispose.</em>
 </div>
 
 {% if scrape_on %}
@@ -25,26 +26,83 @@
 </div>
 {% endif %}
 
-{% if last_run %}
+{% if import_result %}
 <div class="callout" style="margin-top:12px;border-left:4px solid var(--accent,#3b6ef5)">
   <span class="callout-ico">✓</span>
-  Last run — scanned <strong>{{ last_run.pages_scanned }}</strong> page(s),
-  found <strong>{{ last_run.found }}</strong>, saved <strong>{{ last_run.saved }}</strong> new,
-  skipped <strong>{{ last_run.skipped }}</strong> existing.
-  Stopped: <code>{{ last_run.stopped_reason }}</code>.
+  {% if import_result == 'none' %}
+    No export available to import — run a preview first.
+  {% else %}
+    Imported <strong>{{ import_result.split('-')[0] }}</strong> agencies
+    (skipped <strong>{{ import_result.split('-')[1] }}</strong> already stored).
+  {% endif %}
 </div>
 {% endif %}
 
-<div class="pill-row" style="margin:14px 0;align-items:center">
+{# ---- Controls -------------------------------------------------------------- #}
+<div class="pill-row" style="margin:14px 0;gap:8px;align-items:center;flex-wrap:wrap">
   <form method="post" action="/agencies/run" style="margin:0">
-    <button class="btn" type="submit">⟳ Run discovery now</button>
+    <button class="btn" type="submit">⟳ Run discovery (preview → JSON)</button>
   </form>
+  {% if resumable %}
+  <form method="post" action="/agencies/resume" style="margin:0">
+    <button class="btn ghost" type="submit">⏵ Resume interrupted run (from page {{ (resumable.last_page or 0) + 1 }})</button>
+  </form>
+  {% endif %}
+  {% if export_ready %}
+  <a class="btn ghost" href="/agencies/export.json">⬇ Download export</a>
+  <form method="post" action="/agencies/import" style="margin:0">
+    <button class="btn" type="submit">⤓ Import verified JSON → database</button>
+  </form>
+  {% endif %}
   <span class="muted small" style="margin-left:auto">
-    {{ counts.total }} discovered ·
-    {{ counts.New }} new · {{ counts.Reviewed }} reviewed · {{ counts.Dismissed }} dismissed
+    {{ counts.total }} in DB · {{ counts.New }} new · {{ counts.Reviewed }} reviewed · {{ counts.Dismissed }} dismissed
   </span>
 </div>
 
+{# ---- Last run: progress + counters + timing -------------------------------- #}
+{% if last_run %}
+<section class="card">
+  <div class="card-head">
+    <h2>📊 Last run #{{ last_run.id }}</h2>
+    <span class="muted small">
+      {{ 'preview (no import)' if last_run.dry_run else 'live import' }} ·
+      status <strong>{{ last_run.status }}</strong> ·
+      stopped: <code>{{ last_run.stopped_reason or '—' }}</code>
+    </span>
+  </div>
+  <div class="kpi-row" style="display:flex;gap:18px;flex-wrap:wrap;margin:6px 2px 10px">
+    <div><div class="muted small">Progress</div>
+      <div style="font-size:18px;font-weight:700">
+        page {{ last_run.last_page or 0 }}{% if last_run.total_pages %} of {{ last_run.total_pages }}{% endif %}
+      </div></div>
+    <div><div class="muted small">Discovered</div>
+      <div style="font-size:18px;font-weight:700">{{ last_run.found or 0 }}</div></div>
+    <div><div class="muted small">New (unique)</div>
+      <div style="font-size:18px;font-weight:700">{{ last_run.new_count or 0 }}</div></div>
+    <div><div class="muted small">Duplicates skipped</div>
+      <div style="font-size:18px;font-weight:700">{{ last_run.duplicate_count or 0 }}</div></div>
+    <div><div class="muted small">Imported to DB</div>
+      <div style="font-size:18px;font-weight:700">{{ last_run.imported_count or 0 }}</div></div>
+    <div><div class="muted small">Failed pages</div>
+      <div style="font-size:18px;font-weight:700">{{ (last_run.failed_pages or '[]') if last_run.failed_pages not in ('[]', None) else '0' }}</div></div>
+    <div><div class="muted small">Elapsed</div>
+      <div style="font-size:18px;font-weight:700">{{ '%.1f'|format(last_run.elapsed_seconds or 0) }}s</div></div>
+  </div>
+  {% if last_run.status == 'interrupted' %}
+  <p class="muted small">This run was interrupted — use <strong>Resume</strong> above to continue from the last good page.</p>
+  {% endif %}
+
+  {% if run_log %}
+  <details style="margin-top:8px">
+    <summary class="muted small" style="cursor:pointer">Detailed log ({{ run_log|length }} lines)</summary>
+    <pre class="small" style="max-height:260px;overflow:auto;background:var(--panel,#11151c);padding:10px;border-radius:8px;margin-top:8px;white-space:pre-wrap">{% for line in run_log %}{{ line }}
+{% endfor %}</pre>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ---- The review queue ------------------------------------------------------ #}
 <section class="card">
   <div class="card-head">
     <h2>🏢 Discovered agencies</h2>
@@ -93,7 +151,7 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">No agencies discovered yet. Run the agent above to populate this list.</p>
+  <p class="muted">No agencies in the database yet. Run a preview, verify the JSON, then import.</p>
   {% endif %}
 </section>
 
