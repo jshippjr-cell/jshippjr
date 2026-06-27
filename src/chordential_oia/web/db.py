@@ -1450,6 +1450,30 @@ def reset_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> None:
     save_agency_enrichment(conn, agency_id, {})
 
 
+def agencies_needing_enrichment(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100000
+) -> List[sqlite3.Row]:
+    """Agency rows not yet fully enriched (enrichment status != 'complete'),
+    oldest first. A resumable batch re-selects these each run, so finished
+    agencies are skipped while interrupted / errored / blocked ones are retried."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        raw = r["enrichment_json"]
+        status = ""
+        if raw:
+            try:
+                status = (json.loads(raw) or {}).get("status", "")
+            except (json.JSONDecodeError, TypeError):
+                status = ""
+        if status != "complete":
+            out.append(r)
+            if len(out) >= limit:
+                break
+    return out
+
+
 def list_inbound_leads(
     conn: sqlite3.Connection, status: Optional[str] = None
 ) -> List[sqlite3.Row]:

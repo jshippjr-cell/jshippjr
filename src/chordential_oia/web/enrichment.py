@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import html as _html
 import re
+import time
 import urllib.request
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Dict, List, Optional, Tuple
@@ -667,4 +668,58 @@ def enrich_agency(
         "agency_id": agency_id, "company": profile.name, "website": website,
         "status": "complete", "steps_done": steps_done,
         "fields_filled": filled, "profile": profile.to_dict(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Batch runner — enrich the Master Company Database one agency at a time
+# --------------------------------------------------------------------------- #
+def enrich_batch(
+    conn,
+    *,
+    source: Optional[str] = None,
+    limit: Optional[int] = None,
+    fetch: Optional[Fetch] = None,
+    delay: float = 0.0,
+    reset: bool = False,
+    on_agency: Optional[Callable[[Dict], None]] = None,
+) -> Dict:
+    """Enrich every not-yet-complete agency in the database, one at a time.
+
+    Resumable at TWO levels: each agency is itself resumable (its profile +
+    per-agent checkpoint are committed as it goes), and the batch re-selects only
+    agencies whose status isn't 'complete' — so re-invoking after an interruption
+    skips the finished ones and picks up the rest. Pass ``source`` to scope to one
+    directory, ``limit`` to cap how many to process, ``delay`` to space out the
+    network, ``reset=True`` to re-enrich everything from the homepage, and
+    ``on_agency`` to observe each agency's summary as it completes.
+
+    Network is gated exactly like enrich_agency: with no ``fetch`` and scraping
+    off, every agency comes back 'blocked' (a no-op the run reports honestly).
+    """
+    if reset:
+        rows = db.list_agencies(conn, source=source, limit=limit or 100000)
+    else:
+        rows = db.agencies_needing_enrichment(conn, source=source,
+                                              limit=limit or 100000)
+    if limit:
+        rows = rows[:limit]
+
+    results: List[Dict] = []
+    counts: Dict[str, int] = {}
+    for i, row in enumerate(rows):
+        summary = enrich_agency(conn, row["id"], fetch=fetch, reset=reset)
+        results.append(summary)
+        counts[summary["status"]] = counts.get(summary["status"], 0) + 1
+        if on_agency:
+            on_agency(summary)
+        if delay and i < len(rows) - 1:
+            time.sleep(delay)
+
+    return {
+        "source": source, "total": len(results),
+        "completed": counts.get("complete", 0),
+        "blocked": counts.get("blocked", 0),
+        "errors": counts.get("error", 0),
+        "status_counts": counts, "results": results,
     }

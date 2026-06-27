@@ -251,3 +251,77 @@ def test_enrich_errors_when_homepage_unreachable(tmp_path):
     conn, aid = _seed(tmp_path)
     summary = en.enrich_agency(conn, aid, fetch=lambda url: ("", False))
     assert summary["status"] == "error"
+
+
+# --------------------------------------------------------------------------- #
+# Batch runner — enrich the whole Master Company Database, resumably.
+# --------------------------------------------------------------------------- #
+# A second tiny site so a batch has more than one agency to walk.
+SITE2 = {
+    "https://southgate.example/": """<html><head><title>Southgate</title></head>
+        <body><nav><a href="/capabilities">Capabilities</a>
+        <a href="/get-in-touch">Get in touch</a></nav></body></html>""",
+    "https://southgate.example/capabilities": """<body><h2>Capabilities</h2><ul>
+        <li>Media Planning</li><li>Performance</li></ul></body>""",
+    "https://southgate.example/get-in-touch": """<body>
+        <a href="mailto:team@southgate.example">Email us</a></body>""",
+}
+
+
+def _seed_many(tmp_path):
+    conn = dbm.connect(str(tmp_path / "batch.db"))
+    dbm.init_db(conn)
+    for key, company, site in [
+        ("northwind.example", "Northwind", "https://northwind.example"),
+        ("southgate.example", "Southgate", "https://southgate.example"),
+    ]:
+        dbm.upsert_agency(conn, "manual", {
+            "dedup_key": key, "company": company, "website": site})
+    return conn
+
+
+def test_enrich_batch_processes_all_agencies(tmp_path):
+    conn = _seed_many(tmp_path)
+    pages = {**SITE, **SITE2}
+    seen = []
+    summary = en.enrich_batch(conn, fetch=make_fetch(pages),
+                              on_agency=lambda s: seen.append(s["company"]))
+    assert summary["total"] == 2 and summary["completed"] == 2
+    assert set(seen) == {"Northwind", "Southgate"}
+    rows = {r["company"]: dbm.get_agency_enrichment(conn, r["id"])
+            for r in dbm.list_agencies(conn, "manual")}
+    assert rows["Southgate"]["profile"]["services"] == ["Media Planning", "Performance"]
+    assert rows["Southgate"]["profile"]["email"] == "team@southgate.example"
+
+
+def test_enrich_batch_resumes_and_skips_completed(tmp_path):
+    conn = _seed_many(tmp_path)
+    pages = {**SITE, **SITE2}
+    en.enrich_batch(conn, fetch=make_fetch(pages))
+    # Everything is complete now, so a second pass selects nothing.
+    again = en.enrich_batch(conn, fetch=make_fetch(pages))
+    assert again["total"] == 0
+    # Add a fresh agency; only IT gets processed on the next pass.
+    dbm.upsert_agency(conn, "manual", {
+        "dedup_key": "southgate.example", "company": "Southgate",
+        "website": "https://southgate.example", "industries": "x"})  # update is no-op for status
+    dbm.upsert_agency(conn, "manual", {
+        "dedup_key": "new.example", "company": "Newco", "website": "https://southgate.example"})
+    third = en.enrich_batch(conn, fetch=make_fetch(pages),
+                            on_agency=lambda s: None)
+    assert third["total"] == 1 and third["results"][0]["company"] == "Newco"
+
+
+def test_enrich_batch_respects_limit(tmp_path):
+    conn = _seed_many(tmp_path)
+    summary = en.enrich_batch(conn, fetch=make_fetch({**SITE, **SITE2}), limit=1)
+    assert summary["total"] == 1
+    # the other agency is still pending
+    assert len(dbm.agencies_needing_enrichment(conn, "manual")) == 1
+
+
+def test_enrich_batch_blocked_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(en, "scrape_enabled", lambda: False)
+    conn = _seed_many(tmp_path)
+    summary = en.enrich_batch(conn)               # no fetch + scraping off
+    assert summary["total"] == 2 and summary["blocked"] == 2 and summary["completed"] == 0
