@@ -275,7 +275,8 @@ CATALOG: List[SourceSite] = [
         "Global agency profiles directory. Public; the directory agent walks every "
         "page and stores company/website/employees/location/description/industries. "
         "Operator confirms bulk use under AdForum's terms.", STATUS_SUGGESTED,
-        [("opportunity", "Agencies", "https://www.adforum.com/agencies")],
+        [("opportunity", "US agency search",
+          "https://www.adforum.com/agency/search?location=country_strkey:COU149")],
     ),
     SourceSite(
         "canneslions", "Cannes Lions · Agencies", "https://www.canneslions.com",
