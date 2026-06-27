@@ -14,6 +14,7 @@ way once a sample page is available.
 from __future__ import annotations
 
 import html as _html
+import json
 import math
 import re
 import urllib.parse
@@ -354,6 +355,161 @@ def make_aaaa_source(profile_urls):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# Cannes Lions / lovethework.com  ("The Work" award archive; Next.js flight JSON)
+# --------------------------------------------------------------------------- #
+# lovethework is not a directory of agency profiles — it's the official archive of
+# award-WINNING campaigns. The unit we want is the AGENCY credited on each winner,
+# so a reach-out list of award-winning agencies falls out of "The Work". Honesty
+# rule: an award credit states the agency name, the campaign, the brand, the
+# sector and the award level — NOT website / employees / location / capabilities.
+# We fill only what the source actually states and leave the rest blank.
+#
+# The winners page is server-rendered Next.js: the entry data rides in a
+# self.__next_f.push([1,"<flight payload>"]) chunk. The payload is a JSON string;
+# decoding it once yields a line whose "searchResults":{...,"documents":[...]} is
+# itself valid JSON. Each document carries title + contributors + tags, plus an
+# "enrichmentData" JSON string (brand/agency supportText, sector subText,
+# mediaTag.awardLevel, slug). enrichmentData is occasionally a deferred React ref
+# ("$3e") rather than inline JSON, so we fall back to contributors + tags.
+_LTW_BASE = "https://www.lovethework.com/en/awards/winners-shortlists/cannes-lions/film"
+_LTW_PUSH = re.compile(r'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)', re.S)
+_LTW_AWARDS = {
+    "grandprix": "Grand Prix", "titanium": "Titanium", "gold": "Gold",
+    "silver": "Silver", "bronze": "Bronze",
+    "shortlist": "Shortlist", "shortlisted": "Shortlist",
+}
+
+
+def _ltw_award_label(raw: str) -> str:
+    """Normalize an award level ('grandprix' / 'Grand Prix') to a display label."""
+    s = (raw or "").strip()
+    return _LTW_AWARDS.get(re.sub(r"[\s_]+", "", s).lower(), s.title() if s else "")
+
+
+def _ltw_sector(raw: str) -> str:
+    """A Lions category tag reads 'B01: Consumer Goods'; the enrichment subText is
+    just 'Consumer Goods'. Strip any leading 'A06:'-style code either way."""
+    return re.sub(r"^[A-Z]?\d+\s*:\s*", "", _text(raw)).strip()
+
+
+def _ltw_search_results(html: str) -> dict:
+    """Decode the flight chunk and return the searchResults dict (or {})."""
+    for payload in _LTW_PUSH.findall(html):
+        if "searchResults" not in payload:
+            continue
+        try:
+            line = json.loads('"' + payload + '"')
+        except Exception:
+            continue
+        k = line.find('"searchResults":')
+        if k < 0:
+            continue
+        start = line.find("{", k)
+        depth = 0
+        for idx in range(start, len(line)):
+            ch = line[idx]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(line[start:idx + 1])
+                    except Exception:
+                        return {}
+        break
+    return {}
+
+
+def _ltw_agencies(doc: dict, enrich: dict) -> List[str]:
+    """The agencies credited on one entry. contributors (type=='Agency') is the
+    normalized, authoritative list; if absent, fall back to the agency token of
+    the 'BRAND, AGENCY' supportText (everything after the brand)."""
+    names = [c.get("name", "").strip()
+             for c in (doc.get("contributors") or [])
+             if c.get("type") == "Agency" and c.get("name", "").strip()]
+    if names:
+        return names
+    support = (enrich.get("supportText") or "").strip()
+    if "," in support:
+        agency = support.rsplit(",", 1)[1].strip()
+        if agency:
+            return [agency]
+    return []
+
+
+def lovethework_total_pages(html: str) -> Optional[int]:
+    """Pages in this winners list, from the reported totalCount / pageSize."""
+    res = _ltw_search_results(html)
+    total = res.get("totalCount")
+    size = res.get("pageSize") or 24
+    return math.ceil(total / size) if total else None
+
+
+def parse_lovethework_entries(html: str) -> List[AgencyRecord]:
+    """One lovethework 'The Work' winners page -> one AgencyRecord per credited
+    agency. Records carry no website / employees / location (the archive doesn't
+    state them); the award level, campaign and brand go in the description and the
+    sector in industries, so each agency is reachable in context. source_url is
+    left blank on purpose: an agency that wins repeatedly should collapse to one
+    row, and the engine's dedup falls back to the agency name when there's no URL."""
+    docs = _ltw_search_results(html).get("documents") or []
+    records: List[AgencyRecord] = []
+    for doc in docs:
+        raw = doc.get("enrichmentData")
+        enrich: dict = {}
+        if isinstance(raw, str) and raw.startswith("{"):
+            try:
+                enrich = json.loads(raw)
+            except Exception:
+                enrich = {}
+        agencies = _ltw_agencies(doc, enrich)
+        if not agencies:
+            continue
+        title = _text(doc.get("title") or "")
+        support = (enrich.get("supportText") or "").strip()
+        brand = support.rsplit(",", 1)[0].strip() if "," in support else support
+        award = _ltw_award_label((enrich.get("mediaTag") or {}).get("awardLevel", ""))
+        sector = _ltw_sector(enrich.get("subText") or "")
+        for tag in (doc.get("tags") or []):          # deferred-enrichment fallback
+            if not award and tag.get("level2") == "Award level":
+                award = _ltw_award_label(tag.get("level3", ""))
+            if not sector and tag.get("level1") == "Lions Award Category":
+                sector = _ltw_sector(tag.get("level3", ""))
+        desc = ("Cannes Lions " + award).strip() if award else "Cannes Lions winner"
+        if title:
+            desc += f": “{title}”"
+        if brand:
+            desc += f" for {brand}"
+        for agency in agencies:
+            records.append(AgencyRecord(
+                company=_text(agency), industries=sector, description=desc))
+    return records
+
+
+def make_lovethework_source(base_url: str):
+    """Return a ``page_source(page)`` that walks one lovethework winners list to
+    the end. Pagination appends ``?page=N`` (the Next.js search convention) and
+    the crawl stops at the reported total page count. Network is gated like the
+    other sources: with scraping off it reports an error rather than pretending.
+
+    ``base_url`` is one award category, e.g. Cannes Lions Film
+    (``/en/awards/winners-shortlists/cannes-lions/film``); point it at any other
+    category to harvest that list's winning agencies the same way."""
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        sep = "&" if "?" in base_url else "?"
+        url = base_url if page == 1 else f"{base_url}{sep}page={page}"
+        text, ok = _fetch(url)
+        if not ok:
+            return PageResult(ok=False, detail="fetch failed")
+        return PageResult(records=parse_lovethework_entries(text),
+                          total_pages=lovethework_total_pages(text), ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
 # (4A's is intentionally absent — its profiles crawl from a supplied URL list
@@ -363,4 +519,5 @@ SOURCE_FACTORIES = {
                 "https://www.adforum.com/agency/search?location=country_strkey:COU149"),
     "designrush": (make_designrush_source,
                    "https://www.designrush.com/agency/digital-marketing/us"),
+    "canneslions": (make_lovethework_source, _LTW_BASE),
 }

@@ -357,3 +357,78 @@ def test_aaaa_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch)
     summary = dc.run_crawl(conn, "aaaa_directory", src)
     assert summary["outcome"] == "error"
     assert dbm.count_agencies(conn, "aaaa_directory") == 0
+
+
+# --------------------------------------------------------------------------- #
+# Cannes Lions / lovethework.com ("The Work" award archive; Next.js flight JSON).
+# Not an agency directory — the archive of award-WINNING campaigns — so each
+# record is one credited agency (no website/employees/location; the award level,
+# campaign, brand and sector are what the source actually states).
+# --------------------------------------------------------------------------- #
+# A faithful slice of a real lovethework winners page: the flight chunk whose
+# searchResults.documents carry the entries. Covers inline enrichmentData, the
+# supportText "BRAND, AGENCY" fallback (empty contributors), and a deferred
+# enrichmentData ref ("$3e") that falls back to contributors + tags. raw string:
+# the flight payload is escaped JSON, so the backslashes must stay literal.
+LOVETHEWORK_HTML = r'''<script>self.__next_f.push([1,"29:[\"$\",\"$L2e\",null,{\"initialSearchResultsCollectionItems\":[],\"searchResults\":{\"totalCount\": 1464, \"pageSize\": 24, \"pageNumber\": 1, \"documents\": [{\"contentId\": \"781857\", \"contentType\": \"Entry\", \"title\": \"CAN I GET A SIX PACK QUICKLY?\", \"body\": \"$2f\", \"enrichmentData\": \"{\\\"description\\\": \\\"...\\\", \\\"mediaTag\\\": {\\\"awardLevel\\\": \\\"grandprix\\\", \\\"festivalName\\\": \\\"Cannes Lions\\\"}, \\\"slug\\\": \\\"can-i-get-a-six-pack-quickly-781857\\\", \\\"subText\\\": \\\"Consumer Services/Business to Business\\\", \\\"supportText\\\": \\\"CLAUDE, MOTHER\\\"}\", \"contributors\": [{\"id\": \"a\", \"name\": \"MOTHER\", \"type\": \"Agency\"}], \"tags\": [{\"level1\": \"Trophies\", \"level2\": \"Award level\", \"level3\": \"Grand Prix\"}]}, {\"contentId\": \"781858\", \"contentType\": \"Entry\", \"title\": \"CHALLENGER\", \"body\": \"$30\", \"enrichmentData\": \"{\\\"mediaTag\\\": {\\\"awardLevel\\\": \\\"gold\\\", \\\"festivalName\\\": \\\"Cannes Lions\\\"}, \\\"slug\\\": \\\"challenger-781858\\\", \\\"subText\\\": \\\"Challenger Brand\\\", \\\"supportText\\\": \\\"CLAUDE, MOTHER\\\"}\", \"contributors\": [{\"id\": \"a\", \"name\": \"MOTHER\", \"type\": \"Agency\"}], \"tags\": []}, {\"contentId\": \"781900\", \"contentType\": \"Entry\", \"title\": \"YOUR WAY OUT\", \"body\": \"$31\", \"enrichmentData\": \"{\\\"mediaTag\\\": {\\\"awardLevel\\\": \\\"gold\\\"}, \\\"slug\\\": \\\"your-way-out-781900\\\", \\\"subText\\\": \\\"Market Disruption\\\", \\\"supportText\\\": \\\"COINBASE, ISLE OF ANY\\\"}\", \"contributors\": [], \"tags\": []}, {\"contentId\": \"780570\", \"contentType\": \"Entry\", \"title\": \"L’ULTIMO UOMO REALE\", \"body\": \"$32\", \"enrichmentData\": \"$3e\", \"contributors\": [{\"id\": \"c\", \"name\": \"Team One Advertising\", \"type\": \"Agency\"}], \"tags\": [{\"level1\": \"Trophies\", \"level2\": \"Award level\", \"level3\": \"Silver\"}, {\"level1\": \"Lions Award Category\", \"level2\": \"Online Film: Sectors\", \"level3\": \"B01: Consumer Goods\"}]}]}}]\n"])</script>'''
+
+
+def test_parse_lovethework_extracts_award_winning_agencies():
+    recs = dp.parse_lovethework_entries(LOVETHEWORK_HTML)
+    by = {r.company: r for r in recs}
+    assert set(by) == {"MOTHER", "ISLE OF ANY", "Team One Advertising"}  # MOTHER twice
+    assert len(recs) == 4
+    # inline enrichmentData: agency from contributors, award + brand + sector
+    first = next(r for r in recs if r.description.startswith("Cannes Lions Grand Prix"))
+    assert first.company == "MOTHER"
+    assert first.industries == "Consumer Services/Business to Business"
+    assert "CAN I GET A SIX PACK QUICKLY?" in first.description and "for CLAUDE" in first.description
+    # empty contributors: agency taken from the "BRAND, AGENCY" supportText tail
+    assert by["ISLE OF ANY"].industries == "Market Disruption"
+    # deferred enrichmentData ref: falls back to contributors + tags
+    team = by["Team One Advertising"]
+    assert team.description.startswith("Cannes Lions Silver")
+    assert team.industries == "Consumer Goods"          # "B01: " category code stripped
+    # award credits carry no contact fields — recorded honestly as blank
+    assert first.website == "" and first.employees == "" and first.location == ""
+
+
+def test_lovethework_total_pages_from_reported_count():
+    assert dp.lovethework_total_pages(LOVETHEWORK_HTML) == 61   # ceil(1464 / 24)
+
+
+def test_lovethework_dedup_collapses_repeat_winners():
+    # No source_url, so dedup falls back to the agency name: an agency that wins
+    # more than once collapses to a single row.
+    recs = dp.parse_lovethework_entries(LOVETHEWORK_HTML)
+    mothers = [r for r in recs if r.company == "MOTHER"]
+    assert len(mothers) == 2
+    assert mothers[0].dedup_key() == mothers[1].dedup_key() == "mother|"
+
+
+def test_make_lovethework_source_drives_engine_offline(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    # Page 1 has the entries; page 2 comes back empty so the crawl ends cleanly
+    # without fetching all 61 reported pages.
+    def fake_fetch(url, timeout=15.0):
+        return (LOVETHEWORK_HTML if "page=" not in url else "<html></html>"), True
+    monkeypatch.setattr(dp, "_fetch", fake_fetch)
+
+    conn = dbm.connect(str(tmp_path / "ltw.db"))
+    dbm.init_db(conn)
+    src = dp.make_lovethework_source(dp._LTW_BASE)
+    summary = dc.run_crawl(conn, "canneslions", src)
+
+    assert summary["outcome"] == "complete"
+    assert dbm.count_agencies(conn, "canneslions") == 3      # MOTHER deduped
+    rows = {r["company"]: r for r in dbm.list_agencies(conn, "canneslions")}
+    assert "Team One Advertising" in rows and "ISLE OF ANY" in rows
+
+
+def test_lovethework_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
+    conn = dbm.connect(str(tmp_path / "ltw.db"))
+    dbm.init_db(conn)
+    summary = dc.run_crawl(conn, "canneslions", dp.make_lovethework_source(dp._LTW_BASE))
+    assert summary["outcome"] == "error"
+    assert dbm.count_agencies(conn, "canneslions") == 0
