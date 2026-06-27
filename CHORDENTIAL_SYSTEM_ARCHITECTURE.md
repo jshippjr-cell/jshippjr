@@ -1,6 +1,6 @@
 # CHORDENTIAL — System Architecture
 
-> **Status:** Living document · v1.0 · 2026-06-27
+> **Status:** Living document · v1.1 · 2026-06-27 (ADR-0008: multi-tenant + UUID foundation shipped)
 > **Authority:** This is the architectural **constitution** for Chordential. Every
 > future development chat, implementation agent, and human contributor treats it as
 > authoritative. Code that contradicts this document is a bug in the code *or* a
@@ -240,13 +240,17 @@ data models**, not through each other's internals (§9). Each entity below lists
 *Purpose, Primary identifier, Key relationships, Lifecycle, Ownership.* Current tables
 are named where they exist.
 
-> **Identity note (TARGET ⚪):** every primary entity gains a stable surrogate key
-> (UUID) plus tenant/owner scoping for multi-tenancy (§12). Today, integer PKs in
-> SQLite. The migration is additive (add UUID + tenant columns), not a rewrite.
+> **Identity note (🟢 shipped — ADR-0008):** every primary entity carries a stable
+> **`uuid`** (auto-stamped) *and* a **`tenant_id`** (defaulted to the single default
+> tenant) **today**, even though the platform is single-tenant in practice. Integer PKs
+> remain the internal FK keys; UUIDs are the stable external/cross-tenant identifier.
+> Tenant **scoping of queries** is deferred behind the `current_tenant_id()` seam until
+> the Auth layer exists — flipping it on is additive, not a redesign.
 
 | Entity | Purpose | Primary id | Key relationships | Lifecycle (states) | Owner module |
 |--------|---------|-----------|-------------------|--------------------|--------------|
-| **Agency / Organization** | A buyer org (discovered or known) | `agencies.id` (→ UUID) | has many Contacts; raises Opportunities; subject of Intelligence | `New → Reviewed → Dismissed` (discovery); promote → CRM org | Agency Discovery → CRM |
+| **Tenant** 🟢 | The isolation/ownership root every business row belongs to | `tenants.id` (UUID) | owns every tenant-scoped entity; will own Users/Teams | `active → suspended` | Governance / Auth |
+| **Agency / Organization** | A buyer org (discovered or known) | `agencies.id` + `uuid` | belongs to Tenant; has many Contacts; raises Opportunities; subject of Intelligence | `New → Reviewed → Dismissed` (discovery); promote → CRM org | Agency Discovery → CRM |
 | **Company (CRM)** | Canonical org record in the pipeline | `companies.client` | parent of Opportunities/Projects | implicit (active) | CRM |
 | **Contact** ⚪ | A person at an org | `contacts.id` | belongs to Agency; party to Interactions | `Discovered → Verified → Engaged → Dormant` | Contact Discovery / CRM |
 | **Opportunity** | A potential deal/need | `opportunities.id` | belongs to Org; scored; → Proposal; → Project | `New → Pursuing → Submitted → Won / Lost / Passed` | Opportunity Intelligence / Scoring |
@@ -263,7 +267,7 @@ are named where they exist.
 | **Document** | A generated artifact (capability doc, delivery package, report, export) | path/`doc_overrides` | of Opportunity/Project/Run | versioned/best-effort PDF | Proposal / Reporting |
 | **Task / Job** ⚪ | A unit of agent work | `tasks.id` / `agency_runs.id` (pattern) | produced/consumed by agents | `queued → running → completed / interrupted / failed` | Scheduler / Shared |
 | **Notification** | An alert to a user/channel | `push_subscriptions` + events | of an event; to a User | `created → sent → read` | Notification System |
-| **User** ⚪ | An authenticated actor | `users.id` | has Roles; owns actions; scoped to Tenant | `invited → active → suspended` | Auth |
+| **User** ⚪ | An authenticated actor | `users.id` (UUID) | belongs to Tenant; has Roles; owns actions | `invited → active → suspended` | Auth |
 | **Audit Record** ⚪ | Immutable change log entry | `audit_log.id` | references any entity + actor | append-only | Governance |
 | **Run / Agent Execution** | One observable agent run | `agency_runs.id` (pattern to generalize) | of an Agent; checkpoints | `running → completed / interrupted` | Shared (Observability) |
 
@@ -273,6 +277,11 @@ are named where they exist.
 - **Token-gated client surfaces:** `share_token` + per-reviewer `?r=` tokens.
 - **Additive column migrations:** `_*_COLUMNS` dict + `ALTER TABLE` loop in `db.py`.
 - **Checkpointed run state:** `agency_runs` (generalize into a platform `runs` table).
+- **Tenancy + identity (🟢 ADR-0008):** new tables register in `_ENTITY_TABLES`
+  (gets `uuid` + `tenant_id`) or `_TENANT_ONLY_TABLES` (gets `tenant_id`) in `db.py`;
+  the migration stamps columns, backfills, indexes `tenant_id`, and installs the UUID
+  trigger. **Every new table must join one of these lists** — that is the rule that
+  keeps the platform tenant-safe as it grows.
 
 ---
 
@@ -312,6 +321,16 @@ are named where they exist.
 - **Migrations.** Additive and idempotent: extend the `_*_COLUMNS` + `ALTER TABLE`
   pattern; `CREATE TABLE IF NOT EXISTS` for fresh DBs. No destructive migrations
   without an ADR and a backup/rollback note.
+- **Multi-tenancy & identity keys (🟢 ADR-0008).** Every business row carries a
+  **`tenant_id`** (constant column DEFAULT = the seeded default tenant; backfilled on
+  ALTER; indexed). Every **primary entity** also carries a stable **`uuid`** (backfilled
+  for existing rows; stamped on insert by an `AFTER INSERT` trigger — so insert helpers
+  stay untouched). Integer PKs remain internal FK keys; UUIDs are the external/
+  cross-tenant identifier. **Query-level tenant scoping is deferred** behind the
+  `current_tenant_id()` seam (returns the default tenant until Auth exists); turning it
+  on is additive. Postgres cutover swaps the SQLite triggers for column defaults
+  (`gen_random_uuid()` / constant `tenant_id`). *Rule: a new table is not done until it
+  joins `_ENTITY_TABLES` or `_TENANT_ONLY_TABLES`.*
 
 ---
 
@@ -517,9 +536,12 @@ layer, a real search/cache engine, an event bus.
 
 The architecture must absorb these **without redesign** — each has a pre-planned seam:
 
-- **Multiple users / Teams / Role permissions** → Auth + Authorization services; add
-  `User`, `Team`, `Role` entities and a **tenant_id** scope column on primary entities.
-  The repository layer enforces scoping centrally. (Additive migration, not a rewrite.)
+- **Multiple users / Teams / Role permissions** → the **`tenant_id` scope column and the
+  `tenants` root already exist on every table (🟢 ADR-0008)**, so this reduces to: add
+  `User`, `Team`, `Role` entities, wire `current_tenant_id()` to the authenticated
+  session, and enforce scoping centrally in the repository layer. *The painful part —
+  the schema — is already done; what remains is Auth + a seam flip, not a migration of
+  every table.*
 - **Composer network / Vendor management** → extend Talent/Supply module + portals;
   vendors are orgs with a supply role in the same graph.
 - **Agency portals / Client portals** → new `frontend/` surfaces over existing
@@ -606,6 +628,39 @@ Consequences · Date.** New ADRs append; superseded ones are marked, never delet
 - **Alternatives:** Agents-as-code-only (rejected: no platform-level visibility).
 - **Consequences:** One doc to keep honest; huge clarity dividend at scale.
 
+**ADR-0008 — Multi-tenant + UUID-keyed from day one.** *(2026-06-27)* 🟢 *Foundation shipped*
+- **Decision:** Introduce a `tenants` table with a single seeded **default tenant**, add a
+  `tenant_id` column to **every business table** (defaulted + backfilled to the default
+  tenant), and a stable **`uuid`** to **every primary entity** (backfilled for existing
+  rows; auto-stamped on insert) — *now*, while still single-tenant. Query-level tenant
+  **scoping** is deferred behind a seam (`current_tenant_id()` returns the default
+  today; the Auth layer resolves a real tenant later). Integer PKs stay as internal FKs;
+  UUIDs are the stable external/cross-tenant identifier.
+- **Reasoning:** Retrofitting tenancy is the single most painful database migration a
+  SaaS does (it touches every table and query). Making the *columns and conventions*
+  exist from the beginning turns "future multi-tenancy" from a redesign into an additive
+  change + a seam flip. UUIDs give stable, non-guessable, merge-safe identifiers needed
+  for cross-tenant references, external APIs, and identity resolution.
+- **Implementation:** Additive and safe — `tenant_id` populated by a constant column
+  DEFAULT (existing rows backfilled by the ALTER); `uuid` backfilled via SQL and stamped
+  on new rows by a per-entity **AFTER INSERT trigger**, so the ~13 insert helpers were
+  **not** touched (uniform coverage, minimal churn). `tenant_id` is indexed on every
+  table for future scoping. SQLite-only migration (PRAGMA + triggers); the Postgres
+  cutover uses column defaults `gen_random_uuid()` / constant `tenant_id` instead.
+- **Alternatives considered:** (a) *Defer tenancy entirely* — rejected: the retrofit cost
+  is exactly what we're avoiding. (b) *Enforce tenant scoping in every query now* —
+  rejected: pure overhead with one tenant and one operator; risk without benefit until
+  Auth exists. (c) *Edit every insert helper to mint UUIDs in Python* — rejected for now:
+  more churn/risk across 13 hot functions; triggers give uniform coverage. `new_uuid()`
+  exists for app-side minting where explicit. (d) *Integer-only keys* — rejected: not
+  safe for cross-tenant/external identifiers.
+- **Consequences:** Every row is tenant-stamped and every entity UUID-keyed from v1, so
+  multi-user/teams/portals (§12) become a migration + a seam flip, not a redesign. Cost:
+  two extra columns + an index + a trigger per entity table, and the discipline that
+  **new tables follow the same pattern** (add to `_ENTITY_TABLES` / `_TENANT_ONLY_TABLES`).
+  Open follow-ups: wire `current_tenant_id()` to real auth; enforce scoping in
+  repositories at that time; validate the trigger approach at the Postgres cutover.
+
 > **ADR process:** propose → discuss → record here with the five fields → implement.
 > Significant = changes a boundary, a gate, a shared service, a data-model entity, or a
 > cross-module contract. When in doubt, write the ADR.
@@ -661,10 +716,11 @@ bus** — and forbids the cross-agent-internal anti-pattern explicitly. Build th
 queue before agent count outgrows direct calls.
 
 **Challenge 8 — Multi-tenancy retrofits are notoriously painful.** Adding `tenant_id`
-late means touching every query. **Refinement:** §5/§12 call for `tenant_id` + UUID
-seams *now in the data-model design* (even while single-tenant), and a central
-repository layer to enforce scoping, so the eventual switch is a migration, not a
-rewrite. Recommended as an early ADR when the first second user appears.
+late means touching every query. **Refinement (✅ acted on — ADR-0008, shipped):** rather
+than wait for the first second user, the `tenants` root + `tenant_id` on every table +
+`uuid` on every entity were built **now**, while single-tenant. The expensive,
+touches-everything part (the schema) is done; what remains is wiring `current_tenant_id()`
+to real auth and enforcing scoping in repositories — additive work, not a redesign.
 
 **Remaining known weaknesses (tracked, not yet solved):** no formal RBAC; storage on
 local disk (durability risk for assets/exports); PDF rendering best-effort; no

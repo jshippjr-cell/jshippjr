@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import sqlite3
+import uuid as _uuid
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
@@ -284,6 +285,18 @@ CREATE TABLE IF NOT EXISTS custom_chips (
     family TEXT,                            -- craft | aesthetic | deliverable | assurance
     label TEXT,                            -- short label shown in the rail
     sentence TEXT,                         -- the sentence inserted into the doc
+    created_at TEXT
+);
+
+-- Tenants — the multi-tenancy root (ADR-0008). Single 'default' tenant today; every
+-- business row carries a tenant_id (see _ensure_tenancy) so future teams/clients need
+-- no database redesign — only the eventual switch from "always the default tenant" to
+-- a real authenticated tenant context.
+CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,                    -- UUID
+    slug TEXT UNIQUE,                       -- stable handle (e.g. 'default')
+    name TEXT,
+    status TEXT DEFAULT 'active',           -- active | suspended
     created_at TEXT
 );
 
@@ -570,6 +583,128 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# --------------------------------------------------------------------------- #
+# Multi-tenancy (ADR-0008) — every business row belongs to a tenant, and every
+# primary entity carries a stable UUID, from day one. Today there is exactly one
+# tenant (the default) and a single operator, but the columns + conventions exist
+# now so adding teams/clients later is a migration, never a redesign. Query-level
+# tenant *scoping* is intentionally deferred to the Auth layer (current_tenant_id
+# is the seam); these columns make that switch additive.
+# --------------------------------------------------------------------------- #
+
+#: The single tenant every row belongs to until real multi-tenant auth exists.
+DEFAULT_TENANT_ID = "00000000-0000-4000-8000-000000000001"
+
+#: A deterministic-where-it-can-be UUIDv4 expression (SQLite core funcs only).
+#: Used by triggers so every new entity row gets a UUID without touching the ~13
+#: insert helpers — uniform coverage, lower churn. ``abs(random()%4)`` picks the
+#: RFC-4122 variant nibble safely (no abs-overflow on the 64-bit min value).
+_UUID_V4_SQL = (
+    "lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'"
+    "||substr(hex(randomblob(2)),2)||'-'"
+    "||substr('89ab',1+abs(random()%4),1)||substr(hex(randomblob(2)),2)||'-'"
+    "||hex(randomblob(6)))"
+)
+
+#: Primary entities → get both a UUID and a tenant_id.
+_ENTITY_TABLES = [
+    "opportunities", "talent", "projects", "companies", "inbound_leads",
+    "signals", "proposals", "invoices", "agencies", "agency_runs",
+    "crawl_targets", "discovery_sites", "custom_chips",
+]
+#: Child / event / config tables → tenant-scoped, but identified within a parent
+#: (no separate UUID needed).
+_TENANT_ONLY_TABLES = [
+    "outreach_events", "assignments", "milestones", "review_comments",
+    "project_updates", "brief_progress", "push_subscriptions", "source_meta",
+]
+
+
+def new_uuid() -> str:
+    """A fresh RFC-4122 UUID4 string (for app code that mints ids in Python)."""
+    return str(_uuid.uuid4())
+
+
+def current_tenant_id(conn: Optional[sqlite3.Connection] = None) -> str:
+    """The tenant the current actor is acting within. **Seam:** returns the default
+    tenant today; the Auth layer will resolve a real tenant from the session/request
+    context here without callers changing."""
+    return DEFAULT_TENANT_ID
+
+
+def ensure_default_tenant(conn: sqlite3.Connection) -> None:
+    """Seed the single default tenant (idempotent)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO tenants (id, slug, name, status, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (DEFAULT_TENANT_ID, "default", "Chordential",
+         "active", datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def list_tenants(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute("SELECT * FROM tenants ORDER BY created_at").fetchall()
+
+
+def _ensure_tenancy(conn: sqlite3.Connection) -> None:
+    """Idempotently apply the multi-tenancy + UUID foundation (ADR-0008).
+
+    Adds a ``tenant_id`` (defaulted to the default tenant) to every business table
+    and a ``uuid`` to every primary entity, backfills existing rows, installs a
+    trigger that stamps a UUID on each new entity row, and indexes ``tenant_id``.
+    Additive and safe: existing queries are untouched (new columns are ignored by
+    name-based row mappers; tenant_id is populated by its column DEFAULT).
+
+    SQLite-only (it uses PRAGMA + triggers); the Postgres cutover uses column
+    defaults ``gen_random_uuid()`` / a constant ``tenant_id`` instead — see ADR-0008.
+    """
+    if not isinstance(conn, sqlite3.Connection):  # PG path: handled at cutover
+        return
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS tenants (
+            id TEXT PRIMARY KEY, slug TEXT UNIQUE, name TEXT,
+            status TEXT DEFAULT 'active', created_at TEXT
+        )"""
+    )
+    ensure_default_tenant(conn)
+
+    def _cols(table: str) -> set:
+        return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+    def _exists(table: str) -> bool:
+        return conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone() is not None
+
+    for table in _ENTITY_TABLES + _TENANT_ONLY_TABLES:
+        if not _exists(table):  # tolerate a partial DB — skip tables not yet created
+            continue
+        if "tenant_id" not in _cols(table):
+            # Constant DEFAULT → existing rows are backfilled to the default tenant
+            # automatically by the ALTER.
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN tenant_id TEXT "
+                f"DEFAULT '{DEFAULT_TENANT_ID}'"
+            )
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_tenant "
+            f"ON {table}(tenant_id)"
+        )
+
+    for table in _ENTITY_TABLES:
+        if not _exists(table):
+            continue
+        if "uuid" not in _cols(table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN uuid TEXT")
+            # Backfill existing rows (UUID can't be a column DEFAULT — non-deterministic).
+            conn.execute(f"UPDATE {table} SET uuid = ({_UUID_V4_SQL}) WHERE uuid IS NULL")
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_uuid "
+            f"AFTER INSERT ON {table} WHEN NEW.uuid IS NULL "
+            f"BEGIN UPDATE {table} SET uuid = ({_UUID_V4_SQL}) WHERE rowid = NEW.rowid; END"
+        )
+
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """Idempotently bring an older database up to the current schema.
 
@@ -778,6 +913,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             started_at TEXT, updated_at TEXT, finished_at TEXT
         )"""
     )
+    _ensure_tenancy(conn)
     conn.commit()
 
 
