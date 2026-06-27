@@ -255,3 +255,54 @@ def test_live_crawl_blocked_when_scraping_off(app_db):
     assert r.status_code == 200
     st = app_mod.db.get_crawl_state(app_mod.db.connect(), "thedrum")
     assert st["status"] == "error"
+
+
+# --------------------------------------------------------------------------- #
+# Auto-enrichment (the agent enriches on its own) + accordion / pagination.
+# --------------------------------------------------------------------------- #
+def test_scheduler_run_enrich_cycle_enriches_pending(app_db, monkeypatch):
+    client, app_mod = app_db
+    from chordential_oia.web import scheduler
+    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    # Acme resolves via the fake site; one autonomous pass completes it.
+    completed = scheduler.run_enrich_cycle(batch=10)
+    assert completed >= 1
+    aid = _agency_id(app_mod, "Acme")
+    assert app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)["status"] == "complete"
+
+
+def test_manual_enrich_pending_route(app_db, monkeypatch):
+    client, app_mod = app_db
+    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    r = client.post("/agencies/enrich-pending", data={"limit": "10"},
+                    follow_redirects=True)
+    assert r.status_code == 200
+    aid = _agency_id(app_mod, "Acme")
+    assert app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)["status"] == "complete"
+
+
+def test_accordion_shows_enriched_profile_inline(app_db, monkeypatch):
+    client, app_mod = app_db
+    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    client.post("/agencies/enrich-pending", data={"limit": "10"})
+    r = client.get("/agencies")
+    # the enriched facts render inside the accordion row, not just on the detail page
+    assert "Brand Strategy" in r.text and "Web Design" in r.text
+
+
+def test_agencies_pagination(app_db, monkeypatch):
+    client, app_mod = app_db
+    # Seed > one page of agencies.
+    conn = app_mod.db.connect()
+    for i in range(60):
+        app_mod.db.upsert_agency(conn, "bulk", {
+            "dedup_key": f"co{i}.example", "company": f"Co {i:02d}",
+            "website": f"https://co{i}.example"})
+    conn.commit(); conn.close()
+    p1 = client.get("/agencies", params={"page": 1})
+    p2 = client.get("/agencies", params={"page": 2})
+    assert "Page 1 of" in p1.text
+    assert p1.text != p2.text                # different slices
