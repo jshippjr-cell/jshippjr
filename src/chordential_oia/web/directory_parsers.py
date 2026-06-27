@@ -87,6 +87,44 @@ def adforum_total_results(html: str) -> Optional[int]:
     return int(m.group(1).replace(",", "")) if m else None
 
 
+# An agency's profile page carries website + description (the listing omits them).
+# AdForum does NOT publish an employee count anywhere on the profile, so that
+# field stays blank for this source — we don't invent it.
+_AF_SITE = re.compile(r'href="([^"]+)"[^>]*class="contact__link--site"', re.S)
+_AF_DESC = re.compile(r'class="agency-description__text">(.*?)</div>', re.S)
+
+
+def parse_adforum_profile(html: str) -> dict:
+    """One AdForum agency profile page -> {website, description}. Pure, no network."""
+    site = ""
+    m = _AF_SITE.search(html or "")
+    if m:
+        site = _html.unescape(m.group(1)).strip()
+    descs = [_text(b) for b in _AF_DESC.findall(html or "")]
+    description = " ".join(d for d in descs if d)[:1000]
+    return {"website": site, "description": description}
+
+
+def make_adforum_enricher():
+    """Return an ``enrich(record)`` for the engine that fetches each agency's
+    AdForum profile (record.source_url) and fills website + description. Gated by
+    the scrape flag; on failure it returns the record unchanged (listing fields
+    survive). Employees aren't on AdForum, so that field is left blank."""
+    def enrich(rec):
+        if not scrape_enabled() or not rec.source_url:
+            return rec
+        text, ok = _fetch(rec.source_url)
+        if not ok:
+            return rec
+        prof = parse_adforum_profile(text)
+        if prof["website"]:
+            rec.website = prof["website"]
+        if prof["description"]:
+            rec.description = prof["description"]
+        return rec
+    return enrich
+
+
 def _fetch(url: str, timeout: float = 15.0):
     """GET (text, ok). Only reached when the scrape flag is on."""
     req = urllib.request.Request(url, headers={"User-Agent": _UA})

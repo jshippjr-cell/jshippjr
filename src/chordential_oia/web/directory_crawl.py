@@ -45,9 +45,12 @@ class AgencyRecord:
     source_url: str = ""
 
     def dedup_key(self) -> str:
-        """Stable identity for de-duplication: the website host if we have one
-        (the most reliable signal an agency is the same across pages), else the
-        company name + location."""
+        """Stable identity for de-duplication. A directory profile URL is the most
+        reliable signal (and, crucially, it never changes when the row is later
+        enriched), so prefer it; then the website host; then name + location."""
+        if self.source_url.strip():
+            p = urlsplit(self.source_url.strip())
+            return (p.netloc + p.path).rstrip("/").lower()
         host = urlsplit(self.website.strip()).netloc.lower() if self.website else ""
         host = host[4:] if host.startswith("www.") else host
         if host:
@@ -91,8 +94,14 @@ def run_crawl(
     delay: float = 0.0,
     reset: bool = False,
     on_progress: Optional[Progress] = None,
+    enrich: Optional[Callable[["AgencyRecord"], "AgencyRecord"]] = None,
 ) -> Dict:
     """Crawl one directory to completion (or resume an interrupted one).
+
+    ``enrich``, if given, is called per record before storing — typically a
+    per-agency profile-page fetch that fills fields the listing page omits
+    (e.g. website / description). A failing enrich never sinks the crawl: the
+    base listing record is stored instead.
 
     Returns a summary dict. Safe to call repeatedly: with ``reset=False`` it
     picks up from the persisted checkpoint and de-dupes, so re-running after an
@@ -139,6 +148,11 @@ def run_crawl(
 
         new_here = 0
         for rec in res.records:
+            if enrich:
+                try:
+                    rec = enrich(rec) or rec
+                except Exception:
+                    pass  # keep the listing fields; one bad profile never stops the crawl
             if db.upsert_agency(conn, source_key, rec.to_db()):
                 new_here += 1
         pages_done += 1
