@@ -924,11 +924,12 @@ PASTE_ONLY_SOURCES = {
     "adforum": "AdForum blocks server crawls (HTTP 403) and loads results by "
                "infinite scroll — crawl it with a headless browser / scraping "
                "API, or paste the page.",
-    "agencyspotter": "Agency Spotter sits behind a Cloudflare challenge that "
-                     "blocks server crawls — paste the category page (it "
-                     "paginates with ?page=N, so paste each page), or crawl it "
-                     "with a headless browser / scraping API.",
 }
+# (Agency Spotter ships a Cloudflare challenge, so a server crawl MIGHT 403 — but
+# it paginates with ?page=N, so we let the live crawl try: if Cloudflare serves
+# the HTML it walks every page on its own, and if it 403s the crawl reports the
+# reason and the paste path is still there as a fallback. Hence it's deliberately
+# NOT listed paste-only.)
 
 
 def parse_listing(source_key: str, html: str) -> List[AgencyRecord]:
