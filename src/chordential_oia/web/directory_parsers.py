@@ -510,6 +510,86 @@ def make_lovethework_source(base_url: str):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# Awwwards directory  (server-rendered HTML; one .card-directory per agency)
+# --------------------------------------------------------------------------- #
+# The directory listing carries company, website and location on the card, plus
+# the agency's Awwwards trophy counts (HM / SOTD / SOTM / SOTY). Honesty rule:
+# employees / description / industries are NOT on the listing, so they stay blank
+# (the awards summary goes in description as the one extra fact the page states).
+# The promoted ".card-directory-sp" cards at the top are duplicates of real grid
+# entries, so we parse only the main ".card-directory" grid and skip them.
+_AW_BASE = "https://www.awwwards.com"
+_AW_CARD = '<div class="card-directory">'
+_AW_NAME = re.compile(r'avatar-name__name">\s*<strong>(.*?)</strong>', re.S)
+_AW_PROFILE = re.compile(r'class="avatar-name__link"\s+href="(/[^"]+)"', re.S)
+_AW_LOC = re.compile(r'<strong>Location</strong></div>\s*<div>(.*?)</div>', re.S)
+_AW_SITE = re.compile(r'<strong>Website</strong></div>\s*<div><a href="([^"]+)"', re.S)
+_AW_SCORE = re.compile(
+    r'box-score__top">\s*<strong>(.*?)</strong>\s*</div>\s*'
+    r'<div class="box-score__bottom">\s*<strong>(.*?)</strong>', re.S)
+_AW_COUNT = re.compile(r'<strong>([\d,]+)</strong>\s*professionals waiting', re.S)
+_AW_LABELS = {
+    "HM": "Honorable Mentions", "SOTD": "Sites of the Day",
+    "SOTM": "Sites of the Month", "SOTY": "Sites of the Year",
+}
+
+
+def _aw_awards(block: str) -> str:
+    """Summarize the card's trophy counts (skipping zeros) for the description."""
+    bits = []
+    for label, value in _AW_SCORE.findall(block):
+        val = _text(value)
+        if val and val != "0":
+            bits.append(f"{val} {_AW_LABELS.get(_text(label), _text(label))}")
+    return "Awwwards: " + ", ".join(bits) if bits else ""
+
+
+def awwwards_total_results(html: str) -> Optional[int]:
+    """The "N professionals waiting" count the directory header reports."""
+    m = _AW_COUNT.search(html)
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def parse_awwwards_listing(html: str) -> List[AgencyRecord]:
+    """One Awwwards /directory/ page -> AgencyRecords (one per .card-directory)."""
+    records: List[AgencyRecord] = []
+    for block in html.split(_AW_CARD)[1:]:
+        name = _AW_NAME.search(block)
+        if not name:
+            continue
+        prof = _AW_PROFILE.search(block)
+        loc = _AW_LOC.search(block)
+        site = _AW_SITE.search(block)
+        records.append(AgencyRecord(
+            company=_text(name.group(1)),
+            website=_html.unescape(site.group(1)).strip() if site else "",
+            location=_text(loc.group(1)) if loc else "",
+            description=_aw_awards(block),
+            source_url=(_AW_BASE + prof.group(1)) if prof else "",
+        ))
+    return records
+
+
+def make_awwwards_source(base_url: str, per_page: int = 24):
+    """Return a ``page_source(page)`` for the engine that fetches + parses one
+    Awwwards directory page. Pagination appends ``?page=N``; total pages come
+    from the reported professional count so the crawl knows when it's done."""
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        sep = "&" if "?" in base_url else "?"
+        url = base_url if page == 1 else f"{base_url}{sep}page={page}"
+        text, ok = _fetch(url)
+        if not ok:
+            return PageResult(ok=False, detail="fetch failed")
+        records = parse_awwwards_listing(text)
+        total = awwwards_total_results(text)
+        total_pages = math.ceil(total / per_page) if total else None
+        return PageResult(records=records, total_pages=total_pages, ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
 # (4A's is intentionally absent — its profiles crawl from a supplied URL list
@@ -520,4 +600,5 @@ SOURCE_FACTORIES = {
     "designrush": (make_designrush_source,
                    "https://www.designrush.com/agency/digital-marketing/us"),
     "canneslions": (make_lovethework_source, _LTW_BASE),
+    "awwwards": (make_awwwards_source, "https://www.awwwards.com/directory/"),
 }

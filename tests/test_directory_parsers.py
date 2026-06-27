@@ -432,3 +432,132 @@ def test_lovethework_source_reports_error_when_scraping_disabled(tmp_path, monke
     summary = dc.run_crawl(conn, "canneslions", dp.make_lovethework_source(dp._LTW_BASE))
     assert summary["outcome"] == "error"
     assert dbm.count_agencies(conn, "canneslions") == 0
+
+
+# --------------------------------------------------------------------------- #
+# Awwwards directory (server-rendered HTML; one .card-directory per agency).
+# Company / website / location + the agency's trophy counts are on the listing;
+# employees / description / industries are not, so they stay blank (the awards
+# summary becomes the description). Promoted .card-directory-sp cards duplicate
+# real grid entries and are skipped.
+# --------------------------------------------------------------------------- #
+# A faithful slice: the header count, one promoted (sp) card that must be
+# skipped, and two real grid cards (one with a zero SOTY that must be dropped).
+AWWWARDS_HTML = """
+<div class="header-grid__left"><strong>1965</strong> professionals waiting.</div>
+<div class="card-directory-sp">
+    <div class="card-directory-sp__left"><p>International</p>
+        <h2 class="card-directory-sp__title"><a href="/clay/">Clay</a></h2></div>
+    <div class="card-directory-sp__footer"><div class="card-directory-sp__left">
+        <a href="https://clay.global" class="url">clay.global</a></div>
+        <div class="card-directory-sp__right">14 awards</div></div>
+</div>
+<ul class="grid-cards js-ajax-entries">
+<li>
+    <div class="card-directory">
+        <div class="card-directory__cover"><a href="/locomotive/"><img class="card-directory__media"></a></div>
+        <div class="card-directory__content"><div class="card-directory__header"><div class="users-credits">
+            <figure class="avatar-name"><a class="avatar-name__link" href="/locomotive/">
+                <figcaption class="avatar-name__name"><strong>Locomotive</strong><sup>PRO</sup></figcaption>
+            </a></figure></div></div>
+        <ul class="card-directory__list">
+            <li><div class="card-directory__section"><strong>Location</strong></div><div>Canada</div></li>
+            <li><div class="card-directory__section"><strong>Website</strong></div>
+                <div><a href="https://locomotive.ca" rel="nofollow noopener noreferrer" target="_blank">locomotive.ca</a></div></li>
+            <li><div class="card-directory__section"><strong>Awards</strong></div>
+                <div class="c-boxes-score">
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>HM</strong></div>
+                        <div class="box-score__bottom"><strong>131</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTD</strong></div>
+                        <div class="box-score__bottom"><strong>91</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTM</strong></div>
+                        <div class="box-score__bottom"><strong>4</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTY</strong></div>
+                        <div class="box-score__bottom"><strong>1</strong></div></div>
+                </div></li>
+        </ul></div>
+    </div>
+</li>
+<li>
+    <div class="card-directory">
+        <div class="card-directory__cover"><a href="/adoratorio.studio/"><img class="card-directory__media"></a></div>
+        <div class="card-directory__content"><div class="card-directory__header"><div class="users-credits">
+            <figure class="avatar-name"><a class="avatar-name__link" href="/adoratorio.studio/">
+                <figcaption class="avatar-name__name"><strong>Adoratorio Studio</strong><sup>PRO</sup></figcaption>
+            </a></figure></div></div>
+        <ul class="card-directory__list">
+            <li><div class="card-directory__section"><strong>Location</strong></div><div>Italy</div></li>
+            <li><div class="card-directory__section"><strong>Website</strong></div>
+                <div><a href="https://adoratorio.com/" rel="nofollow noopener noreferrer" target="_blank">adoratorio.com</a></div></li>
+            <li><div class="card-directory__section"><strong>Awards</strong></div>
+                <div class="c-boxes-score">
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>HM</strong></div>
+                        <div class="box-score__bottom"><strong>65</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTD</strong></div>
+                        <div class="box-score__bottom"><strong>44</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTM</strong></div>
+                        <div class="box-score__bottom"><strong>1</strong></div></div>
+                    <div class="box-score box-score--small"><div class="box-score__top"><strong>SOTY</strong></div>
+                        <div class="box-score__bottom"><strong>0</strong></div></div>
+                </div></li>
+        </ul></div>
+    </div>
+</li>
+</ul>
+"""
+
+
+def test_parse_awwwards_listing_extracts_card_fields():
+    recs = dp.parse_awwwards_listing(AWWWARDS_HTML)
+    assert len(recs) == 2                                   # the .sp promo card is skipped
+    loco = recs[0]
+    assert loco.company == "Locomotive"
+    assert loco.website == "https://locomotive.ca"
+    assert loco.location == "Canada"
+    assert loco.source_url == "https://www.awwwards.com/locomotive/"
+    # awards summary becomes the description; employees/industries stay blank
+    assert loco.description == ("Awwwards: 131 Honorable Mentions, 91 Sites of the Day, "
+                                "4 Sites of the Month, 1 Sites of the Year")
+    assert loco.employees == "" and loco.industries == ""
+    # a zero trophy count is dropped from the summary
+    assert recs[1].description == ("Awwwards: 65 Honorable Mentions, 44 Sites of the Day, "
+                                   "1 Sites of the Month")
+
+
+def test_awwwards_total_and_pages():
+    assert dp.awwwards_total_results(AWWWARDS_HTML) == 1965
+    assert dp.make_awwwards_source  # registered factory exists
+
+
+def test_awwwards_dedup_key_uses_profile_url():
+    rec = dp.parse_awwwards_listing(AWWWARDS_HTML)[0]
+    assert rec.dedup_key() == "www.awwwards.com/locomotive"
+
+
+def test_make_awwwards_source_drives_engine_offline(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    # Page 1 returns the cards; the count says 1965 (82 pages), but page 2 comes
+    # back empty here so the crawl ends cleanly without 82 fetches.
+    def fake_fetch(url, timeout=15.0):
+        return (AWWWARDS_HTML if "page=" not in url else "<html></html>"), True
+    monkeypatch.setattr(dp, "_fetch", fake_fetch)
+
+    conn = dbm.connect(str(tmp_path / "aw.db"))
+    dbm.init_db(conn)
+    src = dp.make_awwwards_source("https://www.awwwards.com/directory/")
+    summary = dc.run_crawl(conn, "awwwards", src)
+
+    assert summary["outcome"] == "complete"
+    assert summary["records_new"] == 2
+    rows = {r["company"]: r for r in dbm.list_agencies(conn, "awwwards")}
+    assert rows["Locomotive"]["location"] == "Canada"
+    assert rows["Adoratorio Studio"]["website"] == "https://adoratorio.com/"
+
+
+def test_awwwards_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
+    conn = dbm.connect(str(tmp_path / "aw.db"))
+    dbm.init_db(conn)
+    summary = dc.run_crawl(conn, "awwwards", dp.make_awwwards_source("https://www.awwwards.com/directory/"))
+    assert summary["outcome"] == "error"
+    assert dbm.count_agencies(conn, "awwwards") == 0
