@@ -561,3 +561,73 @@ def test_awwwards_source_reports_error_when_scraping_disabled(tmp_path, monkeypa
     summary = dc.run_crawl(conn, "awwwards", dp.make_awwwards_source("https://www.awwwards.com/directory/"))
     assert summary["outcome"] == "error"
     assert dbm.count_agencies(conn, "awwwards") == 0
+
+
+# --------------------------------------------------------------------------- #
+# The Drum ranked-list ("Hotlist") page. The whole ranking is embedded as
+# HTML-entity-encoded JSON in <td-rankings-list :list-data="[...]"> — one page,
+# no pagination. Each entry has company / location / editorial + a profile URL;
+# there's no outbound website or employee count, so those stay blank.
+# --------------------------------------------------------------------------- #
+# A faithful slice: the data attribute with two real entries (one with an empty
+# location, like several real rows), entity-encoded exactly as The Drum emits it.
+THEDRUM_HTML = (
+    '<td-rankings-list list-type="company" pagination="" :items-per-page="20" '
+    ':list-data="[{&quot;companyName&quot;:&quot;Bader Rutter&quot;,&quot;url&quot;:&quot;\\/profile\\/bader-rutter&quot;,'
+    '&quot;location&quot;:&quot;Milwaukee County United States&quot;,&quot;yearFounded&quot;:1973,'
+    '&quot;topExecutive&quot;:&quot;David Jordan&quot;,'
+    '&quot;editorial&quot;:&quot;Bader Rutter is an employee-owned US B2B agency known for agriculture and food.&quot;},'
+    '{&quot;companyName&quot;:&quot;Marketbridge&quot;,&quot;url&quot;:&quot;\\/profile\\/marketbridge&quot;,'
+    '&quot;location&quot;:&quot; United States&quot;,&quot;yearFounded&quot;:1991,'
+    '&quot;topExecutive&quot;:&quot;Bob Ray&quot;,'
+    '&quot;editorial&quot;:&quot;Marketbridge is a data-driven B2B growth consultancy.&quot;}]"'
+    '></td-rankings-list>'
+)
+
+
+def test_parse_thedrum_list_extracts_entries():
+    recs = dp.parse_thedrum_list(THEDRUM_HTML)
+    assert len(recs) == 2
+    bader = recs[0]
+    assert bader.company == "Bader Rutter"
+    assert bader.location == "Milwaukee County United States"
+    assert bader.source_url == "https://www.thedrum.com/profile/bader-rutter"
+    assert bader.description.startswith("Bader Rutter is an employee-owned US B2B agency")
+    # no outbound website / employee count on the Drum list — left blank, not faked
+    assert bader.website == "" and bader.employees == "" and bader.industries == ""
+    # a leading-space location is normalized
+    assert recs[1].location == "United States"
+
+
+def test_parse_thedrum_list_returns_empty_without_list_data():
+    assert dp.parse_thedrum_list("<html><body>no list here</body></html>") == []
+
+
+def test_thedrum_dedup_key_uses_profile_url():
+    rec = dp.parse_thedrum_list(THEDRUM_HTML)[0]
+    assert rec.dedup_key() == "www.thedrum.com/profile/bader-rutter"
+
+
+def test_make_thedrum_source_drives_engine_offline(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(dp, "_fetch", lambda url, timeout=15.0: (THEDRUM_HTML, True))
+
+    conn = dbm.connect(str(tmp_path / "td.db"))
+    dbm.init_db(conn)
+    src = dp.make_thedrum_source("https://www.thedrum.com/b2b-agencies")
+    summary = dc.run_crawl(conn, "thedrum", src)
+
+    assert summary["outcome"] == "complete"
+    assert summary["pages_done"] == 1          # whole list is on one page
+    assert dbm.count_agencies(conn, "thedrum") == 2
+    rows = {r["company"]: r for r in dbm.list_agencies(conn, "thedrum")}
+    assert rows["Marketbridge"]["source_url"] == "https://www.thedrum.com/profile/marketbridge"
+
+
+def test_thedrum_source_reports_error_when_scraping_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(dp, "scrape_enabled", lambda: False)
+    conn = dbm.connect(str(tmp_path / "td.db"))
+    dbm.init_db(conn)
+    summary = dc.run_crawl(conn, "thedrum", dp.make_thedrum_source("https://www.thedrum.com/b2b-agencies"))
+    assert summary["outcome"] == "error"
+    assert dbm.count_agencies(conn, "thedrum") == 0

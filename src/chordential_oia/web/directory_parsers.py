@@ -590,6 +590,60 @@ def make_awwwards_source(base_url: str, per_page: int = 24):
     return page_source
 
 
+# --------------------------------------------------------------------------- #
+# The Drum  (server-rendered; the whole ranked list rides in one data attribute)
+# --------------------------------------------------------------------------- #
+# A Drum "Hotlist" page embeds its entire ranking as HTML-entity-encoded JSON in
+# the <td-rankings-list :list-data="[...]"> attribute — no pagination, the full
+# list is on the one page. Each entry carries companyName, a /profile/<slug> URL,
+# location and a rich editorial blurb (plus yearFounded / topExecutive). Honesty
+# rule: there's no outbound website or employee count, so those stay blank; the
+# editorial becomes the description and the Drum profile URL the identity.
+_TD_BASE = "https://www.thedrum.com"
+_TD_LISTDATA = re.compile(r':list-data="([^"]*)"', re.S)
+
+
+def parse_thedrum_list(html: str) -> List[AgencyRecord]:
+    """One Drum ranked-list page -> AgencyRecords, from the embedded list-data."""
+    m = _TD_LISTDATA.search(html)
+    if not m:
+        return []
+    try:
+        entries = json.loads(_html.unescape(m.group(1)))
+    except Exception:
+        return []
+    records: List[AgencyRecord] = []
+    for e in entries:
+        name = _text(e.get("companyName") or "")
+        if not name:
+            continue
+        url = (e.get("url") or "").strip()
+        records.append(AgencyRecord(
+            company=name,
+            location=_text(e.get("location") or ""),
+            description=_text(e.get("editorial") or ""),
+            source_url=(_TD_BASE + url) if url.startswith("/") else url,
+        ))
+    return records
+
+
+def make_thedrum_source(base_url: str):
+    """Return a ``page_source(page)`` for a Drum Hotlist. The full ranking is on
+    one page (embedded in the data attribute), so page 1 yields every agency and
+    the crawl completes in a single fetch (total_pages = 1). Point ``base_url`` at
+    any other Drum list (e.g. /b2b-agencies) to harvest that ranking the same way."""
+    def page_source(page: int) -> PageResult:
+        if not scrape_enabled():
+            return PageResult(ok=False, detail="scraping disabled")
+        if page > 1:
+            return PageResult(records=[], total_pages=1, ok=True)
+        text, ok = _fetch(base_url)
+        if not ok:
+            return PageResult(ok=False, detail="fetch failed")
+        return PageResult(records=parse_thedrum_list(text), total_pages=1, ok=True)
+    return page_source
+
+
 # Registry: source_key -> (factory, default base URL). A runner does
 #   run_crawl(conn, key, make(base)) to crawl that directory to completion.
 # (4A's is intentionally absent — its profiles crawl from a supplied URL list
@@ -601,4 +655,5 @@ SOURCE_FACTORIES = {
                    "https://www.designrush.com/agency/digital-marketing/us"),
     "canneslions": (make_lovethework_source, _LTW_BASE),
     "awwwards": (make_awwwards_source, "https://www.awwwards.com/directory/"),
+    "thedrum": (make_thedrum_source, "https://www.thedrum.com/b2b-agencies"),
 }
