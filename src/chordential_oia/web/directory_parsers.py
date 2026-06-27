@@ -717,6 +717,19 @@ INGEST_SOURCES = [
 ]
 
 
+# Sources that can't be crawled from the server (key -> why). AdForum blocks
+# server requests (HTTP 403) AND paginates by infinite scroll (a "See more"
+# button that loads 25 more via JavaScript — no ?page=N), so neither the live
+# crawl nor a Ctrl-U paste gets past the first 25. Use a pasted full-DOM, a
+# headless browser, or a scraping API for these. Kept as data so the UI can hide
+# the (futile) Crawl button and say why.
+PASTE_ONLY_SOURCES = {
+    "adforum": "AdForum blocks server crawls (HTTP 403) and loads results by "
+               "infinite scroll — crawl it with a headless browser / scraping "
+               "API, or paste the page.",
+}
+
+
 def parse_listing(source_key: str, html: str) -> List[AgencyRecord]:
     """Parse one pasted page for ``source_key`` into AgencyRecords. 4A's pastes
     are a single agency-profile page; the rest are multi-agency listing pages.
