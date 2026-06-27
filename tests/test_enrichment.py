@@ -23,6 +23,7 @@ SITE = {
             <a href="/about">Who We Are</a>
             <a href="/what-we-do">What We Do</a>
             <a href="/our-work">Our Work</a>
+            <a href="/our-clients">Our Clients</a>
             <a href="/sectors">Sectors</a>
             <a href="/where-we-are">Studios</a>
             <a href="/team">Meet the Team</a>
@@ -44,6 +45,11 @@ SITE = {
         <a href="/our-work/aurora-rebrand">AURORA Rebrand</a>
         <a href="/our-work/vance-athletic-site">Vance Athletic Website</a>
         <a href="/about">About</a></body>""",
+    "https://northwind.example/our-clients": """<body><h2>Our Clients</h2>
+        <img src="/l/aurora.svg" alt="AURORA logo">
+        <img src="/l/vance.svg" alt="Vance Athletic">
+        <img src="/l/meridian.svg" alt="Meridian Bank">
+        <img src="/l/spacer.gif" alt="Logo"></body>""",
     "https://northwind.example/sectors": """<body><h2>Sectors</h2><ul>
         <li>Technology</li><li>Healthcare</li><li>Finance</li></ul></body>""",
     "https://northwind.example/where-we-are": """<body><h2>Studios</h2>
@@ -103,6 +109,8 @@ def _seed(tmp_path, website="https://northwind.example", company="Northwind"):
     ("/what-we-do", "What We Do", "services"),
     ("/our-work", "", "work"),
     ("/case-studies", "", "work"),
+    ("/our-clients", "Our Clients", "clients"),
+    ("/clients", "", "clients"),
     ("/sectors", "", "industries"),
     ("/team", "Meet the Team", "leadership"),
     ("/people", "", "leadership"),
@@ -151,6 +159,9 @@ def test_enrich_agency_extracts_and_normalizes(tmp_path):
                              "Web Development", "Motion"]
     assert p["industries"] == ["Technology", "Healthcare", "Finance"]
     assert p["portfolio"] == ["AURORA Rebrand", "Vance Athletic Website"]
+    # notable clients come from the dedicated clients page (logo alt text);
+    # the generic "Logo" placeholder is filtered out, "AURORA logo" -> "AURORA"
+    assert p["clients"] == ["AURORA", "Vance Athletic", "Meridian Bank"]
     assert p["awards"] == ["D&AD Wood Pencil 2023", "Awwwards Site of the Day"]
     assert p["offices"] == ["120 Main St, Portland, OR 97201", "5 Hoxton Sq, London N1 6NU"]
     # the section-header h2 does NOT swallow the first person card
@@ -188,6 +199,7 @@ def test_missing_info_is_left_empty(tmp_path):
     p = summary["profile"]
     # no nav -> no concept pages -> every discovered-only field stays empty
     assert p["services"] == [] and p["industries"] == [] and p["portfolio"] == []
+    assert p["clients"] == []
     assert p["leadership"] == [] and p["awards"] == [] and p["offices"] == []
     assert p["founded_year"] == "" and p["careers_url"] == ""
     assert p["sources"] == {}                      # nothing fabricated

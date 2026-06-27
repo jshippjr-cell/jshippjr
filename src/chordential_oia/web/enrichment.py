@@ -159,6 +159,7 @@ class AgencyProfile:
     services: List[str] = field(default_factory=list)
     industries: List[str] = field(default_factory=list)
     portfolio: List[str] = field(default_factory=list)
+    clients: List[str] = field(default_factory=list)
     awards: List[str] = field(default_factory=list)
     offices: List[str] = field(default_factory=list)
     leadership: List[Dict[str, str]] = field(default_factory=list)  # {name, title}
@@ -185,7 +186,7 @@ class AgencyProfile:
 # concepts by MEANING (path tokens + anchor text), longest keyword wins so
 # 'work-with-us' (careers) beats 'work' (portfolio).
 # --------------------------------------------------------------------------- #
-CONCEPTS = ("about", "services", "industries", "work", "leadership",
+CONCEPTS = ("about", "services", "industries", "work", "clients", "leadership",
             "offices", "awards", "careers", "news", "contact")
 
 _CONCEPT_KEYWORDS: Dict[str, Tuple[str, ...]] = {
@@ -195,7 +196,10 @@ _CONCEPT_KEYWORDS: Dict[str, Tuple[str, ...]] = {
                  "solutions", "offerings", "disciplines", "specialisms"),
     "industries": ("industries", "sectors", "markets", "verticals", "specialties"),
     "work": ("our work", "case studies", "case study", "portfolio", "projects",
-             "work", "cases", "showcase", "clients"),
+             "work", "cases", "showcase"),
+    "clients": ("our clients", "client list", "client roster", "clients",
+                "brands we work with", "who we work with", "brands we've worked with",
+                "trusted by", "the brands"),
     "leadership": ("leadership", "our team", "the team", "our people", "people",
                    "team", "management", "founders", "meet the team"),
     "offices": ("offices", "locations", "where we are", "find us", "studios"),
@@ -394,6 +398,35 @@ class PortfolioAgent(_Agent):
         return {"portfolio": titles, "_source": (self.concept, url)} if titles else {}
 
 
+class ClientsAgent(_Agent):
+    name, concept = "clients", "clients"
+    # Generic strings that show up in client grids but aren't a client name.
+    _GENERIC = re.compile(
+        r"^(logo|logotype|client|clients|our clients|brand|brands|image|home|menu|"
+        r"read more|view|case study|learn more)$", re.I)
+
+    def run(self, ctx: _Ctx) -> Dict:
+        url, html = ctx.page_for("clients")
+        if not html:
+            return {}
+        block = (_headed_block(html, "client", "brands we", "who we work",
+                               "trusted by") or html)
+        # Client rosters are logo grids (names in <img alt>) and/or short lists.
+        cand: List[str] = [_text(m.group(1)) for m in re.finditer(
+            r'<img\b[^>]*\balt=["\'](.*?)["\']', block, re.I | re.S)]
+        cand += _list_items(block, maxlen=60)
+        names: List[str] = []
+        seen = set()
+        for t in cand:
+            t = re.sub(r"\s+(?:logo|logotype)$", "", t, flags=re.I).strip()
+            key = t.lower()
+            if t and 2 <= len(t) <= 60 and not self._GENERIC.match(t) and key not in seen:
+                seen.add(key)
+                names.append(t)
+        names = names[:60]
+        return {"clients": names, "_source": (self.concept, url)} if names else {}
+
+
 class AwardsAgent(_Agent):
     name, concept = "awards", "awards"
     _AWARD = re.compile(r"award|awwward|winner|won|gold|silver|bronze|finalist|"
@@ -536,10 +569,10 @@ class ContactAgent(_Agent):
 
 
 # Pipeline order mirrors the requested flow:
-# Website(discover) → About → Services → Portfolio → Awards → Industries →
-# Offices → Leadership → Careers → News → Contact.
+# Website(discover) → About → Services → Portfolio → Clients → Awards →
+# Industries → Offices → Leadership → Careers → News → Contact.
 MICRO_AGENTS: List[_Agent] = [
-    AboutAgent(), ServicesAgent(), PortfolioAgent(), AwardsAgent(),
+    AboutAgent(), ServicesAgent(), PortfolioAgent(), ClientsAgent(), AwardsAgent(),
     IndustriesAgent(), OfficesAgent(), LeadershipAgent(), CareersAgent(),
     NewsAgent(), ContactAgent(),
 ]
