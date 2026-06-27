@@ -264,6 +264,59 @@ CATALOG: List[SourceSite] = [
         "Local/indie music gigs; noisy and per-market.", STATUS_SUGGESTED,
         [("opportunity", "Creative gigs", "https://www.craigslist.org/search/crg?query={q}")],
     ),
+    # --- Agency directories (harvested by the resumable directory-crawl engine) -
+    # Each is its own agent/search. Public directories are active with the same
+    # courtesy rails + operator-ToS caveat as Agency Spotter; 4A's is a
+    # member/login directory, so it stays manual-assist. The per-site extraction
+    # parser is fitted from each site's real markup before a live run.
+    SourceSite(
+        "adforum", "AdForum · Agencies", "https://www.adforum.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Global agency profiles directory. Public; the directory agent walks every "
+        "page and stores company/website/employees/location/description/industries. "
+        "Operator confirms bulk use under AdForum's terms.", STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.adforum.com/agencies")],
+    ),
+    SourceSite(
+        "canneslions", "Cannes Lions · Agencies", "https://www.canneslions.com",
+        "opportunity", "Awards directory", "Competitive Intelligence Analyst",
+        "Cannes Lions entrant/winner agencies — high-end creative buyers. The agent "
+        "walks the agency listing page by page. Operator confirms bulk use under "
+        "the site's terms.", STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.canneslions.com/")],
+    ),
+    SourceSite(
+        "aaaa_directory", "4A's · Agency Search", "https://www.aaaa.org",
+        "opportunity", "Trade-body directory", "Competitive Intelligence Analyst",
+        "American Association of Advertising Agencies member directory. Member/login "
+        "gated, so this is MANUAL-ASSIST: open the search in a logged-in browser and "
+        "hand-capture, like LinkedIn.", STATUS_SUGGESTED,
+        [("opportunity", "Agency search", "https://www.aaaa.org/agency-search/")],
+        login_gated=True,
+    ),
+    SourceSite(
+        "awwwards", "Awwwards · Agencies", "https://www.awwwards.com",
+        "opportunity", "Design directory", "Competitive Intelligence Analyst",
+        "Award-winning digital/design studios — creative buyers. The agent walks the "
+        "agencies listing page by page. Operator confirms bulk use under the site's "
+        "terms.", STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.awwwards.com/agencies/")],
+    ),
+    SourceSite(
+        "designrush", "DesignRush · Agencies", "https://www.designrush.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "Large public agency marketplace/directory. The agent walks every page and "
+        "stores the six fields. Operator confirms bulk use under DesignRush's terms.",
+        STATUS_SUGGESTED,
+        [("opportunity", "Agencies", "https://www.designrush.com/agency")],
+    ),
+    SourceSite(
+        "thedrum", "The Drum · Recommends", "https://www.thedrum.com",
+        "opportunity", "Agency directory", "Competitive Intelligence Analyst",
+        "The Drum Recommends agency directory. The agent walks the directory page by "
+        "page. Operator confirms bulk use under The Drum's terms.", STATUS_SUGGESTED,
+        [("opportunity", "Directory", "https://www.thedrum.com/recommends/agencies")],
+    ),
     SourceSite(
         "agencyspotter", "Agency Spotter", "https://www.agencyspotter.com",
         "opportunity", "Agency directory", "Competitive Intelligence Analyst",
