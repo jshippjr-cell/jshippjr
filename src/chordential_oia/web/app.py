@@ -55,7 +55,7 @@ from ..delivery import (
 from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
-from . import db, discovery, scheduler, seed, signals, sources, triage, webpush
+from . import db, discovery, enrichment, scheduler, seed, signals, sources, triage, webpush
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -455,6 +455,87 @@ def sources_clear_tests():
     finally:
         conn.close()
     return RedirectResponse("/sources", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Agencies — the harvested Master Company Database + the Company Enrichment
+# Engine. The list shows every harvested agency and its enrichment status; the
+# per-row "Enrich" button runs the engine live (it actually fetches the agency's
+# website when CHORDENTIAL_ENABLE_SCRAPE is on, i.e. on Render). This is the
+# one-agency smoke test: click Enrich on Render, then read the profile.
+# --------------------------------------------------------------------------- #
+def _enrichment_status(conn, agency_id: int) -> str:
+    return (db.get_agency_enrichment(conn, agency_id) or {}).get("status", "")
+
+
+@app.get("/agencies", response_class=HTMLResponse)
+def agencies_page(request: Request, source: str = "", enriched: str = ""):
+    """The harvested agencies, with enrichment status and per-row Enrich."""
+    conn = db.connect()
+    try:
+        all_sources = [r["source"] for r in conn.execute(
+            "SELECT DISTINCT source FROM agencies WHERE source IS NOT NULL "
+            "ORDER BY source")]
+        rows = db.list_agencies(conn, source=source or None, limit=500)
+        agencies = []
+        for r in rows:
+            status = _enrichment_status(conn, r["id"])
+            if enriched == "yes" and status != "complete":
+                continue
+            if enriched == "no" and status == "complete":
+                continue
+            agencies.append({
+                "id": r["id"], "company": r["company"], "website": r["website"],
+                "location": r["location"], "source": r["source"],
+                "status": status or "—",
+            })
+        pending = len(db.agencies_needing_enrichment(conn, source=source or None))
+        total = db.count_agencies(conn, source or None)
+    finally:
+        conn.close()
+    return render(request, "agencies.html", nav="agencies", agencies=agencies,
+                  sources=all_sources, source=source, enriched=enriched,
+                  pending=pending, total=total,
+                  scrape_on=enrichment.scrape_enabled())
+
+
+@app.get("/agencies/{agency_id}", response_class=HTMLResponse)
+def agency_detail(request: Request, agency_id: int):
+    """One agency's enriched Agency Profile (or the empty shell before a run)."""
+    conn = db.connect()
+    try:
+        row = db.get_agency(conn, agency_id)
+        if row is None:
+            return PlainTextResponse("No such agency", status_code=404)
+        state = db.get_agency_enrichment(conn, agency_id) or {}
+    finally:
+        conn.close()
+    profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
+    if not profile.get("company"):
+        profile["company"] = row["company"]
+    if not profile.get("website"):
+        profile["website"] = row["website"]
+    return render(request, "agency_detail.html", nav="agencies",
+                  agency={"id": row["id"], "company": row["company"],
+                          "website": row["website"], "source": row["source"]},
+                  profile=profile, status=state.get("status", ""),
+                  detail=state.get("detail", ""),
+                  steps_done=state.get("steps_done", []),
+                  scrape_on=enrichment.scrape_enabled())
+
+
+@app.post("/agencies/{agency_id}/enrich")
+def agency_enrich(agency_id: int, reset: str = Form("")):
+    """Run the Company Enrichment Engine on ONE agency, live. Uses the default
+    fetcher, so it actually reads the agency's website wherever scraping is
+    enabled (Render); in the egress-blocked sandbox it records 'blocked'. Safe to
+    re-press: it resumes unless 'reset' is set."""
+    conn = db.connect()
+    try:
+        enrichment.enrich_agency(conn, agency_id, reset=bool(reset))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}", status_code=303)
 
 
 @app.get("/signals/selftest", response_class=HTMLResponse)
