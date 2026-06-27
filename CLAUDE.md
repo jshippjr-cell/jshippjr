@@ -3,6 +3,11 @@
 Guidance for Claude/agents working in this repo. Read this first; it front-loads what
 otherwise gets re-discovered every session.
 
+> **Architectural constitution:** `CHORDENTIAL_SYSTEM_ARCHITECTURE.md` (root) is the
+> authoritative architecture + governance doc, and `AGENTS.md` (root) is the live agent
+> manifest. Read both before non-trivial work; honor them; amend via ADR, never silently.
+> New agents go in `AGENTS.md` (Planned) **before** they're built (manifest-first).
+
 ## What this is
 Chordential — a **procurement-grade music studio + the operating system that runs it.**
 The product the market pays for is the *music service* (clearance-certified original
