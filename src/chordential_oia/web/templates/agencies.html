@@ -128,10 +128,10 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Auto-enrichment:
-      {% if auto_enrich.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+      {% if auto_enrich.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
     </strong>
     <div class="muted small">
-      {% if auto_enrich.enabled %}
+      {% if auto_enrich.autonomous %}
         The agent enriches pending agencies on its own in the background — no clicking needed.
         {% if auto_enrich.running %}<strong>A pass is running now…</strong> {% endif %}
         {% if auto_enrich.last_run %}Last pass completed {{ auto_enrich.last_completed }} · {{ auto_enrich.total_completed }} total this session.{% endif %}
@@ -154,7 +154,7 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Auto-refresh (re-enrichment):
-      {% if auto_reenrich.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+      {% if auto_reenrich.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
     </strong>
     <div class="muted small">
       Periodically re-fetches each agency (every {{ auto_reenrich.stale_days }} days) so the data stays current — that's what feeds the opportunity timeline with fresh change.
@@ -172,10 +172,10 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Decision-maker discovery:
-      {% if auto_dm.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+      {% if auto_dm.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
     </strong>
     <div class="muted small">
-      {% if auto_dm.enabled %}
+      {% if auto_dm.autonomous %}
         The agent finds the people worth contacting at each agency on its own in the background.
         {% if auto_dm.running %}<strong>A pass is running now…</strong> {% endif %}
         {% if auto_dm.last_run %}Last pass found {{ auto_dm.last_found }} · {{ auto_dm.total_found }} people this session.{% endif %}
@@ -196,7 +196,7 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Company intelligence:
-      {% if auto_intel.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+      {% if auto_intel.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
     </strong>
     <div class="muted small">
       Derives the structured, evidence-backed intelligence profile from each enriched agency's collected data.
@@ -216,7 +216,7 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Opportunity signals:
-      {% if auto_signals.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+      {% if auto_signals.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
     </strong>
     <div class="muted small">
       Watches each agency for <em>change</em> — new work, hires, awards, client wins — and flags the moments most likely to need original music.
@@ -236,7 +236,7 @@
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
   <div style="flex:1;min-width:240px">
     <strong>Music opportunity scoring:
-      {% if auto_score.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+      {% if auto_score.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
     </strong>
     <div class="muted small">
       Scores every agency (0–100, tier A–D) from intelligence + signals + outreach — every point traceable, and the score moves as things change.

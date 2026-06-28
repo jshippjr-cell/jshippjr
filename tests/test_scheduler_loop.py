@@ -24,6 +24,7 @@ def test_loop_fires_enrichment_on_its_own_each_tick(monkeypatch):
     # Only enrichment enabled; with a zero interval it must run on every base tick
     # (i.e. without anyone clicking), proving the per-task gate works.
     calls = {"enrich": 0}
+    monkeypatch.setattr(sch, "autonomous_engines_on", lambda: True)
     monkeypatch.setattr(sch, "enrich_enabled", lambda: True)
     for off in ("dm_enabled", "autofetch_enabled", "signals_active",
                 "reddit_enabled", "triage_enabled"):
@@ -50,6 +51,48 @@ def test_loop_fires_enrichment_on_its_own_each_tick(monkeypatch):
     assert calls["enrich"] >= 2            # fired on its own across multiple ticks
 
 
+def test_autonomy_off_by_default_so_loop_skips_heavy_cycles(monkeypatch):
+    # Default OFF: the heavy engines must NOT run autonomously (the CPU pile-up
+    # that 502'd the live instance). enrich_enabled() is True, but with the master
+    # switch off the loop never fires it.
+    monkeypatch.delenv("CHORDENTIAL_AUTONOMOUS", raising=False)
+    assert sch.autonomous_engines_on() is False
+    calls = {"enrich": 0}
+    monkeypatch.setattr(sch, "enrich_enabled", lambda: True)
+    for off in ("dm_enabled", "autofetch_enabled", "signals_active",
+                "reddit_enabled", "triage_enabled"):
+        monkeypatch.setattr(sch, off, lambda: False)
+    monkeypatch.setattr(sch, "_enrich_interval_seconds", lambda: 0)
+    monkeypatch.setattr(sch, "run_enrich_cycle",
+                        lambda: calls.__setitem__("enrich", calls["enrich"] + 1) or 0)
+    real_sleep = asyncio.sleep
+    ticks = {"n": 0}
+
+    async def fake_sleep(_seconds):
+        ticks["n"] += 1
+        if ticks["n"] > 3:
+            raise asyncio.CancelledError
+        await real_sleep(0)
+    monkeypatch.setattr(sch.asyncio, "sleep", fake_sleep)
+
+    async def run():
+        with pytest.raises(asyncio.CancelledError):
+            await sch.run_loop()
+    asyncio.run(run())
+    assert calls["enrich"] == 0            # never fired autonomously
+
+
+def test_manual_start_works_even_when_autonomy_off(monkeypatch):
+    # Manual buttons must keep working with autonomy off — they're user-initiated.
+    monkeypatch.delenv("CHORDENTIAL_AUTONOMOUS", raising=False)
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
+    sch._enrich_status["running"] = False
+    started = {}
+    monkeypatch.setattr(sch.threading, "Thread",
+                        lambda *a, **k: type("T", (), {"start": lambda self: started.setdefault("yes", True)})())
+    assert sch.start_manual_enrich(5) is True and started.get("yes")
+
+
 def test_only_one_heavy_cycle_runs_at_a_time():
     # The shared heavy lock prevents several batches hammering a small instance at
     # once (the overload that hung the live service): if one heavy job holds the
@@ -69,6 +112,7 @@ def test_only_one_heavy_cycle_runs_at_a_time():
 def test_a_slow_task_does_not_block_a_fast_one(monkeypatch):
     # autofetch on a long interval must not stop enrichment from firing each tick.
     fired = {"enrich": 0, "autofetch": 0}
+    monkeypatch.setattr(sch, "autonomous_engines_on", lambda: True)
     monkeypatch.setattr(sch, "enrich_enabled", lambda: True)
     monkeypatch.setattr(sch, "autofetch_enabled", lambda: True)
     for off in ("dm_enabled", "signals_active", "reddit_enabled", "triage_enabled"):

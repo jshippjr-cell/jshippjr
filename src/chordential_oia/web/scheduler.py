@@ -76,6 +76,16 @@ def autofetch_enabled() -> bool:
     )
 
 
+def autonomous_engines_on() -> bool:
+    """Master switch for the heavy agency engines running AUTONOMOUSLY in the loop
+    (enrich, re-enrich, decision makers, intelligence, signals, scoring). Default
+    OFF: these are CPU-heavy batches that, run unattended on a small single-CPU
+    instance, starve the web server (the live 502/restart loop). The manual buttons
+    always work regardless; flip CHORDENTIAL_AUTONOMOUS=1 to let them run on their
+    own (recommended only on a larger instance)."""
+    return os.environ.get("CHORDENTIAL_AUTONOMOUS", "0").strip().lower() not in _FALSEY
+
+
 # Autonomous Gmail triage (Phase B2). Off by default — opt in with
 # CHORDENTIAL_TRIAGE_ENABLED — and only when triage is actually configured
 # (Gmail creds + Anthropic key). Each due cycle reads the unread alert queue,
@@ -270,6 +280,7 @@ def start_manual_reenrich(batch: int = 0) -> bool:
 def reenrich_status() -> dict:
     s = dict(_reenrich_status)
     s["enabled"] = reenrich_enabled()
+    s["autonomous"] = autonomous_engines_on() and reenrich_enabled()
     s["stale_days"] = _reenrich_stale_days()
     return s
 
@@ -345,6 +356,7 @@ def start_manual_dm(batch: int = 0) -> bool:
 def dm_status() -> dict:
     s = dict(_dm_status)
     s["enabled"] = dm_enabled()
+    s["autonomous"] = autonomous_engines_on() and dm_enabled()
     return s
 
 
@@ -416,6 +428,7 @@ def start_manual_intel(batch: int = 0) -> bool:
 def intel_status() -> dict:
     s = dict(_intel_status)
     s["enabled"] = intel_enabled()
+    s["autonomous"] = autonomous_engines_on() and intel_enabled()
     return s
 
 
@@ -485,6 +498,7 @@ def start_manual_signals(batch: int = 0) -> bool:
 def signals_engine_status() -> dict:
     s = dict(_sig_status)
     s["enabled"] = signals_engine_enabled()
+    s["autonomous"] = autonomous_engines_on() and signals_engine_enabled()
     return s
 
 
@@ -553,12 +567,14 @@ def start_manual_score(batch: int = 0) -> bool:
 def score_status() -> dict:
     s = dict(_score_status)
     s["enabled"] = score_enabled()
+    s["autonomous"] = autonomous_engines_on() and score_enabled()
     return s
 
 
 def enrich_status() -> dict:
     s = dict(_enrich_status)
     s["enabled"] = enrich_enabled()
+    s["autonomous"] = autonomous_engines_on() and enrich_enabled()
     return s
 
 
@@ -804,37 +820,41 @@ async def run_loop() -> None:
                 pass
             finally:
                 _status["running"] = False
-        if enrich_enabled() and due(_last_enrich_mono, _enrich_interval_seconds()):
+        # The heavy agency engines run autonomously ONLY behind the master switch
+        # (default off) — otherwise their CPU-heavy batches starve this single-CPU
+        # web instance. The manual buttons remain available either way.
+        auto = autonomous_engines_on()
+        if auto and enrich_enabled() and due(_last_enrich_mono, _enrich_interval_seconds()):
             _last_enrich_mono = now_mono
             try:
                 await asyncio.to_thread(run_enrich_cycle)       # self-bookkeeping
             except Exception:
                 pass
-        if reenrich_enabled() and due(_last_reenrich_mono, _reenrich_interval_seconds()):
+        if auto and reenrich_enabled() and due(_last_reenrich_mono, _reenrich_interval_seconds()):
             _last_reenrich_mono = now_mono
             try:
                 await asyncio.to_thread(run_reenrich_cycle)     # self-bookkeeping
             except Exception:
                 pass
-        if dm_enabled() and due(_last_dm_mono, _dm_interval_seconds()):
+        if auto and dm_enabled() and due(_last_dm_mono, _dm_interval_seconds()):
             _last_dm_mono = now_mono
             try:
                 await asyncio.to_thread(run_dm_cycle)           # self-bookkeeping
             except Exception:
                 pass
-        if intel_enabled() and due(_last_intel_mono, _intel_interval_seconds()):
+        if auto and intel_enabled() and due(_last_intel_mono, _intel_interval_seconds()):
             _last_intel_mono = now_mono
             try:
                 await asyncio.to_thread(run_intel_cycle)        # self-bookkeeping
             except Exception:
                 pass
-        if signals_engine_enabled() and due(_last_sig_mono, _sig_interval_seconds()):
+        if auto and signals_engine_enabled() and due(_last_sig_mono, _sig_interval_seconds()):
             _last_sig_mono = now_mono
             try:
                 await asyncio.to_thread(run_signals_cycle)      # self-bookkeeping
             except Exception:
                 pass
-        if score_enabled() and due(_last_score_mono, _score_interval_seconds()):
+        if auto and score_enabled() and due(_last_score_mono, _score_interval_seconds()):
             _last_score_mono = now_mono
             try:
                 await asyncio.to_thread(run_score_cycle)        # self-bookkeeping
