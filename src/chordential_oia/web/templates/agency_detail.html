@@ -32,6 +32,64 @@
   {% endif %}
 {% endmacro %}
 
+<!-- Music Opportunity — the headline: should Chordential care, and why. -->
+<div id="opportunity" class="card" style="margin-bottom:16px;border:2px solid var(--accent,#2e8b57)">
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    {% if opportunity and opportunity.score is defined %}
+    <div style="text-align:center;min-width:96px">
+      <div style="font-size:38px;font-weight:700;line-height:1">{{ opportunity.score }}</div>
+      <div class="muted small">/ 100 · Tier {{ opportunity.tier }}</div>
+      {% if opportunity.movement %}<div class="small" style="color:{{ '#2e8b57' if opportunity.movement > 0 else '#b5651d' }}">{{ '▲' if opportunity.movement > 0 else '▼' }} {{ opportunity.movement|abs }} since last run</div>{% endif %}
+    </div>
+    <div style="flex:1;min-width:240px">
+      <div class="small"><strong>Recommended action:</strong> {{ opportunity.recommended_action }}</div>
+      <div class="small"><strong>Best timing:</strong> {{ opportunity.best_timing }}</div>
+      {% if opportunity.recommended_contact %}<div class="small"><strong>Contact:</strong> {{ opportunity.recommended_contact.name }}, {{ opportunity.recommended_contact.title }}{% if opportunity.recommended_contact.email %} · {{ opportunity.recommended_contact.email }}{% endif %}</div>{% endif %}
+      <div class="muted small">Confidence {{ opportunity.confidence }}%</div>
+    </div>
+    {% else %}
+    <div style="flex:1"><span class="muted">Not scored yet — generate the score once intelligence + signals are in.</span></div>
+    {% endif %}
+    <form method="post" action="/agencies/{{ agency.id }}/score" style="margin:0">
+      <button class="btn btn-small" type="submit">{{ 'Re-score' if opportunity else 'Score now' }}</button>
+    </form>
+  </div>
+
+  {% if opportunity and opportunity.subscores %}
+  <table style="width:100%;border-collapse:collapse;margin-top:12px">
+    <tbody>
+    {% for s in opportunity.subscores %}
+      <tr style="border-top:1px solid var(--border,#eee);vertical-align:top">
+        <td style="padding:6px 8px;white-space:nowrap"><strong>{{ s.name }}</strong></td>
+        <td style="padding:6px 8px;white-space:nowrap">{{ s.value }} / {{ s.max }}</td>
+        <td style="padding:6px 8px"><details><summary class="muted small">why</summary>
+          <ul class="tight small muted">{% for e in s.evidence %}<li>{{ e }}</li>{% endfor %}</ul></details></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if opportunity.talking_points %}
+  <div style="margin-top:12px"><strong class="small">Talking points</strong>
+    <ul class="tight small">{% for p in opportunity.talking_points %}<li>{{ p.text }} <span class="muted">[{{ p.source }}]</span></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <!-- Relationship history + log a touch (the score reacts immediately). -->
+  <details style="margin-top:12px"><summary class="small">Relationship history ({{ outreach|length }}) · log a touch</summary>
+    {% if outreach %}<ul class="tight small muted" style="margin-top:6px">
+      {% for o in outreach %}<li>{{ o.occurred_at[:10] }} · {{ o.kind }}{% if o.contact %} → {{ o.contact }}{% endif %}{% if o.responded %} · responded{% endif %}{% if o.note %} — {{ o.note }}{% endif %}</li>{% endfor %}
+    </ul>{% endif %}
+    <form method="post" action="/agencies/{{ agency.id }}/outreach" class="small" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select name="kind"><option value="email">Email</option><option value="call">Call</option><option value="linkedin">LinkedIn</option><option value="note">Note</option></select>
+      <input name="contact" placeholder="contact (optional)">
+      <input name="note" placeholder="note (optional)" style="flex:1;min-width:140px">
+      <label class="muted"><input type="checkbox" name="responded" value="1"> responded</label>
+      <button class="btn btn-small" type="submit">Log outreach</button>
+    </form>
+  </details>
+</div>
+
 {% macro listfield(label, items) %}
   {% if items %}
   <div class="kv"><div class="kv-k">{{ label }}</div>
