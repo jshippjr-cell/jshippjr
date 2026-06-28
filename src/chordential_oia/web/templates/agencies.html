@@ -192,6 +192,26 @@
   </form>
 </div>
 
+<!-- Opportunity Signals: change detection over collected data → buying signals. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Opportunity signals:
+      {% if auto_signals.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      Watches each agency for <em>change</em> — new work, hires, awards, client wins — and flags the moments most likely to need original music.
+      {% if auto_signals.running %}<strong>A scan is running now…</strong> {% endif %}
+      {% if auto_signals.last_run %}Last scan: {{ auto_signals.last_new }} new · {{ auto_signals.scanned }} agencies checked.{% endif %}
+      {{ sig_total }} active signals on the timeline.
+    </div>
+  </div>
+  {% if sig_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Scanning for signals in the background — refresh to see progress</span>
+  {% elif sig_started == "0" %}<span class="small muted">A scan is already running — refresh to see progress</span>{% endif %}
+  <form method="post" action="/agencies/signals-pending" style="margin:0">
+    <button class="btn" type="submit"{% if auto_signals.running %} disabled{% endif %}>Scan for signals</button>
+  </form>
+</div>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">

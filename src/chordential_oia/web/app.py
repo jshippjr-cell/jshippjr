@@ -57,7 +57,8 @@ from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
     db, decision_makers, directory_crawl, directory_parsers, discovery,
-    enrichment, intelligence, scheduler, seed, signals, sources, triage, webpush,
+    enrichment, intelligence, opportunity_signals, scheduler, seed, signals,
+    sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -497,7 +498,7 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   crawled: str = "", pages: str = "", cstatus: str = "",
                   eb_started: str = "", eb_n: str = "",
                   dm_started: str = "", dm_n: str = "",
-                  intel_started: str = "", intel_n: str = ""):
+                  intel_started: str = "", intel_n: str = "", sig_started: str = ""):
     """Paginated accordion of harvested agencies; each row expands to its enriched
     Agency Profile inline. Filter/paginate happen in SQL so this scales to
     thousands of rows."""
@@ -534,6 +535,7 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
         dm_pending = len(db.agencies_needing_decision_makers(conn, source=source or None))
         dm_total = db.count_decision_makers(conn)
         intel_pending = len(db.agencies_needing_intelligence(conn, source=source or None))
+        sig_total = db.count_opportunity_signals(conn, active_only=True)
         total = db.count_agencies(conn, source or None)
         crawl_states = []
         for key in directory_parsers.SOURCE_FACTORIES:
@@ -567,9 +569,11 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   dm_pending=dm_pending, dm_total=dm_total,
                   intel_started=intel_started, intel_n=intel_n,
                   intel_pending=intel_pending,
+                  sig_started=sig_started, sig_total=sig_total,
                   auto_enrich=scheduler.enrich_status(),
                   auto_dm=scheduler.dm_status(),
                   auto_intel=scheduler.intel_status(),
+                  auto_signals=scheduler.signals_engine_status(),
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -677,6 +681,21 @@ def agencies_intel_pending(limit: str = Form("")):
         status_code=303)
 
 
+@app.post("/agencies/signals-pending")
+def agencies_signals_pending(limit: str = Form("")):
+    """Nudge a batch of signal detection now — fire-and-forget; the background
+    scheduler also sweeps on its own. Progress shows in the signals status card."""
+    n = 100
+    try:
+        n = max(1, min(500, int(limit)))
+    except (TypeError, ValueError):
+        n = 100
+    started = scheduler.start_manual_signals(n)
+    return RedirectResponse(
+        f"/agencies?sig_started={'1' if started else '0'}",
+        status_code=303)
+
+
 @app.post("/agencies/import-setup")
 def agencies_import_setup():
     """Load the agencies recovered from the directory pages pasted during setup
@@ -724,6 +743,7 @@ def agency_detail(request: Request, agency_id: int):
         dm_rows = [_decision_maker_view(r) for r in
                    db.list_decision_makers(conn, agency_id)]
         intel = db.get_agency_intel(conn, agency_id) or {}
+        timeline = opportunity_signals.agency_timeline(conn, agency_id)
     finally:
         conn.close()
     profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
@@ -737,7 +757,7 @@ def agency_detail(request: Request, agency_id: int):
                   profile=profile, status=state.get("status", ""),
                   detail=state.get("detail", ""),
                   steps_done=state.get("steps_done", []),
-                  decision_makers=dm_rows, intel=intel,
+                  decision_makers=dm_rows, intel=intel, timeline=timeline,
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -790,6 +810,19 @@ def agency_generate_intelligence(agency_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/agencies/{agency_id}#intelligence", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/signals")
+def agency_detect_signals(agency_id: int):
+    """Scan ONE agency for new opportunity signals (change detection over its
+    collected profile). Pure computation; runs inline. First scan baselines the
+    agency, later scans surface what's new."""
+    conn = db.connect()
+    try:
+        opportunity_signals.detect_signals(conn, agency_id, force=True)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#timeline", status_code=303)
 
 
 @app.post("/agencies/{agency_id}/enrich")

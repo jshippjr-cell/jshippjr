@@ -141,6 +141,48 @@
 <p class="muted small">No intelligence profile yet — generate one (it reads the collected enrichment + decision-maker data; richer once enrichment has completed).</p>
 {% endif %}
 
+<!-- Opportunity Timeline: change-detected buying signals, music-relevance tagged. -->
+<h2 id="timeline" style="margin-top:24px">Opportunity timeline
+  <span class="muted small">({{ timeline | selectattr('expired','equalto',false) | list | length }} active)</span></h2>
+<div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+  <form method="post" action="/agencies/{{ agency.id }}/signals" style="margin:0">
+    <button class="btn" type="submit">{{ 'Re-scan for signals' if timeline else 'Scan for signals' }}</button>
+  </form>
+  <span class="muted small">Watches for <em>change</em> (new work, hires, awards, wins). First scan sets a baseline; new changes appear here over time. “Music” = does this event raise the odds they'll commission original music.</span>
+</div>
+
+{% if timeline %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left;background:var(--bg2,#f6f6f6)">
+      <th style="padding:8px 10px">Detected</th><th style="padding:8px 10px">Event</th>
+      <th style="padding:8px 10px">Importance</th><th style="padding:8px 10px">Music</th>
+      <th style="padding:8px 10px">Source</th><th style="padding:8px 10px">Expires</th>
+    </tr></thead>
+    <tbody>
+    {% for s in timeline %}
+      <tr style="border-top:1px solid var(--border,#eee){% if s.expired %};opacity:.5{% endif %}">
+        <td style="padding:8px 10px" class="small">{{ s.detected_at[:10] }}</td>
+        <td style="padding:8px 10px"><strong>{{ s.event_type }}</strong>
+          <span class="muted small">· {{ s.category }}</span><br>
+          <span class="small">{{ s.summary }}</span>
+          {% if s.evidence %}<details style="margin-top:2px"><summary class="muted small">evidence</summary>
+            <ul class="tight small muted">{% for e in s.evidence %}<li>{{ e }}</li>{% endfor %}</ul></details>{% endif %}
+        </td>
+        <td style="padding:8px 10px">{{ s.importance }}</td>
+        <td style="padding:8px 10px"><strong>{{ s.music_relevance }}</strong></td>
+        <td style="padding:8px 10px" class="small">{% if s.source_url %}<a href="{{ s.source_url }}" target="_blank" rel="noopener noreferrer">{{ s.source }}</a>{% else %}{{ s.source }}{% endif %}</td>
+        <td style="padding:8px 10px" class="small">{{ s.expires_at[:10] if s.expires_at else '—' }}{% if s.expired %} <span class="muted">(expired)</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted small" style="margin-top:8px">The engine stores verified signals only — it doesn't score them. A signal expires so a stale event stops reading as a live opportunity.</p>
+{% else %}
+<p class="muted small">No signals yet — run a scan to baseline this agency (signals appear here as it changes: new work, hires, awards, wins).{% if not scrape_on %} Enrichment runs for real on Render.{% endif %}</p>
+{% endif %}
+
 <!-- Decision Maker Discovery Engine: the people worth contacting, ranked + explained. -->
 <h2 id="decision-makers" style="margin-top:24px">Decision makers
   <span class="muted small">({{ decision_makers | length }})</span></h2>
