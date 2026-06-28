@@ -17,7 +17,7 @@ import os
 import re
 import secrets
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from ..invoicing import INVOICE_STATES, Invoice
@@ -1779,6 +1779,36 @@ def agencies_for_signal_scan(
         if len(out) >= limit:
             break
     return out
+
+
+def agencies_due_for_reenrichment(
+    conn: sqlite3.Connection, source: Optional[str] = None, stale_days: int = 7,
+    limit: int = 100000
+) -> List[sqlite3.Row]:
+    """Enriched agencies whose data has gone stale (last_enriched older than
+    ``stale_days``, or never timestamped), oldest-stamp first so the refresh
+    rotates. This is the re-enrichment cadence's queue — refreshing these is what
+    gives the Signal Detection Framework fresh data to diff against."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).isoformat()
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    due: List[tuple] = []
+    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        raw = r["enrichment_json"]
+        if not raw:
+            continue
+        try:
+            state = json.loads(raw) or {}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if state.get("status") != "complete":
+            continue
+        last = state.get("last_enriched") or ""
+        if last and last >= cutoff:
+            continue                          # still fresh
+        due.append((last, r))
+    due.sort(key=lambda t: t[0])              # stalest (incl. untimestamped "") first
+    return [r for _last, r in due[:limit]]
 
 
 def agencies_needing_decision_makers(

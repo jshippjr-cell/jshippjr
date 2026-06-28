@@ -31,6 +31,7 @@ import html as _html
 import re
 import time
 import urllib.request
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit
@@ -65,6 +66,10 @@ _SCRIPT_STYLE = re.compile(r"<(script|style|noscript)\b[^>]*>.*?</\1>", re.S | r
 def _text(fragment: str) -> str:
     """Strip tags, unescape entities, collapse whitespace."""
     return _WS.sub(" ", _html.unescape(_TAG.sub("", fragment or ""))).strip()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _strip_chrome(html: str) -> str:
@@ -667,10 +672,13 @@ def enrich_agency(
     links: List[Tuple[str, str, str]] = [tuple(x) for x in (state.get("links") or [])]
 
     def _save(status: str, detail: str = "") -> None:
-        db.save_agency_enrichment(conn, agency_id, {
+        blob = {
             "status": status, "steps_done": steps_done, "detail": detail,
             "links": [list(t) for t in links], "profile": profile.to_dict(),
-        })
+        }
+        if status == "complete":                 # stamp when fully (re-)enriched —
+            blob["last_enriched"] = _now_iso()   # the re-enrichment cadence reads this
+        db.save_agency_enrichment(conn, agency_id, blob)
         conn.commit()
         if on_progress:
             on_progress({"agency_id": agency_id, "status": status,
@@ -765,3 +773,26 @@ def enrich_batch(
         "errors": counts.get("error", 0),
         "status_counts": counts, "results": results,
     }
+
+
+def reenrich_batch(
+    conn, *, source: Optional[str] = None, stale_days: int = 7,
+    limit: int = 10, fetch: Optional[Fetch] = None,
+) -> Dict:
+    """Refresh agencies whose enrichment has gone stale — re-fetch their pages
+    (reset=True) so the data is current. This is what feeds the Signal Detection
+    Framework: a refreshed profile that differs from its last snapshot is exactly
+    what produces new opportunity signals. ``stale_days`` is the freshness window;
+    only agencies last enriched longer ago than that (or never timestamped) are
+    refreshed, one at a time, bounded by ``limit``.
+
+    Network-gated like enrich_agency: with no ``fetch`` and scraping off it's a
+    no-op (everything comes back 'blocked')."""
+    rows = db.agencies_due_for_reenrichment(
+        conn, source=source, stale_days=stale_days, limit=limit)
+    refreshed = 0
+    for row in rows:
+        summary = enrich_agency(conn, row["id"], fetch=fetch, reset=True)
+        if summary["status"] == "complete":
+            refreshed += 1
+    return {"due": len(rows), "refreshed": refreshed}
