@@ -90,18 +90,23 @@ def test_manual_start_works_even_when_autonomy_off(monkeypatch):
     started = {}
     monkeypatch.setattr(sch.threading, "Thread",
                         lambda *a, **k: type("T", (), {"start": lambda self: started.setdefault("yes", True)})())
-    assert sch.start_manual_enrich(5) is True and started.get("yes")
+    try:
+        assert sch.start_manual_enrich(5) is True and started.get("yes")
+    finally:
+        sch._enrich_status["running"] = False        # don't leak the guard flag
 
 
 def test_full_pipeline_runs_all_layers_in_order(tmp_path, monkeypatch):
     # "Build full profile" must chain enrich → decision makers → intelligence →
-    # signals → score for one agency, in order, in one background job.
+    # signals → score for one agency, in order, in one killable worker process.
     from chordential_oia.web import (db as dbm, enrichment as en,
-                                      decision_makers as dm)
+                                      decision_makers as dm, _enrich_worker)
+    db_path = str(tmp_path / "pipe.db")
     monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.setenv("CHORDENTIAL_DB", db_path)
     monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
 
-    conn = dbm.connect(str(tmp_path / "pipe.db"))
+    conn = dbm.connect(db_path)
     dbm.init_db(conn)
     dbm.upsert_agency(conn, "s", {"dedup_key": "acme.example", "company": "Acme",
                                   "website": "https://acme.example"})
@@ -123,14 +128,82 @@ def test_full_pipeline_runs_all_layers_in_order(tmp_path, monkeypatch):
     monkeypatch.setattr(en, "_default_fetch", fake_fetch)
     monkeypatch.setattr(dm, "_default_fetch", fake_fetch)
 
-    # run synchronously (don't spawn a thread) to assert the chained outcome
-    monkeypatch.setattr(sch, "_run_in_background", lambda fn: fn(conn))
+    # drive the worker synchronously in-process (don't spawn a real subprocess) to
+    # assert the chained outcome — the worker opens its own connection to the same DB.
+    monkeypatch.setattr(sch, "_run_worker",
+                        lambda spec, timeout: _enrich_worker.run(spec))
     assert sch.start_agency_pipeline(aid) is True
 
     assert dbm.get_agency_enrichment(conn, aid)["status"] == "complete"   # enriched
     assert dbm.count_decision_makers(conn, aid) >= 1                      # decision makers
     assert dbm.get_agency_intel(conn, aid).get("status") == "complete"   # intelligence
     assert dbm.get_agency_score(conn, aid).get("score") is not None       # scored
+
+
+def test_worker_hung_job_is_killed_not_awaited_forever(monkeypatch):
+    # The whole point of out-of-process enrichment: a runaway parse that would
+    # otherwise freeze the web server (silent logs, wheel of death) is reaped by the
+    # watchdog. Simulate a process whose wait() times out and assert kill() fires.
+    import subprocess as sp
+    killed = {"n": 0}
+
+    class FakeProc:
+        def wait(self, timeout=None):
+            raise sp.TimeoutExpired("worker", timeout)
+
+        def kill(self):
+            killed["n"] += 1
+
+    monkeypatch.setattr(sch.subprocess, "Popen", lambda *a, **k: FakeProc())
+    # run the watchdog body synchronously instead of on a real thread
+    monkeypatch.setattr(sch.threading, "Thread",
+                        lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
+    sch._run_worker({"action": "enrich", "agency_id": 1}, timeout=1)
+    assert killed["n"] == 1                       # hung worker killed, not hung on forever
+
+
+def test_worker_normal_job_is_not_killed(monkeypatch):
+    killed = {"n": 0}
+
+    class OkProc:
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            killed["n"] += 1
+
+    monkeypatch.setattr(sch.subprocess, "Popen", lambda *a, **k: OkProc())
+    monkeypatch.setattr(sch.threading, "Thread",
+                        lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
+    sch._run_worker({"action": "enrich", "agency_id": 1}, timeout=99)
+    assert killed["n"] == 0                       # a job that finishes is never killed
+
+
+def test_worker_runs_as_a_real_subprocess(tmp_path):
+    # End-to-end: the `python -m chordential_oia.web._enrich_worker` entrypoint
+    # actually starts, connects to CHORDENTIAL_DB, does work, commits, and exits 0.
+    # Uses a website-less agency so no network is needed.
+    import json
+    import os
+    import subprocess
+    import sys
+    from chordential_oia.web import db as dbm
+
+    db_path = str(tmp_path / "w.db")
+    conn = dbm.connect(db_path)
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "no.site", "company": "NoSite",
+                                  "website": ""})
+    aid = conn.execute("SELECT id FROM agencies").fetchone()["id"]
+    conn.commit()
+
+    env = dict(os.environ, CHORDENTIAL_DB=db_path, CHORDENTIAL_ENABLE_SCRAPE="1")
+    spec = json.dumps({"action": "enrich", "agency_id": aid})
+    r = subprocess.run([sys.executable, "-m", "chordential_oia.web._enrich_worker", spec],
+                       env=env, timeout=60, capture_output=True)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    state = dbm.get_agency_enrichment(dbm.connect(db_path), aid)
+    assert state and state.get("status") in ("error", "blocked")   # it ran and committed
 
 
 def test_only_one_heavy_cycle_runs_at_a_time():
