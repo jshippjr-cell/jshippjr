@@ -321,6 +321,10 @@ _PROJECT_COLUMNS = {
 # agency row renders exactly as before.
 _AGENCY_COLUMNS = {
     "enrichment_json": "TEXT",
+    # Decision Maker Discovery marker: a small JSON blob {status, found, total,
+    # last_run} so the batch/auto-run knows an agency has been processed and the
+    # queue advances (an agency where 0 people were found isn't re-tried forever).
+    "dm_json": "TEXT",
 }
 
 # Provenance columns on talent — migrated onto an existing roster the same way.
@@ -1549,6 +1553,55 @@ def count_decision_makers(
 def delete_decision_makers(conn: sqlite3.Connection, agency_id: int) -> None:
     """Clear an agency's decision makers so a discovery run starts clean (reset)."""
     conn.execute("DELETE FROM decision_makers WHERE agency_id = ?", (agency_id,))
+
+
+def get_agency_dm(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's decision-maker discovery marker (agencies.dm_json), or {}.
+    Shape: {"status": str, "found": int, "total": int, "last_run": iso}."""
+    row = conn.execute(
+        "SELECT dm_json FROM agencies WHERE id = ?", (agency_id,)).fetchone()
+    if not row or not row["dm_json"]:
+        return {}
+    try:
+        return json.loads(row["dm_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_agency_dm(conn: sqlite3.Connection, agency_id: int, state: dict) -> None:
+    """Persist the agency's decision-maker discovery marker. Caller commits."""
+    conn.execute(
+        "UPDATE agencies SET dm_json = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(state), datetime.now(timezone.utc).isoformat(), agency_id))
+
+
+def agencies_needing_decision_makers(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100000
+) -> List[sqlite3.Row]:
+    """Agencies that can still have decision makers discovered: a website is on
+    record and discovery hasn't completed (dm_json status != 'complete'). Mirrors
+    agencies_needing_enrichment so the batch/auto-run advances instead of re-trying
+    the same rows — an agency processed with 0 people found is marked complete and
+    drops out."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        if not (r["website"] or "").strip():
+            continue
+        raw = r["dm_json"]
+        status = ""
+        if raw:
+            try:
+                status = (json.loads(raw) or {}).get("status", "")
+            except (json.JSONDecodeError, TypeError):
+                status = ""
+        if status == "complete":
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
 
 
 # --------------------------------------------------------------------------- #

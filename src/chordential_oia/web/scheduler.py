@@ -162,6 +162,80 @@ def start_manual_enrich(batch: int = 0) -> bool:
     return True
 
 
+# Autonomous Decision Maker Discovery — the same shape as auto-enrichment: on when
+# scraping is on and not explicitly disabled, a bounded batch per due cycle, fully
+# in the background so the people-to-contact fill in over time on their own.
+_dm_status = {"last_run": None, "last_found": 0, "total_found": 0,
+              "cycles": 0, "pending": 0, "running": False}
+_last_dm_mono = 0.0
+_dm_lock = threading.Lock()
+
+
+def dm_enabled() -> bool:
+    return discovery.scrape_enabled() and (
+        os.environ.get("CHORDENTIAL_AUTODM", "1").strip().lower() not in _FALSEY
+    )
+
+
+def _dm_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_AUTODM_INTERVAL", "600")))
+    except ValueError:
+        return 600
+
+
+def _dm_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTODM_BATCH", "10")))
+    except ValueError:
+        return 10
+
+
+def run_dm_cycle(batch: int = 0) -> int:
+    """One decision-maker discovery pass over up to ``batch`` agencies that still
+    need it. Blocking; runs in a worker thread. Updates the shared status and the
+    pending count. Returns how many NEW decision makers were stored this pass.
+    Lock-guarded so two passes never overlap."""
+    from . import decision_makers
+    limit = batch or _dm_batch_size()
+    if not _dm_lock.acquire(blocking=False):
+        return 0
+    _dm_status["running"] = True
+    try:
+        conn = db.connect()
+        try:
+            res = decision_makers.discover_batch(conn, limit=limit)
+            _dm_status["pending"] = len(db.agencies_needing_decision_makers(conn))
+        finally:
+            conn.close()
+        found = res.get("found", 0)
+        _dm_status["cycles"] += 1
+        _dm_status["last_found"] = found
+        _dm_status["total_found"] += found
+        _dm_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return found
+    finally:
+        _dm_status["running"] = False
+        _dm_lock.release()
+
+
+def start_manual_dm(batch: int = 0) -> bool:
+    """Kick a one-off decision-maker discovery pass in the background and return at
+    once. True if started; False if one's already running or discovery is off here."""
+    if not dm_enabled():
+        return False
+    if _dm_status.get("running"):
+        return False
+    threading.Thread(target=run_dm_cycle, args=(batch,), daemon=True).start()
+    return True
+
+
+def dm_status() -> dict:
+    s = dict(_dm_status)
+    s["enabled"] = dm_enabled()
+    return s
+
+
 def enrich_status() -> dict:
     s = dict(_enrich_status)
     s["enabled"] = enrich_enabled()
@@ -385,6 +459,15 @@ async def run_loop() -> None:
                 _last_enrich_mono = now_mono
                 try:
                     await asyncio.to_thread(run_enrich_cycle)  # self-bookkeeping
+                except Exception:
+                    pass
+        if dm_enabled():                     # autonomous Decision Maker Discovery
+            global _last_dm_mono
+            now_mono = time.monotonic()
+            if now_mono - _last_dm_mono >= _dm_interval_seconds():
+                _last_dm_mono = now_mono
+                try:
+                    await asyncio.to_thread(run_dm_cycle)       # self-bookkeeping
                 except Exception:
                     pass
         if triage_enabled():                 # Phase B2 — autonomous Gmail triage

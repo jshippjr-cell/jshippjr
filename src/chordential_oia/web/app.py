@@ -495,7 +495,8 @@ def _profile_from_row(row) -> dict:
 def agencies_page(request: Request, source: str = "", enriched: str = "",
                   page: int = 1, ingested: str = "", new: str = "", added: str = "",
                   crawled: str = "", pages: str = "", cstatus: str = "",
-                  eb_started: str = "", eb_n: str = ""):
+                  eb_started: str = "", eb_n: str = "",
+                  dm_started: str = "", dm_n: str = ""):
     """Paginated accordion of harvested agencies; each row expands to its enriched
     Agency Profile inline. Filter/paginate happen in SQL so this scales to
     thousands of rows."""
@@ -529,6 +530,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                 "status": pp["status"] or "—", "profile": pp["profile"],
             })
         pending = len(db.agencies_needing_enrichment(conn, source=source or None))
+        dm_pending = len(db.agencies_needing_decision_makers(conn, source=source or None))
+        dm_total = db.count_decision_makers(conn)
         total = db.count_agencies(conn, source or None)
         crawl_states = []
         for key in directory_parsers.SOURCE_FACTORIES:
@@ -558,7 +561,10 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   crawl_states=crawl_states, crawled=crawled, pages=pages,
                   cstatus=cstatus, pages_per_click=PAGES_PER_CRAWL_CLICK,
                   eb_started=eb_started, eb_n=eb_n,
+                  dm_started=dm_started, dm_n=dm_n,
+                  dm_pending=dm_pending, dm_total=dm_total,
                   auto_enrich=scheduler.enrich_status(),
+                  auto_dm=scheduler.dm_status(),
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -631,6 +637,22 @@ def agencies_enrich_pending(limit: str = Form("")):
     started = scheduler.start_manual_enrich(n)
     return RedirectResponse(
         f"/agencies?eb_started={'1' if started else '0'}&eb_n={n}",
+        status_code=303)
+
+
+@app.post("/agencies/decision-makers-pending")
+def agencies_dm_pending(limit: str = Form("")):
+    """Nudge a batch of decision-maker discovery now — fire-and-forget, same as
+    enrich-pending (a batch of live crawls takes minutes). The background scheduler
+    also does this on its own; progress shows in the discovery status card."""
+    n = 25
+    try:
+        n = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        n = 25
+    started = scheduler.start_manual_dm(n)
+    return RedirectResponse(
+        f"/agencies?dm_started={'1' if started else '0'}&dm_n={n}",
         status_code=303)
 
 
