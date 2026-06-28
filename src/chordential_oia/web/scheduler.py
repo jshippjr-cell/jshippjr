@@ -39,6 +39,28 @@ _status = {
 
 _FALSEY = {"0", "false", "no", "off", ""}
 
+# The loop wakes on a short base tick and each periodic task gates itself by its
+# own interval (below). This decouples them: enrichment can fire every 5 min even
+# though the heavier feed/autofetch passes run every 15 — they no longer throttle
+# each other through one shared sleep.
+_last_signals_mono = 0.0
+_last_reddit_mono = 0.0
+_last_autofetch_mono = 0.0
+
+
+def _base_tick_seconds() -> int:
+    try:
+        return max(10, int(os.environ.get("CHORDENTIAL_LOOP_TICK", "30")))
+    except ValueError:
+        return 30
+
+
+def _signals_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_SIGNALS_INTERVAL", "900")))
+    except ValueError:
+        return 900
+
 
 def autofetch_enabled() -> bool:
     """On only when scraping is enabled AND the scheduler isn't explicitly off."""
@@ -427,20 +449,35 @@ def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
 
 
 async def run_loop() -> None:
-    """The forever loop, started from the app lifespan. Self-heals on errors."""
+    """The forever loop, started from the app lifespan. Self-heals on errors.
+
+    Wakes on a short base tick; each periodic task gates itself by its OWN
+    interval (via a monotonic timer), so a fast task (enrichment, 5 min) isn't
+    throttled by a slow one (feed/autofetch, 15 min). All timers start at 0, so on
+    boot every enabled task runs one pass right away, then on its own cadence."""
+    global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
+    global _last_enrich_mono, _last_dm_mono, _last_triage_mono
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
-        if signals_active():                 # Signal Engine: RSS gigs + indicators
+        now_mono = time.monotonic()
+
+        def due(last: float, interval: int) -> bool:
+            return now_mono - last >= interval
+
+        if signals_active() and due(_last_signals_mono, _signals_interval_seconds()):
+            _last_signals_mono = now_mono
             try:
                 await asyncio.to_thread(poll_feeds)
             except Exception:
                 pass
-        if reddit_enabled():                 # direct Reddit gigs (cap-free, replaces F5Bot)
+        if reddit_enabled() and due(_last_reddit_mono, _signals_interval_seconds()):
+            _last_reddit_mono = now_mono
             try:
                 await asyncio.to_thread(poll_reddit)
             except Exception:
                 pass
-        if autofetch_enabled():
+        if autofetch_enabled() and due(_last_autofetch_mono, _interval_seconds()):
+            _last_autofetch_mono = now_mono
             _status["running"] = True
             try:
                 found = await asyncio.to_thread(run_cycle)
@@ -452,35 +489,26 @@ async def run_loop() -> None:
                 pass
             finally:
                 _status["running"] = False
-        if enrich_enabled():                 # autonomous Company Enrichment
-            global _last_enrich_mono
-            now_mono = time.monotonic()
-            if now_mono - _last_enrich_mono >= _enrich_interval_seconds():
-                _last_enrich_mono = now_mono
-                try:
-                    await asyncio.to_thread(run_enrich_cycle)  # self-bookkeeping
-                except Exception:
-                    pass
-        if dm_enabled():                     # autonomous Decision Maker Discovery
-            global _last_dm_mono
-            now_mono = time.monotonic()
-            if now_mono - _last_dm_mono >= _dm_interval_seconds():
-                _last_dm_mono = now_mono
-                try:
-                    await asyncio.to_thread(run_dm_cycle)       # self-bookkeeping
-                except Exception:
-                    pass
-        if triage_enabled():                 # Phase B2 — autonomous Gmail triage
-            global _last_triage_mono
-            now_mono = time.monotonic()
-            if now_mono - _last_triage_mono >= _triage_interval_seconds():
-                _last_triage_mono = now_mono
-                try:
-                    created = await asyncio.to_thread(run_triage_cycle)
-                    _triage_status["cycles"] += 1
-                    _triage_status["last_created"] = created
-                    _triage_status["total_created"] += created
-                    _triage_status["last_run"] = datetime.now(timezone.utc).isoformat()
-                except Exception:
-                    pass
-        await asyncio.sleep(_interval_seconds())
+        if enrich_enabled() and due(_last_enrich_mono, _enrich_interval_seconds()):
+            _last_enrich_mono = now_mono
+            try:
+                await asyncio.to_thread(run_enrich_cycle)       # self-bookkeeping
+            except Exception:
+                pass
+        if dm_enabled() and due(_last_dm_mono, _dm_interval_seconds()):
+            _last_dm_mono = now_mono
+            try:
+                await asyncio.to_thread(run_dm_cycle)           # self-bookkeeping
+            except Exception:
+                pass
+        if triage_enabled() and due(_last_triage_mono, _triage_interval_seconds()):
+            _last_triage_mono = now_mono
+            try:
+                created = await asyncio.to_thread(run_triage_cycle)
+                _triage_status["cycles"] += 1
+                _triage_status["last_created"] = created
+                _triage_status["total_created"] += created
+                _triage_status["last_run"] = datetime.now(timezone.utc).isoformat()
+            except Exception:
+                pass
+        await asyncio.sleep(_base_tick_seconds())
