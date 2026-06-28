@@ -19,7 +19,10 @@ Controls (env):
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -97,51 +100,79 @@ def _run_in_background(fn) -> None:
     threading.Thread(target=_job, daemon=True).start()
 
 
+def _worker_timeout_seconds(default: int) -> int:
+    try:
+        return max(30, int(os.environ.get("CHORDENTIAL_WORKER_TIMEOUT", str(default))))
+    except ValueError:
+        return default
+
+
+def _run_worker(spec: dict, timeout: int, on_done=None) -> None:
+    """Launch the heavy job in a SEPARATE, KILLABLE process and return at once.
+
+    Parsing a hostile webpage can drive a C-level regex/parse into a runaway that
+    holds Python's global lock forever — in-process that freezes the whole web
+    server (silent logs, the live wheel of death) and cannot be interrupted from a
+    thread. A subprocess has its own interpreter lock + memory and is killable, so a
+    watchdog thread reaps it after ``timeout`` and the web process is never affected.
+    The watchdog only does ``p.wait()`` (blocking I/O — releases the GIL), so it
+    can't starve anything either."""
+    args = [sys.executable, "-m", "chordential_oia.web._enrich_worker",
+            json.dumps(spec)]
+
+    def _supervise():
+        try:
+            proc = subprocess.Popen(args, env=dict(os.environ))
+        except Exception:
+            return
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()                       # runaway parse — kill, don't wait forever
+            except Exception:
+                pass
+        except Exception:
+            pass
+        finally:
+            if on_done:
+                try:
+                    on_done()
+                except Exception:
+                    pass
+
+    threading.Thread(target=_supervise, daemon=True).start()
+
+
 def start_agency_enrich(agency_id: int, *, reset: bool = False) -> bool:
-    """Enrich ONE agency in the background (it fetches the live site). Returns True
-    if started; False if scraping is off here (then it's a no-op the UI explains)."""
+    """Enrich ONE agency in a separate, killable process (it fetches the live site).
+    Returns True if started; False if scraping is off here (a no-op the UI explains)."""
     if not discovery.scrape_enabled():
         return False
-    from . import enrichment
-    _run_in_background(lambda conn: enrichment.enrich_agency(conn, agency_id, reset=reset))
+    _run_worker({"action": "enrich", "agency_id": agency_id, "reset": reset},
+                _worker_timeout_seconds(180))
     return True
 
 
 def start_agency_decision_makers(agency_id: int, *, reset: bool = False) -> bool:
-    """Discover ONE agency's decision makers in the background (fetches live pages)."""
+    """Discover ONE agency's decision makers in a separate, killable process."""
     if not discovery.scrape_enabled():
         return False
-    from . import decision_makers
-    _run_in_background(lambda conn: decision_makers.discover_decision_makers(
-        conn, agency_id, reset=reset))
+    _run_worker({"action": "decision_makers", "agency_id": agency_id, "reset": reset},
+                _worker_timeout_seconds(180))
     return True
 
 
 def start_agency_pipeline(agency_id: int, *, reset: bool = False) -> bool:
-    """Run the WHOLE chain for ONE agency, in order, in a single background job:
-    enrich → decision makers → intelligence → signals → score. One agency processed
-    sequentially (not a batch), lock-guarded, so it's safe on a small instance —
-    and one press builds the complete profile instead of clicking five buttons.
-    Each step consumes the prior step's output, which the ordering guarantees; a
-    failing step never sinks the rest. Needs scraping for the live-fetch steps."""
+    """Run the WHOLE chain for ONE agency, in order, in a single killable worker
+    process: enrich → decision makers → intelligence → signals → score. One agency,
+    sequential — one press builds the complete profile instead of clicking five
+    buttons. Each step consumes the prior step's output (the ordering guarantees it);
+    a failing step never sinks the rest. Needs scraping for the live-fetch steps."""
     if not discovery.scrape_enabled():
         return False
-
-    def _run(conn):
-        from . import (enrichment, decision_makers, intelligence,
-                       opportunity_signals, music_opportunity)
-        for step in (
-            lambda: enrichment.enrich_agency(conn, agency_id, reset=reset),
-            lambda: decision_makers.discover_decision_makers(conn, agency_id, reset=reset),
-            lambda: intelligence.generate_intelligence(conn, agency_id),
-            lambda: opportunity_signals.detect_signals(conn, agency_id, force=True),
-            lambda: music_opportunity.score_agency(conn, agency_id),
-        ):
-            try:
-                step()
-            except Exception:
-                pass                             # one bad step never sinks the rest
-    _run_in_background(_run)
+    _run_worker({"action": "pipeline", "agency_id": agency_id, "reset": reset},
+                _worker_timeout_seconds(600))
     return True
 
 
@@ -270,15 +301,21 @@ def run_enrich_cycle(batch: int = 0) -> int:
 
 
 def start_manual_enrich(batch: int = 0) -> bool:
-    """Kick a one-off enrichment pass in a background thread and return at once —
-    enriching a batch of live sites takes minutes, far longer than an HTTP request
-    can wait. Returns True if a pass was started, False if one was already running
-    or enrichment is disabled here. Progress shows up in ``enrich_status``."""
+    """Kick a one-off enrichment pass and return at once. Runs in a SEPARATE,
+    KILLABLE process (not an in-process thread): a single hostile page used to send
+    the parse into a runaway that froze the whole web server (silent logs, the live
+    wheel of death). Out-of-process it can't, and a watchdog reaps it on timeout.
+    Returns True if started, False if enrichment is disabled or one is already
+    running (a second nudge is a no-op rather than a second worker on a small box)."""
     if not enrich_enabled():
         return False
     if _enrich_status.get("running"):
         return False
-    threading.Thread(target=run_enrich_cycle, args=(batch,), daemon=True).start()
+    limit = batch or _enrich_batch_size()
+    _enrich_status["running"] = True
+    _run_worker({"action": "batch", "limit": limit, "delay": _enrich_delay_seconds()},
+                _worker_timeout_seconds(max(600, limit * 180)),
+                on_done=lambda: _enrich_status.__setitem__("running", False))
     return True
 
 
