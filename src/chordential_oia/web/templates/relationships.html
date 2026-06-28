@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Relationships{% endblock %}
+{% block heading %}Relationship Management{% endblock %}
+{% block content %}
+
+<p class="muted small" style="margin:6px 0 14px">Consumes the intelligence — manages the lifecycle of every agency relationship. Not "accounts" and "contacts"; movements, follow-ups, and what to do next.</p>
+
+<!-- Today's Priorities — what to act on, derived from the engines. -->
+<div class="card" style="margin-bottom:16px">
+  <strong>Today's priorities</strong>
+  <div class="row" style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">
+    <div><div style="font-size:26px;font-weight:700">{{ priorities.moved_to_a_count }}</div><div class="muted small">moved into Tier A</div></div>
+    <div><div style="font-size:26px;font-weight:700">{{ priorities.follow_ups_due_count }}</div><div class="muted small">follow-ups overdue</div></div>
+    <div><div style="font-size:26px;font-weight:700">{{ priorities.ep_hires_count }}</div><div class="muted small">hired producers</div></div>
+    <div><div style="font-size:26px;font-weight:700">{{ priorities.campaigns_count }}</div><div class="muted small">released campaigns</div></div>
+    <div><div style="font-size:26px;font-weight:700;color:var(--green,#2e8b57)">{{ priorities.recommended_count }}</div><div class="muted small">recommended outreach</div></div>
+  </div>
+</div>
+
+<div class="row" style="display:flex;gap:14px;flex-wrap:wrap">
+  <!-- Recommended outreach -->
+  <div class="card" style="flex:1;min-width:320px">
+    <strong>Recommended outreach today</strong>
+    {% if priorities.recommended %}
+    <ul class="tight small" style="margin-top:8px">
+      {% for r in priorities.recommended %}
+      <li><a href="/agencies/{{ r.id }}#opportunity">{{ r.company }}</a> — <strong>{{ r.score }}</strong> (tier {{ r.tier }})
+        {% if r.contact %}· {{ r.contact.name }}, {{ r.contact.title }}{% endif %}<br>
+        <span class="muted">{{ r.action }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">Nothing flagged for outreach yet — score agencies and let signals accrue.</p>{% endif %}
+  </div>
+
+  <!-- Top movers -->
+  <div class="card" style="flex:1;min-width:280px">
+    <strong>Top movers</strong> <span class="muted small">— what changed</span>
+    {% if priorities.top_movers %}
+    <ul class="tight small" style="margin-top:8px">
+      {% for m in priorities.top_movers %}
+      <li><a href="/agencies/{{ m.id }}#opportunity">{{ m.company }}</a> — {{ m.opportunity_score }}
+        <span style="color:{{ '#2e8b57' if (m.score_movement or 0) > 0 else '#b5651d' }}">{{ '▲' if (m.score_movement or 0) > 0 else '▼' }} {{ (m.score_movement or 0)|abs }}</span>
+        <span class="muted">(tier {{ m.opportunity_tier }})</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">No score movement yet.</p>{% endif %}
+  </div>
+</div>
+
+{% if priorities.overdue %}
+<div class="card" style="margin-top:14px">
+  <strong>Overdue follow-ups</strong>
+  <ul class="tight small" style="margin-top:8px">
+    {% for t in priorities.overdue %}
+    <li><a href="/agencies/{{ t.agency_id }}#relationship">{{ t.agency_name }}</a> — {{ t.title }} <span class="muted">(due {{ t.due_at[:10] }})</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- The pipeline: highest-scoring relationships with their stage. -->
+<h2 style="margin-top:24px">Relationship pipeline</h2>
+{% if pipeline %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left;background:var(--bg2,#f6f6f6)">
+      <th style="padding:8px 10px">Agency</th><th style="padding:8px 10px">Stage</th>
+      <th style="padding:8px 10px">Score</th><th style="padding:8px 10px">Tier</th>
+      <th style="padding:8px 10px">Movement</th>
+    </tr></thead>
+    <tbody>
+    {% for p in pipeline %}
+      <tr style="border-top:1px solid var(--border,#eee)">
+        <td style="padding:8px 10px"><a href="/agencies/{{ p.id }}#relationship">{{ p.company }}</a></td>
+        <td style="padding:8px 10px">{{ p.stage }}</td>
+        <td style="padding:8px 10px"><strong>{{ p.score }}</strong></td>
+        <td style="padding:8px 10px">{{ p.tier }}</td>
+        <td style="padding:8px 10px">{% if p.movement %}<span style="color:{{ '#2e8b57' if p.movement > 0 else '#b5651d' }}">{{ '▲' if p.movement > 0 else '▼' }} {{ p.movement|abs }}</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="muted small">No scored relationships yet — score agencies on the Agencies page first.</p>
+{% endif %}
+
+{% endblock %}

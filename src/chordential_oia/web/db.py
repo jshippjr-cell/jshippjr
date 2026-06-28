@@ -834,15 +834,49 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             UNIQUE(agency_id, dedup_key)
         )"""
     )
-    # Relationship history / previous outreach to an agency — what the Music
-    # Opportunity Engine reads for Relationship Readiness and timing (recent
-    # contact lowers readiness; a response warms it). One row per touch.
+    # Relationship history / previous outreach to an agency — the interaction log
+    # the Opportunity Engine reads for Relationship Readiness and the Relationship
+    # Management Platform reads for stage + timeline. One row per touch.
     conn.execute(
         """CREATE TABLE IF NOT EXISTS agency_outreach (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             agency_id INTEGER, kind TEXT, direction TEXT DEFAULT 'out',
             occurred_at TEXT, responded INTEGER DEFAULT 0,
             contact TEXT DEFAULT '', note TEXT DEFAULT '', created_at TEXT
+        )"""
+    )
+    # Relationship Management Platform — everything belongs to the RELATIONSHIP,
+    # not the agency. The lifecycle stage (one row per agency; auto-derived unless
+    # overridden), follow-up tasks, relationship memory (institutional knowledge),
+    # and documents. The platform consumes the engines' outputs; it doesn't crawl.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS relationships (
+            agency_id INTEGER PRIMARY KEY,
+            stage TEXT, stage_overridden INTEGER DEFAULT 0,
+            owner TEXT DEFAULT '', note TEXT DEFAULT '',
+            created_at TEXT, updated_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agency_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, title TEXT, kind TEXT DEFAULT 'task',
+            due_at TEXT, status TEXT DEFAULT 'open', source TEXT DEFAULT 'manual',
+            created_at TEXT, done_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agency_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, contact TEXT DEFAULT '', fact TEXT,
+            source TEXT DEFAULT 'manual', created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agency_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, title TEXT, url TEXT DEFAULT '',
+            note TEXT DEFAULT '', created_at TEXT
         )"""
     )
     conn.execute(
@@ -1829,6 +1863,111 @@ def last_agency_outreach(
     return conn.execute(
         "SELECT * FROM agency_outreach WHERE agency_id = ? AND direction = ? "
         "ORDER BY occurred_at DESC LIMIT 1", (agency_id, direction)).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# Relationship Management Platform — stage, tasks, memory, documents
+# --------------------------------------------------------------------------- #
+def get_relationship(conn: sqlite3.Connection, agency_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM relationships WHERE agency_id = ?", (agency_id,)).fetchone()
+
+
+def upsert_relationship(conn: sqlite3.Connection, agency_id: int, **fields) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    if get_relationship(conn, agency_id) is None:
+        conn.execute(
+            "INSERT INTO relationships (agency_id, created_at, updated_at) VALUES (?,?,?)",
+            (agency_id, now, now))
+    if fields:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(f"UPDATE relationships SET {sets}, updated_at=? WHERE agency_id=?",
+                     (*fields.values(), now, agency_id))
+
+
+def add_agency_task(conn: sqlite3.Connection, agency_id: int, *, title: str,
+                    kind: str = "task", due_at: str = "", source: str = "manual") -> None:
+    conn.execute(
+        """INSERT INTO agency_tasks (agency_id, title, kind, due_at, status, source, created_at)
+           VALUES (?,?,?,?,'open',?,?)""",
+        (agency_id, title, kind, due_at, source,
+         datetime.now(timezone.utc).isoformat()))
+
+
+def list_agency_tasks(conn: sqlite3.Connection, agency_id: int,
+                      status: Optional[str] = None) -> List[sqlite3.Row]:
+    clause = " AND status = ?" if status else ""
+    params = ((agency_id, status) if status else (agency_id,))
+    return conn.execute(
+        f"SELECT * FROM agency_tasks WHERE agency_id = ?{clause} "
+        "ORDER BY (due_at = '') ASC, due_at ASC, id DESC", params).fetchall()
+
+
+def complete_agency_task(conn: sqlite3.Connection, task_id: int) -> None:
+    conn.execute("UPDATE agency_tasks SET status='done', done_at=? WHERE id=?",
+                 (datetime.now(timezone.utc).isoformat(), task_id))
+
+
+def has_open_followup(conn: sqlite3.Connection, agency_id: int) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM agency_tasks WHERE agency_id=? AND kind='followup' AND status='open'",
+        (agency_id,)).fetchone() is not None
+
+
+def overdue_tasks(conn: sqlite3.Connection, limit: int = 100) -> List[sqlite3.Row]:
+    now = datetime.now(timezone.utc).isoformat()
+    return conn.execute(
+        """SELECT t.*, a.company AS agency_name FROM agency_tasks t
+           JOIN agencies a ON a.id = t.agency_id
+           WHERE t.status='open' AND t.due_at != '' AND t.due_at < ?
+           ORDER BY t.due_at ASC LIMIT ?""", (now, limit)).fetchall()
+
+
+def upcoming_tasks(conn: sqlite3.Connection, limit: int = 100) -> List[sqlite3.Row]:
+    return conn.execute(
+        """SELECT t.*, a.company AS agency_name FROM agency_tasks t
+           JOIN agencies a ON a.id = t.agency_id
+           WHERE t.status='open'
+           ORDER BY (t.due_at = '') ASC, t.due_at ASC LIMIT ?""", (limit,)).fetchall()
+
+
+def count_open_tasks(conn: sqlite3.Connection) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM agency_tasks WHERE status='open'").fetchone()["n"]
+
+
+def add_agency_memory(conn: sqlite3.Connection, agency_id: int, *, fact: str,
+                      contact: str = "", source: str = "manual") -> bool:
+    """Add a relationship-memory fact, skipping an exact duplicate (so auto-seeded
+    facts aren't re-added on every view). Returns True if newly added."""
+    if conn.execute("SELECT 1 FROM agency_memory WHERE agency_id=? AND fact=?",
+                    (agency_id, fact)).fetchone():
+        return False
+    conn.execute(
+        "INSERT INTO agency_memory (agency_id, contact, fact, source, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (agency_id, contact, fact, source, datetime.now(timezone.utc).isoformat()))
+    return True
+
+
+def list_agency_memory(conn: sqlite3.Connection, agency_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_memory WHERE agency_id = ? ORDER BY created_at DESC",
+        (agency_id,)).fetchall()
+
+
+def add_agency_document(conn: sqlite3.Connection, agency_id: int, *, title: str,
+                        url: str = "", note: str = "") -> None:
+    conn.execute(
+        "INSERT INTO agency_documents (agency_id, title, url, note, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (agency_id, title, url, note, datetime.now(timezone.utc).isoformat()))
+
+
+def list_agency_documents(conn: sqlite3.Connection, agency_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_documents WHERE agency_id = ? ORDER BY created_at DESC",
+        (agency_id,)).fetchall()
 
 
 # --------------------------------------------------------------------------- #
