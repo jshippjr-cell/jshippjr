@@ -553,14 +553,24 @@ def connect(db_path: str = DEFAULT_DB_PATH):
         os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    # WAL mode: readers and the single writer proceed concurrently, so a page read
-    # NEVER blocks behind a background write (the default rollback journal takes an
-    # exclusive lock that stalls every reader — which on a busy instance looks like
-    # the whole site hanging). synchronous=NORMAL is the safe, fast pairing for WAL.
-    # Best-effort: if the mode can't be set right now, fall back rather than fail.
+    # Journal mode. WAL lets readers and the single writer proceed concurrently, but
+    # it relies on a shared-memory (-shm) file and POSIX locking that are NOT reliable
+    # on network-attached storage (e.g. a Render persistent disk) — there it can hang
+    # every DB open, which looks like the whole site down while /healthz (no DB) still
+    # passes. So WAL is OPT-IN (CHORDENTIAL_SQLITE_WAL=1) for local/fast-disk use;
+    # by default we use the rollback journal, which is what ran reliably in prod.
+    #
+    # journal_mode is PERSISTED in the DB file, so if WAL was ever set we must
+    # actively switch back to DELETE here (and that checkpoints + removes the stale
+    # -wal/-shm files left on the disk). Best-effort: never fail the open over this.
+    want_wal = os.environ.get("CHORDENTIAL_SQLITE_WAL", "0").strip().lower() in (
+        "1", "true", "yes", "on")
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
+        if want_wal:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+        else:
+            conn.execute("PRAGMA journal_mode=DELETE")   # undo any persisted WAL
     except sqlite3.OperationalError:
         pass
     # Still wait out brief writer-vs-writer contention instead of erroring.
