@@ -553,9 +553,18 @@ def connect(db_path: str = DEFAULT_DB_PATH):
         os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    # The background auto-fetcher writes from a worker thread while request
-    # handlers also write; wait out brief lock contention instead of erroring.
-    conn.execute("PRAGMA busy_timeout=5000")
+    # WAL mode: readers and the single writer proceed concurrently, so a page read
+    # NEVER blocks behind a background write (the default rollback journal takes an
+    # exclusive lock that stalls every reader — which on a busy instance looks like
+    # the whole site hanging). synchronous=NORMAL is the safe, fast pairing for WAL.
+    # Best-effort: if the mode can't be set right now, fall back rather than fail.
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.OperationalError:
+        pass
+    # Still wait out brief writer-vs-writer contention instead of erroring.
+    conn.execute("PRAGMA busy_timeout=10000")
     return conn
 
 
