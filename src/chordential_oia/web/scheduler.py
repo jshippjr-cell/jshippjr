@@ -258,6 +258,77 @@ def dm_status() -> dict:
     return s
 
 
+# Autonomous Company Intelligence — derive the structured intelligence profile for
+# enriched agencies. Pure computation (no network), so it runs whenever enabled,
+# independent of scraping; it simply finds nothing until agencies are enriched.
+_intel_status = {"last_run": None, "last_generated": 0, "total_generated": 0,
+                 "cycles": 0, "pending": 0, "running": False}
+_last_intel_mono = 0.0
+_intel_lock = threading.Lock()
+
+
+def intel_enabled() -> bool:
+    return os.environ.get("CHORDENTIAL_AUTOINTEL", "1").strip().lower() not in _FALSEY
+
+
+def _intel_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_AUTOINTEL_INTERVAL", "600")))
+    except ValueError:
+        return 600
+
+
+def _intel_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOINTEL_BATCH", "25")))
+    except ValueError:
+        return 25
+
+
+def run_intel_cycle(batch: int = 0) -> int:
+    """One Company Intelligence pass over up to ``batch`` enriched-but-unprofiled
+    agencies. Blocking; runs in a worker thread. Lock-guarded. Returns how many
+    profiles were generated this pass."""
+    from . import intelligence
+    limit = batch or _intel_batch_size()
+    if not _intel_lock.acquire(blocking=False):
+        return 0
+    _intel_status["running"] = True
+    try:
+        conn = db.connect()
+        try:
+            res = intelligence.generate_batch(conn, limit=limit)
+            _intel_status["pending"] = len(db.agencies_needing_intelligence(conn))
+        finally:
+            conn.close()
+        generated = res.get("generated", 0)
+        _intel_status["cycles"] += 1
+        _intel_status["last_generated"] = generated
+        _intel_status["total_generated"] += generated
+        _intel_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return generated
+    finally:
+        _intel_status["running"] = False
+        _intel_lock.release()
+
+
+def start_manual_intel(batch: int = 0) -> bool:
+    """Kick a one-off intelligence pass in the background; return at once. True if
+    started, False if one's already running or intelligence is disabled here."""
+    if not intel_enabled():
+        return False
+    if _intel_status.get("running"):
+        return False
+    threading.Thread(target=run_intel_cycle, args=(batch,), daemon=True).start()
+    return True
+
+
+def intel_status() -> dict:
+    s = dict(_intel_status)
+    s["enabled"] = intel_enabled()
+    return s
+
+
 def enrich_status() -> dict:
     s = dict(_enrich_status)
     s["enabled"] = enrich_enabled()
@@ -456,7 +527,7 @@ async def run_loop() -> None:
     throttled by a slow one (feed/autofetch, 15 min). All timers start at 0, so on
     boot every enabled task runs one pass right away, then on its own cadence."""
     global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
-    global _last_enrich_mono, _last_dm_mono, _last_triage_mono
+    global _last_enrich_mono, _last_dm_mono, _last_intel_mono, _last_triage_mono
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
         now_mono = time.monotonic()
@@ -499,6 +570,12 @@ async def run_loop() -> None:
             _last_dm_mono = now_mono
             try:
                 await asyncio.to_thread(run_dm_cycle)           # self-bookkeeping
+            except Exception:
+                pass
+        if intel_enabled() and due(_last_intel_mono, _intel_interval_seconds()):
+            _last_intel_mono = now_mono
+            try:
+                await asyncio.to_thread(run_intel_cycle)        # self-bookkeeping
             except Exception:
                 pass
         if triage_enabled() and due(_last_triage_mono, _triage_interval_seconds()):

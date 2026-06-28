@@ -99,6 +99,48 @@
 </p>
 {% endif %}
 
+<!-- Company Intelligence: the evidence-backed "brain" — every value cites its evidence. -->
+<h2 id="intelligence" style="margin-top:24px">Company intelligence
+  {% if intel and intel.overall_confidence is defined %}<span class="muted small">(confidence {{ intel.overall_confidence }}%)</span>{% endif %}</h2>
+<div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+  <form method="post" action="/agencies/{{ agency.id }}/intelligence" style="margin:0">
+    <button class="btn" type="submit">{{ 'Regenerate intelligence' if intel else 'Generate intelligence' }}</button>
+  </form>
+  <span class="muted small">Derived only from collected data — every conclusion below cites its evidence.</span>
+</div>
+
+{% macro intelfield(label, f) %}
+  {% if f and (f.value or f.value == 0) and (f.value is string or f.value|length > 0 or f.value is number) %}
+  <div class="kv" style="align-items:flex-start">
+    <div class="kv-k">{{ label }}{% if f.confidence is defined %} <span class="muted small">{{ f.confidence }}%</span>{% endif %}</div>
+    <div class="kv-v">
+      {% if f.value is string %}{{ f.value }}
+      {% else %}{{ f.value | join(', ') }}{% endif %}
+      {% if f.evidence %}<details style="margin-top:4px"><summary class="muted small">evidence</summary>
+        <ul class="tight small muted">{% for e in f.evidence %}<li>{{ e }}</li>{% endfor %}</ul></details>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% if intel and intel.status == 'complete' %}
+<div class="card">
+  {% if intel.note %}<p class="small" style="color:#b5651d;margin:0 0 10px">{{ intel.note }}</p>{% endif %}
+  {{ intelfield("Executive summary", intel.executive_summary) }}
+  {{ intelfield("Primary industries", intel.primary_industries) }}
+  {{ intelfield("Creative focus", intel.creative_focus) }}
+  {{ intelfield("Campaign types", intel.campaign_types) }}
+  {{ intelfield("Production style", intel.production_style) }}
+  {{ intelfield("Typical clients", intel.typical_clients) }}
+  {{ intelfield("Production complexity", intel.production_complexity) }}
+  {{ intelfield("Observed music usage", intel.music_usage) }}
+  {{ intelfield("Likely music procurement", intel.music_procurement) }}
+  {{ intelfield("Momentum", intel.momentum) }}
+</div>
+{% else %}
+<p class="muted small">No intelligence profile yet — generate one (it reads the collected enrichment + decision-maker data; richer once enrichment has completed).</p>
+{% endif %}
+
 <!-- Decision Maker Discovery Engine: the people worth contacting, ranked + explained. -->
 <h2 id="decision-makers" style="margin-top:24px">Decision makers
   <span class="muted small">({{ decision_makers | length }})</span></h2>

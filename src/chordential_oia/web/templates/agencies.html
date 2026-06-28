@@ -172,6 +172,26 @@
   </form>
 </div>
 
+<!-- Company Intelligence: derive the evidence-backed profile from collected data. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Company intelligence:
+      {% if auto_intel.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      Derives the structured, evidence-backed intelligence profile from each enriched agency's collected data.
+      {% if auto_intel.running %}<strong>A pass is running now…</strong> {% endif %}
+      {% if auto_intel.last_run %}Last pass generated {{ auto_intel.last_generated }} · {{ auto_intel.total_generated }} this session.{% endif %}
+      {{ intel_pending }} enriched agencies awaiting a profile.
+    </div>
+  </div>
+  {% if intel_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Generating intelligence for up to {{ intel_n }} agencies in the background — refresh to see progress</span>
+  {% elif intel_started == "0" %}<span class="small muted">A pass is already running — refresh to see progress</span>{% endif %}
+  <form method="post" action="/agencies/intelligence-pending" style="margin:0">
+    <button class="btn" type="submit"{% if auto_intel.running %} disabled{% endif %}>Generate intelligence ({{ intel_pending if intel_pending < 25 else 25 }})</button>
+  </form>
+</div>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">
