@@ -329,6 +329,75 @@ def intel_status() -> dict:
     return s
 
 
+# Autonomous Signal Detection — scan enriched agencies for new opportunity signals
+# (change detection over the collected profile). Pure computation; a fingerprint
+# short-circuit makes scanning cheap, so it sweeps a rotating batch each cycle.
+_sig_status = {"last_run": None, "last_new": 0, "total_new": 0,
+               "cycles": 0, "scanned": 0, "running": False}
+_last_sig_mono = 0.0
+_sig_lock = threading.Lock()
+
+
+def signals_engine_enabled() -> bool:
+    return os.environ.get("CHORDENTIAL_AUTOSIGNALS", "1").strip().lower() not in _FALSEY
+
+
+def _sig_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_AUTOSIGNALS_INTERVAL", "600")))
+    except ValueError:
+        return 600
+
+
+def _sig_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSIGNALS_BATCH", "100")))
+    except ValueError:
+        return 100
+
+
+def run_signals_cycle(batch: int = 0) -> int:
+    """One Signal Detection pass over a rotating batch of enriched agencies.
+    Blocking; runs in a worker thread. Lock-guarded. Returns NEW signals stored."""
+    from . import opportunity_signals
+    limit = batch or _sig_batch_size()
+    if not _sig_lock.acquire(blocking=False):
+        return 0
+    _sig_status["running"] = True
+    try:
+        conn = db.connect()
+        try:
+            res = opportunity_signals.detect_batch(conn, limit=limit)
+        finally:
+            conn.close()
+        new = res.get("new", 0)
+        _sig_status["cycles"] += 1
+        _sig_status["last_new"] = new
+        _sig_status["total_new"] += new
+        _sig_status["scanned"] = res.get("scanned", 0)
+        _sig_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return new
+    finally:
+        _sig_status["running"] = False
+        _sig_lock.release()
+
+
+def start_manual_signals(batch: int = 0) -> bool:
+    """Kick a one-off signal-detection pass in the background; return at once."""
+    if not signals_engine_enabled():
+        return False
+    if _sig_status.get("running"):
+        return False
+    threading.Thread(target=run_signals_cycle, args=(batch,), daemon=True).start()
+    return True
+
+
+def signals_engine_status() -> dict:
+    s = dict(_sig_status)
+    s["enabled"] = signals_engine_enabled()
+    return s
+
+
 def enrich_status() -> dict:
     s = dict(_enrich_status)
     s["enabled"] = enrich_enabled()
@@ -527,7 +596,8 @@ async def run_loop() -> None:
     throttled by a slow one (feed/autofetch, 15 min). All timers start at 0, so on
     boot every enabled task runs one pass right away, then on its own cadence."""
     global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
-    global _last_enrich_mono, _last_dm_mono, _last_intel_mono, _last_triage_mono
+    global _last_enrich_mono, _last_dm_mono, _last_intel_mono, _last_sig_mono
+    global _last_triage_mono
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
         now_mono = time.monotonic()
@@ -576,6 +646,12 @@ async def run_loop() -> None:
             _last_intel_mono = now_mono
             try:
                 await asyncio.to_thread(run_intel_cycle)        # self-bookkeeping
+            except Exception:
+                pass
+        if signals_engine_enabled() and due(_last_sig_mono, _sig_interval_seconds()):
+            _last_sig_mono = now_mono
+            try:
+                await asyncio.to_thread(run_signals_cycle)      # self-bookkeeping
             except Exception:
                 pass
         if triage_enabled() and due(_last_triage_mono, _triage_interval_seconds()):

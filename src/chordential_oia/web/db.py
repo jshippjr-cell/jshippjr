@@ -330,6 +330,13 @@ _AGENCY_COLUMNS = {
     # get_agency_intel for the shape). Carries its own 'status' so the batch /
     # auto-run queue advances exactly like enrichment and decision makers.
     "intel_json": "TEXT",
+    # Signal Detection snapshot: {fingerprint, baselined, seen: {dedup_key: 1},
+    # last_scan}. The "seen" set is how change detection works — a signal whose key
+    # is already seen isn't re-emitted, so re-scanning only surfaces NEW changes.
+    "signals_json": "TEXT",
+    # When this agency was last scanned for signals (rotates the scan queue so the
+    # background pass works through the whole DB rather than the same first N).
+    "signals_scanned_at": "TEXT",
 }
 
 # Decision-maker columns added after the table first shipped — migrated onto an
@@ -802,6 +809,23 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # system has confidently classified (by rule or, for the unknowns, by LLM —
     # ``source`` records which), so a repeat title is a cheap lookup, never an
     # LLM call. ``hits`` counts how often the title has been seen.
+    # Opportunity Timeline: the chronological stream of normalized opportunity
+    # SIGNALS the Signal Detection Framework emits (one row per detected event,
+    # collapsed on (agency_id, dedup_key) so the same change is never stored
+    # twice). The engine stores verified signals only — it does NOT score them.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS opportunity_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, dedup_key TEXT,
+            event_type TEXT, category TEXT,
+            importance TEXT, music_relevance TEXT, confidence INTEGER DEFAULT 0,
+            summary TEXT, source TEXT, source_url TEXT,
+            evidence_json TEXT,
+            event_date TEXT, detected_at TEXT, expires_at TEXT,
+            created_at TEXT,
+            UNIQUE(agency_id, dedup_key)
+        )"""
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS title_taxonomy (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1635,6 +1659,122 @@ def agencies_needing_intelligence(
                 continue
         except (json.JSONDecodeError, TypeError):
             pass
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Opportunity signals — the change-detected timeline + its baseline snapshot
+# --------------------------------------------------------------------------- #
+def get_agency_signal_snapshot(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's Signal Detection snapshot (agencies.signals_json), or {}."""
+    row = conn.execute(
+        "SELECT signals_json FROM agencies WHERE id = ?", (agency_id,)).fetchone()
+    if not row or not row["signals_json"]:
+        return {}
+    try:
+        return json.loads(row["signals_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_agency_signal_snapshot(
+    conn: sqlite3.Connection, agency_id: int, snapshot: dict
+) -> None:
+    """Persist the snapshot and stamp signals_scanned_at (rotates the scan queue)."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE agencies SET signals_json = ?, signals_scanned_at = ?, updated_at = ? "
+        "WHERE id = ?", (json.dumps(snapshot), now, now, agency_id))
+
+
+def insert_opportunity_signal(conn: sqlite3.Connection, agency_id: int, sig: dict) -> bool:
+    """Insert one signal; ignore it if (agency_id, dedup_key) already exists (the
+    timeline never stores the same change twice). Returns True if newly inserted."""
+    key = (sig.get("dedup_key") or "").strip().lower()
+    now = datetime.now(timezone.utc).isoformat()
+    if conn.execute("SELECT 1 FROM opportunity_signals WHERE agency_id=? AND dedup_key=?",
+                    (agency_id, key)).fetchone():
+        return False
+    conn.execute(
+        """INSERT INTO opportunity_signals
+           (agency_id, dedup_key, event_type, category, importance, music_relevance,
+            confidence, summary, source, source_url, evidence_json,
+            event_date, detected_at, expires_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (agency_id, key, sig.get("event_type", ""), sig.get("category", ""),
+         sig.get("importance", ""), sig.get("music_relevance", ""),
+         int(sig.get("confidence") or 0), sig.get("summary", ""),
+         sig.get("source", ""), sig.get("source_url", ""),
+         json.dumps(sig.get("evidence") or []),
+         sig.get("event_date") or now, sig.get("detected_at") or now,
+         sig.get("expires_at") or "", now))
+    return True
+
+
+def list_opportunity_signals(
+    conn: sqlite3.Connection, agency_id: int, *, active_only: bool = False
+) -> List[sqlite3.Row]:
+    """An agency's opportunity timeline, newest first. ``active_only`` hides signals
+    whose expiry has passed (a stale signal isn't a live opportunity)."""
+    rows = conn.execute(
+        "SELECT * FROM opportunity_signals WHERE agency_id = ? "
+        "ORDER BY detected_at DESC, id DESC", (agency_id,)).fetchall()
+    if not active_only:
+        return rows
+    now = datetime.now(timezone.utc).isoformat()
+    return [r for r in rows if not r["expires_at"] or r["expires_at"] >= now]
+
+
+def count_opportunity_signals(
+    conn: sqlite3.Connection, agency_id: Optional[int] = None, *, active_only: bool = False
+) -> int:
+    where, params = [], []
+    if agency_id is not None:
+        where.append("agency_id = ?"); params.append(agency_id)
+    if active_only:
+        where.append("(expires_at = '' OR expires_at >= ?)")
+        params.append(datetime.now(timezone.utc).isoformat())
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    return conn.execute(
+        f"SELECT COUNT(*) AS n FROM opportunity_signals{clause}", params).fetchone()["n"]
+
+
+def recent_opportunity_signals(
+    conn: sqlite3.Connection, *, limit: int = 100, active_only: bool = True
+) -> List[sqlite3.Row]:
+    """The freshest signals across ALL agencies — the cross-agency feed."""
+    rows = conn.execute(
+        """SELECT s.*, a.company AS agency_name FROM opportunity_signals s
+           JOIN agencies a ON a.id = s.agency_id
+           ORDER BY s.detected_at DESC, s.id DESC LIMIT ?""", (limit * 4,)).fetchall()
+    now = datetime.now(timezone.utc).isoformat()
+    if active_only:
+        rows = [r for r in rows if not r["expires_at"] or r["expires_at"] >= now]
+    return rows[:limit]
+
+
+def agencies_for_signal_scan(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100
+) -> List[sqlite3.Row]:
+    """Enriched agencies due for a signal scan, least-recently-scanned first (so a
+    bounded background pass rotates through the whole DB). Signal detection re-runs
+    over time — a cheap fingerprint check skips anything that hasn't changed."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(
+            f"SELECT * FROM agencies{clause} "
+            "ORDER BY signals_scanned_at IS NULL DESC, signals_scanned_at ASC, id",
+            params):
+        enr = r["enrichment_json"]
+        try:
+            if not enr or (json.loads(enr) or {}).get("status") != "complete":
+                continue
+        except (json.JSONDecodeError, TypeError):
+            continue
         out.append(r)
         if len(out) >= limit:
             break
