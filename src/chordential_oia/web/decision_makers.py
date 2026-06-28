@@ -34,7 +34,7 @@ import re
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit
 
-from . import db
+from . import db, web_search
 from .enrichment import (
     Fetch, _anchors, _default_fetch, _host, _strip_chrome, _text,
     classify_link, discover_links, scrape_enabled,
@@ -42,6 +42,8 @@ from .enrichment import (
 
 # An LLM classifier seam: title + context -> classification dict (or None).
 LLM = Callable[[str, str], Optional[Dict]]
+# A web-search seam: query -> [{title, url, snippet}] (see web_search.search).
+SearchFn = Callable[[str], List[Dict]]
 
 # The concepts whose pages name people (leadership covers team/people/management).
 _PEOPLE_CONCEPTS = ("leadership", "about")
@@ -110,12 +112,15 @@ def extract_people(html: str, page_url: str) -> List[Dict]:
     people: List[Dict] = []
     seen = set()
 
-    def add(name, title, photo="", bio=""):
+    def add(name, title, photo="", bio="", card=""):
         key = name.lower()
         if name and title and key not in seen:
             seen.add(key)
+            # ``card`` is this person's own slice (heading→next heading, or the
+            # inline row) so contact discovery reads only their details — never the
+            # neighbouring person's email/LinkedIn.
             people.append({"name": name, "title": title, "photo_url": photo,
-                           "bio": bio, "source_url": page_url})
+                           "bio": bio, "source_url": page_url, "card": card})
 
     # Layout A — heading cards. The card runs to the next heading of any level.
     heads = list(re.finditer(r"<h([1-6])\b[^>]*>(.*?)</h\1>", text, re.S | re.I))
@@ -128,7 +133,8 @@ def extract_people(html: str, page_url: str) -> List[Dict]:
         pre = text[max(0, m.start() - 400):m.start()]      # photo often precedes name
         title = _first_title_line(card)
         if title:
-            add(name, title, _first_photo(pre + card, page_url), _first_bio(card))
+            add(name, title, _first_photo(pre + card, page_url), _first_bio(card),
+                card=card)
 
     # Layout B — inline "Name — Title" rows (list items / paragraphs).
     for m in re.finditer(r"<(?:li|p|div)\b[^>]*>(.*?)</(?:li|p|div)>", text, re.S | re.I):
@@ -139,7 +145,8 @@ def extract_people(html: str, page_url: str) -> List[Dict]:
         if len(parts) == 2:
             name, title = parts[0].strip(), parts[1].strip()
             if _looks_like_name(name) and _TITLE_LINE.search(title) and len(title) <= 80:
-                add(name, title, _first_photo(m.group(1), page_url), "")
+                add(name, title, _first_photo(m.group(1), page_url), "",
+                    card=m.group(1))
     return people
 
 
@@ -416,6 +423,68 @@ def verify_linkedin(name: str, linkedin_url: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# External search enrichment — fill LinkedIn / press from a web search when the
+# agency's own site doesn't expose them. Off by default (the seam returns nothing
+# until a provider is configured). Honesty rule: a searched LinkedIn is accepted
+# ONLY if it structurally matches the person's name; press is off-site results.
+# --------------------------------------------------------------------------- #
+def _pick_linkedin(results: List[Dict], name: str) -> str:
+    """The first /in/ profile in the results whose slug matches the person's name —
+    so a wrong-person hit (or a non-matching top result) is never attached."""
+    for r in results:
+        url = (r.get("url") or "").split("?")[0]
+        if "linkedin.com/in/" in url.lower() and verify_linkedin(name, url):
+            return url
+    return ""
+
+
+def _press_from(results: List[Dict], exclude_hosts: set, limit: int = 5) -> List[Dict]:
+    """Off-site, non-social search results → press mentions [{title, url}]."""
+    out: List[Dict] = []
+    seen = set()
+    for r in results:
+        url = (r.get("url") or "").strip()
+        if not url:
+            continue
+        host = _host(url)
+        if host in exclude_hosts or any(host.endswith("." + h) for h in exclude_hosts):
+            continue
+        if "linkedin.com" in host or host in _SOCIAL_HOSTS:
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append({"title": r.get("title") or url, "url": url.split("?")[0]})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def search_enrich(person: Dict, contacts: Dict, agency_name: str,
+                  agency_host: str, search: SearchFn) -> Dict:
+    """Use the search seam to fill a missing LinkedIn (only if it verifies) and to
+    find press mentions. Returns {"linkedin": str, "press": [...]}; both empty when
+    search is off or nothing matches. Never invents — a found LinkedIn must match
+    the person's name to be accepted."""
+    name = person.get("name", "")
+    out = {"linkedin": "", "press": []}
+    if not name or search is None:
+        return out
+    if not contacts.get("linkedin"):
+        try:
+            hits = search(f'{name} {agency_name} linkedin')
+        except Exception:
+            hits = []
+        out["linkedin"] = _pick_linkedin(hits or [], name)  # only a name-matching one
+    try:
+        hits = search(f'{name} {agency_name}')
+    except Exception:
+        hits = []
+    out["press"] = _press_from(hits or [], {agency_host, "linkedin.com"})
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Agent 5 — Confidence Scoring: deterministic 0–100 from the signals we collected.
 # --------------------------------------------------------------------------- #
 def score_confidence(person: Dict, contacts: Dict, classification: Dict,
@@ -450,8 +519,8 @@ def _dedup_key(name: str) -> str:
 
 def discover_decision_makers(
     conn, agency_id: int, *, fetch: Optional[Fetch] = None,
-    llm: Optional[LLM] = None, reset: bool = False,
-    threshold: Optional[int] = None,
+    llm: Optional[LLM] = None, search: Optional[SearchFn] = None,
+    reset: bool = False, threshold: Optional[int] = None,
 ) -> Dict:
     """Run the full pipeline for ONE agency and store every decision maker found.
 
@@ -477,6 +546,11 @@ def discover_decision_makers(
             return {"agency_id": agency_id, "status": "blocked",
                     "detail": "scraping disabled", "found": 0}
         fetch = _default_fetch
+    if search is None:
+        search = web_search.search          # null seam until a provider is set
+
+    agency_name = (row["company"] or "").strip()
+    agency_host = _host(website)
 
     if reset:
         db.delete_decision_makers(conn, agency_id)
@@ -515,12 +589,17 @@ def discover_decision_makers(
     found = 0
     for person in people:
         page_html = get(person["source_url"])
-        card = _person_card(page_html, person["name"])
+        card = person.get("card") or page_html      # this person's own slice
         # Agent 2 — classify the title (rules → LLM → learn).
         cls = classify_title(conn, person["title"], context=person.get("bio", ""),
                              llm=llm, threshold=threshold)
-        # Agent 3 — public contacts.
+        # Agent 3 — public contacts (from the agency's own page).
         contacts = discover_contacts(card or page_html, person, person["source_url"])
+        # Agent 3b — external search: fill a missing LinkedIn (only if it matches)
+        # and find press mentions. No-op unless a search provider is configured.
+        extra = search_enrich(person, contacts, agency_name, agency_host, search)
+        if extra["linkedin"]:
+            contacts["linkedin"] = extra["linkedin"]
         # Agent 4 — structural LinkedIn verification.
         verified = verify_linkedin(person["name"], contacts["linkedin"])
         # Agent 5 — confidence.
@@ -536,6 +615,7 @@ def discover_decision_makers(
             "phone": contacts["phone"],
             "social_json": json.dumps(contacts["social"]),
             "source_urls_json": json.dumps([person["source_url"]]),
+            "press_json": json.dumps(extra["press"]),
             "role_category": cls["role_category"], "priority": cls["priority"],
             "music_relevance": cls["music_relevance"],
             "relevance_reason": cls["relevance_reason"],
@@ -555,26 +635,13 @@ def discover_decision_makers(
             "total": total, "people": len(people)}
 
 
-def _person_card(html: str, name: str) -> str:
-    """The slice of HTML around a person's name — their 'card' — so contact
-    discovery reads only their details, not the whole page. Falls back to '' (the
-    caller then uses the full page)."""
-    if not html or not name:
-        return ""
-    text = _strip_chrome(html)
-    idx = text.lower().find(name.lower())
-    if idx < 0:
-        return ""
-    return text[max(0, idx - 200):idx + 1200]
-
-
 # --------------------------------------------------------------------------- #
 # Batch runner — discover decision makers across enriched agencies
 # --------------------------------------------------------------------------- #
 def discover_batch(
     conn, *, source: Optional[str] = None, limit: int = 50,
     fetch: Optional[Fetch] = None, llm: Optional[LLM] = None,
-    reset: bool = False,
+    search: Optional[SearchFn] = None, reset: bool = False,
 ) -> Dict:
     """Run discovery over agencies that have a website, one at a time. Resumable in
     the same spirit as enrichment: re-invoking re-processes (idempotent upserts), so
@@ -584,7 +651,7 @@ def discover_batch(
     counts: Dict[str, int] = {}
     for r in rows:
         summary = discover_decision_makers(
-            conn, r["id"], fetch=fetch, llm=llm, reset=reset)
+            conn, r["id"], fetch=fetch, llm=llm, search=search, reset=reset)
         results.append(summary)
         counts[summary["status"]] = counts.get(summary["status"], 0) + 1
     return {"total": len(results), "complete": counts.get("complete", 0),

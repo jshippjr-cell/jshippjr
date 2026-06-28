@@ -327,6 +327,13 @@ _AGENCY_COLUMNS = {
     "dm_json": "TEXT",
 }
 
+# Decision-maker columns added after the table first shipped — migrated onto an
+# existing decision_makers table the same idempotent way.
+_DM_COLUMNS = {
+    # Press mentions found via the external search seam: JSON [{title, url}, ...].
+    "press_json": "TEXT",
+}
+
 # Provenance columns on talent — migrated onto an existing roster the same way.
 _TALENT_COLUMNS = {
     "source": "TEXT",
@@ -769,7 +776,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             department TEXT, office TEXT, reports_to TEXT,
             bio TEXT, photo_url TEXT,
             linkedin TEXT, email TEXT, phone TEXT,
-            social_json TEXT, source_urls_json TEXT,
+            social_json TEXT, source_urls_json TEXT, press_json TEXT,
             role_category TEXT, priority TEXT,
             music_relevance TEXT, relevance_reason TEXT,
             confidence INTEGER DEFAULT 0,
@@ -780,6 +787,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             UNIQUE(agency_id, dedup_key)
         )"""
     )
+    dm_cols = {r["name"] for r in conn.execute("PRAGMA table_info(decision_makers)")}
+    for name, decl in _DM_COLUMNS.items():
+        if name not in dm_cols:
+            conn.execute(f"ALTER TABLE decision_makers ADD COLUMN {name} {decl}")
     # The self-expanding title taxonomy: the learned cache that lets the Role
     # Classification agent answer from rules without re-deciding. Seeded keyword
     # rules live in code; this table accumulates one row per normalized title the
@@ -1505,9 +1516,9 @@ def upsert_decision_maker(conn: sqlite3.Connection, agency_id: int, rec: Dict) -
     now = datetime.now(timezone.utc).isoformat()
     cols = ("name", "title", "department", "office", "reports_to", "bio",
             "photo_url", "linkedin", "email", "phone", "social_json",
-            "source_urls_json", "role_category", "priority", "music_relevance",
-            "relevance_reason", "confidence", "linkedin_verified",
-            "classified_by", "last_verified")
+            "source_urls_json", "press_json", "role_category", "priority",
+            "music_relevance", "relevance_reason", "confidence",
+            "linkedin_verified", "classified_by", "last_verified")
     vals = [rec.get(c) if rec.get(c) is not None else "" for c in cols]
     exists = conn.execute(
         "SELECT id FROM decision_makers WHERE agency_id = ? AND dedup_key = ?",

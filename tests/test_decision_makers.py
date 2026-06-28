@@ -222,6 +222,60 @@ def test_default_llm_is_off_without_key(monkeypatch):
     assert dm._default_llm("Anything", "") is None
 
 
+# --------------------------------------------------------------------------- #
+# External search seam — fill LinkedIn / press when the site doesn't expose them.
+# --------------------------------------------------------------------------- #
+def test_web_search_is_null_without_provider(monkeypatch):
+    from chordential_oia.web import web_search
+    monkeypatch.delenv("CHORDENTIAL_SEARCH_PROVIDER", raising=False)
+    assert web_search.search_enabled() is False
+    assert web_search.search("anyone acme linkedin") == []
+
+
+def test_search_enrich_accepts_only_matching_linkedin_and_collects_press():
+    person = {"name": "Sam Okafor"}
+    # the search returns a LinkedIn that doesn't match + a wrong-person one + press
+    def fake_search(query):
+        if "linkedin" in query:
+            return [{"title": "Someone Else", "url": "https://linkedin.com/in/someone-else-1"},
+                    {"title": "Sam Okafor", "url": "https://www.linkedin.com/in/sam-okafor-9a"}]
+        return [{"title": "Acme hires Sam Okafor", "url": "https://adage.com/article"},
+                {"title": "Acme team", "url": "https://acme.example/team"},   # own site -> excluded
+                {"title": "Sam on LinkedIn", "url": "https://linkedin.com/in/x"}]  # social -> excluded
+    got = dm.search_enrich(person, {"linkedin": ""}, "Acme", "acme.example", fake_search)
+    # the matching profile is chosen (the first non-matching one is skipped)
+    assert got["linkedin"] == "https://www.linkedin.com/in/sam-okafor-9a"
+    # press is the off-site, non-social result only
+    assert [p["url"] for p in got["press"]] == ["https://adage.com/article"]
+
+
+def test_search_enrich_never_overwrites_unverifiable_profile():
+    # if nothing the search returns matches the name, we keep LinkedIn empty
+    got = dm.search_enrich(
+        {"name": "Dana Reed"}, {"linkedin": ""}, "Acme", "acme.example",
+        lambda q: [{"title": "x", "url": "https://linkedin.com/in/totally-different-9"}])
+    assert got["linkedin"] == ""
+
+
+def test_discover_uses_search_to_fill_linkedin_and_press(tmp_path):
+    conn, aid = _seed(tmp_path)
+
+    def fake_search(query):
+        # Sam Okafor has no LinkedIn on the site; the search supplies a matching one
+        if "Sam Okafor" in query and "linkedin" in query:
+            return [{"title": "Sam Okafor", "url": "https://www.linkedin.com/in/sam-okafor-44"}]
+        if "Sam Okafor" in query:
+            return [{"title": "Sam Okafor joins Acme", "url": "https://shootonline.com/x"}]
+        return []
+
+    dm.discover_decision_makers(conn, aid, fetch=fake_fetch, search=fake_search)
+    sam = next(r for r in dbm.list_decision_makers(conn, aid) if r["name"] == "Sam Okafor")
+    assert sam["linkedin"] == "https://www.linkedin.com/in/sam-okafor-44"
+    assert sam["linkedin_verified"] == 1                       # searched + verified
+    press = json.loads(sam["press_json"])
+    assert press and press[0]["url"] == "https://shootonline.com/x"
+
+
 def test_discover_batch_runs_over_agencies(tmp_path):
     conn, aid = _seed(tmp_path)
     dbm.upsert_agency(conn, "agencyspotter", {
