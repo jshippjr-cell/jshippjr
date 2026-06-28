@@ -184,6 +184,88 @@ def start_manual_enrich(batch: int = 0) -> bool:
     return True
 
 
+# Re-enrichment cadence — periodically refresh agencies whose enrichment has gone
+# stale, so the Signal Detection Framework has fresh data to diff. Network-heavy
+# (re-fetches sites), so it runs on a long interval with a small batch.
+_reenrich_status = {"last_run": None, "last_refreshed": 0, "total_refreshed": 0,
+                    "cycles": 0, "due": 0, "running": False}
+_last_reenrich_mono = 0.0
+_reenrich_lock = threading.Lock()
+
+
+def reenrich_enabled() -> bool:
+    return discovery.scrape_enabled() and (
+        os.environ.get("CHORDENTIAL_REENRICH", "1").strip().lower() not in _FALSEY
+    )
+
+
+def _reenrich_interval_seconds() -> int:
+    try:
+        return max(300, int(os.environ.get("CHORDENTIAL_REENRICH_INTERVAL", "21600")))
+    except ValueError:
+        return 21600
+
+
+def _reenrich_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_REENRICH_BATCH", "5")))
+    except ValueError:
+        return 5
+
+
+def _reenrich_stale_days() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_REENRICH_STALE_DAYS", "7")))
+    except ValueError:
+        return 7
+
+
+def run_reenrich_cycle(batch: int = 0) -> int:
+    """One re-enrichment pass: refresh up to ``batch`` stale agencies (re-fetch
+    their pages) so their profiles are current. Blocking; runs in a worker thread.
+    Lock-guarded. Returns how many were refreshed this pass."""
+    from . import enrichment
+    limit = batch or _reenrich_batch_size()
+    stale = _reenrich_stale_days()
+    if not _reenrich_lock.acquire(blocking=False):
+        return 0
+    _reenrich_status["running"] = True
+    try:
+        conn = db.connect()
+        try:
+            res = enrichment.reenrich_batch(conn, stale_days=stale, limit=limit)
+            _reenrich_status["due"] = len(db.agencies_due_for_reenrichment(
+                conn, stale_days=stale))
+        finally:
+            conn.close()
+        refreshed = res.get("refreshed", 0)
+        _reenrich_status["cycles"] += 1
+        _reenrich_status["last_refreshed"] = refreshed
+        _reenrich_status["total_refreshed"] += refreshed
+        _reenrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return refreshed
+    finally:
+        _reenrich_status["running"] = False
+        _reenrich_lock.release()
+
+
+def start_manual_reenrich(batch: int = 0) -> bool:
+    """Kick a one-off re-enrichment pass in the background; return at once."""
+    if not reenrich_enabled():
+        return False
+    if _reenrich_status.get("running"):
+        return False
+    threading.Thread(target=run_reenrich_cycle, args=(batch,), daemon=True).start()
+    return True
+
+
+def reenrich_status() -> dict:
+    s = dict(_reenrich_status)
+    s["enabled"] = reenrich_enabled()
+    s["stale_days"] = _reenrich_stale_days()
+    return s
+
+
 # Autonomous Decision Maker Discovery — the same shape as auto-enrichment: on when
 # scraping is on and not explicitly disabled, a bounded batch per due cycle, fully
 # in the background so the people-to-contact fill in over time on their own.
@@ -596,8 +678,8 @@ async def run_loop() -> None:
     throttled by a slow one (feed/autofetch, 15 min). All timers start at 0, so on
     boot every enabled task runs one pass right away, then on its own cadence."""
     global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
-    global _last_enrich_mono, _last_dm_mono, _last_intel_mono, _last_sig_mono
-    global _last_triage_mono
+    global _last_enrich_mono, _last_reenrich_mono, _last_dm_mono, _last_intel_mono
+    global _last_sig_mono, _last_triage_mono
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
         now_mono = time.monotonic()
@@ -634,6 +716,12 @@ async def run_loop() -> None:
             _last_enrich_mono = now_mono
             try:
                 await asyncio.to_thread(run_enrich_cycle)       # self-bookkeeping
+            except Exception:
+                pass
+        if reenrich_enabled() and due(_last_reenrich_mono, _reenrich_interval_seconds()):
+            _last_reenrich_mono = now_mono
+            try:
+                await asyncio.to_thread(run_reenrich_cycle)     # self-bookkeeping
             except Exception:
                 pass
         if dm_enabled() and due(_last_dm_mono, _dm_interval_seconds()):

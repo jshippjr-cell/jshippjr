@@ -143,8 +143,28 @@
   </div>
   {% if eb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Enriching up to {{ eb_n }} in the background — refresh to see progress</span>
   {% elif eb_started == "0" %}<span class="small muted">A pass is already running — refresh to see progress</span>{% endif %}
+  {% if rb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Refreshing up to {{ rb_n }} stale agencies in the background</span>
+  {% elif rb_started == "0" %}<span class="small muted">A refresh is already running</span>{% endif %}
   <form method="post" action="/agencies/enrich-pending" style="margin:0">
     <button class="btn" type="submit"{% if auto_enrich.running %} disabled{% endif %}>Enrich {{ pending if pending < 25 else 25 }} now</button>
+  </form>
+</div>
+
+<!-- Re-enrichment cadence: refresh stale agencies so signal detection has fresh diffs. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Auto-refresh (re-enrichment):
+      {% if auto_reenrich.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      Periodically re-fetches each agency (every {{ auto_reenrich.stale_days }} days) so the data stays current — that's what feeds the opportunity timeline with fresh change.
+      {% if auto_reenrich.running %}<strong>A refresh is running now…</strong> {% endif %}
+      {% if auto_reenrich.last_run %}Last refresh: {{ auto_reenrich.last_refreshed }} · {{ auto_reenrich.total_refreshed }} this session.{% endif %}
+      {{ auto_reenrich.due }} agencies due for refresh.
+    </div>
+  </div>
+  <form method="post" action="/agencies/reenrich-pending" style="margin:0">
+    <button class="btn" type="submit"{% if auto_reenrich.running %} disabled{% endif %}>Refresh stale (10)</button>
   </form>
 </div>
 

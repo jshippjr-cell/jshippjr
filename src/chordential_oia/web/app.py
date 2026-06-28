@@ -497,6 +497,7 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   page: int = 1, ingested: str = "", new: str = "", added: str = "",
                   crawled: str = "", pages: str = "", cstatus: str = "",
                   eb_started: str = "", eb_n: str = "",
+                  rb_started: str = "", rb_n: str = "",
                   dm_started: str = "", dm_n: str = "",
                   intel_started: str = "", intel_n: str = "", sig_started: str = ""):
     """Paginated accordion of harvested agencies; each row expands to its enriched
@@ -565,6 +566,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   crawl_states=crawl_states, crawled=crawled, pages=pages,
                   cstatus=cstatus, pages_per_click=PAGES_PER_CRAWL_CLICK,
                   eb_started=eb_started, eb_n=eb_n,
+                  rb_started=rb_started, rb_n=rb_n,
+                  auto_reenrich=scheduler.reenrich_status(),
                   dm_started=dm_started, dm_n=dm_n,
                   dm_pending=dm_pending, dm_total=dm_total,
                   intel_started=intel_started, intel_n=intel_n,
@@ -646,6 +649,23 @@ def agencies_enrich_pending(limit: str = Form("")):
     started = scheduler.start_manual_enrich(n)
     return RedirectResponse(
         f"/agencies?eb_started={'1' if started else '0'}&eb_n={n}",
+        status_code=303)
+
+
+@app.post("/agencies/reenrich-pending")
+def agencies_reenrich_pending(limit: str = Form("")):
+    """Nudge a batch of re-enrichment now — refresh stale agencies' data so the
+    Signal Detection Framework has fresh changes to diff. Fire-and-forget (re-
+    fetching sites takes minutes); the background scheduler also does this on its
+    own cadence."""
+    n = 10
+    try:
+        n = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        n = 10
+    started = scheduler.start_manual_reenrich(n)
+    return RedirectResponse(
+        f"/agencies?rb_started={'1' if started else '0'}&rb_n={n}",
         status_code=303)
 
 
