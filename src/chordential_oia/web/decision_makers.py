@@ -480,6 +480,7 @@ def discover_decision_makers(
 
     if reset:
         db.delete_decision_makers(conn, agency_id)
+        db.save_agency_dm(conn, agency_id, {})
         conn.commit()
 
     cache: Dict[str, Tuple[str, bool]] = {}
@@ -544,9 +545,12 @@ def discover_decision_makers(
             "last_verified": datetime.now(timezone.utc).isoformat(),
         }):
             found += 1
-    conn.commit()
-
     total = db.count_decision_makers(conn, agency_id)
+    from datetime import datetime, timezone
+    db.save_agency_dm(conn, agency_id, {
+        "status": "complete", "found": found, "total": total,
+        "last_run": datetime.now(timezone.utc).isoformat()})
+    conn.commit()
     return {"agency_id": agency_id, "status": "complete", "found": found,
             "total": total, "people": len(people)}
 
@@ -575,7 +579,7 @@ def discover_batch(
     """Run discovery over agencies that have a website, one at a time. Resumable in
     the same spirit as enrichment: re-invoking re-processes (idempotent upserts), so
     a bounded ``limit`` per call keeps each run short."""
-    rows = db.agencies_needing_enrichment(conn, source=source, limit=limit)
+    rows = db.agencies_needing_decision_makers(conn, source=source, limit=limit)
     results: List[Dict] = []
     counts: Dict[str, int] = {}
     for r in rows:

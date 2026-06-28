@@ -148,6 +148,30 @@
   </form>
 </div>
 
+<!-- Decision Maker Discovery: same background pattern — find the people to contact. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Decision-maker discovery:
+      {% if auto_dm.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      {% if auto_dm.enabled %}
+        The agent finds the people worth contacting at each agency on its own in the background.
+        {% if auto_dm.running %}<strong>A pass is running now…</strong> {% endif %}
+        {% if auto_dm.last_run %}Last pass found {{ auto_dm.last_found }} · {{ auto_dm.total_found }} people this session.{% endif %}
+      {% else %}
+        Runs automatically on Render (live fetching on).
+      {% endif %}
+      {{ dm_total }} decision makers stored · {{ dm_pending }} agencies awaiting discovery.
+    </div>
+  </div>
+  {% if dm_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Finding decision makers for up to {{ dm_n }} agencies in the background — refresh to see progress</span>
+  {% elif dm_started == "0" %}<span class="small muted">A pass is already running — refresh to see progress</span>{% endif %}
+  <form method="post" action="/agencies/decision-makers-pending" style="margin:0">
+    <button class="btn" type="submit"{% if auto_dm.running %} disabled{% endif %}>Find decision makers ({{ dm_pending if dm_pending < 25 else 25 }})</button>
+  </form>
+</div>
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">

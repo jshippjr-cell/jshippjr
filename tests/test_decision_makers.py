@@ -228,8 +228,45 @@ def test_discover_batch_runs_over_agencies(tmp_path):
         "dedup_key": "nosite", "company": "No Site", "website": ""})
     conn.commit()
     res = dm.discover_batch(conn, fetch=fake_fetch, limit=10)
-    # only the website-bearing agency yields people; the no-site one errors
+    # only the website-bearing agency is queued (no-site rows are excluded)
     assert res["found"] == 3 and res["complete"] == 1
+
+
+def test_batch_marks_agencies_and_queue_advances(tmp_path):
+    conn, aid = _seed(tmp_path)
+    # before: the agency is awaiting discovery
+    assert len(dbm.agencies_needing_decision_makers(conn)) == 1
+    dm.discover_batch(conn, fetch=fake_fetch, limit=10)
+    # after: marked complete -> drops out of the queue (no re-clog), even though
+    # found could have been 0 for some agency
+    assert dbm.agencies_needing_decision_makers(conn) == []
+    assert dbm.get_agency_dm(conn, aid)["status"] == "complete"
+    # a second batch does nothing; a reset re-queues it
+    again = dm.discover_batch(conn, fetch=fake_fetch, limit=10)
+    assert again["total"] == 0
+    dm.discover_decision_makers(conn, aid, fetch=fake_fetch, reset=True)
+    assert dbm.get_agency_dm(conn, aid)["status"] == "complete"  # re-marked
+
+
+def test_needing_decision_makers_skips_no_website(tmp_path):
+    conn, _ = _seed(tmp_path)
+    dbm.upsert_agency(conn, "thedrum", {
+        "dedup_key": "nosite", "company": "No Site", "website": ""})
+    conn.commit()
+    rows = dbm.agencies_needing_decision_makers(conn)
+    assert [r["company"] for r in rows] == ["Acme"]
+
+
+def test_start_manual_dm_guarded(tmp_path, monkeypatch):
+    from chordential_oia.web import scheduler as sch
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: False)
+    assert sch.start_manual_dm(5) is False              # disabled here
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
+    sch._dm_status["running"] = True
+    try:
+        assert sch.start_manual_dm(5) is False          # already running
+    finally:
+        sch._dm_status["running"] = False
 
 
 # --------------------------------------------------------------------------- #
