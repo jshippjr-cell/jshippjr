@@ -57,8 +57,9 @@ from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
     db, decision_makers, directory_crawl, directory_parsers, discovery,
-    enrichment, intelligence, music_opportunity, opportunity_signals, relationships,
-    scheduler, seed, signals, sources, triage, webpush,
+    enrichment, intelligence, music_opportunity, opportunity_signals,
+    outreach_engine, relationships, scheduler, seed, signals, sources, triage,
+    webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -793,6 +794,7 @@ def agency_detail(request: Request, agency_id: int):
         outreach = [dict(o) for o in db.list_agency_outreach(conn, agency_id)]
         relationships.seed_memory(conn, agency_id)       # institutional memory
         relationship = relationships.relationship_view(conn, agency_id)
+        outreach_ws = outreach_engine.outreach_workspace(conn, agency_id)
     finally:
         conn.close()
     profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
@@ -809,6 +811,7 @@ def agency_detail(request: Request, agency_id: int):
                   decision_makers=dm_rows, intel=intel, timeline=timeline,
                   opportunity=opportunity, outreach=outreach,
                   relationship=relationship, stages=relationships.STAGES,
+                  outreach_ws=outreach_ws,
                   scrape_on=enrichment.scrape_enabled())
 
 
