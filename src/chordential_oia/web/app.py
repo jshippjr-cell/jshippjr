@@ -840,16 +840,11 @@ def _decision_maker_view(r) -> dict:
 
 @app.post("/agencies/{agency_id}/decision-makers")
 def agency_find_decision_makers(agency_id: int, reset: str = Form("")):
-    """Run the Decision Maker Discovery Engine on ONE agency, live — visit its
-    leadership/team/about pages, extract every person, classify + score them, and
-    store the lot. Uses the default fetcher (reads the real site where scraping is
-    on; records 'blocked' in the sandbox). Safe to re-press (idempotent upserts)."""
-    conn = db.connect()
-    try:
-        decision_makers.discover_decision_makers(
-            conn, agency_id, reset=bool(reset))
-    finally:
-        conn.close()
+    """Discover ONE agency's decision makers — visit its leadership/team/about
+    pages, extract every person, classify + score them. Fire-and-forget: it fetches
+    live pages (slow), so running it inline spins the request — instead it runs in
+    the background and the page shows results on refresh. Safe to re-press."""
+    scheduler.start_agency_decision_makers(agency_id, reset=bool(reset))
     return RedirectResponse(f"/agencies/{agency_id}#decision-makers", status_code=303)
 
 
@@ -997,15 +992,11 @@ def agency_add_document(agency_id: int, title: str = Form(...), url: str = Form(
 
 @app.post("/agencies/{agency_id}/enrich")
 def agency_enrich(agency_id: int, reset: str = Form("")):
-    """Run the Company Enrichment Engine on ONE agency, live. Uses the default
-    fetcher, so it actually reads the agency's website wherever scraping is
-    enabled (Render); in the egress-blocked sandbox it records 'blocked'. Safe to
-    re-press: it resumes unless 'reset' is set."""
-    conn = db.connect()
-    try:
-        enrichment.enrich_agency(conn, agency_id, reset=bool(reset))
-    finally:
-        conn.close()
+    """Run the Company Enrichment Engine on ONE agency. Fire-and-forget: it reads
+    the agency's live website (homepage + ~10 sub-pages), which is far too slow to
+    do inside the request — so it runs in the background and the profile fills in on
+    refresh. Safe to re-press: it resumes unless 'reset' is set."""
+    scheduler.start_agency_enrich(agency_id, reset=bool(reset))
     return RedirectResponse(f"/agencies/{agency_id}", status_code=303)
 
 

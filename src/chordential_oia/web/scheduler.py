@@ -76,6 +76,47 @@ def autofetch_enabled() -> bool:
     )
 
 
+def _run_in_background(fn) -> None:
+    """Run ``fn(conn)`` in a daemon thread, holding the shared heavy lock for its
+    duration (so it never overlaps another heavy job) with its own DB connection.
+    Used by the per-agency Enrich / Find-decision-makers actions: those fetch live
+    pages (slow), so doing them inline spins the request — this returns instantly
+    and the page shows progress on refresh."""
+    def _job():
+        _heavy_lock.acquire()                    # wait our turn; never overlap
+        try:
+            conn = db.connect()
+            try:
+                fn(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+        finally:
+            _heavy_lock.release()
+    threading.Thread(target=_job, daemon=True).start()
+
+
+def start_agency_enrich(agency_id: int, *, reset: bool = False) -> bool:
+    """Enrich ONE agency in the background (it fetches the live site). Returns True
+    if started; False if scraping is off here (then it's a no-op the UI explains)."""
+    if not discovery.scrape_enabled():
+        return False
+    from . import enrichment
+    _run_in_background(lambda conn: enrichment.enrich_agency(conn, agency_id, reset=reset))
+    return True
+
+
+def start_agency_decision_makers(agency_id: int, *, reset: bool = False) -> bool:
+    """Discover ONE agency's decision makers in the background (fetches live pages)."""
+    if not discovery.scrape_enabled():
+        return False
+    from . import decision_makers
+    _run_in_background(lambda conn: decision_makers.discover_decision_makers(
+        conn, agency_id, reset=reset))
+    return True
+
+
 def autonomous_engines_on() -> bool:
     """Master switch for the heavy agency engines running AUTONOMOUSLY in the loop
     (enrich, re-enrich, decision makers, intelligence, signals, scoring). Default

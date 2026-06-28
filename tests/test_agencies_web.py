@@ -88,34 +88,42 @@ def test_agency_detail_before_enrichment(app_db):
 
 def test_enrich_action_runs_live_and_shows_profile(app_db, monkeypatch):
     client, app_mod = app_db
-    # Turn live fetching on for the engine and point it at the fake site.
     monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
     monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
     aid = _agency_id(app_mod, "Acme")
-
-    r = client.post(f"/agencies/{aid}/enrich", follow_redirects=True)
-    assert r.status_code == 200
-    # The extracted facts render on the profile page.
+    # The route is fire-and-forget (it fetches the live site, too slow to do inline),
+    # so drive the engine synchronously here, then check the profile renders.
+    conn = app_mod.db.connect()
+    app_mod.enrichment.enrich_agency(conn, aid)
+    conn.close()
+    r = client.get(f"/agencies/{aid}")
     assert "Brand Strategy" in r.text and "Web Design" in r.text
-    assert "hi@acme.example" in r.text
-    assert "2011" in r.text
-    assert "complete" in r.text
-
-    # And it persisted to the Master Company Database row.
+    assert "hi@acme.example" in r.text and "2011" in r.text and "complete" in r.text
     state = app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)
     assert state["status"] == "complete"
     assert state["profile"]["services"] == ["Brand Strategy", "Web Design"]
 
 
-def test_enrich_action_blocked_when_scraping_off(app_db):
-    # Default env has scraping OFF (the sandbox case): Enrich records 'blocked'
-    # rather than pretending to fetch.
+def test_enrich_action_is_fire_and_forget(app_db, monkeypatch):
+    # Pressing Enrich must NOT run the (slow, live-fetching) engine inside the
+    # request — it delegates to the background runner and redirects immediately.
+    client, app_mod = app_db
+    calls = {}
+    monkeypatch.setattr(app_mod.scheduler, "start_agency_enrich",
+                        lambda aid, reset=False: calls.setdefault("aid", aid) is None or True)
+    aid = _agency_id(app_mod, "Acme")
+    r = client.post(f"/agencies/{aid}/enrich", follow_redirects=False)
+    assert r.status_code == 303 and calls["aid"] == aid
+
+
+def test_enrich_action_noop_when_scraping_off(app_db):
+    # Default env has scraping OFF (the sandbox case): the background runner is a
+    # no-op, so nothing is recorded — and crucially the request returns instantly.
     client, app_mod = app_db
     aid = _agency_id(app_mod, "Acme")
     r = client.post(f"/agencies/{aid}/enrich", follow_redirects=True)
     assert r.status_code == 200
-    state = app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)
-    assert state["status"] == "blocked"
+    assert not app_mod.db.get_agency_enrichment(app_mod.db.connect(), aid)
 
 
 def test_agency_detail_404(app_db):
