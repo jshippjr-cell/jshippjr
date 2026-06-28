@@ -56,8 +56,8 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
-    db, directory_crawl, directory_parsers, discovery, enrichment, scheduler,
-    seed, signals, sources, triage, webpush,
+    db, decision_makers, directory_crawl, directory_parsers, discovery,
+    enrichment, scheduler, seed, signals, sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -678,6 +678,8 @@ def agency_detail(request: Request, agency_id: int):
         if row is None:
             return PlainTextResponse("No such agency", status_code=404)
         state = db.get_agency_enrichment(conn, agency_id) or {}
+        dm_rows = [_decision_maker_view(r) for r in
+                   db.list_decision_makers(conn, agency_id)]
     finally:
         conn.close()
     profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
@@ -691,7 +693,45 @@ def agency_detail(request: Request, agency_id: int):
                   profile=profile, status=state.get("status", ""),
                   detail=state.get("detail", ""),
                   steps_done=state.get("steps_done", []),
+                  decision_makers=dm_rows,
                   scrape_on=enrichment.scrape_enabled())
+
+
+def _decision_maker_view(r) -> dict:
+    """Flatten a decision_makers row for the template (JSON blobs → objects)."""
+    def _loads(v, default):
+        try:
+            return json.loads(v) if v else default
+        except (json.JSONDecodeError, TypeError):
+            return default
+    return {
+        "name": r["name"], "title": r["title"], "department": r["department"],
+        "bio": r["bio"], "photo_url": r["photo_url"],
+        "linkedin": r["linkedin"], "email": r["email"], "phone": r["phone"],
+        "social": _loads(r["social_json"], {}),
+        "source_urls": _loads(r["source_urls_json"], []),
+        "role_category": r["role_category"], "priority": r["priority"],
+        "music_relevance": r["music_relevance"],
+        "relevance_reason": r["relevance_reason"],
+        "confidence": r["confidence"],
+        "linkedin_verified": bool(r["linkedin_verified"]),
+        "classified_by": r["classified_by"], "last_verified": r["last_verified"],
+    }
+
+
+@app.post("/agencies/{agency_id}/decision-makers")
+def agency_find_decision_makers(agency_id: int, reset: str = Form("")):
+    """Run the Decision Maker Discovery Engine on ONE agency, live — visit its
+    leadership/team/about pages, extract every person, classify + score them, and
+    store the lot. Uses the default fetcher (reads the real site where scraping is
+    on; records 'blocked' in the sandbox). Safe to re-press (idempotent upserts)."""
+    conn = db.connect()
+    try:
+        decision_makers.discover_decision_makers(
+            conn, agency_id, reset=bool(reset))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#decision-makers", status_code=303)
 
 
 @app.post("/agencies/{agency_id}/enrich")
