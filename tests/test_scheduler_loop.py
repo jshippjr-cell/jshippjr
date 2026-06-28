@@ -50,6 +50,22 @@ def test_loop_fires_enrichment_on_its_own_each_tick(monkeypatch):
     assert calls["enrich"] >= 2            # fired on its own across multiple ticks
 
 
+def test_only_one_heavy_cycle_runs_at_a_time():
+    # The shared heavy lock prevents several batches hammering a small instance at
+    # once (the overload that hung the live service): if one heavy job holds the
+    # lock, every other heavy cycle is a no-op.
+    sch._heavy_lock.acquire()
+    try:
+        assert sch.run_enrich_cycle() == 0
+        assert sch.run_dm_cycle() == 0
+        assert sch.run_intel_cycle() == 0
+        assert sch.run_signals_cycle() == 0
+        assert sch.run_score_cycle() == 0
+        assert sch.run_reenrich_cycle() == 0
+    finally:
+        sch._heavy_lock.release()
+
+
 def test_a_slow_task_does_not_block_a_fast_one(monkeypatch):
     # autofetch on a long interval must not stop enrichment from firing each tick.
     fired = {"enrich": 0, "autofetch": 0}

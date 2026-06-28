@@ -39,6 +39,13 @@ _status = {
 
 _FALSEY = {"0", "false", "no", "off", ""}
 
+# ONE shared lock across every heavy background cycle (enrich, re-enrich, decision
+# makers, intelligence, signals, scoring). Only one heavy job runs at a time — auto
+# OR manual — so a small instance is never hit by several batches at once (the
+# overload that hung the live service). Each cycle keeps its own "running" flag for
+# the UI but gates execution on this lock.
+_heavy_lock = threading.Lock()
+
 # The loop wakes on a short base tick and each periodic task gates itself by its
 # own interval (below). This decouples them: enrichment can fire every 5 min even
 # though the heavier feed/autofetch passes run every 15 — they no longer throttle
@@ -150,14 +157,14 @@ def run_enrich_cycle(batch: int = 0) -> int:
     nudge while one is in flight is a no-op rather than a double run on the DB."""
     from . import enrichment
     limit = batch or _enrich_batch_size()
-    if not _enrich_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0                              # a pass is already running
     _enrich_status["running"] = True
     try:
         conn = db.connect()
         try:
             res = enrichment.enrich_batch(conn, limit=limit)
-            _enrich_status["pending"] = len(db.agencies_needing_enrichment(conn))
+            _enrich_status["pending"] = db.count_needing_enrichment(conn)
         finally:
             conn.close()
         completed = res.get("completed", 0)
@@ -168,7 +175,7 @@ def run_enrich_cycle(batch: int = 0) -> int:
         return completed
     finally:
         _enrich_status["running"] = False
-        _enrich_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_enrich(batch: int = 0) -> bool:
@@ -227,15 +234,16 @@ def run_reenrich_cycle(batch: int = 0) -> int:
     from . import enrichment
     limit = batch or _reenrich_batch_size()
     stale = _reenrich_stale_days()
-    if not _reenrich_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0
     _reenrich_status["running"] = True
     try:
         conn = db.connect()
         try:
             res = enrichment.reenrich_batch(conn, stale_days=stale, limit=limit)
+            # bounded count (don't materialize the whole table just for a status)
             _reenrich_status["due"] = len(db.agencies_due_for_reenrichment(
-                conn, stale_days=stale))
+                conn, stale_days=stale, limit=500))
         finally:
             conn.close()
         refreshed = res.get("refreshed", 0)
@@ -246,7 +254,7 @@ def run_reenrich_cycle(batch: int = 0) -> int:
         return refreshed
     finally:
         _reenrich_status["running"] = False
-        _reenrich_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_reenrich(batch: int = 0) -> bool:
@@ -302,14 +310,14 @@ def run_dm_cycle(batch: int = 0) -> int:
     Lock-guarded so two passes never overlap."""
     from . import decision_makers
     limit = batch or _dm_batch_size()
-    if not _dm_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0
     _dm_status["running"] = True
     try:
         conn = db.connect()
         try:
             res = decision_makers.discover_batch(conn, limit=limit)
-            _dm_status["pending"] = len(db.agencies_needing_decision_makers(conn))
+            _dm_status["pending"] = db.count_needing_decision_makers(conn)
         finally:
             conn.close()
         found = res.get("found", 0)
@@ -320,7 +328,7 @@ def run_dm_cycle(batch: int = 0) -> int:
         return found
     finally:
         _dm_status["running"] = False
-        _dm_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_dm(batch: int = 0) -> bool:
@@ -373,14 +381,14 @@ def run_intel_cycle(batch: int = 0) -> int:
     profiles were generated this pass."""
     from . import intelligence
     limit = batch or _intel_batch_size()
-    if not _intel_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0
     _intel_status["running"] = True
     try:
         conn = db.connect()
         try:
             res = intelligence.generate_batch(conn, limit=limit)
-            _intel_status["pending"] = len(db.agencies_needing_intelligence(conn))
+            _intel_status["pending"] = db.count_needing_intelligence(conn)
         finally:
             conn.close()
         generated = res.get("generated", 0)
@@ -391,7 +399,7 @@ def run_intel_cycle(batch: int = 0) -> int:
         return generated
     finally:
         _intel_status["running"] = False
-        _intel_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_intel(batch: int = 0) -> bool:
@@ -433,7 +441,7 @@ def _sig_interval_seconds() -> int:
 
 def _sig_batch_size() -> int:
     try:
-        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSIGNALS_BATCH", "100")))
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSIGNALS_BATCH", "25")))
     except ValueError:
         return 100
 
@@ -443,7 +451,7 @@ def run_signals_cycle(batch: int = 0) -> int:
     Blocking; runs in a worker thread. Lock-guarded. Returns NEW signals stored."""
     from . import opportunity_signals
     limit = batch or _sig_batch_size()
-    if not _sig_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0
     _sig_status["running"] = True
     try:
@@ -461,7 +469,7 @@ def run_signals_cycle(batch: int = 0) -> int:
         return new
     finally:
         _sig_status["running"] = False
-        _sig_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_signals(batch: int = 0) -> bool:
@@ -502,7 +510,7 @@ def _score_interval_seconds() -> int:
 
 def _score_batch_size() -> int:
     try:
-        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSCORE_BATCH", "100")))
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSCORE_BATCH", "25")))
     except ValueError:
         return 100
 
@@ -512,7 +520,7 @@ def run_score_cycle(batch: int = 0) -> int:
     a worker thread. Lock-guarded. Returns how many agencies were (re)scored."""
     from . import music_opportunity
     limit = batch or _score_batch_size()
-    if not _score_lock.acquire(blocking=False):
+    if not _heavy_lock.acquire(blocking=False):
         return 0
     _score_status["running"] = True
     try:
@@ -529,7 +537,7 @@ def run_score_cycle(batch: int = 0) -> int:
         return scored
     finally:
         _score_status["running"] = False
-        _score_lock.release()
+        _heavy_lock.release()
 
 
 def start_manual_score(batch: int = 0) -> bool:
@@ -742,13 +750,29 @@ async def run_loop() -> None:
     """The forever loop, started from the app lifespan. Self-heals on errors.
 
     Wakes on a short base tick; each periodic task gates itself by its OWN
-    interval (via a monotonic timer), so a fast task (enrichment, 5 min) isn't
-    throttled by a slow one (feed/autofetch, 15 min). All timers start at 0, so on
-    boot every enabled task runs one pass right away, then on its own cadence."""
+    interval (via a monotonic timer). The heavy cycles also share one lock, so only
+    one runs at a time. Their first runs are STAGGERED after boot (below) rather
+    than all firing at once — the boot-time pile-up that overloaded the instance."""
     global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
     global _last_enrich_mono, _last_reenrich_mono, _last_dm_mono, _last_intel_mono
     global _last_sig_mono, _last_score_mono, _last_triage_mono
-    await asyncio.sleep(15)  # let startup seeding settle before the first pass
+    await asyncio.sleep(20)  # let startup seeding + the first requests settle
+    # Stagger first-runs: seed each timer to now-(interval-offset) so the first
+    # pass of each heavy cycle comes due spread out (≈ the offset seconds from now),
+    # never all at once. The shared lock makes any residual overlap a no-op.
+    base = time.monotonic()
+
+    def _stagger(interval: int, offset: int) -> float:
+        # first run ≈ ``offset`` seconds from now; never pushes into the future
+        # for tiny intervals (so fast/test cadences still fire promptly)
+        return base - max(0, interval - offset)
+
+    _last_enrich_mono = _stagger(_enrich_interval_seconds(), 60)
+    _last_dm_mono = _stagger(_dm_interval_seconds(), 150)
+    _last_intel_mono = _stagger(_intel_interval_seconds(), 240)
+    _last_sig_mono = _stagger(_sig_interval_seconds(), 330)
+    _last_score_mono = _stagger(_score_interval_seconds(), 420)
+    _last_reenrich_mono = base                       # first re-enrich after a full interval
     while True:
         now_mono = time.monotonic()
 

@@ -534,10 +534,10 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                 "location": r["location"], "source": r["source"],
                 "status": pp["status"] or "—", "profile": pp["profile"],
             })
-        pending = len(db.agencies_needing_enrichment(conn, source=source or None))
-        dm_pending = len(db.agencies_needing_decision_makers(conn, source=source or None))
+        pending = db.count_needing_enrichment(conn, source or None)
+        dm_pending = db.count_needing_decision_makers(conn, source or None)
         dm_total = db.count_decision_makers(conn)
-        intel_pending = len(db.agencies_needing_intelligence(conn, source=source or None))
+        intel_pending = db.count_needing_intelligence(conn, source or None)
         sig_total = db.count_opportunity_signals(conn, active_only=True)
         movers = [{"id": r["id"], "company": r["company"],
                    "score": r["opportunity_score"], "tier": r["opportunity_tier"],

@@ -46,6 +46,25 @@ _PROD_DM = {"dedup_key": "dana reed", "name": "Dana Reed",
             "relevance_reason": "x", "confidence": 92}
 
 
+def test_cheap_status_counts_match_list_helpers(tmp_path):
+    # The dashboard/page counts use SQL COUNT (no blob loading) and must agree with
+    # the authoritative list helpers — this is the fix that stopped 12k-row scans
+    # on every page load from overloading the instance.
+    conn = dbm.connect(str(tmp_path / "counts.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "a", "company": "A", "website": "https://a.com"})
+    dbm.upsert_agency(conn, "s", {"dedup_key": "b", "company": "B", "website": "https://b.com"})
+    dbm.upsert_agency(conn, "s", {"dedup_key": "c", "company": "C", "website": ""})
+    conn.commit()
+    bid = next(r["id"] for r in dbm.list_agencies(conn) if r["company"] == "B")
+    dbm.save_agency_enrichment(conn, bid, {
+        "status": "complete", "profile": en.AgencyProfile(name="B").to_dict()})
+    conn.commit()
+    assert dbm.count_needing_enrichment(conn) == len(dbm.agencies_needing_enrichment(conn))
+    assert dbm.count_needing_decision_makers(conn) == len(dbm.agencies_needing_decision_makers(conn))
+    assert dbm.count_needing_intelligence(conn) == len(dbm.agencies_needing_intelligence(conn))
+
+
 def test_industry_classification_is_word_bounded():
     # "care" inside "healthcare" must NOT trigger Automotive ("car")
     f = intel.classify_industries(
