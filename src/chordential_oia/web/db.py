@@ -2051,18 +2051,55 @@ def top_movers(
         (*params, limit)).fetchall()
 
 
+# --------------------------------------------------------------------------- #
+# Cheap status counts — COUNT(*) with a JSON marker, NO blob loading and NO
+# Python materialization, so the dashboard / status cards / page loads don't scan
+# 12k full rows (with their large JSON columns) into memory on every request.
+# --------------------------------------------------------------------------- #
+_DONE = '%"status": "complete"%'
+_ERR = '%"status": "error"%'
+
+
+def _count(conn: sqlite3.Connection, where: str, params: tuple) -> int:
+    return conn.execute(
+        f"SELECT COUNT(*) AS n FROM agencies WHERE {where}", params).fetchone()["n"]
+
+
+def _src(source: Optional[str]) -> tuple:
+    return (" AND source = ?", (source,)) if source else ("", ())
+
+
+def count_needing_enrichment(conn, source: Optional[str] = None) -> int:
+    s, p = _src(source)
+    return _count(conn, "TRIM(COALESCE(website,'')) != '' "
+                  "AND COALESCE(enrichment_json,'') NOT LIKE ? "
+                  "AND COALESCE(enrichment_json,'') NOT LIKE ?" + s, (_DONE, _ERR, *p))
+
+
+def count_needing_decision_makers(conn, source: Optional[str] = None) -> int:
+    s, p = _src(source)
+    return _count(conn, "TRIM(COALESCE(website,'')) != '' "
+                  "AND COALESCE(dm_json,'') NOT LIKE ?" + s, (_DONE, *p))
+
+
+def count_needing_intelligence(conn, source: Optional[str] = None) -> int:
+    s, p = _src(source)
+    return _count(conn, "COALESCE(enrichment_json,'') LIKE ? "
+                  "AND COALESCE(intel_json,'') NOT LIKE ?" + s, (_DONE, _DONE, *p))
+
+
 def agencies_due_for_reenrichment(
     conn: sqlite3.Connection, source: Optional[str] = None, stale_days: int = 7,
-    limit: int = 100000
+    limit: int = 1000
 ) -> List[sqlite3.Row]:
     """Enriched agencies whose data has gone stale (last_enriched older than
-    ``stale_days``, or never timestamped), oldest-stamp first so the refresh
-    rotates. This is the re-enrichment cadence's queue — refreshing these is what
-    gives the Signal Detection Framework fresh data to diff against."""
+    ``stale_days``, or never timestamped). Iterates in id order and STOPS at
+    ``limit`` (bounded memory — never materializes the whole table); as agencies
+    are refreshed their stamp updates and they drop out, so the scan rotates."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).isoformat()
     clause = " WHERE source = ?" if source else ""
     params = ((source,) if source else ())
-    due: List[tuple] = []
+    out: List[sqlite3.Row] = []
     for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
         raw = r["enrichment_json"]
         if not raw:
@@ -2075,10 +2112,11 @@ def agencies_due_for_reenrichment(
             continue
         last = state.get("last_enriched") or ""
         if last and last >= cutoff:
-            continue                          # still fresh
-        due.append((last, r))
-    due.sort(key=lambda t: t[0])              # stalest (incl. untimestamped "") first
-    return [r for _last, r in due[:limit]]
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def agencies_needing_decision_makers(
