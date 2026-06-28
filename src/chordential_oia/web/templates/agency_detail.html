@@ -136,6 +136,8 @@
           {% if d.email %}<a href="mailto:{{ d.email }}">{{ d.email }}</a><br>{% endif %}
           {% if d.phone %}{{ d.phone }}{% endif %}
           {% if not d.linkedin and not d.email and not d.phone %}<span class="muted">—</span>{% endif %}
+          {% if d.press %}<br><span class="muted">Press:</span>
+            {% for p in d.press %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer" title="{{ p.title }}">·</a>{% endfor %}{% endif %}
         </td>
         <td style="padding:8px 10px">{{ d.confidence }}%</td>
       </tr>

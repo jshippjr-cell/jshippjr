@@ -732,6 +732,7 @@ def _decision_maker_view(r) -> dict:
         "linkedin": r["linkedin"], "email": r["email"], "phone": r["phone"],
         "social": _loads(r["social_json"], {}),
         "source_urls": _loads(r["source_urls_json"], []),
+        "press": _loads(r["press_json"], []),
         "role_category": r["role_category"], "priority": r["priority"],
         "music_relevance": r["music_relevance"],
         "relevance_reason": r["relevance_reason"],
