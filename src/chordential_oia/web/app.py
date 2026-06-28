@@ -652,11 +652,14 @@ def agencies_enrich_pending(limit: str = Form("")):
     than an HTTP request can wait — so we kick it off in a background thread and
     return immediately. Progress shows up in the auto-enrichment status card on
     refresh. Re-press to queue more once the running pass finishes."""
-    n = 25
+    # Keep one press small: a big batch of live-site fetches saturates the single-
+    # CPU instance for many minutes and starves the web server (the "wheel of
+    # death"). 5 at a time, paced; re-press once the running pass finishes.
+    n = 5
     try:
-        n = max(1, min(50, int(limit)))
+        n = max(1, min(10, int(limit)))
     except (TypeError, ValueError):
-        n = 25
+        n = 5
     started = scheduler.start_manual_enrich(n)
     return RedirectResponse(
         f"/agencies?eb_started={'1' if started else '0'}&eb_n={n}",
@@ -997,6 +1000,15 @@ def agency_enrich(agency_id: int, reset: str = Form("")):
     do inside the request — so it runs in the background and the profile fills in on
     refresh. Safe to re-press: it resumes unless 'reset' is set."""
     scheduler.start_agency_enrich(agency_id, reset=bool(reset))
+    return RedirectResponse(f"/agencies/{agency_id}", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/pipeline")
+def agency_full_pipeline(agency_id: int, reset: str = Form("")):
+    """One press → build the COMPLETE profile for this agency: enrich → decision
+    makers → intelligence → signals → score, run in order in a single background
+    job. Returns instantly; the page fills in over the next minute on refresh."""
+    scheduler.start_agency_pipeline(agency_id, reset=bool(reset))
     return RedirectResponse(f"/agencies/{agency_id}", status_code=303)
 
 

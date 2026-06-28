@@ -6,8 +6,11 @@
 <p class="muted small" style="margin:6px 0 14px"><a href="/agencies">← All agencies</a></p>
 
 <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+  <form method="post" action="/agencies/{{ agency.id }}/pipeline" style="margin:0">
+    <button class="btn" type="submit" title="Enrich → decision makers → intelligence → signals → score, in order">⚡ Build full profile</button>
+  </form>
   <form method="post" action="/agencies/{{ agency.id }}/enrich" style="margin:0">
-    <button class="btn" type="submit">{{ 'Re-run enrichment' if status else 'Enrich now' }}</button>
+    <button class="btn btn-small" type="submit">{{ 'Re-run enrichment' if status else 'Enrich only' }}</button>
   </form>
   {% if status %}
   <form method="post" action="/agencies/{{ agency.id }}/enrich" style="margin:0">
@@ -25,6 +28,7 @@
   <span class="muted small" style="margin-left:auto">live fetching OFF here — runs for real on Render</span>
   {% endif %}
 </div>
+<p class="muted small" style="margin:-6px 0 14px">“Build full profile” runs every layer for this agency in the background (≈1 min) — press it, then refresh to watch the sections fill in.</p>
 
 {% macro field(label, value) %}
   {% if value %}

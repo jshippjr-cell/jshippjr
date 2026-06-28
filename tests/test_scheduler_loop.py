@@ -93,6 +93,46 @@ def test_manual_start_works_even_when_autonomy_off(monkeypatch):
     assert sch.start_manual_enrich(5) is True and started.get("yes")
 
 
+def test_full_pipeline_runs_all_layers_in_order(tmp_path, monkeypatch):
+    # "Build full profile" must chain enrich → decision makers → intelligence →
+    # signals → score for one agency, in order, in one background job.
+    from chordential_oia.web import (db as dbm, enrichment as en,
+                                      decision_makers as dm)
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)
+
+    conn = dbm.connect(str(tmp_path / "pipe.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "acme.example", "company": "Acme",
+                                  "website": "https://acme.example"})
+    aid = conn.execute("SELECT id FROM agencies").fetchone()["id"]
+    conn.commit()
+
+    SITE = {"https://acme.example/": "<html><body><nav>"
+            "<a href='/what-we-do'>What We Do</a><a href='/team'>Team</a></nav></body></html>",
+            "https://acme.example/what-we-do": "<body><h2>What We Do</h2><ul>"
+            "<li>Brand Films</li></ul></body>",
+            "https://acme.example/team": "<body><h2>Leadership</h2><div><h3>Dana Reed</h3>"
+            "<p>Executive Producer</p></div></body>"}
+    fake_fetch = (lambda u, timeout=15.0:
+                  ((SITE.get(u) or SITE.get(u + "/") or ""),
+                   (u in SITE or u + "/" in SITE)))
+    # Both enrichment and decision_makers hold their OWN binding of _default_fetch
+    # (decision_makers did `from .enrichment import _default_fetch`), so the live-
+    # network seam must be faked on both modules or the DM step hits the wire.
+    monkeypatch.setattr(en, "_default_fetch", fake_fetch)
+    monkeypatch.setattr(dm, "_default_fetch", fake_fetch)
+
+    # run synchronously (don't spawn a thread) to assert the chained outcome
+    monkeypatch.setattr(sch, "_run_in_background", lambda fn: fn(conn))
+    assert sch.start_agency_pipeline(aid) is True
+
+    assert dbm.get_agency_enrichment(conn, aid)["status"] == "complete"   # enriched
+    assert dbm.count_decision_makers(conn, aid) >= 1                      # decision makers
+    assert dbm.get_agency_intel(conn, aid).get("status") == "complete"   # intelligence
+    assert dbm.get_agency_score(conn, aid).get("score") is not None       # scored
+
+
 def test_only_one_heavy_cycle_runs_at_a_time():
     # The shared heavy lock prevents several batches hammering a small instance at
     # once (the overload that hung the live service): if one heavy job holds the
