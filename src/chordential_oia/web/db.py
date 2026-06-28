@@ -325,6 +325,11 @@ _AGENCY_COLUMNS = {
     # last_run} so the batch/auto-run knows an agency has been processed and the
     # queue advances (an agency where 0 people were found isn't re-tried forever).
     "dm_json": "TEXT",
+    # Company Intelligence Profile: the structured, evidence-backed intelligence
+    # the engine derives from the enriched profile + decision makers (see
+    # get_agency_intel for the shape). Carries its own 'status' so the batch /
+    # auto-run queue advances exactly like enrichment and decision makers.
+    "intel_json": "TEXT",
 }
 
 # Decision-maker columns added after the table first shipped — migrated onto an
@@ -1584,6 +1589,56 @@ def save_agency_dm(conn: sqlite3.Connection, agency_id: int, state: dict) -> Non
     conn.execute(
         "UPDATE agencies SET dm_json = ?, updated_at = ? WHERE id = ?",
         (json.dumps(state), datetime.now(timezone.utc).isoformat(), agency_id))
+
+
+def get_agency_intel(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's Company Intelligence Profile (agencies.intel_json), or {}.
+    Shape: each intelligence field is {"value", "evidence": [str], "confidence"}
+    plus "overall_confidence", "status", "generated_at" — see intelligence.py."""
+    row = conn.execute(
+        "SELECT intel_json FROM agencies WHERE id = ?", (agency_id,)).fetchone()
+    if not row or not row["intel_json"]:
+        return {}
+    try:
+        return json.loads(row["intel_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_agency_intel(conn: sqlite3.Connection, agency_id: int, state: dict) -> None:
+    """Persist the agency's Company Intelligence Profile. Caller commits."""
+    conn.execute(
+        "UPDATE agencies SET intel_json = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(state), datetime.now(timezone.utc).isoformat(), agency_id))
+
+
+def agencies_needing_intelligence(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100000
+) -> List[sqlite3.Row]:
+    """Agencies ready for an intelligence pass: enrichment has completed (the
+    engine consumes the enriched profile) and intelligence isn't done yet. Gating
+    on enrichment keeps the chain in order: crawl → enrich → decision makers →
+    intelligence, each advancing its own queue."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
+        enr = r["enrichment_json"]
+        intel = r["intel_json"]
+        try:
+            if (json.loads(enr) or {}).get("status") != "complete" if enr else True:
+                continue
+        except (json.JSONDecodeError, TypeError):
+            continue
+        try:
+            if intel and (json.loads(intel) or {}).get("status") == "complete":
+                continue
+        except (json.JSONDecodeError, TypeError):
+            pass
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def agencies_needing_decision_makers(
