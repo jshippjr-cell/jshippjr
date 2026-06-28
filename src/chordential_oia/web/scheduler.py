@@ -117,6 +117,34 @@ def start_agency_decision_makers(agency_id: int, *, reset: bool = False) -> bool
     return True
 
 
+def start_agency_pipeline(agency_id: int, *, reset: bool = False) -> bool:
+    """Run the WHOLE chain for ONE agency, in order, in a single background job:
+    enrich → decision makers → intelligence → signals → score. One agency processed
+    sequentially (not a batch), lock-guarded, so it's safe on a small instance —
+    and one press builds the complete profile instead of clicking five buttons.
+    Each step consumes the prior step's output, which the ordering guarantees; a
+    failing step never sinks the rest. Needs scraping for the live-fetch steps."""
+    if not discovery.scrape_enabled():
+        return False
+
+    def _run(conn):
+        from . import (enrichment, decision_makers, intelligence,
+                       opportunity_signals, music_opportunity)
+        for step in (
+            lambda: enrichment.enrich_agency(conn, agency_id, reset=reset),
+            lambda: decision_makers.discover_decision_makers(conn, agency_id, reset=reset),
+            lambda: intelligence.generate_intelligence(conn, agency_id),
+            lambda: opportunity_signals.detect_signals(conn, agency_id, force=True),
+            lambda: music_opportunity.score_agency(conn, agency_id),
+        ):
+            try:
+                step()
+            except Exception:
+                pass                             # one bad step never sinks the rest
+    _run_in_background(_run)
+    return True
+
+
 def autonomous_engines_on() -> bool:
     """Master switch for the heavy agency engines running AUTONOMOUSLY in the loop
     (enrich, re-enrich, decision makers, intelligence, signals, scoring). Default
@@ -198,6 +226,17 @@ def _enrich_batch_size() -> int:
         return 10
 
 
+def _enrich_delay_seconds() -> float:
+    """Pause between agencies in a batch. On a single-CPU instance a back-to-back
+    batch pins the box and starves the one web worker (the "wheel of death" while
+    a manual enrich runs); ``time.sleep`` here releases the GIL so the web server
+    gets a guaranteed slice between each site. Tunable; 0 disables (tests)."""
+    try:
+        return max(0.0, float(os.environ.get("CHORDENTIAL_ENRICH_DELAY", "1.5")))
+    except ValueError:
+        return 1.5
+
+
 def run_enrich_cycle(batch: int = 0) -> int:
     """One enrichment pass — enriches up to ``batch`` enrichable agencies (default
     from env). Blocking; meant to run in a worker thread. Updates the shared status
@@ -214,7 +253,8 @@ def run_enrich_cycle(batch: int = 0) -> int:
     try:
         conn = db.connect()
         try:
-            res = enrichment.enrich_batch(conn, limit=limit)
+            res = enrichment.enrich_batch(conn, limit=limit,
+                                          delay=_enrich_delay_seconds())
             _enrich_status["pending"] = db.count_needing_enrichment(conn)
         finally:
             conn.close()
