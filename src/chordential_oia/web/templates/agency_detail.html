@@ -99,4 +99,53 @@
 </p>
 {% endif %}
 
+<!-- Decision Maker Discovery Engine: the people worth contacting, ranked + explained. -->
+<h2 id="decision-makers" style="margin-top:24px">Decision makers
+  <span class="muted small">({{ decision_makers | length }})</span></h2>
+<div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+  <form method="post" action="/agencies/{{ agency.id }}/decision-makers" style="margin:0">
+    <button class="btn" type="submit">{{ 'Re-find decision makers' if decision_makers else 'Find decision makers' }}</button>
+  </form>
+  {% if decision_makers %}
+  <form method="post" action="/agencies/{{ agency.id }}/decision-makers" style="margin:0">
+    <input type="hidden" name="reset" value="1"><button class="btn btn-small" type="submit">Reset & re-find</button>
+  </form>
+  {% endif %}
+  <span class="muted small">The machine proposes a ranked shortlist with the “why”; you decide who to contact.</span>
+</div>
+
+{% if decision_makers %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left;background:var(--bg2,#f6f6f6)">
+      <th style="padding:8px 10px">Person</th><th style="padding:8px 10px">Priority</th>
+      <th style="padding:8px 10px">Music fit</th><th style="padding:8px 10px">Why relevant</th>
+      <th style="padding:8px 10px">Contact</th><th style="padding:8px 10px">Conf.</th>
+    </tr></thead>
+    <tbody>
+    {% for d in decision_makers %}
+      <tr style="border-top:1px solid var(--border,#eee)">
+        <td style="padding:8px 10px"><strong>{{ d.name }}</strong><br>
+          <span class="muted small">{{ d.title }}{% if d.department %} · {{ d.department }}{% endif %}</span></td>
+        <td style="padding:8px 10px">{{ d.priority }}</td>
+        <td style="padding:8px 10px">{{ d.music_relevance }}</td>
+        <td style="padding:8px 10px" class="small">{{ d.relevance_reason }}
+          {% if d.classified_by == 'llm' %}<span class="muted">(AI)</span>{% endif %}</td>
+        <td style="padding:8px 10px" class="small">
+          {% if d.linkedin %}<a href="{{ d.linkedin }}" target="_blank" rel="noopener noreferrer">LinkedIn</a>{% if d.linkedin_verified %} ✓{% endif %}<br>{% endif %}
+          {% if d.email %}<a href="mailto:{{ d.email }}">{{ d.email }}</a><br>{% endif %}
+          {% if d.phone %}{{ d.phone }}{% endif %}
+          {% if not d.linkedin and not d.email and not d.phone %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td style="padding:8px 10px">{{ d.confidence }}%</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted small" style="margin-top:8px">Stored: name, title, department, bio, LinkedIn, public email/phone, source URLs, priority, music relevance, the reason, a confidence score and last-verified — every field a fact from a public page or a deterministic classification of one. ✓ = LinkedIn name matches the profile slug.</p>
+{% else %}
+<p class="muted small">No decision makers found yet.{% if not scrape_on %} Live fetching is off here — runs for real on Render.{% endif %}</p>
+{% endif %}
+
 {% endblock %}

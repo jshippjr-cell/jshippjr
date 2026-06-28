@@ -753,6 +753,46 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             last_url TEXT, detail TEXT DEFAULT '', updated_at TEXT
         )"""
     )
+    # Decision Maker Discovery Engine output: the people worth contacting at each
+    # agency, one row per person per agency (collapsed on (agency_id, dedup_key) so
+    # a re-run never piles up copies). Every column is a fact pulled from a public
+    # page or a deterministic classification of one — nothing invented.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS decision_makers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, dedup_key TEXT,
+            name TEXT, title TEXT,
+            department TEXT, office TEXT, reports_to TEXT,
+            bio TEXT, photo_url TEXT,
+            linkedin TEXT, email TEXT, phone TEXT,
+            social_json TEXT, source_urls_json TEXT,
+            role_category TEXT, priority TEXT,
+            music_relevance TEXT, relevance_reason TEXT,
+            confidence INTEGER DEFAULT 0,
+            linkedin_verified INTEGER DEFAULT 0,
+            classified_by TEXT DEFAULT 'rules',
+            last_verified TEXT,
+            created_at TEXT, updated_at TEXT,
+            UNIQUE(agency_id, dedup_key)
+        )"""
+    )
+    # The self-expanding title taxonomy: the learned cache that lets the Role
+    # Classification agent answer from rules without re-deciding. Seeded keyword
+    # rules live in code; this table accumulates one row per normalized title the
+    # system has confidently classified (by rule or, for the unknowns, by LLM —
+    # ``source`` records which), so a repeat title is a cheap lookup, never an
+    # LLM call. ``hits`` counts how often the title has been seen.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS title_taxonomy (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title_norm TEXT UNIQUE,
+            role_category TEXT, department TEXT, priority TEXT,
+            music_relevance TEXT, relevance_reason TEXT,
+            source TEXT DEFAULT 'rules', rationale TEXT DEFAULT '',
+            confidence INTEGER DEFAULT 0, hits INTEGER DEFAULT 0,
+            created_at TEXT, updated_at TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -1448,6 +1488,121 @@ def save_agency_enrichment(
 def reset_agency_enrichment(conn: sqlite3.Connection, agency_id: int) -> None:
     """Clear an agency's enrichment so the next run starts from the homepage."""
     save_agency_enrichment(conn, agency_id, {})
+
+
+# --------------------------------------------------------------------------- #
+# Decision makers — the people worth contacting at each agency
+# --------------------------------------------------------------------------- #
+def upsert_decision_maker(conn: sqlite3.Connection, agency_id: int, rec: Dict) -> bool:
+    """Insert a decision maker, or refresh it if (agency_id, dedup_key) exists.
+    Returns True if a NEW row was created. List/dict fields (social, source_urls)
+    are passed through as already-serialized JSON strings by the caller."""
+    key = (rec.get("dedup_key") or "").strip().lower()
+    now = datetime.now(timezone.utc).isoformat()
+    cols = ("name", "title", "department", "office", "reports_to", "bio",
+            "photo_url", "linkedin", "email", "phone", "social_json",
+            "source_urls_json", "role_category", "priority", "music_relevance",
+            "relevance_reason", "confidence", "linkedin_verified",
+            "classified_by", "last_verified")
+    vals = [rec.get(c) if rec.get(c) is not None else "" for c in cols]
+    exists = conn.execute(
+        "SELECT id FROM decision_makers WHERE agency_id = ? AND dedup_key = ?",
+        (agency_id, key)).fetchone()
+    if exists:
+        conn.execute(
+            f"UPDATE decision_makers SET {', '.join(f'{c}=?' for c in cols)}, "
+            "updated_at=? WHERE id=?", (*vals, now, exists["id"]))
+        return False
+    conn.execute(
+        f"INSERT INTO decision_makers (agency_id, dedup_key, {', '.join(cols)}, "
+        f"created_at, updated_at) VALUES (?,?,{','.join('?' * len(cols))},?,?)",
+        (agency_id, key, *vals, now, now))
+    return True
+
+
+def list_decision_makers(
+    conn: sqlite3.Connection, agency_id: int
+) -> List[sqlite3.Row]:
+    """An agency's decision makers, most relevant first (priority then confidence).
+    The scoring engine decides who matters; this is just a sensible default order."""
+    return conn.execute(
+        """SELECT * FROM decision_makers WHERE agency_id = ?
+           ORDER BY CASE priority
+                      WHEN 'Very High' THEN 0 WHEN 'High' THEN 1
+                      WHEN 'Medium' THEN 2 WHEN 'Low' THEN 3
+                      WHEN 'Very Low' THEN 4 ELSE 5 END,
+                    confidence DESC, name COLLATE NOCASE""",
+        (agency_id,)).fetchall()
+
+
+def count_decision_makers(
+    conn: sqlite3.Connection, agency_id: Optional[int] = None
+) -> int:
+    if agency_id is None:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM decision_makers").fetchone()["n"]
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM decision_makers WHERE agency_id = ?",
+        (agency_id,)).fetchone()["n"]
+
+
+def delete_decision_makers(conn: sqlite3.Connection, agency_id: int) -> None:
+    """Clear an agency's decision makers so a discovery run starts clean (reset)."""
+    conn.execute("DELETE FROM decision_makers WHERE agency_id = ?", (agency_id,))
+
+
+# --------------------------------------------------------------------------- #
+# Title taxonomy — the learned classification cache (grows over time)
+# --------------------------------------------------------------------------- #
+def taxonomy_get(
+    conn: sqlite3.Connection, title_norm: str, *, bump: bool = False
+) -> Optional[sqlite3.Row]:
+    """A learned title classification, or None. With ``bump`` it also increments
+    the hit counter (a cache read that records the title was seen again)."""
+    row = conn.execute(
+        "SELECT * FROM title_taxonomy WHERE title_norm = ?", (title_norm,)
+    ).fetchone()
+    if row and bump:
+        conn.execute(
+            "UPDATE title_taxonomy SET hits = hits + 1, updated_at = ? "
+            "WHERE id = ?", (datetime.now(timezone.utc).isoformat(), row["id"]))
+    return row
+
+
+def taxonomy_put(conn: sqlite3.Connection, title_norm: str, **fields) -> None:
+    """Learn (or refresh) a title classification. Upsert on title_norm; a new row
+    starts at hits=1. The caller commits."""
+    now = datetime.now(timezone.utc).isoformat()
+    existing = conn.execute(
+        "SELECT id FROM title_taxonomy WHERE title_norm = ?", (title_norm,)
+    ).fetchone()
+    if existing:
+        if fields:
+            sets = ", ".join(f"{k}=?" for k in fields)
+            conn.execute(
+                f"UPDATE title_taxonomy SET {sets}, updated_at=? WHERE id=?",
+                (*fields.values(), now, existing["id"]))
+        return
+    cols = list(fields.keys())
+    conn.execute(
+        f"INSERT INTO title_taxonomy (title_norm, {', '.join(cols)}, hits, "
+        f"created_at, updated_at) VALUES (?,{','.join('?' * len(cols))},1,?,?)",
+        (title_norm, *fields.values(), now, now))
+
+
+def taxonomy_count(conn: sqlite3.Connection, source: Optional[str] = None) -> int:
+    if source:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM title_taxonomy WHERE source = ?", (source,)
+        ).fetchone()["n"]
+    return conn.execute("SELECT COUNT(*) AS n FROM title_taxonomy").fetchone()["n"]
+
+
+def list_taxonomy(conn: sqlite3.Connection, limit: int = 500) -> List[sqlite3.Row]:
+    """The learned taxonomy, most-seen first — a window into what the system knows."""
+    return conn.execute(
+        "SELECT * FROM title_taxonomy ORDER BY hits DESC, title_norm LIMIT ?",
+        (limit,)).fetchall()
 
 
 def agencies_needing_enrichment(
