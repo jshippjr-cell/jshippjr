@@ -57,8 +57,8 @@ from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
     db, decision_makers, directory_crawl, directory_parsers, discovery,
-    enrichment, intelligence, opportunity_signals, scheduler, seed, signals,
-    sources, triage, webpush,
+    enrichment, intelligence, music_opportunity, opportunity_signals, scheduler,
+    seed, signals, sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -499,7 +499,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   eb_started: str = "", eb_n: str = "",
                   rb_started: str = "", rb_n: str = "",
                   dm_started: str = "", dm_n: str = "",
-                  intel_started: str = "", intel_n: str = "", sig_started: str = ""):
+                  intel_started: str = "", intel_n: str = "", sig_started: str = "",
+                  score_started: str = ""):
     """Paginated accordion of harvested agencies; each row expands to its enriched
     Agency Profile inline. Filter/paginate happen in SQL so this scales to
     thousands of rows."""
@@ -537,6 +538,13 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
         dm_total = db.count_decision_makers(conn)
         intel_pending = len(db.agencies_needing_intelligence(conn, source=source or None))
         sig_total = db.count_opportunity_signals(conn, active_only=True)
+        movers = [{"id": r["id"], "company": r["company"],
+                   "score": r["opportunity_score"], "tier": r["opportunity_tier"],
+                   "movement": r["score_movement"]}
+                  for r in db.top_movers(conn, limit=6, source=source or None)]
+        top_opps = [{"id": r["id"], "company": r["company"],
+                     "score": r["opportunity_score"], "tier": r["opportunity_tier"]}
+                    for r in db.top_opportunities(conn, limit=6, source=source or None)]
         total = db.count_agencies(conn, source or None)
         crawl_states = []
         for key in directory_parsers.SOURCE_FACTORIES:
@@ -577,6 +585,8 @@ def agencies_page(request: Request, source: str = "", enriched: str = "",
                   auto_dm=scheduler.dm_status(),
                   auto_intel=scheduler.intel_status(),
                   auto_signals=scheduler.signals_engine_status(),
+                  auto_score=scheduler.score_status(),
+                  score_started=score_started, movers=movers, top_opps=top_opps,
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -716,6 +726,21 @@ def agencies_signals_pending(limit: str = Form("")):
         status_code=303)
 
 
+@app.post("/agencies/score-pending")
+def agencies_score_pending(limit: str = Form("")):
+    """Nudge a batch of Music Opportunity scoring now — fire-and-forget; the
+    background scheduler also re-scores on its own."""
+    n = 100
+    try:
+        n = max(1, min(1000, int(limit)))
+    except (TypeError, ValueError):
+        n = 100
+    started = scheduler.start_manual_score(n)
+    return RedirectResponse(
+        f"/agencies?score_started={'1' if started else '0'}",
+        status_code=303)
+
+
 @app.post("/agencies/import-setup")
 def agencies_import_setup():
     """Load the agencies recovered from the directory pages pasted during setup
@@ -764,6 +789,8 @@ def agency_detail(request: Request, agency_id: int):
                    db.list_decision_makers(conn, agency_id)]
         intel = db.get_agency_intel(conn, agency_id) or {}
         timeline = opportunity_signals.agency_timeline(conn, agency_id)
+        opportunity = db.get_agency_score(conn, agency_id) or {}
+        outreach = [dict(o) for o in db.list_agency_outreach(conn, agency_id)]
     finally:
         conn.close()
     profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
@@ -778,6 +805,7 @@ def agency_detail(request: Request, agency_id: int):
                   detail=state.get("detail", ""),
                   steps_done=state.get("steps_done", []),
                   decision_makers=dm_rows, intel=intel, timeline=timeline,
+                  opportunity=opportunity, outreach=outreach,
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -843,6 +871,35 @@ def agency_detect_signals(agency_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/agencies/{agency_id}#timeline", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/score")
+def agency_score(agency_id: int):
+    """Recompute the Music Opportunity score for ONE agency from its collected
+    intelligence + signals + outreach. Pure reasoning; runs inline."""
+    conn = db.connect()
+    try:
+        music_opportunity.score_agency(conn, agency_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#opportunity", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/outreach")
+def agency_log_outreach(agency_id: int, kind: str = Form("email"),
+                        contact: str = Form(""), note: str = Form(""),
+                        responded: str = Form("")):
+    """Log a touch in the agency's relationship history, then re-score (outreach
+    lowers Relationship Readiness — the score reacts immediately)."""
+    conn = db.connect()
+    try:
+        db.log_agency_outreach(conn, agency_id, kind=kind or "email",
+                               contact=contact, note=note, responded=bool(responded))
+        conn.commit()
+        music_opportunity.score_agency(conn, agency_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#opportunity", status_code=303)
 
 
 @app.post("/agencies/{agency_id}/enrich")

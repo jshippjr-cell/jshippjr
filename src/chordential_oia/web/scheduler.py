@@ -480,6 +480,74 @@ def signals_engine_status() -> dict:
     return s
 
 
+# Autonomous Music Opportunity scoring — recompute the explainable score for
+# agencies with an intelligence profile. Pure reasoning (no network); re-runs over
+# time so the score stays alive as signals and outreach change.
+_score_status = {"last_run": None, "last_scored": 0, "movers": 0,
+                 "cycles": 0, "running": False}
+_last_score_mono = 0.0
+_score_lock = threading.Lock()
+
+
+def score_enabled() -> bool:
+    return os.environ.get("CHORDENTIAL_AUTOSCORE", "1").strip().lower() not in _FALSEY
+
+
+def _score_interval_seconds() -> int:
+    try:
+        return max(60, int(os.environ.get("CHORDENTIAL_AUTOSCORE_INTERVAL", "600")))
+    except ValueError:
+        return 600
+
+
+def _score_batch_size() -> int:
+    try:
+        return max(1, int(os.environ.get("CHORDENTIAL_AUTOSCORE_BATCH", "100")))
+    except ValueError:
+        return 100
+
+
+def run_score_cycle(batch: int = 0) -> int:
+    """One Music Opportunity scoring pass over a rotating batch. Blocking; runs in
+    a worker thread. Lock-guarded. Returns how many agencies were (re)scored."""
+    from . import music_opportunity
+    limit = batch or _score_batch_size()
+    if not _score_lock.acquire(blocking=False):
+        return 0
+    _score_status["running"] = True
+    try:
+        conn = db.connect()
+        try:
+            res = music_opportunity.score_batch(conn, limit=limit)
+        finally:
+            conn.close()
+        scored = res.get("scored", 0)
+        _score_status["cycles"] += 1
+        _score_status["last_scored"] = scored
+        _score_status["movers"] = res.get("movers", 0)
+        _score_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        return scored
+    finally:
+        _score_status["running"] = False
+        _score_lock.release()
+
+
+def start_manual_score(batch: int = 0) -> bool:
+    """Kick a one-off scoring pass in the background; return at once."""
+    if not score_enabled():
+        return False
+    if _score_status.get("running"):
+        return False
+    threading.Thread(target=run_score_cycle, args=(batch,), daemon=True).start()
+    return True
+
+
+def score_status() -> dict:
+    s = dict(_score_status)
+    s["enabled"] = score_enabled()
+    return s
+
+
 def enrich_status() -> dict:
     s = dict(_enrich_status)
     s["enabled"] = enrich_enabled()
@@ -679,7 +747,7 @@ async def run_loop() -> None:
     boot every enabled task runs one pass right away, then on its own cadence."""
     global _last_signals_mono, _last_reddit_mono, _last_autofetch_mono
     global _last_enrich_mono, _last_reenrich_mono, _last_dm_mono, _last_intel_mono
-    global _last_sig_mono, _last_triage_mono
+    global _last_sig_mono, _last_score_mono, _last_triage_mono
     await asyncio.sleep(15)  # let startup seeding settle before the first pass
     while True:
         now_mono = time.monotonic()
@@ -740,6 +808,12 @@ async def run_loop() -> None:
             _last_sig_mono = now_mono
             try:
                 await asyncio.to_thread(run_signals_cycle)      # self-bookkeeping
+            except Exception:
+                pass
+        if score_enabled() and due(_last_score_mono, _score_interval_seconds()):
+            _last_score_mono = now_mono
+            try:
+                await asyncio.to_thread(run_score_cycle)        # self-bookkeeping
             except Exception:
                 pass
         if triage_enabled() and due(_last_triage_mono, _triage_interval_seconds()):

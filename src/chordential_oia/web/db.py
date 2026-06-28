@@ -337,6 +337,14 @@ _AGENCY_COLUMNS = {
     # When this agency was last scanned for signals (rotates the scan queue so the
     # background pass works through the whole DB rather than the same first N).
     "signals_scanned_at": "TEXT",
+    # Music Opportunity Engine output. The headline number/tier/movement are real
+    # columns so Top Movers / sort-by-score are efficient; the full explainable
+    # breakdown (sub-scores + evidence + recommendation + history) is the JSON blob.
+    "opportunity_score": "INTEGER",
+    "opportunity_tier": "TEXT",
+    "score_movement": "INTEGER DEFAULT 0",
+    "scored_at": "TEXT",
+    "opportunity_score_json": "TEXT",
 }
 
 # Decision-maker columns added after the table first shipped — migrated onto an
@@ -824,6 +832,17 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             event_date TEXT, detected_at TEXT, expires_at TEXT,
             created_at TEXT,
             UNIQUE(agency_id, dedup_key)
+        )"""
+    )
+    # Relationship history / previous outreach to an agency — what the Music
+    # Opportunity Engine reads for Relationship Readiness and timing (recent
+    # contact lowers readiness; a response warms it). One row per touch.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS agency_outreach (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agency_id INTEGER, kind TEXT, direction TEXT DEFAULT 'out',
+            occurred_at TEXT, responded INTEGER DEFAULT 0,
+            contact TEXT DEFAULT '', note TEXT DEFAULT '', created_at TEXT
         )"""
     )
     conn.execute(
@@ -1779,6 +1798,118 @@ def agencies_for_signal_scan(
         if len(out) >= limit:
             break
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Relationship history / outreach to an agency
+# --------------------------------------------------------------------------- #
+def log_agency_outreach(
+    conn: sqlite3.Connection, agency_id: int, *, kind: str = "email",
+    direction: str = "out", responded: bool = False, contact: str = "",
+    note: str = "", occurred_at: Optional[str] = None
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO agency_outreach
+           (agency_id, kind, direction, occurred_at, responded, contact, note, created_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (agency_id, kind, direction, occurred_at or now, 1 if responded else 0,
+         contact, note, now))
+
+
+def list_agency_outreach(conn: sqlite3.Connection, agency_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_outreach WHERE agency_id = ? ORDER BY occurred_at DESC",
+        (agency_id,)).fetchall()
+
+
+def last_agency_outreach(
+    conn: sqlite3.Connection, agency_id: int, direction: str = "out"
+) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM agency_outreach WHERE agency_id = ? AND direction = ? "
+        "ORDER BY occurred_at DESC LIMIT 1", (agency_id, direction)).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# Music Opportunity Engine — the explainable score + its queue/rankings
+# --------------------------------------------------------------------------- #
+def save_agency_score(
+    conn: sqlite3.Connection, agency_id: int, *, score: int, tier: str,
+    movement: int, blob: dict
+) -> None:
+    """Persist the headline score columns (for ranking) + the full breakdown blob.
+    Caller commits."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE agencies SET opportunity_score=?, opportunity_tier=?, "
+        "score_movement=?, scored_at=?, opportunity_score_json=?, updated_at=? "
+        "WHERE id=?",
+        (int(score), tier, int(movement), now, json.dumps(blob), now, agency_id))
+
+
+def get_agency_score(conn: sqlite3.Connection, agency_id: int) -> dict:
+    """The agency's full Music Opportunity breakdown (opportunity_score_json), or {}."""
+    row = conn.execute(
+        "SELECT opportunity_score_json FROM agencies WHERE id = ?", (agency_id,)).fetchone()
+    if not row or not row["opportunity_score_json"]:
+        return {}
+    try:
+        return json.loads(row["opportunity_score_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def agencies_to_score(
+    conn: sqlite3.Connection, source: Optional[str] = None, limit: int = 100
+) -> List[sqlite3.Row]:
+    """Agencies with a Company Intelligence profile, least-recently-scored first so
+    a bounded pass rotates through the DB. Scoring re-runs over time (the score is
+    alive) — gating on intelligence keeps the chain ordered."""
+    clause = " WHERE source = ?" if source else ""
+    params = ((source,) if source else ())
+    out: List[sqlite3.Row] = []
+    for r in conn.execute(
+            f"SELECT * FROM agencies{clause} "
+            "ORDER BY scored_at IS NULL DESC, scored_at ASC, id", params):
+        intel = r["intel_json"]
+        try:
+            if not intel or (json.loads(intel) or {}).get("status") != "complete":
+                continue
+        except (json.JSONDecodeError, TypeError):
+            continue
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def top_opportunities(
+    conn: sqlite3.Connection, *, limit: int = 25, source: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Highest-scoring agencies — the prioritized pursuit list."""
+    clause = "WHERE opportunity_score IS NOT NULL"
+    params: list = []
+    if source:
+        clause += " AND source = ?"; params.append(source)
+    return conn.execute(
+        f"SELECT * FROM agencies {clause} "
+        "ORDER BY opportunity_score DESC, score_movement DESC LIMIT ?",
+        (*params, limit)).fetchall()
+
+
+def top_movers(
+    conn: sqlite3.Connection, *, limit: int = 10, source: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Agencies whose score moved most since the previous run (the "what changed
+    this week" feed) — biggest risers first."""
+    clause = "WHERE score_movement IS NOT NULL AND score_movement != 0"
+    params: list = []
+    if source:
+        clause += " AND source = ?"; params.append(source)
+    return conn.execute(
+        f"SELECT * FROM agencies {clause} ORDER BY score_movement DESC LIMIT ?",
+        (*params, limit)).fetchall()
 
 
 def agencies_due_for_reenrichment(

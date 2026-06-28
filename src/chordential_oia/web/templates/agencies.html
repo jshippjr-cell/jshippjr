@@ -232,6 +232,53 @@
   </form>
 </div>
 
+<!-- Music Opportunity Engine: the synthesis — score, tier, movement, why. -->
+<div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1;min-width:240px">
+    <strong>Music opportunity scoring:
+      {% if auto_score.enabled %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off</span>{% endif %}
+    </strong>
+    <div class="muted small">
+      Scores every agency (0–100, tier A–D) from intelligence + signals + outreach — every point traceable, and the score moves as things change.
+      {% if auto_score.running %}<strong>A scoring pass is running now…</strong> {% endif %}
+      {% if auto_score.last_run %}Last pass: {{ auto_score.last_scored }} scored · {{ auto_score.movers }} moved.{% endif %}
+    </div>
+  </div>
+  {% if score_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Scoring in the background — refresh to see movers</span>
+  {% elif score_started == "0" %}<span class="small muted">A scoring pass is already running</span>{% endif %}
+  <form method="post" action="/agencies/score-pending" style="margin:0">
+    <button class="btn" type="submit"{% if auto_score.running %} disabled{% endif %}>Score agencies</button>
+  </form>
+</div>
+
+{% if movers or top_opps %}
+<div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin:14px 0">
+  {% if movers %}
+  <div class="card" style="flex:1;min-width:280px">
+    <strong>Top movers</strong> <span class="muted small">— what changed</span>
+    <ul class="tight small" style="margin-top:8px">
+      {% for m in movers %}
+      <li><a href="/agencies/{{ m.id }}#opportunity">{{ m.company }}</a>
+        — {{ m.score }} <span style="color:var(--green,#2e8b57)">▲ {{ m.movement }}</span>
+        <span class="muted">(tier {{ m.tier }})</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if top_opps %}
+  <div class="card" style="flex:1;min-width:280px">
+    <strong>Top opportunities</strong> <span class="muted small">— highest score</span>
+    <ul class="tight small" style="margin-top:8px">
+      {% for o in top_opps %}
+      <li><a href="/agencies/{{ o.id }}#opportunity">{{ o.company }}</a>
+        — <strong>{{ o.score }}</strong> <span class="muted">(tier {{ o.tier }})</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <form method="get" action="/agencies" class="row" style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
   <label class="muted small">Source
     <select name="source" onchange="this.form.submit()">
