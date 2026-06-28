@@ -57,8 +57,8 @@ from ..talent import Talent, profile_completeness
 from ..matching import match_talent
 from . import (
     db, decision_makers, directory_crawl, directory_parsers, discovery,
-    enrichment, intelligence, music_opportunity, opportunity_signals, scheduler,
-    seed, signals, sources, triage, webpush,
+    enrichment, intelligence, music_opportunity, opportunity_signals, relationships,
+    scheduler, seed, signals, sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -791,6 +791,8 @@ def agency_detail(request: Request, agency_id: int):
         timeline = opportunity_signals.agency_timeline(conn, agency_id)
         opportunity = db.get_agency_score(conn, agency_id) or {}
         outreach = [dict(o) for o in db.list_agency_outreach(conn, agency_id)]
+        relationships.seed_memory(conn, agency_id)       # institutional memory
+        relationship = relationships.relationship_view(conn, agency_id)
     finally:
         conn.close()
     profile = enrichment.AgencyProfile.from_dict(state.get("profile")).to_dict()
@@ -806,6 +808,7 @@ def agency_detail(request: Request, agency_id: int):
                   steps_done=state.get("steps_done", []),
                   decision_makers=dm_rows, intel=intel, timeline=timeline,
                   opportunity=opportunity, outreach=outreach,
+                  relationship=relationship, stages=relationships.STAGES,
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -889,17 +892,104 @@ def agency_score(agency_id: int):
 def agency_log_outreach(agency_id: int, kind: str = Form("email"),
                         contact: str = Form(""), note: str = Form(""),
                         responded: str = Form("")):
-    """Log a touch in the agency's relationship history, then re-score (outreach
-    lowers Relationship Readiness — the score reacts immediately)."""
+    """Log a touch in the relationship history. The Reminder Agent then ensures a
+    follow-up, and the score re-runs (outreach lowers Relationship Readiness — the
+    score reacts immediately)."""
     conn = db.connect()
     try:
         db.log_agency_outreach(conn, agency_id, kind=kind or "email",
                                contact=contact, note=note, responded=bool(responded))
         conn.commit()
+        relationships.ensure_followup(conn, agency_id, contact=contact)
         music_opportunity.score_agency(conn, agency_id)
     finally:
         conn.close()
     return RedirectResponse(f"/agencies/{agency_id}#opportunity", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Relationship Management Platform
+# --------------------------------------------------------------------------- #
+@app.get("/relationships", response_class=HTMLResponse)
+def relationships_dashboard(request: Request):
+    """Today's Priorities + the relationship pipeline — what to act on, derived
+    from the engines (movements, follow-ups, recommended outreach)."""
+    conn = db.connect()
+    try:
+        priorities = relationships.daily_priorities(conn)
+        rows = db.top_opportunities(conn, limit=50)
+        pipeline = []
+        for r in rows:
+            interactions = list(db.list_agency_outreach(conn, r["id"]))
+            stage = relationships.current_stage(
+                conn, r["id"], score=r["opportunity_score"],
+                interactions=interactions,
+                responded=any(o["responded"] for o in interactions))
+            pipeline.append({"id": r["id"], "company": r["company"],
+                             "score": r["opportunity_score"], "tier": r["opportunity_tier"],
+                             "stage": stage, "movement": r["score_movement"]})
+    finally:
+        conn.close()
+    return render(request, "relationships.html", nav="relationships",
+                  priorities=priorities, pipeline=pipeline, stages=relationships.STAGES)
+
+
+@app.post("/agencies/{agency_id}/relationship/stage")
+def agency_set_stage(agency_id: int, stage: str = Form(...)):
+    """Manually override the relationship stage (the Relationship Agent's auto
+    derivation is the default; this pins it)."""
+    conn = db.connect()
+    try:
+        db.upsert_relationship(conn, agency_id, stage=stage, stage_overridden=1)
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#relationship", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/relationship/task")
+def agency_add_task(agency_id: int, title: str = Form(...), due_at: str = Form("")):
+    conn = db.connect()
+    try:
+        db.add_agency_task(conn, agency_id, title=title, due_at=due_at)
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#relationship", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/relationship/task/{task_id}/done")
+def agency_complete_task(agency_id: int, task_id: int):
+    conn = db.connect()
+    try:
+        db.complete_agency_task(conn, task_id)
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#relationship", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/relationship/memory")
+def agency_add_memory(agency_id: int, fact: str = Form(...), contact: str = Form("")):
+    conn = db.connect()
+    try:
+        db.add_agency_memory(conn, agency_id, fact=fact, contact=contact)
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#relationship", status_code=303)
+
+
+@app.post("/agencies/{agency_id}/relationship/document")
+def agency_add_document(agency_id: int, title: str = Form(...), url: str = Form(""),
+                        note: str = Form("")):
+    conn = db.connect()
+    try:
+        db.add_agency_document(conn, agency_id, title=title, url=url, note=note)
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/agencies/{agency_id}#relationship", status_code=303)
 
 
 @app.post("/agencies/{agency_id}/enrich")

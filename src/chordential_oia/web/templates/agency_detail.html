@@ -157,6 +157,73 @@
 </p>
 {% endif %}
 
+<!-- Relationship workspace: where are we in this relationship, what's next. -->
+<div id="relationship" class="card" style="margin-bottom:16px">
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <strong>Relationship</strong>
+      <span class="muted small">· Stage <strong>{{ relationship.stage }}</strong> · Probability {{ relationship.probability }}
+        · {{ relationship.interaction_count }} interaction(s) · {{ relationship.signal_count }} active signal(s)
+        · Last contact {{ relationship.last_interaction or 'none' }}</span>
+      <div class="small" style="margin-top:4px"><strong>Next:</strong>
+        {% if relationship.next_task %}{{ relationship.next_task.title }}{% if relationship.next_task.due_at %} <span class="muted">(due {{ relationship.next_task.due_at[:10] }})</span>{% endif %}
+        {% else %}{{ relationship.recommended_action }}{% endif %}</div>
+    </div>
+    <form method="post" action="/agencies/{{ agency.id }}/relationship/stage" class="small" style="margin:0">
+      <select name="stage" onchange="this.form.submit()">
+        {% for s in stages %}<option value="{{ s }}"{% if s == relationship.stage %} selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn btn-small" type="submit">Set</button></noscript>
+    </form>
+  </div>
+
+  <div class="row" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">
+    <!-- Tasks / follow-ups -->
+    <div style="flex:1;min-width:260px">
+      <strong class="small">Tasks & follow-ups</strong>
+      {% if relationship.open_tasks %}<ul class="tight small" style="margin-top:6px">
+        {% for t in relationship.open_tasks %}
+        <li>{{ t.title }}{% if t.due_at %} <span class="muted">(due {{ t.due_at[:10] }})</span>{% endif %}
+          {% if t.source == 'auto' %}<span class="muted">· auto</span>{% endif %}
+          <form method="post" action="/agencies/{{ agency.id }}/relationship/task/{{ t.id }}/done" style="display:inline;margin:0"><button class="btn btn-small" type="submit">done</button></form></li>
+        {% endfor %}
+      </ul>{% else %}<p class="muted small">No open tasks.</p>{% endif %}
+      <form method="post" action="/agencies/{{ agency.id }}/relationship/task" class="small" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <input name="title" placeholder="task" required style="flex:1;min-width:120px">
+        <input name="due_at" type="date">
+        <button class="btn btn-small" type="submit">Add</button>
+      </form>
+    </div>
+
+    <!-- Relationship memory -->
+    <div style="flex:1;min-width:260px">
+      <strong class="small">Relationship memory</strong> <span class="muted small">— institutional knowledge</span>
+      {% if relationship.memory %}<ul class="tight small" style="margin-top:6px">
+        {% for m in relationship.memory %}<li>{{ m.fact }}{% if m.contact %} <span class="muted">— {{ m.contact }}</span>{% endif %}</li>{% endfor %}
+      </ul>{% else %}<p class="muted small">No memory yet.</p>{% endif %}
+      <form method="post" action="/agencies/{{ agency.id }}/relationship/memory" class="small" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <input name="fact" placeholder="e.g. Prefers short emails; mentioned orchestra" required style="flex:1;min-width:140px">
+        <input name="contact" placeholder="contact" style="width:110px">
+        <button class="btn btn-small" type="submit">Remember</button>
+      </form>
+    </div>
+  </div>
+
+  <details style="margin-top:12px"><summary class="small">Relationship timeline ({{ relationship.timeline|length }}) · documents ({{ relationship.documents|length }})</summary>
+    {% if relationship.timeline %}<ul class="tight small muted" style="margin-top:6px">
+      {% for e in relationship.timeline[:30] %}<li>{{ e.date[:10] }} · <strong>{{ e.kind }}</strong> — {{ e.label }}{% if e.detail %} <span class="muted">· {{ e.detail[:80] }}</span>{% endif %}</li>{% endfor %}
+    </ul>{% endif %}
+    {% if relationship.documents %}<ul class="tight small" style="margin-top:6px">
+      {% for d in relationship.documents %}<li>{% if d.url %}<a href="{{ d.url }}" target="_blank" rel="noopener noreferrer">{{ d.title }}</a>{% else %}{{ d.title }}{% endif %}{% if d.note %} <span class="muted">— {{ d.note }}</span>{% endif %}</li>{% endfor %}
+    </ul>{% endif %}
+    <form method="post" action="/agencies/{{ agency.id }}/relationship/document" class="small" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+      <input name="title" placeholder="document title" required style="min-width:120px">
+      <input name="url" placeholder="link (optional)" style="flex:1;min-width:140px">
+      <button class="btn btn-small" type="submit">Add doc</button>
+    </form>
+  </details>
+</div>
+
 <!-- Company Intelligence: the evidence-backed "brain" — every value cites its evidence. -->
 <h2 id="intelligence" style="margin-top:24px">Company intelligence
   {% if intel and intel.overall_confidence is defined %}<span class="muted small">(confidence {{ intel.overall_confidence }}%)</span>{% endif %}</h2>
