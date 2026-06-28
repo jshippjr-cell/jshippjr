@@ -224,6 +224,61 @@
   </details>
 </div>
 
+<!-- Outreach Engine: strategy first, three drafts, intelligent next action. Drafts
+     are for review — nothing is sent from here. -->
+{% if outreach_ws and outreach_ws.status == 'ok' %}
+{% set st = outreach_ws.strategy %}
+<div id="outreach" class="card" style="margin-bottom:16px">
+  <strong>Outreach</strong>
+  <span class="muted small">— strategy first; drafts for your review (nothing is sent from here)</span>
+  <div class="row" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+    <div style="min-width:120px">
+      <div class="small">Decision</div>
+      <div style="font-size:22px;font-weight:700;color:{{ '#2e8b57' if st.decision == 'YES' else '#b5651d' if st.decision in ('WAIT','MONITOR') else '#999' }}">{{ st.decision }}</div>
+      <div class="muted small">{{ st.detail }}</div>
+    </div>
+    <div style="flex:1;min-width:240px">
+      <div class="small"><strong>Objective:</strong> {{ st.objective }}</div>
+      <div class="small"><strong>Why today:</strong> {{ st.brief.why_now or '—' }}{% if st.brief.why_now_source %} <span class="muted">[{{ st.brief.why_now_source }}]</span>{% endif %}</div>
+      <div class="small"><strong>Next best action:</strong> {{ outreach_ws.next_best_action.action }} <span class="muted">— {{ outreach_ws.next_best_action.reason }}</span></div>
+    </div>
+  </div>
+
+  <details style="margin-top:10px"><summary class="small">Brief (the strategy behind the drafts)</summary>
+    <div class="small" style="margin-top:6px">
+      {% if st.brief.mention %}<div><strong>Mention:</strong> {{ st.brief.mention | join('; ') }}</div>{% endif %}
+      {% if st.brief.evidence %}<div><strong>Evidence:</strong> {{ st.brief.evidence | join('; ') }}</div>{% endif %}
+      <div><strong>Avoid:</strong> {{ st.brief.avoid | join('; ') }}</div>
+      <div><strong>CTA:</strong> {{ st.brief.cta }}</div>
+    </div>
+  </details>
+
+  <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+    {% for d in outreach_ws.drafts %}
+    <div class="card" style="flex:1;min-width:260px;background:var(--bg2,#fafafa)">
+      <div class="small muted" style="text-transform:capitalize">{{ d.angle }}-focused{% if d.generated_by == 'ai' %} · AI{% endif %}</div>
+      <div class="small"><strong>{{ d.subject }}</strong></div>
+      <pre style="white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0">{{ d.body }}</pre>
+      <form method="post" action="/agencies/{{ agency.id }}/outreach" style="margin:0">
+        <input type="hidden" name="kind" value="email">
+        <input type="hidden" name="contact" value="{{ st.brief.contact.name if st.brief.contact else '' }}">
+        <input type="hidden" name="note" value="{{ d.angle }}: {{ d.subject }}">
+        <button class="btn btn-small" type="submit" onclick="return confirm('Log this as sent? (This records the touch — it does NOT send an email.)')">Log as sent</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if outreach_ws.memory %}
+  <details style="margin-top:12px"><summary class="small">Relationship summary (institutional memory)</summary>
+    <div class="small" style="margin-top:6px">{{ outreach_ws.memory.summary }}</div>
+    {% if outreach_ws.memory.memory %}<ul class="tight small muted">{% for m in outreach_ws.memory.memory %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+    <div class="small"><strong>Recommended next step:</strong> {{ outreach_ws.memory.recommended_next_step }}</div>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
 <!-- Company Intelligence: the evidence-backed "brain" — every value cites its evidence. -->
 <h2 id="intelligence" style="margin-top:24px">Company intelligence
   {% if intel and intel.overall_confidence is defined %}<span class="muted small">(confidence {{ intel.overall_confidence }}%)</span>{% endif %}</h2>
