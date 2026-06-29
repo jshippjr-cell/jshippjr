@@ -160,6 +160,61 @@ def test_manual_enrich_guard_self_heals_when_stale():
         sch._enrich_status["running"] = False
 
 
+def test_enrich_one_supervised_marks_error_on_timeout(tmp_path, monkeypatch):
+    # The crux of resilient batch enrichment: a worker that hangs on a hostile page
+    # is killed AND the agency is marked 'error', so the batch skips it next time
+    # instead of re-picking the same page forever.
+    import subprocess as sp
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "e.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "x", "company": "X",
+                                  "website": "https://x.example"})
+    aid = conn.execute("SELECT id FROM agencies").fetchone()["id"]
+    conn.commit()
+
+    class HangProc:
+        def wait(self, timeout=None):
+            raise sp.TimeoutExpired("w", timeout)
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(sch.subprocess, "Popen", lambda *a, **k: HangProc())
+    assert sch._enrich_one_supervised(conn, aid, timeout=1) is False
+    st = dbm.get_agency_enrichment(conn, aid)
+    assert st and st.get("status") == "error"            # marked → batch will skip it
+    assert dbm.count_needing_enrichment(conn) == 0       # no longer "awaiting"
+
+
+def test_supervised_batch_advances_through_agencies(tmp_path, monkeypatch):
+    # The batch must make forward progress: enrich N, leaving the rest, and record
+    # how many completed (the "click Enrich, count drops" behaviour).
+    from chordential_oia.web import db as dbm
+    db_path = str(tmp_path / "b.db")
+    monkeypatch.setenv("CHORDENTIAL_DB", db_path)
+    conn = dbm.connect(db_path)
+    dbm.init_db(conn)
+    for i in range(4):
+        dbm.upsert_agency(conn, "s", {"dedup_key": f"a{i}", "company": f"A{i}",
+                                      "website": f"https://a{i}.example"})
+    conn.commit()
+
+    def fake_one(c, aid, timeout):                        # stand in for the worker
+        dbm.save_agency_enrichment(c, aid, {"status": "complete", "steps_done": [],
+                                            "links": [], "profile": {}})
+        c.commit()
+        return True
+
+    monkeypatch.setattr(sch, "_enrich_one_supervised", fake_one)
+    monkeypatch.setattr(sch, "_enrich_delay_seconds", lambda: 0)
+    monkeypatch.setattr(sch.threading, "Thread",
+                        lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
+    sch._enrich_batch_supervised(3)
+    assert dbm.count_needing_enrichment(dbm.connect(db_path)) == 1   # 3 of 4 done
+    assert sch._enrich_status["last_completed"] == 3
+
+
 def test_worker_hung_job_is_killed_not_awaited_forever(monkeypatch):
     # The whole point of out-of-process enrichment: a runaway parse that would
     # otherwise freeze the web server (silent logs, wheel of death) is reaped by the
