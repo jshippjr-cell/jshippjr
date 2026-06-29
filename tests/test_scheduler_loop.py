@@ -200,13 +200,14 @@ def test_supervised_batch_advances_through_agencies(tmp_path, monkeypatch):
                                       "website": f"https://a{i}.example"})
     conn.commit()
 
-    def fake_one(c, aid, timeout):                        # stand in for the worker
-        dbm.save_agency_enrichment(c, aid, {"status": "complete", "steps_done": [],
-                                            "links": [], "profile": {}})
-        c.commit()
+    def fake_one(conn, action, aid, timeout, *, reset=False, label="enrich",
+                 on_timeout=None):                        # stand in for the worker
+        dbm.save_agency_enrichment(conn, aid, {"status": "complete", "steps_done": [],
+                                               "links": [], "profile": {}})
+        conn.commit()
         return True
 
-    monkeypatch.setattr(sch, "_enrich_one_supervised", fake_one)
+    monkeypatch.setattr(sch, "_run_one_supervised", fake_one)
     monkeypatch.setattr(sch, "_enrich_delay_seconds", lambda: 0)
     monkeypatch.setattr(sch.threading, "Thread",
                         lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
@@ -214,6 +215,24 @@ def test_supervised_batch_advances_through_agencies(tmp_path, monkeypatch):
     assert dbm.count_needing_enrichment(dbm.connect(db_path)) == 1   # 3 of 4 done
     assert sch._enrich_status["last_completed"] == 3
     assert sch._enrich_status["batch_done"] == 3                     # live progress tracked
+
+
+def test_dm_error_status_drops_out_of_the_queue(tmp_path):
+    # A timed-out decision-maker discovery is marked dm-'error'; that MUST exclude it
+    # from the needing-queue, or the autonomous cycle would re-pick the same hostile
+    # page every pass and never advance.
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "d.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "x", "company": "X",
+                                  "website": "https://x.example"})
+    aid = conn.execute("SELECT id FROM agencies").fetchone()["id"]
+    conn.commit()
+    assert dbm.count_needing_decision_makers(conn) == 1
+    dbm.save_agency_dm(conn, aid, {"status": "error", "found": 0, "total": 0})
+    conn.commit()
+    assert dbm.count_needing_decision_makers(conn) == 0
+    assert dbm.agencies_needing_decision_makers(conn) == []
 
 
 def test_worker_hung_job_is_killed_not_awaited_forever(monkeypatch):

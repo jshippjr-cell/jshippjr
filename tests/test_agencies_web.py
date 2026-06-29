@@ -269,11 +269,20 @@ def test_live_crawl_blocked_when_scraping_off(app_db):
 # Auto-enrichment (the agent enriches on its own) + accordion / pagination.
 # --------------------------------------------------------------------------- #
 def test_scheduler_run_enrich_cycle_enriches_pending(app_db, monkeypatch):
+    # An autonomous pass drives one killable worker per pending agency. The actual
+    # enrich logic is covered in test_enrichment; here we assert the cycle advances
+    # through the queue (the worker runs out-of-process, so we stand it in).
     client, app_mod = app_db
-    from chordential_oia.web import scheduler
-    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
-    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
-    # Acme resolves via the fake site; one autonomous pass completes it.
+    from chordential_oia.web import scheduler, db as dbm
+
+    def fake_run_one(conn, action, agency_id, timeout, *, reset=False,
+                     label="enrich", on_timeout=None):
+        dbm.save_agency_enrichment(conn, agency_id, {
+            "status": "complete", "steps_done": [], "links": [], "profile": {}})
+        conn.commit()
+        return True
+
+    monkeypatch.setattr(scheduler, "_run_one_supervised", fake_run_one)
     completed = scheduler.run_enrich_cycle(batch=10)
     assert completed >= 1
     aid = _agency_id(app_mod, "Acme")
