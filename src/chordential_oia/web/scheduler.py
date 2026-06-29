@@ -236,7 +236,8 @@ def triage_status() -> dict:
 # fills in quality over time without anyone pressing Enrich.
 _enrich_status = {"last_run": None, "last_completed": 0, "total_completed": 0,
                   "cycles": 0, "pending": 0, "running": False,
-                  "running_since": None, "running_ttl": 0.0}
+                  "running_since": None, "running_ttl": 0.0,
+                  "batch_done": 0, "batch_target": 0}
 _last_enrich_mono = 0.0
 _enrich_lock = threading.Lock()
 
@@ -384,6 +385,11 @@ def _enrich_batch_supervised(limit: int, on_done=None) -> None:
                     break                          # nothing left to enrich
                 if _enrich_one_supervised(conn, rows[0]["id"], per_agency):
                     completed += 1
+                _enrich_status["batch_done"] = _enrich_status.get("batch_done", 0) + 1
+                try:                               # live remaining count for the UI
+                    _enrich_status["pending"] = db.count_needing_enrichment(conn)
+                except Exception:
+                    pass
                 if delay:
                     time.sleep(delay)              # breathe between agencies
         finally:
@@ -423,6 +429,8 @@ def start_manual_enrich(batch: int = 0) -> bool:
     _enrich_status["running"] = True
     _enrich_status["running_since"] = time.monotonic()
     _enrich_status["running_ttl"] = float(limit * _agency_timeout_seconds() + 60)
+    _enrich_status["batch_target"] = limit
+    _enrich_status["batch_done"] = 0
     _enrich_batch_supervised(
         limit, on_done=lambda: _enrich_status.__setitem__("running", False))
     return True
