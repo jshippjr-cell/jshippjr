@@ -2098,7 +2098,8 @@ def count_needing_enrichment(conn, source: Optional[str] = None) -> int:
 def count_needing_decision_makers(conn, source: Optional[str] = None) -> int:
     s, p = _src(source)
     return _count(conn, "TRIM(COALESCE(website,'')) != '' "
-                  "AND COALESCE(dm_json,'') NOT LIKE ?" + s, (_DONE, *p))
+                  "AND COALESCE(dm_json,'') NOT LIKE ? "
+                  "AND COALESCE(dm_json,'') NOT LIKE ?" + s, (_DONE, _ERR, *p))
 
 
 def count_needing_intelligence(conn, source: Optional[str] = None) -> int:
@@ -2159,8 +2160,8 @@ def agencies_needing_decision_makers(
                 status = (json.loads(raw) or {}).get("status", "")
             except (json.JSONDecodeError, TypeError):
                 status = ""
-        if status == "complete":
-            continue
+        if status in ("complete", "error"):
+            continue                          # done, or terminally failed (e.g. timed out)
         out.append(r)
         if len(out) >= limit:
             break

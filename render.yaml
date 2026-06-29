@@ -36,6 +36,13 @@ services:
       # only), CHORDENTIAL_AUTOFETCH_INTERVAL=900 (seconds), CHORDENTIAL_REFETCH_HOURS=12.
       - key: CHORDENTIAL_ENABLE_SCRAPE
         value: "1"
+      # Autonomous engines: enrich / re-enrich / decision-makers / intelligence /
+      # signals / scoring run on their own in the background. SAFE on this small
+      # instance because every live-fetch job runs in its own KILLABLE worker
+      # process with a per-agency timeout — a hostile page can't freeze the server
+      # or stall the queue (it's killed, marked, and skipped). Set "0" to disable.
+      - key: CHORDENTIAL_AUTONOMOUS
+        value: "1"
       # Web Push (native phone alerts for the installed PWA). The VAPID keypair
       # and subject are set in the Render dashboard (the private key is a secret),
       # NOT committed here: CHORDENTIAL_VAPID_PUBLIC, CHORDENTIAL_VAPID_PRIVATE,

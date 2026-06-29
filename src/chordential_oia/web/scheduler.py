@@ -288,32 +288,19 @@ def _enrich_delay_seconds() -> float:
 
 
 def run_enrich_cycle(batch: int = 0) -> int:
-    """One enrichment pass — enriches up to ``batch`` enrichable agencies (default
-    from env). Blocking; meant to run in a worker thread. Updates the shared status
-    (so both the autonomous loop and the manual nudge report the same progress) and
-    refreshes the pending count. Returns the number that completed this pass.
-
-    Guarded by a lock + a ``running`` flag so two passes never overlap: a manual
-    nudge while one is in flight is a no-op rather than a double run on the DB."""
-    from . import enrichment
+    """One autonomous enrichment pass — enriches up to ``batch`` agencies, EACH in
+    its own killable worker process (so a hostile page can't freeze the server or
+    stall the queue). Lock-guarded: a no-op if another heavy job holds the lock, so
+    it just retries next interval. Returns how many completed this pass."""
     limit = batch or _enrich_batch_size()
     if not _heavy_lock.acquire(blocking=False):
-        return 0                              # a pass is already running
+        return 0                              # a heavy job is already running
     _enrich_status["running"] = True
     try:
-        conn = db.connect()
-        try:
-            res = enrichment.enrich_batch(conn, limit=limit,
-                                          delay=_enrich_delay_seconds())
-            _enrich_status["pending"] = db.count_needing_enrichment(conn)
-        finally:
-            conn.close()
-        completed = res.get("completed", 0)
-        _enrich_status["cycles"] += 1
-        _enrich_status["last_completed"] = completed
-        _enrich_status["total_completed"] += completed
-        _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
-        return completed
+        return _supervised_pass_locked(
+            "enrich", db.agencies_needing_enrichment, _enrich_status,
+            limit=limit, on_timeout=_mark_enrichment_error, label="enrich",
+            count_fn=db.count_needing_enrichment)
     finally:
         _enrich_status["running"] = False
         _heavy_lock.release()
@@ -330,80 +317,131 @@ def _agency_timeout_seconds() -> int:
         return 180
 
 
-def _enrich_one_supervised(conn, agency_id: int, timeout: int) -> bool:
-    """Enrich ONE agency in its own killable worker process. Returns True on a clean
-    finish. On timeout the worker is killed AND the agency is marked 'error' here —
-    the killed worker can't mark itself, and without a terminal status the batch
-    would pick the same hostile page again next time and never advance."""
-    args = [sys.executable, "-m", "chordential_oia.web._enrich_worker",
-            json.dumps({"action": "enrich", "agency_id": agency_id})]
+def _mark_enrichment_error(conn, agency_id: int) -> None:
+    """Mark a timed-out enrichment 'error' so the queue advances past a hostile page."""
+    try:
+        db.save_agency_enrichment(conn, agency_id, {
+            "status": "error", "steps_done": [], "links": [], "profile": {},
+            "detail": "enrichment timed out (a page likely hung the parser)"})
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _mark_dm_error(conn, agency_id: int) -> None:
+    try:
+        db.save_agency_dm(conn, agency_id, {
+            "status": "error", "found": 0, "total": 0,
+            "detail": "decision-maker discovery timed out (a page likely hung)"})
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _defer_reenrich(conn, agency_id: int) -> None:
+    """A re-enrichment timed out. Keep the existing (good) profile but stamp it
+    fresh, so the stale-selector won't immediately pick the same hanging page again."""
+    try:
+        blob = db.get_agency_enrichment(conn, agency_id) or {}
+        blob["last_enriched"] = _now_iso()
+        db.save_agency_enrichment(conn, agency_id, blob)
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _run_one_supervised(conn, action: str, agency_id: int, timeout: int,
+                        *, reset: bool = False, label: str = "enrich",
+                        on_timeout=None) -> bool:
+    """Run ONE agency through ``action`` in its own killable worker process. Returns
+    True on a clean exit. On timeout the worker is killed and ``on_timeout`` runs
+    (the killed worker can't mark itself, and without a terminal status the queue
+    would re-pick the same hostile page forever and never advance)."""
+    spec = {"action": action, "agency_id": agency_id, "reset": reset}
+    args = [sys.executable, "-m", "chordential_oia.web._enrich_worker", json.dumps(spec)]
     try:
         proc = subprocess.Popen(args, env=dict(os.environ))
     except Exception as e:
-        print(f"[enrich] agency {agency_id}: spawn failed: {e}", flush=True)
+        print(f"[{label}] agency {agency_id}: spawn failed: {e}", flush=True)
         return False
     try:
         rc = proc.wait(timeout=timeout)
-        print(f"[enrich] agency {agency_id}: worker exited {rc}", flush=True)
+        print(f"[{label}] agency {agency_id}: worker exited {rc}", flush=True)
         return rc == 0
     except subprocess.TimeoutExpired:
         try:
             proc.kill()
         except Exception:
             pass
-        print(f"[enrich] agency {agency_id}: TIMED OUT after {timeout}s — killed; "
-              "marking error so the batch advances", flush=True)
-        try:
-            db.save_agency_enrichment(conn, agency_id, {
-                "status": "error", "steps_done": [], "links": [], "profile": {},
-                "detail": "enrichment timed out (a page likely hung the parser)"})
-            conn.commit()
-        except Exception:
-            pass
+        print(f"[{label}] agency {agency_id}: TIMED OUT after {timeout}s — killed",
+              flush=True)
+        if on_timeout:
+            on_timeout(conn, agency_id)
         return False
     except Exception as e:
-        print(f"[enrich] agency {agency_id}: error {e}", flush=True)
+        print(f"[{label}] agency {agency_id}: error {e}", flush=True)
         return False
+
+
+def _enrich_one_supervised(conn, agency_id: int, timeout: int, *,
+                           reset: bool = False) -> bool:
+    """Back-compat wrapper: enrich one agency, marking it error on timeout."""
+    return _run_one_supervised(conn, "enrich", agency_id, timeout, reset=reset,
+                               label="enrich", on_timeout=_mark_enrichment_error)
+
+
+def _supervised_pass_locked(action, select_fn, status, *, limit, reset=False,
+                            on_timeout=None, label="enrich", count_fn=None) -> int:
+    """Process up to ``limit`` agencies, EACH in its own killable worker — the shared
+    engine for both the manual buttons and the autonomous cycles. The CALLER holds
+    ``_heavy_lock`` (so only one heavy job runs at a time). A hostile page freezes
+    only that one agency's worker; it's killed, handled, and the pass moves on — so a
+    pass always makes forward progress. Updates ``status`` live. Returns completed."""
+    per_agency = _agency_timeout_seconds()
+    delay = _enrich_delay_seconds()
+    status["batch_target"] = limit
+    status["batch_done"] = 0
+    completed = 0
+    conn = db.connect(os.environ.get("CHORDENTIAL_DB") or db.DEFAULT_DB_PATH)
+    try:
+        for _ in range(max(1, limit)):
+            rows = select_fn(conn, limit=1)
+            if not rows:
+                break                              # nothing left for this engine
+            if _run_one_supervised(conn, action, rows[0]["id"], per_agency,
+                                   reset=reset, label=label, on_timeout=on_timeout):
+                completed += 1
+            status["batch_done"] = status.get("batch_done", 0) + 1
+            if count_fn:
+                try:
+                    status["pending"] = count_fn(conn)
+                except Exception:
+                    pass
+            if delay:
+                time.sleep(delay)                  # breathe between agencies
+    finally:
+        status["cycles"] = status.get("cycles", 0) + 1
+        status["last_completed"] = completed
+        status["total_completed"] = status.get("total_completed", 0) + completed
+        status["last_run"] = datetime.now(timezone.utc).isoformat()
+        conn.close()
+        print(f"[{label}] pass done: {completed} processed", flush=True)
+    return completed
 
 
 def _enrich_batch_supervised(limit: int, on_done=None) -> None:
-    """Enrich up to ``limit`` agencies, EACH in its own killable worker with its own
-    timeout, in a background thread. A hostile page freezes only that one agency's
-    worker; it's killed, marked 'error', and the batch moves to the next — so it
-    always makes forward progress instead of stalling on the first bad page (the
-    'click Enrich, nothing happens' symptom). Updates the shared status as it goes."""
-    per_agency = _agency_timeout_seconds()
-    delay = _enrich_delay_seconds()
-
+    """Manual 'Enrich now': run a supervised per-agency pass in a background thread,
+    serialized with the autonomous cycles via the shared heavy lock."""
     def _job():
-        conn = db.connect(os.environ.get("CHORDENTIAL_DB") or db.DEFAULT_DB_PATH)
-        completed = 0
+        _heavy_lock.acquire()                      # never overlap another heavy job
         try:
-            for _ in range(max(1, limit)):
-                rows = db.agencies_needing_enrichment(conn, limit=1)
-                if not rows:
-                    break                          # nothing left to enrich
-                if _enrich_one_supervised(conn, rows[0]["id"], per_agency):
-                    completed += 1
-                _enrich_status["batch_done"] = _enrich_status.get("batch_done", 0) + 1
-                try:                               # live remaining count for the UI
-                    _enrich_status["pending"] = db.count_needing_enrichment(conn)
-                except Exception:
-                    pass
-                if delay:
-                    time.sleep(delay)              # breathe between agencies
+            _supervised_pass_locked(
+                "enrich", db.agencies_needing_enrichment, _enrich_status,
+                limit=limit, on_timeout=_mark_enrichment_error, label="enrich",
+                count_fn=db.count_needing_enrichment)
         finally:
-            _enrich_status["cycles"] = _enrich_status.get("cycles", 0) + 1
-            _enrich_status["last_completed"] = completed
-            _enrich_status["total_completed"] = \
-                _enrich_status.get("total_completed", 0) + completed
-            _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
-            try:
-                _enrich_status["pending"] = db.count_needing_enrichment(conn)
-            except Exception:
-                pass
-            conn.close()
-            print(f"[enrich] batch done: {completed} enriched this pass", flush=True)
+            _heavy_lock.release()
+            _enrich_status["running"] = False
             if on_done:
                 try:
                     on_done()
@@ -473,29 +511,24 @@ def _reenrich_stale_days() -> int:
 
 
 def run_reenrich_cycle(batch: int = 0) -> int:
-    """One re-enrichment pass: refresh up to ``batch`` stale agencies (re-fetch
-    their pages) so their profiles are current. Blocking; runs in a worker thread.
-    Lock-guarded. Returns how many were refreshed this pass."""
-    from . import enrichment
+    """One re-enrichment pass: refresh up to ``batch`` stale agencies (re-fetch their
+    pages, reset=True), EACH in its own killable worker. On timeout the existing
+    (good) profile is KEPT and just stamped fresh, so a newly-hostile page doesn't
+    cost us the data — it's simply deferred. Lock-guarded. Returns how many ran."""
     limit = batch or _reenrich_batch_size()
     stale = _reenrich_stale_days()
     if not _heavy_lock.acquire(blocking=False):
         return 0
     _reenrich_status["running"] = True
     try:
-        conn = db.connect()
-        try:
-            res = enrichment.reenrich_batch(conn, stale_days=stale, limit=limit)
-            # bounded count (don't materialize the whole table just for a status)
-            _reenrich_status["due"] = len(db.agencies_due_for_reenrichment(
-                conn, stale_days=stale, limit=500))
-        finally:
-            conn.close()
-        refreshed = res.get("refreshed", 0)
-        _reenrich_status["cycles"] += 1
+        def _select(conn, limit):
+            return db.agencies_due_for_reenrichment(conn, stale_days=stale, limit=limit)
+        refreshed = _supervised_pass_locked(
+            "enrich", _select, _reenrich_status, limit=limit, reset=True,
+            on_timeout=_defer_reenrich, label="reenrich")
         _reenrich_status["last_refreshed"] = refreshed
-        _reenrich_status["total_refreshed"] += refreshed
-        _reenrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+        _reenrich_status["total_refreshed"] = \
+            _reenrich_status.get("total_refreshed", 0) + refreshed
         return refreshed
     finally:
         _reenrich_status["running"] = False
@@ -550,28 +583,19 @@ def _dm_batch_size() -> int:
 
 
 def run_dm_cycle(batch: int = 0) -> int:
-    """One decision-maker discovery pass over up to ``batch`` agencies that still
-    need it. Blocking; runs in a worker thread. Updates the shared status and the
-    pending count. Returns how many NEW decision makers were stored this pass.
-    Lock-guarded so two passes never overlap."""
-    from . import decision_makers
+    """One decision-maker discovery pass over up to ``batch`` agencies, EACH in its
+    own killable worker (live-fetches people pages, so same freeze risk as enrich).
+    On timeout the agency is marked dm-'error' so the queue advances. Lock-guarded.
+    Returns how many agencies were processed this pass."""
     limit = batch or _dm_batch_size()
     if not _heavy_lock.acquire(blocking=False):
         return 0
     _dm_status["running"] = True
     try:
-        conn = db.connect()
-        try:
-            res = decision_makers.discover_batch(conn, limit=limit)
-            _dm_status["pending"] = db.count_needing_decision_makers(conn)
-        finally:
-            conn.close()
-        found = res.get("found", 0)
-        _dm_status["cycles"] += 1
-        _dm_status["last_found"] = found
-        _dm_status["total_found"] += found
-        _dm_status["last_run"] = datetime.now(timezone.utc).isoformat()
-        return found
+        return _supervised_pass_locked(
+            "decision_makers", db.agencies_needing_decision_makers, _dm_status,
+            limit=limit, on_timeout=_mark_dm_error, label="decision-makers",
+            count_fn=db.count_needing_decision_makers)
     finally:
         _dm_status["running"] = False
         _heavy_lock.release()
