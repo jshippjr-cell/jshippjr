@@ -652,14 +652,14 @@ def agencies_enrich_pending(limit: str = Form("")):
     than an HTTP request can wait — so we kick it off in a background thread and
     return immediately. Progress shows up in the auto-enrichment status card on
     refresh. Re-press to queue more once the running pass finishes."""
-    # Keep one press small: a big batch of live-site fetches saturates the single-
-    # CPU instance for many minutes and starves the web server (the "wheel of
-    # death"). 5 at a time, paced; re-press once the running pass finishes.
-    n = 5
+    # 25 at a time. Safe to do a real batch now that enrichment runs in a separate,
+    # killable worker process (a hostile page can't pin or freeze the web server) —
+    # the worker does them one at a time, paced, and a watchdog reaps any runaway.
+    n = 25
     try:
-        n = max(1, min(10, int(limit)))
+        n = max(1, min(50, int(limit)))
     except (TypeError, ValueError):
-        n = 5
+        n = 25
     started = scheduler.start_manual_enrich(n)
     return RedirectResponse(
         f"/agencies?eb_started={'1' if started else '0'}&eb_n={n}",

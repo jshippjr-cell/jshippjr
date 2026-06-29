@@ -140,6 +140,26 @@ def test_full_pipeline_runs_all_layers_in_order(tmp_path, monkeypatch):
     assert dbm.get_agency_score(conn, aid).get("score") is not None       # scored
 
 
+def test_manual_enrich_guard_self_heals_when_stale():
+    # The "a batch is running" guard must never stick: once the flag is older than
+    # the worker's own timeout, it's stale and a new pass is allowed again (so the
+    # button can't end up permanently disabled).
+    import time as _time
+    try:
+        sch._enrich_status["running"] = True
+        sch._enrich_status["running_since"] = _time.monotonic() - 10_000
+        sch._enrich_status["running_ttl"] = 600.0
+        assert sch._manual_enrich_running() is False          # stale → auto-cleared
+        assert sch._enrich_status["running"] is False
+
+        sch._enrich_status["running"] = True                  # a fresh pass still counts
+        sch._enrich_status["running_since"] = _time.monotonic()
+        sch._enrich_status["running_ttl"] = 600.0
+        assert sch._manual_enrich_running() is True
+    finally:
+        sch._enrich_status["running"] = False
+
+
 def test_worker_hung_job_is_killed_not_awaited_forever(monkeypatch):
     # The whole point of out-of-process enrichment: a runaway parse that would
     # otherwise freeze the web server (silent logs, wheel of death) is reaped by the
