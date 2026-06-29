@@ -23,11 +23,16 @@ import sys
 from . import db
 
 
+def _log(msg: str) -> None:
+    print(f"[enrich-worker] {msg}", flush=True)   # goes to the parent's stdout → Render logs
+
+
 def run(spec: dict) -> None:
     """Execute one job described by ``spec`` against a fresh DB connection."""
     action = spec.get("action")
     agency_id = spec.get("agency_id")
     reset = bool(spec.get("reset", False))
+    _log(f"start action={action} agency={agency_id}")
 
     # Re-read the DB path from the environment (the parent passes it through), so
     # the worker connects to the same database whether it runs as a real subprocess
@@ -36,7 +41,8 @@ def run(spec: dict) -> None:
     try:
         if action == "enrich":
             from . import enrichment
-            enrichment.enrich_agency(conn, agency_id, reset=reset)
+            res = enrichment.enrich_agency(conn, agency_id, reset=reset)
+            _log(f"done action=enrich agency={agency_id} status={res.get('status')}")
 
         elif action == "decision_makers":
             from . import decision_makers

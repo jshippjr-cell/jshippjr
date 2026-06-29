@@ -318,25 +318,113 @@ def run_enrich_cycle(batch: int = 0) -> int:
         _heavy_lock.release()
 
 
+def _agency_timeout_seconds() -> int:
+    """Hard cap for enriching ONE agency. A page can hang the parser indefinitely
+    (a runaway regex holds the lock and can't be interrupted), so each agency runs
+    in its own worker and is killed past this. Legit-but-slow sites finish well
+    under it; true hangs get caught. Tunable via CHORDENTIAL_AGENCY_TIMEOUT."""
+    try:
+        return max(30, int(os.environ.get("CHORDENTIAL_AGENCY_TIMEOUT", "180")))
+    except ValueError:
+        return 180
+
+
+def _enrich_one_supervised(conn, agency_id: int, timeout: int) -> bool:
+    """Enrich ONE agency in its own killable worker process. Returns True on a clean
+    finish. On timeout the worker is killed AND the agency is marked 'error' here —
+    the killed worker can't mark itself, and without a terminal status the batch
+    would pick the same hostile page again next time and never advance."""
+    args = [sys.executable, "-m", "chordential_oia.web._enrich_worker",
+            json.dumps({"action": "enrich", "agency_id": agency_id})]
+    try:
+        proc = subprocess.Popen(args, env=dict(os.environ))
+    except Exception as e:
+        print(f"[enrich] agency {agency_id}: spawn failed: {e}", flush=True)
+        return False
+    try:
+        rc = proc.wait(timeout=timeout)
+        print(f"[enrich] agency {agency_id}: worker exited {rc}", flush=True)
+        return rc == 0
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        print(f"[enrich] agency {agency_id}: TIMED OUT after {timeout}s — killed; "
+              "marking error so the batch advances", flush=True)
+        try:
+            db.save_agency_enrichment(conn, agency_id, {
+                "status": "error", "steps_done": [], "links": [], "profile": {},
+                "detail": "enrichment timed out (a page likely hung the parser)"})
+            conn.commit()
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        print(f"[enrich] agency {agency_id}: error {e}", flush=True)
+        return False
+
+
+def _enrich_batch_supervised(limit: int, on_done=None) -> None:
+    """Enrich up to ``limit`` agencies, EACH in its own killable worker with its own
+    timeout, in a background thread. A hostile page freezes only that one agency's
+    worker; it's killed, marked 'error', and the batch moves to the next — so it
+    always makes forward progress instead of stalling on the first bad page (the
+    'click Enrich, nothing happens' symptom). Updates the shared status as it goes."""
+    per_agency = _agency_timeout_seconds()
+    delay = _enrich_delay_seconds()
+
+    def _job():
+        conn = db.connect(os.environ.get("CHORDENTIAL_DB") or db.DEFAULT_DB_PATH)
+        completed = 0
+        try:
+            for _ in range(max(1, limit)):
+                rows = db.agencies_needing_enrichment(conn, limit=1)
+                if not rows:
+                    break                          # nothing left to enrich
+                if _enrich_one_supervised(conn, rows[0]["id"], per_agency):
+                    completed += 1
+                if delay:
+                    time.sleep(delay)              # breathe between agencies
+        finally:
+            _enrich_status["cycles"] = _enrich_status.get("cycles", 0) + 1
+            _enrich_status["last_completed"] = completed
+            _enrich_status["total_completed"] = \
+                _enrich_status.get("total_completed", 0) + completed
+            _enrich_status["last_run"] = datetime.now(timezone.utc).isoformat()
+            try:
+                _enrich_status["pending"] = db.count_needing_enrichment(conn)
+            except Exception:
+                pass
+            conn.close()
+            print(f"[enrich] batch done: {completed} enriched this pass", flush=True)
+            if on_done:
+                try:
+                    on_done()
+                except Exception:
+                    pass
+
+    threading.Thread(target=_job, daemon=True).start()
+
+
 def start_manual_enrich(batch: int = 0) -> bool:
-    """Kick a one-off enrichment pass and return at once. Runs in a SEPARATE,
-    KILLABLE process (not an in-process thread): a single hostile page used to send
-    the parse into a runaway that froze the whole web server (silent logs, the live
-    wheel of death). Out-of-process it can't, and a watchdog reaps it on timeout.
-    Returns True if started, False if enrichment is disabled or one is already
-    running (a second nudge is a no-op rather than a second worker on a small box)."""
+    """Kick a one-off enrichment pass and return at once. Each agency runs in its
+    own SEPARATE, KILLABLE worker process: a hostile page that hangs the parser used
+    to freeze the whole web server (the wheel of death); now it can't, and it can't
+    even stall the batch — a hung agency is killed, marked failed, and the batch
+    moves on. Returns True if started, False if enrichment is disabled or one is
+    already running (a second nudge is a no-op, not a second batch on a small box)."""
     if not enrich_enabled():
         return False
     if _manual_enrich_running():
         return False
     limit = batch or _enrich_batch_size()
-    timeout = _worker_timeout_seconds(max(600, limit * 180))
+    # backstop TTL for the self-healing guard: worst case is every agency timing out
     _enrich_status["running"] = True
     _enrich_status["running_since"] = time.monotonic()
-    _enrich_status["running_ttl"] = float(timeout)
-    _run_worker({"action": "batch", "limit": limit, "delay": _enrich_delay_seconds()},
-                timeout,
-                on_done=lambda: _enrich_status.__setitem__("running", False))
+    _enrich_status["running_ttl"] = float(limit * _agency_timeout_seconds() + 60)
+    _enrich_batch_supervised(
+        limit, on_done=lambda: _enrich_status.__setitem__("running", False))
     return True
 
 
