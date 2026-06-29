@@ -122,19 +122,22 @@ def _run_worker(spec: dict, timeout: int, on_done=None) -> None:
 
     def _supervise():
         try:
-            proc = subprocess.Popen(args, env=dict(os.environ))
-        except Exception:
-            return
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
             try:
-                proc.kill()                       # runaway parse — kill, don't wait forever
+                proc = subprocess.Popen(args, env=dict(os.environ))
+            except Exception:
+                return                            # couldn't even spawn — give up
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()                   # runaway parse — kill, don't wait forever
+                except Exception:
+                    pass
             except Exception:
                 pass
-        except Exception:
-            pass
         finally:
+            # ALWAYS run on_done — even if Popen failed — so a guard flag set by the
+            # caller (e.g. "a batch is running") can never get stuck on permanently.
             if on_done:
                 try:
                     on_done()
@@ -232,9 +235,24 @@ def triage_status() -> dict:
 # bounded batch of not-yet-complete agencies, so the Master Company Database
 # fills in quality over time without anyone pressing Enrich.
 _enrich_status = {"last_run": None, "last_completed": 0, "total_completed": 0,
-                  "cycles": 0, "pending": 0, "running": False}
+                  "cycles": 0, "pending": 0, "running": False,
+                  "running_since": None, "running_ttl": 0.0}
 _last_enrich_mono = 0.0
 _enrich_lock = threading.Lock()
+
+
+def _manual_enrich_running() -> bool:
+    """Is a manual enrich batch genuinely in flight? Self-healing: if the flag has
+    been set longer than the worker's own timeout (+ margin), the worker is long
+    gone and the flag is stale — clear it so the button can never stick disabled."""
+    if not _enrich_status.get("running"):
+        return False
+    since = _enrich_status.get("running_since")
+    ttl = _enrich_status.get("running_ttl") or 0.0
+    if since is not None and (time.monotonic() - since) > ttl + 30:
+        _enrich_status["running"] = False
+        return False
+    return True
 
 
 def enrich_enabled() -> bool:
@@ -309,12 +327,15 @@ def start_manual_enrich(batch: int = 0) -> bool:
     running (a second nudge is a no-op rather than a second worker on a small box)."""
     if not enrich_enabled():
         return False
-    if _enrich_status.get("running"):
+    if _manual_enrich_running():
         return False
     limit = batch or _enrich_batch_size()
+    timeout = _worker_timeout_seconds(max(600, limit * 180))
     _enrich_status["running"] = True
+    _enrich_status["running_since"] = time.monotonic()
+    _enrich_status["running_ttl"] = float(timeout)
     _run_worker({"action": "batch", "limit": limit, "delay": _enrich_delay_seconds()},
-                _worker_timeout_seconds(max(600, limit * 180)),
+                timeout,
                 on_done=lambda: _enrich_status.__setitem__("running", False))
     return True
 
@@ -690,7 +711,9 @@ def score_status() -> dict:
 
 
 def enrich_status() -> dict:
+    running = _manual_enrich_running()           # self-heals a stale flag
     s = dict(_enrich_status)
+    s["running"] = running
     s["enabled"] = enrich_enabled()
     s["autonomous"] = autonomous_engines_on() and enrich_enabled()
     return s
