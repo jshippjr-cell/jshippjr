@@ -213,6 +213,7 @@ def test_supervised_batch_advances_through_agencies(tmp_path, monkeypatch):
     sch._enrich_batch_supervised(3)
     assert dbm.count_needing_enrichment(dbm.connect(db_path)) == 1   # 3 of 4 done
     assert sch._enrich_status["last_completed"] == 3
+    assert sch._enrich_status["batch_done"] == 3                     # live progress tracked
 
 
 def test_worker_hung_job_is_killed_not_awaited_forever(monkeypatch):

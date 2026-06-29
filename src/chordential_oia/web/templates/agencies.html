@@ -131,24 +131,36 @@
       {% if auto_enrich.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
     </strong>
     <div class="muted small">
-      {% if auto_enrich.autonomous %}
+      {% if auto_enrich.running %}
+        <strong style="color:var(--amber,#b8860b)">⏳ Enriching now — {{ auto_enrich.batch_done }} of {{ auto_enrich.batch_target }} this pass.</strong>
+        Each site is fetched live, so a full pass of 25 takes a few minutes. This page
+        refreshes itself while it runs — no need to keep clicking.
+      {% elif auto_enrich.autonomous %}
         The agent enriches pending agencies on its own in the background — no clicking needed.
-        {% if auto_enrich.running %}<strong>A pass is running now…</strong> {% endif %}
         {% if auto_enrich.last_run %}Last pass completed {{ auto_enrich.last_completed }} · {{ auto_enrich.total_completed }} total this session.{% endif %}
-        {{ pending }} agencies awaiting enrichment.
       {% else %}
-        Runs automatically on Render (live fetching on). {{ pending }} agencies awaiting enrichment.
+        Runs automatically on Render (live fetching on).
+        {% if auto_enrich.last_run %}Last manual pass enriched {{ auto_enrich.last_completed }}.{% endif %}
       {% endif %}
+      {{ pending }} agencies awaiting enrichment.
     </div>
   </div>
-  {% if eb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Enriching up to {{ eb_n }} in the background — refresh to see progress</span>
-  {% elif eb_started == "0" %}<span class="small muted">A pass is already running — refresh to see progress</span>{% endif %}
+  {% if eb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Started — enriching up to {{ eb_n }} in the background</span>
+  {% elif eb_started == "0" %}<span class="small muted">A pass is already running — let it finish</span>{% endif %}
   {% if rb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Refreshing up to {{ rb_n }} stale agencies in the background</span>
   {% elif rb_started == "0" %}<span class="small muted">A refresh is already running</span>{% endif %}
   <form method="post" action="/agencies/enrich-pending" style="margin:0">
-    <button class="btn" type="submit"{% if auto_enrich.running %} disabled{% endif %}>Enrich {{ pending if pending < 25 else 25 }} now</button>
+    <button class="btn" type="submit"
+      {% if auto_enrich.running %} disabled style="opacity:.55;cursor:not-allowed"{% endif %}>
+      {% if auto_enrich.running %}Enriching… {{ auto_enrich.batch_done }}/{{ auto_enrich.batch_target }}{% else %}Enrich {{ pending if pending < 25 else 25 }} now{% endif %}
+    </button>
   </form>
 </div>
+{% if auto_enrich.running %}
+<!-- A manual enrich pass is in flight: auto-refresh so the count visibly drops
+     without the operator wondering whether it stalled. -->
+<script>setTimeout(function(){ location.reload(); }, 15000);</script>
+{% endif %}
 
 <!-- Re-enrichment cadence: refresh stale agencies so signal detection has fresh diffs. -->
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
