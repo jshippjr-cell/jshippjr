@@ -78,9 +78,16 @@
     </form>
 
     {% if invite %}
-    <details class="edit-block" style="margin-top:14px">
-      <summary class="btn">✉ Recruiting invite <span class="muted">— personalized draft to copy</span></summary>
-      <p class="muted small">The machine drafts; you send. Copy, tweak, and email it — then move them to <strong>Invited</strong>.</p>
+    <details class="edit-block" style="margin-top:14px" id="invite">
+      <summary class="btn">✉ Recruiting invite <span class="muted">— personalized draft</span></summary>
+      {% if invite_result == 'sent' %}<p class="pill sv-door">✓ Invite emailed — moved to Invited</p>
+      {% elif invite_result in ('manual','logged','error') %}<p class="muted small">{% if invite_result=='manual' %}No email on file (or mail not set up) — copy the draft below and send it yourself.{% else %}Mail provider returned “{{ invite_result }}” — copy the draft below and send it manually.{% endif %}</p>{% endif %}
+      <p class="muted small">The machine drafts; you send. {% if t.email and mail_configured %}Send it straight to {{ t.email }}, or copy + tweak it first.{% else %}Copy, tweak, and email it — then move them to <strong>Invited</strong>.{% endif %}</p>
+      {% if t.email and mail_configured %}
+      <form method="post" action="/talent/{{ t.id }}/invite/send" style="margin-bottom:10px">
+        <button class="btn primary" type="submit">✉ Send invite to {{ t.email }}</button>
+      </form>
+      {% endif %}
       <label class="muted small">Subject</label>
       <input type="text" readonly value="{{ invite.subject }}" onclick="this.select()"
              style="width:100%;font-size:13px;padding:8px;border:1px solid var(--line,#ddd);border-radius:6px">

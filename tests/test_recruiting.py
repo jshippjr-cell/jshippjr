@@ -81,3 +81,51 @@ def test_talent_detail_shows_invite_composer(ctx):
     conn.close()
     page = client.get(f"/talent/{tid}").text
     assert "Recruiting invite" in page
+
+
+def test_send_invite_falls_back_to_manual(ctx):
+    # No email + null mailer → no send, stays Prospect, flagged manual (never crashes).
+    client, db_mod = ctx
+    conn = db_mod.connect()
+    tid = db_mod.insert_talent(conn, Talent(
+        name="No Email", disciplines=[MusicDiscipline.COMPOSITION]))
+    conn.close()
+    r = client.post(f"/talent/{tid}/invite/send", follow_redirects=False)
+    assert r.status_code == 303
+    assert "invite=manual" in r.headers["location"]
+    conn = db_mod.connect()
+    try:
+        inv = conn.execute(
+            "SELECT invite_status FROM talent WHERE id=?", (tid,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert inv == "Prospect"  # unchanged — nothing was sent
+
+
+def test_send_invite_emails_and_advances(ctx, monkeypatch):
+    client, db_mod = ctx
+    from chordential_oia.web import app as app_mod
+    sent = {}
+
+    def fake_send(to, subject, text, html=None):
+        sent.update(to=to, subject=subject, text=text)
+        return "sent"
+
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(app_mod.mailer, "send_email", fake_send)
+    conn = db_mod.connect()
+    tid = db_mod.insert_talent(conn, Talent(
+        name="Mara Velez", email="mara@example.com",
+        disciplines=[MusicDiscipline.COMPOSITION], credits="Scored two spots"))
+    conn.close()
+    r = client.post(f"/talent/{tid}/invite/send", follow_redirects=False)
+    assert "invite=sent" in r.headers["location"]
+    assert sent["to"] == "mara@example.com"
+    assert "Chordential" in sent["text"]
+    conn = db_mod.connect()
+    try:
+        inv = conn.execute(
+            "SELECT invite_status FROM talent WHERE id=?", (tid,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert inv == "Invited"  # funnel advanced on a successful send

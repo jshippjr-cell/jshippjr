@@ -2725,7 +2725,8 @@ def talent_create(
 
 
 @app.get("/talent/{talent_id}", response_class=HTMLResponse)
-def talent_detail(request: Request, talent_id: int):
+def talent_detail(request: Request, talent_id: int, invite: str = ""):
+    invite_result = invite  # ?invite=<send-status> flash; renamed to avoid shadowing
     conn = db.connect()
     try:
         row = db.get_talent(conn, talent_id)
@@ -2747,7 +2748,8 @@ def talent_detail(request: Request, talent_id: int):
         completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
         review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
         portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
-        invite=invite,
+        invite=invite, mail_configured=mailer.mail_configured(),
+        invite_result=invite_result,
     )
 
 
@@ -2798,16 +2800,55 @@ def talent_invite(talent_id: int, invite_status: str = Form(...)):
     return RedirectResponse(f"/talent/{talent_id}", status_code=303)
 
 
+@app.post("/talent/{talent_id}/invite/send")
+def talent_send_invite(talent_id: int):
+    """Email the personalized recruiting invite to the creator and advance them to
+    Invited. Falls back gracefully: with no email on file or mail unconfigured, it
+    just flags 'copy it manually' (the draft is always on the page)."""
+    conn = db.connect()
+    try:
+        row = db.get_talent(conn, talent_id)
+        if row is None:
+            return RedirectResponse("/talent", status_code=303)
+        t = db.talent_from_row(row)
+    finally:
+        conn.close()
+    email = (t.email or "").strip()
+    if not email or not mailer.mail_configured():
+        return RedirectResponse(f"/talent/{talent_id}?invite=manual#invite", status_code=303)
+    base = _public_base()
+    inv = recruiting.compose_invite(
+        t, apply_url=f"{base}/apply", artists_url=f"{base}/for-artists")
+    status = mailer.send_email(email, inv["subject"], inv["body"])
+    if status == "sent":
+        conn = db.connect()
+        try:
+            db.update_talent_invite(conn, talent_id, "Invited")  # funnel advances
+        finally:
+            conn.close()
+    return RedirectResponse(f"/talent/{talent_id}?invite={status}#invite", status_code=303)
+
+
 @app.post("/talent/{talent_id}/portal")
 def talent_issue_portal(talent_id: int):
     """Mint (or reveal) the creator's portal access token — their only credential
     for /creator/<token>. Jon issues this when a creator is qualified, then sends
-    them the link. Idempotent: re-issuing returns the same token."""
+    them the link. Idempotent: re-issuing returns the same token. If mail is
+    configured and the creator has an email, also send them the link (best-effort)."""
     conn = db.connect()
     try:
-        db.ensure_talent_portal_token(conn, talent_id)
+        token = db.ensure_talent_portal_token(conn, talent_id)
+        row = db.get_talent(conn, talent_id)
+        email = (row["email"] or "").strip() if row is not None else ""
     finally:
         conn.close()
+    if token and email and mailer.mail_configured():
+        url = f"{_public_base()}/creator/{token}"
+        mailer.send_email(
+            email, "Your Chordential creator workspace",
+            "You're set up in Chordential. Your personal workspace — where you'll see "
+            f"assigned briefs and submit your work — is here:\n\n{url}\n\n"
+            "It's private to you; no password needed. — Chordential")
     return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
 
 
@@ -2886,13 +2927,17 @@ async def creator_submit_version(
             return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
         data = await file.read()
         label, campaign = _append_version_from_bytes(conn, project_id, data, file.filename)
-        # Note who submitted it on the project timeline, then notify reviewers.
-        db.add_update(conn, project_id,
-                      f"{row['name']} submitted {label} for review.")
-        reviewers = db.list_delivery_reviewers(conn, project_id)
+        # Note who submitted it on the project timeline.
+        who = row["name"]
+        db.add_update(conn, project_id, f"{who} submitted {label} for review.")
     finally:
         conn.close()
-    _notify_reviewers_new_version(project_id, campaign, label, reviewers)
+    # Composer-direction notification: ping Jon (the operator) that new work landed
+    # — NOT the client. A creator's raw submission is for Jon to vet first; he decides
+    # whether to push it to the client ("machine proposes, Jon disposes").
+    _notify_operator_review(
+        project_id, None, f"New work submitted — {campaign}",
+        f"{who} submitted {label}. Review it in the delivery console.")
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
