@@ -30,3 +30,9 @@ capabilities_clips/
 
 # Founder-uploaded relevant-work audio samples (local disk; not durable on Render)
 src/chordential_oia/web/uploads/
+
+# Third-party agent skills installed via `npx skills add` (kept on local disk,
+# not part of the product repo). Those tools run locally, not in CI/prod.
+.agents/
+.claude/skills/
+skills-lock.json
