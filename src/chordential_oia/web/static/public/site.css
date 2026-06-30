@@ -450,19 +450,25 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-stage{position:relative;min-height:100vh;padding-top:90px}
 
 /* The card itself: position via nth-child "slots" below. `rotate`/`scale` are the
-   STANDALONE CSS properties (not `transform`), which is what makes the SPIN here
-   coexist with the FALL (`translate`) below — two independent animated properties,
-   no keyframe duplication needed.
+   STANDALONE CSS properties (not `transform`), which is what makes the ORBIT here
+   coexist with the FALL (`translate`) below — independent animated properties, no
+   keyframe duplication needed.
    The spiral: transform-origin is pinned to a point OUTSIDE the card itself
    (var(--orbit) below its center) and `rotate` is animated through a full circle —
    so the card doesn't just spin on its own axis, it SWEEPS around that distant
    pivot, i.e. genuinely orbits. Combined with the simultaneous downward `translate`
-   fall, the two together trace an actual corkscrew/spiral path, not a straight drop. */
+   fall, the two together trace an actual corkscrew/spiral path.
+   The 3D depth read: `scale` and `blur` are bundled into the SAME rg-orbit keyframe
+   as the rotation (not static per-card values), cycling near->far->near in lockstep
+   with the sweep — at the front of its orbit (rotate≈0/360) a card is full-size and
+   sharp ("foreground"); at the back (rotate≈180) it shrinks and blurs ("background").
+   That's what makes depth actually visible as the cards move, not just implied by a
+   fixed look. var(--near)/var(--far)/var(--fblur) give each slot its own depth range. */
 .rg-card{position:absolute;display:flex;flex-direction:column;justify-content:flex-end;
   width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45);
   transform-origin:50% var(--orbit,160px);
-  animation:rg-fall var(--dur,20s) linear infinite, rg-spin var(--spin,14s) linear infinite;
+  animation:rg-fall var(--dur,20s) linear infinite, rg-orbit var(--spin,14s) linear infinite;
   animation-delay:var(--delay,0s), var(--spin-delay,0s)}
 .rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .25s}
 .rg-card:hover::after{background:rgba(0,0,0,.38)}
@@ -472,7 +478,11 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:11.5px;margin-top:3px}
 
 @keyframes rg-fall{ 0%{translate:0 -32vh} 100%{translate:0 132vh} }
-@keyframes rg-spin{ from{rotate:0deg} to{rotate:360deg} }
+@keyframes rg-orbit{
+  0%   { rotate:0deg;   scale:var(--near,1);   filter:blur(0) }
+  50%  { rotate:180deg; scale:var(--far,.6);   filter:blur(var(--fblur,4px)) }
+  100% { rotate:360deg; scale:var(--near,1);   filter:blur(0) }
+}
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
@@ -482,14 +492,17 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-orange-sand{background:linear-gradient(135deg,var(--orange),var(--sand))}
 .rg-ink-wine{background:linear-gradient(135deg,var(--ink),var(--wine))}
 
-/* Six hand-tuned "slots" (left position, fall timing, orbit radius/speed, blur,
-   scale) cycling by nth-child — deterministic variety without CSS random()/modulo. */
-.rg-card:nth-child(6n+1){left:6%;  --dur:19s; --delay:-2s;  --orbit:140px; --spin:13s; --spin-delay:-2s;  scale:1;    filter:blur(0)}
-.rg-card:nth-child(6n+2){left:23%; --dur:24s; --delay:-9s;  --orbit:190px; --spin:17s; --spin-delay:-9s;  scale:.9;   filter:blur(2px)}
-.rg-card:nth-child(6n+3){left:40%; --dur:17s; --delay:-13s; --orbit:120px; --spin:11s; --spin-delay:-13s; scale:1.06; filter:blur(0)}
-.rg-card:nth-child(6n+4){left:57%; --dur:22s; --delay:-5s;  --orbit:220px; --spin:19s; --spin-delay:-5s;  scale:.88;  filter:blur(3px)}
-.rg-card:nth-child(6n+5){left:71%; --dur:25s; --delay:-17s; --orbit:160px; --spin:15s; --spin-delay:-17s; scale:1;    filter:blur(1px)}
-.rg-card:nth-child(6n+6){left:86%; --dur:20s; --delay:-7s;  --orbit:100px; --spin:9s;  --spin-delay:-7s;  scale:.96;  filter:blur(0)}
+/* Six hand-tuned "slots" (left position, fall timing, orbit radius/speed, and the
+   near/far depth range each card cycles through) cycling by nth-child —
+   deterministic variety without CSS random()/modulo. --near/--far/--fblur drive
+   the rg-orbit keyframe above: each card grows+sharpens toward the viewer at the
+   front of its sweep and shrinks+blurs away at the back. */
+.rg-card:nth-child(6n+1){left:6%;  --dur:19s; --delay:-2s;  --orbit:140px; --spin:13s; --spin-delay:-2s;  --near:1.08; --far:.55; --fblur:4.5px}
+.rg-card:nth-child(6n+2){left:23%; --dur:24s; --delay:-9s;  --orbit:190px; --spin:17s; --spin-delay:-9s;  --near:1;    --far:.62; --fblur:3.5px}
+.rg-card:nth-child(6n+3){left:40%; --dur:17s; --delay:-13s; --orbit:120px; --spin:11s; --spin-delay:-13s; --near:1.1;  --far:.6;  --fblur:5px}
+.rg-card:nth-child(6n+4){left:57%; --dur:22s; --delay:-5s;  --orbit:220px; --spin:19s; --spin-delay:-5s;  --near:.96;  --far:.5;  --fblur:4px}
+.rg-card:nth-child(6n+5){left:71%; --dur:25s; --delay:-17s; --orbit:160px; --spin:15s; --spin-delay:-17s; --near:1.04; --far:.58; --fblur:3px}
+.rg-card:nth-child(6n+6){left:86%; --dur:20s; --delay:-7s;  --orbit:100px; --spin:9s;  --spin-delay:-7s;  --near:1;    --far:.65; --fblur:4px}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}

@@ -84,11 +84,30 @@ def test_reel_cards_genuinely_orbit_not_just_fall():
         / "src/chordential_oia/web/static/public/site.css"
     )
     css = css_path.read_text()
-    # An animated full-circle spin keyframe must exist...
-    assert "@keyframes rg-spin" in css
+    # An animated full-circle orbit keyframe must exist...
+    assert "@keyframes rg-orbit" in css
     assert "rotate:360deg" in css or "rotate: 360deg" in css
     # ...and the card's transform-origin must be offset OUTSIDE itself (not 50% 50%)
     # — a card spinning around its own center never visibly orbits/displaces.
     assert "transform-origin:50% var(--orbit" in css
-    # The spin animation must actually be applied to .rg-card, not just defined.
-    assert "rg-spin var(--spin" in css
+    # The orbit animation must actually be applied to .rg-card, not just defined.
+    assert "rg-orbit var(--spin" in css
+
+
+def test_reel_cards_have_depth_cycle_near_far_near():
+    """Scale + blur must be bundled INTO the same orbit keyframe (not static
+    per-card values) so a card visibly grows/sharpens at the front of its sweep
+    and shrinks/blurs at the back — that's what makes depth actually READ as the
+    cards move, answering "you should be able to see the cards in the foreground
+    and background"."""
+    css_path = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/site.css"
+    )
+    css = css_path.read_text()
+    assert "scale:var(--near" in css
+    assert "scale:var(--far" in css
+    assert "filter:blur(var(--fblur" in css
+    # Every slot must define its own near/far/blur range.
+    assert css.count("--near:") == 6
+    assert css.count("--far:") == 6
