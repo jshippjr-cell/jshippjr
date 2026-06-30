@@ -1,11 +1,22 @@
 {% extends "base.html" %}
+{% set sp = source_preset|default('manual') %}
 {% block title %}Add talent{% endblock %}
-{% block heading %}<a class="crumb" href="/talent">Talent</a> / Add{% endblock %}
+{% block heading %}<a class="crumb" href="/talent">Talent</a> / {{ 'Log sourced candidate' if sp=='sourced' else 'Add' }}{% endblock %}
 {% block content %}
 
 <section class="card" style="max-width:640px">
-  <div class="card-head"><h2>Add a creator</h2></div>
+  <div class="card-head"><h2>{{ 'Log a sourced candidate' if sp=='sourced' else 'Add a creator' }}</h2></div>
+  {% if sp=='sourced' %}
+  <p class="muted small" style="margin:-6px 0 14px">
+    The workaround for bot-blocked / login-walled sites: browse the venue in your own
+    signed-in browser, then log the creators worth a look here. They land in your
+    <strong>reel-review queue</strong> as <span class="src-badge src-sourced">Sourced</span> —
+    same human gate as everyone else. Open the venue searches on the
+    <a class="link" href="/discovery?kind=talent">Crawler page</a>.
+  </p>
+  {% endif %}
   <form class="stack" method="post" action="/talent">
+    <input type="hidden" name="source" value="{{ sp }}">
     <label>Name</label>
     <input type="text" name="name" required placeholder="e.g. Maya Okafor">
     <label>Email</label>

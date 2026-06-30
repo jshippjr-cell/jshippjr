@@ -2593,12 +2593,16 @@ def set_buyer_website(client: str, website: str = Form("")):
 FORM_DISCIPLINES = [d for d in MusicDiscipline if d is not MusicDiscipline.NON_CRAFT]
 
 
+_SOURCE_CHANNELS = ["applied", "sourced", "referral", "manual"]
+
+
 @app.get("/talent", response_class=HTMLResponse)
 def talent_roster(
     request: Request,
     discipline: Optional[str] = None,
     review: Optional[str] = None,
     invite: Optional[str] = None,
+    source: Optional[str] = None,
     sort: str = "name",
 ):
     conn = db.connect()
@@ -2615,6 +2619,10 @@ def talent_roster(
         all_talents = [db.talent_from_row(r) for r in db.list_talent(conn)]
     finally:
         conn.close()
+    # Origin-channel filter (applied | sourced | referral | manual) — answers
+    # "where's my sourced channel?" by making each intake lane visible/filterable.
+    if source in _SOURCE_CHANNELS:
+        talents = [t for t in talents if t.source_channel == source]
     cards = [{"t": t, "completeness": profile_completeness(t)} for t in talents]
     sorters = {
         "name": lambda c: c["t"].name.lower(),
@@ -2628,22 +2636,33 @@ def talent_roster(
         "approved": sum(1 for t in all_talents if t.is_approved),
         "pending": sum(1 for t in all_talents if t.review_status.value == "Pending"),
         "matchable": sum(1 for t in all_talents if t.matchable),
+        "sourced": sum(1 for t in all_talents if t.source_channel == "sourced"),
     }
     active = {
         "discipline": discipline or "", "review": review or "",
-        "invite": invite or "", "sort": sort,
+        "invite": invite or "", "source": source if source in _SOURCE_CHANNELS else "",
+        "sort": sort,
     }
     return render(
         request, "talent_roster.html", nav="talent", cards=cards, counts=counts,
         disciplines=FORM_DISCIPLINES, review_states=db.REVIEW_STATES,
-        invite_states=db.INVITE_STATES, active=active, review_queue=review_queue,
+        invite_states=db.INVITE_STATES, source_channels=_SOURCE_CHANNELS,
+        active=active, review_queue=review_queue,
     )
 
 
+_ADD_SOURCES = {"manual", "sourced", "referral"}
+
+
 @app.get("/talent/new", response_class=HTMLResponse)
-def talent_new(request: Request):
+def talent_new(request: Request, source: str = "manual"):
+    # ?source=sourced renders the "log a candidate I found myself" variant — the
+    # human-in-the-loop workaround for bot-blocked sites: browse the site in your
+    # own signed-in browser, then log the worth-reviewing creators here.
+    preset = source if source in _ADD_SOURCES else "manual"
     return render(
-        request, "talent_form.html", nav="talent", talent=None, disciplines=FORM_DISCIPLINES
+        request, "talent_form.html", nav="talent", talent=None,
+        disciplines=FORM_DISCIPLINES, source_preset=preset,
     )
 
 
@@ -2677,13 +2696,16 @@ def talent_create(
     notes: str = Form(""),
     rate: str = Form(""),
     rate_unit: str = Form("hourly"),
+    source: str = Form("manual"),
 ):
     valid = [MusicDiscipline(d) for d in disciplines if d in {m.value for m in MusicDiscipline}]
+    origin = source if source in _ADD_SOURCES else "manual"
     t = Talent(
         name=name.strip(), email=email.strip() or None, disciplines=valid,
         credits=credits.strip(), location=location.strip() or None,
         demo_reel_url=demo_reel_url.strip() or None, notes=notes.strip(),
         rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
+        source=origin, source_url=demo_reel_url.strip() or None,
     )
     conn = db.connect()
     try:

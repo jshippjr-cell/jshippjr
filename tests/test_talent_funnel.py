@@ -129,3 +129,56 @@ def test_roster_shows_source_badges(ctx):
     # Sourced prospects ingested on boot show a provenance badge.
     assert "src-badge" in page
     assert "Sourced" in page
+
+
+def test_sourced_channel_filter_and_count(ctx):
+    client, db_mod = ctx
+    # Log a candidate Jon found himself (the bot-block workaround) — source=sourced.
+    client.post(
+        "/talent",
+        data={"name": "Scouted Sky", "disciplines": ["composition"], "source": "sourced"},
+    )
+    conn = db_mod.connect()
+    try:
+        row = conn.execute("SELECT * FROM talent WHERE name='Scouted Sky'").fetchone()
+    finally:
+        conn.close()
+    assert row["source"] == "sourced"
+    # Approve it so it leaves the always-on review queue (which ignores filters by
+    # design) and we're testing the filtered card grid, not the gate.
+    client.post(f"/talent/{row['id']}/review", data={"review_status": "Approved"})
+    # The sourced-channel filter returns it; the manual channel does not.
+    assert "Scouted Sky" in client.get("/talent?source=sourced").text
+    assert "Scouted Sky" not in client.get("/talent?source=manual").text
+
+
+def test_sourced_quickadd_form_renders(ctx):
+    client, _ = ctx
+    page = client.get("/talent/new?source=sourced").text
+    assert "Log a sourced candidate" in page
+    assert 'name="source" value="sourced"' in page
+
+
+def test_refer_creates_referral_pending(ctx):
+    client, db_mod = ctx
+    assert client.get("/refer").status_code == 200
+    r = client.post(
+        "/refer",
+        data={"name": "Refer Ray", "email": "ray@x.com",
+              "disciplines": ["composition"], "referred_by": "Maya Okafor",
+              "credits": "Scored two spots."},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/thanks?kind=refer"
+    conn = db_mod.connect()
+    try:
+        row = conn.execute("SELECT * FROM talent WHERE name='Refer Ray'").fetchone()
+    finally:
+        conn.close()
+    assert row["source"] == "referral"
+    assert row["review_status"] == "Pending"        # same human gate
+    assert "Referred by Maya Okafor" in row["notes"]
+    t = db_mod.talent_from_row(row)
+    assert t.source_label == "Referral"
+    assert t.source_channel == "referral"

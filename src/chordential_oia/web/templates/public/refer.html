@@ -1,0 +1,65 @@
+{% extends "public_base.html" %}
+{% block title %}Refer a creator{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="hero-eyebrow">For our creators</p>
+    <h1 class="page-title">Know someone great? Refer them.</h1>
+    <p class="page-lede">
+      The best people come from people we already trust. Tell us about a composer,
+      sound designer, arranger, or supervisor whose work you’d vouch for — we review
+      every reel personally before we reach out.
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-inner form-wrap">
+    <form class="lead-form" method="post" action="/refer">
+      <div class="field-row">
+        <div class="field">
+          <label for="referred_by">Your name</label>
+          <input id="referred_by" name="referred_by" placeholder="So we can thank you">
+        </div>
+        <div class="field">
+          <label for="name">Their name *</label>
+          <input id="name" name="name" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="email">Their email</label>
+          <input id="email" name="email" type="email">
+        </div>
+        <div class="field">
+          <label for="location">Their location</label>
+          <input id="location" name="location" placeholder="City, or Remote">
+        </div>
+      </div>
+      <div class="field">
+        <label>Their disciplines</label>
+        <div class="checks">
+          {% for d in disciplines %}
+          <label class="check"><input type="checkbox" name="disciplines" value="{{ d.value }}"> {{ d.label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field">
+        <label for="credits">Why them / their work</label>
+        <textarea id="credits" name="credits" rows="4"
+                  placeholder="What they’ve done, what they’re great at."></textarea>
+      </div>
+      <div class="field">
+        <label for="demo_reel_url">Their reel / portfolio link</label>
+        <input id="demo_reel_url" name="demo_reel_url"
+               placeholder="Link to their work">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Send the referral</button>
+      </div>
+      <p class="form-note">We review every referral’s reel personally — no automated screening.</p>
+    </form>
+  </div>
+</section>
+{% endblock %}

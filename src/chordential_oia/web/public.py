@@ -294,3 +294,46 @@ def public_apply_submit(
     finally:
         conn.close()
     return RedirectResponse("/thanks?kind=apply", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Referral loop — a creator we trust refers a peer. Council's recommended,
+# ToS-clean supply channel: it needs no scraping at all. The referred creator
+# enters the SAME reel-review funnel, tagged source="referral".
+# --------------------------------------------------------------------------- #
+@router.get("/refer", response_class=HTMLResponse)
+def public_refer(request: Request):
+    return render(
+        request, "public/refer.html", active="", disciplines=APPLY_DISCIPLINES,
+    )
+
+
+@router.post("/refer", response_class=HTMLResponse)
+def public_refer_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(""),
+    disciplines: List[str] = Form([]),
+    credits: str = Form(""),
+    location: str = Form(""),
+    demo_reel_url: str = Form(""),
+    referred_by: str = Form(""),
+):
+    valid = [
+        MusicDiscipline(d) for d in disciplines
+        if d in {m.value for m in MusicDiscipline}
+    ]
+    by = referred_by.strip()
+    note = f"Referred by {by}." if by else "Peer referral."
+    t = Talent(
+        name=name.strip(), email=email.strip() or None, disciplines=valid,
+        credits=credits.strip(), location=location.strip() or None,
+        demo_reel_url=demo_reel_url.strip() or None,
+        source="referral", source_url=demo_reel_url.strip() or None, notes=note,
+    )
+    conn = db.connect()
+    try:
+        db.insert_talent(conn, t)
+    finally:
+        conn.close()
+    return RedirectResponse("/thanks?kind=refer", status_code=303)

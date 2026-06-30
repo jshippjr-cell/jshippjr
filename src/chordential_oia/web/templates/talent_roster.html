@@ -9,6 +9,7 @@
     <div class="muted">Music creators we can staff onto won work — matched on profile &amp; credits, gated by demo-reel review.</div>
   </div>
   <div class="brief-actions">
+    <a class="btn" href="/talent/new?source=sourced">⌖ Log sourced candidate</a>
     <a class="btn primary" href="/talent/new">+ Add talent</a>
   </div>
 </div>
@@ -16,7 +17,7 @@
 <div class="kpi-grid">
   <a class="kpi" href="/talent"><div class="kpi-label">On roster</div><div class="kpi-value">{{ counts.total }}</div><div class="kpi-sub">creators</div></a>
   <a class="kpi accent-won" href="/talent?sort=matchable"><div class="kpi-label">Matchable</div><div class="kpi-value">{{ counts.matchable }}</div><div class="kpi-sub">approved + skilled</div></a>
-  <a class="kpi" href="/talent?review=Approved"><div class="kpi-label">Approved</div><div class="kpi-value">{{ counts.approved }}</div><div class="kpi-sub">reel reviewed</div></a>
+  <a class="kpi" href="/talent?source=sourced"><div class="kpi-label">Sourced</div><div class="kpi-value">{{ counts.sourced }}</div><div class="kpi-sub">scouted / crawled</div></a>
   <a class="kpi accent-review" href="/talent?review=Pending"><div class="kpi-label">Pending review</div><div class="kpi-value">{{ counts.pending }}</div><div class="kpi-sub">awaiting your look</div></a>
 </div>
 
@@ -59,6 +60,10 @@
   <select name="invite" onchange="this.form.submit()">
     <option value="">Any funnel stage</option>
     {% for s in invite_states %}<option value="{{ s }}" {{ 'selected' if active.invite==s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="source" onchange="this.form.submit()">
+    <option value="">Any channel</option>
+    {% for s in source_channels %}<option value="{{ s }}" {{ 'selected' if active.source==s }}>{{ s|capitalize }}</option>{% endfor %}
   </select>
   <select name="sort" onchange="this.form.submit()">
     {% for key, label in [('name','Sort: Name'),('matchable','Sort: Matchable first'),('completeness','Sort: Most complete'),('discipline','Sort: Discipline')] %}
