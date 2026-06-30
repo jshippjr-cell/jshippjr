@@ -1,0 +1,33 @@
+<!-- Intro gate — shown on EVERY visit (no session skip), shared by /reel and
+     /showreel. "Welcome" crossfades into the Chordential mark; the visitor's choice
+     ("with sound" / "without sound") is the user-gesture that unlocks audio — the
+     same gesture browsers require anyway, so this turns the autoplay-policy fight
+     into a deliberate, on-brand moment instead of a workaround. Pure CSS animation
+     + ~25 lines of vanilla JS, no dependencies. -->
+<div class="ig-gate" data-ig-gate>
+  <div class="ig-center">
+    <span class="ig-word">Welcome</span>
+    <img class="ig-mark" src="/static/public/mark-icon.png" alt="" aria-hidden="true">
+  </div>
+  <div class="ig-choices">
+    <button type="button" class="ig-btn ig-btn-primary" data-ig-enter="sound">enter with sound &#9679;</button>
+    <button type="button" class="ig-btn ig-btn-ghost" data-ig-enter="muted">enter without sound</button>
+  </div>
+</div>
+<script>
+(function () {
+  var gate = document.querySelector('[data-ig-gate]');
+  if (!gate) return;
+  document.querySelectorAll('[data-ig-enter]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      // Real user gesture — the moment audio/video autoplay is allowed to start.
+      window.CHORDENTIAL_SOUND_ON = btn.getAttribute('data-ig-enter') === 'sound';
+      gate.classList.add('ig-closing');
+      window.setTimeout(function () { gate.remove(); }, 500);
+      document.dispatchEvent(new CustomEvent('chordential:entered', {
+        detail: { sound: window.CHORDENTIAL_SOUND_ON },
+      }));
+    });
+  });
+})();
+</script>

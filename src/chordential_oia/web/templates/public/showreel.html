@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Showreel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=5">
+<link rel="stylesheet" href="/static/public/site.css?v=6">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="sr-body">
+  {% include "public/_intro_gate.html" %}
   <main class="sr-stage" data-cursor-stage data-cursor="play">
     <!-- Background: the hero footage (muted autoplay; poster covers blocked autoplay) -->
     <div class="sr-bg"{% if hero.poster %} style="background-image:url('{{ hero.poster }}')"{% endif %}>
@@ -136,6 +137,13 @@
     });
 
     load(i);  // honors the ?t= deep link set above (defaults to 0)
+
+    // The intro gate's choice IS the user gesture: "with sound" starts playback
+    // immediately (the gesture that satisfies the browser's autoplay policy);
+    // "without sound" leaves it paused — the existing click-to-play still works.
+    document.addEventListener('chordential:entered', function (e) {
+      if (e.detail && e.detail.sound) { reveal(); play(); }
+    });
   })();
   </script>
 </body>

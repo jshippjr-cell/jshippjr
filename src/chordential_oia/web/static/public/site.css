@@ -498,3 +498,42 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
     box-shadow:none;border-radius:12px;aspect-ratio:16/10}
   .rg-toggle{display:none}
 }
+
+/* ===== Intro gate — "Welcome" crossfades into the Chordential mark, then the
+   sound choice (shared by /reel + /showreel, shown every visit). The chosen
+   button IS the user gesture that unlocks audio per browser autoplay policy. === */
+.ig-gate{position:fixed;inset:0;z-index:50;background:var(--dark);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:46px}
+.ig-gate.ig-closing{opacity:0;pointer-events:none;transition:opacity .5s ease}
+
+.ig-center{position:relative;width:100%;height:120px;display:flex;align-items:center;justify-content:center}
+.ig-word{position:absolute;color:var(--dark-text);font-family:var(--serif);font-weight:600;
+  font-size:38px;letter-spacing:.01em;opacity:0;
+  animation:ig-word-in .5s ease forwards, ig-word-out .7s ease forwards;
+  animation-delay:0s, 1.2s}
+.ig-mark{position:absolute;height:96px;width:auto;opacity:0;transform:scale(.4) rotate(-12deg);
+  animation:ig-mark-in .8s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:1.25s}
+
+@keyframes ig-word-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes ig-word-out{ to{opacity:0;transform:scale(.7)} }
+@keyframes ig-mark-in{ to{opacity:1;transform:scale(1) rotate(0)} }
+
+.ig-choices{display:flex;align-items:center;gap:18px;opacity:0;
+  animation:ig-choices-in .6s ease forwards;animation-delay:2.05s}
+@keyframes ig-choices-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.ig-btn{font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0}
+.ig-btn-primary{background:var(--orange);color:#fff;font-weight:700;padding:13px 24px}
+.ig-btn-primary:hover{background:var(--wine)}
+.ig-btn-ghost{background:transparent;color:var(--dark-muted);padding:13px 6px;
+  text-decoration:underline;text-underline-offset:3px}
+.ig-btn-ghost:hover{color:var(--dark-text)}
+
+@media (max-width:480px){
+  .ig-word{font-size:28px}
+  .ig-mark{height:72px}
+  .ig-choices{flex-direction:column;gap:12px}
+}
+@media (prefers-reduced-motion:reduce){
+  .ig-word,.ig-mark,.ig-choices{animation:none;opacity:1;transform:none}
+  .ig-mark{display:none}
+}
