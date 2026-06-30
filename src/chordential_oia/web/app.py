@@ -4544,12 +4544,87 @@ def invoice_set_status(invoice_id: int, status: str = Form(...)):
                 conn, inv["project_id"],
                 f"{inv['kind']} invoice {status.lower()}.", "invoice",
             )
+            # Client payment in → generate the crew payout ledger (Owed). Idempotent.
+            if status == "Paid":
+                n = db.ensure_project_payouts(conn, inv["project_id"])
+                if n:
+                    db.add_update(conn, inv["project_id"],
+                                  f"{n} crew payout(s) queued (Owed).", "invoice")
             return RedirectResponse(
                 f"/project/{inv['project_id']}/proposal", status_code=303
             )
     finally:
         conn.close()
     return RedirectResponse("/projects", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Payout ledger — pay the crew. Owed rows are generated when a client invoice is
+# Paid; Jon pays off-platform and marks each Paid (W-9 must be on file first).
+# --------------------------------------------------------------------------- #
+@app.get("/payouts", response_class=HTMLResponse)
+def payouts_ledger(request: Request, err: str = "", paid: str = ""):
+    conn = db.connect()
+    try:
+        owed = db.list_payouts(conn, status="Owed")
+        done = db.list_payouts(conn, status="Paid")
+        totals = db.payout_totals(conn)
+    finally:
+        conn.close()
+    return render(
+        request, "payouts.html", nav="payouts", owed=owed, done=done,
+        totals=totals, err=err, paid_id=paid,
+    )
+
+
+@app.post("/payouts/{payout_id}")
+def payout_update(
+    payout_id: int,
+    qty: str = Form(""),
+    amount: str = Form(""),
+    reference: str = Form(""),
+):
+    """Edit an Owed payout's hours/days, amount, and payment reference."""
+    conn = db.connect()
+    try:
+        db.update_payout(conn, payout_id, _parse_rate(qty), _parse_rate(amount),
+                         reference.strip())
+    finally:
+        conn.close()
+    return RedirectResponse("/payouts", status_code=303)
+
+
+@app.post("/payouts/{payout_id}/pay")
+def payout_pay(payout_id: int, reference: str = Form("")):
+    """Mark a payout Paid — GATED on a W-9 being on file for the creator.
+
+    The ledger never moves money; Jon pays off-platform and records it here. The
+    W-9 gate is the compliance discipline the council required before a first payout."""
+    conn = db.connect()
+    try:
+        po = db.get_payout(conn, payout_id)
+        if po is None:
+            return RedirectResponse("/payouts", status_code=303)
+        w9 = po["w9_received_at"] if "w9_received_at" in po.keys() else None
+        if not w9:
+            # Block: surface which creator needs a W-9 first.
+            return RedirectResponse(
+                f"/payouts?err=w9&paid={payout_id}", status_code=303)
+        db.set_payout_paid(conn, payout_id, True, reference.strip())
+    finally:
+        conn.close()
+    return RedirectResponse("/payouts", status_code=303)
+
+
+@app.post("/payouts/{payout_id}/unpay")
+def payout_unpay(payout_id: int):
+    """Revert a payout to Owed (correct a mistaken mark-paid)."""
+    conn = db.connect()
+    try:
+        db.set_payout_paid(conn, payout_id, False)
+    finally:
+        conn.close()
+    return RedirectResponse("/payouts", status_code=303)
 
 
 @app.post("/webhooks/stripe")
@@ -4583,6 +4658,11 @@ async def stripe_webhook(request: Request):
                 if inv["project_id"]:
                     db.add_update(conn, inv["project_id"],
                                   f"{inv['kind']} invoice paid (Stripe).", "invoice")
+                    # Client payment in → generate the crew payout ledger (Owed).
+                    n = db.ensure_project_payouts(conn, inv["project_id"])
+                    if n:
+                        db.add_update(conn, inv["project_id"],
+                                      f"{n} crew payout(s) queued (Owed).", "invoice")
         finally:
             conn.close()
     return Response(status_code=200)

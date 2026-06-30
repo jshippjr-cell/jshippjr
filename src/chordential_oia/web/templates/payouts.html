@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Payouts{% endblock %}
+{% block heading %}Payout Ledger{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <h1 class="detail-title">Payout Ledger</h1>
+    <div class="muted">Pay the crew. Owed rows appear when a client invoice is marked Paid —
+      pay each off-platform (Zelle / ACH / Wise), then mark it Paid here with a reference.
+      <strong>A W-9 must be on file</strong> before a creator's first payout.</div>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <a class="kpi accent-review" href="/payouts"><div class="kpi-label">Owed</div><div class="kpi-value">{{ totals.owed_amount|money }}</div><div class="kpi-sub">{{ totals.owed_count }} payout(s)</div></a>
+  <a class="kpi accent-won" href="/payouts"><div class="kpi-label">Paid</div><div class="kpi-value">{{ totals.paid_amount|money }}</div><div class="kpi-sub">{{ totals.paid_count }} settled</div></a>
+</div>
+
+{% if err == 'w9' %}
+<section class="card urgent">
+  <div class="card-head"><h2>⚠ W-9 needed first</h2></div>
+  <p>That creator has no W-9 on file. Collect it, mark <em>“W-9 received”</em> on their
+    <a class="link" href="/talent">talent profile</a>, then mark the payout Paid.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>Owed <span class="muted">— awaiting payment</span></h2></div>
+  {% if owed %}
+  <table class="kv" style="width:100%">
+    <tr style="text-align:left;color:var(--muted)">
+      <th>Creator</th><th>Project / role</th><th>Rate</th><th>Qty</th><th>Amount</th><th>W-9</th><th></th>
+    </tr>
+    {% for p in owed %}
+    <tr>
+      <td><strong>{{ p.talent_name or '—' }}</strong></td>
+      <td>{{ p.project_need or '—' }}<div class="muted small">{{ p.role }}</div></td>
+      <td>{% if p.rate is not none %}{{ p.rate|money }}{% if p.rate_unit=='day' %}/day{% elif p.rate_unit=='project' %} flat{% else %}/hr{% endif %}{% else %}—{% endif %}</td>
+      <td colspan="2">
+        <form method="post" action="/payouts/{{ p.id }}" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="number" name="qty" step="0.25" min="0" value="{{ p.qty if p.qty is not none else '' }}" style="width:62px" title="Hours / days">
+          <span class="muted">×</span>
+          <input type="number" name="amount" step="0.01" min="0" value="{{ p.amount if p.amount is not none else '' }}" style="width:92px" title="Amount owed">
+          <input type="text" name="reference" placeholder="ref (optional)" value="{{ p.reference or '' }}" style="width:120px">
+          <button class="btn tiny" type="submit">Save</button>
+        </form>
+      </td>
+      <td>{% if p.w9_received_at %}<span class="pill sv-door" title="On file {{ p.w9_received_at }}">✓</span>{% else %}<span class="pill rev-pending" title="No W-9 on file">needs W-9</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/payouts/{{ p.id }}/pay">
+          <input type="hidden" name="reference" value="{{ p.reference or '' }}">
+          <button class="btn tiny win" type="submit" {{ 'disabled' if not p.w9_received_at }}>Mark Paid</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Nothing owed. Payouts appear here once a client invoice is marked Paid.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Paid <span class="muted">— settled</span></h2></div>
+  {% if done %}
+  <table class="kv" style="width:100%">
+    <tr style="text-align:left;color:var(--muted)">
+      <th>Creator</th><th>Project / role</th><th>Amount</th><th>Paid</th><th>Reference</th><th></th>
+    </tr>
+    {% for p in done %}
+    <tr>
+      <td><strong>{{ p.talent_name or '—' }}</strong></td>
+      <td>{{ p.project_need or '—' }}<div class="muted small">{{ p.role }}</div></td>
+      <td>{{ p.amount|money if p.amount is not none else '—' }}</td>
+      <td class="muted small">{{ (p.paid_at or '')[:10] }}</td>
+      <td class="muted small">{{ p.reference or '—' }}</td>
+      <td>
+        <form method="post" action="/payouts/{{ p.id }}/unpay">
+          <button class="btn tiny" type="submit" title="Revert to Owed">Undo</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No payouts settled yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

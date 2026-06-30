@@ -277,6 +277,28 @@ CREATE TABLE IF NOT EXISTS invoices (
     paid_at TEXT
 );
 
+-- Talent payouts — the collaborator-pay ledger. Generated (Owed) when a client
+-- invoice is marked Paid; Jon pays each off-platform (Zelle/ACH/Wise) and marks it
+-- Paid with a reference. A W-9 must be on file (talent.w9_received_at) before a
+-- payout can be marked Paid. UNIQUE makes generation idempotent (one row per
+-- assignment-role). Off-platform by design — no in-app payout rails (Stripe Connect
+-- deferred); this ledger is the discipline that every collaborator is tracked + paid.
+CREATE TABLE IF NOT EXISTS talent_payouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    talent_id INTEGER,
+    role TEXT,
+    rate REAL,                              -- snapshot of the talent rate at creation
+    rate_unit TEXT,                         -- hourly | day | project
+    qty REAL,                              -- hours/days worked (1 for project-flat)
+    amount REAL,                            -- amount owed (rate × qty), editable
+    status TEXT DEFAULT 'Owed',             -- Owed | Paid
+    reference TEXT,                         -- off-platform payment reference
+    paid_at TEXT,
+    created_at TEXT,
+    UNIQUE(project_id, talent_id, role)
+);
+
 -- "My chips" — reusable support descriptors Jon types once and keeps. Global
 -- (not per-deal): a phrase written for one client is available on every doc.
 CREATE TABLE IF NOT EXISTS custom_chips (
@@ -3073,6 +3095,121 @@ def update_invoice_status(
         (status, paid_at, external_ref, invoice_id),
     )
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Talent payouts — the collaborator-pay ledger (Owed → Paid, off-platform)
+# --------------------------------------------------------------------------- #
+PAYOUT_STATES = ("Owed", "Paid")
+
+
+def ensure_project_payouts(conn: sqlite3.Connection, project_id: int) -> int:
+    """Generate Owed payout rows for a project's crew — idempotent.
+
+    Called when a client invoice is marked Paid: every assignment gets one payout
+    (one row per talent-role, enforced by the UNIQUE constraint, so re-running or a
+    second invoice never double-creates). Amount is seeded from the talent's rate
+    (qty defaults to 1 — Jon adjusts hours/days), or 0 when no rate is on file.
+    Returns how many new payouts were created."""
+    created = 0
+    for a in list_assignments(conn, project_id):
+        if a["talent_id"] is None:
+            continue
+        rate = a["talent_rate"] if "talent_rate" in a.keys() else None
+        unit = (a["talent_rate_unit"] if "talent_rate_unit" in a.keys() else None) or "hourly"
+        amount = float(rate) if rate is not None else 0.0
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO talent_payouts
+               (project_id, talent_id, role, rate, rate_unit, qty, amount, status, created_at)
+               VALUES (?,?,?,?,?,?,?,'Owed',?)""",
+            (project_id, a["talent_id"], a["role"],
+             float(rate) if rate is not None else None, unit, 1.0, amount,
+             datetime.now(timezone.utc).isoformat()),
+        )
+        created += cur.rowcount or 0
+    conn.commit()
+    return created
+
+
+def list_payouts(conn: sqlite3.Connection, status: Optional[str] = None) -> List[sqlite3.Row]:
+    """Every payout joined to its creator (name, W-9 status) and project (need),
+    newest first. Optionally filter by status (Owed | Paid)."""
+    where, params = "", []
+    if status in PAYOUT_STATES:
+        where = " WHERE po.status = ?"
+        params.append(status)
+    return conn.execute(
+        f"""SELECT po.*, t.name AS talent_name, t.email AS talent_email,
+                   t.w9_received_at AS w9_received_at, t.portal_token AS portal_token,
+                   p.need AS project_need, p.client AS project_client
+            FROM talent_payouts po
+            LEFT JOIN talent t ON po.talent_id = t.id
+            LEFT JOIN projects p ON po.project_id = p.id
+            {where}
+            ORDER BY (po.status='Paid') ASC, po.created_at DESC""",
+        params,
+    ).fetchall()
+
+
+def get_payout(conn: sqlite3.Connection, payout_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        """SELECT po.*, t.name AS talent_name, t.w9_received_at AS w9_received_at
+           FROM talent_payouts po LEFT JOIN talent t ON po.talent_id = t.id
+           WHERE po.id = ?""",
+        (payout_id,),
+    ).fetchone()
+
+
+def update_payout(
+    conn: sqlite3.Connection, payout_id: int,
+    qty: Optional[float], amount: Optional[float], reference: Optional[str],
+) -> None:
+    """Edit an Owed payout's quantity / amount / reference before it's paid."""
+    conn.execute(
+        "UPDATE talent_payouts SET qty=?, amount=?, reference=? WHERE id=?",
+        (qty, amount, (reference or None), payout_id),
+    )
+    conn.commit()
+
+
+def set_payout_paid(
+    conn: sqlite3.Connection, payout_id: int, paid: bool,
+    reference: Optional[str] = None,
+) -> None:
+    """Mark a payout Paid (stamp paid_at, keep the reference) or revert it to Owed.
+
+    The W-9 gate is enforced in the route, not here — this is the storage write."""
+    if paid:
+        conn.execute(
+            """UPDATE talent_payouts
+               SET status='Paid', paid_at=?, reference=COALESCE(?, reference)
+               WHERE id=?""",
+            (datetime.now(timezone.utc).isoformat(), (reference or None), payout_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE talent_payouts SET status='Owed', paid_at=NULL WHERE id=?",
+            (payout_id,),
+        )
+    conn.commit()
+
+
+def payout_totals(conn: sqlite3.Connection) -> dict:
+    """Ledger KPIs: amount + count, split Owed vs Paid."""
+    row = conn.execute(
+        """SELECT
+             COALESCE(SUM(CASE WHEN status='Owed' THEN amount END),0) AS owed_amount,
+             COALESCE(SUM(CASE WHEN status='Paid' THEN amount END),0) AS paid_amount,
+             SUM(CASE WHEN status='Owed' THEN 1 ELSE 0 END) AS owed_count,
+             SUM(CASE WHEN status='Paid' THEN 1 ELSE 0 END) AS paid_count
+           FROM talent_payouts"""
+    ).fetchone()
+    return {
+        "owed_amount": row["owed_amount"] or 0,
+        "paid_amount": row["paid_amount"] or 0,
+        "owed_count": row["owed_count"] or 0,
+        "paid_count": row["paid_count"] or 0,
+    }
 
 
 # --------------------------------------------------------------------------- #
