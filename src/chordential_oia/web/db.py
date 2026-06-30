@@ -3012,6 +3012,24 @@ def get_proposal(conn: sqlite3.Connection, proposal_id: int) -> Optional[sqlite3
     ).fetchone()
 
 
+def update_proposal_price(
+    conn: sqlite3.Connection, proposal_id: int, total_price: float, deposit_pct: float,
+) -> None:
+    """Override a proposal's price — for a hand-sold, custom-quoted deal where the
+    number agreed with the client doesn't come from the estimator. Recomputes
+    deposit_amount/balance_due from the new total; line items/terms are untouched
+    (they document the scope/rationale, the footer carries the agreed price)."""
+    deposit_amount = round(total_price * deposit_pct, 2)
+    balance_due = round(total_price - deposit_amount, 2)
+    conn.execute(
+        """UPDATE proposals
+           SET total_price=?, deposit_pct=?, deposit_amount=?, balance_due=?
+           WHERE id=?""",
+        (total_price, deposit_pct, deposit_amount, balance_due, proposal_id),
+    )
+    conn.commit()
+
+
 def proposal_for_project(
     conn: sqlite3.Connection, project_id: int
 ) -> Optional[sqlite3.Row]:

@@ -4606,6 +4606,34 @@ def project_proposal_text(project_id: int):
     return PlainTextResponse(obj.render_text())
 
 
+@app.post("/proposal/{proposal_id}/price")
+def proposal_set_price(
+    proposal_id: int, total_price: str = Form(...), deposit_pct: str = Form("50"),
+):
+    """Override a proposal's price with a custom, hand-agreed number — for deals
+    quoted per-contract rather than off the estimator (e.g. a flat productized
+    offer). Deposit/balance recompute from the new total; the existing invoice +
+    Stripe-checkout + payment-gate + revenue-dashboard pipeline is unchanged."""
+    conn = db.connect()
+    try:
+        p = db.get_proposal(conn, proposal_id)
+        if p is None:
+            return RedirectResponse("/projects", status_code=303)
+        total = _parse_rate(total_price)
+        if total is not None:
+            pct = _parse_rate(deposit_pct) or 50.0
+            pct = max(0.0, min(100.0, pct)) / 100.0
+            db.update_proposal_price(conn, proposal_id, total, pct)
+            if p["project_id"]:
+                db.add_update(conn, p["project_id"],
+                              f"Proposal price set to {total:,.0f} (custom).", "proposal")
+    finally:
+        conn.close()
+    if p is not None and p["project_id"]:
+        return RedirectResponse(f"/project/{p['project_id']}/proposal", status_code=303)
+    return RedirectResponse("/projects", status_code=303)
+
+
 @app.post("/proposal/{proposal_id}/status")
 def proposal_set_status(proposal_id: int, status: str = Form(...)):
     conn = db.connect()

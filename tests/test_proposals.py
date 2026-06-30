@@ -121,3 +121,62 @@ def test_proposal_status_and_export(ctx):
     assert txt.status_code == 200
     assert "PROPOSAL" in txt.text
     assert "Acme Agency" in txt.text
+
+
+def test_custom_price_override_recomputes_deposit_and_balance(ctx):
+    """Hand-sold deals are priced per contract, not by the estimator — Jon can
+    override the total and everything downstream (deposit, balance, invoices)
+    follows the custom number."""
+    client, db_mod = ctx
+    pid = _project_from_new_opp(client, db_mod)
+    client.post(f"/project/{pid}/proposal")
+    conn = db_mod.connect()
+    try:
+        prop = db_mod.proposal_for_project(conn, pid)
+    finally:
+        conn.close()
+    estimator_total = prop["total_price"]
+
+    r = client.post(f"/proposal/{prop['id']}/price",
+                    data={"total_price": "2950", "deposit_pct": "50"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/project/{pid}/proposal"
+
+    conn = db_mod.connect()
+    try:
+        prop2 = db_mod.proposal_for_project(conn, pid)
+    finally:
+        conn.close()
+    assert prop2["total_price"] == 2950.0
+    assert prop2["total_price"] != estimator_total
+    assert prop2["deposit_amount"] == 1475.0
+    assert prop2["balance_due"] == 1475.0
+
+
+def test_custom_price_flows_into_invoice_amount(ctx):
+    client, db_mod = ctx
+    pid = _project_from_new_opp(client, db_mod)
+    client.post(f"/project/{pid}/proposal")
+    conn = db_mod.connect()
+    try:
+        prop = db_mod.proposal_for_project(conn, pid)
+    finally:
+        conn.close()
+    client.post(f"/proposal/{prop['id']}/price",
+               data={"total_price": "2950", "deposit_pct": "50"})
+    client.post(f"/project/{pid}/invoice", data={"kind": "Deposit"})
+    conn = db_mod.connect()
+    try:
+        inv = db_mod.list_invoices(conn, pid)[0]
+    finally:
+        conn.close()
+    assert inv["amount"] == 1475.0   # the custom deposit, not the estimator's
+
+
+def test_custom_price_form_renders_on_proposal_page(ctx):
+    client, db_mod = ctx
+    pid = _project_from_new_opp(client, db_mod)
+    client.post(f"/project/{pid}/proposal")
+    page = client.get(f"/project/{pid}/proposal").text
+    assert "Set custom price" in page

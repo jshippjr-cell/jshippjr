@@ -41,6 +41,27 @@
     </tfoot>
   </table>
 
+  <details class="edit-block" style="margin-top:10px">
+    <summary class="btn tiny">✎ Set custom price</summary>
+    <p class="muted small" style="margin:8px 0">Override the total with the number you
+      actually agreed with the client — line items above stay as scope rationale; this
+      figure (and the deposit/balance it derives) is what gets invoiced.</p>
+    <form method="post" action="/proposal/{{ proposal['id'] }}/price"
+          style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="muted small" style="display:block">Total price ($)</label>
+        <input type="number" name="total_price" step="0.01" min="0" required
+               value="{{ proposal['total_price'] }}" style="width:140px">
+      </div>
+      <div>
+        <label class="muted small" style="display:block">Deposit (%)</label>
+        <input type="number" name="deposit_pct" step="1" min="0" max="100"
+               value="{{ (proposal['deposit_pct']*100)|round|int }}" style="width:80px">
+      </div>
+      <button class="btn tiny primary" type="submit">Set price</button>
+    </form>
+  </details>
+
   <div class="kv" style="margin-top:14px">
     <div class="strong">Terms</div>
     <ul class="brief-list">{% for t in terms %}<li>{{ t }}</li>{% endfor %}</ul>
