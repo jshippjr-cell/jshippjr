@@ -3097,6 +3097,27 @@ def update_invoice_status(
     conn.commit()
 
 
+def invoice_balance(conn: sqlite3.Connection, project_id: int) -> dict:
+    """Payment status for a project's invoices — drives the deliverable download gate.
+
+    ``billed``       = everything sent to the client (Issued + Paid)
+    ``paid``         = settled
+    ``outstanding``  = Issued but not yet Paid (Draft invoices aren't owed yet)
+    ``paid_in_full`` = something was billed AND nothing is outstanding
+    """
+    rows = list_invoices(conn, project_id)
+    paid = sum((r["amount"] or 0) for r in rows if r["status"] == "Paid")
+    outstanding = sum((r["amount"] or 0) for r in rows if r["status"] == "Issued")
+    billed = paid + outstanding
+    return {
+        "billed": billed,
+        "paid": paid,
+        "outstanding": outstanding,
+        "paid_in_full": billed > 0 and outstanding == 0,
+        "has_invoices": bool(rows),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Talent payouts — the collaborator-pay ledger (Owed → Paid, off-platform)
 # --------------------------------------------------------------------------- #

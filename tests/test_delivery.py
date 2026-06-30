@@ -970,7 +970,7 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
             "indemnification available on request.", "")
 
 
-def test_portal_shows_package_ready_and_download_everything(client):
+def test_portal_package_ready_but_download_is_payment_gated(client):
     pid = _win_and_make_project(client, 1)
     _assign_a_creator(client, pid)
     _seed_asset(client, pid)
@@ -978,17 +978,20 @@ def test_portal_shows_package_ready_and_download_everything(client):
     rtoken = _add_reviewer(client, pid)
     client.post(f"/project/{pid}/review/approve",
                 data={"r": rtoken, "deliver_partial": "1"})
+    # Unpaid: the package shows, the checklist renders — but download is LOCKED.
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Your delivery package is ready" in page
-    assert "Download " in page
-    # The big button links to the assembled ZIP.
-    assert "_Delivery.zip" in page
-    # The checklist items are ticked.
+    assert "Payment required to download" in page
     assert "Broadcast Mix" in page
     assert "Rights Certificate" in page
+    # Operator unlocks (override) → the gated download link appears.
+    client.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"})
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert "_Delivery.zip" in page
+    assert f"/project/{pid}/dl/" in page
 
 
-def test_delivery_zip_is_served_by_uploads_route(client):
+def test_delivery_zip_blocked_on_uploads_served_via_gated_route(client):
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
     rtoken = _add_reviewer(client, pid)
@@ -997,13 +1000,15 @@ def test_delivery_zip_is_served_by_uploads_route(client):
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
-        url = db_mod.get_delivery(conn, pid)["delivery_zip"]["url"]
+        fn = db_mod.get_delivery(conn, pid)["delivery_zip"]["filename"]
     finally:
         conn.close()
-    r = client.get(url)
+    # The ZIP is no longer served by /uploads (backdoor closed).
+    assert client.get(f"/uploads/{fn}", follow_redirects=False).status_code in (404, 303)
+    # The operator (admin) downloads it via the gated route.
+    r = client.get(f"/project/{pid}/dl/{fn}")
     assert r.status_code == 200
-    # It's a real ZIP (PK magic bytes).
-    assert r.content[:2] == b"PK"
+    assert r.content[:2] == b"PK"  # real ZIP magic bytes
 
 
 def test_admin_rebuild_route_reassembles_package(client):

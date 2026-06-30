@@ -206,6 +206,9 @@ _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
 # The review-portal client actions (comment / approve / request-changes) are posted
 # by the agency from the same token-gated link — token-validated in the route.
 _REVIEW_ACTION_RE = re.compile(r"^/project/\d+/review/(comment|approve|changes)/?$")
+# Payment-gated deliverable download — opened from the token-gated portal; the route
+# itself validates the share/reviewer token AND the paid-in-full gate.
+_DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
 # The composer portal — a qualified creator's token-gated home (view assignments,
 # submit work versions). The per-creator portal token IS the access control, so it
 # bypasses the admin login gate (same exemption as the client delivery portal).
@@ -216,6 +219,7 @@ def _is_delivery_portal_path(path: str) -> bool:
     return bool(
         _DELIVERY_PORTAL_RE.match(path)
         or _REVIEW_ACTION_RE.match(path)
+        or _DELIVERY_DL_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
     )
 
@@ -2489,21 +2493,93 @@ def chips_custom(
 # zero-downtime (blue-green) cutover — a redeploy/instance swap loses them.
 # Durable storage needs object storage (S3/R2). Acceptable for now; note it.
 # --------------------------------------------------------------------------- #
+def _safe_upload_path(name: str) -> Optional[str]:
+    """Resolve a bare filename to a real path inside UPLOAD_DIR, or None. Guards
+    against path traversal (only a bare basename that exists is accepted)."""
+    base = os.path.basename(name or "")
+    if not base or base != name:
+        return None
+    path = os.path.join(UPLOAD_DIR, base)
+    if os.path.realpath(path) != os.path.join(os.path.realpath(UPLOAD_DIR), base):
+        return None
+    return path if os.path.isfile(path) else None
+
+
 @app.get("/uploads/{name}")
 def serve_upload(name: str):
-    """Serve a stored upload by basename. Guards against path traversal — only a
-    bare filename that actually exists inside UPLOAD_DIR is served."""
+    """Serve a stored upload by basename (streaming previews, static media).
+
+    The delivery ZIP is NEVER served here — it's a payment-gated deliverable that
+    only ever goes through /project/<id>/dl/<name>. Blocking .zip closes the
+    deterministic-filename backdoor on the bundle while leaving audio streaming open
+    (so a client can still review/preview before paying)."""
     from fastapi.responses import FileResponse
-    base = os.path.basename(name)
-    if not base or base != name:
+    if (name or "").lower().endswith(".zip"):
         return PlainTextResponse("not found", status_code=404)
-    path = os.path.join(UPLOAD_DIR, base)
-    # Resolve and confirm the file stays inside UPLOAD_DIR (defense in depth).
-    if os.path.realpath(path) != os.path.join(os.path.realpath(UPLOAD_DIR), base):
-        return PlainTextResponse("not found", status_code=404)
-    if not os.path.isfile(path):
+    path = _safe_upload_path(name)
+    if path is None:
         return PlainTextResponse("not found", status_code=404)
     return FileResponse(path)
+
+
+@app.get("/project/{project_id}/dl/{name}")
+def delivery_download(request: Request, project_id: int, name: str, k: str = "", r: str = ""):
+    """Payment-gated deliverable download (ZIP + per-asset masters/docs).
+
+    Two access modes, distinguished by whether a share/reviewer TOKEN is presented:
+
+    * **Client** (a valid ``?k=``/``?r=`` token) — the payment gate applies: the file
+      is served only when deliverables are UNLOCKED (paid in full, or Jon manually
+      unlocked this delivery), else **402 Payment Required**. We key on token presence
+      (not admin status) deliberately: when the admin gate is disabled, ``_admin_authed``
+      is True for everyone, so an admin-status check would silently bypass the paywall.
+    * **Operator** (no token) — must be the admin; Jon downloads freely to inspect the
+      package. 404 if not authorized.
+
+    Streaming previews are unaffected (they stay on /uploads); this gate is only on the
+    downloadable deliverables."""
+    from fastapi.responses import FileResponse
+    conn = db.connect()
+    try:
+        row = db.get_project(conn, project_id)
+        if row is None:
+            return PlainTextResponse("not found", status_code=404)
+        token = db.ensure_project_share_token(conn, project_id)
+        delivery = db.get_delivery(conn, project_id)
+        verified = reviewer_from_token(delivery, r)
+        k_ok = bool(token and k and hmac.compare_digest(str(k), str(token)))
+        has_client_token = k_ok or verified is not None
+        if has_client_token:
+            unlocked = (bool(delivery.get("download_unlocked"))
+                        or db.invoice_balance(conn, project_id)["paid_in_full"])
+            if not unlocked:
+                return PlainTextResponse(
+                    "Payment required: your deliverables unlock once your invoice is "
+                    "paid in full. You can still stream and review the work.",
+                    status_code=402)
+        elif not _admin_authed(request):
+            # No client token and not the operator → no access.
+            return PlainTextResponse("not found", status_code=404)
+    finally:
+        conn.close()
+    path = _safe_upload_path(name)
+    if path is None:
+        return PlainTextResponse("not found", status_code=404)
+    return FileResponse(path, filename=os.path.basename(path))
+
+
+@app.post("/project/{project_id}/delivery/unlock")
+def delivery_unlock(project_id: int, unlock: str = Form("1")):
+    """Operator override (admin-only via the gate): manually unlock/relock the
+    client's deliverable downloads independent of payment. Machine proposes (pay in
+    full → unlock); Jon disposes (release anyway, or hold)."""
+    conn = db.connect()
+    try:
+        db.update_delivery(conn, project_id, "download_unlocked",
+                           True if unlock == "1" else None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
 @app.post("/opportunity/{opp_id}/doc/upload")
@@ -3325,11 +3401,31 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         else:
             sel_open += 1
 
+    # Payment gate on DOWNLOADS (not on streaming/preview — the client must be able
+    # to review before paying). Deliverables unlock when the client is paid in full
+    # OR Jon has manually unlocked this delivery. Streaming src stays on /uploads;
+    # only the ZIP + per-asset DOWNLOAD links route through the gated _can-download_ path.
+    balance = db.invoice_balance(conn, project_id)
+    download_unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
+    # Build gated download URLs (carry the share token so the route can authorize).
+    def _dl(name: str) -> str:
+        base = os.path.basename(name or "")
+        return f"/project/{project_id}/dl/{base}?k={token}" if base else ""
+    zip_obj = delivery.get("delivery_zip")
+    if zip_obj:
+        zip_obj = dict(zip_obj)
+        zip_obj["dl_url"] = _dl(zip_obj.get("filename") or "")
+    for a in assets_with_approval:
+        fn = a.get("filename") or os.path.basename(a.get("url") or "")
+        a["dl_url"] = _dl(fn)
+
     return {
         "row": row,
         "project": row,
         "assignments": assignments,
         "delivery": delivery,
+        "download_unlocked": download_unlocked,
+        "invoice_balance": balance,
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
         "cert": cert,
@@ -3375,7 +3471,7 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "share_token": token,
         "comments": comments,
         # Delivery automation (Phase 3): the assembled ZIP + the payoff checklist.
-        "delivery_zip": delivery.get("delivery_zip"),
+        "delivery_zip": zip_obj,
         "delivery_checklist": delivery.get("delivery_checklist") or [],
         # Creative brief + campaign timeline (Phase 4) — the dashboard's spine.
         "brief": brief,

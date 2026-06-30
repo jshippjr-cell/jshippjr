@@ -180,8 +180,32 @@
   <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
   {% endif %}
   {% if delivery_zip %}
-  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="{{ delivery_zip.url }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
+  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="/project/{{ project['id'] }}/dl/{{ delivery_zip.filename }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
   {% endif %}
+
+  <!-- Payment gate on the CLIENT's deliverable downloads -->
+  <div class="paygate" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e6dfd2)">
+    <div class="small">
+      <b>Client downloads:</b>
+      {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">🔒 locked</span>{% endif %}
+      {% if invoice_balance %}
+        · billed ${{ '%.0f'|format(invoice_balance.billed) }}, paid ${{ '%.0f'|format(invoice_balance.paid) }}{% if invoice_balance.outstanding %}, <b>outstanding ${{ '%.0f'|format(invoice_balance.outstanding) }}</b>{% endif %}
+      {% endif %}
+    </div>
+    <p class="small muted" style="margin:6px 0 8px">The client can always stream/review; the ZIP + file downloads unlock when paid in full. You can override:</p>
+    {% if delivery.get('download_unlocked') %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
+      <input type="hidden" name="unlock" value="0">
+      <button class="btn" type="submit">🔒 Re-lock to payment</button>
+    </form>
+    <span class="small muted">Manually unlocked — downloads open regardless of payment.</span>
+    {% else %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
+      <input type="hidden" name="unlock" value="1">
+      <button class="btn" type="submit">🔓 Unlock downloads anyway</button>
+    </form>
+    {% endif %}
+  </div>
 </section>
 
 <!-- REVIEWERS (verified-identity approval) -->
