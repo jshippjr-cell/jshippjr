@@ -18,16 +18,30 @@
 (function () {
   var gate = document.querySelector('[data-ig-gate]');
   if (!gate) return;
+  var dismissed = false;
+  function dismiss(sound) {
+    if (dismissed) return;             // a stray double-click/double-fire is a no-op
+    dismissed = true;
+    // Real user gesture — the moment audio/video autoplay is allowed to start.
+    window.CHORDENTIAL_SOUND_ON = sound;
+    gate.classList.add('ig-closing');
+    window.setTimeout(function () { gate.remove(); }, 500);
+    document.dispatchEvent(new CustomEvent('chordential:entered', { detail: { sound: sound } }));
+  }
+  // The explicit choice buttons set sound on/off precisely...
   document.querySelectorAll('[data-ig-enter]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      // Real user gesture — the moment audio/video autoplay is allowed to start.
-      window.CHORDENTIAL_SOUND_ON = btn.getAttribute('data-ig-enter') === 'sound';
-      gate.classList.add('ig-closing');
-      window.setTimeout(function () { gate.remove(); }, 500);
-      document.dispatchEvent(new CustomEvent('chordential:entered', {
-        detail: { sound: window.CHORDENTIAL_SOUND_ON },
-      }));
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismiss(btn.getAttribute('data-ig-enter') === 'sound');
     });
+  });
+  // ...but clicking ANYWHERE ELSE on the gate also dismisses it (defaulting to
+  // muted) — splash screens are commonly tapped off-target, and a gate that only
+  // responds to two small buttons can read as "broken" if you miss them.
+  gate.addEventListener('click', function () { dismiss(false); });
+  // Keyboard escape hatch.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') dismiss(false);
   });
 })();
 </script>

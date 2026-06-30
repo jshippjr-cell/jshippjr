@@ -46,3 +46,20 @@ def test_intro_gate_dispatches_entered_event(client):
     assert "chordential:entered" in t
     # The sound choice is what triggers showreel playback (the user gesture).
     assert "e.detail.sound" in t
+
+
+def test_intro_gate_dismisses_on_backdrop_click_and_escape(client):
+    # Hardening after a real-world report: a gate that only responds to its two
+    # small buttons can read as "broken" if the visitor taps elsewhere. The whole
+    # gate element now carries its own click listener (defaulting to muted), plus
+    # an Escape-key fallback.
+    t = client.get("/reel").text
+    assert "gate.addEventListener('click'" in t
+    assert "e.key === 'Escape'" in t
+
+
+def test_intro_gate_has_css_only_failsafe(client):
+    # Even total JS failure can't permanently block the page underneath.
+    css = client.get("/static/public/site.css?v=7").text
+    assert "ig-failsafe-fade" in css
+    assert "9s" in css

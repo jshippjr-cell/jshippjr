@@ -537,3 +537,9 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   .ig-word,.ig-mark,.ig-choices{animation:none;opacity:1;transform:none}
   .ig-mark{display:none}
 }
+
+/* CSS-only failsafe: if JS never runs (a script error elsewhere on the page, an
+   ad/privacy blocker, anything), the gate still can't permanently block access to
+   the page underneath — it auto-fades after 9s with no script required. */
+.ig-gate{animation:ig-failsafe-fade 0s linear 9s forwards}
+@keyframes ig-failsafe-fade{ to{opacity:0;pointer-events:none;visibility:hidden} }
