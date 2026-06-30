@@ -261,6 +261,12 @@ def public_thanks(
 # Creator applications — supply-side intake. Applicants enter the SAME review
 # funnel as sourced/manual talent: Pending until Jon reviews the reel.
 # --------------------------------------------------------------------------- #
+@router.get("/for-artists", response_class=HTMLResponse)
+def public_for_artists(request: Request):
+    """The supply-side analog of the first-touch page: why a creator would join."""
+    return render(request, "public/for_artists.html", active="for-artists")
+
+
 @router.get("/apply", response_class=HTMLResponse)
 def public_apply(request: Request):
     return render(

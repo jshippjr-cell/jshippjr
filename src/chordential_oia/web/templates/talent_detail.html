@@ -76,6 +76,20 @@
         {% endfor %}
       </div>
     </form>
+
+    {% if invite %}
+    <details class="edit-block" style="margin-top:14px">
+      <summary class="btn">✉ Recruiting invite <span class="muted">— personalized draft to copy</span></summary>
+      <p class="muted small">The machine drafts; you send. Copy, tweak, and email it — then move them to <strong>Invited</strong>.</p>
+      <label class="muted small">Subject</label>
+      <input type="text" readonly value="{{ invite.subject }}" onclick="this.select()"
+             style="width:100%;font-size:13px;padding:8px;border:1px solid var(--line,#ddd);border-radius:6px">
+      <label class="muted small" style="margin-top:8px;display:block">Message</label>
+      <textarea readonly rows="14" onclick="this.select()"
+                style="width:100%;font-size:13px;line-height:1.5;padding:10px;border:1px solid var(--line,#ddd);border-radius:6px">{{ invite.body }}</textarea>
+      <p class="muted small">Pitch: respect, fair terms, and first-look — never volume or a salary. (Honesty rule.)</p>
+    </details>
+    {% endif %}
   </section>
 
   <section class="card">

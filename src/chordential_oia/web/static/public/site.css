@@ -224,6 +224,14 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .page-lede{font-size:18px;color:var(--dark-muted);max-width:640px;margin:0}
 .band{padding:64px 0}
 .band-alt{background:linear-gradient(180deg,#F7F0E6,#FCF7F8)}
+.band-tint{background:linear-gradient(180deg,#F7F0E6,#FCF7F8)}
+.band-inner.narrow{max-width:760px;text-align:center}
+.band-inner.narrow .hero-actions{justify-content:center;margin-top:22px}
+.section-title{font-family:var(--serif);font-size:26px;margin:0 0 14px}
+.value-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+.value-card{background:#fff;border:1px solid var(--line,#E6DFD2);border-radius:14px;padding:22px 24px}
+.value-card h3{font-family:var(--serif);font-size:19px;margin:0 0 8px;color:var(--wine,#44161E)}
+.value-card p{margin:0;color:var(--ink-muted,#55504a);font-size:15px;line-height:1.6}
 .band-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:28px}
 .band-head h2{font-family:var(--serif);font-size:26px;margin:0}
 .band-more{color:var(--accent);font-weight:650;font-size:14px}

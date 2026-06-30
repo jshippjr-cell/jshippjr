@@ -31,6 +31,7 @@ from fastapi.templating import Jinja2Templates
 from ..estimation import ROLE_RATES, RoleLine
 from ..invoicing import build_invoice
 from .. import mailer
+from .. import recruiting
 from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..payments import get_payment_provider
 from ..proposals import Proposal, build_proposal
@@ -2736,11 +2737,17 @@ def talent_detail(request: Request, talent_id: int):
     finally:
         conn.close()
     portal_url = f"{_public_base()}/creator/{portal_token}" if portal_token else None
+    # Recruiting composer: a personalized, deterministic invite draft Jon can copy,
+    # edit, and send to a prospect (machine proposes, Jon disposes).
+    base = _public_base()
+    invite = recruiting.compose_invite(
+        t, apply_url=f"{base}/apply", artists_url=f"{base}/for-artists")
     return render(
         request, "talent_detail.html", nav="talent", t=t,
         completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
         review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
         portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
+        invite=invite,
     )
 
 
