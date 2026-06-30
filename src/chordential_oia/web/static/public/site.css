@@ -383,6 +383,9 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   display:flex;align-items:center;justify-content:center;color:var(--dark-text);
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px}
 .sr-close:hover{background:rgba(255,255,255,.16)}
+.sr-gallery-link{position:absolute;top:26px;left:50%;transform:translateX(-50%);z-index:5;
+  color:var(--dark-muted);font-size:12.5px;text-decoration:none;letter-spacing:.02em}
+.sr-gallery-link:hover{color:var(--dark-text)}
 
 .sr-hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   text-align:center;color:var(--dark-text);padding:0 24px;transition:opacity .5s ease;pointer-events:none}
@@ -446,13 +449,21 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 
 .rg-stage{position:relative;min-height:100vh;padding-top:90px}
 
-/* The card itself: position via nth-child "slots" below; rotate/scale are the
-   STANDALONE CSS properties (not `transform`) so they coexist with the `translate`
-   keyframe animation below without one overwriting the other. */
+/* The card itself: position via nth-child "slots" below. `rotate`/`scale` are the
+   STANDALONE CSS properties (not `transform`), which is what makes the SPIN here
+   coexist with the FALL (`translate`) below — two independent animated properties,
+   no keyframe duplication needed.
+   The spiral: transform-origin is pinned to a point OUTSIDE the card itself
+   (var(--orbit) below its center) and `rotate` is animated through a full circle —
+   so the card doesn't just spin on its own axis, it SWEEPS around that distant
+   pivot, i.e. genuinely orbits. Combined with the simultaneous downward `translate`
+   fall, the two together trace an actual corkscrew/spiral path, not a straight drop. */
 .rg-card{position:absolute;display:flex;flex-direction:column;justify-content:flex-end;
   width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45);
-  animation:rg-fall var(--dur,20s) linear infinite;animation-delay:var(--delay,0s)}
+  transform-origin:50% var(--orbit,160px);
+  animation:rg-fall var(--dur,20s) linear infinite, rg-spin var(--spin,14s) linear infinite;
+  animation-delay:var(--delay,0s), var(--spin-delay,0s)}
 .rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .25s}
 .rg-card:hover::after{background:rgba(0,0,0,.38)}
 .rg-card-kind{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
@@ -461,6 +472,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:11.5px;margin-top:3px}
 
 @keyframes rg-fall{ 0%{translate:0 -32vh} 100%{translate:0 132vh} }
+@keyframes rg-spin{ from{rotate:0deg} to{rotate:360deg} }
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
@@ -470,14 +482,14 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-orange-sand{background:linear-gradient(135deg,var(--orange),var(--sand))}
 .rg-ink-wine{background:linear-gradient(135deg,var(--ink),var(--wine))}
 
-/* Six hand-tuned "slots" (left position, timing, tilt, blur, scale) cycling by
-   nth-child — deterministic variety without needing CSS random()/modulo. */
-.rg-card:nth-child(6n+1){left:6%;  --dur:19s; --delay:-2s;  rotate:-7deg; scale:1;    filter:blur(0)}
-.rg-card:nth-child(6n+2){left:23%; --dur:24s; --delay:-9s;  rotate:4deg;  scale:.9;   filter:blur(2px)}
-.rg-card:nth-child(6n+3){left:40%; --dur:17s; --delay:-13s; rotate:-3deg; scale:1.06; filter:blur(0)}
-.rg-card:nth-child(6n+4){left:57%; --dur:22s; --delay:-5s;  rotate:8deg;  scale:.88;  filter:blur(3px)}
-.rg-card:nth-child(6n+5){left:71%; --dur:25s; --delay:-17s; rotate:-6deg; scale:1;    filter:blur(1px)}
-.rg-card:nth-child(6n+6){left:86%; --dur:20s; --delay:-7s;  rotate:5deg;  scale:.96;  filter:blur(0)}
+/* Six hand-tuned "slots" (left position, fall timing, orbit radius/speed, blur,
+   scale) cycling by nth-child — deterministic variety without CSS random()/modulo. */
+.rg-card:nth-child(6n+1){left:6%;  --dur:19s; --delay:-2s;  --orbit:140px; --spin:13s; --spin-delay:-2s;  scale:1;    filter:blur(0)}
+.rg-card:nth-child(6n+2){left:23%; --dur:24s; --delay:-9s;  --orbit:190px; --spin:17s; --spin-delay:-9s;  scale:.9;   filter:blur(2px)}
+.rg-card:nth-child(6n+3){left:40%; --dur:17s; --delay:-13s; --orbit:120px; --spin:11s; --spin-delay:-13s; scale:1.06; filter:blur(0)}
+.rg-card:nth-child(6n+4){left:57%; --dur:22s; --delay:-5s;  --orbit:220px; --spin:19s; --spin-delay:-5s;  scale:.88;  filter:blur(3px)}
+.rg-card:nth-child(6n+5){left:71%; --dur:25s; --delay:-17s; --orbit:160px; --spin:15s; --spin-delay:-17s; scale:1;    filter:blur(1px)}
+.rg-card:nth-child(6n+6){left:86%; --dur:20s; --delay:-7s;  --orbit:100px; --spin:9s;  --spin-delay:-7s;  scale:.96;  filter:blur(0)}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}

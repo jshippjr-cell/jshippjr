@@ -65,3 +65,30 @@ def test_showreel_honors_deep_link_track_index(client):
     t = client.get("/showreel?t=2").text
     # The starting index is threaded into the player init call.
     assert "load(i)" in t
+
+
+def test_showreel_links_back_to_the_gallery(client):
+    # Landing directly on /showreel (skipping /reel) shouldn't dead-end — this is
+    # the exact confusion that prompted the fix: the founder typed /showreel
+    # directly and expected to see the gallery cards that only exist on /reel.
+    t = client.get("/showreel").text
+    assert 'href="/reel"' in t
+
+
+def test_reel_cards_genuinely_orbit_not_just_fall():
+    """The motion must SWEEP through an angle (orbit around an offset pivot), not
+    just sit at a fixed tilt while falling straight down — that was the reported
+    gap ("falling instead of rotating in a spiral")."""
+    css_path = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/site.css"
+    )
+    css = css_path.read_text()
+    # An animated full-circle spin keyframe must exist...
+    assert "@keyframes rg-spin" in css
+    assert "rotate:360deg" in css or "rotate: 360deg" in css
+    # ...and the card's transform-origin must be offset OUTSIDE itself (not 50% 50%)
+    # — a card spinning around its own center never visibly orbits/displaces.
+    assert "transform-origin:50% var(--orbit" in css
+    # The spin animation must actually be applied to .rg-card, not just defined.
+    assert "rg-spin var(--spin" in css
