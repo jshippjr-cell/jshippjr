@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your work — {{ t.name }} · Chordential</title>
+<style>
+  :root{
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
+    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:780px;margin:0 auto;padding:0 20px 64px}
+  .hero{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
+    padding:46px 0 40px;margin-bottom:30px}
+  .hero .wrap{padding-top:0}
+  .kick{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 8px}
+  h1{font-family:var(--serif);font-weight:600;font-size:36px;line-height:1.08;margin:0 0 8px}
+  .hero .tag{color:var(--sand);font-size:15px;max-width:92%;margin:0}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+  h2{font-family:var(--serif);font-size:21px;color:var(--wine);margin:0 0 4px;font-weight:600}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .row{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;margin:0 0 12px}
+  .row b{color:var(--slate);font-weight:600}
+  .pill{display:inline-block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+    padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--slate)}
+  .pill.live{border-color:var(--orange);color:var(--orange)}
+  ul.versions{list-style:none;margin:8px 0 14px;padding:0;font-size:13px}
+  ul.versions li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  ul.versions li:last-child{border-bottom:0}
+  ul.versions .vlabel{font-weight:700;color:var(--wine)}
+  audio{height:30px;vertical-align:middle}
+  .uploader{border:1px dashed var(--sand);border-radius:10px;padding:14px 16px;background:var(--cream)}
+  .uploader label{font-size:12px;color:var(--slate);display:block;margin-bottom:8px;font-weight:600}
+  .btn{display:inline-block;background:var(--orange);color:#fff;border:0;border-radius:8px;padding:10px 18px;
+    font-weight:700;font-size:14px;cursor:pointer;text-decoration:none}
+  .muted-note{font-size:11px;color:var(--muted);font-style:italic;margin-top:10px}
+  .empty{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="wrap">
+      <p class="kick">Creator workspace</p>
+      <h1>Welcome, {{ t.name.split(' ')[0] }}.</h1>
+      <p class="tag">Your assigned briefs, your work versions, and where each one stands —
+        all in one place. The music is always yours; we organize, document, and deliver it.</p>
+    </div>
+  </div>
+  <div class="wrap">
+
+    {% if not assignments %}
+    <div class="card">
+      <h2>No active assignments yet</h2>
+      <p class="empty">When you're staffed onto a project, the brief and your upload space
+        will appear here. We'll be in touch.</p>
+    </div>
+    {% endif %}
+
+    {% for a in assignments %}
+    <div class="card" id="p{{ a.project_id }}">
+      <h2>{{ a.need }}</h2>
+      <p class="sub">{{ a.client }}</p>
+      <div class="row">
+        <span><b>Your role:</b> {{ a.role }}</span>
+        {% if a.deadline %}<span><b>Deadline:</b> {{ a.deadline }}</span>{% endif %}
+        <span class="pill {{ 'live' if a.delivery_state in ('In review','Approved') }}">{{ a.delivery_state }}</span>
+      </div>
+
+      {% if a.versions %}
+      <ul class="versions">
+        {% for v in a.versions %}
+        <li>
+          <span class="vlabel">{{ v.label }}</span>
+          {% if v.url %}<audio controls preload="none" src="{{ v.url }}"></audio>{% endif %}
+          <span class="sub" style="margin:0">{{ v.name or '' }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty" style="margin:6px 0 14px">No versions submitted yet — upload your first below.</p>
+      {% endif %}
+
+      <form class="uploader" method="post"
+            action="/creator/{{ token }}/project/{{ a.project_id }}/version"
+            enctype="multipart/form-data">
+        <label>Submit a new version of your master (mp3/wav)</label>
+        <input type="file" name="file" accept="audio/*" required>
+        <button class="btn" type="submit">Submit for review</button>
+        <p class="muted-note">Submitting a new version reopens review and notifies the team.
+          A human always presses the approve button — we never auto-decide.</p>
+      </form>
+    </div>
+    {% endfor %}
+
+  </div>
+</body>
+</html>

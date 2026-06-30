@@ -205,10 +205,18 @@ _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
 # The review-portal client actions (comment / approve / request-changes) are posted
 # by the agency from the same token-gated link — token-validated in the route.
 _REVIEW_ACTION_RE = re.compile(r"^/project/\d+/review/(comment|approve|changes)/?$")
+# The composer portal — a qualified creator's token-gated home (view assignments,
+# submit work versions). The per-creator portal token IS the access control, so it
+# bypasses the admin login gate (same exemption as the client delivery portal).
+_CREATOR_PORTAL_RE = re.compile(r"^/creator/[A-Za-z0-9_-]+(/project/\d+/version)?/?$")
 
 
 def _is_delivery_portal_path(path: str) -> bool:
-    return bool(_DELIVERY_PORTAL_RE.match(path) or _REVIEW_ACTION_RE.match(path))
+    return bool(
+        _DELIVERY_PORTAL_RE.match(path)
+        or _REVIEW_ACTION_RE.match(path)
+        or _CREATOR_PORTAL_RE.match(path)
+    )
 
 
 def _admin_secret() -> Optional[str]:
@@ -2723,12 +2731,16 @@ def talent_detail(request: Request, talent_id: int):
         if row is None:
             return HTMLResponse("Talent not found", status_code=404)
         t = db.talent_from_row(row)
+        portal_token = row["portal_token"] if "portal_token" in row.keys() else None
+        w9_at = row["w9_received_at"] if "w9_received_at" in row.keys() else None
     finally:
         conn.close()
+    portal_url = f"{_public_base()}/creator/{portal_token}" if portal_token else None
     return render(
         request, "talent_detail.html", nav="talent", t=t,
         completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
         review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
+        portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
     )
 
 
@@ -2777,6 +2789,104 @@ def talent_invite(talent_id: int, invite_status: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+@app.post("/talent/{talent_id}/portal")
+def talent_issue_portal(talent_id: int):
+    """Mint (or reveal) the creator's portal access token — their only credential
+    for /creator/<token>. Jon issues this when a creator is qualified, then sends
+    them the link. Idempotent: re-issuing returns the same token."""
+    conn = db.connect()
+    try:
+        db.ensure_talent_portal_token(conn, talent_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+
+
+@app.post("/talent/{talent_id}/w9")
+def talent_set_w9(talent_id: int, received: str = Form("")):
+    """Record/clear the creator's W-9-on-file date (the payout-ledger gate)."""
+    from datetime import date as _date
+    conn = db.connect()
+    try:
+        db.set_talent_w9(conn, talent_id,
+                         _date.today().isoformat() if received == "1" else None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Composer portal — a qualified creator's token-gated home. NOT admin-gated;
+# the per-creator portal token IS the credential (same model as the client
+# delivery portal). They see their assigned briefs and submit work versions.
+# --------------------------------------------------------------------------- #
+def _creator_assignment_view(conn, talent_id: int) -> list:
+    """Per-assignment cards for the composer portal: brief, role, deadline, the
+    delivery state, and the versions THIS creator can submit/see for the project."""
+    out = []
+    for a in db.list_talent_assignments(conn, talent_id):
+        delivery = db.get_delivery(conn, a["project_id"])
+        out.append({
+            "project_id": a["project_id"],
+            "role": a["role"],
+            "client": a["client"],
+            "need": a["need"],
+            "deadline": a["deadline"],
+            "status": a["status"],
+            "delivery_state": (delivery.get("state") or "Not started"),
+            "version_state": (delivery.get("version_state") or ""),
+            "versions": versions_list(delivery),
+        })
+    return out
+
+
+@app.get("/creator/{token}", response_class=HTMLResponse)
+def creator_portal(request: Request, token: str):
+    conn = db.connect()
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        t = db.talent_from_row(row)
+        assignments = _creator_assignment_view(conn, row["id"])
+    finally:
+        conn.close()
+    return render(
+        request, "creator_portal.html", nav="", token=token, t=t,
+        completeness=profile_completeness(t), assignments=assignments,
+    )
+
+
+@app.post("/creator/{token}/project/{project_id}/version")
+async def creator_submit_version(
+    token: str, project_id: int, file: Optional[UploadFile] = File(None),
+):
+    """A creator submits a work version for a project they're assigned to.
+
+    Reuses the exact version-ladder mechanism the admin Assets agent uses, so a
+    creator-submitted master is a first-class version. Guarded twice: a valid
+    portal token AND an actual assignment to this project."""
+    conn = db.connect()
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.talent_is_assigned(conn, row["id"], project_id):
+            return HTMLResponse("Not assigned to this project", status_code=403)
+        if file is None or not (file.filename or "").strip():
+            return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+        data = await file.read()
+        label, campaign = _append_version_from_bytes(conn, project_id, data, file.filename)
+        # Note who submitted it on the project timeline, then notify reviewers.
+        db.add_update(conn, project_id,
+                      f"{row['name']} submitted {label} for review.")
+        reviewers = db.list_delivery_reviewers(conn, project_id)
+    finally:
+        conn.close()
+    _notify_reviewers_new_version(project_id, campaign, label, reviewers)
+    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #
@@ -3561,6 +3671,46 @@ def _next_version_label(delivery: dict, *, final: bool = False) -> tuple:
     return n, version_label(n, final=final)
 
 
+def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename: str) -> tuple:
+    """Write uploaded audio bytes as the next version in a project's delivery ladder.
+
+    Shared by the admin Assets agent and the composer portal so both produce
+    identically-named versions, advance ``version_state``, and reopen an
+    already-approved delivery to review (a new master supersedes prior sign-off).
+    Returns ``(label, campaign)`` for the caller's notification."""
+    from datetime import datetime as _dt, timezone as _tz
+    delivery = db.get_delivery(conn, project_id)
+    versions = versions_list(delivery)
+    ext = os.path.splitext(src_filename or "")[1].lower()
+    safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
+    n, label = _next_version_label(delivery)
+    row = db.get_project(conn, project_id)
+    campaign = (row["need"] if row is not None else "") or "Campaign"
+    stem = version_name(campaign, "Master", 60, "Master", n,
+                        "FINAL" if "FINAL" in label.upper() else f"v{n}")
+    safe_name = f"proj{project_id}-v{n}{safe_ext}"
+    bump = 1
+    while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
+        safe_name = f"proj{project_id}-v{n}-{bump}{safe_ext}"
+        bump += 1
+    with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
+        fh.write(data)
+    versions.append({
+        "n": n,
+        "label": label,
+        "url": f"/uploads/{safe_name}",
+        "filename": safe_name,
+        "name": stem,
+        "created_at": _dt.now(_tz.utc).isoformat(),
+    })
+    db.update_delivery(conn, project_id, "versions", versions)
+    db.update_delivery(conn, project_id, "version_state", label)
+    # A new version supersedes any prior approval/delivery — reopen to review.
+    if (delivery.get("state") or "") in ("Approved", "Delivered"):
+        db.update_delivery(conn, project_id, "state", "In review")
+    return label, campaign
+
+
 @app.post("/project/{project_id}/delivery/version")
 async def delivery_version(
     project_id: int,
@@ -3576,7 +3726,6 @@ async def delivery_version(
     deterministically, advances ``version_state`` to the new label, and — if the
     delivery had been Approved — reopens it to "In review" (a new version means the
     prior approval no longer stands). ``action=remove`` drops the newest version."""
-    from datetime import datetime as _dt, timezone as _tz
     conn = db.connect()
     try:
         delivery = db.get_delivery(conn, project_id)
@@ -3600,38 +3749,8 @@ async def delivery_version(
         if file is None or not (file.filename or "").strip():
             return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
-        ext = os.path.splitext(file.filename)[1].lower()
         data = await file.read()
-        safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
-
-        n, label = _next_version_label(delivery)
-        # Deterministic on-disk + display name for the version.
-        row = db.get_project(conn, project_id)
-        campaign = (row["need"] if row is not None else "") or "Campaign"
-        stem = version_name(campaign, "Master", 60, "Master", n,
-                            "FINAL" if "FINAL" in label.upper() else f"v{n}")
-        safe_name = f"proj{project_id}-v{n}{safe_ext}"
-        # Avoid clobbering on a re-log at the same n.
-        bump = 1
-        while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
-            safe_name = f"proj{project_id}-v{n}-{bump}{safe_ext}"
-            bump += 1
-        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
-            fh.write(data)
-
-        versions.append({
-            "n": n,
-            "label": label,
-            "url": f"/uploads/{safe_name}",
-            "filename": safe_name,
-            "name": stem,
-            "created_at": _dt.now(_tz.utc).isoformat(),
-        })
-        db.update_delivery(conn, project_id, "versions", versions)
-        db.update_delivery(conn, project_id, "version_state", label)
-        # A new version supersedes any prior approval/delivery — reopen to review.
-        if (delivery.get("state") or "") in ("Approved", "Delivered"):
-            db.update_delivery(conn, project_id, "state", "In review")
+        label, campaign = _append_version_from_bytes(conn, project_id, data, file.filename)
         # Agency-direction notification (the documented TODO): email each named
         # reviewer their personal review link so coordination stops leaking to
         # manual messaging. Best-effort, per reviewer — never blocks the upload.

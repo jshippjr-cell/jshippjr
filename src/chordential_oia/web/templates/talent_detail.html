@@ -37,6 +37,37 @@
     </form>
     <p class="muted small">A creator becomes <strong>Matchable</strong> only after you approve their reel and they have at least one discipline.</p>
 
+    <div class="card-head" style="margin-top:18px" id="access"><h2>Creator access <span class="muted">— their portal credential</span></h2></div>
+    {% if portal_token %}
+    <p class="muted small">Their personal, unguessable workspace link (no password — the link is the key). Send it to them:</p>
+    <input type="text" readonly value="{{ portal_url }}" onclick="this.select()"
+           style="width:100%;font-size:12px;padding:8px;border:1px solid var(--line, #ddd);border-radius:6px">
+    <div class="status-buttons" style="margin-top:8px">
+      <a class="btn" href="/creator/{{ portal_token }}" target="_blank" rel="noopener">Open portal ↗</a>
+      <form method="post" action="/talent/{{ t.id }}/portal" style="display:inline">
+        <button class="btn" type="submit">Re-issue link</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted small">Once they're qualified, issue a portal link so they can see their briefs and submit work.</p>
+    <form method="post" action="/talent/{{ t.id }}/portal">
+      <button class="btn primary" type="submit">⚷ Issue creator access link</button>
+    </form>
+    {% endif %}
+    <div style="margin-top:12px">
+      <form method="post" action="/talent/{{ t.id }}/w9">
+        {% if w9_received_at %}
+        <span class="pill sv-door">✓ W-9 on file ({{ w9_received_at }})</span>
+        <input type="hidden" name="received" value="0">
+        <button class="btn tiny" type="submit">Clear</button>
+        {% else %}
+        <span class="muted small">W-9 needed before first payout.</span>
+        <input type="hidden" name="received" value="1">
+        <button class="btn tiny" type="submit">Mark W-9 received</button>
+        {% endif %}
+      </form>
+    </div>
+
     <div class="card-head" style="margin-top:18px"><h2>Recruiting funnel</h2></div>
     <form class="stack" method="post" action="/talent/{{ t.id }}/invite">
       <div class="status-buttons">

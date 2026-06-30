@@ -1,0 +1,158 @@
+"""Composer portal — a qualified creator's token-gated workspace.
+
+A creator's only credential is an unguessable portal token (no password). The
+portal shows their assigned briefs and lets them submit work versions into the
+same delivery ladder the admin Assets agent uses — guarded by token AND a real
+assignment to the project.
+"""
+
+import importlib
+
+import pytest
+
+pytest.importorskip("fastapi")
+pytest.importorskip("httpx")
+from fastapi.testclient import TestClient  # noqa: E402
+
+
+@pytest.fixture()
+def ctx(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "test.db"))
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "uploads"))
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    from chordential_oia.web import app as app_mod
+    importlib.reload(app_mod)
+    with TestClient(app_mod.app) as c:
+        yield c, db_mod, app_mod
+
+
+def _approved_composer(db_mod, name="Mara Velez"):
+    from chordential_oia.talent import Talent, ReviewStatus
+    from chordential_oia.models import MusicDiscipline
+    conn = db_mod.connect()
+    try:
+        tid = db_mod.insert_talent(conn, Talent(
+            name=name, disciplines=[MusicDiscipline.COMPOSITION],
+            review_status=ReviewStatus.APPROVED,
+        ))
+    finally:
+        conn.close()
+    return tid
+
+
+def _project_with(db_mod, talent_id, role="Composer", need="Brand anthem"):
+    conn = db_mod.connect()
+    try:
+        pid = db_mod.insert_project(conn, None, "AURORA", need, 0, 0, [role], "2026-08-01")
+        db_mod.add_assignment(conn, pid, role, talent_id)
+    finally:
+        conn.close()
+    return pid
+
+
+def test_issue_token_and_open_portal(ctx):
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    # Admin issues the access link from the talent detail page.
+    client.post(f"/talent/{tid}/portal")
+    conn = db_mod.connect()
+    try:
+        tok = conn.execute(
+            "SELECT portal_token FROM talent WHERE id=?", (tid,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert tok
+    r = client.get(f"/creator/{tok}")
+    assert r.status_code == 200
+    assert "Creator workspace" in r.text
+
+
+def test_portal_shows_assigned_brief(ctx):
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    _project_with(db_mod, tid, need="Lumen launch film")
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    conn.close()
+    page = client.get(f"/creator/{tok}").text
+    assert "Lumen launch film" in page
+    assert "Composer" in page
+
+
+def test_creator_submits_version(ctx):
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    conn.close()
+    r = client.post(
+        f"/creator/{tok}/project/{pid}/version",
+        files={"file": ("demo.mp3", b"ID3audio-bytes", "audio/mpeg")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert len(d.get("versions") or []) == 1
+
+
+def test_upload_blocked_when_not_assigned(ctx):
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    # a project the creator is NOT assigned to
+    other = db_mod.insert_project(conn, None, "X", "Other", 0, 0, ["Composer"], None)
+    conn.close()
+    r = client.post(
+        f"/creator/{tok}/project/{other}/version",
+        files={"file": ("x.mp3", b"x", "audio/mpeg")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+
+
+def test_bogus_token_404(ctx):
+    client, _, _ = ctx
+    assert client.get("/creator/not-a-real-token").status_code == 404
+
+
+def test_w9_toggle(ctx):
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    client.post(f"/talent/{tid}/w9", data={"received": "1"})
+    conn = db_mod.connect()
+    try:
+        w9 = conn.execute(
+            "SELECT w9_received_at FROM talent WHERE id=?", (tid,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert w9  # a date was recorded
+    client.post(f"/talent/{tid}/w9", data={"received": "0"})
+    conn = db_mod.connect()
+    try:
+        w9 = conn.execute(
+            "SELECT w9_received_at FROM talent WHERE id=?", (tid,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert w9 is None
+
+
+def test_portal_bypasses_admin_gate(ctx, monkeypatch):
+    # With an admin token set, the creator portal is still reachable by its own token.
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    conn.close()
+    monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "secret")
+    r = client.get(f"/creator/{tok}", follow_redirects=False)
+    assert r.status_code == 200  # not redirected to /admin/login

@@ -360,6 +360,13 @@ _TALENT_COLUMNS = {
     "source_url": "TEXT",
     "rate": "REAL",
     "rate_unit": "TEXT DEFAULT 'hourly'",
+    # Per-creator unguessable token that gates the composer portal (/creator/<token>)
+    # — a qualified creator's only credential, mirroring projects.share_token. No
+    # password: the token IS the access control (validated in the route).
+    "portal_token": "TEXT",
+    # W-9 status for the payout ledger: collected before a first payout can be
+    # marked Paid. Stored as an ISO date (when received) — null = not on file.
+    "w9_received_at": "TEXT",
 }
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
@@ -3223,6 +3230,69 @@ def update_talent_profile(
 
 def talent_count(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM talent").fetchone()[0]
+
+
+# --- Composer portal access (per-creator token credential) ---------------- #
+def ensure_talent_portal_token(conn: sqlite3.Connection, talent_id: int) -> Optional[str]:
+    """Return the creator's portal token, minting one on first use.
+
+    The creator's only credential for the composer portal (``/creator/<token>``):
+    unguessable, not enumerable, no password. Mirrors
+    :func:`ensure_project_share_token`. ``None`` only if the creator doesn't exist."""
+    row = conn.execute(
+        "SELECT portal_token FROM talent WHERE id = ?", (talent_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    existing = row["portal_token"]
+    if existing and str(existing).strip():
+        return existing
+    token = secrets.token_urlsafe(12)
+    conn.execute(
+        "UPDATE talent SET portal_token = ? WHERE id = ?", (token, talent_id)
+    )
+    conn.commit()
+    return token
+
+
+def get_talent_by_portal_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
+    """Resolve a creator from their portal token (the access check). Blank → None."""
+    if not token or not str(token).strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM talent WHERE portal_token = ?", (str(token).strip(),)
+    ).fetchone()
+
+
+def set_talent_w9(conn: sqlite3.Connection, talent_id: int, received_at: Optional[str]) -> None:
+    """Record (or clear) the W-9-on-file date — the payout-ledger compliance gate."""
+    conn.execute(
+        "UPDATE talent SET w9_received_at = ? WHERE id = ?", (received_at, talent_id)
+    )
+    conn.commit()
+
+
+def list_talent_assignments(conn: sqlite3.Connection, talent_id: int) -> List[sqlite3.Row]:
+    """Every project a creator is assigned to, newest first — the spine of the
+    composer portal. Joins assignments → projects so the portal can show the role,
+    brief, deadline, and delivery state for each engagement."""
+    return conn.execute(
+        """SELECT a.id AS assignment_id, a.role, a.created_at AS assigned_at,
+                  p.id AS project_id, p.client, p.need, p.deadline, p.status,
+                  p.delivery_json, p.share_token
+           FROM assignments a JOIN projects p ON a.project_id = p.id
+           WHERE a.talent_id = ? ORDER BY p.created_at DESC, a.role""",
+        (talent_id,),
+    ).fetchall()
+
+
+def talent_is_assigned(conn: sqlite3.Connection, talent_id: int, project_id: int) -> bool:
+    """Is this creator actually on this project? Guards composer-portal uploads so a
+    creator can only submit work to a project they're assigned to."""
+    return conn.execute(
+        "SELECT 1 FROM assignments WHERE talent_id = ? AND project_id = ? LIMIT 1",
+        (talent_id, project_id),
+    ).fetchone() is not None
 
 
 def load_talent(conn: sqlite3.Connection) -> List[Talent]:
