@@ -4707,6 +4707,26 @@ def invoice_set_status(invoice_id: int, status: str = Form(...)):
 
 
 # --------------------------------------------------------------------------- #
+# Revenue dashboard — the CRO's home screen. Cash collected is the number that
+# matters; pipeline + funnel + A/R are the leading indicators. Read-only, built
+# from existing data (invoices, proposals, projects, opportunities).
+# --------------------------------------------------------------------------- #
+@app.get("/revenue", response_class=HTMLResponse)
+def revenue_dashboard(request: Request):
+    conn = db.connect()
+    try:
+        summary = db.revenue_summary(conn)
+        outstanding = db.list_outstanding_invoices(conn)
+        payments = db.recent_payments(conn)
+    finally:
+        conn.close()
+    return render(
+        request, "revenue.html", nav="revenue", summary=summary,
+        outstanding=outstanding, payments=payments,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Payout ledger — pay the crew. Owed rows are generated when a client invoice is
 # Paid; Jon pays off-platform and marks each Paid (W-9 must be on file first).
 # --------------------------------------------------------------------------- #

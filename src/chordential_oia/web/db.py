@@ -3097,6 +3097,74 @@ def update_invoice_status(
     conn.commit()
 
 
+def revenue_summary(conn: sqlite3.Connection) -> dict:
+    """Company-wide revenue rollup for the dashboard — computed from data we already
+    store (invoices, proposals, projects, opportunities). The CRO's home screen:
+    cash collected (the number that matters), A/R, pipeline, and the funnel."""
+    def _sum(sql, params=()):
+        return conn.execute(sql, params).fetchone()[0] or 0
+
+    collected = _sum("SELECT SUM(amount) FROM invoices WHERE status='Paid'")
+    outstanding = _sum("SELECT SUM(amount) FROM invoices WHERE status='Issued'")
+    deposits_paid = _sum(
+        "SELECT SUM(amount) FROM invoices WHERE status='Paid' AND kind='Deposit'")
+    finals_paid = _sum(
+        "SELECT SUM(amount) FROM invoices WHERE status='Paid' AND kind='Final'")
+    # Pipeline (money proposed, not yet collected): Sent = open, Accepted = verbal-yes.
+    pipeline_sent = _sum(
+        "SELECT SUM(total_price) FROM proposals WHERE status='Sent'")
+    pipeline_accepted = _sum(
+        "SELECT SUM(total_price) FROM proposals WHERE status='Accepted'")
+    # Conversion funnel counts.
+    qualified = _sum("SELECT COUNT(*) FROM opportunities WHERE qualified=1")
+    proposals_sent = _sum(
+        "SELECT COUNT(*) FROM proposals WHERE status IN ('Sent','Accepted','Declined')")
+    deposits_count = _sum(
+        "SELECT COUNT(*) FROM invoices WHERE kind='Deposit' AND status='Paid'")
+    delivered = _sum("SELECT COUNT(*) FROM projects WHERE status='Delivered'")
+    # Paid-in-full projects (re-uses the same gate the downloads use).
+    paid_in_full = sum(
+        1 for p in conn.execute("SELECT id FROM projects").fetchall()
+        if invoice_balance(conn, p["id"])["paid_in_full"]
+    )
+    return {
+        "collected": collected,
+        "outstanding": outstanding,            # A/R: earned but not yet collected
+        "billed": collected + outstanding,
+        "deposits_paid": deposits_paid,
+        "finals_paid": finals_paid,
+        "pipeline_sent": pipeline_sent,
+        "pipeline_accepted": pipeline_accepted,
+        "pipeline_open": pipeline_sent + pipeline_accepted,
+        "funnel": {
+            "qualified": qualified,
+            "proposals_sent": proposals_sent,
+            "deposits_collected": deposits_count,
+            "delivered": delivered,
+            "paid_in_full": paid_in_full,
+        },
+    }
+
+
+def list_outstanding_invoices(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    """Issued-but-unpaid invoices (the A/R worklist) with their project context."""
+    return conn.execute(
+        """SELECT i.*, p.client AS project_client, p.need AS project_need
+           FROM invoices i LEFT JOIN projects p ON i.project_id = p.id
+           WHERE i.status='Issued' ORDER BY i.created_at"""
+    ).fetchall()
+
+
+def recent_payments(conn: sqlite3.Connection, limit: int = 8) -> List[sqlite3.Row]:
+    """The latest collected payments — proof the dollars are real, newest first."""
+    return conn.execute(
+        """SELECT i.*, p.client AS project_client, p.need AS project_need
+           FROM invoices i LEFT JOIN projects p ON i.project_id = p.id
+           WHERE i.status='Paid' ORDER BY i.paid_at DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
 def invoice_balance(conn: sqlite3.Connection, project_id: int) -> dict:
     """Payment status for a project's invoices — drives the deliverable download gate.
 

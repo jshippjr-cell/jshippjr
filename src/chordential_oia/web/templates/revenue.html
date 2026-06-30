@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Revenue{% endblock %}
+{% block heading %}Revenue{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <h1 class="detail-title">Revenue</h1>
+    <div class="muted">The number that matters is <strong>cash collected</strong>. Everything
+      else here is a leading indicator of it. (CRO mandate — drive usage &amp; dollars.)</div>
+  </div>
+</div>
+
+<!-- The headline numbers -->
+<div class="kpi-grid">
+  <a class="kpi accent-won" href="/revenue">
+    <div class="kpi-label">Cash collected</div>
+    <div class="kpi-value">{{ summary.collected|money }}</div>
+    <div class="kpi-sub">deposits {{ summary.deposits_paid|money }} · finals {{ summary.finals_paid|money }}</div>
+  </a>
+  <a class="kpi accent-review" href="/revenue#ar">
+    <div class="kpi-label">Outstanding (A/R)</div>
+    <div class="kpi-value">{{ summary.outstanding|money }}</div>
+    <div class="kpi-sub">invoiced, not yet collected</div>
+  </a>
+  <a class="kpi" href="/projects">
+    <div class="kpi-label">Open pipeline</div>
+    <div class="kpi-value">{{ summary.pipeline_open|money }}</div>
+    <div class="kpi-sub">sent {{ summary.pipeline_sent|money }} · accepted {{ summary.pipeline_accepted|money }}</div>
+  </a>
+  <a class="kpi" href="/payouts">
+    <div class="kpi-label">Paid-in-full projects</div>
+    <div class="kpi-value">{{ summary.funnel.paid_in_full }}</div>
+    <div class="kpi-sub">delivered {{ summary.funnel.delivered }}</div>
+  </a>
+</div>
+
+<!-- The conversion funnel: where dollars are won or lost -->
+<section class="card">
+  <div class="card-head"><h2>Conversion funnel <span class="muted">— qualified → cash</span></h2></div>
+  <div class="funnel-row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:stretch">
+    {% set f = summary.funnel %}
+    {% for step in [
+      ('Qualified opps', f.qualified, '/lanes'),
+      ('Proposals sent', f.proposals_sent, '/projects'),
+      ('Deposits collected', f.deposits_collected, '/revenue'),
+      ('Delivered', f.delivered, '/projects'),
+      ('Paid in full', f.paid_in_full, '/revenue')
+    ] %}
+    <a href="{{ step[2] }}" class="funnel-step" style="flex:1 1 120px;text-align:center;padding:14px 10px;background:var(--card,#fff);border:1px solid var(--line,#e6dfd2);border-radius:12px;text-decoration:none">
+      <div style="font-size:26px;font-weight:800;color:var(--wine,#44161E)">{{ step[1] }}</div>
+      <div class="muted small">{{ step[0] }}</div>
+      {% if not loop.last %}<div class="muted" style="font-size:18px;margin-top:4px">↓</div>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% if f.paid_in_full == 0 %}
+  <p class="small" style="margin-top:12px;color:var(--wine,#7a2330)"><b>No dollars collected yet.</b>
+    The whole machine is built; the next milestone is the first deposit. See
+    <code>docs/revenue-drive-council.md</code> for the first-dollar plan.</p>
+  {% endif %}
+</section>
+
+<!-- A/R worklist: money earned, chase it -->
+<section class="card" id="ar">
+  <div class="card-head"><h2>Outstanding invoices <span class="muted">— earned, not collected</span></h2></div>
+  {% if outstanding %}
+  <table class="kv" style="width:100%">
+    <tr style="text-align:left;color:var(--muted)"><th>Client / project</th><th>Kind</th><th>Amount</th><th>Issued</th><th></th></tr>
+    {% for i in outstanding %}
+    <tr>
+      <td><strong>{{ i.project_client or '—' }}</strong><div class="muted small">{{ i.project_need or '' }}</div></td>
+      <td>{{ i.kind }}</td>
+      <td>{{ i.amount|money }}</td>
+      <td class="muted small">{{ (i.created_at or '')[:10] }}</td>
+      <td>{% if i.project_id %}<a class="btn tiny" href="/project/{{ i.project_id }}/proposal">Open</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No outstanding invoices.</p>
+  {% endif %}
+</section>
+
+<!-- Proof the dollars are real -->
+<section class="card">
+  <div class="card-head"><h2>Recent payments</h2></div>
+  {% if payments %}
+  <table class="kv" style="width:100%">
+    <tr style="text-align:left;color:var(--muted)"><th>Client / project</th><th>Kind</th><th>Amount</th><th>Paid</th></tr>
+    {% for i in payments %}
+    <tr>
+      <td><strong>{{ i.project_client or '—' }}</strong><div class="muted small">{{ i.project_need or '' }}</div></td>
+      <td>{{ i.kind }}</td>
+      <td>{{ i.amount|money }}</td>
+      <td class="muted small">{{ (i.paid_at or '')[:10] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No payments collected yet — the first one is the milestone.</p>
+  {% endif %}
+</section>
+{% endblock %}
