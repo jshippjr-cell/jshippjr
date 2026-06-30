@@ -88,12 +88,12 @@ HERO = {
     # ↺ Set to "loop" for the always-animating WebP instead (no iOS play button).
     "motion": "video",
     # Hero background: spliced clip (Engineers/string ensemble + Composer/MIDI) on
-    # Cloudinary. f_auto,q_auto = optimal codec + visually-lossless quality, so it's
-    # a smaller, faster-starting file with NO visible quality loss.
-    # ac_none strips the audio track entirely at delivery (no re-upload) — a truly
-    # silent video is the most reliable to autoplay on mobile and loads a touch
-    # lighter. The hero is decorative; it never needs sound.
-    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto,ac_none/v1782271309/herospliced_lbtrdp.mp4",
+    # Cloudinary. f_auto = optimal codec; q_auto:best = the highest auto-quality tier
+    # (much less compression banding/blocking than plain q_auto) — the source master
+    # is only 1280x720, so this is the sharpest delivery possible without a higher-res
+    # master. ac_none strips the audio track at delivery (no re-upload) — a silent
+    # video autoplays most reliably on mobile. The hero is decorative; never needs sound.
+    "video": "https://res.cloudinary.com/dwzzf6vvd/video/upload/f_auto,q_auto:best,ac_none/v1782271309/herospliced_lbtrdp.mp4",
     "poster": "/static/public/hero-spliced-poster.jpg?v=1",
     # High-quality animated loop rendered from the real hero footage
     # (hero-spliced.mp4 → 1000px, 12fps, ~1.8MB). Always animates on mobile — no
