@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Showreel — Chordential</title>
+<link rel="stylesheet" href="/static/public/site.css">
+<link rel="icon" href="/static/public/wordmark-dark.png">
+</head>
+<body class="sr-body">
+  <main class="sr-stage" data-cursor-stage data-cursor="play">
+    <!-- Background: the hero footage (muted autoplay; poster covers blocked autoplay) -->
+    <div class="sr-bg"{% if hero.poster %} style="background-image:url('{{ hero.poster }}')"{% endif %}>
+      {% if hero.video %}
+      <video class="sr-video" autoplay muted loop playsinline webkit-playsinline
+             preload="auto" src="{{ hero.video }}"></video>
+      {% endif %}
+    </div>
+    <div class="sr-veil"></div>
+
+    <!-- Chrome: logo + close -->
+    <a class="sr-logo" href="/" aria-label="Chordential home" data-cursor="close">
+      <img src="/static/public/wordmark-ko.png" alt="Chordential">
+    </a>
+    <a class="sr-close" href="/" aria-label="Close" data-cursor="close">&#10005;</a>
+
+    <!-- Centered hint (fades once playing) -->
+    <div class="sr-hint">
+      <p class="sr-eyebrow">Showreel</p>
+      <h1 class="sr-title">Original music. Cleared to use.</h1>
+      <p class="sr-lede">Press play.</p>
+      <!-- Touch devices get a real button (no cursor to follow) -->
+      <button type="button" class="sr-tap" data-sr-toggle>&#9654; Play</button>
+    </div>
+
+    <!-- The cursor-following pill (desktop) -->
+    <div class="sr-cursor" aria-hidden="true">play</div>
+
+    <!-- Docked player (revealed on first play) -->
+    <div class="sr-player" data-sr-player>
+      <button type="button" class="sr-btn" data-sr-toggle aria-label="Play/pause">&#9654;</button>
+      <button type="button" class="sr-btn" data-sr-prev aria-label="Previous">&#8249;</button>
+      <button type="button" class="sr-btn" data-sr-next aria-label="Next">&#8250;</button>
+      <div class="sr-meta">
+        <span class="sr-track-title" data-sr-title></span>
+        <input type="range" class="sr-scrub" data-sr-scrub min="0" max="1000" value="0" aria-label="Seek">
+      </div>
+    </div>
+
+    <audio data-sr-audio preload="none"></audio>
+  </main>
+
+  <script>
+    window.SR_TRACKS = [
+      {% for t in tracks %}{"title": {{ t.title|tojson }}, "url": {{ t.audio_url|tojson }}, "label": {{ t.discipline_label|tojson }}}{{ "," if not loop.last }}
+      {% endfor %}
+    ];
+  </script>
+  <script>
+  // Background hero video: same muted-autoplay + reveal-on-playing as the home hero.
+  // The poster (CSS background on .sr-bg) covers the buffer / blocked-autoplay case.
+  (function () {
+    var v = document.querySelector('.sr-video');
+    if (!v) return;
+    v.muted = true; v.defaultMuted = true; v.setAttribute('muted', '');
+    v.addEventListener('playing', function () { v.classList.add('is-playing'); });
+    var kick = function () { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } };
+    ['loadeddata', 'canplay'].forEach(function (ev) { v.addEventListener(ev, kick); });
+    kick();
+  })();
+  </script>
+  <script src="/static/public/cursor-label.js"></script>
+  <script>
+  (function () {
+    var tracks = window.SR_TRACKS || [];
+    var stage = document.querySelector('[data-cursor-stage]');
+    var audio = document.querySelector('[data-sr-audio]');
+    var player = document.querySelector('[data-sr-player]');
+    var title = document.querySelector('[data-sr-title]');
+    var scrub = document.querySelector('[data-sr-scrub]');
+    var toggles = document.querySelectorAll('[data-sr-toggle]');
+    if (!stage || !audio || !tracks.length) return;
+
+    var i = 0, loaded = -1;
+
+    function load(n) {
+      i = (n + tracks.length) % tracks.length;
+      if (loaded !== i) { audio.src = tracks[i].url; loaded = i; }
+      if (title) title.textContent = tracks[i].title;
+    }
+    function reveal() {
+      document.body.classList.add('sr-started');
+      if (player) player.classList.add('on');
+    }
+    function play() {
+      if (loaded < 0) load(0);
+      var p = audio.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+    function setPlayingUI(on) {
+      document.body.classList.toggle('sr-playing', on);
+      // Contextual cursor: pause while playing, play while paused.
+      stage.setAttribute('data-cursor', on ? 'pause' : 'play');
+      toggles.forEach(function (b) { b.innerHTML = on ? '&#10073;&#10073;' : '&#9654;'; });
+    }
+    function toggle() {
+      reveal();
+      if (audio.paused) play(); else audio.pause();
+    }
+
+    // Click the stage toggles play/pause — but ignore clicks on the chrome/controls.
+    stage.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, input, [data-sr-player]')) return;
+      toggle();
+    });
+    toggles.forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+    });
+    var prev = document.querySelector('[data-sr-prev]');
+    var next = document.querySelector('[data-sr-next]');
+    if (prev) prev.addEventListener('click', function (e) { e.stopPropagation(); reveal(); load(i - 1); play(); });
+    if (next) next.addEventListener('click', function (e) { e.stopPropagation(); reveal(); load(i + 1); play(); });
+
+    audio.addEventListener('play', function () { setPlayingUI(true); });
+    audio.addEventListener('pause', function () { setPlayingUI(false); });
+    audio.addEventListener('ended', function () { load(i + 1); play(); });
+    audio.addEventListener('timeupdate', function () {
+      if (scrub && audio.duration) scrub.value = String(Math.round(audio.currentTime / audio.duration * 1000));
+    });
+    if (scrub) scrub.addEventListener('input', function () {
+      if (audio.duration) audio.currentTime = scrub.value / 1000 * audio.duration;
+    });
+
+    load(0);
+  })();
+  </script>
+</body>
+</html>

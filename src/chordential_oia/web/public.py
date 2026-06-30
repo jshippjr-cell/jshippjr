@@ -125,6 +125,18 @@ def public_samples(request: Request):
     )
 
 
+@router.get("/showreel", response_class=HTMLResponse)
+def public_showreel(request: Request):
+    """Immersive showreel stage: hero video background, a cursor-following 'play'
+    label, and the cleared capability tracks playing in a docked player. Doubles as
+    a sell-by-hand asset — a clickable reel of original, cleared music."""
+    show = get_showcase()
+    tracks = [d for d in show.demos if (d.audio_url or "").strip()]
+    return render(
+        request, "public/showreel.html", active="", hero=show.hero, tracks=tracks,
+    )
+
+
 @router.get("/delivery-sample", response_class=HTMLResponse)
 def public_delivery_sample(request: Request):
     """Sample agency delivery package — proves the premium delivery experience.

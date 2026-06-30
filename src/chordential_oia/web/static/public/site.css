@@ -361,3 +361,67 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   .lead-form{padding:20px}
   .btn{padding:12px 18px;font-size:14.5px}
 }
+
+/* ===== Showreel — immersive stage (cursor-follow + docked player) ========== */
+.sr-body{margin:0;background:var(--dark);overflow:hidden}
+.sr-stage{position:fixed;inset:0;background:var(--dark);overflow:hidden}
+/* Hide the native cursor only where a fine pointer drives the custom one. */
+@media (hover:hover) and (pointer:fine){
+  .sr-stage, .sr-stage a, .sr-stage button{cursor:none}
+}
+.sr-bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.sr-video{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .8s ease}
+.sr-video.is-playing{opacity:1}
+.sr-veil{position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 18%, rgba(23,21,20,.30), rgba(23,21,20,.66) 70%, rgba(23,21,20,.86) 100%)}
+/* When playing, deepen the veil so the player + audio take the focus. */
+.sr-playing .sr-veil{background:radial-gradient(120% 90% at 50% 30%, rgba(23,21,20,.55), rgba(23,21,20,.86) 80%)}
+
+.sr-logo{position:absolute;top:22px;left:24px;z-index:5}
+.sr-logo img{height:26px;width:auto;display:block}
+.sr-close{position:absolute;top:20px;right:24px;z-index:5;width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;color:var(--dark-text);
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px}
+.sr-close:hover{background:rgba(255,255,255,.16)}
+
+.sr-hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;color:var(--dark-text);padding:0 24px;transition:opacity .5s ease;pointer-events:none}
+.sr-started .sr-hint{opacity:0}
+.sr-eyebrow{color:#f0b487;font-weight:700;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px}
+.sr-title{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1.08;margin:0 0 12px;max-width:14ch}
+.sr-lede{color:var(--dark-muted);font-size:17px;margin:0}
+
+/* The cursor-following pill (desktop). Hidden until the pointer enters the stage. */
+.sr-cursor{position:fixed;top:0;left:0;z-index:8;pointer-events:none;
+  background:var(--accent);color:#fff;font-weight:700;font-size:13px;letter-spacing:.04em;
+  padding:9px 16px;border-radius:999px;opacity:0;transition:opacity .2s ease;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);will-change:transform}
+.sr-cursor.on{opacity:1}
+@media (hover:none),(pointer:coarse){ .sr-cursor{display:none} }
+
+/* Touch fallback button — shown only on touch (no cursor to follow). */
+.sr-tap{display:none;margin-top:26px;pointer-events:auto;background:var(--accent);color:#fff;border:0;
+  border-radius:999px;padding:14px 28px;font-weight:700;font-size:16px;cursor:pointer}
+.is-touch .sr-tap{display:inline-block}
+.is-touch.sr-started .sr-tap{display:none}
+
+/* Docked player — slides up on first play. */
+.sr-player{position:absolute;left:50%;bottom:26px;transform:translateX(-50%) translateY(140%);
+  z-index:6;display:flex;align-items:center;gap:8px;background:rgba(252,247,248,.96);
+  border-radius:999px;padding:8px 14px 8px 8px;box-shadow:0 10px 30px rgba(0,0,0,.4);
+  opacity:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s ease;max-width:92vw}
+.sr-player.on{transform:translateX(-50%) translateY(0);opacity:1}
+.sr-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;
+  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.sr-btn:hover{background:var(--wine)}
+.sr-meta{display:flex;flex-direction:column;gap:3px;padding:0 10px;min-width:200px}
+.sr-track-title{font-size:13px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-scrub{appearance:none;-webkit-appearance:none;width:100%;height:4px;border-radius:999px;
+  background:var(--border2);outline:none}
+.sr-scrub::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer}
+.sr-scrub::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:var(--accent);cursor:pointer}
+
+@media (max-width:620px){
+  .sr-title{font-size:30px}
+  .sr-meta{min-width:120px}
+}

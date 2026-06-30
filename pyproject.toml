@@ -64,6 +64,7 @@ where = ["src"]
     "static/*.svg",
     "static/*.ico",
     "static/public/*.css",
+    "static/public/*.js",
     "static/public/*.png",
     "static/public/*.jpg",
     "static/public/*.svg",

@@ -185,7 +185,7 @@ ADMIN_COOKIE = "cdl_admin"
 # default; a new *public* page must be added to this set.
 _PUBLIC_PATHS = frozenset({
     "/", "/capabilities", "/samples", "/start", "/book", "/thanks", "/apply",
-    "/delivery-sample",
+    "/delivery-sample", "/refer", "/for-artists", "/showreel",
 })
 
 
