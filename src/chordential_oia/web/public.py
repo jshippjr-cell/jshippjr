@@ -125,6 +125,41 @@ def public_samples(request: Request):
     )
 
 
+_GALLERY_GRADIENTS = [
+    "wine-orange", "slate-sand", "ink-orange", "wine-slate", "orange-sand", "ink-wine",
+]
+
+
+@router.get("/reel", response_class=HTMLResponse)
+def public_reel(request: Request):
+    """The gallery index: a falling/spiral arrangement of cards (capability tracks
+    + case studies) in Chordential's palette. A new page — does NOT replace the
+    converting homepage (/) — linked from the footer. Each card opens the showreel
+    (deep-linked to that track) or a case study. Pure-CSS motion (server-seeded
+    per-card timing/position), so there's no animation JS at all; falls back to a
+    static list automatically on touch / reduced-motion / narrow screens via CSS."""
+    show = get_showcase()
+    tracks = [d for d in show.demos if (d.audio_url or "").strip()]
+    cards = []
+    for i, t in enumerate(tracks):
+        cards.append({
+            "title": t.title, "label": t.discipline_label,
+            "href": f"/showreel?t={i}", "kind": "Track",
+        })
+    for c in show.cases:
+        cards.append({
+            "title": c.title, "label": "Case study",
+            "href": "/capabilities", "kind": "Case",
+        })
+    # Deterministic per-card seed (index-based, not random) so the layout is stable
+    # across requests/deploys — same spirit as the rest of the codebase's "no
+    # randomness in rendered output" discipline.
+    for i, c in enumerate(cards):
+        c["seed"] = i
+        c["gradient"] = _GALLERY_GRADIENTS[i % len(_GALLERY_GRADIENTS)]
+    return render(request, "public/reel.html", active="", cards=cards)
+
+
 @router.get("/showreel", response_class=HTMLResponse)
 def public_showreel(request: Request):
     """Immersive showreel stage: hero video background, a cursor-following 'play'

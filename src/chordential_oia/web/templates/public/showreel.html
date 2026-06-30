@@ -82,6 +82,10 @@
     if (!stage || !audio || !tracks.length) return;
 
     var i = 0, loaded = -1;
+    // Deep link from the gallery: /showreel?t=<index> opens on that track.
+    var qs = new URLSearchParams(window.location.search);
+    var startAt = parseInt(qs.get('t'), 10);
+    if (!isNaN(startAt)) i = ((startAt % tracks.length) + tracks.length) % tracks.length;
 
     function load(n) {
       i = (n + tracks.length) % tracks.length;
@@ -131,7 +135,7 @@
       if (audio.duration) audio.currentTime = scrub.value / 1000 * audio.duration;
     });
 
-    load(0);
+    load(i);  // honors the ?t= deep link set above (defaults to 0)
   })();
   </script>
 </body>

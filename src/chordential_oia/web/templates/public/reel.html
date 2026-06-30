@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Reel — Chordential</title>
+<link rel="stylesheet" href="/static/public/site.css">
+<link rel="icon" href="/static/public/wordmark-dark.png">
+</head>
+<body class="rg-body">
+  <!-- Pure-CSS spiral/list toggle (no JS) — same checkbox-hack pattern already
+       used for the mobile menu in public_base.html. -->
+  <input type="checkbox" id="rg-view-toggle" class="rg-view-input">
+
+  <header class="rg-chrome">
+    <a class="rg-logo" href="/"><img src="/static/public/wordmark-ko.png" alt="Chordential"></a>
+    <label for="rg-view-toggle" class="rg-toggle">
+      <span class="rg-toggle-spiral">spiral</span>
+      <span class="rg-toggle-dot" aria-hidden="true">&#9679;</span>
+      <span class="rg-toggle-list">list</span>
+    </label>
+    <a class="rg-menu" href="/for-artists">menu &#183;</a>
+  </header>
+
+  <main class="rg-stage">
+    {% for c in cards %}
+    <a class="rg-card rg-{{ c.gradient }}" href="{{ c.href }}"
+       style="--seed:{{ c.seed }}">
+      <span class="rg-card-kind">{{ c.kind }}</span>
+      <span class="rg-card-title">{{ c.title }}</span>
+      <span class="rg-card-label">{{ c.label }}</span>
+    </a>
+    {% endfor %}
+  </main>
+
+  <div class="rg-foot">
+    <span class="rg-foot-eyebrow">showreel</span>
+    <span class="rg-foot-dot">&#183;</span>
+    <span class="rg-foot-year">2026</span>
+  </div>
+</body>
+</html>
