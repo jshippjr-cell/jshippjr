@@ -70,6 +70,7 @@
   // rAF tick per frame coalesces however many events landed and applies
   // ONE transform write, matched to the actual render cadence.
   var frameQueued = false;
+  var frameId = null;
   var frameX = 0;
   var frameT = 0;
 
@@ -79,13 +80,18 @@
     lastX = e.clientX;
     if (!frameQueued) {
       frameQueued = true;
-      requestAnimationFrame(applyDragFrame);
+      frameId = requestAnimationFrame(applyDragFrame);
     }
   }
 
+  // NOT gated on `dragging` — a real regression lived here: for a short/quick
+  // drag, pointerup (which sets dragging=false) frequently beats the queued
+  // rAF callback, so bailing here silently dropped the final bit of motion
+  // and its velocity, reading as the drag "not responding." lastX/frameX
+  // stay meaningful even after release, so it's always safe to flush them.
   function applyDragFrame() {
     frameQueued = false;
-    if (!dragging) return;
+    frameId = null;
     var now = performance.now();
     var dt = Math.max(1, now - frameT);
     var dx = lastX - frameX;
@@ -104,6 +110,17 @@
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
+    // Flush any motion still waiting on a queued rAF right now, rather than
+    // hoping that frame arrives before this function returns — release must
+    // never lose the last bit of drag or compute momentum off a stale
+    // velocity. Cancel the pending frame first: if it were left to fire on
+    // its own next, it would recompute dx as 0 (frameX already caught up
+    // here) and stomp the just-flushed velocity back to 0, killing momentum
+    // a tick after it started.
+    if (frameQueued) {
+      cancelAnimationFrame(frameId);
+      applyDragFrame();
+    }
     // The drag itself is direct, user-driven motion (1:1 with the pointer) —
     // only the momentum continuation afterward is "automatic," so that's
     // the one piece reduced-motion turns off; the rotation just stops where
@@ -121,6 +138,7 @@
     frameX = e.clientX;
     frameT = performance.now();
     drum.classList.add("rg-dragging");
+    resetAllTilts(); // dragging rotates the whole drum — a card frozen mid-tilt reads as stuck
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
@@ -205,6 +223,19 @@
     }
   }
 
+  // Clicking the currently-active card a SECOND time closes it back down:
+  // un-pop/un-highlight it (the card "goes back into the carousel"), hide
+  // the docked player, and resume the default entrance track quietly in the
+  // background — mirroring the same hidden ambient state the page starts in.
+  function deactivate() {
+    if (activeCard) activeCard.classList.remove("rg-active");
+    activeCard = null;
+    drum.classList.remove("rg-has-active");
+    if (player) player.classList.remove("on");
+    if (trackCards.length) loadTrack(trackCards[0], true, false);
+    else if (audio) audio.pause();
+  }
+
   function step(dir) {
     if (!trackCards.length) return;
     var i = activeCard ? trackCards.indexOf(activeCard) : -1;
@@ -217,10 +248,48 @@
       if (moved > 6) { e.preventDefault(); return; } // a real drag, not a click
       if (!card.dataset.audioUrl) return; // a case card: let it navigate normally
       e.preventDefault();
-      if (card === activeCard) togglePlayPause();
+      if (card === activeCard) deactivate();
       else loadTrack(card, true);
     });
   });
+
+  // ------------------------------------------------------------------ //
+  // Holographic tilt: each card tips toward the cursor and shows a soft
+  // cursor-tracked sheen, independent of (and layered on top of) whatever
+  // slot/active/dimmed transform already applies. Real pointer devices
+  // only — touch has no hover to drive this from, and gating it out there
+  // avoids a tilt that gets "stuck" with no mouseleave to reset it.
+  // ------------------------------------------------------------------ //
+  var supportsHoverTilt = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+  function resetAllTilts() {
+    cards.forEach(function (card) {
+      card.style.setProperty("--tilt-x", "0deg");
+      card.style.setProperty("--tilt-y", "0deg");
+      card.style.setProperty("--hx", "50%");
+      card.style.setProperty("--hy", "50%");
+      card.classList.remove("rg-tilting");
+    });
+  }
+
+  if (supportsHoverTilt) {
+    cards.forEach(function (card) {
+      card.addEventListener("mousemove", function (e) {
+        if (dragging) return; // dragging owns the drum's rotation — don't fight it per-card
+        var rect = card.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var y = e.clientY - rect.top;
+        var tiltX = ((rect.height / 2 - y) / rect.height) * 16;
+        var tiltY = ((x - rect.width / 2) / rect.width) * 16;
+        card.style.setProperty("--tilt-x", tiltX.toFixed(2) + "deg");
+        card.style.setProperty("--tilt-y", tiltY.toFixed(2) + "deg");
+        card.style.setProperty("--hx", ((x / rect.width) * 100).toFixed(1) + "%");
+        card.style.setProperty("--hy", ((y / rect.height) * 100).toFixed(1) + "%");
+        card.classList.add("rg-tilting");
+      });
+      card.addEventListener("mouseleave", resetAllTilts);
+    });
+  }
 
   if (toggleBtn) toggleBtn.addEventListener("click", function (e) { e.stopPropagation(); togglePlayPause(); });
   if (prevBtn) prevBtn.addEventListener("click", function (e) { e.stopPropagation(); step(-1); });

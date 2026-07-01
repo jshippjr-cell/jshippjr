@@ -93,7 +93,7 @@ def test_reel_cards_get_evenly_spaced_slot_angles(client):
 
 def test_reel_loads_the_drag_carousel_engine(client):
     t = client.get("/reel").text
-    assert '<script src="/static/public/reel-carousel.js?v=2"></script>' in t
+    assert '<script src="/static/public/reel-carousel.js?v=3"></script>' in t
     assert 'id="rg-drum"' in t
     r = client.get("/static/public/reel-carousel.js")
     assert r.status_code == 200
@@ -209,3 +209,44 @@ def test_list_mode_hides_the_drag_hint(client):
     the static grid where dragging no longer applies."""
     css = _reel_css()
     assert ".rg-view-input:checked ~ .rg-stage .rg-hint{display:none}" in css
+
+
+def test_drag_frame_flush_is_not_gated_on_the_dragging_flag():
+    """Confirmed live via Playwright: for a short/quick drag, pointerup (which
+    sets dragging=false) frequently beats the queued rAF callback that was
+    meant to apply the frame's motion. Gating the flush on `dragging` silently
+    dropped that final bit of rotation and its velocity — the drag reading as
+    "stuck" or unresponsive for exactly the kind of quick flick a real user
+    tries constantly. lastX/frameX stay meaningful after release, so the
+    flush must run unconditionally."""
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    body = js.split("function applyDragFrame() {", 1)[1].split("\n  }", 1)[0]
+    assert "if (!dragging) return;" not in body
+
+
+def test_pointerup_flushes_and_cancels_any_pending_drag_frame():
+    """Without cancelling the pending rAF before the manual flush, it would
+    still fire on its own next tick, recompute dx as 0 (frameX already caught
+    up), and stomp the just-flushed velocity back to 0 — killing momentum a
+    tick after it started."""
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    assert "cancelAnimationFrame(frameId);\n      applyDragFrame();" in js
+
+
+def test_drag_still_works_while_a_card_is_active_and_popped():
+    """A card popping forward (much bigger translateZ/scale) must never make
+    the carousel itself undraggable — dragging rotates the shared drum
+    regardless of which card, if any, is currently active."""
+    css = _reel_css()
+    # The active card doesn't remove itself from the drum or gain its own
+    # separate drag-blocking layer — it's still a normal child card, just a
+    # visually bigger one; there's no CSS here that would intercept drag
+    # input away from the shared .rg-drum pointerdown listener.
+    assert ".rg-card.rg-active{" in css
+    assert "pointer-events:none" not in css.split(".rg-card.rg-active{", 1)[1].split("}", 1)[0]

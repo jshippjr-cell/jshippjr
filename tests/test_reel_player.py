@@ -84,7 +84,8 @@ def test_active_card_pops_forward_and_others_dim(client):
     assert (
         ".rg-drum.rg-has-active .rg-card:not(.rg-active){\n"
         "  filter:brightness(.55) saturate(.7);\n"
-        "  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px)) scale(.82)}"
+        "  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px)) scale(.82)\n"
+        "    rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))}"
         in css
     )
 
@@ -143,3 +144,70 @@ def test_default_entrance_track_is_the_strings_arrangement_track(client):
 def test_reel_audio_element_loops(client):
     t = client.get("/reel").text
     assert '<audio data-rg-audio preload="none" loop></audio>' in t
+
+
+# --------------------------------------------------------------------------- #
+# Clicking the active card a SECOND time closes it back down — un-pops it,
+# hides the player, and resumes the default entrance track quietly, instead
+# of just pausing in place.
+# --------------------------------------------------------------------------- #
+
+def test_clicking_the_active_card_again_calls_deactivate_not_toggle_play_pause(client):
+    js = _carousel_js()
+    assert "if (card === activeCard) deactivate();" in js
+    assert "if (card === activeCard) togglePlayPause();" not in js
+
+
+def test_deactivate_unpops_the_card_hides_the_player_and_resumes_the_default_track(client):
+    js = _carousel_js()
+    assert "function deactivate() {" in js
+    body = js.split("function deactivate() {", 1)[1].split("\n  }", 1)[0]
+    assert 'activeCard.classList.remove("rg-active")' in body
+    assert 'drum.classList.remove("rg-has-active")' in body
+    assert 'player.classList.remove("on")' in body
+    assert "loadTrack(trackCards[0], true, false)" in body
+
+
+# --------------------------------------------------------------------------- #
+# Holographic tilt: each card tips toward the cursor and shows a cursor-
+# tracked sheen, on real pointer devices only, and never fights the drag.
+# --------------------------------------------------------------------------- #
+
+def test_cards_carry_tilt_and_shine_custom_properties_in_every_transform_state(client):
+    css = _reel_css()
+    assert "rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))" in css
+    # Base slot placement, the active pop, AND the dimmed/shrunk state must
+    # all include the tilt terms — whichever one currently applies to a card.
+    assert css.count("rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))") >= 3
+    assert ".rg-card-shine{" in css
+    assert "radial-gradient(circle at var(--hx,50%) var(--hy,50%)" in css
+
+
+def test_tilt_transition_is_faster_than_the_base_transform_transition(client):
+    """The base .5s transition would make the continuous mousemove-driven
+    tilt visibly lag behind the cursor, chasing a moving target. JS toggles
+    a class for a much shorter transition only while actively tracking."""
+    css = _reel_css()
+    assert ".rg-card.rg-tilting{transition:transform .12s ease-out" in css
+
+
+def test_reel_card_template_includes_the_shine_overlay(client):
+    t = client.get("/reel").text
+    assert 'class="rg-card-shine"' in t
+
+
+def test_tilt_is_gated_to_real_pointer_devices(client):
+    js = _carousel_js()
+    assert 'window.matchMedia("(hover: hover) and (pointer: fine)").matches' in js
+    assert "if (supportsHoverTilt) {" in js
+
+
+def test_tilt_does_not_fight_an_active_drag(client):
+    js = _carousel_js()
+    assert "if (dragging) return; // dragging owns the drum's rotation" in js
+    assert "resetAllTilts();" in js  # called from onDown, at drag start
+
+
+def test_mouseleave_resets_tilt_to_neutral(client):
+    js = _carousel_js()
+    assert 'card.addEventListener("mouseleave", resetAllTilts);' in js
