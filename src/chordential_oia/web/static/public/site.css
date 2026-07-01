@@ -453,25 +453,29 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-stage{position:relative;min-height:100vh;padding-top:90px;
   perspective:1400px;transform-style:preserve-3d}
 
-/* The card itself: position via nth-child "slots" below.
-   TRUE 3D carousel, not a flattened illusion: each card sits at a fixed angle
-   around a shared vertical cylinder (--slot-angle, evenly spaced) at a fixed
-   depth (--z, how far back on the cylinder). The whole cylinder SPINS together —
-   every card's Y-axis rotation advances through the same 360deg sweep (rg-orbit),
-   just starting at its own --slot-angle offset — so cards keep their relative
-   spacing as they turn, exactly like a rotating carousel. Real perspective does
-   the rest: a card facing the viewer (rotate≈0/360) reads full-size and crisp in
-   the FOREGROUND; a card that has turned away (rotate≈180) is genuinely
-   foreshortened, smaller, and further back — the BACKGROUND — because that's
-   what real 3D projection does, not a manual size/blur guess.
-   `rotate`/`scale`/`translate` are the STANDALONE CSS properties (not `transform`),
-   so the ORBIT (rotate+scale) and the FALL (translate) coexist as independent
-   animated properties with no keyframe duplication. */
-.rg-card{position:absolute;display:flex;flex-direction:column;justify-content:flex-end;
+/* The card itself: EVERY card starts from the SAME base position — dead center
+   of the stage (left:50% + a negative margin equal to half its width) — because
+   an orbit only reads as "around a central column" if all cards share one axis.
+   --slot-angle then fans each card out from that shared center via a REAL
+   `transform` chain: rotateY(angle) translateZ(radius). Order matters here and
+   is the whole fix — CSS composes `transform` functions in the order written,
+   so rotating FIRST and then pushing out along the now-rotated Z axis is what
+   sweeps the card around a circle. (The previous build used the standalone
+   `rotate`/`translate` CSS properties instead of `transform` — those have a
+   spec-fixed application order, translate always before rotate, no matter how
+   you write them — so the Z-push never got carried around by the spin; every
+   card just spun in place on its own little slot. Standalone `translate` is
+   still used, but ONLY for the vertical fall (Y), which doesn't need ordering
+   against the orbit.) The whole ring turns together via rg-orbit animating
+   `transform` itself, each card starting at its own --slot-angle offset — real
+   perspective then does the foreground/background depth for free. */
+.rg-card{position:absolute;left:50%;margin-left:-115px;
+  display:flex;flex-direction:column;justify-content:flex-end;
   width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45);
-  translate:0 -32vh var(--z,-220px);
-  rotate:0 1 0 var(--slot-angle,0deg);
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  translate:0 -32vh 0;
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px));
   animation:rg-fall var(--dur,20s) linear infinite, rg-orbit var(--spin,14s) linear infinite;
   animation-delay:var(--delay,0s), var(--spin-delay,0s)}
 .rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .25s}
@@ -482,13 +486,13 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:11.5px;margin-top:3px}
 
 @keyframes rg-fall{
-  0%   { translate:0 -32vh var(--z,-220px) }
-  100% { translate:0 132vh var(--z,-220px) }
+  0%   { translate:0 -32vh 0 }
+  100% { translate:0 132vh 0 }
 }
 @keyframes rg-orbit{
-  0%   { rotate:0 1 0 calc(var(--slot-angle,0deg) + 0deg);   scale:var(--near,1); filter:blur(0) }
-  50%  { rotate:0 1 0 calc(var(--slot-angle,0deg) + 180deg); scale:var(--far,.6); filter:blur(var(--fblur,4px)) }
-  100% { rotate:0 1 0 calc(var(--slot-angle,0deg) + 360deg); scale:var(--near,1); filter:blur(0) }
+  0%   { transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px)) scale(var(--near,1)); filter:blur(0) }
+  50%  { transform:rotateY(calc(var(--slot-angle,0deg) + 180deg)) translateZ(var(--orbit-r,320px)) scale(var(--far,.6)); filter:blur(var(--fblur,4px)) }
+  100% { transform:rotateY(calc(var(--slot-angle,0deg) + 360deg)) translateZ(var(--orbit-r,320px)) scale(var(--near,1)); filter:blur(0) }
 }
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
@@ -499,19 +503,21 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-orange-sand{background:linear-gradient(135deg,var(--orange),var(--sand))}
 .rg-ink-wine{background:linear-gradient(135deg,var(--ink),var(--wine))}
 
-/* Six hand-tuned "slots" (left position, fall timing, orbit radius/speed, and the
-   near/far depth range each card cycles through) cycling by nth-child —
-   deterministic variety without CSS random()/modulo. --slot-angle is each card's
-   own starting position on its rotation cycle (staggers who's "facing forward"
-   at any given moment); --z is how far back it sits before the spin starts;
-   --near/--far/--fblur drive the rg-orbit keyframe: real Y-axis rotation already
+/* Six hand-tuned "slots" cycling by nth-child — deterministic variety without
+   CSS random()/modulo. --slot-angle evenly spaces the six cards 60deg apart
+   around the SAME shared column (0/60/120/180/240/300); --orbit-r is that
+   column's radius (roughly constant across cards on purpose — a real column
+   has one consistent radius, not six different ones). Each card's own --spin
+   duration means they don't all turn in perfect lockstep, which is what gives
+   the "spiral" feel while still tracing the one shared axis. --near/--far/
+   --fblur drive the rg-orbit keyframe: real Y-axis rotation already
    foreshortens the card geometrically, this ADDS the size/blur cue on top. */
-.rg-card:nth-child(6n+1){left:6%;  --dur:19s; --delay:-2s;  --z:-180px; --slot-angle:20deg;  --spin:13s; --spin-delay:-2s;  --near:1.08; --far:.55; --fblur:4.5px}
-.rg-card:nth-child(6n+2){left:23%; --dur:24s; --delay:-9s;  --z:-260px; --slot-angle:80deg;  --spin:17s; --spin-delay:-9s;  --near:1;    --far:.62; --fblur:3.5px}
-.rg-card:nth-child(6n+3){left:40%; --dur:17s; --delay:-13s; --z:-150px; --slot-angle:140deg; --spin:11s; --spin-delay:-13s; --near:1.1;  --far:.6;  --fblur:5px}
-.rg-card:nth-child(6n+4){left:57%; --dur:22s; --delay:-5s;  --z:-300px; --slot-angle:200deg; --spin:19s; --spin-delay:-5s;  --near:.96;  --far:.5;  --fblur:4px}
-.rg-card:nth-child(6n+5){left:71%; --dur:25s; --delay:-17s; --z:-210px; --slot-angle:260deg; --spin:15s; --spin-delay:-17s; --near:1.04; --far:.58; --fblur:3px}
-.rg-card:nth-child(6n+6){left:86%; --dur:20s; --delay:-7s;  --z:-130px; --slot-angle:320deg; --spin:9s;  --spin-delay:-7s;  --near:1;    --far:.65; --fblur:4px}
+.rg-card:nth-child(6n+1){--orbit-r:320px; --slot-angle:0deg;   --dur:19s; --delay:-2s;  --spin:22s; --spin-delay:-2s;  --near:1.08; --far:.55; --fblur:4.5px}
+.rg-card:nth-child(6n+2){--orbit-r:300px; --slot-angle:60deg;  --dur:24s; --delay:-9s;  --spin:26s; --spin-delay:-9s;  --near:1;    --far:.62; --fblur:3.5px}
+.rg-card:nth-child(6n+3){--orbit-r:340px; --slot-angle:120deg; --dur:17s; --delay:-13s; --spin:19s; --spin-delay:-13s; --near:1.1;  --far:.6;  --fblur:5px}
+.rg-card:nth-child(6n+4){--orbit-r:310px; --slot-angle:180deg; --dur:22s; --delay:-5s;  --spin:24s; --spin-delay:-5s;  --near:.96;  --far:.5;  --fblur:4px}
+.rg-card:nth-child(6n+5){--orbit-r:330px; --slot-angle:240deg; --dur:25s; --delay:-17s; --spin:20s; --spin-delay:-17s; --near:1.04; --far:.58; --fblur:3px}
+.rg-card:nth-child(6n+6){--orbit-r:290px; --slot-angle:300deg; --dur:20s; --delay:-7s;  --spin:28s; --spin-delay:-7s;  --near:1;    --far:.65; --fblur:4px}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
@@ -522,14 +528,14 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
   padding:90px 24px 60px;min-height:auto}
 .rg-view-input:checked ~ .rg-stage .rg-card{
-  position:static;animation:none;rotate:none;scale:1;translate:none;filter:none;
+  position:static;animation:none;transform:none;translate:none;filter:none;
   width:auto;height:auto;margin:0;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
 
 @media (hover:none),(prefers-reduced-motion:reduce),(max-width:760px){
   .rg-stage{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
     padding:90px 24px 60px;min-height:auto;perspective:none}
-  .rg-card{position:static;animation:none;rotate:none;scale:1;translate:none;filter:none;
-    width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
+  .rg-card{position:static;animation:none;transform:none;translate:none;filter:none;
+    width:auto;height:auto;margin:0;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
   .rg-toggle{display:none}
 }
 

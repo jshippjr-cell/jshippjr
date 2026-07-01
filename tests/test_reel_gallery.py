@@ -84,18 +84,40 @@ def _reel_css():
 
 def test_reel_uses_real_css_3d_not_a_flattened_illusion():
     """Genuine 3D, not a 2D-rotate-plus-manual-blur fake: the stage needs a real
-    perspective + preserve-3d viewing context, and each card must rotate around
-    the Y AXIS (a real "turntable" turn, using the rotate property's axis-angle
-    form) rather than the screen-plane Z-axis spin from the earlier attempt —
-    only a Y-axis rotation under perspective produces true foreshortening."""
+    perspective + preserve-3d viewing context, and each card must revolve around
+    the Y AXIS via the `transform` property's own function order — rotateY()
+    THEN translateZ() — which is what actually sweeps a card's depth-push around
+    a circle. (The standalone `rotate`/`translate` CSS properties can't do this:
+    the spec applies them in a fixed order — translate always before rotate — so
+    a standalone translateZ never gets carried around by a standalone rotateY;
+    every card would just spin in place instead of orbiting.)"""
     css = _reel_css()
     assert "perspective:1400px" in css
     assert "transform-style:preserve-3d" in css
     assert "@keyframes rg-orbit" in css
-    # Axis-angle rotate syntax "0 1 0 <angle>" = rotate around Y.
-    assert "rotate:0 1 0 calc(var(--slot-angle" in css
-    assert "rotate:0 1 0 var(--slot-angle" in css  # the base (pre-animation) placement
-    assert "rg-orbit var(--spin" in css            # actually applied to .rg-card
+    assert "transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r" in css
+    assert "transform:rotateY(calc(var(--slot-angle,0deg) + 180deg)) translateZ(var(--orbit-r" in css
+    assert "rg-orbit var(--spin" in css  # actually applied to .rg-card
+
+
+def test_reel_cards_hide_their_backface():
+    """Without this, a card rotated past 90deg shows a mirrored (backwards-text)
+    image of its own front face instead of turning cleanly away from the
+    viewer — a real visual glitch caught by screenshotting the live orbit."""
+    css = _reel_css()
+    assert "backface-visibility:hidden" in css
+
+
+def test_reel_cards_share_one_central_column():
+    """An "orbit" only reads as orbiting a CENTRAL column if every card starts
+    from the SAME base position (dead center of the stage) and is fanned out
+    purely by its own --slot-angle + --orbit-r — not six independent per-card
+    `left:X%` slots, which would make each card spin around its own tiny orbit
+    instead of one shared axis."""
+    css = _reel_css()
+    assert "left:50%" in css
+    assert "margin-left:-115px" in css
+    assert "left:6%" not in css  # the old per-card horizontal slot is gone
 
 
 def test_reel_cards_have_depth_cycle_near_far_near():
@@ -103,21 +125,20 @@ def test_reel_cards_have_depth_cycle_near_far_near():
     on top of the real geometric foreshortening — a card grows/sharpens at the
     front of its sweep and shrinks/blurs at the back."""
     css = _reel_css()
-    assert "scale:var(--near" in css
-    assert "scale:var(--far" in css
+    assert "scale(var(--near" in css
+    assert "scale(var(--far" in css
     assert "filter:blur(var(--fblur" in css
-    # Every slot must define its own near/far/blur range and its own 3D placement.
+    # Every slot must define its own near/far/blur range and its own orbit radius.
     assert css.count("--near:") == 6
     assert css.count("--far:") == 6
     assert css.count("--slot-angle:") == 6
-    assert css.count("--z:") == 6
+    assert css.count("--orbit-r:") == 6
 
 
 def test_reel_fallback_resets_the_3d_properties():
     """List-mode and the mobile/touch/reduced-motion fallback must fully neutralize
-    translate/rotate (not just the old rotate:0deg) since translate now carries a
-    Z-depth component and rotate uses axis-angle syntax — a bare 0deg reset would
-    leave the old Z-push/Y-axis state partially applied."""
+    both `transform` (the orbit) and `translate` (the fall) — a bare rotate:0deg
+    reset wouldn't touch either, since the orbit now lives entirely in `transform`."""
     css = _reel_css()
     assert css.count("translate:none") >= 2
-    assert css.count("rotate:none") >= 2
+    assert css.count("transform:none") >= 2
