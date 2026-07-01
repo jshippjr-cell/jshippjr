@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ..models import MusicDiscipline, Opportunity
-from ..talent import Talent
+from ..talent import Talent, normalize_url
 from . import db
 from .estimate import build_estimate
 from .evaluate import evaluate
@@ -362,11 +362,12 @@ def public_apply_submit(
         MusicDiscipline(d) for d in disciplines
         if d in {m.value for m in MusicDiscipline}
     ]
+    reel_url = normalize_url(demo_reel_url)
     t = Talent(
         name=name.strip(), email=email.strip() or None, disciplines=valid,
         credits=credits.strip(), location=location.strip() or None,
-        demo_reel_url=demo_reel_url.strip() or None,
-        source="applicant", source_url=demo_reel_url.strip() or None,
+        demo_reel_url=reel_url,
+        source="applicant", source_url=reel_url,
     )
     conn = db.connect()
     try:
@@ -405,11 +406,12 @@ def public_refer_submit(
     ]
     by = referred_by.strip()
     note = f"Referred by {by}." if by else "Peer referral."
+    reel_url = normalize_url(demo_reel_url)
     t = Talent(
         name=name.strip(), email=email.strip() or None, disciplines=valid,
         credits=credits.strip(), location=location.strip() or None,
-        demo_reel_url=demo_reel_url.strip() or None,
-        source="referral", source_url=demo_reel_url.strip() or None, notes=note,
+        demo_reel_url=reel_url,
+        source="referral", source_url=reel_url, notes=note,
     )
     conn = db.connect()
     try:

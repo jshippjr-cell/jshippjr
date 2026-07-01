@@ -54,7 +54,7 @@ from ..delivery import (
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
-from ..talent import Talent, profile_completeness
+from ..talent import Talent, normalize_url, profile_completeness
 from ..matching import match_talent
 from . import (
     db, decision_makers, directory_crawl, directory_parsers, discovery,
@@ -1199,6 +1199,19 @@ def inbound_set_status(lead_id: int, status: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse("/leads", status_code=303)
+
+
+@app.post("/leads/{lead_id}/delete")
+def inbound_delete(lead_id: int):
+    """Permanently remove a Dismissed lead — for clearing out ones already
+    addressed, distinct from Dismiss (which just files it out of the New
+    queue but keeps the record)."""
+    conn = db.connect()
+    try:
+        db.delete_inbound_lead(conn, lead_id)
+    finally:
+        conn.close()
+    return RedirectResponse("/leads?status=Dismissed", status_code=303)
 
 
 @app.post("/leads/{lead_id}/promote")
@@ -2785,12 +2798,13 @@ def talent_create(
 ):
     valid = [MusicDiscipline(d) for d in disciplines if d in {m.value for m in MusicDiscipline}]
     origin = source if source in _ADD_SOURCES else "manual"
+    reel_url = normalize_url(demo_reel_url)
     t = Talent(
         name=name.strip(), email=email.strip() or None, disciplines=valid,
         credits=credits.strip(), location=location.strip() or None,
-        demo_reel_url=demo_reel_url.strip() or None, notes=notes.strip(),
+        demo_reel_url=reel_url, notes=notes.strip(),
         rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
-        source=origin, source_url=demo_reel_url.strip() or None,
+        source=origin, source_url=reel_url,
     )
     conn = db.connect()
     try:
@@ -2846,7 +2860,7 @@ def talent_edit(
     try:
         db.update_talent_profile(
             conn, talent_id, name.strip(), email, disciplines, credits.strip(),
-            location, demo_reel_url, notes.strip(),
+            location, normalize_url(demo_reel_url) or "", notes.strip(),
             rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
         )
     finally:

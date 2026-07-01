@@ -102,6 +102,21 @@ class Talent:
         return self.is_approved and bool(self.disciplines)
 
 
+def normalize_url(url: Optional[str]) -> Optional[str]:
+    """A demo-reel/portfolio link a person typed in by hand, e.g.
+    "chordential.com/reel" — no scheme. Stored as-is, `<a href="...">` would
+    resolve it as a RELATIVE link off the current page instead of the
+    external site (the link "goes nowhere"), and an HTML `type="url"` input
+    rejects it client-side as "not a URL" before it's even submitted. Adding
+    an assumed https:// when no scheme is present fixes both."""
+    url = (url or "").strip()
+    if not url:
+        return None
+    if "://" not in url:
+        url = "https://" + url
+    return url
+
+
 def profile_completeness(t: Talent) -> int:
     """0-100 signal of how complete a profile is (matching readiness)."""
     checks = [

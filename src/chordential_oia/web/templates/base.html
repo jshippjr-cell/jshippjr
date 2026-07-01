@@ -143,6 +143,27 @@
     if (document.visibilityState === 'visible') clearAppBadge();
   });
 })();
+
+// Every edit action on this dashboard (add/remove a chip, save notes, change
+// a status…) is a plain form POST that redirects back to the same page — a
+// full page load, which resets scroll to the top. That reads as "nothing
+// happened" when the thing you just edited was scrolled halfway down a long
+// page (the capabilities doc especially). Record scroll position right
+// before any form submits, and restore it right after the reload — a
+// same-page edit now keeps you looking at what you just changed.
+(function () {
+  var KEY = 'chordential:scrollY:' + location.pathname;
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.tagName === 'FORM') {
+      sessionStorage.setItem(KEY, String(window.scrollY));
+    }
+  }, true);
+  var saved = sessionStorage.getItem(KEY);
+  if (saved !== null) {
+    sessionStorage.removeItem(KEY);
+    window.scrollTo(0, parseInt(saved, 10) || 0);
+  }
+})();
 </script>
 </body>
 </html>

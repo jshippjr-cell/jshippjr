@@ -102,6 +102,42 @@ def test_apply_creates_pending_applicant(ctx):
     assert not t.matchable
 
 
+def test_apply_with_a_bare_domain_reel_link_still_works_and_normalizes(ctx):
+    """Reported live: "chordential.com/reel" (no scheme) as a demo reel URL.
+    The public apply form's field has no type="url" restriction, so the
+    browser lets it through — but it must still land in the DB as a working
+    absolute link, not a bare domain that would render as a broken relative
+    href on the talent's dashboard profile."""
+    client, db_mod = ctx
+    r = client.post(
+        "/apply",
+        data={"name": "Bare Domain Bo", "email": "bo@x.com",
+              "disciplines": ["composition"], "credits": "",
+              "demo_reel_url": "chordential.com/reel"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    conn = db_mod.connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM talent WHERE name='Bare Domain Bo'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row["demo_reel_url"] == "https://chordential.com/reel"
+
+    detail = client.get(f"/talent/{row['id']}").text
+    assert 'href="https://chordential.com/reel"' in detail
+
+
+def test_thanks_page_renders_after_applying(ctx):
+    """Reported live: "pressing the real Apply button takes you nowhere."
+    The redirect target must actually render, not 404/500."""
+    client, _ = ctx
+    r = client.get("/thanks?kind=apply")
+    assert r.status_code == 200
+
+
 def test_applicant_becomes_matchable_after_approval(ctx):
     client, db_mod = ctx
     client.post(

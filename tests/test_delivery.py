@@ -357,6 +357,18 @@ def test_delivery_package_renders_with_client_contributor_and_certificate(client
     assert "indemnif" not in body.lower() or "available on request" in body.lower()
 
 
+def test_project_detail_has_no_from_opportunity_pill(client):
+    """Removed: every project already originates from a won opportunity
+    today (the only way to create one is /opportunity/{id}/project), so the
+    pill was pure clutter on the one page that matters most, the project
+    overview — not a meaningful distinction from any other project."""
+    pid = _win_and_make_project(client, 1)
+    body = client.get(f"/project/{pid}").text
+    assert "From opportunity" not in body
+    assert "Proposal &amp; invoices" in body or "Proposal & invoices" in body
+    assert "Delivery console" in body
+
+
 def test_uploading_asset_stores_it_and_it_appears_in_package(client):
     pid = _win_and_make_project(client, 1)
     files = {"file": ("anthem.mp3", b"ID3fakeaudio", "audio/mpeg")}

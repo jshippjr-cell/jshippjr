@@ -570,6 +570,26 @@
     });
   });
 })();
+
+// Every chip/pill/field edit here is a plain form POST that redirects back
+// to this same page — a full page load, which resets scroll to the top.
+// On a long document that reads as "nothing happened." Record scroll
+// position right before any form submits, restore it right after the
+// reload (this page is standalone — it doesn't extend base.html, so it
+// needs its own copy of the same fix used there).
+(function () {
+  var KEY = 'chordential:scrollY:' + location.pathname;
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.tagName === 'FORM') {
+      sessionStorage.setItem(KEY, String(window.scrollY));
+    }
+  }, true);
+  var saved = sessionStorage.getItem(KEY);
+  if (saved !== null) {
+    sessionStorage.removeItem(KEY);
+    window.scrollTo(0, parseInt(saved, 10) || 0);
+  }
+})();
 </script>
 </body>
 </html>

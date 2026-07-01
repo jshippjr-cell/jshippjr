@@ -7,7 +7,6 @@
   <div>
     <div class="pill-row">
       <span class="pill {{ 'st-won' if row['status']=='Delivered' else 'st-pursuing' }}">{{ row['status'] }}</span>
-      {% if row['opp_id'] %}<a class="pill ghost" href="/opportunity/{{ row['opp_id'] }}">From opportunity ↗</a>{% endif %}
       <a class="pill ghost" href="/project/{{ row['id'] }}/proposal">Proposal &amp; invoices →</a>
       <a class="pill ghost" href="/project/{{ row['id'] }}/delivery">Delivery console →</a>
     </div>

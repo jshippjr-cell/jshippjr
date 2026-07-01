@@ -171,3 +171,61 @@ def test_dismiss_sets_status(ctx):
     finally:
         conn.close()
     assert status == "Dismissed"
+
+
+def test_delete_removes_a_dismissed_lead(ctx):
+    """A lead that's already been addressed (Dismissed) can be permanently
+    cleared out, not just filed under a status you still have to scroll
+    past."""
+    client, db_mod = ctx
+    before = _lead_count(db_mod)
+    client.post("/start", data={"contact_name": "Rae Cho", "company": "Cho Studio",
+                                "contact_email": "rae@cho.studio", "phone": "555-0107"})
+    conn = db_mod.connect()
+    lead_id = conn.execute(
+        "SELECT id FROM inbound_leads WHERE company='Cho Studio'"
+    ).fetchone()[0]
+    conn.close()
+
+    client.post(f"/leads/{lead_id}/status", data={"status": "Dismissed"})
+    r = client.post(f"/leads/{lead_id}/delete", follow_redirects=False)
+    assert r.status_code == 303
+    assert _lead_count(db_mod) == before
+
+
+def test_delete_refuses_a_lead_that_is_not_dismissed(ctx):
+    """The delete route only accepts already-addressed (Dismissed) leads —
+    a stray/forged POST can't quietly erase an active New/Reviewed/Qualified
+    lead."""
+    client, db_mod = ctx
+    client.post("/start", data={"contact_name": "Uma Diaz", "company": "Diaz Co",
+                                "contact_email": "uma@diaz.co", "phone": "555-0108"})
+    conn = db_mod.connect()
+    lead_id = conn.execute(
+        "SELECT id FROM inbound_leads WHERE company='Diaz Co'"
+    ).fetchone()[0]
+    conn.close()
+
+    before = _lead_count(db_mod)
+    client.post(f"/leads/{lead_id}/delete")
+    assert _lead_count(db_mod) == before  # still there — never dismissed
+
+
+def test_delete_refuses_a_promoted_lead_even_if_dismissed(ctx):
+    """A lead already linked to a real opportunity is never eligible for
+    deletion, regardless of its status — deleting it would erase the
+    opportunity's own paper trail back to where it came from."""
+    client, db_mod = ctx
+    client.post("/start", data={"contact_name": "Finn Lark", "company": "Lark Media",
+                                "contact_email": "finn@lark.media", "phone": "555-0109"})
+    conn = db_mod.connect()
+    lead_id = conn.execute(
+        "SELECT id FROM inbound_leads WHERE company='Lark Media'"
+    ).fetchone()[0]
+    conn.close()
+
+    client.post(f"/leads/{lead_id}/promote")
+    client.post(f"/leads/{lead_id}/status", data={"status": "Dismissed"})
+    before = _lead_count(db_mod)
+    client.post(f"/leads/{lead_id}/delete")
+    assert _lead_count(db_mod) == before

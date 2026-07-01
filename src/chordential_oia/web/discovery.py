@@ -273,39 +273,51 @@ def run_target(conn, target) -> int:
 def _do_fetch(conn, target) -> int:
     """Fetch + ingest one target into the review queue. Talent → Pending creators;
     opportunities → inbound leads (deduped so recurring re-scans don't pile up).
-    No gate check here — callers enforce the approved-lineage gate."""
+    No gate check here — callers enforce the approved-lineage gate.
+
+    The actual network fetch is real I/O against a site we don't control —
+    timeouts, HTML/JSON shape changes, rate limits are all expected, not
+    exceptional. An uncaught exception here used to propagate straight out
+    to the interactive "Fetch now" route as a raw 500 error page. It's
+    caught here instead so every caller (the interactive route AND the
+    scheduler's background auto-fetch) gets the same graceful outcome: the
+    target is marked Fetched with outcome="error" (the UI already has a
+    display case for this) rather than crashing or silently vanishing."""
     ingested = 0
     outcome = None
-    if target["kind"] == "talent":
-        for t in ScrapedTalentSource(target["url"]).fetch():
-            if not db.talent_exists(conn, t.name, t.email):
-                db.insert_talent(conn, t)
+    try:
+        if target["kind"] == "talent":
+            for t in ScrapedTalentSource(target["url"]).fetch():
+                if not db.talent_exists(conn, t.name, t.email):
+                    db.insert_talent(conn, t)
+                    ingested += 1
+            outcome = "ok" if ingested else "empty"
+        elif target["kind"] == "opportunity":
+            res = crawl_adapters.fetch_opportunity_records(target)
+            for rec in res["records"]:
+                if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
+                    continue
+                db.insert_inbound_lead(
+                    conn,
+                    contact_name="(discovered)",
+                    company=rec["company"],
+                    project_type=rec["need"],
+                    description=rec["description"],
+                    source="crawl",
+                )
+                try:                             # best-effort phone push — never breaks the fetch
+                    from . import signals
+                    signals.notify_new_lead(rec["company"] or rec["need"], "crawler")
+                except Exception:
+                    pass
                 ingested += 1
-        outcome = "ok" if ingested else "empty"
-    elif target["kind"] == "opportunity":
-        res = crawl_adapters.fetch_opportunity_records(target)
-        for rec in res["records"]:
-            if db.inbound_lead_exists(conn, rec["company"], rec["need"], "crawl"):
-                continue
-            db.insert_inbound_lead(
-                conn,
-                contact_name="(discovered)",
-                company=rec["company"],
-                project_type=rec["need"],
-                description=rec["description"],
-                source="crawl",
-            )
-            try:                             # best-effort phone push — never breaks the fetch
-                from . import signals
-                signals.notify_new_lead(rec["company"] or rec["need"], "crawler")
-            except Exception:
-                pass
-            ingested += 1
-        outcome = res["outcome"]
-        # Auto-detect a login wall → move the source to manual-assist (never
-        # auto-fetched again) so Jon knows it needs his own signed-in browser.
-        if outcome == "login" and target["source_key"]:
-            db.set_site_login_gated(conn, target["source_key"], True)
+            outcome = res["outcome"]
+            # Auto-detect a login wall → move the source to manual-assist (never
+            # auto-fetched again) so Jon knows it needs his own signed-in browser.
+            if outcome == "login" and target["source_key"]:
+                db.set_site_login_gated(conn, target["source_key"], True)
+    except Exception:
+        outcome = "error"
 
     db.mark_crawl_target_fetched(conn, target["id"], ingested, outcome)
     return ingested

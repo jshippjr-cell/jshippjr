@@ -32,7 +32,12 @@
     <label>Location</label>
     <input type="text" name="location" placeholder="Los Angeles, CA / Remote">
     <label>Demo reel link</label>
-    <input type="url" name="demo_reel_url" placeholder="https://… (you'll review this before they're matchable)">
+    <!-- type="text", not "url" — the browser's native url validation demands
+         an explicit scheme and rejects a plain "chordential.com/reel" before
+         the form even submits. The server normalizes a missing scheme by
+         assuming https:// (see talent.normalize_url), so this just needs to
+         get the value there. -->
+    <input type="text" name="demo_reel_url" placeholder="chordential.com/reel or https://… (you'll review this before they're matchable)">
     <label>Rate</label>
     <div class="row" style="display:flex; gap:.5rem">
       <input type="number" name="rate" step="0.01" min="0" placeholder="e.g. 1200" style="flex:2">

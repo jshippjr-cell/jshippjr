@@ -70,6 +70,11 @@
             <input type="hidden" name="status" value="Dismissed">
             <button class="btn tiny ghost" type="submit">Dismiss</button>
           </form>
+          {% else %}
+          <form method="post" action="/leads/{{ l['id'] }}/delete"
+                onsubmit="return confirm('Delete this lead for good? This can\'t be undone.')">
+            <button class="btn tiny ghost" type="submit" title="Permanently remove this lead">Delete</button>
+          </form>
           {% endif %}
           {% else %}
           <span class="muted small">Promoted</span>

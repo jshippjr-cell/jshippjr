@@ -275,3 +275,57 @@ def test_approved_fetch_ingests_when_enabled(ctx, monkeypatch):
         conn.close()
     assert {r["name"] for r in rows} == {"Web Wendy", "Crawl Carl"}
     assert all(r["review_status"] == "Pending" for r in rows)
+
+
+def test_fetch_failure_is_caught_not_a_raw_crash(ctx, monkeypatch):
+    """The individual fetchers already fail soft around the network call
+    itself (ScrapedTalentSource.fetch() catches _fetch_url errors; several
+    layers in crawl_adapters.py do the same) — but _do_fetch's own ingest
+    loop (db writes, parsing results) had no equivalent safety net. Any
+    unexpected exception there used to propagate straight out of run_target,
+    which the interactive "Fetch now" route had no try/except around
+    either, surfacing as a raw 500 error page instead of a normal "this
+    fetch failed" state. It must be caught and recorded, not raised."""
+    _, db_mod = ctx
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.setattr(
+        ScrapedTalentSource, "fetch",
+        lambda self, limit=50: (_ for _ in ()).throw(RuntimeError("unexpected parse bug")),
+    )
+
+    conn = db_mod.connect()
+    tid = db_mod.insert_crawl_target(
+        conn, "talent", "L", "q", "https://ex.com", "vicontrol", "why"
+    )
+    db_mod.update_crawl_target_status(conn, tid, "Approved")
+    target = db_mod.get_crawl_target(conn, tid)
+    n = discovery.run_target(conn, target)  # must not raise
+    conn.close()
+    assert n == 0
+
+    conn = db_mod.connect()
+    try:
+        row = db_mod.get_crawl_target(conn, tid)
+    finally:
+        conn.close()
+    assert row["status"] == "Fetched"
+    assert row["last_outcome"] == "error"
+
+
+def test_interactive_fetch_route_survives_a_scrape_failure(ctx, monkeypatch):
+    client, db_mod = ctx
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.setattr(
+        ScrapedTalentSource, "fetch",
+        lambda self, limit=50: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    conn = db_mod.connect()
+    tid = db_mod.insert_crawl_target(
+        conn, "talent", "L", "q", "https://ex.com", "vicontrol", "why"
+    )
+    db_mod.update_crawl_target_status(conn, tid, "Approved")
+    conn.close()
+
+    r = client.post(f"/discovery/{tid}/fetch", data={"kind": "talent"}, follow_redirects=False)
+    assert r.status_code == 303, "must redirect gracefully, not 500"

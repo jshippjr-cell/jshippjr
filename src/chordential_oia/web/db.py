@@ -24,7 +24,7 @@ from ..invoicing import INVOICE_STATES, Invoice
 from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
 from ..proposals import PROPOSAL_STATES, Proposal
 from ..strategic import assess_strategic_value
-from ..talent import InviteStatus, ReviewStatus, Talent
+from ..talent import InviteStatus, ReviewStatus, Talent, normalize_url
 from .evaluate import evaluate
 
 DEFAULT_DB_PATH = os.environ.get("CHORDENTIAL_DB", "chordential.db")
@@ -2406,6 +2406,20 @@ def update_inbound_lead_status(
     conn.commit()
 
 
+def delete_inbound_lead(conn: sqlite3.Connection, lead_id: int) -> bool:
+    """Permanently remove a lead — only once it's Dismissed (already
+    addressed) and never promoted into the pipeline, so this can't be used
+    to erase a real opportunity's paper trail. Returns False (no-op) if
+    those conditions aren't met, rather than raising, since the only caller
+    is a same-page form button that shouldn't need its own error page."""
+    row = get_inbound_lead(conn, lead_id)
+    if row is None or row["status"] != "Dismissed" or row["linked_opp_id"]:
+        return False
+    conn.execute("DELETE FROM inbound_leads WHERE id = ?", (lead_id,))
+    conn.commit()
+    return True
+
+
 def link_inbound_to_opp(
     conn: sqlite3.Connection, lead_id: int, opp_id: int
 ) -> None:
@@ -3356,7 +3370,12 @@ def talent_from_row(row: sqlite3.Row) -> Talent:
         disciplines=_disciplines_from_json(row["disciplines"]),
         credits=row["credits"] or "",
         location=row["location"],
-        demo_reel_url=row["demo_reel_url"],
+        # Normalized on the way out too, not just on write — a row saved
+        # before this fix existed (or written by any future caller that
+        # forgets to normalize) still renders as a working absolute link
+        # instead of a bare "chordential.com/reel" that resolves relative
+        # to the current page and goes nowhere.
+        demo_reel_url=normalize_url(row["demo_reel_url"]),
         review_status=_enum(row["review_status"], ReviewStatus, ReviewStatus.PENDING),
         invite_status=_enum(row["invite_status"], InviteStatus, InviteStatus.PROSPECT),
         notes=row["notes"] or "",

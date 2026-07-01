@@ -5,8 +5,32 @@ from chordential_oia.talent import (
     InviteStatus,
     ReviewStatus,
     Talent,
+    normalize_url,
     profile_completeness,
 )
+
+
+def test_normalize_url_assumes_https_when_scheme_is_missing():
+    """Reported live: entering "chordential.com/reel" as a demo reel URL was
+    rejected as "not a URL" (the admin form's HTML5 type="url" input
+    demands an explicit scheme), and even where it got through, a scheme-
+    less value stored as-is renders as a RELATIVE link — <a
+    href="chordential.com/reel"> resolves against the CURRENT page, not the
+    external site, so the link "goes nowhere." Assuming https:// when no
+    scheme is present fixes both."""
+    assert normalize_url("chordential.com/reel") == "https://chordential.com/reel"
+    assert normalize_url("www.example.com") == "https://www.example.com"
+
+
+def test_normalize_url_leaves_an_explicit_scheme_alone():
+    assert normalize_url("https://chordential.com/reel") == "https://chordential.com/reel"
+    assert normalize_url("http://example.com") == "http://example.com"
+
+
+def test_normalize_url_blank_becomes_none():
+    assert normalize_url("") is None
+    assert normalize_url("   ") is None
+    assert normalize_url(None) is None
 
 
 def test_matchable_requires_approval_and_a_discipline():
