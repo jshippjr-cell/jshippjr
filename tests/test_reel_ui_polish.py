@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
 
 
 def _css(client):
-    return client.get("/static/public/site.css?v=14").text
+    return client.get("/static/public/site.css?v=15").text
 
 
 def test_every_clickable_control_has_a_pressed_state(client):
@@ -163,3 +163,31 @@ def test_intro_sequence_uses_a_strong_easing_curve_not_weak_built_in_ease(client
     assert "ig-choices-in .5s ease forwards" not in css
     assert "animation:ig-word-in .5s cubic-bezier(.2,.8,.2,1) forwards, ig-word-out .7s cubic-bezier(.2,.8,.2,1) forwards" in css
     assert "animation:ig-choices-in .5s cubic-bezier(.2,.8,.2,1) forwards" in css
+
+
+# --------------------------------------------------------------------------- #
+# Play/pause icon cross-fade — replaces the innerHTML swap that popped
+# instantly with no transition at all.
+# --------------------------------------------------------------------------- #
+
+def test_play_pause_crossfades_instead_of_swapping_innerhtml(client):
+    css = _css(client)
+    assert ".sr-icon{" in css
+    assert "opacity .25s cubic-bezier(.2,0,0,1)" in css
+    assert "scale(.25)" in css
+    assert "filter:blur(4px)" in css
+    assert ".sr-btn.is-playing .sr-icon-play{opacity:0" in css
+    assert ".sr-btn.is-playing .sr-icon-pause{opacity:1" in css
+
+
+def test_play_pause_icon_transform_drops_under_reduced_motion(client):
+    css = _css(client)
+    assert ".sr-icon{transition:opacity .3s ease}" in css
+
+
+def test_showreel_has_two_icon_spans_not_an_innerhtml_swap(client):
+    t = client.get("/showreel").text
+    assert 'class="sr-icon sr-icon-play"' in t
+    assert 'class="sr-icon sr-icon-pause"' in t
+    assert "b.innerHTML = on ? '&#10073;&#10073;' : '&#9654;';" not in t
+    assert "classList.toggle('is-playing', on)" in t

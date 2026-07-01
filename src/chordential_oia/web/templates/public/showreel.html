@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Showreel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=14">
+<link rel="stylesheet" href="/static/public/site.css?v=15">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="sr-body">
@@ -40,7 +40,10 @@
 
     <!-- Docked player (revealed on first play) -->
     <div class="sr-player" data-sr-player>
-      <button type="button" class="sr-btn" data-sr-toggle aria-label="Play/pause">&#9654;</button>
+      <button type="button" class="sr-btn" data-sr-toggle aria-label="Play/pause">
+        <span class="sr-icon sr-icon-play" aria-hidden="true">&#9654;</span>
+        <span class="sr-icon sr-icon-pause" aria-hidden="true">&#10073;&#10073;</span>
+      </button>
       <button type="button" class="sr-btn" data-sr-prev aria-label="Previous">&#8249;</button>
       <button type="button" class="sr-btn" data-sr-next aria-label="Next">&#8250;</button>
       <div class="sr-meta">
@@ -107,7 +110,13 @@
       document.body.classList.toggle('sr-playing', on);
       // Contextual cursor: pause while playing, play while paused.
       stage.setAttribute('data-cursor', on ? 'pause' : 'play');
-      toggles.forEach(function (b) { b.innerHTML = on ? '&#10073;&#10073;' : '&#9654;'; });
+      // .sr-btn cross-fades its two icon spans via CSS (the is-playing
+      // class); .sr-tap only ever shows "Play" and hides itself once
+      // revealed, so it's left alone rather than run through the same
+      // icon-swap markup it doesn't have.
+      toggles.forEach(function (b) {
+        if (b.classList.contains('sr-btn')) b.classList.toggle('is-playing', on);
+      });
     }
     function toggle() {
       reveal();
