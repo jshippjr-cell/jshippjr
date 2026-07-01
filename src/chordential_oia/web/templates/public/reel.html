@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Reel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=16">
+<link rel="stylesheet" href="/static/public/site.css?v=17">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="rg-body">
   {% include "public/_intro_gate.html" %}
-  <!-- Pure-CSS spiral/list toggle (no JS) — same checkbox-hack pattern already
+  <!-- Pure-CSS carousel/list toggle (no JS) — same checkbox-hack pattern already
        used for the mobile menu in public_base.html. -->
   <input type="checkbox" id="rg-view-toggle" class="rg-view-input">
 
   <header class="rg-chrome">
     <a class="rg-logo" href="/"><img src="/static/public/wordmark-ko.png" alt="Chordential"></a>
     <label for="rg-view-toggle" class="rg-toggle">
-      <span class="rg-toggle-spiral">spiral</span>
+      <span class="rg-toggle-spiral">carousel</span>
       <span class="rg-toggle-dot" aria-hidden="true">&#9679;</span>
       <span class="rg-toggle-list">list</span>
     </label>
@@ -24,14 +24,17 @@
   </header>
 
   <main class="rg-stage">
-    {% for c in cards %}
-    <a class="rg-card rg-{{ c.gradient }}" href="{{ c.href }}"
-       style="--seed:{{ c.seed }}">
-      <span class="rg-card-kind">{{ c.kind }}</span>
-      <span class="rg-card-title">{{ c.title }}</span>
-      <span class="rg-card-label">{{ c.label }}</span>
-    </a>
-    {% endfor %}
+    <div class="rg-drum" id="rg-drum">
+      {% for c in cards %}
+      <a class="rg-card rg-{{ c.gradient }}" href="{{ c.href }}"
+         style="--slot-angle:{{ (loop.index0 * 360 / cards|length) }}deg">
+        <span class="rg-card-kind">{{ c.kind }}</span>
+        <span class="rg-card-title">{{ c.title }}</span>
+        <span class="rg-card-label">{{ c.label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <p class="rg-hint" aria-hidden="true">Drag to look around</p>
   </main>
 
   <div class="rg-foot">
@@ -39,5 +42,7 @@
     <span class="rg-foot-dot">&#183;</span>
     <span class="rg-foot-year">2026</span>
   </div>
+
+  <script src="/static/public/reel-carousel.js"></script>
 </body>
 </html>

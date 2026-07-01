@@ -507,61 +507,45 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 }
 .rg-menu:active{transform:scale(.96)}
 
-/* perspective + preserve-3d make this a REAL 3D viewing context: children's
-   rotate-around-Y-axis + translateZ are rendered with true depth foreshortening
-   and depth-sorted occlusion — not faked with 2D rotate + manually-tuned scale. */
-.rg-stage{position:relative;min-height:100vh;padding-top:90px;
-  perspective:1400px;transform-style:preserve-3d}
+/* perspective + preserve-3d make this a REAL 3D viewing context: the drum's
+   children (each rotated to its own slot + pushed out along Z) render with
+   true depth foreshortening and depth-sorted occlusion — not faked with 2D
+   rotate + manually-tuned scale. */
+.rg-stage{position:relative;height:70vh;padding-top:90px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+  perspective:1400px}
 
-/* The card itself: EVERY card starts from the SAME base position — dead center
-   of the stage (left:50% + a negative margin equal to half its width) — because
-   an orbit only reads as "around a central column" if all cards share one axis.
-   --slot-angle then fans each card out from that shared center via a REAL
-   `transform` chain: rotateY(angle) translateZ(radius). Order matters here and
-   is the whole fix — CSS composes `transform` functions in the order written,
-   so rotating FIRST and then pushing out along the now-rotated Z axis is what
-   sweeps the card around a circle. (The previous build used the standalone
-   `rotate`/`translate` CSS properties instead of `transform` — those have a
-   spec-fixed application order, translate always before rotate, no matter how
-   you write them — so the Z-push never got carried around by the spin; every
-   card just spun in place on its own little slot. Standalone `translate` is
-   still used, but ONLY for the vertical fall (Y), which doesn't need ordering
-   against the orbit.) The whole ring turns together via rg-orbit animating
-   `transform` itself, each card starting at its own --slot-angle offset — real
-   perspective then does the foreground/background depth for free. */
-.rg-card{position:absolute;left:50%;margin-left:-115px;
+/* The drum: a single 0×0 point at the stage's center. reel-carousel.js drags
+   it — sets `transform:rotateY(deg)` on THIS element only, driven by pointer
+   position — while every card keeps its own FIXED placement (rotateY(slot)
+   translateZ(radius)) as a child. Rotating the shared parent sweeps every
+   child around together, exactly like spinning a real cylinder. */
+.rg-drum{position:relative;width:1px;height:1px;transform-style:preserve-3d;
+  cursor:grab;touch-action:pan-y;will-change:transform}
+.rg-drum.rg-dragging{cursor:grabbing;user-select:none}
+
+/* Each card's own slot is a FIXED transform (angle from Jinja at render time,
+   radius written once at load by reel-carousel.js from the measured card
+   width — so this still looks right if the number of tracks/cases changes).
+   Real perspective does the foreground/background depth for free; no manual
+   per-card near/far tuning needed since every card sits at the same radius. */
+.rg-card{position:absolute;left:-115px;top:-75px;
   display:flex;flex-direction:column;justify-content:flex-end;
   width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(31,30,30,.45);
   backface-visibility:hidden;-webkit-backface-visibility:hidden;
-  translate:0 -32vh 0;
-  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px));
-  animation:rg-fall var(--dur,20s) linear infinite, rg-orbit var(--spin,14s) linear infinite;
-  animation-delay:var(--delay,0s), var(--spin-delay,0s)}
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px))}
 /* opacity, not `background` — a composite the GPU can run alone, vs. a
    background-color change which is a repaint. */
 .rg-card::after{content:"";position:absolute;inset:0;background:#000;opacity:0;transition:opacity .15s ease}
 @media (hover:hover) and (pointer:fine){
   .rg-card:hover::after{opacity:.38}
 }
-/* Press feedback lives on the overlay, not `transform` — the card's own transform
-   is already driven every frame by the rg-orbit animation, which (per the CSS
-   cascade) would silently win over a plain :active transform rule and swallow it. */
 .rg-card:active::after{opacity:.55}
 .rg-card-kind{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:rgba(255,255,255,.7);margin-bottom:auto}
 .rg-card-title{position:relative;color:#fff;font-weight:700;font-size:15px;line-height:1.25;margin-top:10px}
 .rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:11.5px;margin-top:3px}
-
-@keyframes rg-fall{
-  0%   { translate:0 -32vh 0 }
-  100% { translate:0 132vh 0 }
-}
-@keyframes rg-orbit{
-  0%   { transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px)) scale(var(--near,1)); filter:blur(0) }
-  50%  { transform:rotateY(calc(var(--slot-angle,0deg) + 180deg)) translateZ(var(--orbit-r,320px)) scale(var(--far,.6)); filter:blur(var(--fblur,4px)) }
-  100% { transform:rotateY(calc(var(--slot-angle,0deg) + 360deg)) translateZ(var(--orbit-r,320px)) scale(var(--near,1)); filter:blur(0) }
-}
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
@@ -571,40 +555,37 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-orange-sand{background:linear-gradient(135deg,var(--orange),var(--sand))}
 .rg-ink-wine{background:linear-gradient(135deg,var(--ink),var(--wine))}
 
-/* Six hand-tuned "slots" cycling by nth-child — deterministic variety without
-   CSS random()/modulo. --slot-angle evenly spaces the six cards 60deg apart
-   around the SAME shared column (0/60/120/180/240/300); --orbit-r is that
-   column's radius (roughly constant across cards on purpose — a real column
-   has one consistent radius, not six different ones). Each card's own --spin
-   duration means they don't all turn in perfect lockstep, which is what gives
-   the "spiral" feel while still tracing the one shared axis. --near/--far/
-   --fblur drive the rg-orbit keyframe: real Y-axis rotation already
-   foreshortens the card geometrically, this ADDS the size/blur cue on top. */
-.rg-card:nth-child(6n+1){--orbit-r:320px; --slot-angle:0deg;   --dur:19s; --delay:-2s;  --spin:22s; --spin-delay:-2s;  --near:1.08; --far:.55; --fblur:4.5px}
-.rg-card:nth-child(6n+2){--orbit-r:300px; --slot-angle:60deg;  --dur:24s; --delay:-9s;  --spin:26s; --spin-delay:-9s;  --near:1;    --far:.62; --fblur:3.5px}
-.rg-card:nth-child(6n+3){--orbit-r:340px; --slot-angle:120deg; --dur:17s; --delay:-13s; --spin:19s; --spin-delay:-13s; --near:1.1;  --far:.6;  --fblur:5px}
-.rg-card:nth-child(6n+4){--orbit-r:310px; --slot-angle:180deg; --dur:22s; --delay:-5s;  --spin:24s; --spin-delay:-5s;  --near:.96;  --far:.5;  --fblur:4px}
-.rg-card:nth-child(6n+5){--orbit-r:330px; --slot-angle:240deg; --dur:25s; --delay:-17s; --spin:20s; --spin-delay:-17s; --near:1.04; --far:.58; --fblur:3px}
-.rg-card:nth-child(6n+6){--orbit-r:290px; --slot-angle:300deg; --dur:20s; --delay:-7s;  --spin:28s; --spin-delay:-7s;  --near:1;    --far:.65; --fblur:4px}
+.rg-hint{position:absolute;left:0;right:0;bottom:26px;text-align:center;
+  color:var(--dark-muted);font-size:11.5px;letter-spacing:.04em;pointer-events:none}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
 .rg-foot-dot{color:var(--orange)}
 
-/* LIST mode (the toggle) — flips the falling spiral to a static grid. */
+/* LIST mode (the toggle) — flips the draggable carousel to a static grid. */
 .rg-view-input:checked ~ .rg-stage{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
-  padding:90px 24px 60px;min-height:auto}
+  height:auto;padding:90px 24px 60px}
+.rg-view-input:checked ~ .rg-stage .rg-drum{
+  display:contents}
 .rg-view-input:checked ~ .rg-stage .rg-card{
-  position:static;animation:none;transform:none;translate:none;filter:none;
-  width:auto;height:auto;margin:0;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
+  position:static;transform:none;filter:none;
+  width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
+.rg-view-input:checked ~ .rg-stage .rg-hint{display:none}
 
-@media (hover:none),(prefers-reduced-motion:reduce),(max-width:760px){
+/* Reduced motion drops the release-momentum spin (handled in JS) but the drag
+   itself is user-initiated 1:1 motion, not automatic — kept for everyone,
+   including touch, where dragging is the natural gesture anyway. Only a
+   narrow screen (where a 230px card at a steep angle would get clipped by
+   the viewport) falls back to a plain static grid. */
+@media (max-width:640px){
   .rg-stage{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
-    padding:90px 24px 60px;min-height:auto;perspective:none}
-  .rg-card{position:static;animation:none;transform:none;translate:none;filter:none;
-    width:auto;height:auto;margin:0;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
+    height:auto;padding:90px 24px 60px;perspective:none}
+  .rg-drum{display:contents}
+  .rg-card{position:static;transform:none;filter:none;
+    width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
   .rg-toggle{display:none}
+  .rg-hint{display:none}
 }
 
 /* ===== Intro gate — "Welcome" crossfades into the Chordential mark, then the

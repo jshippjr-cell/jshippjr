@@ -1,8 +1,9 @@
-"""The Reel gallery (/reel) — falling/spiral cards, pure-CSS motion, no animation JS.
-
-A new page (does NOT replace the converting homepage). Cards link to the showreel
-(deep-linked to a track) or a case study. Spiral/list toggle is pure CSS (checkbox
-hack); mobile/touch/reduced-motion fall back to a static list automatically via CSS.
+"""The Reel gallery (/reel) — a user-draggable 3D carousel drum (pure CSS 3D +
+a small vanilla-JS drag/momentum engine, no framework). Cards link to the
+showreel (deep-linked to a track) or a case study. Carousel/list toggle is
+pure CSS (checkbox hack); reduced motion drops only the release-momentum
+spin (the drag itself is direct, user-driven motion); a narrow screen falls
+back to a static list via CSS.
 """
 
 import importlib
@@ -42,10 +43,12 @@ def test_reel_cards_link_to_showreel_deep_link_and_capabilities(client):
     assert "/capabilities" in t
 
 
-def test_reel_has_spiral_list_toggle(client):
+def test_reel_has_carousel_list_toggle(client):
     t = client.get("/reel").text
     assert 'id="rg-view-toggle"' in t
     assert "rg-toggle" in t
+    assert "carousel" in t  # the renamed label — it's a drum, not a spiral now
+    assert "list" in t
 
 
 def test_reel_is_public_no_admin_gate(client, monkeypatch):
@@ -75,6 +78,28 @@ def test_showreel_links_back_to_the_gallery(client):
     assert 'href="/reel"' in t
 
 
+def test_reel_cards_get_evenly_spaced_slot_angles(client):
+    # Server-computed at render time (not nth-child CSS) so it's correct for
+    # however many tracks/cases actually exist, not a hardcoded card count.
+    from chordential_oia.web.showcase import get_showcase
+    show = get_showcase()
+    n = len([d for d in show.demos if (d.audio_url or "").strip()]) + len(show.cases)
+
+    t = client.get("/reel").text
+    assert "--slot-angle:0.0deg" in t or "--slot-angle:0deg" in t
+    expected_second = 360 / n
+    assert f"--slot-angle:{expected_second}deg" in t
+
+
+def test_reel_loads_the_drag_carousel_engine(client):
+    t = client.get("/reel").text
+    assert '<script src="/static/public/reel-carousel.js"></script>' in t
+    assert 'id="rg-drum"' in t
+    r = client.get("/static/public/reel-carousel.js")
+    assert r.status_code == 200
+    assert "pointerdown" in r.text
+
+
 def _reel_css():
     return (
         __import__("pathlib").Path(__file__).resolve().parents[1]
@@ -84,20 +109,16 @@ def _reel_css():
 
 def test_reel_uses_real_css_3d_not_a_flattened_illusion():
     """Genuine 3D, not a 2D-rotate-plus-manual-blur fake: the stage needs a real
-    perspective + preserve-3d viewing context, and each card must revolve around
-    the Y AXIS via the `transform` property's own function order — rotateY()
-    THEN translateZ() — which is what actually sweeps a card's depth-push around
-    a circle. (The standalone `rotate`/`translate` CSS properties can't do this:
-    the spec applies them in a fixed order — translate always before rotate — so
-    a standalone translateZ never gets carried around by a standalone rotateY;
-    every card would just spin in place instead of orbiting.)"""
+    perspective + preserve-3d viewing context, and each card sits via the
+    `transform` property's own function order — rotateY() THEN translateZ() —
+    which is what actually places a card's depth-push around a circle rather
+    than spinning it in place. The drum (not each card) is what the drag
+    engine rotates, sweeping every card around together."""
     css = _reel_css()
     assert "perspective:1400px" in css
     assert "transform-style:preserve-3d" in css
-    assert "@keyframes rg-orbit" in css
-    assert "transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r" in css
-    assert "transform:rotateY(calc(var(--slot-angle,0deg) + 180deg)) translateZ(var(--orbit-r" in css
-    assert "rg-orbit var(--spin" in css  # actually applied to .rg-card
+    assert "transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius" in css
+    assert ".rg-drum{" in css
 
 
 def test_reel_cards_hide_their_backface():
@@ -108,37 +129,76 @@ def test_reel_cards_hide_their_backface():
     assert "backface-visibility:hidden" in css
 
 
-def test_reel_cards_share_one_central_column():
-    """An "orbit" only reads as orbiting a CENTRAL column if every card starts
-    from the SAME base position (dead center of the stage) and is fanned out
-    purely by its own --slot-angle + --orbit-r — not six independent per-card
-    `left:X%` slots, which would make each card spin around its own tiny orbit
-    instead of one shared axis."""
-    css = _reel_css()
-    assert "left:50%" in css
-    assert "margin-left:-115px" in css
-    assert "left:6%" not in css  # the old per-card horizontal slot is gone
-
-
-def test_reel_cards_have_depth_cycle_near_far_near():
-    """Scale + blur are still bundled INTO the orbit keyframe as an ADDITIONAL cue
-    on top of the real geometric foreshortening — a card grows/sharpens at the
-    front of its sweep and shrinks/blurs at the back."""
-    css = _reel_css()
-    assert "scale(var(--near" in css
-    assert "scale(var(--far" in css
-    assert "filter:blur(var(--fblur" in css
-    # Every slot must define its own near/far/blur range and its own orbit radius.
-    assert css.count("--near:") == 6
-    assert css.count("--far:") == 6
-    assert css.count("--slot-angle:") == 6
-    assert css.count("--orbit-r:") == 6
+def test_reel_drum_radius_is_computed_from_measured_card_width_not_hardcoded():
+    """The old build hand-tuned a fixed --orbit-r per card via nth-child. The
+    drag carousel instead measures the actual card width at load and derives
+    one shared radius from the "N tiles around a circle" formula, so it still
+    looks right whatever the number of tracks/cases happens to be."""
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    assert "getBoundingClientRect" in js
+    assert "Math.tan(Math.PI / n)" in js
+    assert "--radius" in js
 
 
 def test_reel_fallback_resets_the_3d_properties():
-    """List-mode and the mobile/touch/reduced-motion fallback must fully neutralize
-    both `transform` (the orbit) and `translate` (the fall) — a bare rotate:0deg
-    reset wouldn't touch either, since the orbit now lives entirely in `transform`."""
+    """List-mode and the narrow-screen fallback must fully neutralize the
+    card's own `transform` (its fixed drum slot)."""
     css = _reel_css()
-    assert css.count("translate:none") >= 2
     assert css.count("transform:none") >= 2
+
+
+def test_reel_carousel_stays_interactive_on_touch():
+    """A draggable carousel is naturally suited to touch (drag/swipe is a
+    primary touch gesture) — unlike the old auto-spinning orbit, touch
+    devices should NOT be forced into the static list fallback. Only a
+    narrow viewport (max-width) still falls back."""
+    css = _reel_css()
+    assert "@media (max-width:640px){" in css
+    assert "@media (hover:none),(prefers-reduced-motion:reduce),(max-width:760px){" not in css
+
+
+def test_drag_past_threshold_suppresses_the_card_click():
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    assert "moved > 6" in js
+    assert "e.preventDefault()" in js
+
+
+def test_reduced_motion_drops_only_the_release_momentum_not_the_live_drag():
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    assert "prefers-reduced-motion: reduce" in js
+    assert "if (!reduceMotion && Math.abs(velocity) > 0.05) momentumStep();" in js
+
+
+def test_carousel_avoids_setpointercapture_which_swallows_real_clicks():
+    """Confirmed live via Playwright: capturing the pointer on the drum
+    redirects pointerup's target to the drum <div>, and the click event
+    synthesized right after inherits that same wrong target — so every
+    non-drag click on a card silently landed on the drum instead of the
+    card <a>, and never navigated. Plain window-level move/up listeners
+    (attached only while dragging) avoid the pitfall entirely."""
+    js = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "src/chordential_oia/web/static/public/reel-carousel.js"
+    ).read_text()
+    assert "drum.setPointerCapture(" not in js
+    assert 'window.addEventListener("pointermove", onMove)' in js
+    assert 'window.addEventListener("pointerup", onUp)' in js
+
+
+def test_list_mode_hides_the_drag_hint(client):
+    """A sibling combinator only reaches direct siblings — .rg-hint lives
+    INSIDE .rg-stage, not as its own sibling of the checkbox, so
+    `.rg-view-input:checked ~ .rg-hint` silently never matched. Caught by
+    screenshotting list mode and seeing the hint still showing underneath
+    the static grid where dragging no longer applies."""
+    css = _reel_css()
+    assert ".rg-view-input:checked ~ .rg-stage .rg-hint{display:none}" in css
