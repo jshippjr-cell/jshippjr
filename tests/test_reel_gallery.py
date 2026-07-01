@@ -75,39 +75,49 @@ def test_showreel_links_back_to_the_gallery(client):
     assert 'href="/reel"' in t
 
 
-def test_reel_cards_genuinely_orbit_not_just_fall():
-    """The motion must SWEEP through an angle (orbit around an offset pivot), not
-    just sit at a fixed tilt while falling straight down — that was the reported
-    gap ("falling instead of rotating in a spiral")."""
-    css_path = (
+def _reel_css():
+    return (
         __import__("pathlib").Path(__file__).resolve().parents[1]
         / "src/chordential_oia/web/static/public/site.css"
-    )
-    css = css_path.read_text()
-    # An animated full-circle orbit keyframe must exist...
+    ).read_text()
+
+
+def test_reel_uses_real_css_3d_not_a_flattened_illusion():
+    """Genuine 3D, not a 2D-rotate-plus-manual-blur fake: the stage needs a real
+    perspective + preserve-3d viewing context, and each card must rotate around
+    the Y AXIS (a real "turntable" turn, using the rotate property's axis-angle
+    form) rather than the screen-plane Z-axis spin from the earlier attempt —
+    only a Y-axis rotation under perspective produces true foreshortening."""
+    css = _reel_css()
+    assert "perspective:1400px" in css
+    assert "transform-style:preserve-3d" in css
     assert "@keyframes rg-orbit" in css
-    assert "rotate:360deg" in css or "rotate: 360deg" in css
-    # ...and the card's transform-origin must be offset OUTSIDE itself (not 50% 50%)
-    # — a card spinning around its own center never visibly orbits/displaces.
-    assert "transform-origin:50% var(--orbit" in css
-    # The orbit animation must actually be applied to .rg-card, not just defined.
-    assert "rg-orbit var(--spin" in css
+    # Axis-angle rotate syntax "0 1 0 <angle>" = rotate around Y.
+    assert "rotate:0 1 0 calc(var(--slot-angle" in css
+    assert "rotate:0 1 0 var(--slot-angle" in css  # the base (pre-animation) placement
+    assert "rg-orbit var(--spin" in css            # actually applied to .rg-card
 
 
 def test_reel_cards_have_depth_cycle_near_far_near():
-    """Scale + blur must be bundled INTO the same orbit keyframe (not static
-    per-card values) so a card visibly grows/sharpens at the front of its sweep
-    and shrinks/blurs at the back — that's what makes depth actually READ as the
-    cards move, answering "you should be able to see the cards in the foreground
-    and background"."""
-    css_path = (
-        __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/site.css"
-    )
-    css = css_path.read_text()
+    """Scale + blur are still bundled INTO the orbit keyframe as an ADDITIONAL cue
+    on top of the real geometric foreshortening — a card grows/sharpens at the
+    front of its sweep and shrinks/blurs at the back."""
+    css = _reel_css()
     assert "scale:var(--near" in css
     assert "scale:var(--far" in css
     assert "filter:blur(var(--fblur" in css
-    # Every slot must define its own near/far/blur range.
+    # Every slot must define its own near/far/blur range and its own 3D placement.
     assert css.count("--near:") == 6
     assert css.count("--far:") == 6
+    assert css.count("--slot-angle:") == 6
+    assert css.count("--z:") == 6
+
+
+def test_reel_fallback_resets_the_3d_properties():
+    """List-mode and the mobile/touch/reduced-motion fallback must fully neutralize
+    translate/rotate (not just the old rotate:0deg) since translate now carries a
+    Z-depth component and rotate uses axis-angle syntax — a bare 0deg reset would
+    leave the old Z-push/Y-axis state partially applied."""
+    css = _reel_css()
+    assert css.count("translate:none") >= 2
+    assert css.count("rotate:none") >= 2
