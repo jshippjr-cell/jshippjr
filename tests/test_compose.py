@@ -84,6 +84,68 @@ def test_open_in_mail_client_mailto_carries_body(client):
     assert "isn't always ideal" in decoded
 
 
+def test_send_now_button_hidden_when_mail_not_configured(client):
+    """Reported live: "when I send the outreach email out, it sits in my
+    outbox in my mail app" — the compose page only ever offered a mailto:
+    draft. Send now must not appear (and must not be implied) when there's
+    no real mail provider configured — the mailto fallback stays the only
+    option, exactly as before."""
+    page = client.get("/opportunity/3/compose").text
+    assert "Send now to" not in page
+    assert 'action="/opportunity/3/compose/send"' not in page
+
+
+def test_compose_send_falls_back_to_manual_when_mail_not_configured(client):
+    r = client.post("/opportunity/3/compose/send", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/opportunity/3/compose?sent=manual"
+
+
+def test_compose_send_actually_sends_when_mail_configured(client, monkeypatch):
+    """The real fix: when mail is configured, Send now calls the mailer
+    directly — no mailto:, no local mail client, no draft left sitting in
+    an outbox."""
+    from chordential_oia.web import app as app_mod
+    from chordential_oia.web import db as db_mod
+
+    conn = db_mod.connect()
+    try:
+        db_mod.update_outreach(conn, 3, contact_email="buyer@brand.com")
+    finally:
+        conn.close()
+
+    sent = {}
+
+    def fake_send(to, subject, text, html=None):
+        sent.update(to=to, subject=subject, text=text, html=html)
+        return "sent"
+
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(app_mod.mailer, "send_email", fake_send)
+
+    page = client.get("/opportunity/3/compose").text
+    assert "Send now to buyer@brand.com" in page
+
+    r = client.post("/opportunity/3/compose/send", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/opportunity/3/compose?sent=sent"
+    assert sent["to"] == "buyer@brand.com"
+    assert sent["html"] is not None
+    assert "wordmark-dark.png" in sent["html"]
+
+    page = client.get(r.headers["location"]).text
+    assert "✓ Email sent to buyer@brand.com" in page
+
+
+def test_capabilities_doc_links_to_compose_to_email_it(client):
+    """The combined flow: the capabilities doc page doesn't have its own,
+    separate "email it" send action — "Email this" routes to the same
+    outreach composer that actually sends, so there's one real place to
+    email a contact, not two disconnected ones."""
+    page = client.get("/opportunity/3/capabilities").text
+    assert 'href="/opportunity/3/compose">✉ Email this</a>' in page
+
+
 def test_compose_music_upload_returns_to_composer_and_plays_on_page(client):
     """Uploading a track from the composer returns to the composer, lists the
     track, and the tailored first-touch page then plays it."""

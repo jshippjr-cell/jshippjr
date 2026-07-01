@@ -83,3 +83,84 @@ def compose_invite(
     body = "\n\n".join(b["text"] for b in blocks)
     subject = f"A curated invite from Chordential, {_first_name(t.name)}"
     return {"subject": subject, "body": body}
+
+
+def _money(value: Optional[float]) -> str:
+    if value is None:
+        return ""
+    return f"${value:,.0f}"
+
+
+def compose_review_decision(
+    t, *, accepted: bool, artists_url: str, from_name: str = "Jon",
+) -> dict:
+    """The reel-review verdict, sent to an applicant so they're never left
+    wondering. ``t.disciplines``/``t.rate``/``t.rate_unit`` (already on
+    every Talent record) fill in capacity + rate for an accepted creator —
+    never a promise of steady volume, matching the invite's honesty rule."""
+    name = _first_name(t.name)
+    if accepted:
+        crafts = ", ".join(t.discipline_labels) or "your craft"
+        rate_line = ""
+        if t.rate:
+            unit = {"hourly": "/hr", "day": "/day", "project": "/project"}.get(
+                t.rate_unit, "")
+            rate_line = f"\n\nFor reference, our standing rate for this work is {_money(t.rate)}{unit} — we'll confirm specifics on any brief before it starts."
+        body = (
+            f"Hi {name},\n\n"
+            f"Good news — I reviewed your reel and you're in. You're on the roster "
+            f"for {crafts}, first-look on real, paid briefs when one fits your "
+            f"craft (never spec, never a promise of volume — we're early, and "
+            f"honest about that).{rate_line}\n\n"
+            f"Here's how we work with artists, if you haven't already seen it: "
+            f"{artists_url}\n\n"
+            f"— {from_name}, Chordential"
+        )
+        subject = f"You're on the roster, {name}"
+    else:
+        body = (
+            f"Hi {name},\n\n"
+            f"Thanks for sending your reel — I gave it a real listen. It's not a "
+            f"fit for what we're building right now, so I won't add you to the "
+            f"roster. That's a read on current fit, not a judgment on the work.\n\n"
+            f"— {from_name}, Chordential"
+        )
+        subject = "Following up on your Chordential application"
+    return {"subject": subject, "body": body}
+
+
+def compose_project_assignment(
+    t, *, role: str, client: str, need: str,
+    budget_low: Optional[float] = None, budget_high: Optional[float] = None,
+    deadline: str = "", from_name: str = "Jon",
+) -> dict:
+    """Sent the moment a creator is signed onto a project (the ONLY assign
+    path — Jon's explicit decision), so they hear the scope from us before
+    anything else. Rate reference comes from the creator's own standing
+    rate; a fixed-scope/clean-rights terms line matches the recruiting
+    invite's promise."""
+    name = _first_name(t.name)
+    brief = (need or "this project").strip()
+    budget_line = ""
+    if budget_low or budget_high:
+        low, high = _money(budget_low), _money(budget_high)
+        band = f"{low}–{high}" if (low and high and low != high) else (low or high)
+        budget_line = f"\nBudget: {band}"
+    deadline_line = f"\nDeadline: {deadline}" if deadline else ""
+    rate_line = ""
+    if t.rate:
+        unit = {"hourly": "/hr", "day": "/day", "project": "/project"}.get(t.rate_unit, "")
+        rate_line = f"\nYour rate: {_money(t.rate)}{unit}"
+    body = (
+        f"Hi {name},\n\n"
+        f"You're signed on — here's the scope.\n\n"
+        f"Client: {client or 'Chordential'}\n"
+        f"Role: {role}\n"
+        f"Brief: {brief}"
+        f"{budget_line}{deadline_line}{rate_line}\n\n"
+        f"Original, cleared work, fixed scope, clean rights — same terms as always. "
+        f"I'll follow up with anything else you need to get started.\n\n"
+        f"— {from_name}, Chordential"
+    )
+    subject = f"You're signed on: {client or 'a new project'} ({role})"
+    return {"subject": subject, "body": body}

@@ -142,3 +142,24 @@ def test_smtp_failure_returns_error_never_raises(monkeypatch):
 def test_empty_recipient_is_error(monkeypatch):
     m = _reload(monkeypatch, {})
     assert m.send_email("", "Hi", "body") == "error"
+
+
+# --------------------------------------------------------------------------- #
+# branded_html — the ONE shell shared by every outbound email (recruiting
+# invite, outreach, capabilities doc) so they read as the same studio.
+# --------------------------------------------------------------------------- #
+def test_branded_html_includes_the_logo_at_an_absolute_url():
+    out = mailer_mod.branded_html("https://chordential.com", "Hi there.")
+    assert 'src="https://chordential.com/static/public/wordmark-dark.png"' in out
+
+
+def test_branded_html_escapes_body_and_preserves_line_breaks():
+    out = mailer_mod.branded_html("https://chordential.com", "Line one\nLine <two>")
+    assert "Line one<br>Line &lt;two&gt;" in out
+    assert "<two>" not in out  # never unescaped into real markup
+
+
+def test_branded_html_strips_trailing_slash_from_base_url():
+    out = mailer_mod.branded_html("https://chordential.com/", "Hi.")
+    assert "https://chordential.com/static/public/wordmark-dark.png" in out
+    assert "chordential.com//static" not in out

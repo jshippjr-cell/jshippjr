@@ -341,6 +341,22 @@ def notify_new_lead(company_or_name: str, source: str) -> None:
               click_url="https://chordential.com/incoming")
 
 
+def notify_new_talent_application(name: str) -> None:
+    """Push a phone alert when a creator applies from the public site.
+    Reported live: "I have no idea when people apply — there's no alert
+    that gets sent out anywhere." Mirrors notify_new_lead: native Web Push
+    to the installed PWA (opens the app to the talent roster) with ntfy.sh
+    as a fallback. Best-effort, never raises."""
+    msg = f"{name} applied to join Chordential".strip()
+    try:
+        from . import webpush
+        webpush.send_web_push("🎤 New talent application", body=msg, url="/talent")
+    except Exception:
+        pass
+    send_push("New talent application", body=msg,
+              click_url="https://chordential.com/talent")
+
+
 def ingest_alert(conn, raw: str, source: str = "email") -> int:
     """Parse a forwarded saved-search / F5Bot alert email into signals."""
     n = 0

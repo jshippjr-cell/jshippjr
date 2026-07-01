@@ -144,12 +144,17 @@
   <a href="/opportunity/{{ row['id'] }}/capabilities?edit=1">✎ Edit</a>
   {% endif %}
   <span class="spacer"></span>
+  {# This page prints/downloads only — outreach compose is the one place that
+     actually emails a contact, so "email this" goes there instead of a
+     second, disconnected send flow. Keeps everyone's understanding, terms,
+     and delivery-outline content in reach of the same email Jon sends. #}
+  <a class="btn apply" href="/opportunity/{{ row['id'] }}/compose">✉ Email this</a>
   {% if row['delivery_doc_sent_at'] %}
   <span class="sent-mark">✓ Sent {{ row['delivery_doc_sent_at'][:10] }}</span>
   {% else %}
   <form method="post" action="/opportunity/{{ row['id'] }}/delivery-sent" style="display:inline">
     <input type="hidden" name="return_to" value="/opportunity/{{ row['id'] }}/capabilities">
-    <button class="btn apply" type="submit">Mark delivery doc sent</button>
+    <button class="btn ghost" type="submit" title="Sent the PDF some other way (attached elsewhere, printed, etc.) — just mark it">Mark sent another way</button>
   </form>
   {% endif %}
   <button class="btn pdf" type="button" onclick="window.print()">⤓ Save as PDF</button>

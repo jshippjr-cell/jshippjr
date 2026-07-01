@@ -1026,7 +1026,10 @@ def test_capabilities_doc_deposit_amount_without_invoice(client):
 
 def test_capabilities_doc_mark_delivery_sent_in_toolbar(client):
     page = client.get("/opportunity/1/capabilities").text
-    assert "Mark delivery doc sent" in page
+    # "Email this" routes to the real send flow (outreach compose); "Mark
+    # sent another way" is for a PDF sent/attached outside the system.
+    assert 'href="/opportunity/1/compose">✉ Email this</a>' in page
+    assert "Mark sent another way" in page
     client.post(
         "/opportunity/1/delivery-sent",
         data={"return_to": "/opportunity/1/capabilities"},
@@ -1034,7 +1037,7 @@ def test_capabilities_doc_mark_delivery_sent_in_toolbar(client):
     )
     page = client.get("/opportunity/1/capabilities").text
     assert "✓ Sent" in page
-    assert "Mark delivery doc sent" not in page
+    assert "Mark sent another way" not in page
 
 
 # --------------------------------------------------------------------------- #

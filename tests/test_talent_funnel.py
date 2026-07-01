@@ -102,6 +102,52 @@ def test_apply_creates_pending_applicant(ctx):
     assert not t.matchable
 
 
+def test_apply_fires_a_phone_notification(ctx, monkeypatch):
+    """Reported live: "I have no idea when people apply — there's no alert
+    that gets sent out anywhere." A submitted application must trigger a
+    push notification, the same way a new inbound lead does."""
+    client, db_mod = ctx
+    from chordential_oia.web import signals
+
+    calls = []
+    monkeypatch.setattr(
+        signals, "notify_new_talent_application", lambda name: calls.append(name)
+    )
+    client.post(
+        "/apply",
+        data={"name": "Priya Nandan", "email": "priya@x.com",
+              "disciplines": ["composition"]},
+    )
+    assert calls == ["Priya Nandan"]
+
+
+def test_apply_notification_failure_never_blocks_the_submission(ctx, monkeypatch):
+    """The push is best-effort — a broken notification path must never stop
+    the application itself from being recorded."""
+    client, db_mod = ctx
+    from chordential_oia.web import signals
+
+    def _boom(name):
+        raise RuntimeError("push service down")
+
+    monkeypatch.setattr(signals, "notify_new_talent_application", _boom)
+    r = client.post(
+        "/apply",
+        data={"name": "Resilient Rae", "email": "rae@x.com",
+              "disciplines": ["composition"]},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    conn = db_mod.connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM talent WHERE name='Resilient Rae'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row is not None
+
+
 def test_apply_with_a_bare_domain_reel_link_still_works_and_normalizes(ctx):
     """Reported live: "chordential.com/reel" (no scheme) as a demo reel URL.
     The public apply form's field has no type="url" restriction, so the

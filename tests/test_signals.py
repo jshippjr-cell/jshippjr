@@ -224,6 +224,49 @@ def test_send_push_unset_and_test_route(ctx, monkeypatch):
     assert r.status_code == 303 and "push=unset" in r.headers["location"]
 
 
+def test_notify_new_talent_application_pushes_web_and_ntfy(ctx, monkeypatch):
+    """Reported live: no alert fires anywhere when someone applies. Mirrors
+    notify_new_lead — native Web Push to the installed PWA, ntfy as
+    fallback, both best-effort."""
+    _, _, sig = ctx
+    calls = {}
+    monkeypatch.setattr(
+        sig, "send_push",
+        lambda title, body="", click_url="": calls.update(
+            title=title, body=body, click_url=click_url) or "sent",
+    )
+
+    from chordential_oia.web import webpush
+    web_calls = {}
+    monkeypatch.setattr(
+        webpush, "send_web_push",
+        lambda title, body="", url="": web_calls.update(title=title, body=body, url=url),
+    )
+
+    sig.notify_new_talent_application("Priya Nandan")
+    assert "Priya Nandan" in calls["body"]
+    assert calls["click_url"] == "https://chordential.com/talent"
+    assert web_calls["url"] == "/talent"
+    assert "Priya Nandan" in web_calls["body"]
+
+
+def test_notify_new_talent_application_is_best_effort(ctx, monkeypatch):
+    """A broken webpush import/call must not stop the ntfy fallback (or raise)."""
+    _, _, sig = ctx
+    calls = {}
+    monkeypatch.setattr(
+        sig, "send_push",
+        lambda title, body="", click_url="": calls.update(body=body) or "sent",
+    )
+    from chordential_oia.web import webpush
+    monkeypatch.setattr(
+        webpush, "send_web_push",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    sig.notify_new_talent_application("Resilient Rae")  # must not raise
+    assert "Resilient Rae" in calls["body"]
+
+
 def test_push_builds_request_with_unicode_title(ctx, monkeypatch):
     """Emoji/unicode in the title must not break the push: header values are
     latin-1 only, so they get sanitized while the request still goes out. We

@@ -1906,7 +1906,7 @@ def _compose_state(conn, opp_id: int):
 
 
 @app.get("/opportunity/{opp_id}/compose", response_class=HTMLResponse)
-def compose_page(request: Request, opp_id: int):
+def compose_page(request: Request, opp_id: int, sent: str = ""):
     conn = db.connect()
     try:
         row, opp, plan, blocks, selected, body = _compose_state(conn, opp_id)
@@ -1924,6 +1924,7 @@ def compose_page(request: Request, opp_id: int):
         request, "compose.html", nav="inbox", row=row, opp=opp, plan=plan,
         blocks=blocks, selected=selected, body=body, subject=subject, mailto=mailto,
         relevant_uploads=relevant_uploads, page_url=page_url,
+        mail_configured=mailer.mail_configured(), sent=sent,
     )
 
 
@@ -1947,6 +1948,31 @@ async def set_compose(request: Request, opp_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}/compose", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/compose/send")
+def compose_send(opp_id: int):
+    """Actually send the composed email via the configured mail provider,
+    instead of only opening a mailto: draft in Jon's own mail client (where
+    it sits until he separately hits Send there). Falls back to "manual" —
+    same as the recruiting invite — when there's no contact email or mail
+    isn't configured; the mailto link stays on the page either way, so
+    nothing is lost, this just adds a real send on top."""
+    conn = db.connect()
+    try:
+        row, opp, plan, blocks, selected, body = _compose_state(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+    finally:
+        conn.close()
+    email = (row["contact_email"] or "").strip()
+    if not email or not mailer.mail_configured():
+        return RedirectResponse(f"/opportunity/{opp_id}/compose?sent=manual", status_code=303)
+    base = _public_base()
+    status = mailer.send_email(
+        email, plan.email_subject, body, html=mailer.branded_html(base, body),
+    )
+    return RedirectResponse(f"/opportunity/{opp_id}/compose?sent={status}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #
@@ -2870,11 +2896,30 @@ def talent_edit(
 
 @app.post("/talent/{talent_id}/review")
 def talent_review(talent_id: int, review_status: str = Form(...), return_to: str = Form("")):
+    """The reel-review verdict. An applicant left hearing nothing after
+    applying is the exact gap reported live — a real transition INTO
+    Approved or Declined (never a re-click of the state it's already in)
+    emails them the outcome, with role/rate for an acceptance."""
     conn = db.connect()
     try:
+        before = db.get_talent(conn, talent_id)
+        was = before["review_status"] if before is not None else None
         db.update_talent_review(conn, talent_id, review_status)
+        t = db.talent_from_row(db.get_talent(conn, talent_id)) if before is not None else None
     finally:
         conn.close()
+    if (
+        t is not None and was != review_status
+        and review_status in ("Approved", "Declined")
+        and t.email and mailer.mail_configured()
+    ):
+        base = _public_base()
+        dec = recruiting.compose_review_decision(
+            t, accepted=(review_status == "Approved"), artists_url=f"{base}/for-artists",
+        )
+        mailer.send_email(
+            t.email, dec["subject"], dec["body"], html=mailer.branded_html(base, dec["body"]),
+        )
     return RedirectResponse(
         _safe_local(return_to, f"/talent/{talent_id}"), status_code=303
     )
@@ -2909,7 +2954,10 @@ def talent_send_invite(talent_id: int):
     base = _public_base()
     inv = recruiting.compose_invite(
         t, apply_url=f"{base}/apply", artists_url=f"{base}/for-artists")
-    status = mailer.send_email(email, inv["subject"], inv["body"])
+    status = mailer.send_email(
+        email, inv["subject"], inv["body"],
+        html=mailer.branded_html(base, inv["body"]),
+    )
     if status == "sent":
         conn = db.connect()
         try:
@@ -3152,15 +3200,31 @@ def project_detail(request: Request, project_id: int):
 
 @app.post("/project/{project_id}/assign")
 def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form(...)):
-    """The decision action — Jon assigns a creator to a role. The only assign path."""
+    """The decision action — Jon assigns a creator to a role. The only assign
+    path. Reported live: signing a creator should email them the project
+    scope — this is the one place that decision is made, so it's the one
+    place the email fires from."""
     conn = db.connect()
     try:
         db.add_assignment(conn, project_id, role, talent_id)
-        t = db.get_talent(conn, talent_id)
-        name = t["name"] if t else "a creator"
+        row = db.get_talent(conn, talent_id)
+        t = db.talent_from_row(row) if row is not None else None
+        name = t.name if t else "a creator"
         db.add_update(conn, project_id, f"{name} assigned to {role}.", "assignment")
+        project = db.get_project(conn, project_id)
     finally:
         conn.close()
+    if t is not None and t.email and mailer.mail_configured() and project is not None:
+        base = _public_base()
+        scope = recruiting.compose_project_assignment(
+            t, role=role, client=project["client"], need=project["need"],
+            budget_low=project["budget_min"], budget_high=project["budget_max"],
+            deadline=project["deadline"] or "",
+        )
+        mailer.send_email(
+            t.email, scope["subject"], scope["body"],
+            html=mailer.branded_html(base, scope["body"]),
+        )
     return RedirectResponse(f"/project/{project_id}", status_code=303)
 
 

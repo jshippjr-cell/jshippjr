@@ -374,6 +374,11 @@ def public_apply_submit(
         db.insert_talent(conn, t)
     finally:
         conn.close()
+    try:                                     # best-effort phone push — never blocks the submit
+        from . import signals
+        signals.notify_new_talent_application(t.name)
+    except Exception:
+        pass
     return RedirectResponse("/thanks?kind=apply", status_code=303)
 
 

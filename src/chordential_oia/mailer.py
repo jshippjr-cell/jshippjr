@@ -24,6 +24,7 @@ caller (a web request) is never blocked or crashed by a mail failure.
 
 from __future__ import annotations
 
+import html as _html
 import logging
 import os
 import ssl
@@ -99,6 +100,36 @@ def _send_smtp(to: str, subject: str, text: str, html: Optional[str]) -> str:
     except Exception:  # noqa: BLE001 — mail is best-effort, never block the request
         logger.exception("mailer: smtp send to %s failed", to)
         return "error"
+
+
+def branded_html(base_url: str, body_text: str, *, footer: str = "Chordential — original, clearance-certified music.") -> str:
+    """Wrap a plain-text email body in the Chordential-branded HTML shell:
+    wordmark logo, brand palette, a simple card. Plain hex colors (not the
+    site's oklch() custom properties) since email client CSS support is
+    much narrower than a browser's. ``base_url`` must be an absolute
+    origin (e.g. https://chordential.com) — a relative image path is dead
+    in a mail client.
+
+    Every recruiting/outreach/capabilities-doc email shares this ONE shell
+    so they read as the same studio, not three different tools bolted
+    together."""
+    escaped = _html.escape(body_text or "").replace("\n", "<br>")
+    logo = f"{base_url.rstrip('/')}/static/public/wordmark-dark.png"
+    return f"""<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:32px 16px;background:#FCF7F8;
+             font-family:Georgia,'Times New Roman',serif;">
+  <div style="max-width:560px;margin:0 auto;">
+    <img src="{logo}" alt="Chordential" height="26"
+         style="height:26px;width:auto;display:block;margin:0 0 24px">
+    <div style="background:#fff;border:1px solid #D8CDB6;border-radius:12px;
+                padding:28px 30px;color:#1F1E1E;font-size:15px;line-height:1.65;">
+      {escaped}
+    </div>
+    <p style="color:#737469;font-size:12px;margin:20px 4px 0">{_html.escape(footer)}</p>
+  </div>
+</body>
+</html>"""
 
 
 def send_email(to: str, subject: str, text: str, html: Optional[str] = None) -> str:

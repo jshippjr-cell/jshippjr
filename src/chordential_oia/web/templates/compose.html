@@ -10,9 +10,15 @@
   <div>
     <div class="kpi-label">First-touch composer</div>
     <div class="verdict-action">Build a personal email — blocks on/off</div>
-    <div class="muted">Minimal by default. Toggle a block, hit Apply, and the preview updates. Send opens your own mail client.</div>
+    <div class="muted">Minimal by default. Toggle a block, hit Apply, and the preview updates.
+      {% if mail_configured %}Send now delivers it directly; Open in mail client stays as a manual option.{% else %}Send opens your own mail client — the capabilities doc's "send by email" also lands you here, since this is the one place that reaches a contact.{% endif %}</div>
   </div>
 </div>
+
+{% if sent == 'sent' %}<p class="pill sv-door">✓ Email sent to {{ row['contact_email'] }}</p>
+{% elif sent == 'manual' %}<p class="muted small">No contact email on file (or mail isn't set up) — use Open in mail client or Copy email below.</p>
+{% elif sent == 'error' %}<p class="muted small">Mail provider returned an error — use Open in mail client or Copy email below.</p>
+{% endif %}
 
 <div class="cols-2">
   <section class="card">
@@ -39,11 +45,17 @@
     <div class="first-touch" id="compose-body" style="margin-top:10px;white-space:pre-wrap">{{ body }}</div>
 
     <div class="reach-actions" style="margin-top:14px">
-      <a class="btn primary" href="{{ mailto }}">✉ Open in mail client</a>
+      {% if mail_configured and row['contact_email'] %}
+      <form method="post" action="/opportunity/{{ row['id'] }}/compose/send" style="display:inline">
+        <button class="btn primary" type="submit">✉ Send now to {{ row['contact_email'] }}</button>
+      </form>
+      {% endif %}
+      <a class="btn {{ 'ghost' if mail_configured and row['contact_email'] else 'primary' }}" href="{{ mailto }}">Open in mail client</a>
       <button class="btn ghost" type="button" onclick="copyCompose(this)">Copy email</button>
     </div>
     <p class="muted small reach-hint">
-      {% if row['contact_email'] %}Opens your mail client to <strong>{{ row['contact_email'] }}</strong> with this body prefilled.
+      {% if mail_configured and row['contact_email'] %}Send now delivers it directly to <strong>{{ row['contact_email'] }}</strong>. Open in mail client drafts the same email in your own mail app instead, if you'd rather send it yourself.
+      {% elif row['contact_email'] %}Opens your mail client to <strong>{{ row['contact_email'] }}</strong> with this body prefilled.
       {% else %}Opens your mail client with this body prefilled — add the recipient (or set the contact email on the Outreach page).{% endif %}
     </p>
   </section>
