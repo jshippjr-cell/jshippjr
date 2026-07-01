@@ -198,16 +198,87 @@ def test_reel_card_template_includes_the_shine_overlay(client):
 
 def test_tilt_is_gated_to_real_pointer_devices(client):
     js = _carousel_js()
-    assert 'window.matchMedia("(hover: hover) and (pointer: fine)").matches' in js
-    assert "if (supportsHoverTilt) {" in js
+    assert 'var isDesktop = window.matchMedia("(hover: hover) and (pointer: fine)").matches;' in js
+    assert "if (isDesktop) {" in js
 
 
-def test_tilt_does_not_fight_an_active_drag(client):
+def test_tilt_and_drag_are_mutually_exclusive_by_device_capability(client):
+    """Tilt (desktop-only, mouse-driven) and drag (touch-only) never run at
+    the same time on the same device — isDesktop picks exactly one
+    interaction model, so there's no runtime state needed to keep them from
+    fighting each other."""
     js = _carousel_js()
-    assert "if (dragging) return; // dragging owns the drum's rotation" in js
-    assert "resetAllTilts();" in js  # called from onDown, at drag start
+    assert "drum.addEventListener(\"pointerdown\", onDown);" in js
+    # The pointerdown attach (drag) and the tilt attach are each gated by
+    # isDesktop in opposite directions.
+    drag_attach = js.split('drum.addEventListener("pointerdown", onDown);', 1)[0]
+    assert "if (isDesktop) {" in drag_attach
+    assert "} else {" in js
 
 
 def test_mouseleave_resets_tilt_to_neutral(client):
     js = _carousel_js()
     assert 'card.addEventListener("mouseleave", resetAllTilts);' in js
+
+
+# --------------------------------------------------------------------------- #
+# Desktop: the carousel spins on its own instead of being drag-driven, and
+# scrolling gives it a temporary speed boost. Touch keeps drag exactly as
+# before (verified separately in test_reel_gallery.py's drag-fix tests).
+# --------------------------------------------------------------------------- #
+
+def test_desktop_auto_rotates_and_scroll_boosts_the_rate(client):
+    js = _carousel_js()
+    assert "function autoRotateStep(t) {" in js
+    assert "function startAutoRotate() {" in js
+    assert "function stopAutoRotate() {" in js
+    assert 'drum.addEventListener("wheel", function (e) {' in js
+    assert "boost += Math.min(Math.abs(e.deltaY), 120) * 0.6;" in js
+
+
+def test_auto_rotate_starts_immediately_on_desktop_and_never_on_touch(client):
+    js = _carousel_js()
+    assert "if (isDesktop) {\n    startAutoRotate();" in js
+
+
+def test_auto_rotate_respects_reduced_motion(client):
+    js = _carousel_js()
+    body = js.split("function startAutoRotate() {", 1)[1].split("\n  }", 1)[0]
+    assert "if (autoRotateId || reduceMotion) return;" in body
+
+
+def test_popping_a_card_pauses_ambient_motion_deactivating_resumes_it_on_desktop(client):
+    js = _carousel_js()
+    assert "function pauseAmbientMotion() {" in js
+    body = js.split("function pauseAmbientMotion() {", 1)[1].split("\n  }", 1)[0]
+    assert "stopMomentum();" in body
+    assert "stopAutoRotate();" in body
+    assert "pauseAmbientMotion();" in js.split("function spinToFront(card) {", 1)[1].split("\n  }", 1)[0]
+    assert "if (isDesktop) startAutoRotate();" in js.split("function deactivate() {", 1)[1].split("\n  }", 1)[0]
+
+
+def test_desktop_hint_says_scroll_not_drag(client):
+    t = client.get("/reel").text
+    assert 'class="rg-hint rg-hint-desktop"' in t
+    assert "Scroll to spin faster" in t
+    assert 'class="rg-hint rg-hint-touch"' in t
+    assert "Drag to look around" in t
+
+
+def test_hint_variants_are_gated_by_device_capability_not_screen_width(client):
+    css = _reel_css()
+    assert ".rg-hint-touch{display:none}" in css
+    assert "@media (hover:none),(pointer:coarse){" in css
+
+
+# --------------------------------------------------------------------------- #
+# Mobile drag "shake": the browser's own native vertical-pan handling was
+# coexisting with our JS's horizontal rotation on the same touch gesture —
+# touch-action:none claims the whole gesture for JS so only one system
+# drives motion during a touch-drag.
+# --------------------------------------------------------------------------- #
+
+def test_drum_claims_the_full_touch_gesture_no_competing_native_pan(client):
+    css = _reel_css()
+    assert "touch-action:none" in css
+    assert "touch-action:pan-y" not in css

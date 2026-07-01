@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Reel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=20">
+<link rel="stylesheet" href="/static/public/site.css?v=21">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="rg-body">
@@ -37,7 +37,8 @@
       </a>
       {% endfor %}
     </div>
-    <p class="rg-hint" aria-hidden="true">Drag to look around &#183; click a track to play it</p>
+    <p class="rg-hint rg-hint-desktop" aria-hidden="true">Scroll to spin faster &#183; click a track to play it</p>
+    <p class="rg-hint rg-hint-touch" aria-hidden="true">Drag to look around &#183; click a track to play it</p>
   </main>
 
   <!-- Docked player — reuses the exact showreel player styling (.sr-*), shown
@@ -62,6 +63,6 @@
     <span class="rg-foot-year">2026</span>
   </div>
 
-  <script src="/static/public/reel-carousel.js?v=3"></script>
+  <script src="/static/public/reel-carousel.js?v=4"></script>
 </body>
 </html>

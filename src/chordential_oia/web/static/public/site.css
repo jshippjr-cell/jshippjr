@@ -517,14 +517,22 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   display:flex;align-items:center;justify-content:center;overflow:hidden;
   perspective:1400px}
 
-/* The drum: a single 0×0 point at the stage's center. reel-carousel.js drags
-   it — sets `transform:rotateY(deg)` on THIS element only, driven by pointer
-   position — while every card keeps its own FIXED placement (rotateY(slot)
-   translateZ(radius)) as a child. Rotating the shared parent sweeps every
-   child around together, exactly like spinning a real cylinder. */
+/* The drum: a single 0×0 point at the stage's center. reel-carousel.js sets
+   `transform:rotateY(deg)` on THIS element only — while every card keeps its
+   own FIXED placement (rotateY(slot) translateZ(radius)) as a child.
+   Rotating the shared parent sweeps every child around together, exactly
+   like spinning a real cylinder.
+   On a real pointer device (mouse/trackpad) it spins on its own and speeds
+   up on scroll — no drag there. Touch keeps the drag/momentum interaction;
+   `touch-action:none` claims the whole gesture for JS so the browser's own
+   vertical-pan handling can't also kick in mid-drag and fight it (that
+   double handling was reading as the screen "shaking" while dragging). */
 .rg-drum{position:relative;width:1px;height:1px;transform-style:preserve-3d;
-  cursor:grab;touch-action:pan-y;will-change:transform}
+  cursor:grab;touch-action:none;will-change:transform}
 .rg-drum.rg-dragging{cursor:grabbing;user-select:none}
+@media (hover:hover) and (pointer:fine){
+  .rg-drum{cursor:default}
+}
 
 /* Each card's own slot is a FIXED transform (angle from Jinja at render time,
    radius written once at load by reel-carousel.js from the measured card
@@ -594,6 +602,14 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 
 .rg-hint{position:absolute;left:0;right:0;bottom:26px;text-align:center;
   color:var(--muted);font-size:11.5px;letter-spacing:.04em;pointer-events:none}
+/* Two copies of the hint, one per interaction model — CSS decides which
+   shows, matching the same media query the JS uses to pick drag vs.
+   auto-spin, so they can never disagree about which mode is actually live. */
+.rg-hint-touch{display:none}
+@media (hover:none),(pointer:coarse){
+  .rg-hint-desktop{display:none}
+  .rg-hint-touch{display:block}
+}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}

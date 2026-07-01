@@ -17,6 +17,10 @@
   drum.style.setProperty("--radius", radius.toFixed(1) + "px");
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Real pointer device (mouse/trackpad) vs. touch — decides which
+  // interaction model runs below: auto-spin + scroll-to-speed-up on
+  // desktop, or drag-to-rotate on touch. Never both.
+  var isDesktop = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   var rotation = 0;
   var velocity = 0;
@@ -25,10 +29,11 @@
   var moved = 0;
   var momentumId = null;
 
-  // Three motion modes share this one element: instant 1:1 drag, instant
-  // per-frame momentum physics, and an eased "snap to front" on click — the
-  // first two want NO css transition (they already are the animation, frame
-  // by frame); only the click-triggered snap wants an eased transition.
+  // Every motion mode below shares this one element: instant 1:1 drag,
+  // instant per-frame momentum/auto-rotate physics, and an eased "snap to
+  // front" on click — the first two want NO css transition (they already
+  // are the animation, frame by frame); only the click-triggered snap wants
+  // an eased transition.
   function setTransition(on) {
     drum.style.transition = on ? "transform .6s cubic-bezier(.2,.8,.2,1)" : "none";
   }
@@ -54,6 +59,13 @@
       momentumId = null;
     }
   }
+
+  // ------------------------------------------------------------------ //
+  // Touch: drag-to-rotate + release momentum. All functions below are
+  // still declared unconditionally (harmless if unused) so spinToFront can
+  // safely call stopMomentum() regardless of which mode is actually live —
+  // only the pointerdown listener that drives them is gated by isDesktop.
+  // ------------------------------------------------------------------ //
 
   // Deliberately NOT using setPointerCapture here: capturing the pointer on
   // the drum redirects pointerup's target to the drum itself, and the click
@@ -138,13 +150,61 @@
     frameX = e.clientX;
     frameT = performance.now();
     drum.classList.add("rg-dragging");
-    resetAllTilts(); // dragging rotates the whole drum — a card frozen mid-tilt reads as stuck
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   }
 
-  drum.addEventListener("pointerdown", onDown);
+  // ------------------------------------------------------------------ //
+  // Desktop: the drum spins on its own at a steady idle rate, and
+  // scrolling over the stage gives it a temporary speed boost that decays
+  // back down. Replaces drag entirely on a real pointer device.
+  // ------------------------------------------------------------------ //
+  var BASE_SPEED = 6; // degrees per second at idle
+  var boost = 0;
+  var autoRotateId = null;
+  var lastAutoT = null;
+
+  function autoRotateStep(t) {
+    if (lastAutoT == null) lastAutoT = t;
+    var dt = (t - lastAutoT) / 1000;
+    lastAutoT = t;
+    boost *= Math.pow(0.9, dt * 60); // frame-rate-independent decay toward 0
+    rotation += (BASE_SPEED + boost) * dt;
+    apply();
+    autoRotateId = requestAnimationFrame(autoRotateStep);
+  }
+
+  function startAutoRotate() {
+    if (autoRotateId || reduceMotion) return;
+    lastAutoT = null;
+    setTransition(false);
+    autoRotateId = requestAnimationFrame(autoRotateStep);
+  }
+
+  function stopAutoRotate() {
+    if (autoRotateId) {
+      cancelAnimationFrame(autoRotateId);
+      autoRotateId = null;
+    }
+  }
+
+  // A card popping forward parks the drum facing it — ambient motion (of
+  // either kind) pauses until the card is deactivated again.
+  function pauseAmbientMotion() {
+    stopMomentum();
+    stopAutoRotate();
+  }
+
+  if (isDesktop) {
+    startAutoRotate();
+    drum.addEventListener("wheel", function (e) {
+      if (!autoRotateId) return; // paused while a card is active — scroll does nothing
+      boost += Math.min(Math.abs(e.deltaY), 120) * 0.6;
+    }, { passive: true });
+  } else {
+    drum.addEventListener("pointerdown", onDown);
+  }
   setTransition(false);
   apply();
 
@@ -176,7 +236,7 @@
 
   function spinToFront(card) {
     var slot = parseFloat(card.style.getPropertyValue("--slot-angle")) || 0;
-    stopMomentum();
+    pauseAmbientMotion();
     rotation = angleToFront(slot);
     setTransition(true);
     apply();
@@ -225,8 +285,9 @@
 
   // Clicking the currently-active card a SECOND time closes it back down:
   // un-pop/un-highlight it (the card "goes back into the carousel"), hide
-  // the docked player, and resume the default entrance track quietly in the
-  // background — mirroring the same hidden ambient state the page starts in.
+  // the docked player, resume the default entrance track quietly in the
+  // background, and let the drum resume spinning on its own (desktop only —
+  // on touch, motion is drag-driven only, same as before).
   function deactivate() {
     if (activeCard) activeCard.classList.remove("rg-active");
     activeCard = null;
@@ -234,6 +295,7 @@
     if (player) player.classList.remove("on");
     if (trackCards.length) loadTrack(trackCards[0], true, false);
     else if (audio) audio.pause();
+    if (isDesktop) startAutoRotate();
   }
 
   function step(dir) {
@@ -260,8 +322,6 @@
   // only — touch has no hover to drive this from, and gating it out there
   // avoids a tilt that gets "stuck" with no mouseleave to reset it.
   // ------------------------------------------------------------------ //
-  var supportsHoverTilt = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-
   function resetAllTilts() {
     cards.forEach(function (card) {
       card.style.setProperty("--tilt-x", "0deg");
@@ -272,10 +332,9 @@
     });
   }
 
-  if (supportsHoverTilt) {
+  if (isDesktop) {
     cards.forEach(function (card) {
       card.addEventListener("mousemove", function (e) {
-        if (dragging) return; // dragging owns the drum's rotation — don't fight it per-card
         var rect = card.getBoundingClientRect();
         var x = e.clientX - rect.left;
         var y = e.clientY - rect.top;
