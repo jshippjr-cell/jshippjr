@@ -1,9 +1,14 @@
 """The Reel gallery (/reel) — a user-draggable 3D carousel drum (pure CSS 3D +
-a small vanilla-JS drag/momentum engine, no framework). Cards link to the
-showreel (deep-linked to a track) or a case study. Carousel/list toggle is
-pure CSS (checkbox hack); reduced motion drops only the release-momentum
-spin (the drag itself is direct, user-driven motion); a narrow screen falls
-back to a static list via CSS.
+a small vanilla-JS drag/momentum engine, no framework). Every card is a
+track, deep-linked to the showreel and playable inline. Case studies used to
+sit in this same carousel as non-audio cards, but several shared a brand
+name with an actual track (e.g. a track "Financial Services — Brand Theme"
+alongside a case study "Financial services — sonic identity") — clicking
+the lookalike case card silently didn't play anything, reading as a bug.
+Cases now live only on /capabilities, linked from this page's footer.
+Carousel/list toggle is pure CSS (checkbox hack); reduced motion drops only
+the release-momentum spin (the drag itself is direct, user-driven motion);
+a narrow screen falls back to a static list via CSS.
 """
 
 import importlib
@@ -26,21 +31,23 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_reel_renders_a_card_per_track_and_case(client):
+def test_reel_renders_a_card_per_track_only_no_case_studies(client):
     from chordential_oia.web.showcase import get_showcase
     show = get_showcase()
     n_tracks = len([d for d in show.demos if (d.audio_url or "").strip()])
-    n_cases = len(show.cases)
+    assert len(show.cases) > 0, "this test wants at least one case study to prove it's excluded"
 
     r = client.get("/reel")
     assert r.status_code == 200
-    assert r.text.count('class="rg-card ') == n_tracks + n_cases
+    assert r.text.count('class="rg-card ') == n_tracks
+    for c in show.cases:
+        assert c.title not in r.text
 
 
-def test_reel_cards_link_to_showreel_deep_link_and_capabilities(client):
+def test_reel_cards_link_to_showreel_deep_link_case_studies_link_from_footer(client):
     t = client.get("/reel").text
     assert "/showreel?t=0" in t
-    assert "/capabilities" in t
+    assert 'class="rg-foot-cases" href="/capabilities"' in t
 
 
 def test_reel_has_carousel_list_toggle(client):
@@ -80,10 +87,10 @@ def test_showreel_links_back_to_the_gallery(client):
 
 def test_reel_cards_get_evenly_spaced_slot_angles(client):
     # Server-computed at render time (not nth-child CSS) so it's correct for
-    # however many tracks/cases actually exist, not a hardcoded card count.
+    # however many tracks actually exist, not a hardcoded card count.
     from chordential_oia.web.showcase import get_showcase
     show = get_showcase()
-    n = len([d for d in show.demos if (d.audio_url or "").strip()]) + len(show.cases)
+    n = len([d for d in show.demos if (d.audio_url or "").strip()])
 
     t = client.get("/reel").text
     assert "--slot-angle:0.0deg" in t or "--slot-angle:0deg" in t

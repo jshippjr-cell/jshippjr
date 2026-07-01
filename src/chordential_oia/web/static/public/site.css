@@ -614,6 +614,16 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
   color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
 .rg-foot-dot{color:var(--orange)}
+/* The only non-decorative thing in the footer — case studies moved here
+   from the carousel itself (several shared a brand name with an actual
+   track card, reading as a bug when the lookalike case card didn't play
+   audio). Needs its own pointer-events:auto since the footer container
+   opts everything out by default. */
+.rg-foot-cases{color:var(--muted);text-decoration:underline;text-underline-offset:2px;
+  pointer-events:auto;transition:color .15s ease}
+@media (hover:hover) and (pointer:fine){
+  .rg-foot-cases:hover{color:var(--ink)}
+}
 
 /* The docked player (.sr-player, reused verbatim from /showreel) sits at the
    body level here — NOT nested inside .rg-stage, which has `perspective` set

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Reel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=21">
+<link rel="stylesheet" href="/static/public/site.css?v=22">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="rg-body">
@@ -30,7 +30,7 @@
          style="--slot-angle:{{ (loop.index0 * 360 / cards|length) }}deg"
          {% if c.audio_url %}data-audio-url="{{ c.audio_url }}"{% endif %}
          data-title="{{ c.title }}" data-label="{{ c.label }}">
-        <span class="rg-card-kind">{{ "▶ play" if c.audio_url else "↗ case study" }}</span>
+        <span class="rg-card-kind">&#9654; play</span>
         <span class="rg-card-title">{{ c.title }}</span>
         <span class="rg-card-label">{{ c.label }}</span>
         <span class="rg-card-shine" aria-hidden="true"></span>
@@ -61,6 +61,8 @@
     <span class="rg-foot-eyebrow">showreel</span>
     <span class="rg-foot-dot">&#183;</span>
     <span class="rg-foot-year">2026</span>
+    <span class="rg-foot-dot">&#183;</span>
+    <a class="rg-foot-cases" href="/capabilities">case studies</a>
   </div>
 
   <script src="/static/public/reel-carousel.js?v=4"></script>

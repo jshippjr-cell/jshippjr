@@ -1,7 +1,9 @@
 """The Reel's inline audio player: clicking a track card pops it forward,
 highlights it, and plays that track through a docked player (styling reused
-from /showreel) instead of navigating away. Case-study cards are unaffected
-— they still navigate to /capabilities.
+from /showreel) instead of navigating away. /reel carries tracks only now —
+case studies (which used to sit in the same carousel and got confused for
+lookalike tracks, e.g. "Financial Services — Brand Theme" the track vs.
+"Financial services — sonic identity" the case) link from the footer instead.
 """
 
 import importlib
@@ -44,16 +46,31 @@ def test_reel_cards_are_bigger(client):
     assert "width:230px;height:150px" not in css
 
 
-def test_track_cards_carry_audio_url_case_cards_dont(client):
+def test_every_reel_card_carries_an_audio_url(client):
     from chordential_oia.web.showcase import get_showcase
     show = get_showcase()
     n_tracks = len([d for d in show.demos if (d.audio_url or "").strip()])
 
     t = client.get("/reel").text
+    assert t.count('class="rg-card ') == n_tracks
     assert t.count("data-audio-url=") == n_tracks
-    # Case cards still exist and still link to /capabilities.
     assert 'data-title="' in t
-    assert "/capabilities" in t
+
+
+def test_reel_no_longer_carries_lookalike_case_study_cards(client):
+    """Several case studies share a brand name with an actual track (e.g. a
+    track "Financial Services — Brand Theme" alongside a case study
+    "Financial services — sonic identity") — clicking the lookalike case
+    card silently didn't play anything, which read as a bug. Case studies
+    now link only from the footer, not as carousel cards."""
+    from chordential_oia.web.showcase import get_showcase
+    show = get_showcase()
+    assert len(show.cases) > 0
+
+    t = client.get("/reel").text
+    for c in show.cases:
+        assert c.title not in t
+    assert 'class="rg-foot-cases" href="/capabilities">case studies</a>' in t
 
 
 def test_reel_has_a_docked_player_reusing_showreel_styling(client):
@@ -110,19 +127,21 @@ def test_carousel_js_spins_the_clicked_track_to_face_front(client):
     assert "function setActiveCard(card)" in js
 
 
-def test_carousel_js_case_cards_still_navigate_normally(client):
+def test_carousel_js_still_guards_against_a_card_with_no_audio_url(client):
+    """/reel no longer renders case-study cards, but this generic guard
+    stays as cheap defensive code — every card click handler still checks
+    dataset.audioUrl before doing anything, not "is this a case card"."""
     js = _carousel_js()
     assert "if (!card.dataset.audioUrl) return;" in js
 
 
 def test_carousel_js_defaults_to_the_first_track_looping_on_sound_entry(client):
-    """The entrance track is whichever track card is first in DOM order
-    (tracks are appended before cases in public.py), which is already
-    "Strings Arrangement for a Holiday Spot" — verified in practice, not
-    hardcoded by title text here (that would break if the demo catalog
-    ever gets reordered). It loads with reveal=false: it loops quietly in
-    the background — no card pops, no docked player appears — until the
-    visitor actually clicks a card themselves."""
+    """The entrance track is whichever track card is first in DOM order,
+    which is already "Strings Arrangement for a Holiday Spot" — verified in
+    practice, not hardcoded by title text here (that would break if the demo
+    catalog ever gets reordered). It loads with reveal=false: it loops
+    quietly in the background — no card pops, no docked player appears —
+    until the visitor actually clicks a card themselves."""
     js = _carousel_js()
     assert "chordential:entered" in js
     assert "loadTrack(trackCards[0], true, false);" in js

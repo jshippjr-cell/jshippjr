@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
 
 
 def _css(client):
-    return client.get("/static/public/site.css?v=21").text
+    return client.get("/static/public/site.css?v=22").text
 
 
 def test_every_clickable_control_has_a_pressed_state(client):
