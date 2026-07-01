@@ -132,24 +132,24 @@ _GALLERY_GRADIENTS = [
 
 @router.get("/reel", response_class=HTMLResponse)
 def public_reel(request: Request):
-    """The gallery index: a falling/spiral arrangement of cards (capability tracks
-    + case studies) in Chordential's palette. A new page — does NOT replace the
-    converting homepage (/) — linked from the footer. Each card opens the showreel
-    (deep-linked to that track) or a case study. Pure-CSS motion (server-seeded
-    per-card timing/position), so there's no animation JS at all; falls back to a
-    static list automatically on touch / reduced-motion / narrow screens via CSS."""
+    """The gallery index: a draggable 3D carousel drum (capability tracks + case
+    studies) in Chordential's palette. A new page — does NOT replace the
+    converting homepage (/) — linked from the footer. Clicking a track card pops
+    it forward, highlights it, and plays that track inline via a docked player;
+    a case card still opens /capabilities. Falls back to a static list
+    automatically on reduced-motion / narrow screens via CSS."""
     show = get_showcase()
     tracks = [d for d in show.demos if (d.audio_url or "").strip()]
     cards = []
     for i, t in enumerate(tracks):
         cards.append({
             "title": t.title, "label": t.discipline_label,
-            "href": f"/showreel?t={i}", "kind": "Track",
+            "href": f"/showreel?t={i}", "kind": "Track", "audio_url": t.audio_url,
         })
     for c in show.cases:
         cards.append({
             "title": c.title, "label": "Case study",
-            "href": "/capabilities", "kind": "Case",
+            "href": "/capabilities", "kind": "Case", "audio_url": "",
         })
     # Deterministic per-card seed (index-based, not random) so the layout is stable
     # across requests/deploys — same spirit as the rest of the codebase's "no

@@ -529,12 +529,13 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
    width — so this still looks right if the number of tracks/cases changes).
    Real perspective does the foreground/background depth for free; no manual
    per-card near/far tuning needed since every card sits at the same radius. */
-.rg-card{position:absolute;left:-115px;top:-75px;
+.rg-card{position:absolute;left:-160px;top:-105px;
   display:flex;flex-direction:column;justify-content:flex-end;
-  width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
+  width:320px;height:210px;border-radius:16px;padding:20px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(31,30,30,.45);
   backface-visibility:hidden;-webkit-backface-visibility:hidden;
-  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px))}
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px));
+  transition:transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease, filter .3s ease}
 /* opacity, not `background` — a composite the GPU can run alone, vs. a
    background-color change which is a repaint. */
 .rg-card::after{content:"";position:absolute;inset:0;background:#000;opacity:0;transition:opacity .15s ease}
@@ -542,10 +543,23 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   .rg-card:hover::after{opacity:.38}
 }
 .rg-card:active::after{opacity:.55}
-.rg-card-kind{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+.rg-card-kind{position:relative;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   color:rgba(255,255,255,.7);margin-bottom:auto}
-.rg-card-title{position:relative;color:#fff;font-weight:700;font-size:15px;line-height:1.25;margin-top:10px}
-.rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:11.5px;margin-top:3px}
+.rg-card-title{position:relative;color:#fff;font-weight:700;font-size:19px;line-height:1.25;margin-top:12px}
+.rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:13px;margin-top:4px}
+
+/* The clicked track "pops out forward and gets highlighted": pushed nearer
+   the viewer (bigger translateZ) and scaled up a touch more, on top of
+   whatever its base rotateY(slot) placement already is — reel-carousel.js
+   also spins the whole drum so this card's slot faces front. Everything
+   else dims so the active card reads as clearly picked, without literally
+   blurring cards out (that would hurt legibility while still readable at
+   the ring's edges). */
+.rg-card.rg-active{
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(calc(var(--radius,300px) + 90px)) scale(1.06);
+  box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 0 2px rgba(255,255,255,.22);
+  z-index:2}
+.rg-drum.rg-has-active .rg-card:not(.rg-active){filter:brightness(.4) saturate(.75)}
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
@@ -562,6 +576,13 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
 .rg-foot-dot{color:var(--orange)}
 
+/* The docked player (.sr-player, reused verbatim from /showreel) sits at the
+   body level here — NOT nested inside .rg-stage, which has `perspective` set
+   and would otherwise become the containing block for a fixed-position
+   descendant (the same rule that applies to `transform`), pinning the player
+   to the STAGE's box instead of the viewport. */
+.rg-body .sr-player{position:fixed}
+
 /* LIST mode (the toggle) — flips the draggable carousel to a static grid. */
 .rg-view-input:checked ~ .rg-stage{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
@@ -572,6 +593,12 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   position:static;transform:none;filter:none;
   width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
 .rg-view-input:checked ~ .rg-stage .rg-hint{display:none}
+/* The dimming rule below (.rg-drum.rg-has-active .rg-card:not(.rg-active)) has
+   HIGHER specificity than the plain reset above — without this exact-shape
+   override, a card that was dimmed while in carousel mode would stay dimmed
+   after switching to list mode, since .rg-has-active isn't cleared by the
+   view toggle (a checkbox, deliberately kept JS-free). */
+.rg-view-input:checked ~ .rg-stage .rg-drum.rg-has-active .rg-card:not(.rg-active){filter:none}
 
 /* Reduced motion drops the release-momentum spin (handled in JS) but the drag
    itself is user-initiated 1:1 motion, not automatic — kept for everyone,
@@ -584,6 +611,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   .rg-drum{display:contents}
   .rg-card{position:static;transform:none;filter:none;
     width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
+  .rg-drum.rg-has-active .rg-card:not(.rg-active){filter:none}
   .rg-toggle{display:none}
   .rg-hint{display:none}
 }
