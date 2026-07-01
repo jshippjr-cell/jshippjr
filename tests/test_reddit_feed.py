@@ -74,3 +74,28 @@ def test_reddit_enabled_requires_creds(ctx, monkeypatch):
     assert sched.reddit_enabled() is True
     monkeypatch.setenv("CHORDENTIAL_REDDIT", "0")
     assert sched.reddit_enabled() is False             # explicit off
+
+
+def test_poll_now_reports_missing_reddit_creds_instead_of_silence(ctx, monkeypatch):
+    # Without this, a real gig (e.g. a "[PAID] Looking for Music Composer" post
+    # on r/gameDevClassifieds) can go permanently unseen with no signal anywhere
+    # on the radar that Reddit was never actually being polled.
+    _, sched, _ = ctx
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.delenv("REDDIT_CLIENT_ID", raising=False)
+    monkeypatch.delenv("REDDIT_CLIENT_SECRET", raising=False)
+    monkeypatch.setattr(sched, "configured_feeds", lambda: [])
+    status = sched.poll_now()
+    assert "reddit-api: not configured" in status
+    assert "REDDIT_CLIENT_ID" in status
+
+
+def test_poll_now_reports_reddit_explicitly_off(ctx, monkeypatch):
+    _, sched, _ = ctx
+    monkeypatch.setenv("CHORDENTIAL_ENABLE_SCRAPE", "1")
+    monkeypatch.setenv("REDDIT_CLIENT_ID", "x")
+    monkeypatch.setenv("REDDIT_CLIENT_SECRET", "y")
+    monkeypatch.setenv("CHORDENTIAL_REDDIT", "0")
+    monkeypatch.setattr(sched, "configured_feeds", lambda: [])
+    status = sched.poll_now()
+    assert "reddit-api: off (CHORDENTIAL_REDDIT=0)" in status

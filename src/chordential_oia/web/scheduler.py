@@ -949,6 +949,14 @@ def poll_now() -> str:
             parts.append(f"reddit-api: {poll_reddit()} new gig(s)")
         except Exception:  # noqa: BLE001
             parts.append("reddit-api: error")
+    elif discovery.scrape_enabled():
+        # Otherwise this is a fully silent gap: r/gameDevClassifieds etc. never
+        # get polled and nothing on the radar hints why — a real gig (e.g. a
+        # "[PAID] Looking for Music Composer" post) can sit unseen indefinitely.
+        if not (os.environ.get("REDDIT_CLIENT_ID") and os.environ.get("REDDIT_CLIENT_SECRET")):
+            parts.append("reddit-api: not configured (set REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET)")
+        elif os.environ.get("CHORDENTIAL_REDDIT", "1").strip().lower() in _FALSEY:
+            parts.append("reddit-api: off (CHORDENTIAL_REDDIT=0)")
     _last_poll = " · ".join(parts) if parts else "nothing to poll"
     return _last_poll
 
