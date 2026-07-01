@@ -673,8 +673,9 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 
 /* CSS-only failsafe: if JS never runs (a script error elsewhere on the page, an
    ad/privacy blocker, anything), the gate still can't permanently block access to
-   the page underneath — it auto-fades after 9s with no script required. */
-.ig-gate{animation:ig-failsafe-fade 0s linear 9s forwards}
+   the page underneath — it auto-fades after 3 minutes of no action with no
+   script required. */
+.ig-gate{animation:ig-failsafe-fade 0s linear 180s forwards}
 @keyframes ig-failsafe-fade{ to{opacity:0;pointer-events:none;visibility:hidden} }
 
 /* ===== Stills — scroll-tilted editorial grid ===============================

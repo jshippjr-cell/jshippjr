@@ -58,7 +58,7 @@ def test_stills_is_public_no_admin_gate(client, monkeypatch):
 
 def test_stills_loads_the_scroll_engine_script(client):
     t = client.get("/stills").text
-    assert '<script src="/static/public/scroll-tilted-grid.js"></script>' in t
+    assert '<script src="/static/public/scroll-tilted-grid.js?v=1"></script>' in t
     r = client.get("/static/public/scroll-tilted-grid.js")
     assert r.status_code == 200
     assert "IntersectionObserver" in r.text

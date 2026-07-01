@@ -34,3 +34,19 @@ def test_standalone_pages_match_public_base_css_version():
             f"?v={base_version!r} — a browser with the old version cached (7-day "
             f"max-age) will never see this page's CSS additions"
         )
+
+
+# Every <script src="/static/public/*.js"> must carry its own ?v= — this bit for
+# real: reel-carousel.js shipped unversioned through several rewrites (drag
+# engine, then the inline audio player), so a browser that had ever cached the
+# very first copy kept serving it for the full 7-day max-age — cards silently
+# navigated away, never popped forward, and never showed the docked player,
+# because the running JS was months of iteration behind the HTML it loaded.
+def test_every_local_js_script_tag_has_a_cache_buster():
+    js_tag_re = re.compile(r'<script src="(/static/public/[^"]+\.js)(\?v=(\w+))?">')
+    missing = []
+    for page in TEMPLATES.rglob("*.html"):
+        for path, _, version in js_tag_re.findall(page.read_text()):
+            if not version:
+                missing.append(f"{page.relative_to(TEMPLATES)} -> {path}")
+    assert not missing, f"unversioned <script> tags (never cache-bustable): {missing}"

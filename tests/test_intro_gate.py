@@ -60,6 +60,9 @@ def test_intro_gate_dismisses_on_backdrop_click_and_escape(client):
 
 def test_intro_gate_has_css_only_failsafe(client):
     # Even total JS failure can't permanently block the page underneath.
+    # 3 minutes of no action, not a hair-trigger — a visitor reading the
+    # choices shouldn't get shoved into the carousel mid-decision.
     css = client.get("/static/public/site.css?v=18").text
     assert "ig-failsafe-fade" in css
-    assert "9s" in css
+    assert "180s" in css
+    assert "9s forwards" not in css

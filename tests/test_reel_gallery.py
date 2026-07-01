@@ -93,7 +93,7 @@ def test_reel_cards_get_evenly_spaced_slot_angles(client):
 
 def test_reel_loads_the_drag_carousel_engine(client):
     t = client.get("/reel").text
-    assert '<script src="/static/public/reel-carousel.js"></script>' in t
+    assert '<script src="/static/public/reel-carousel.js?v=1"></script>' in t
     assert 'id="rg-drum"' in t
     r = client.get("/static/public/reel-carousel.js")
     assert r.status_code == 200
