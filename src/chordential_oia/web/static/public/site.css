@@ -363,7 +363,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 }
 
 /* ===== Showreel — immersive stage (cursor-follow + docked player) ========== */
-.sr-body{margin:0;background:var(--dark);overflow:hidden}
+.sr-body{margin:0;background:var(--dark);overflow:hidden;-webkit-font-smoothing:antialiased}
 .sr-stage{position:fixed;inset:0;background:var(--dark);overflow:hidden}
 /* Hide the native cursor only where a fine pointer drives the custom one. */
 @media (hover:hover) and (pointer:fine){
@@ -384,7 +384,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px;
   transition:background .15s ease,transform .15s ease}
 .sr-close:hover{background:rgba(255,255,255,.16)}
-.sr-close:active{transform:scale(.94)}
+.sr-close:active{transform:scale(.96)}
 .sr-gallery-link{position:absolute;top:26px;left:50%;transform:translateX(-50%);z-index:5;
   color:var(--dark-muted);font-size:12.5px;text-decoration:none;letter-spacing:.02em}
 .sr-gallery-link:hover{color:var(--dark-text)}
@@ -409,7 +409,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .sr-tap{display:none;margin-top:26px;pointer-events:auto;background:var(--accent);color:#fff;border:0;
   border-radius:999px;padding:14px 28px;font-weight:700;font-size:16px;cursor:pointer;
   transition:transform .15s ease}
-.sr-tap:active{transform:scale(.95)}
+.sr-tap:active{transform:scale(.96)}
 .is-touch .sr-tap{display:inline-block}
 .is-touch.sr-started .sr-tap{display:none}
 
@@ -419,11 +419,15 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   border-radius:999px;padding:8px 14px 8px 8px;box-shadow:0 10px 30px rgba(31,30,30,.4);
   opacity:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s ease;max-width:92vw}
 .sr-player.on{transform:translateX(-50%) translateY(0);opacity:1}
+/* The play triangle (▶) is visually asymmetric — geometric centering reads as
+   off-center to the eye, so nudge it right with padding-left. Pause (❚❚) and
+   prev/next (‹ ›) are symmetric and don't need it, but a shared small nudge
+   is close enough across all four glyphs to not be worth branching per-icon. */
 .sr-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;
   font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
-  transition:background .15s ease,transform .15s ease}
+  padding-left:2px;transition:background .15s ease,transform .15s ease}
 .sr-btn:hover{background:var(--wine)}
-.sr-btn:active{transform:scale(.9)}
+.sr-btn:active{transform:scale(.96)}
 .sr-meta{display:flex;flex-direction:column;gap:3px;padding:0 10px;min-width:200px}
 .sr-track-title{font-size:13px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sr-scrub{appearance:none;-webkit-appearance:none;width:100%;height:4px;border-radius:999px;
@@ -443,7 +447,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 }
 
 /* ===== The Reel — gallery (falling/spiral cards, pure CSS, no animation JS) === */
-.rg-body{margin:0;background:var(--dark);min-height:100vh;overflow-x:hidden}
+.rg-body{margin:0;background:var(--dark);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .rg-view-input{position:absolute;opacity:0;pointer-events:none}
 
 .rg-chrome{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;
@@ -451,7 +455,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-chrome>*{pointer-events:auto}
 .rg-logo img{height:24px;width:auto;display:block}
 .rg-toggle{display:flex;align-items:center;gap:9px;color:var(--dark-muted);font-size:13px;
-  cursor:pointer;user-select:none}
+  cursor:pointer;user-select:none;padding:11px 4px}
 .rg-toggle-spiral,.rg-toggle-list{transition:color .2s}
 .rg-toggle-dot{font-size:7px;color:var(--orange)}
 .rg-view-input:not(:checked) ~ .rg-chrome .rg-toggle-spiral{color:#fff;font-weight:700}
@@ -574,19 +578,24 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   animation:ig-mark-in .8s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:1.25s}
 
 @keyframes ig-word-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-@keyframes ig-word-out{ to{opacity:0;transform:scale(.7)} }
+/* Exits should read softer than their entrance, not louder — ig-word-in only
+   slides 6px, so the exit stays a fade with a small translate too instead of
+   a much bigger 30%-shrink scale. */
+@keyframes ig-word-out{ to{opacity:0;transform:translateY(-6px)} }
 @keyframes ig-mark-in{ to{opacity:1;transform:scale(1) rotate(0)} }
 
-.ig-choices{display:flex;align-items:center;gap:18px;opacity:0;
-  animation:ig-choices-in .6s ease forwards;animation-delay:2.05s}
-@keyframes ig-choices-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+/* .ig-choices is layout only now — each button animates itself with its own
+   delay so the pair staggers in rather than moving as one fused block. */
+.ig-choices{display:flex;align-items:center;gap:18px}
 .ig-btn{font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0;
+  opacity:0;animation:ig-choices-in .5s ease forwards;
   transition:background .15s ease,color .15s ease,transform .15s ease}
-.ig-btn:active{transform:scale(.95)}
-.ig-btn-primary{background:var(--orange);color:#fff;font-weight:700;padding:13px 24px}
+.ig-btn:active{transform:scale(.96)}
+@keyframes ig-choices-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.ig-btn-primary{background:var(--orange);color:#fff;font-weight:700;padding:13px 24px;animation-delay:2.05s}
 .ig-btn-primary:hover{background:var(--wine)}
 .ig-btn-ghost{background:transparent;color:var(--dark-muted);padding:13px 6px;
-  text-decoration:underline;text-underline-offset:3px}
+  text-decoration:underline;text-underline-offset:3px;animation-delay:2.13s}
 .ig-btn-ghost:hover{color:var(--dark-text)}
 
 @media (max-width:480px){
