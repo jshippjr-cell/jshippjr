@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stills — Chordential</title>
+<link rel="stylesheet" href="/static/public/site.css?v=16">
+<link rel="icon" href="/static/public/wordmark-dark.png">
+</head>
+<body class="stl-body">
+  <header class="rg-chrome" style="justify-content:flex-start;gap:24px">
+    <a class="rg-logo" href="/"><img src="/static/public/wordmark-ko.png" alt="Chordential"></a>
+    <a class="rg-menu" href="/reel">the reel &#183;</a>
+  </header>
+
+  <section class="stl-hero">
+    <p class="stl-eyebrow">Stills</p>
+    <h1 class="stl-title">The catalogue, one frame at a time</h1>
+    <p class="stl-lede">Scroll to bring each track and case study into focus — click through to hear it or read how it was solved.</p>
+  </section>
+
+  <main class="stl-grid">
+    {% for c in cards %}
+    <figure class="stl-tile">
+      <a class="stl-frame rg-{{ c.gradient }}" href="{{ c.href }}">
+        <span class="stl-img">
+          <span class="stl-kind">{{ c.kind }}</span>
+          <span class="stl-tile-title">{{ c.title }}</span>
+          <span class="stl-tile-label">{{ c.label }}</span>
+        </span>
+      </a>
+    </figure>
+    {% endfor %}
+  </main>
+
+  <script src="/static/public/scroll-tilted-grid.js"></script>
+</body>
+</html>

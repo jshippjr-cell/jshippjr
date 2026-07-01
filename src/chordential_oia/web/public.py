@@ -160,6 +160,32 @@ def public_reel(request: Request):
     return render(request, "public/reel.html", active="", cards=cards)
 
 
+@router.get("/stills", response_class=HTMLResponse)
+def public_stills(request: Request):
+    """An editorial alternative to /reel's orbiting carousel: the same tracks
+    + case studies as a scroll-tilted grid — each tile rises tipped forward,
+    settles into focus, then tilts away as it exits. Pure CSS transform/filter
+    driven by a small vanilla-JS scroll engine (scroll-tilted-grid.js); falls
+    back to a static grid on touch/reduced-motion/narrow screens via CSS.
+    Same card data + gradient tiles as /reel, so no new imagery is needed."""
+    show = get_showcase()
+    tracks = [d for d in show.demos if (d.audio_url or "").strip()]
+    cards = []
+    for i, t in enumerate(tracks):
+        cards.append({
+            "title": t.title, "label": t.discipline_label,
+            "href": f"/showreel?t={i}", "kind": "Track",
+        })
+    for c in show.cases:
+        cards.append({
+            "title": c.title, "label": "Case study",
+            "href": "/capabilities", "kind": "Case",
+        })
+    for i, c in enumerate(cards):
+        c["gradient"] = _GALLERY_GRADIENTS[i % len(_GALLERY_GRADIENTS)]
+    return render(request, "public/stills.html", active="", cards=cards)
+
+
 @router.get("/showreel", response_class=HTMLResponse)
 def public_showreel(request: Request):
     """Immersive showreel stage: hero video background, a cursor-following 'play'
