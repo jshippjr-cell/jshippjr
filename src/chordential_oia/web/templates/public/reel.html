@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Reel — Chordential</title>
-<link rel="stylesheet" href="/static/public/site.css?v=18">
+<link rel="stylesheet" href="/static/public/site.css?v=19">
 <link rel="icon" href="/static/public/wordmark-dark.png">
 </head>
 <body class="rg-body">
@@ -14,7 +14,7 @@
   <input type="checkbox" id="rg-view-toggle" class="rg-view-input">
 
   <header class="rg-chrome">
-    <a class="rg-logo" href="/"><img src="/static/public/wordmark-ko.png" alt="Chordential"></a>
+    <a class="rg-logo" href="/"><img src="/static/public/wordmark-dark.png" alt="Chordential"></a>
     <label for="rg-view-toggle" class="rg-toggle">
       <span class="rg-toggle-spiral">carousel</span>
       <span class="rg-toggle-dot" aria-hidden="true">&#9679;</span>
@@ -30,7 +30,7 @@
          style="--slot-angle:{{ (loop.index0 * 360 / cards|length) }}deg"
          {% if c.audio_url %}data-audio-url="{{ c.audio_url }}"{% endif %}
          data-title="{{ c.title }}" data-label="{{ c.label }}">
-        <span class="rg-card-kind">{{ c.kind }}</span>
+        <span class="rg-card-kind">{{ "▶ play" if c.audio_url else "↗ case study" }}</span>
         <span class="rg-card-title">{{ c.title }}</span>
         <span class="rg-card-label">{{ c.label }}</span>
       </a>
@@ -61,6 +61,6 @@
     <span class="rg-foot-year">2026</span>
   </div>
 
-  <script src="/static/public/reel-carousel.js?v=1"></script>
+  <script src="/static/public/reel-carousel.js?v=2"></script>
 </body>
 </html>

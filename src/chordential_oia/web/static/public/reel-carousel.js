@@ -22,7 +22,6 @@
   var velocity = 0;
   var dragging = false;
   var lastX = 0;
-  var lastT = 0;
   var moved = 0;
   var momentumId = null;
 
@@ -63,17 +62,38 @@
   // of the card <a>, and never navigates. Plain window-level move/up
   // listeners (attached only while dragging) avoid that pitfall entirely —
   // pointerup keeps its natural target, so a real click resolves normally.
+  //
+  // pointermove can fire far more often than the display repaints (some
+  // trackpads/mice report well past 60Hz) — writing a style + forcing a
+  // layout on EVERY event, rather than once per animation frame, is what
+  // made the drag feel janky. A raw dx is only recorded here; a single
+  // rAF tick per frame coalesces however many events landed and applies
+  // ONE transform write, matched to the actual render cadence.
+  var frameQueued = false;
+  var frameX = 0;
+  var frameT = 0;
+
   function onMove(e) {
     if (!dragging) return;
-    var dx = e.clientX - lastX;
-    moved += Math.abs(dx);
+    moved += Math.abs(e.clientX - lastX);
+    lastX = e.clientX;
+    if (!frameQueued) {
+      frameQueued = true;
+      requestAnimationFrame(applyDragFrame);
+    }
+  }
+
+  function applyDragFrame() {
+    frameQueued = false;
+    if (!dragging) return;
     var now = performance.now();
-    var dt = Math.max(1, now - lastT);
+    var dt = Math.max(1, now - frameT);
+    var dx = lastX - frameX;
     var delta = dx * 0.3;
     rotation += delta;
     velocity = delta * (16 / dt); // normalize to a ~60fps-per-frame step
-    lastX = e.clientX;
-    lastT = now;
+    frameX = lastX;
+    frameT = now;
     apply();
   }
 
@@ -98,7 +118,8 @@
     dragging = true;
     moved = 0;
     lastX = e.clientX;
-    lastT = performance.now();
+    frameX = e.clientX;
+    frameT = performance.now();
     drum.classList.add("rg-dragging");
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -155,13 +176,19 @@
     if (toggleBtn) toggleBtn.classList.toggle("is-playing", on);
   }
 
-  function loadTrack(card, autoplay) {
+  // `reveal` defaults to true (a real click: pop the card forward, spin it to
+  // front, show the docked player). The entrance's own ambient loop passes
+  // reveal:false — it plays quietly in the background with no card popped
+  // and no player shown, until the visitor actually clicks something.
+  function loadTrack(card, autoplay, reveal) {
     if (!audio || !card || !card.dataset.audioUrl) return;
-    setActiveCard(card);
-    spinToFront(card);
-    audio.src = card.dataset.audioUrl;
+    if (reveal !== false) {
+      setActiveCard(card);
+      spinToFront(card);
+      if (player) player.classList.add("on");
+    }
+    if (audio.src !== card.dataset.audioUrl) audio.src = card.dataset.audioUrl;
     if (titleEl) titleEl.textContent = card.dataset.title || "";
-    if (player) player.classList.add("on");
     if (autoplay) {
       var p = audio.play();
       if (p && p.catch) p.catch(function () {});
@@ -214,10 +241,12 @@
 
   // The intro gate's "with sound" choice IS the user gesture that satisfies
   // the browser's autoplay policy — start the first track (index 0, already
-  // Chordential's chosen "Strings Arrangement..." track) looping by default.
+  // Chordential's chosen "Strings Arrangement..." track) looping quietly in
+  // the background. reveal:false — no card pops, no player shows, until the
+  // visitor actually clicks a card themselves.
   document.addEventListener("chordential:entered", function (e) {
     if (e.detail && e.detail.sound && trackCards.length) {
-      loadTrack(trackCards[0], true);
+      loadTrack(trackCards[0], true, false);
     }
   });
 })();

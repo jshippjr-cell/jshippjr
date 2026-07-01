@@ -484,24 +484,26 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 }
 
 /* ===== The Reel — gallery (falling/spiral cards, pure CSS, no animation JS) === */
-.rg-body{margin:0;background:var(--dark);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+/* White stage on purpose: the popped/highlighted active card needs to read
+   clearly against something neutral, not compete with a dark backdrop. */
+.rg-body{margin:0;background:#fff;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .rg-view-input{position:absolute;opacity:0;pointer-events:none}
 
 .rg-chrome{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;
   justify-content:space-between;padding:20px 24px;pointer-events:none}
 .rg-chrome>*{pointer-events:auto}
 .rg-logo img{height:24px;width:auto;display:block}
-.rg-toggle{display:flex;align-items:center;gap:9px;color:var(--dark-muted);font-size:13px;
+.rg-toggle{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px;
   cursor:pointer;user-select:none;padding:11px 4px}
 .rg-toggle-spiral,.rg-toggle-list{transition:color .2s}
 .rg-toggle-dot{font-size:7px;color:var(--orange)}
-.rg-view-input:not(:checked) ~ .rg-chrome .rg-toggle-spiral{color:#fff;font-weight:700}
-.rg-view-input:checked ~ .rg-chrome .rg-toggle-list{color:#fff;font-weight:700}
-.rg-menu{position:relative;color:var(--dark-text);text-decoration:none;font-size:13px;
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:999px;
+.rg-view-input:not(:checked) ~ .rg-chrome .rg-toggle-spiral{color:var(--ink);font-weight:700}
+.rg-view-input:checked ~ .rg-chrome .rg-toggle-list{color:var(--ink);font-weight:700}
+.rg-menu{position:relative;color:var(--ink);text-decoration:none;font-size:13px;
+  background:rgba(23,21,20,.05);border:1px solid var(--border2);border-radius:999px;
   padding:9px 16px;transition:transform .15s ease}
 .rg-menu::before{content:"";position:absolute;z-index:-1;inset:-1px;border-radius:inherit;
-  background:rgba(255,255,255,.16);opacity:0;transition:opacity .15s ease}
+  background:rgba(23,21,20,.08);opacity:0;transition:opacity .15s ease}
 @media (hover:hover) and (pointer:fine){
   .rg-menu:hover::before{opacity:1}
 }
@@ -533,7 +535,7 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   display:flex;flex-direction:column;justify-content:flex-end;
   width:320px;height:210px;border-radius:16px;padding:20px;text-decoration:none;
   overflow:hidden;box-shadow:0 18px 40px rgba(31,30,30,.45);
-  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;
   transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px));
   transition:transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease, filter .3s ease}
 /* opacity, not `background` — a composite the GPU can run alone, vs. a
@@ -548,18 +550,19 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-card-title{position:relative;color:#fff;font-weight:700;font-size:19px;line-height:1.25;margin-top:12px}
 .rg-card-label{position:relative;color:rgba(255,255,255,.75);font-size:13px;margin-top:4px}
 
-/* The clicked track "pops out forward and gets highlighted": pushed nearer
-   the viewer (bigger translateZ) and scaled up a touch more, on top of
+/* The clicked track "pops out forward and gets highlighted": pushed much
+   nearer the viewer (bigger translateZ) and noticeably scaled up, on top of
    whatever its base rotateY(slot) placement already is — reel-carousel.js
-   also spins the whole drum so this card's slot faces front. Everything
-   else dims so the active card reads as clearly picked, without literally
-   blurring cards out (that would hurt legibility while still readable at
-   the ring's edges). */
+   also spins the whole drum so this card's slot faces front. Every other
+   card both dims AND shrinks, so the active card reads as clearly picked
+   against the white stage. */
 .rg-card.rg-active{
-  transform:rotateY(var(--slot-angle,0deg)) translateZ(calc(var(--radius,300px) + 90px)) scale(1.06);
-  box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 0 2px rgba(255,255,255,.22);
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(calc(var(--radius,300px) + 180px)) scale(1.16);
+  box-shadow:0 50px 110px rgba(0,0,0,.4), 0 0 0 3px var(--orange);
   z-index:2}
-.rg-drum.rg-has-active .rg-card:not(.rg-active){filter:brightness(.4) saturate(.75)}
+.rg-drum.rg-has-active .rg-card:not(.rg-active){
+  filter:brightness(.55) saturate(.7);
+  transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px)) scale(.82)}
 
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
@@ -570,10 +573,10 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-ink-wine{background:linear-gradient(135deg,var(--ink),var(--wine))}
 
 .rg-hint{position:absolute;left:0;right:0;bottom:26px;text-align:center;
-  color:var(--dark-muted);font-size:11.5px;letter-spacing:.04em;pointer-events:none}
+  color:var(--muted);font-size:11.5px;letter-spacing:.04em;pointer-events:none}
 
 .rg-foot{position:fixed;left:24px;bottom:20px;z-index:5;display:flex;align-items:center;gap:8px;
-  color:var(--dark-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
+  color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
 .rg-foot-dot{color:var(--orange)}
 
 /* The docked player (.sr-player, reused verbatim from /showreel) sits at the
@@ -594,26 +597,23 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
 .rg-view-input:checked ~ .rg-stage .rg-hint{display:none}
 /* The dimming rule below (.rg-drum.rg-has-active .rg-card:not(.rg-active)) has
-   HIGHER specificity than the plain reset above — without this exact-shape
-   override, a card that was dimmed while in carousel mode would stay dimmed
-   after switching to list mode, since .rg-has-active isn't cleared by the
-   view toggle (a checkbox, deliberately kept JS-free). */
-.rg-view-input:checked ~ .rg-stage .rg-drum.rg-has-active .rg-card:not(.rg-active){filter:none}
+   the SAME specificity as the plain reset above — without this exact-shape
+   override, a card that was dimmed/shrunk while in carousel mode could stay
+   that way after switching to list mode, since .rg-has-active isn't cleared
+   by the view toggle (a checkbox, deliberately kept JS-free). */
+.rg-view-input:checked ~ .rg-stage .rg-drum.rg-has-active .rg-card:not(.rg-active){filter:none;transform:none}
 
 /* Reduced motion drops the release-momentum spin (handled in JS) but the drag
    itself is user-initiated 1:1 motion, not automatic — kept for everyone,
-   including touch, where dragging is the natural gesture anyway. Only a
-   narrow screen (where a 230px card at a steep angle would get clipped by
-   the viewport) falls back to a plain static grid. */
+   including touch, where dragging is the natural gesture anyway. The 3D
+   carousel now runs at every screen size (it no longer gets shoved into a
+   static grid on mobile) — narrow screens just get a smaller card, and the
+   ring radius (computed at runtime from the measured card width) shrinks to
+   match automatically. */
 @media (max-width:640px){
-  .rg-stage{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
-    height:auto;padding:90px 24px 60px;perspective:none}
-  .rg-drum{display:contents}
-  .rg-card{position:static;transform:none;filter:none;
-    width:auto;height:auto;box-shadow:none;border-radius:12px;aspect-ratio:16/10}
-  .rg-drum.rg-has-active .rg-card:not(.rg-active){filter:none}
-  .rg-toggle{display:none}
-  .rg-hint{display:none}
+  .rg-stage{height:56vh;padding-top:80px}
+  .rg-card{left:-110px;top:-72px;width:220px;height:144px;padding:14px}
+  .rg-card-title{font-size:16px}
 }
 
 /* ===== Intro gate — "Welcome" crossfades into the Chordential mark, then the

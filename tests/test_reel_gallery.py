@@ -93,7 +93,7 @@ def test_reel_cards_get_evenly_spaced_slot_angles(client):
 
 def test_reel_loads_the_drag_carousel_engine(client):
     t = client.get("/reel").text
-    assert '<script src="/static/public/reel-carousel.js?v=1"></script>' in t
+    assert '<script src="/static/public/reel-carousel.js?v=2"></script>' in t
     assert 'id="rg-drum"' in t
     r = client.get("/static/public/reel-carousel.js")
     assert r.status_code == 200
@@ -144,20 +144,27 @@ def test_reel_drum_radius_is_computed_from_measured_card_width_not_hardcoded():
 
 
 def test_reel_fallback_resets_the_3d_properties():
-    """List-mode and the narrow-screen fallback must fully neutralize the
-    card's own `transform` (its fixed drum slot)."""
+    """Switching to list mode must fully neutralize the card's own
+    `transform` (its fixed drum slot)."""
     css = _reel_css()
     assert css.count("transform:none") >= 2
 
 
-def test_reel_carousel_stays_interactive_on_touch():
-    """A draggable carousel is naturally suited to touch (drag/swipe is a
-    primary touch gesture) — unlike the old auto-spinning orbit, touch
-    devices should NOT be forced into the static list fallback. Only a
-    narrow viewport (max-width) still falls back."""
+def test_reel_carousel_runs_at_every_screen_size_including_mobile():
+    """The carousel used to force narrow screens into a static list-mode
+    grid — that meant the 3D carousel simply never showed up on phones.
+    Drag/swipe is a natural touch gesture, so mobile now gets the real
+    interactive drum too; only the card size shrinks (the ring radius is
+    computed at runtime from the measured card width, so it adapts on its
+    own). List mode is still available, but only via the user's own choice
+    (the toggle), never forced by viewport width."""
     css = _reel_css()
     assert "@media (max-width:640px){" in css
-    assert "@media (hover:none),(prefers-reduced-motion:reduce),(max-width:760px){" not in css
+    narrow_block = css.split("@media (max-width:640px){", 1)[1].split("\n}", 1)[0]
+    assert "display:grid" not in narrow_block
+    assert "display:contents" not in narrow_block
+    assert "position:static" not in narrow_block
+    assert ".rg-toggle{display:none}" not in narrow_block
 
 
 def test_drag_past_threshold_suppresses_the_card_click():
