@@ -381,8 +381,10 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .sr-logo img{height:26px;width:auto;display:block}
 .sr-close{position:absolute;top:20px;right:24px;z-index:5;width:40px;height:40px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;color:var(--dark-text);
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px}
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px;
+  transition:background .15s ease,transform .15s ease}
 .sr-close:hover{background:rgba(255,255,255,.16)}
+.sr-close:active{transform:scale(.94)}
 .sr-gallery-link{position:absolute;top:26px;left:50%;transform:translateX(-50%);z-index:5;
   color:var(--dark-muted);font-size:12.5px;text-decoration:none;letter-spacing:.02em}
 .sr-gallery-link:hover{color:var(--dark-text)}
@@ -391,32 +393,37 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   text-align:center;color:var(--dark-text);padding:0 24px;transition:opacity .5s ease;pointer-events:none}
 .sr-started .sr-hint{opacity:0}
 .sr-eyebrow{color:#f0b487;font-weight:700;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px}
-.sr-title{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1.08;margin:0 0 12px;max-width:14ch}
+.sr-title{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1.08;margin:0 0 12px;
+  max-width:14ch;text-wrap:balance}
 .sr-lede{color:var(--dark-muted);font-size:17px;margin:0}
 
 /* The cursor-following pill (desktop). Hidden until the pointer enters the stage. */
 .sr-cursor{position:fixed;top:0;left:0;z-index:8;pointer-events:none;
   background:var(--accent);color:#fff;font-weight:700;font-size:13px;letter-spacing:.04em;
   padding:9px 16px;border-radius:999px;opacity:0;transition:opacity .2s ease;
-  box-shadow:0 6px 20px rgba(0,0,0,.35);will-change:transform}
+  box-shadow:0 6px 20px rgba(31,30,30,.35);will-change:transform}
 .sr-cursor.on{opacity:1}
 @media (hover:none),(pointer:coarse){ .sr-cursor{display:none} }
 
 /* Touch fallback button — shown only on touch (no cursor to follow). */
 .sr-tap{display:none;margin-top:26px;pointer-events:auto;background:var(--accent);color:#fff;border:0;
-  border-radius:999px;padding:14px 28px;font-weight:700;font-size:16px;cursor:pointer}
+  border-radius:999px;padding:14px 28px;font-weight:700;font-size:16px;cursor:pointer;
+  transition:transform .15s ease}
+.sr-tap:active{transform:scale(.95)}
 .is-touch .sr-tap{display:inline-block}
 .is-touch.sr-started .sr-tap{display:none}
 
 /* Docked player — slides up on first play. */
 .sr-player{position:absolute;left:50%;bottom:26px;transform:translateX(-50%) translateY(140%);
   z-index:6;display:flex;align-items:center;gap:8px;background:rgba(252,247,248,.96);
-  border-radius:999px;padding:8px 14px 8px 8px;box-shadow:0 10px 30px rgba(0,0,0,.4);
+  border-radius:999px;padding:8px 14px 8px 8px;box-shadow:0 10px 30px rgba(31,30,30,.4);
   opacity:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s ease;max-width:92vw}
 .sr-player.on{transform:translateX(-50%) translateY(0);opacity:1}
 .sr-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;
-  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  transition:background .15s ease,transform .15s ease}
 .sr-btn:hover{background:var(--wine)}
+.sr-btn:active{transform:scale(.9)}
 .sr-meta{display:flex;flex-direction:column;gap:3px;padding:0 10px;min-width:200px}
 .sr-track-title{font-size:13px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sr-scrub{appearance:none;-webkit-appearance:none;width:100%;height:4px;border-radius:999px;
@@ -427,6 +434,12 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 @media (max-width:620px){
   .sr-title{font-size:30px}
   .sr-meta{min-width:120px}
+}
+@media (prefers-reduced-motion:reduce){
+  /* The .rg-* and .ig-* fallbacks already do this; the showreel's own
+     transitions (video fade-in, docked-player slide-up, hint fade-out) were
+     the one place on this feature left unguarded. */
+  .sr-video,.sr-hint,.sr-player{transition:none}
 }
 
 /* ===== The Reel — gallery (falling/spiral cards, pure CSS, no animation JS) === */
@@ -444,8 +457,10 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-view-input:not(:checked) ~ .rg-chrome .rg-toggle-spiral{color:#fff;font-weight:700}
 .rg-view-input:checked ~ .rg-chrome .rg-toggle-list{color:#fff;font-weight:700}
 .rg-menu{color:var(--dark-text);text-decoration:none;font-size:13px;background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:9px 16px}
+  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:9px 16px;
+  transition:background .15s ease,transform .15s ease}
 .rg-menu:hover{background:rgba(255,255,255,.16)}
+.rg-menu:active{transform:scale(.96)}
 
 /* perspective + preserve-3d make this a REAL 3D viewing context: children's
    rotate-around-Y-axis + translateZ are rendered with true depth foreshortening
@@ -472,14 +487,18 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-card{position:absolute;left:50%;margin-left:-115px;
   display:flex;flex-direction:column;justify-content:flex-end;
   width:230px;height:150px;border-radius:14px;padding:16px;text-decoration:none;
-  overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45);
+  overflow:hidden;box-shadow:0 18px 40px rgba(31,30,30,.45);
   backface-visibility:hidden;-webkit-backface-visibility:hidden;
   translate:0 -32vh 0;
   transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px));
   animation:rg-fall var(--dur,20s) linear infinite, rg-orbit var(--spin,14s) linear infinite;
   animation-delay:var(--delay,0s), var(--spin-delay,0s)}
-.rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .25s}
+.rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .15s ease}
 .rg-card:hover::after{background:rgba(0,0,0,.38)}
+/* Press feedback lives on the overlay, not `transform` — the card's own transform
+   is already driven every frame by the rg-orbit animation, which (per the CSS
+   cascade) would silently win over a plain :active transform rule and swallow it. */
+.rg-card:active::after{background:rgba(0,0,0,.55)}
 .rg-card-kind{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:rgba(255,255,255,.7);margin-bottom:auto}
 .rg-card-title{position:relative;color:#fff;font-weight:700;font-size:15px;line-height:1.25;margin-top:10px}
@@ -561,7 +580,9 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .ig-choices{display:flex;align-items:center;gap:18px;opacity:0;
   animation:ig-choices-in .6s ease forwards;animation-delay:2.05s}
 @keyframes ig-choices-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.ig-btn{font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0}
+.ig-btn{font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0;
+  transition:background .15s ease,color .15s ease,transform .15s ease}
+.ig-btn:active{transform:scale(.95)}
 .ig-btn-primary{background:var(--orange);color:#fff;font-weight:700;padding:13px 24px}
 .ig-btn-primary:hover{background:var(--wine)}
 .ig-btn-ghost{background:transparent;color:var(--dark-muted);padding:13px 6px;
