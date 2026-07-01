@@ -382,12 +382,18 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .sr-close{position:absolute;top:20px;right:24px;z-index:5;width:40px;height:40px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;color:var(--dark-text);
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);text-decoration:none;font-size:15px;
-  transition:background .15s ease,transform .15s ease}
-.sr-close:hover{background:rgba(255,255,255,.16)}
+  transition:transform .15s ease}
+/* Hover fill is a separate overlay animating opacity (GPU-only), not the
+   element's own `background` (a paint, not a composite). z-index:-1 keeps it
+   below the "✕" glyph but above .sr-close's own base fill — verified via a
+   local screenshot that the glyph stays legible through the hover state. */
+.sr-close::before{content:"";position:absolute;z-index:-1;inset:-1px;border-radius:inherit;
+  background:rgba(255,255,255,.16);opacity:0;transition:opacity .15s ease}
 .sr-close:active{transform:scale(.96)}
 .sr-gallery-link{position:absolute;top:26px;left:50%;transform:translateX(-50%);z-index:5;
   color:var(--dark-muted);font-size:12.5px;text-decoration:none;letter-spacing:.02em}
-.sr-gallery-link:hover{color:var(--dark-text)}
+/* Hover-gated below — ungated :hover leaves a "stuck" state on touch (a tap
+   registers as a persistent hover with no way to un-hover). */
 
 .sr-hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   text-align:center;color:var(--dark-text);padding:0 24px;transition:opacity .5s ease;pointer-events:none}
@@ -423,10 +429,11 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
    off-center to the eye, so nudge it right with padding-left. Pause (❚❚) and
    prev/next (‹ ›) are symmetric and don't need it, but a shared small nudge
    is close enough across all four glyphs to not be worth branching per-icon. */
-.sr-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;
+.sr-btn{position:relative;width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;
   font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
-  padding-left:2px;transition:background .15s ease,transform .15s ease}
-.sr-btn:hover{background:var(--wine)}
+  padding-left:2px;transition:transform .15s ease}
+.sr-btn::before{content:"";position:absolute;z-index:-1;inset:0;border-radius:inherit;
+  background:var(--wine);opacity:0;transition:opacity .15s ease}
 .sr-btn:active{transform:scale(.96)}
 .sr-meta{display:flex;flex-direction:column;gap:3px;padding:0 10px;min-width:200px}
 .sr-track-title{font-size:13px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -439,11 +446,20 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   .sr-title{font-size:30px}
   .sr-meta{min-width:120px}
 }
+/* Hover fills are gated to devices with a real hover-capable pointer — on
+   touch, an ungated :hover leaves a tap "stuck" in its hovered look with no
+   way to un-hover it. */
+@media (hover:hover) and (pointer:fine){
+  .sr-close:hover::before{opacity:1}
+  .sr-btn:hover::before{opacity:1}
+  .sr-gallery-link:hover{color:var(--dark-text)}
+}
 @media (prefers-reduced-motion:reduce){
-  /* The .rg-* and .ig-* fallbacks already do this; the showreel's own
-     transitions (video fade-in, docked-player slide-up, hint fade-out) were
-     the one place on this feature left unguarded. */
-  .sr-video,.sr-hint,.sr-player{transition:none}
+  /* Reduced motion means gentler, not zero: .sr-video/.sr-hint only ever
+     transition opacity already (no movement), so they're left alone. Only
+     .sr-player's transform (the translateY slide-up) needs to drop — its
+     opacity fade stays, overridden here to opacity-only. */
+  .sr-player{transition:opacity .3s ease}
 }
 
 /* ===== The Reel — gallery (falling/spiral cards, pure CSS, no animation JS) === */
@@ -460,10 +476,14 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .rg-toggle-dot{font-size:7px;color:var(--orange)}
 .rg-view-input:not(:checked) ~ .rg-chrome .rg-toggle-spiral{color:#fff;font-weight:700}
 .rg-view-input:checked ~ .rg-chrome .rg-toggle-list{color:#fff;font-weight:700}
-.rg-menu{color:var(--dark-text);text-decoration:none;font-size:13px;background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:9px 16px;
-  transition:background .15s ease,transform .15s ease}
-.rg-menu:hover{background:rgba(255,255,255,.16)}
+.rg-menu{position:relative;color:var(--dark-text);text-decoration:none;font-size:13px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:999px;
+  padding:9px 16px;transition:transform .15s ease}
+.rg-menu::before{content:"";position:absolute;z-index:-1;inset:-1px;border-radius:inherit;
+  background:rgba(255,255,255,.16);opacity:0;transition:opacity .15s ease}
+@media (hover:hover) and (pointer:fine){
+  .rg-menu:hover::before{opacity:1}
+}
 .rg-menu:active{transform:scale(.96)}
 
 /* perspective + preserve-3d make this a REAL 3D viewing context: children's
@@ -497,12 +517,16 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--orbit-r,320px));
   animation:rg-fall var(--dur,20s) linear infinite, rg-orbit var(--spin,14s) linear infinite;
   animation-delay:var(--delay,0s), var(--spin-delay,0s)}
-.rg-card::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .15s ease}
-.rg-card:hover::after{background:rgba(0,0,0,.38)}
+/* opacity, not `background` — a composite the GPU can run alone, vs. a
+   background-color change which is a repaint. */
+.rg-card::after{content:"";position:absolute;inset:0;background:#000;opacity:0;transition:opacity .15s ease}
+@media (hover:hover) and (pointer:fine){
+  .rg-card:hover::after{opacity:.38}
+}
 /* Press feedback lives on the overlay, not `transform` — the card's own transform
    is already driven every frame by the rg-orbit animation, which (per the CSS
    cascade) would silently win over a plain :active transform rule and swallow it. */
-.rg-card:active::after{background:rgba(0,0,0,.55)}
+.rg-card:active::after{opacity:.55}
 .rg-card-kind{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:rgba(255,255,255,.7);margin-bottom:auto}
 .rg-card-title{position:relative;color:#fff;font-weight:700;font-size:15px;line-height:1.25;margin-top:10px}
@@ -570,11 +594,16 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 .ig-gate.ig-closing{opacity:0;pointer-events:none;transition:opacity .5s ease}
 
 .ig-center{position:relative;width:100%;height:120px;display:flex;align-items:center;justify-content:center}
+/* Built-in `ease` is too weak for a deliberate, watched entrance — use the
+   same strong curve as ig-mark-in throughout the sequence for cohesion. */
 .ig-word{position:absolute;color:var(--dark-text);font-family:var(--serif);font-weight:600;
   font-size:38px;letter-spacing:.01em;opacity:0;
-  animation:ig-word-in .5s ease forwards, ig-word-out .7s ease forwards;
+  animation:ig-word-in .5s cubic-bezier(.2,.8,.2,1) forwards, ig-word-out .7s cubic-bezier(.2,.8,.2,1) forwards;
   animation-delay:0s, 1.2s}
-.ig-mark{position:absolute;height:96px;width:auto;opacity:0;transform:scale(.4) rotate(-12deg);
+/* scale(.9), not scale(.4) — "nothing appears from nothing": starting much
+   below ~0.9 reads as conjured rather than settling into place, even for a
+   rare/first-run delight moment. The -12deg rotation carries the flourish. */
+.ig-mark{position:absolute;height:96px;width:auto;opacity:0;transform:scale(.9) rotate(-12deg);
   animation:ig-mark-in .8s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:1.25s}
 
 @keyframes ig-word-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
@@ -587,16 +616,20 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
 /* .ig-choices is layout only now — each button animates itself with its own
    delay so the pair staggers in rather than moving as one fused block. */
 .ig-choices{display:flex;align-items:center;gap:18px}
-.ig-btn{font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0;
-  opacity:0;animation:ig-choices-in .5s ease forwards;
-  transition:background .15s ease,color .15s ease,transform .15s ease}
+.ig-btn{position:relative;font-family:inherit;font-size:14px;border-radius:999px;cursor:pointer;border:0;
+  opacity:0;animation:ig-choices-in .5s cubic-bezier(.2,.8,.2,1) forwards;
+  transition:color .15s ease,transform .15s ease}
 .ig-btn:active{transform:scale(.96)}
 @keyframes ig-choices-in{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 .ig-btn-primary{background:var(--orange);color:#fff;font-weight:700;padding:13px 24px;animation-delay:2.05s}
-.ig-btn-primary:hover{background:var(--wine)}
+.ig-btn-primary::before{content:"";position:absolute;z-index:-1;inset:-1px;border-radius:inherit;
+  background:var(--wine);opacity:0;transition:opacity .15s ease}
 .ig-btn-ghost{background:transparent;color:var(--dark-muted);padding:13px 6px;
   text-decoration:underline;text-underline-offset:3px;animation-delay:2.13s}
-.ig-btn-ghost:hover{color:var(--dark-text)}
+@media (hover:hover) and (pointer:fine){
+  .ig-btn-primary:hover::before{opacity:1}
+  .ig-btn-ghost:hover{color:var(--dark-text)}
+}
 
 @media (max-width:480px){
   .ig-word{font-size:28px}

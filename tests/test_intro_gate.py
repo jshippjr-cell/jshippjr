@@ -60,6 +60,6 @@ def test_intro_gate_dismisses_on_backdrop_click_and_escape(client):
 
 def test_intro_gate_has_css_only_failsafe(client):
     # Even total JS failure can't permanently block the page underneath.
-    css = client.get("/static/public/site.css?v=13").text
+    css = client.get("/static/public/site.css?v=14").text
     assert "ig-failsafe-fade" in css
     assert "9s" in css
