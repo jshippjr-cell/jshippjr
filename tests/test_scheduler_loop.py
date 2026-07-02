@@ -187,6 +187,34 @@ def test_enrich_one_supervised_marks_error_on_timeout(tmp_path, monkeypatch):
     assert dbm.count_needing_enrichment(conn) == 0       # no longer "awaiting"
 
 
+def test_enrich_one_supervised_marks_error_on_crash(tmp_path, monkeypatch):
+    # A worker that CRASHES (e.g. an unhandled exception on a malformed page) must
+    # be treated the same as a hang: marked 'error' so the batch advances past it.
+    # Before this fix only a timeout cleared the queue — a crashing agency stayed
+    # at the front forever and every pass re-picked (and re-crashed on) it,
+    # completing 0 no matter how many times "Enrich now" was pressed.
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "e2.db"))
+    dbm.init_db(conn)
+    dbm.upsert_agency(conn, "s", {"dedup_key": "x", "company": "X",
+                                  "website": "https://x.example"})
+    aid = conn.execute("SELECT id FROM agencies").fetchone()["id"]
+    conn.commit()
+
+    class CrashProc:
+        def wait(self, timeout=None):
+            return 1                          # non-zero exit, no timeout
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(sch.subprocess, "Popen", lambda *a, **k: CrashProc())
+    assert sch._enrich_one_supervised(conn, aid, timeout=1) is False
+    st = dbm.get_agency_enrichment(conn, aid)
+    assert st and st.get("status") == "error"            # marked → batch will skip it
+    assert dbm.count_needing_enrichment(conn) == 0       # no longer "awaiting"
+
+
 def test_supervised_batch_advances_through_agencies(tmp_path, monkeypatch):
     # The batch must make forward progress: enrich N, leaving the rest, and record
     # how many completed (the "click Enrich, count drops" behaviour).

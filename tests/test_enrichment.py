@@ -265,6 +265,23 @@ def test_enrich_errors_when_homepage_unreachable(tmp_path):
     assert summary["status"] == "error"
 
 
+def test_enrich_survives_a_crashing_discover_step(tmp_path, monkeypatch):
+    # A malformed homepage that makes link discovery itself raise must NOT crash
+    # the whole run — before this fix an uncaught exception here killed the worker
+    # process, and since the agency was never marked complete/error, the batch
+    # re-picked (and re-crashed on) this exact agency every single pass, forever.
+    conn, aid = _seed(tmp_path)
+
+    def _boom(html, base_url):
+        raise ValueError("malformed markup")
+
+    monkeypatch.setattr(en, "discover_links", _boom)
+    summary = en.enrich_agency(conn, aid, fetch=make_fetch(SITE))
+    assert summary["status"] == "complete"          # run finished, not crashed
+    st = dbm.get_agency_enrichment(conn, aid)
+    assert st.get("status") == "complete"            # queue will not re-pick it
+
+
 # --------------------------------------------------------------------------- #
 # Batch runner — enrich the whole Master Company Database, resumably.
 # --------------------------------------------------------------------------- #

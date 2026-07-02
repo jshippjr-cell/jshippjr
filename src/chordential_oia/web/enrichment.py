@@ -684,14 +684,22 @@ def enrich_agency(
             on_progress({"agency_id": agency_id, "status": status,
                          "steps_done": list(steps_done), "detail": detail})
 
-    # Step 0 — discover: fetch the homepage and classify its navigation.
+    # Step 0 — discover: fetch the homepage and classify its navigation. A
+    # malformed page can make link discovery itself raise (bad markup trips the
+    # anchor/classify regexes) — catch here too, exactly like the micro-agents
+    # below, so one bad homepage can't crash the worker and wedge the whole
+    # queue on this one agency forever (selection always re-picks the earliest
+    # not-yet-resolved row).
     if "discover" not in steps_done:
         home_html, ok = fetch(website)
         if not ok:
             _save("error", "homepage fetch failed")
             return {"agency_id": agency_id, "status": "error",
                     "detail": "homepage fetch failed"}
-        links = discover_links(home_html, website)
+        try:
+            links = discover_links(home_html, website)
+        except Exception:
+            links = []
         steps_done.append("discover")
         _save("running", f"discovered {len(links)} pages")
 

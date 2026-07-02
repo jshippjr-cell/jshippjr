@@ -318,11 +318,14 @@ def _agency_timeout_seconds() -> int:
 
 
 def _mark_enrichment_error(conn, agency_id: int) -> None:
-    """Mark a timed-out enrichment 'error' so the queue advances past a hostile page."""
+    """Mark an enrichment 'error' (hang OR crash) so the queue advances past a
+    hostile page — without a terminal status here, the same earliest-pending
+    agency gets re-picked every pass and the whole batch wedges on it forever."""
     try:
         db.save_agency_enrichment(conn, agency_id, {
             "status": "error", "steps_done": [], "links": [], "profile": {},
-            "detail": "enrichment timed out (a page likely hung the parser)"})
+            "detail": "enrichment failed (timed out or the worker crashed — "
+                      "a page likely hung or broke the parser)"})
         conn.commit()
     except Exception:
         pass
@@ -332,7 +335,8 @@ def _mark_dm_error(conn, agency_id: int) -> None:
     try:
         db.save_agency_dm(conn, agency_id, {
             "status": "error", "found": 0, "total": 0,
-            "detail": "decision-maker discovery timed out (a page likely hung)"})
+            "detail": "decision-maker discovery failed (timed out or the "
+                      "worker crashed — a page likely hung or broke the parser)"})
         conn.commit()
     except Exception:
         pass
@@ -354,9 +358,11 @@ def _run_one_supervised(conn, action: str, agency_id: int, timeout: int,
                         *, reset: bool = False, label: str = "enrich",
                         on_timeout=None) -> bool:
     """Run ONE agency through ``action`` in its own killable worker process. Returns
-    True on a clean exit. On timeout the worker is killed and ``on_timeout`` runs
-    (the killed worker can't mark itself, and without a terminal status the queue
-    would re-pick the same hostile page forever and never advance)."""
+    True on a clean exit. On a timeout OR a crash (any non-zero exit) the worker
+    can't mark itself, and without a terminal status ``agencies_needing_enrichment``
+    would re-pick this SAME agency (earliest not-yet-resolved row) every pass —
+    wedging the whole batch on one bad page forever. So ``on_timeout`` runs
+    whenever the worker doesn't exit cleanly, not just on a hang."""
     spec = {"action": action, "agency_id": agency_id, "reset": reset}
     args = [sys.executable, "-m", "chordential_oia.web._enrich_worker", json.dumps(spec)]
     try:
@@ -367,6 +373,8 @@ def _run_one_supervised(conn, action: str, agency_id: int, timeout: int,
     try:
         rc = proc.wait(timeout=timeout)
         print(f"[{label}] agency {agency_id}: worker exited {rc}", flush=True)
+        if rc != 0 and on_timeout:
+            on_timeout(conn, agency_id)
         return rc == 0
     except subprocess.TimeoutExpired:
         try:
@@ -380,6 +388,8 @@ def _run_one_supervised(conn, action: str, agency_id: int, timeout: int,
         return False
     except Exception as e:
         print(f"[{label}] agency {agency_id}: error {e}", flush=True)
+        if on_timeout:
+            on_timeout(conn, agency_id)
         return False
 
 
