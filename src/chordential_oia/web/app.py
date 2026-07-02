@@ -59,7 +59,7 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, normalize_url, profile_completeness
 from ..matching import match_talent
 from . import (
-    db, decision_makers, directory_crawl, directory_parsers, discovery,
+    campaigns, db, decision_makers, directory_crawl, directory_parsers, discovery,
     enrichment, intelligence, music_opportunity, opportunity_signals,
     outreach_engine, relationships, scheduler, seed, signals, sources, triage,
     webpush,
@@ -133,6 +133,9 @@ templates.env.globals["strat_class"] = lambda s: _STRAT_CLASS.get(s, "")
 templates.env.globals["PIPELINE_STATES"] = db.PIPELINE_STATES
 # View-layer stage relabel (ruling #2): friendly label for a raw pipeline status.
 templates.env.globals["stage_label"] = db.stage_label
+# Campaign Workspace (Creative OS) is a flagged module — templates gate the entry
+# points on this so the feature is invisible until CHORDENTIAL_CAMPAIGN_WORKSPACE is on.
+templates.env.globals["campaign_workspace_enabled"] = campaigns.workspace_enabled
 templates.env.filters["stage_label"] = db.stage_label
 # True only when the internal gate is active (CHORDENTIAL_ADMIN_TOKEN set).
 templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_TOKEN"))
@@ -3701,6 +3704,101 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "timeline": timeline,
         "version_states": VERSION_STATES,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Campaign Workspace (Creative OS) — the campaign is the workspace root. Flagged
+# behind CHORDENTIAL_CAMPAIGN_WORKSPACE (OFF by default); routes 404 when the module
+# is disabled, so the existing product is untouched. See docs/campaign-workspace-prd.md.
+# --------------------------------------------------------------------------- #
+def _campaign_view(conn, campaign_id: int):
+    """Assemble the Campaign Home view (or None if not found)."""
+    camp = db.get_campaign(conn, campaign_id)
+    if camp is None:
+        return None
+    direction = db.get_campaign_direction(conn, campaign_id)
+    sections = [{
+        "key": key, "label": label, "hint": hint,
+        "body": (direction[key]["body"] if key in direction else ""),
+        "complete": bool(direction[key]["complete"]) if key in direction else False,
+    } for key, label, hint in campaigns.DIRECTION_SECTIONS]
+    return {
+        "campaign": camp,
+        "phases": campaigns.PHASES,
+        "phase_index": campaigns.phase_index(camp["phase"]),
+        "next_phase": campaigns.next_phase(camp["phase"]),
+        "sections": sections,
+        "completeness": campaigns.direction_completeness(direction),
+    }
+
+
+@app.post("/project/{project_id}/campaign/open")
+def campaign_open(project_id: int):
+    """Open (or create) the campaign workspace that wraps a project — the bridge from
+    the project record into the Creative OS. Idempotent (lazy-creates once)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        camp = db.ensure_campaign_for_project(
+            conn, project_id, phase=campaigns.hydrate_phase_from_delivery(delivery))
+        if camp is None:
+            return HTMLResponse("Project not found", status_code=404)
+        cid = camp["id"]
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{cid}", status_code=303)
+
+
+@app.get("/campaign/{campaign_id}", response_class=HTMLResponse)
+def campaign_home(request: Request, campaign_id: int):
+    """Campaign Home — one screen, one campaign: the creative timeline, the structured
+    creative direction, and the link into delivery. The Creative OS command view."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        view = _campaign_view(conn, campaign_id)
+        if view is None:
+            return HTMLResponse("Campaign not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "campaign_home.html", nav="projects", **view)
+
+
+@app.post("/campaign/{campaign_id}/direction")
+def campaign_set_direction(campaign_id: int, section: str = Form(...),
+                           body: str = Form(""), complete: str = Form("")):
+    """Edit one structured creative-direction section (the composer's brief)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    if section not in campaigns.DIRECTION_KEYS:
+        return HTMLResponse("Unknown section", status_code=400)
+    conn = db.connect()
+    try:
+        db.update_campaign_direction(
+            conn, campaign_id, section, body=body,
+            complete=str(complete).strip() in ("1", "true", "on", "yes"))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{campaign_id}#direction", status_code=303)
+
+
+@app.post("/campaign/{campaign_id}/phase")
+def campaign_set_phase(campaign_id: int, phase: str = Form(...)):
+    """Advance/set the campaign phase — a human-driven transition (the machine only
+    proposes the next phase). Rejects a phase outside the creative timeline."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    if phase not in campaigns.PHASES:
+        return HTMLResponse("Unknown phase", status_code=400)
+    conn = db.connect()
+    try:
+        db.set_campaign_phase(conn, campaign_id, phase)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{campaign_id}", status_code=303)
 
 
 @app.get("/project/{project_id}/delivery", response_class=HTMLResponse)

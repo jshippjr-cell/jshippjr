@@ -938,6 +938,40 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, updated_at TEXT
         )"""
     )
+    # Campaign Workspace (Creative OS) — the campaign is the workspace root that
+    # elevates a project into "one screen, one campaign, everything." Created lazily
+    # per project (compat link `project_id`) so there is no bulk migration; the
+    # existing delivery/review machinery keeps running per-project underneath.
+    # See docs/campaign-workspace-prd.md.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,           -- compat link to the existing project
+            opp_id INTEGER,
+            title TEXT, brand TEXT DEFAULT '', agency_client TEXT DEFAULT '',
+            phase TEXT DEFAULT 'Briefing',
+            budget_min REAL, budget_max REAL, deadline TEXT,
+            contracted_revisions INTEGER,
+            status TEXT DEFAULT 'Active',
+            share_token TEXT, creative_json TEXT,
+            created_at TEXT, updated_at TEXT, archived_at TEXT
+        )"""
+    )
+    # Structured creative direction — the composer's brief as checklist-able sections
+    # (emotional arc, reference playlist, agency/producer notes, brand history,
+    # previous campaigns). One row per (campaign, section).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS campaign_direction (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL,
+            section TEXT NOT NULL,
+            body TEXT DEFAULT '',
+            complete INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'manual',
+            updated_at TEXT,
+            UNIQUE(campaign_id, section)
+        )"""
+    )
     conn.commit()
 
 
@@ -3582,6 +3616,94 @@ def project_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.R
 
 def get_project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.Row]:
     return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+
+
+# --------------------------------------------------------------------------- #
+# Campaign Workspace (Creative OS) — the campaign is the workspace root that
+# elevates a project. Created lazily per project (no bulk migration); the existing
+# delivery/review machinery keeps running per-project underneath. See
+# docs/campaign-workspace-prd.md.
+# --------------------------------------------------------------------------- #
+def get_campaign(conn: sqlite3.Connection, campaign_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
+
+
+def campaign_for_project(conn: sqlite3.Connection, project_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaigns WHERE project_id = ? LIMIT 1", (project_id,)).fetchone()
+
+
+def ensure_campaign_for_project(conn: sqlite3.Connection, project_id: int,
+                                *, phase: str = "Briefing") -> Optional[sqlite3.Row]:
+    """Get (or lazily create) the campaign that wraps a project — the compat bridge
+    from the existing project record to the Creative OS workspace. Idempotent via the
+    project_id link, so opening a project as a workspace never duplicates. Hydrates
+    title/brand/agency/budget/deadline from the project. Returns None if no project."""
+    existing = campaign_for_project(conn, project_id)
+    if existing is not None:
+        return existing
+    proj = get_project(conn, project_id)
+    if proj is None:
+        return None
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO campaigns
+           (project_id, opp_id, title, brand, agency_client, phase,
+            budget_min, budget_max, deadline, status, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (project_id, proj["opp_id"], proj["need"] or "Untitled campaign",
+         proj["client"] or "", proj["client"] or "", phase,
+         proj["budget_min"], proj["budget_max"], proj["deadline"], "Active", now, now))
+    conn.commit()
+    return get_campaign(conn, int(cur.lastrowid))
+
+
+def list_campaigns(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaigns WHERE status != 'Archived' ORDER BY updated_at DESC, id DESC"
+    ).fetchall()
+
+
+def set_campaign_phase(conn: sqlite3.Connection, campaign_id: int, phase: str) -> None:
+    conn.execute(
+        "UPDATE campaigns SET phase = ?, updated_at = ? WHERE id = ?",
+        (phase, datetime.now(timezone.utc).isoformat(), campaign_id))
+    conn.commit()
+
+
+def get_campaign_direction(conn: sqlite3.Connection, campaign_id: int) -> dict:
+    """All direction sections for a campaign as {section: row}."""
+    return {r["section"]: r for r in conn.execute(
+        "SELECT * FROM campaign_direction WHERE campaign_id = ?", (campaign_id,))}
+
+
+def update_campaign_direction(conn: sqlite3.Connection, campaign_id: int, section: str,
+                              *, body: Optional[str] = None,
+                              complete: Optional[bool] = None,
+                              source: str = "manual") -> None:
+    """Upsert one direction section (merge-one-field, mirroring the doc_overrides
+    pattern). Only the provided fields change; the row is created if absent."""
+    now = datetime.now(timezone.utc).isoformat()
+    row = conn.execute(
+        "SELECT * FROM campaign_direction WHERE campaign_id = ? AND section = ?",
+        (campaign_id, section)).fetchone()
+    if row is None:
+        conn.execute(
+            """INSERT INTO campaign_direction
+               (campaign_id, section, body, complete, source, updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (campaign_id, section, body or "",
+             1 if complete else 0, source, now))
+    else:
+        new_body = row["body"] if body is None else body
+        new_complete = row["complete"] if complete is None else (1 if complete else 0)
+        conn.execute(
+            "UPDATE campaign_direction SET body = ?, complete = ?, updated_at = ? "
+            "WHERE campaign_id = ? AND section = ?",
+            (new_body, new_complete, now, campaign_id, section))
+    conn.execute("UPDATE campaigns SET updated_at = ? WHERE id = ?", (now, campaign_id))
+    conn.commit()
 
 
 # --------------------------------------------------------------------------- #

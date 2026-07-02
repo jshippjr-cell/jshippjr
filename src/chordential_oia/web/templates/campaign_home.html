@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign['title'] }} · Campaign{% endblock %}
+{% block heading %}Campaign workspace{% endblock %}
+{% block head %}
+<style>
+  .cw-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+  .cw-title{font-family:var(--serif,Georgia,serif);font-size:26px;line-height:1.15;margin:0}
+  .cw-sub{color:var(--olive,#737469);font-size:13px;margin:2px 0 0}
+  .cw-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--olive,#737469)}
+  .cw-meta b{color:var(--ink,#1F1E1E)}
+  /* creative timeline rail — the campaign's arc, not a kanban */
+  .cw-rail{display:flex;gap:0;align-items:stretch;margin:18px 0 26px;overflow-x:auto}
+  .cw-step{flex:1 0 auto;min-width:92px;text-align:center;position:relative;padding:0 4px}
+  .cw-step .dot{width:14px;height:14px;border-radius:50%;background:var(--sand,#D8CDB6);
+    margin:0 auto 6px;border:2px solid var(--sand,#D8CDB6)}
+  .cw-step .bar{position:absolute;top:8px;left:-50%;width:100%;height:2px;background:var(--sand,#D8CDB6);z-index:-1}
+  .cw-step:first-child .bar{display:none}
+  .cw-step.done .dot,.cw-step.done .bar{background:var(--orange,#E4671F);border-color:var(--orange,#E4671F)}
+  .cw-step.cur .dot{background:var(--wine,#44161E);border-color:var(--wine,#44161E);
+    box-shadow:0 0 0 4px rgba(68,22,30,.14)}
+  .cw-step .lbl{font-size:10.5px;letter-spacing:.02em;color:var(--olive,#737469)}
+  .cw-step.cur .lbl{color:var(--wine,#44161E);font-weight:700}
+  .cw-phasebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-12px 0 24px}
+  /* creative direction */
+  .cw-dir-head{display:flex;align-items:baseline;gap:12px;margin:22px 0 4px}
+  .cw-meter{font-size:12px;color:var(--olive,#737469)}
+  .cw-meter b{color:var(--orange,#E4671F)}
+  .cw-sec{border:1px solid var(--sand,#D8CDB6);border-radius:12px;padding:14px 16px;margin:12px 0;background:#fff}
+  .cw-sec.done{border-color:var(--orange,#E4671F);background:rgba(228,103,31,.03)}
+  .cw-sec-top{display:flex;align-items:center;gap:10px}
+  .cw-sec-title{font-weight:700;font-size:14px}
+  .cw-sec-check{margin-left:auto;font-size:12px;color:var(--olive,#737469)}
+  .cw-sec-hint{color:var(--olive,#737469);font-size:12px;margin:2px 0 8px}
+  .cw-sec textarea{width:100%;min-height:70px;border:1px solid var(--sand,#D8CDB6);border-radius:8px;
+    padding:9px 11px;font:inherit;font-size:13.5px;resize:vertical;background:var(--cream,#FCF7F8)}
+  .cw-sec .row{display:flex;align-items:center;gap:12px;margin-top:8px}
+  .cw-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 0}
+  .cw-tab{font-size:12.5px;padding:6px 12px;border:1px solid var(--sand,#D8CDB6);border-radius:999px;
+    color:var(--slate,#546671);text-decoration:none;background:#fff}
+  .cw-tab.on{background:var(--wine,#44161E);color:#fff;border-color:var(--wine,#44161E)}
+  .cw-body{color:var(--ink,#1F1E1E);font-size:13.5px;white-space:pre-wrap;margin-top:4px}
+  .cw-empty{color:var(--olive,#737469);font-style:italic;font-size:13px}
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="cw-head">
+  <div>
+    <h1 class="cw-title">{{ campaign['title'] }}</h1>
+    <p class="cw-sub">{{ campaign['brand'] or campaign['agency_client'] or 'Campaign' }}
+      {% if campaign['agency_client'] and campaign['brand'] %} · {{ campaign['agency_client'] }}{% endif %}</p>
+  </div>
+  <div class="cw-meta">
+    <div>Phase · <b>{{ campaign['phase'] }}</b></div>
+    {% if campaign['deadline'] %}<div>Deadline · <b>{{ campaign['deadline'] }}</b></div>{% endif %}
+    {% if campaign['project_id'] %}<div><a href="/project/{{ campaign['project_id'] }}/delivery">Delivery console →</a></div>{% endif %}
+  </div>
+</div>
+
+<!-- Creative timeline — the campaign's arc (Briefing → … → Delivered), current phase lit -->
+<div class="cw-rail" aria-label="Creative timeline">
+  {% for p in phases %}
+  <div class="cw-step {{ 'done' if loop.index0 < phase_index else 'cur' if loop.index0 == phase_index else '' }}">
+    <div class="bar"></div><div class="dot"></div>
+    <div class="lbl">{{ p }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Advance the phase — a human moves the campaign along (the machine only proposes) -->
+<div class="cw-phasebar">
+  <form method="post" action="/campaign/{{ campaign['id'] }}/phase" style="display:flex;gap:8px;align-items:center;margin:0">
+    <label class="muted small" for="phase">Set phase</label>
+    <select name="phase" id="phase" class="cw-tab" style="padding:6px 10px">
+      {% for p in phases %}<option value="{{ p }}" {{ 'selected' if p == campaign['phase'] }}>{{ p }}</option>{% endfor %}
+    </select>
+    <button class="btn tiny" type="submit">Update</button>
+  </form>
+  {% if next_phase %}
+  <form method="post" action="/campaign/{{ campaign['id'] }}/phase" style="margin:0">
+    <input type="hidden" name="phase" value="{{ next_phase }}">
+    <button class="btn tiny ghost" type="submit" title="Advance to the next phase">Advance → {{ next_phase }}</button>
+  </form>
+  {% endif %}
+</div>
+
+<!-- Creative Direction — the composer's brief, as structured, checklist-able sections -->
+<div class="cw-dir-head" id="direction">
+  <h2 style="margin:0;font-size:18px">Creative direction</h2>
+  <span class="cw-meter"><b>{{ completeness.done }}</b>/{{ completeness.total }} sections set
+    · {{ completeness.pct }}%</span>
+</div>
+<p class="muted small" style="margin:0 0 6px">The brief the composer inherits — not a description field. Mark each section complete when it's ready to hand off.</p>
+
+{% for s in sections %}
+<div class="cw-sec {{ 'done' if s.complete }}" id="sec-{{ s.key }}">
+  <div class="cw-sec-top">
+    <span class="cw-sec-title">{{ s.label }}</span>
+    <span class="cw-sec-check">{{ '✓ complete' if s.complete else 'draft' }}</span>
+  </div>
+  <div class="cw-sec-hint">{{ s.hint }}</div>
+  <form method="post" action="/campaign/{{ campaign['id'] }}/direction" style="margin:0">
+    <input type="hidden" name="section" value="{{ s.key }}">
+    <textarea name="body" placeholder="{{ s.hint }}">{{ s.body }}</textarea>
+    <div class="row">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate,#546671)">
+        <input type="checkbox" name="complete" value="1" {{ 'checked' if s.complete }}> Mark complete
+      </label>
+      <button class="btn tiny" type="submit">Save</button>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+{% endblock %}

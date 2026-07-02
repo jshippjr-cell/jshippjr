@@ -7,6 +7,11 @@
   <div>
     <div class="pill-row">
       <span class="pill {{ 'st-won' if row['status']=='Delivered' else 'st-pursuing' }}">{{ row['status'] }}</span>
+      {% if campaign_workspace_enabled() %}
+      <form method="post" action="/project/{{ row['id'] }}/campaign/open" style="display:inline;margin:0">
+        <button class="pill" type="submit" style="border:0;cursor:pointer">◎ Campaign workspace →</button>
+      </form>
+      {% endif %}
       <a class="pill ghost" href="/project/{{ row['id'] }}/proposal">Proposal &amp; invoices →</a>
       <a class="pill ghost" href="/project/{{ row['id'] }}/delivery">Delivery console →</a>
     </div>
