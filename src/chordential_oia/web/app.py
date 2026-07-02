@@ -3084,9 +3084,36 @@ def talent_set_w9(talent_id: int, received: str = Form("")):
 # the per-creator portal token IS the credential (same model as the client
 # delivery portal). They see their assigned briefs and submit work versions.
 # --------------------------------------------------------------------------- #
+def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
+    """The client's review feedback on the current version, shaped read-only for the
+    composer's portal — so they see the timecoded notes and change requests directly
+    instead of Jon hand-relaying them (the whole point of the timecode feature).
+    Returns the actionable notes for the current version + the revision budget."""
+    cur = current_version(delivery)
+    cur_n = str(cur["n"]) if cur else "0"
+    notes = []
+    for c in db.list_review_comments(conn, project_id):
+        # Only the notes a composer acts on, and only for the version they're on now.
+        if c["kind"] not in ("comment", "change_request", "asset_change"):
+            continue
+        if (c["version"] or "") != cur_n:
+            continue
+        notes.append({
+            "t": c["t_seconds"], "author": c["author"], "body": c["body"],
+            "kind": c["kind"], "resolved": bool(c["resolved"]),
+        })
+    return {
+        "notes": notes,
+        "open_count": sum(1 for n in notes if not n["resolved"]),
+        "revisions_used": int(delivery.get("revisions_used") or 0),
+        "revisions_included": int(delivery.get("revisions_included") or 0) or None,
+    }
+
+
 def _creator_assignment_view(conn, talent_id: int) -> list:
     """Per-assignment cards for the composer portal: brief, role, deadline, the
-    delivery state, and the versions THIS creator can submit/see for the project."""
+    delivery state, the versions THIS creator can submit/see, and the client's
+    review feedback on the current version (read-only)."""
     out = []
     for a in db.list_talent_assignments(conn, talent_id):
         delivery = db.get_delivery(conn, a["project_id"])
@@ -3100,6 +3127,7 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             "delivery_state": (delivery.get("state") or "Not started"),
             "version_state": (delivery.get("version_state") or ""),
             "versions": versions_list(delivery),
+            "feedback": _creator_feedback(conn, a["project_id"], delivery),
         })
     return out
 
@@ -4308,6 +4336,35 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
             pass
 
 
+def _notify_assigned_creators(project_id: int, project, *, subject: str,
+                              body_text: str) -> None:
+    """Composer-direction notification: email each assigned creator (with an email)
+    when the client acts on their work — approved, or changes requested. Closes the
+    loop the review portal opened: the composer hears the verdict from us instead of
+    Jon relaying it by hand. Best-effort, per creator, never raises. Runs in its own
+    DB connection so it's safe to fire-and-forget off the request thread."""
+    conn = db.connect()
+    try:
+        assignments = db.list_assignments(conn, project_id)
+    finally:
+        conn.close()
+    if not mailer.mail_configured():
+        return
+    base = _public_base()
+    seen = set()
+    for a in assignments:
+        email = (a["talent_email"] or "").strip() if "talent_email" in a.keys() else ""
+        if not email or email.lower() in seen:
+            continue
+        seen.add(email.lower())
+        name = (a["talent_name"] or "there").strip() if "talent_name" in a.keys() else "there"
+        text = f"Hi {name},\n\n{body_text}\n\n— Chordential"
+        try:
+            mailer.send_email(email, subject, text, html=mailer.branded_html(base, text))
+        except Exception:  # noqa: BLE001 — best-effort; one creator's failure never stops the rest
+            pass
+
+
 def _notify_operator_review(project_id: int, project, title: str, body: str) -> None:
     """Push the operator (Jon) when the agency comments / requests changes /
     approves — the coordination signal that 'one link, no email' would otherwise
@@ -4552,6 +4609,13 @@ def review_approve(
         )
     finally:
         conn.close()
+    # Tell the assigned creator(s) their work was approved, off the request thread.
+    campaign = _campaign_label(project)
+    signals.fire_and_forget(
+        _notify_assigned_creators, project_id, project,
+        subject=f"Approved — {campaign}",
+        body_text=(f"Good news — the client approved your work on {campaign}. "
+                   "Thank you. We'll follow up on delivery and anything else needed."))
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
@@ -4608,6 +4672,15 @@ def review_changes(
         )
     finally:
         conn.close()
+    # Tell the assigned creator(s) directly, off the request thread — the composer
+    # portal now shows the notes, and this is the nudge to go look.
+    campaign = _campaign_label(project)
+    signals.fire_and_forget(
+        _notify_assigned_creators, project_id, project,
+        subject=f"Changes requested — {campaign}",
+        body_text=(f"The client requested changes on {campaign}:\n\n\"{note_text}\"\n\n"
+                   "Open your creator portal to see the full timecoded feedback and "
+                   "submit your next version."))
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 

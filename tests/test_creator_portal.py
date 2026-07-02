@@ -102,6 +102,84 @@ def test_creator_submits_version(ctx):
     assert len(d.get("versions") or []) == 1
 
 
+def _composer_with_email(db_mod, name="Ada Lin", email="ada@example.com"):
+    from chordential_oia.talent import Talent, ReviewStatus
+    from chordential_oia.models import MusicDiscipline
+    conn = db_mod.connect()
+    try:
+        return db_mod.insert_talent(conn, Talent(
+            name=name, email=email, disciplines=[MusicDiscipline.COMPOSITION],
+            review_status=ReviewStatus.APPROVED))
+    finally:
+        conn.close()
+
+
+def test_creator_portal_shows_client_feedback_on_current_version(ctx):
+    """The composer must see the client's timecoded notes directly on their portal
+    — the loop the review feature exists to close (no more hand-relayed feedback)."""
+    client, db_mod, app_mod = ctx
+    tid = _composer_with_email(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    share = db_mod.ensure_project_share_token(conn, pid)
+    conn.close()
+    # Composer submits v1 (becomes the current version, tagged "1").
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+    # Client requests changes on it (guest share-token path).
+    client.post(f"/project/{pid}/review/changes",
+                data={"k": share, "author": "Client", "email": "c@brand.com",
+                      "note": "Bring the brass in later, around 0:14."})
+    page = client.get(f"/creator/{tok}").text
+    assert "Client feedback" in page
+    assert "Bring the brass in later" in page          # the actual note, on the portal
+    assert "changes" in page                            # the change-request tag
+
+
+def test_review_changes_notifies_the_assigned_creator(ctx, monkeypatch):
+    """When the client requests changes, the assigned composer is emailed directly
+    (off the request thread) — not left waiting for a hand-relay."""
+    client, db_mod, app_mod = ctx
+    tid = _composer_with_email(db_mod, email="ada@example.com")
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    share = db_mod.ensure_project_share_token(conn, pid)
+    conn.close()
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+
+    sent = []
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(app_mod.mailer, "send_email",
+                        lambda to, s, t, html=None: sent.append((to, s, t)) or "sent")
+    # Run the fire-and-forget notification inline so the assertion is deterministic.
+    monkeypatch.setattr(app_mod.signals, "fire_and_forget",
+                        lambda fn, *a, **k: fn(*a, **k))
+    client.post(f"/project/{pid}/review/changes",
+                data={"k": share, "author": "Client", "email": "c@brand.com",
+                      "note": "Tighten the intro."})
+    assert any(to == "ada@example.com" for to, _, _ in sent)
+    assert any("changes requested" in s.lower() or "changes —" in s.lower()
+               for _, s, _ in sent)
+
+
+def test_review_changes_never_crashes_without_creator_email_or_mail(ctx):
+    """No email on the creator (or mail unconfigured) must not break the client's
+    change request — the notification is strictly additive."""
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)                    # no email
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    share = db_mod.ensure_project_share_token(conn, pid)
+    conn.close()
+    r = client.post(f"/project/{pid}/review/changes",
+                    data={"k": share, "author": "Client", "email": "c@brand.com",
+                          "note": "Change it."}, follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_upload_blocked_when_not_assigned(ctx):
     client, db_mod, _ = ctx
     tid = _approved_composer(db_mod)

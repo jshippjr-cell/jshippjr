@@ -33,6 +33,22 @@
   ul.versions li:last-child{border-bottom:0}
   ul.versions .vlabel{font-weight:700;color:var(--wine)}
   audio{height:30px;vertical-align:middle}
+  .feedback{margin:4px 0 16px;padding:12px 14px;background:var(--cream);
+    border:1px solid var(--line);border-radius:10px}
+  .fb-head{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+    color:var(--wine);display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .fb-count{font-weight:600;color:var(--orange);letter-spacing:0;text-transform:none}
+  .fb-rev{margin-left:auto;font-weight:600;color:var(--slate);letter-spacing:0;text-transform:none}
+  ul.fb-list{list-style:none;margin:0;padding:0;font-size:13px}
+  .fb-item{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line)}
+  .fb-item:last-child{border-bottom:0}
+  .fb-item.done{opacity:.55}
+  .fb-item.done .fb-b{text-decoration:line-through}
+  .fb-t{flex:0 0 auto;color:var(--orange);font-weight:800;font-variant-numeric:tabular-nums;min-width:38px}
+  .fb-tag{flex:0 0 auto;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+    color:var(--wine);background:rgba(68,22,30,.08);border-radius:999px;padding:2px 7px}
+  .fb-a{flex:0 0 auto;font-weight:700;color:var(--wine)}
+  .fb-b{flex:1 1 auto;color:var(--ink)}
   .uploader{border:1px dashed var(--sand);border-radius:10px;padding:14px 16px;background:var(--cream)}
   .uploader label{font-size:12px;color:var(--slate);display:block;margin-bottom:8px;font-weight:600}
   .btn{display:inline-block;background:var(--orange);color:#fff;border:0;border-radius:8px;padding:10px 18px;
@@ -82,6 +98,30 @@
       </ul>
       {% else %}
       <p class="empty" style="margin:6px 0 14px">No versions submitted yet — upload your first below.</p>
+      {% endif %}
+
+      {# The client's review feedback on the current version — so the composer acts
+         on the notes directly instead of waiting for them to be relayed by hand. #}
+      {% if a.feedback and a.feedback.notes %}
+      <div class="feedback">
+        <div class="fb-head">
+          Client feedback
+          <span class="fb-count">{{ a.feedback.open_count }} open</span>
+          {% if a.feedback.revisions_included %}
+          <span class="fb-rev">revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
+          {% endif %}
+        </div>
+        <ul class="fb-list">
+          {% for n in a.feedback.notes %}
+          <li class="fb-item {{ 'done' if n.resolved }}">
+            {% if n.t is not none %}<span class="fb-t">{{ '%d:%02d'|format((n.t/60)|int, (n.t%60)|int) }}</span>{% endif %}
+            {% if n.kind == 'change_request' %}<span class="fb-tag">changes</span>{% endif %}
+            <span class="fb-a">{{ n.author }}</span>
+            <span class="fb-b">{{ n.body }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
       {% endif %}
 
       <form class="uploader" method="post"
