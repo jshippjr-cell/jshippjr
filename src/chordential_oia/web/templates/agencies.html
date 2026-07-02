@@ -131,10 +131,11 @@
       {% if auto_enrich.autonomous %}<span style="color:var(--green,#2e8b57)">ON</span>{% else %}<span class="muted">off here</span>{% endif %}
     </strong>
     <div class="muted small">
+      <span id="enrich-live">
       {% if auto_enrich.running %}
         <strong style="color:var(--amber,#b8860b)">⏳ Enriching now — {{ auto_enrich.batch_done }} of {{ auto_enrich.batch_target }} this pass.</strong>
         Each site is fetched live, so a full pass of 25 takes a few minutes. This page
-        refreshes itself while it runs — no need to keep clicking.
+        updates itself while it runs — no need to keep clicking.
       {% elif auto_enrich.autonomous %}
         The agent enriches pending agencies on its own in the background — no clicking needed.
         {% if auto_enrich.last_run %}Last pass completed {{ auto_enrich.last_completed }} · {{ auto_enrich.total_completed }} total this session.{% endif %}
@@ -142,7 +143,8 @@
         Runs automatically on Render (live fetching on).
         {% if auto_enrich.last_run %}Last manual pass enriched {{ auto_enrich.last_completed }}.{% endif %}
       {% endif %}
-      {{ pending }} agencies awaiting enrichment.
+      </span>
+      <span id="enrich-pending">{{ pending }}</span> agencies awaiting enrichment.
     </div>
   </div>
   {% if eb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Started — enriching up to {{ eb_n }} in the background</span>
@@ -150,17 +152,67 @@
   {% if rb_started == "1" %}<span class="small" style="color:var(--green,#2e8b57)">✓ Refreshing up to {{ rb_n }} stale agencies in the background</span>
   {% elif rb_started == "0" %}<span class="small muted">A refresh is already running</span>{% endif %}
   <form method="post" action="/agencies/enrich-pending" style="margin:0">
-    <button class="btn" type="submit"
+    <button class="btn" id="enrich-btn" type="submit"
       {% if auto_enrich.running %} disabled style="opacity:.55;cursor:not-allowed"{% endif %}>
       {% if auto_enrich.running %}Enriching… {{ auto_enrich.batch_done }}/{{ auto_enrich.batch_target }}{% else %}Enrich {{ pending if pending < 25 else 25 }} now{% endif %}
     </button>
   </form>
 </div>
-{% if auto_enrich.running %}
-<!-- A manual enrich pass is in flight: auto-refresh so the count visibly drops
-     without the operator wondering whether it stalled. -->
-<script>setTimeout(function(){ location.reload(); }, 15000);</script>
-{% endif %}
+<!-- Live progress WITHOUT a blind full-page reload. The old code reloaded the whole
+     page every 15s while a pass ran — which cost ~8 table scans a tick AND silently
+     wiped any half-typed form input (e.g. a pasted directory page). Instead we poll a
+     cheap JSON status endpoint, update the counters in place, and only do a single
+     reload once a pass FINISHES — and even then never while the operator is typing. -->
+<script>
+(function () {
+  var anyRunning = {{ 'true' if (auto_enrich.running or auto_reenrich.running or auto_dm.running or auto_intel.running or auto_signals.running or auto_score.running) else 'false' }};
+  if (!anyRunning) return;                    // nothing in flight → no polling on an idle page
+  var source = {{ (source or '') | tojson }};
+  var wasRunning = true;
+
+  function typing() {                          // don't yank a reload out from under input
+    var a = document.activeElement;
+    if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT' || a.tagName === 'SELECT')) return true;
+    var forms = document.querySelectorAll('textarea, input[type=text], input:not([type])');
+    for (var i = 0; i < forms.length; i++) { if ((forms[i].value || '').trim()) return true; }
+    return false;
+  }
+
+  function tick() {
+    fetch('/agencies/status' + (source ? '?source=' + encodeURIComponent(source) : ''),
+          { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var e = (d.engines && d.engines.enrich) || {};
+        var pend = document.getElementById('enrich-pending');
+        if (pend && d.counts && typeof d.counts.enrich === 'number') pend.textContent = d.counts.enrich;
+        var btn = document.getElementById('enrich-btn');
+        if (btn) {
+          if (e.running) {
+            btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'not-allowed';
+            btn.textContent = 'Enriching… ' + (e.batch_done || 0) + '/' + (e.batch_target || 0);
+          } else {
+            btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = '';
+          }
+        }
+        var live = document.getElementById('enrich-live');
+        if (live && e.running) {
+          live.innerHTML = '<strong style="color:var(--amber,#b8860b)">⏳ Enriching now — ' +
+            (e.batch_done || 0) + ' of ' + (e.batch_target || 0) + ' this pass.</strong> ' +
+            'Each site is fetched live. This page updates itself while it runs.';
+        }
+        if (wasRunning && !d.any_running) {     // a pass just finished → show final results
+          wasRunning = false;
+          if (!typing()) { location.reload(); return; }   // …but never mid-typing
+        }
+        wasRunning = d.any_running;
+        setTimeout(tick, 6000);
+      })
+      .catch(function () { setTimeout(tick, 10000); });   // transient error → back off, keep trying
+  }
+  setTimeout(tick, 6000);
+})();
+</script>
 
 <!-- Re-enrichment cadence: refresh stale agencies so signal detection has fresh diffs. -->
 <div class="card" style="margin:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap">

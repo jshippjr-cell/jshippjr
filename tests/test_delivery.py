@@ -853,6 +853,23 @@ def test_second_version_becomes_current_review_track_and_advances_label(client):
     assert versions[0]["url"] not in page  # the prior version is no longer the player
 
 
+def test_portal_restores_audio_playhead_across_review_actions(client):
+    """Every review action reloads the portal, which used to snap the cue back to
+    0:00 paused — a reviewer leaving several timecoded notes re-seeked after each
+    one. The portal now persists the review-audio playhead on any .review-act
+    submit and restores it after the reload. Assert the wiring is present and points
+    at the real player element (mirrors base.html's scroll-restore trick)."""
+    pid = _win_and_make_project(client, 1)
+    token = _project_token(client, pid)
+    _upload_version(client, pid, "v1.mp3")
+    page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
+    assert 'id="review-audio"' in page                       # the player it restores
+    assert "cdl:reviewAudio:" in page                        # per-project storage key
+    # Saves on any review action submit and restores via loadedmetadata (preload=none
+    # can't seek until the media loads).
+    assert ".review-act" in page and "loadedmetadata" in page
+
+
 def test_new_version_reopens_an_approved_delivery(client):
     pid = _win_and_make_project(client, 1)
     rtoken = _add_reviewer(client, pid)

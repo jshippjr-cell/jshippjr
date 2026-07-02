@@ -25,7 +25,8 @@ from urllib.parse import quote, unquote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -675,6 +676,36 @@ def agencies_crawl(source: str = Form(...), reset: str = Form("")):
         f"/agencies?source={source}&crawled={summary['records_new']}"
         f"&pages={summary['pages_done']}&cstatus={summary['outcome']}#crawl-panel",
         status_code=303)
+
+
+@app.get("/agencies/status")
+def agencies_status(source: str = ""):
+    """Live JSON snapshot of the background engines + pending counts, for the
+    /agencies page to poll and update its progress in place — instead of blindly
+    reloading the whole page every 15s (which cost ~8 table scans a tick and wiped
+    any half-typed form input). Cheap: status dicts + a few COUNT(*) queries, no
+    agency rows materialized."""
+    src = source or None
+    conn = db.connect()
+    try:
+        counts = {
+            "enrich": db.count_needing_enrichment(conn, src),
+            "dm": db.count_needing_decision_makers(conn, src),
+            "intel": db.count_needing_intelligence(conn, src),
+        }
+    finally:
+        conn.close()
+    engines = {
+        "enrich": scheduler.enrich_status(),
+        "reenrich": scheduler.reenrich_status(),
+        "dm": scheduler.dm_status(),
+        "intel": scheduler.intel_status(),
+        "signals": scheduler.signals_engine_status(),
+        "score": scheduler.score_status(),
+    }
+    any_running = any(bool(e.get("running")) for e in engines.values())
+    return JSONResponse({"engines": engines, "counts": counts,
+                         "any_running": any_running})
 
 
 @app.post("/agencies/enrich-pending")

@@ -376,6 +376,70 @@ def test_needing_enrichment_skips_no_website_and_errored(tmp_path):
     assert dbm.agencies_needing_enrichment(conn) == []
 
 
+def test_queue_selectors_match_their_counts_and_handle_edge_blobs(tmp_path):
+    """The six autonomous-engine queue selectors filter in SQL (not a full-table
+    Python scan). This locks the invariant that matters: each selector returns
+    exactly the rows its count function counts, AND the SQL LIKE markers treat the
+    tricky blob states the same as the old Python logic — a 'blocked' row is still
+    retried, a malformed blob is 'not complete', a no-website row is excluded from
+    the site-gated queues."""
+    import json as _json
+    conn = dbm.connect(str(tmp_path / "sel.db"))
+    dbm.init_db(conn)
+
+    def mk(name, website, enr=None, dm=None, intel=None):
+        dbm.upsert_agency(conn, "s", {"dedup_key": name, "company": name,
+                                      "website": website})
+        aid = conn.execute("SELECT id FROM agencies WHERE company=?",
+                           (name,)).fetchone()["id"]
+        if enr is not None:
+            dbm.save_agency_enrichment(conn, aid, {"status": enr})
+        if dm is not None:
+            conn.execute("UPDATE agencies SET dm_json=? WHERE id=?",
+                         (_json.dumps({"status": dm}), aid))
+        if intel is not None:
+            conn.execute("UPDATE agencies SET intel_json=? WHERE id=?",
+                         (_json.dumps({"status": intel}), aid))
+        conn.commit()
+        return aid
+
+    mk("HasSiteNoEnr", "https://a.example")
+    mk("NoSite", "")
+    mk("Complete", "https://c.example", enr="complete")
+    mk("Errored", "https://e.example", enr="error")
+    mk("Blocked", "https://b.example", enr="blocked")
+    mk("DmDone", "https://d.example", enr="complete", dm="complete")
+    mk("IntelDone", "https://j.example", enr="complete", intel="complete")
+    bad = mk("Malformed", "https://m.example")
+    conn.execute("UPDATE agencies SET enrichment_json='{bad' WHERE id=?", (bad,))
+    conn.commit()
+
+    def names(rows):
+        return sorted(r["company"] for r in rows)
+
+    # 'blocked' + malformed + not-yet-enriched are enrichable; complete/error/no-site
+    # are not. And the selector's length matches the count function exactly.
+    enr = dbm.agencies_needing_enrichment(conn)
+    assert names(enr) == ["Blocked", "HasSiteNoEnr", "Malformed"]
+    assert len(enr) == dbm.count_needing_enrichment(conn)
+
+    # dm: any website whose dm isn't complete/error (independent of enrichment).
+    dm = dbm.agencies_needing_decision_makers(conn)
+    assert "DmDone" not in names(dm) and "NoSite" not in names(dm)
+    assert len(dm) == dbm.count_needing_decision_makers(conn)
+
+    # intel: enrichment complete AND intel not complete.
+    intel = dbm.agencies_needing_intelligence(conn)
+    assert names(intel) == ["Complete", "DmDone"]
+    assert len(intel) == dbm.count_needing_intelligence(conn)
+
+    # signal-scan: enrichment complete (regardless of intel/dm).
+    assert names(dbm.agencies_for_signal_scan(conn)) == [
+        "Complete", "DmDone", "IntelDone"]
+    # score: intelligence complete.
+    assert names(dbm.agencies_to_score(conn)) == ["IntelDone"]
+
+
 def test_start_manual_enrich_is_non_blocking_and_guarded(tmp_path, monkeypatch):
     from chordential_oia.web import scheduler as sch
     monkeypatch.setattr(sch.discovery, "scrape_enabled", lambda: True)

@@ -1744,26 +1744,15 @@ def agencies_needing_intelligence(
     engine consumes the enriched profile) and intelligence isn't done yet. Gating
     on enrichment keeps the chain in order: crawl → enrich → decision makers →
     intelligence, each advancing its own queue."""
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
-    out: List[sqlite3.Row] = []
-    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
-        enr = r["enrichment_json"]
-        intel = r["intel_json"]
-        try:
-            if (json.loads(enr) or {}).get("status") != "complete" if enr else True:
-                continue
-        except (json.JSONDecodeError, TypeError):
-            continue
-        try:
-            if intel and (json.loads(intel) or {}).get("status") == "complete":
-                continue
-        except (json.JSONDecodeError, TypeError):
-            pass
-        out.append(r)
-        if len(out) >= limit:
-            break
-    return out
+    # Filter in SQL (mirrors count_needing_intelligence) instead of scanning the
+    # whole table and JSON-parsing every blob in Python: enrichment complete AND
+    # intelligence not complete. The LIKE markers match the stored blob format and
+    # are portable across the SQLite/Postgres backends (same as the count funcs).
+    src, sp = _src(source)
+    return conn.execute(
+        "SELECT * FROM agencies WHERE COALESCE(enrichment_json,'') LIKE ? "
+        "AND COALESCE(intel_json,'') NOT LIKE ?" + src + " ORDER BY id LIMIT ?",
+        (_DONE, _DONE, *sp, limit)).fetchall()
 
 
 # --------------------------------------------------------------------------- #
@@ -1863,23 +1852,13 @@ def agencies_for_signal_scan(
     """Enriched agencies due for a signal scan, least-recently-scanned first (so a
     bounded background pass rotates through the whole DB). Signal detection re-runs
     over time — a cheap fingerprint check skips anything that hasn't changed."""
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
-    out: List[sqlite3.Row] = []
-    for r in conn.execute(
-            f"SELECT * FROM agencies{clause} "
-            "ORDER BY signals_scanned_at IS NULL DESC, signals_scanned_at ASC, id",
-            params):
-        enr = r["enrichment_json"]
-        try:
-            if not enr or (json.loads(enr) or {}).get("status") != "complete":
-                continue
-        except (json.JSONDecodeError, TypeError):
-            continue
-        out.append(r)
-        if len(out) >= limit:
-            break
-    return out
+    # Filter in SQL (enrichment complete) instead of scanning + parsing every blob;
+    # least-recently-scanned first so a bounded pass still rotates the whole DB.
+    src, sp = _src(source)
+    return conn.execute(
+        "SELECT * FROM agencies WHERE COALESCE(enrichment_json,'') LIKE ?" + src +
+        " ORDER BY signals_scanned_at IS NULL DESC, signals_scanned_at ASC, id LIMIT ?",
+        (_DONE, *sp, limit)).fetchall()
 
 
 # --------------------------------------------------------------------------- #
@@ -2053,22 +2032,13 @@ def agencies_to_score(
     """Agencies with a Company Intelligence profile, least-recently-scored first so
     a bounded pass rotates through the DB. Scoring re-runs over time (the score is
     alive) — gating on intelligence keeps the chain ordered."""
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
-    out: List[sqlite3.Row] = []
-    for r in conn.execute(
-            f"SELECT * FROM agencies{clause} "
-            "ORDER BY scored_at IS NULL DESC, scored_at ASC, id", params):
-        intel = r["intel_json"]
-        try:
-            if not intel or (json.loads(intel) or {}).get("status") != "complete":
-                continue
-        except (json.JSONDecodeError, TypeError):
-            continue
-        out.append(r)
-        if len(out) >= limit:
-            break
-    return out
+    # Filter in SQL (intelligence complete) instead of scanning + parsing every blob;
+    # least-recently-scored first so a bounded pass still rotates the whole DB.
+    src, sp = _src(source)
+    return conn.execute(
+        "SELECT * FROM agencies WHERE COALESCE(intel_json,'') LIKE ?" + src +
+        " ORDER BY scored_at IS NULL DESC, scored_at ASC, id LIMIT ?",
+        (_DONE, *sp, limit)).fetchall()
 
 
 def top_opportunities(
@@ -2146,18 +2116,19 @@ def agencies_due_for_reenrichment(
     ``limit`` (bounded memory — never materializes the whole table); as agencies
     are refreshed their stamp updates and they drop out, so the scan rotates."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).isoformat()
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
+    # Push the 'enrichment complete' filter into SQL so only completed rows are
+    # loaded + parsed (not the whole table); the staleness check reads last_enriched,
+    # a nested JSON field, so it stays in Python (json_extract isn't portable to the
+    # Postgres backend). LIMIT is applied after the staleness filter, so pull without
+    # a SQL LIMIT and stop once we've collected enough.
+    src, sp = _src(source)
     out: List[sqlite3.Row] = []
-    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
-        raw = r["enrichment_json"]
-        if not raw:
-            continue
+    for r in conn.execute(
+            "SELECT * FROM agencies WHERE COALESCE(enrichment_json,'') LIKE ?" + src +
+            " ORDER BY id", (_DONE, *sp)):
         try:
-            state = json.loads(raw) or {}
+            state = json.loads(r["enrichment_json"]) or {}
         except (json.JSONDecodeError, TypeError):
-            continue
-        if state.get("status") != "complete":
             continue
         last = state.get("last_enriched") or ""
         if last and last >= cutoff:
@@ -2176,25 +2147,13 @@ def agencies_needing_decision_makers(
     agencies_needing_enrichment so the batch/auto-run advances instead of re-trying
     the same rows — an agency processed with 0 people found is marked complete and
     drops out."""
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
-    out: List[sqlite3.Row] = []
-    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
-        if not (r["website"] or "").strip():
-            continue
-        raw = r["dm_json"]
-        status = ""
-        if raw:
-            try:
-                status = (json.loads(raw) or {}).get("status", "")
-            except (json.JSONDecodeError, TypeError):
-                status = ""
-        if status in ("complete", "error"):
-            continue                          # done, or terminally failed (e.g. timed out)
-        out.append(r)
-        if len(out) >= limit:
-            break
-    return out
+    # Filter in SQL (mirrors count_needing_decision_makers): a website on record and
+    # dm discovery not complete/error — instead of scanning + parsing every blob.
+    src, sp = _src(source)
+    return conn.execute(
+        "SELECT * FROM agencies WHERE TRIM(COALESCE(website,'')) != '' "
+        "AND COALESCE(dm_json,'') NOT LIKE ? AND COALESCE(dm_json,'') NOT LIKE ?" +
+        src + " ORDER BY id LIMIT ?", (_DONE, _ERR, *sp, limit)).fetchall()
 
 
 # --------------------------------------------------------------------------- #
@@ -2264,25 +2223,18 @@ def agencies_needing_enrichment(
     or already errored) don't clog the front of the line and starve the batch.
     Directories that list no outbound website (e.g. The Drum, Cannes Lions) thus
     don't count as 'awaiting' — they'd only ever error."""
-    clause = " WHERE source = ?" if source else ""
-    params = ((source,) if source else ())
-    out: List[sqlite3.Row] = []
-    for r in conn.execute(f"SELECT * FROM agencies{clause} ORDER BY id", params):
-        if not (r["website"] or "").strip():
-            continue                          # no site → nothing to enrich
-        raw = r["enrichment_json"]
-        status = ""
-        if raw:
-            try:
-                status = (json.loads(raw) or {}).get("status", "")
-            except (json.JSONDecodeError, TypeError):
-                status = ""
-        if status in ("complete", "error"):
-            continue                          # done, or terminally failed
-        out.append(r)
-        if len(out) >= limit:
-            break
-    return out
+    # Filter in SQL (mirrors count_needing_enrichment) instead of scanning the whole
+    # table and JSON-parsing every blob in Python — this selector is called once PER
+    # AGENCY inside a batch pass, so an O(table) Python scan per item was O(table×batch)
+    # per pass. The LIKE markers match the stored blob format and are portable to the
+    # Postgres backend (same markers the count functions use). A 'blocked' row (NOT
+    # complete/error) is still retried, exactly as before.
+    src, sp = _src(source)
+    return conn.execute(
+        "SELECT * FROM agencies WHERE TRIM(COALESCE(website,'')) != '' "
+        "AND COALESCE(enrichment_json,'') NOT LIKE ? "
+        "AND COALESCE(enrichment_json,'') NOT LIKE ?" + src +
+        " ORDER BY id LIMIT ?", (_DONE, _ERR, *sp, limit)).fetchall()
 
 
 def list_inbound_leads(

@@ -660,6 +660,33 @@
       ra.play().catch(function () {});
     });
   });
+
+  // Every review action is a full POST/redirect that reloads the page, which used
+  // to snap the track back to 0:00 paused — so a reviewer leaving several timecoded
+  // notes had to re-seek to where they were listening after EACH one. Persist the
+  // playhead + play-state on submit and restore it after the reload (same idea as
+  // base.html's scroll-restore). Keyed per project so two open portals don't collide.
+  var KEY = 'cdl:reviewAudio:' + location.pathname;
+  document.querySelectorAll('.review-act').forEach(function (f) {
+    f.addEventListener('submit', function () {
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify(
+          { t: ra.currentTime || 0, playing: !ra.paused }));
+      } catch (e) {}
+    });
+  });
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+    if (saved && saved.t > 0.5) {
+      sessionStorage.removeItem(KEY);
+      ra.preload = 'metadata';            // preload=none won't seek until loaded
+      ra.addEventListener('loadedmetadata', function () {
+        ra.currentTime = Math.min(saved.t, (ra.duration || saved.t));
+        if (saved.playing) ra.play().catch(function () {});   // resume if browser allows
+      }, { once: true });
+      ra.load();
+    }
+  } catch (e) {}
 })();
 // IP2: a "Reply" affordance under each top-level comment toggles its reply form.
 (function () {

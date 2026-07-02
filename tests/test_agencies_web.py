@@ -131,6 +131,28 @@ def test_agency_detail_404(app_db):
     assert client.get("/agencies/99999").status_code == 404
 
 
+def test_agencies_status_endpoint_returns_engine_state_and_counts(app_db):
+    # The /agencies page polls this instead of blindly reloading the whole page.
+    # It must return the batch-engine state + pending counts as cheap JSON.
+    client, _ = app_db
+    r = client.get("/agencies/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "engines" in data and "counts" in data and "any_running" in data
+    # Both seeded agencies have a website and no enrichment → both awaiting.
+    assert data["counts"]["enrich"] == 2
+    for key in ("enrich", "reenrich", "dm", "intel", "signals", "score"):
+        assert key in data["engines"]
+    # Idle test env → nothing running.
+    assert data["any_running"] is False
+
+
+def test_agencies_status_honors_source_filter(app_db):
+    client, _ = app_db
+    data = client.get("/agencies/status", params={"source": "thedrum"}).json()
+    assert data["counts"]["enrich"] == 1     # only Acme is in 'thedrum'
+
+
 # --------------------------------------------------------------------------- #
 # Populating the Master Company Database from the dashboard.
 # --------------------------------------------------------------------------- #
