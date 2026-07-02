@@ -3,6 +3,10 @@ every page that links site.css MUST use the same cache-busting ?v= query as
 public_base.html — otherwise a browser that ever cached an old copy keeps serving
 it for a week and new CSS silently never loads (this happened: /reel and /showreel
 shipped with an unversioned link while public_base.html was on ?v=4/5).
+
+The buster is now a single template global (``?v={{ asset_v }}``) so all pages
+share ONE value by construction; this test still guards that no page drifts to a
+different hardcoded version or drops the buster entirely.
 """
 
 import re
@@ -19,7 +23,9 @@ STANDALONE_PUBLIC_PAGES = [
 
 
 def _site_css_version(html: str) -> str:
-    m = re.search(r'href="/static/public/site\.css(?:\?v=(\w+))?"', html)
+    # Captures a literal version (?v=22) OR the shared template global (?v={{ asset_v }})
+    # — either way, all pages must resolve to the SAME token.
+    m = re.search(r'href="/static/public/site\.css(?:\?v=([^"]+))?"', html)
     assert m, "no site.css <link> found"
     return m.group(1) or ""
 

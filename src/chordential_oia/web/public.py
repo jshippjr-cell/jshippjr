@@ -36,6 +36,11 @@ templates.env.filters["money"] = money
 templates.env.filters["pct"] = pct
 templates.env.filters["slug"] = slug
 templates.env.filters["displayurl"] = displayurl
+# One source for the static-asset cache-buster. Bump this ONCE to force every public
+# page to re-fetch site.css after a change — it used to be hardcoded as ?v=22 in four
+# templates, so a bump had to be made in all four (and once wasn't, serving stale CSS).
+ASSET_VERSION = "22"
+templates.env.globals["asset_v"] = ASSET_VERSION
 
 router = APIRouter(tags=["public"])
 

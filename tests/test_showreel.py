@@ -49,6 +49,17 @@ def test_showreel_uses_hero_video_background(client):
     assert "herospliced" in t
 
 
+def test_public_css_cachebuster_comes_from_one_source(client):
+    """The site.css ?v= buster is a single template global (asset_v), not hardcoded
+    per template — a bump used to require editing 4 files, and once didn't, serving
+    stale CSS. Every public page must render the resolved value, never the literal."""
+    from chordential_oia.web.public import ASSET_VERSION
+    for path in ("/", "/reel", "/showreel", "/stills"):
+        t = client.get(path).text
+        assert f"site.css?v={ASSET_VERSION}" in t
+        assert "{{ asset_v }}" not in t     # the global actually resolved
+
+
 def test_cursor_label_script_is_served(client):
     r = client.get("/static/public/cursor-label.js")
     assert r.status_code == 200

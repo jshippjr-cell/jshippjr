@@ -23,7 +23,11 @@
        documented fix. f_auto in the Cloudinary URL still picks the codec. #}
     {# No `poster` attribute on the <video> itself: a poster on a blocked <video>
        is what iOS decorates with the play button. The CSS background covers that. #}
-    <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="auto"
+    {# preload="metadata", not "auto": normal visitors still get the video (the
+       in-view .play() below fetches it), but users where autoplay is BLOCKED
+       (data-saver / low-power / reduced-motion) no longer eagerly download ~2.8MB
+       for a video that never plays — the CSS-background poster covers them. #}
+    <video class="hero-video" autoplay muted loop playsinline webkit-playsinline preload="metadata"
            src="{{ h.video }}"></video>
     <script>
     // Mobile autoplay. iOS only autoplays a video that is muted via the *property*
