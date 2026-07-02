@@ -81,7 +81,22 @@ def test_portal_shows_assigned_brief(ctx):
     assert "Composer" in page
 
 
-def test_creator_submits_version(ctx):
+def _composer_with_email(db_mod, name="Ada Lin", email="ada@example.com"):
+    from chordential_oia.talent import Talent, ReviewStatus
+    from chordential_oia.models import MusicDiscipline
+    conn = db_mod.connect()
+    try:
+        return db_mod.insert_talent(conn, Talent(
+            name=name, email=email, disciplines=[MusicDiscipline.COMPOSITION],
+            review_status=ReviewStatus.APPROVED))
+    finally:
+        conn.close()
+
+
+def test_creator_submission_is_pending_not_client_visible(ctx):
+    """A creator's submission must NOT go straight to the client — it waits as a
+    pending submission for Jon to vet ('machine proposes, Jon disposes'). It is off
+    the version ladder until published."""
     client, db_mod, app_mod = ctx
     tid = _approved_composer(db_mod)
     pid = _project_with(db_mod, tid)
@@ -99,19 +114,65 @@ def test_creator_submits_version(ctx):
         d = db_mod.get_delivery(conn, pid)
     finally:
         conn.close()
-    assert len(d.get("versions") or []) == 1
+    assert not (d.get("versions") or [])               # NOT on the client ladder yet
+    assert d.get("pending_version")                     # …held for Jon to publish
+    assert d["pending_version"]["by"] == "Mara Velez"
 
 
-def _composer_with_email(db_mod, name="Ada Lin", email="ada@example.com"):
-    from chordential_oia.talent import Talent, ReviewStatus
-    from chordential_oia.models import MusicDiscipline
+def test_publish_moves_pending_into_ladder_and_notifies_client(ctx, monkeypatch):
+    """Jon's 'Publish to client' moves the pending submission into the version ladder
+    (now client-visible) and notifies the reviewers."""
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    # a reviewer with an email, so publish has someone to notify
+    db_mod.add_delivery_reviewer(conn, pid, name="Dana", email="dana@brand.com",
+                                 role="Producer")
+    conn.close()
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+    sent = []
+    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(app_mod.mailer, "send_email",
+                        lambda to, s, t, html=None: sent.append(to) or "sent")
+    monkeypatch.setattr(app_mod.signals, "fire_and_forget",
+                        lambda fn, *a, **k: fn(*a, **k))
+    r = client.post(f"/project/{pid}/delivery/publish",
+                    data={"action": "publish"}, follow_redirects=False)
+    assert r.status_code == 303
     conn = db_mod.connect()
     try:
-        return db_mod.insert_talent(conn, Talent(
-            name=name, email=email, disciplines=[MusicDiscipline.COMPOSITION],
-            review_status=ReviewStatus.APPROVED))
+        d = db_mod.get_delivery(conn, pid)
     finally:
         conn.close()
+    assert len(d.get("versions") or []) == 1            # now on the client ladder
+    assert not d.get("pending_version")                 # …and consumed
+    assert "dana@brand.com" in sent                     # reviewers notified on publish
+
+
+def test_discard_drops_the_pending_submission(ctx):
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    conn.close()
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+    client.post(f"/project/{pid}/delivery/publish", data={"action": "discard"})
+    conn = db_mod.connect()
+    try:
+        d = db_mod.get_delivery(conn, pid)
+    finally:
+        conn.close()
+    assert not d.get("pending_version") and not (d.get("versions") or [])
+
+
+def _publish(client, pid):
+    """Jon vets + publishes the pending creator submission (test helper)."""
+    client.post(f"/project/{pid}/delivery/publish", data={"action": "publish"})
 
 
 def test_creator_portal_shows_client_feedback_on_current_version(ctx):
@@ -124,9 +185,10 @@ def test_creator_portal_shows_client_feedback_on_current_version(ctx):
     tok = db_mod.ensure_talent_portal_token(conn, tid)
     share = db_mod.ensure_project_share_token(conn, pid)
     conn.close()
-    # Composer submits v1 (becomes the current version, tagged "1").
+    # Composer submits v1; Jon publishes it → it becomes the current version, tagged "1".
     client.post(f"/creator/{tok}/project/{pid}/version",
                 files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+    _publish(client, pid)
     # Client requests changes on it (guest share-token path).
     client.post(f"/project/{pid}/review/changes",
                 data={"k": share, "author": "Client", "email": "c@brand.com",
@@ -149,6 +211,7 @@ def test_review_changes_notifies_the_assigned_creator(ctx, monkeypatch):
     conn.close()
     client.post(f"/creator/{tok}/project/{pid}/version",
                 files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
+    _publish(client, pid)
 
     sent = []
     monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)

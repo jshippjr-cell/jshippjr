@@ -266,8 +266,32 @@
 
 <div class="cols-2">
   <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
-  <section class="card">
+  <section class="card" id="versions">
     <div class="card-head"><h2>Versions &amp; review activity</h2></div>
+    {% if pending_version %}
+    <div class="pending" style="border:1px solid var(--orange,#E4671F);border-radius:10px;
+         padding:14px 16px;margin:0 0 14px;background:rgba(228,103,31,.06)">
+      <div style="font-weight:700;color:var(--orange,#E4671F);margin-bottom:6px">
+        New submission from {{ pending_version.by }} — awaiting your review
+      </div>
+      <div class="muted small" style="margin-bottom:10px">
+        The client can't see this yet. Listen, then publish it to the client (which
+        notifies the reviewers) or discard it.
+      </div>
+      <audio controls preload="none" src="{{ pending_version.url }}" style="max-width:100%;margin-bottom:10px"></audio>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0">
+          <input type="hidden" name="action" value="publish">
+          <button class="btn" type="submit">Publish to client</button>
+        </form>
+        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0"
+              onsubmit="return confirm('Discard this submission? The creator will need to resubmit.')">
+          <input type="hidden" name="action" value="discard">
+          <button class="btn ghost" type="submit">Discard</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
     {% if versions %}
     <div class="vrail" aria-label="Version history">
       {% for v in versions %}

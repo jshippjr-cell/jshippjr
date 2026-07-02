@@ -3168,22 +3168,25 @@ async def creator_submit_version(
         if file is None or not (file.filename or "").strip():
             return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
         data = await file.read()
-        label, campaign = _append_version_from_bytes(conn, project_id, data, file.filename)
-        # Note who submitted it on the project timeline.
         who = row["name"]
-        db.add_update(conn, project_id, f"{who} submitted {label} for review.")
+        # A creator's submission does NOT go straight to the client — it waits as a
+        # pending submission for Jon to vet, then publish. This is the "machine
+        # proposes, Jon disposes" gate the old code claimed but never enforced (it
+        # appended directly to the client-visible ladder).
+        _store_pending_submission(conn, project_id, data, file.filename, who)
+        prow = db.get_project(conn, project_id)
+        campaign = (prow["need"] if prow is not None else "") or "Campaign"
+        db.add_update(conn, project_id, f"{who} submitted a new version — pending your review.")
     finally:
         conn.close()
     # Composer-direction notification: ping Jon (the operator) that new work landed
-    # — NOT the client. A creator's raw submission is for Jon to vet first; he decides
-    # whether to push it to the client ("machine proposes, Jon disposes").
-    # Offloaded to a thread: the push/SMTP calls do blocking network I/O, and this is
-    # an async handler on uvicorn's single event loop — inline they'd freeze the whole
-    # site (every page, every portal, /healthz) for the duration of the send.
+    # — NOT the client. Offloaded to a thread: the push/SMTP calls do blocking network
+    # I/O, and this is an async handler on uvicorn's single event loop — inline they'd
+    # freeze the whole site (every page, every portal, /healthz) for the send.
     await run_in_threadpool(
         _notify_operator_review,
         project_id, None, f"New work submitted — {campaign}",
-        f"{who} submitted {label}. Review it in the delivery console.")
+        f"{who} submitted a new version. Review and publish it in the delivery console.")
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
@@ -3632,6 +3635,9 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         # invites / new-version notices go out automatically or links are copied
         # by hand (mailer is null/unconfigured until SMTP env is set).
         "mail_configured": mailer.mail_configured(),
+        # A creator's submission awaiting Jon's publish decision (console-only; the
+        # client portal never reads this — pending work stays off the client's page).
+        "pending_version": delivery.get("pending_version") or None,
         "assets": assets_with_approval,
         # Per-asset approval rollup ("N of M deliverables approved") — surfaced
         # next to the whole-version Approve so the gap is visible.
@@ -4040,6 +4046,60 @@ def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename:
     db.update_delivery(conn, project_id, "versions", versions)
     db.update_delivery(conn, project_id, "version_state", label)
     # A new version supersedes any prior approval/delivery — reopen to review.
+    if (delivery.get("state") or "") in ("Approved", "Delivered"):
+        db.update_delivery(conn, project_id, "state", "In review")
+    return label, campaign
+
+
+def _store_pending_submission(conn, project_id: int, data: bytes,
+                              src_filename: str, who: str) -> None:
+    """A creator's submission lands here — NOT in the client-visible version ladder.
+    It waits in ``delivery_json['pending_version']`` until Jon publishes it, so the
+    client never hears work he hasn't vetted ("the machine proposes, Jon disposes").
+    The file is written now; publishing just moves the metadata into the ladder."""
+    from datetime import datetime as _dt, timezone as _tz
+    ext = os.path.splitext(src_filename or "")[1].lower()
+    safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
+    safe_name = f"proj{project_id}-pending{safe_ext}"
+    bump = 1
+    while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
+        safe_name = f"proj{project_id}-pending-{bump}{safe_ext}"
+        bump += 1
+    with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
+        fh.write(data)
+    db.update_delivery(conn, project_id, "pending_version", {
+        "url": f"/uploads/{safe_name}",
+        "filename": safe_name,
+        "orig": src_filename or "",
+        "by": who or "A creator",
+        "at": _dt.now(_tz.utc).isoformat(),
+    })
+
+
+def _publish_pending_submission(conn, project_id: int):
+    """Move the pending creator submission into the live version ladder (Jon's
+    'Publish to client' press). Returns ``(label, campaign)`` for the client-direction
+    notification, or ``None`` if there was nothing pending."""
+    from datetime import datetime as _dt, timezone as _tz
+    delivery = db.get_delivery(conn, project_id)
+    pv = delivery.get("pending_version")
+    if not pv:
+        return None
+    versions = versions_list(delivery)
+    n, label = _next_version_label(delivery)
+    row = db.get_project(conn, project_id)
+    campaign = (row["need"] if row is not None else "") or "Campaign"
+    stem = version_name(campaign, "Master", 60, "Master", n,
+                        "FINAL" if "FINAL" in label.upper() else f"v{n}")
+    versions.append({
+        "n": n, "label": label, "url": pv.get("url"),
+        "filename": pv.get("filename"), "name": stem,
+        "created_at": _dt.now(_tz.utc).isoformat(),
+        "from_creator": pv.get("by") or "",
+    })
+    db.update_delivery(conn, project_id, "versions", versions)
+    db.update_delivery(conn, project_id, "version_state", label)
+    db.update_delivery(conn, project_id, "pending_version", "")   # consumed
     if (delivery.get("state") or "") in ("Approved", "Delivered"):
         db.update_delivery(conn, project_id, "state", "In review")
     return label, campaign
@@ -4631,6 +4691,39 @@ def delivery_build(project_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/publish")
+def delivery_publish(project_id: int, action: str = Form("publish")):
+    """Jon's disposition of a creator's pending submission: publish it to the client
+    (moves it into the version ladder and notifies the reviewers) or discard it. The
+    gate that keeps unvetted creator work off the client's portal."""
+    conn = db.connect()
+    result = None
+    reviewers = []
+    try:
+        project = db.get_project(conn, project_id)
+        if project is None:
+            return HTMLResponse("Project not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        if not delivery.get("pending_version"):
+            return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+        if action == "discard":
+            db.update_delivery(conn, project_id, "pending_version", "")
+            db.add_update(conn, project_id, "Discarded the pending creator submission.")
+        else:
+            result = _publish_pending_submission(conn, project_id)
+            if result is not None:
+                db.add_update(conn, project_id, f"Published {result[0]} to the client.")
+                reviewers = db.list_delivery_reviewers(conn, project_id)
+    finally:
+        conn.close()
+    # Client-direction notification only on a real publish — off the request thread.
+    if result is not None:
+        label, campaign = result
+        signals.fire_and_forget(
+            _notify_reviewers_new_version, project_id, campaign, label, reviewers)
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
 @app.post("/project/{project_id}/review/changes")
