@@ -113,6 +113,10 @@ def test_apply_fires_a_phone_notification(ctx, monkeypatch):
     monkeypatch.setattr(
         signals, "notify_new_talent_application", lambda name: calls.append(name)
     )
+    # Run the fire-and-forget notification inline so the assertion is deterministic
+    # (in prod it runs in a daemon thread so the submit redirects instantly).
+    monkeypatch.setattr(signals, "fire_and_forget",
+                        lambda fn, *a, **k: fn(*a, **k))
     client.post(
         "/apply",
         data={"name": "Priya Nandan", "email": "priya@x.com",

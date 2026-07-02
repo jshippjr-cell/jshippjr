@@ -263,11 +263,11 @@ def public_start_submit(
         )
     finally:
         conn.close()
-    try:                                     # best-effort phone push — never blocks the submit
-        from . import signals
-        signals.notify_new_lead(company.strip() or contact_name.strip(), "website")
-    except Exception:
-        pass
+    # Best-effort phone push, off the request thread so the submit redirects
+    # instantly (the push does blocking network I/O; prod has Web Push configured).
+    from . import signals
+    signals.fire_and_forget(
+        signals.notify_new_lead, company.strip() or contact_name.strip(), "website")
     # The indicative band is stored on the lead for the internal quoted-vs-won
     # moat, but is NOT shown back to the client — quoting a range at intake reads
     # as untactful (founder call). So the thank-you response carries no price.
@@ -315,11 +315,11 @@ def public_book_submit(
         )
     finally:
         conn.close()
-    try:                                     # best-effort phone push — never blocks the submit
-        from . import signals
-        signals.notify_new_lead(company.strip() or contact_name.strip(), "website")
-    except Exception:
-        pass
+    # Best-effort phone push, off the request thread so the submit redirects
+    # instantly (the push does blocking network I/O; prod has Web Push configured).
+    from . import signals
+    signals.fire_and_forget(
+        signals.notify_new_lead, company.strip() or contact_name.strip(), "website")
     return RedirectResponse("/thanks?kind=call", status_code=303)
 
 
@@ -374,11 +374,10 @@ def public_apply_submit(
         db.insert_talent(conn, t)
     finally:
         conn.close()
-    try:                                     # best-effort phone push — never blocks the submit
-        from . import signals
-        signals.notify_new_talent_application(t.name)
-    except Exception:
-        pass
+    # Best-effort phone push, off the request thread so the submit redirects
+    # instantly (the push does blocking network I/O; prod has Web Push configured).
+    from . import signals
+    signals.fire_and_forget(signals.notify_new_talent_application, t.name)
     return RedirectResponse("/thanks?kind=apply", status_code=303)
 
 

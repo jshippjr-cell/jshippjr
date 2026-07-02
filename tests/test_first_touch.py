@@ -114,6 +114,34 @@ def test_compose_page_link_carries_real_token(client):
     assert f"https://chordential.com/opportunity/3/first-touch?k={token}" in page
 
 
+def test_first_touch_falls_back_to_showcase_music_when_none_picked(client):
+    """The page must never dead-end the highest-intent click with silence: when
+    no example was hand-picked for the opp, it plays the showcase demo tracks."""
+    token = _token(client)
+    r = client.get(f"/opportunity/3/first-touch?k={token}")
+    assert r.status_code == 200
+    from chordential_oia.web.showcase import get_showcase
+    demo_urls = [d.audio_url for d in get_showcase().demos if d.audio_url]
+    assert demo_urls, "showcase has no demo audio to fall back to"
+    # At least the first demo track's audio is embedded in a player on the page.
+    assert demo_urls[0] in r.text
+
+
+def test_first_touch_reply_cta_has_a_real_recipient(client):
+    """The 'Reply' CTA must open a draft addressed to a real inbox, not the old
+    recipient-less mailto:?subject=… that opened a blank To: line."""
+    token = _token(client)
+    r = client.get(f"/opportunity/3/first-touch?k={token}")
+    assert "mailto:?subject=" not in r.text          # the old empty-recipient bug
+    assert "mailto:hello@chordential.com?subject=" in r.text
+
+
+def test_favicon_route_serves_an_image_not_404(client):
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/")
+
+
 def test_first_touch_reachable_when_admin_gate_on(tmp_path, monkeypatch):
     """With the admin gate active, the token-gated page is still reachable (it
     bypasses the login gate) while a normal internal route redirects to login."""

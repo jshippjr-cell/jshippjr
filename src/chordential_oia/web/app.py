@@ -24,6 +24,7 @@ from typing import List, Optional
 from urllib.parse import quote, unquote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -203,9 +204,15 @@ def _is_first_touch_path(path: str) -> bool:
 # pattern as first-touch — the per-project share token (?k=<token>) checked in the
 # route is the access control, so the path bypasses the admin login gate.
 _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
-# The review-portal client actions (comment / approve / request-changes) are posted
-# by the agency from the same token-gated link — token-validated in the route.
-_REVIEW_ACTION_RE = re.compile(r"^/project/\d+/review/(comment|approve|changes)/?$")
+# The review-portal client actions are posted by the agency from the same token-gated
+# link — each route token-validates (share token ?k= guest OR verified reviewer ?r=)
+# and 404s on a bad token, so the path bypasses the admin login gate. Defined as ONE
+# list so the exemption can't drift from the actual routes (it did once: resolve + asset
+# were added without updating the matcher, bouncing clients to the admin login). When
+# you add a review action, add it here — and it MUST token-validate in-route.
+_REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset")
+_REVIEW_ACTION_RE = re.compile(
+    r"^/project/\d+/review/(?:" + "|".join(_REVIEW_ACTIONS) + r")/?$")
 # Payment-gated deliverable download — opened from the token-gated portal; the route
 # itself validates the share/reviewer token AND the paid-in-full gate.
 _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
@@ -361,6 +368,20 @@ def apple_touch_icon():
     return FileResponse(
         os.path.join(_HERE, "static", "apple-touch-icon.png"),
         headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/favicon.ico")
+def favicon():
+    from fastapi.responses import FileResponse
+    # Serve the wordmark for the implicit /favicon.ico browser request. The
+    # base layouts link an explicit icon, but the standalone client-facing pages
+    # (delivery + creator portals, capabilities doc) don't, so their browsers fall
+    # back to /favicon.ico — without this route that's a 404 console error on every
+    # portal load a paying client opens. One route covers them all.
+    return FileResponse(
+        os.path.join(_HERE, "static", "public", "wordmark-dark.png"),
+        media_type="image/png", headers={"Cache-Control": "public, max-age=604800"},
     )
 
 
@@ -1984,6 +2005,19 @@ def compose_send(opp_id: int):
 # Option C (branded HTML send via Gmail) remains DEFERRED — this page + its view
 # measurement are the gate that decides whether Option C is ever worth building.
 # --------------------------------------------------------------------------- #
+def _reply_to_address() -> str:
+    """A real recipient for the first-touch 'Reply' CTA. Prefer the configured
+    send-from address; otherwise derive hello@<public-domain> so the mailto never
+    opens an empty, recipient-less draft."""
+    configured = mailer._smtp_from()
+    if configured:
+        return configured
+    domain = os.environ.get(
+        "CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com")
+    host = domain.split("://", 1)[-1].strip("/").split("/")[0] or "chordential.com"
+    return f"hello@{host}"
+
+
 @app.get("/opportunity/{opp_id}/first-touch", response_class=HTMLResponse)
 def first_touch_page(request: Request, opp_id: int, k: str = ""):
     conn = db.connect()
@@ -2004,11 +2038,22 @@ def first_touch_page(request: Request, opp_id: int, k: str = ""):
     understanding = build_understanding(opp)
     relevant_uploads = overrides.get("relevant_uploads") or []
     relevant_links = overrides.get("relevant_links") or []
+    # Never dead-end the highest-intent click with silence: when nothing was
+    # hand-picked for this opportunity, fall back to the showcase demo tracks
+    # (honest craft demos, invented brands) so there is always music to hear.
+    showcase_tracks = []
+    if not relevant_uploads and not relevant_links:
+        from .showcase import get_showcase
+        showcase_tracks = [
+            {"label": f"{d.title} — {d.discipline_label}", "url": d.audio_url}
+            for d in get_showcase().demos if d.audio_url
+        ]
     call_url = os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip()
     return render(
         request, "first_touch.html", nav="", row=row, opp=opp,
         client=row["client"], understanding=understanding,
         relevant_uploads=relevant_uploads, relevant_links=relevant_links,
+        showcase_tracks=showcase_tracks, reply_to=_reply_to_address(),
         call_url=call_url,
     )
 
@@ -3073,7 +3118,11 @@ async def creator_submit_version(
     # Composer-direction notification: ping Jon (the operator) that new work landed
     # — NOT the client. A creator's raw submission is for Jon to vet first; he decides
     # whether to push it to the client ("machine proposes, Jon disposes").
-    _notify_operator_review(
+    # Offloaded to a thread: the push/SMTP calls do blocking network I/O, and this is
+    # an async handler on uvicorn's single event loop — inline they'd freeze the whole
+    # site (every page, every portal, /healthz) for the duration of the send.
+    await run_in_threadpool(
+        _notify_operator_review,
         project_id, None, f"New work submitted — {campaign}",
         f"{who} submitted {label}. Review it in the delivery console.")
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
@@ -3983,7 +4032,11 @@ async def delivery_version(
         reviewers = db.list_delivery_reviewers(conn, project_id)
     finally:
         conn.close()
-    _notify_reviewers_new_version(project_id, campaign, label, reviewers)
+    # Offloaded to a thread: this is an async handler and the per-reviewer email loop
+    # does blocking SMTP — inline it would stall uvicorn's single event loop (the whole
+    # site, including health probes) for up to N reviewers × the socket timeout.
+    await run_in_threadpool(
+        _notify_reviewers_new_version, project_id, campaign, label, reviewers)
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 

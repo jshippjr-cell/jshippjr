@@ -105,3 +105,41 @@ def test_cookie_does_not_contain_raw_token(tmp_path, monkeypatch):
                    follow_redirects=False)
         set_cookie = r.headers.get("set-cookie", "")
         assert TOKEN not in set_cookie          # only a hash is stored
+
+
+def test_all_review_actions_bypass_the_admin_gate(tmp_path, monkeypatch):
+    """Regression: the client review portal is opened from a token-gated link, so
+    EVERY review action must bypass the admin login gate (the route validates the
+    token itself and 404s a bad one). The exemption regex once drifted from the
+    routes — 'resolve' and 'asset' were added but not exempted, so agency clients
+    clicking Resolve/Reopen or per-asset Approve got 303-bounced to Chordential's
+    internal admin login and their action was silently lost. Assert all five."""
+    app_mod = _build(tmp_path, monkeypatch, gated=True)
+    with TestClient(app_mod.app) as c:
+        for action in ("comment", "approve", "changes", "resolve", "asset"):
+            r = c.post(f"/project/1/review/{action}", data={"k": "bad-token"},
+                       follow_redirects=False)
+            # Bypasses the gate → route runs and 404s the bad token, rather than
+            # 303-redirecting to /admin/login. The bug would send it to login.
+            loc = r.headers.get("location", "")
+            assert not (r.status_code == 303 and "/admin/login" in loc), (
+                f"review/{action} bounced to the admin login instead of bypassing "
+                f"the gate (status={r.status_code}, location={loc!r})")
+
+
+def test_review_action_exemption_lists_every_review_route(tmp_path, monkeypatch):
+    """Belt-and-suspenders: the exemption action list must match the actual review
+    routes registered on the app, so a newly-added review action can't silently
+    drift out of the gate exemption again."""
+    app_mod = _build(tmp_path, monkeypatch, gated=True)
+    import re
+    registered = set()
+    for route in app_mod.app.routes:
+        m = re.match(r"^/project/\{project_id\}/review/(\w+)$",
+                     getattr(route, "path", ""))
+        if m:
+            registered.add(m.group(1))
+    assert registered, "no review routes found — test wiring is stale"
+    exempted = set(app_mod._REVIEW_ACTIONS)
+    missing = registered - exempted
+    assert not missing, f"review routes not exempted from the admin gate: {missing}"

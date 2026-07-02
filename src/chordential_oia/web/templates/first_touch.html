@@ -118,8 +118,24 @@
       {% endfor %}
       {% endif %}
 
+      {# no hand-picked example → don't dead-end with silence; play the showcase demos #}
       {% if not relevant_uploads and not relevant_links %}
-      <p class="none-note">A tailored example is available on request — just reply.</p>
+        {% if showcase_tracks %}
+        {% for tr in showcase_tracks %}
+        <div class="ex">
+          <div class="ex-title">{{ tr.label }}</div>
+          <div class="cap-audio">
+            <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>
+            <div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>
+            <span class="cap-audio-time">0:00</span>
+            <audio preload="none" src="{{ tr.url }}"></audio>
+          </div>
+        </div>
+        {% endfor %}
+        <p class="none-note">A tailored example for your brief is available on request — just reply.</p>
+        {% else %}
+        <p class="none-note">A tailored example is available on request — just reply.</p>
+        {% endif %}
       {% endif %}
     </section>
 
@@ -130,7 +146,7 @@
         <a class="btn-cta" href="{{ call_url }}" target="_blank" rel="noopener">Book a short call →</a>
         <div class="muted">Or just reply to my email — whatever's easiest for you.</div>
         {% else %}
-        <a class="btn-cta" href="mailto:?subject=Re%3A%20{{ client | urlencode }}">Reply to start a conversation →</a>
+        <a class="btn-cta" href="mailto:{{ reply_to }}?subject=Re%3A%20{{ client | urlencode }}">Reply to start a conversation →</a>
         <div class="muted">A quick reply is all it takes — no pressure either way.</div>
         {% endif %}
       </div>

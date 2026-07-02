@@ -13,9 +13,10 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
 import urllib.request
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Callable, List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 from ..intake import extract_budget, parse_alert_email
@@ -280,6 +281,25 @@ def _ascii_header(value: str) -> str:
     makes urllib raise and the whole push silently fail. Drop anything that can't
     encode so the alert always goes out. (Emoji in the body/Tags is fine.)"""
     return (value or "").encode("latin-1", "ignore").decode("latin-1")
+
+
+def fire_and_forget(fn: Callable, *args, **kwargs) -> None:
+    """Run a best-effort side effect (a phone/web push, an email) in a daemon
+    thread so a public request never waits on it.
+
+    The push/mail paths do blocking network I/O with multi-second timeouts. Even
+    in a threadpooled (sync) request handler that keeps the whole site responsive,
+    the *submitting* user would otherwise sit through the full round-trip before
+    their form redirects. These notifications are already documented as
+    "never blocks the submit" — this makes that literally true. Exceptions inside
+    ``fn`` are swallowed (best-effort). Tests neutralize this by patching it to run
+    ``fn`` inline, keeping notification assertions deterministic."""
+    def _run():
+        try:
+            fn(*args, **kwargs)
+        except Exception:  # noqa: BLE001 — best-effort, never surfaces to the request
+            pass
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def send_push(title: str, body: str = "", click_url: str = "") -> str:
