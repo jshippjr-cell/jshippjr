@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chordential — Experience Storyboards</title>
+<style>
+  :root{
+    --cream:#FCF7F8; --sand:#D8CDB6; --olive:#737469; --slate:#546671;
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --white:#fff;
+    --room:#232120; --room-hi:#2C2A28; --room-line:rgba(216,205,182,.18);
+    --serif:Georgia,'Times New Roman',serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--cream);color:var(--ink);font-family:var(--sans);line-height:1.5}
+
+  /* ---------- page chrome ---------- */
+  .wrap{max-width:1160px;margin:0 auto;padding:0 28px 80px}
+  header.masthead{padding:64px 0 36px;border-bottom:1px solid var(--sand)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive)}
+  h1{font-family:var(--serif);font-weight:400;font-size:clamp(30px,4.5vw,46px);margin:10px 0 14px;color:var(--ink)}
+  h1 em{font-style:italic;color:var(--wine)}
+  .lede{max-width:620px;color:var(--slate);font-size:15.5px}
+  .legend{display:flex;gap:26px;flex-wrap:wrap;margin-top:26px;font-size:12px;color:var(--olive)}
+  .legend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(31,30,30,.12)}
+
+  /* ---------- chapters ---------- */
+  .chapter{padding-top:64px}
+  .ch-head{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+  .ch-num{font-family:var(--mono);font-size:12px;color:var(--orange);letter-spacing:.12em}
+  h2{font-family:var(--serif);font-weight:400;font-size:clamp(24px,3.2vw,32px)}
+  .ch-arc{color:var(--slate);font-size:14px;margin-bottom:28px;max-width:640px}
+  .act{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--wine);
+       margin:34px 0 14px;display:flex;align-items:center;gap:12px}
+  .act::after{content:"";flex:1;height:1px;background:var(--sand)}
+
+  /* ---------- frames ---------- */
+  .frames{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:22px}
+  .frame{background:var(--white);border:1px solid var(--sand);border-radius:14px;overflow:hidden;
+         display:flex;flex-direction:column}
+  .fr-top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--sand)}
+  .fr-no{font-family:var(--mono);font-size:11px;color:var(--olive)}
+  .fr-el{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;padding:3px 8px;border-radius:99px;
+         color:var(--slate);background:rgba(84,102,113,.1)}
+  .fr-el.wine{color:var(--wine);background:rgba(68,22,30,.08)}
+  .fr-el.orange{color:var(--orange);background:rgba(228,103,31,.1)}
+  .fr-cap{padding:13px 16px 16px}
+  .fr-cap h3{font-family:var(--serif);font-weight:400;font-size:16.5px;margin-bottom:4px}
+  .fr-cap p{font-size:12.5px;color:var(--slate)}
+  .mood{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
+        display:block;margin-top:9px}
+
+  /* ---------- mini screens ---------- */
+  .shot{padding:16px 16px 0;background:linear-gradient(180deg,rgba(216,205,182,.16),rgba(216,205,182,0))}
+  .screen{border-radius:8px 8px 0 0;overflow:hidden;border:1px solid var(--sand);border-bottom:0;
+          box-shadow:0 8px 22px -14px rgba(31,30,30,.35);font-size:8px}
+  .bar{display:flex;align-items:center;gap:5px;padding:6px 8px;background:#EFE9DC;border-bottom:1px solid var(--sand)}
+  .bar i{width:6px;height:6px;border-radius:50%;background:var(--sand);display:block}
+  .url{flex:1;background:var(--white);border-radius:99px;padding:2px 8px;font-family:var(--mono);
+       font-size:7px;color:var(--olive);border:1px solid var(--sand)}
+  .body{padding:10px;min-height:132px}
+  .body.day{background:var(--cream);color:var(--ink)}
+  .body.room{background:var(--room);color:rgba(252,247,248,.9)}
+  .body.room .url{background:var(--room-hi)}
+
+  /* tiny UI atoms */
+  .t-word{font-family:var(--serif);font-size:10px;letter-spacing:.02em;margin-bottom:6px}
+  .room .t-word{color:var(--cream)}
+  .t-h{font-family:var(--serif);font-size:11px;margin:4px 0 5px}
+  .t-line{height:4px;border-radius:2px;background:rgba(31,30,30,.14);margin:4px 0}
+  .room .t-line{background:rgba(252,247,248,.16)}
+  .t-line.short{width:62%}.t-line.mid{width:80%}
+  .t-mono{font-family:var(--mono);font-size:7px;color:var(--olive)}
+  .room .t-mono{color:rgba(216,205,182,.75)}
+  .chip{display:inline-block;font-family:var(--mono);font-size:6.5px;padding:2px 6px;border-radius:99px;
+        border:1px solid var(--sand);color:var(--olive);margin:1px 2px 1px 0;background:var(--white)}
+  .room .chip{background:var(--room-hi);border-color:var(--room-line);color:var(--sand)}
+  .chip.acc{background:var(--orange);border-color:var(--orange);color:#fff}
+  .chip.wn{background:var(--wine);border-color:var(--wine);color:#F3D9CB}
+  .chip.sl{background:var(--slate);border-color:var(--slate);color:#E8EDF0}
+  .btn{display:inline-block;font-size:7.5px;font-weight:600;padding:3px 9px;border-radius:6px;
+       background:var(--orange);color:#fff;margin-top:5px}
+  .btn.ghost{background:transparent;border:1px solid var(--sand);color:var(--olive)}
+  .room .btn.ghost{border-color:var(--room-line);color:var(--sand)}
+  .card{background:var(--white);border:1px solid var(--sand);border-radius:6px;padding:7px 8px;margin:5px 0}
+  .room .card{background:var(--room-hi);border-color:var(--room-line)}
+  .row2{display:flex;gap:6px}.row2>*{flex:1}
+  .kv{display:flex;justify-content:space-between;font-family:var(--mono);font-size:6.5px;
+      padding:2.5px 0;border-bottom:1px solid rgba(216,205,182,.35)}
+  .room .kv{border-color:var(--room-line)}
+  .kv b{font-weight:600}
+
+  /* waveform + pins */
+  .wave{display:flex;align-items:flex-end;gap:1.5px;height:26px;margin:6px 0 2px;position:relative}
+  .wave i{flex:1;background:var(--slate);border-radius:1px;opacity:.55;display:block}
+  .wave i.hot{background:var(--orange);opacity:1}
+  .pin{position:absolute;top:-7px;font-size:6px;font-family:var(--mono);color:#fff;background:var(--wine);
+       padding:1px 4px;border-radius:3px;white-space:nowrap}
+  .pin::after{content:"";position:absolute;left:6px;top:100%;border:3px solid transparent;border-top-color:var(--wine)}
+
+  /* stage rail */
+  .rail{display:flex;gap:3px;margin:7px 0}
+  .rail i{flex:1;height:5px;border-radius:2px;background:rgba(84,102,113,.25);display:block}
+  .rail i.done{background:var(--orange)}
+  .rail-l{display:flex;justify-content:space-between;font-family:var(--mono);font-size:5.5px;color:var(--olive)}
+  .room .rail-l{color:rgba(216,205,182,.6)}
+
+  /* rollout matrix */
+  .mx{display:grid;grid-template-columns:auto repeat(3,1fr);gap:1px;background:var(--room-line);
+      font-family:var(--mono);font-size:5.5px;margin-top:6px;border:1px solid var(--room-line)}
+  .mx span{background:var(--room-hi);padding:3px 4px;color:var(--sand)}
+  .mx span.hd{color:rgba(216,205,182,.65)}
+  .mx span.ok{color:var(--orange)}
+
+  /* email + notification frames */
+  .mail{background:var(--cream);border:1px solid var(--sand);border-radius:8px 8px 0 0;padding:10px;min-height:150px}
+  .mail .from{font-family:var(--mono);font-size:6.5px;color:var(--olive);margin-bottom:4px}
+  .mail .subj{font-size:9px;font-weight:600;margin-bottom:6px}
+  .mail .paper{background:var(--white);border:1px solid var(--sand);border-radius:8px;padding:8px}
+  .notif{background:var(--ink);color:var(--cream);border-radius:8px;padding:7px 9px;font-size:7.5px;
+         display:flex;gap:7px;align-items:center;margin-top:34px;box-shadow:0 10px 20px -10px rgba(31,30,30,.6)}
+  .notif .ico{width:16px;height:16px;border-radius:4px;background:var(--orange);flex:none}
+  .counter{display:flex;gap:5px;margin-bottom:7px}
+  .counter div{flex:1;background:var(--room-hi);border:1px solid var(--room-line);border-radius:5px;
+               padding:4px 6px;font-family:var(--mono)}
+  .counter b{display:block;font-size:10px;color:var(--cream)}
+  .counter span{font-size:5.5px;color:rgba(216,205,182,.65);letter-spacing:.06em;text-transform:uppercase}
+
+  footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--sand);
+         font-size:12px;color:var(--olive);font-family:var(--mono)}
+  @media (max-width:720px){.frames{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:no-preference){
+    .frame{transition:transform .18s ease,box-shadow .18s ease}
+    .frame:hover{transform:translateY(-2px);box-shadow:0 14px 30px -18px rgba(31,30,30,.35)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="kicker">Chordential · platform-website-plan.md, visualized</div>
+  <h1>Three journeys through <em>one platform</em></h1>
+  <p class="lede">Every frame below is a screen from the plan. Daylight surfaces are the public,
+  procurement-grade face; the control room is the platform. Each frame is tagged with the plan
+  element it realizes (E1–E10).</p>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--cream)"></i>Daylight — public &amp; email surfaces</span>
+    <span><i class="sw" style="background:var(--room)"></i>Control room — platform &amp; portals</span>
+    <span><i class="sw" style="background:var(--slate)"></i>Intelligence</span>
+    <span><i class="sw" style="background:var(--wine)"></i>Relationships</span>
+    <span><i class="sw" style="background:var(--orange)"></i>Delivery &amp; action</span>
+  </div>
+</header>
+
+<!-- ============================================================= -->
+<!-- STORYBOARD 1 — THE CUSTOMER                                    -->
+<!-- ============================================================= -->
+<section class="chapter">
+  <div class="ch-head"><span class="ch-num">STORYBOARD 01</span><h2>The customer — an agency producer</h2></div>
+  <p class="ch-arc">Maya produces the AURORA rebrand at a mid-size agency. From the first email to the
+  final stem folder, she never manages music — she manages her campaign.</p>
+
+  <div class="act">Act I · Finding Chordential</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.1</span><span class="fr-el wine">E6 · Outreach Strategy</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">from&nbsp; jon@chordential.com</div>
+        <div class="subj">Original music for the AURORA rebrand</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="t-line mid"></div><div class="t-line"></div><div class="t-line short"></div>
+          <div class="t-mono" style="margin-top:5px">↳ built from: case study shipped 06-24 · no credited music partner</div>
+          <span class="btn ghost">See how we work →</span>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>An email that knows why it's writing</h3>
+      <p>Maya gets one contextual note — the talking point is drawn from a real observed signal,
+      never a blast template.</p><span class="mood">Daylight · email</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.2</span><span class="fr-el orange">E10 · front of house</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">chordential.com/for/aurora-team</span></div>
+        <div class="body day">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="t-h">Music for AURORA, handled.</div>
+          <div class="wave"><i style="height:30%"></i><i style="height:55%"></i><i style="height:80%" class="hot"></i><i style="height:65%" class="hot"></i><i style="height:40%"></i><i style="height:70%"></i><i style="height:52%"></i><i style="height:85%"></i><i style="height:35%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:75%"></i></div>
+          <div class="t-mono">▶ hear the reel · 90 sec</div>
+          <span class="btn">Book a discovery call</span><span class="btn ghost">Capabilities doc</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Her own first-touch page</h3>
+      <p>The token link opens a page addressed to her team: the reel is one click away,
+      the capabilities doc and a call link beside it.</p><span class="mood">Daylight · token-gated public</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.3</span><span class="fr-el wine">E5 · Relationship</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">discovery call → brief</span></div>
+        <div class="body day">
+          <div class="t-h">The brief, captured once</div>
+          <div class="kv"><span>need</span><b>:60 anthem + cutdowns</b></div>
+          <div class="kv"><span>budget</span><b>$18–24k</b></div>
+          <div class="kv"><span>deadline</span><b>2026-08-21</b></div>
+          <div class="kv"><span>tone refs</span><b>3 links attached</b></div>
+          <div class="t-mono" style="margin-top:5px">saved to the relationship record — she never repeats herself</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>One conversation, remembered</h3>
+      <p>Scope, budget, deadline and taste references go into institutional memory on the call.
+      Nothing is asked twice.</p><span class="mood">Daylight → control room</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act II · The work</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.4</span><span class="fr-el wine">E7 · Content Generation</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">from&nbsp; jon@chordential.com</div>
+        <div class="subj">Proposal — AURORA anthem (fixed scope, clean rights)</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="kv"><span>original :60 + :30 + :15</span><b>$21,000</b></div>
+          <div class="kv"><span>revisions included</span><b>2 rounds</b></div>
+          <div class="kv"><span>rights</span><b>full buyout, all media</b></div>
+          <span class="btn">Approve &amp; kick off</span>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>A proposal built from the brief</h3>
+      <p>Estimate, scope and rights in one branded page — assembled from evidence,
+      approved with one press.</p><span class="mood">Daylight · email + doc</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.5</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">review.chordential.com/p/aurora?r=maya</span></div>
+        <div class="body room">
+          <div class="t-word">AURORA ANTHEM · v1</div>
+          <div class="wave">
+            <span class="pin" style="left:24%">0:14 brass later?</span>
+            <i style="height:35%"></i><i style="height:60%"></i><i style="height:82%" class="hot"></i><i style="height:48%" class="hot"></i><i style="height:70%" class="hot"></i><i style="height:55%"></i><i style="height:88%"></i><i style="height:42%"></i><i style="height:66%"></i><i style="height:50%"></i><i style="height:74%"></i><i style="height:38%"></i>
+          </div>
+          <div class="rail-l"><span>0:00</span><span>0:30</span><span>1:00</span></div>
+          <div class="chip">v1</div><div class="chip acc">▶ play</div><div class="chip wn">2 notes</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>Notes pinned to the second</h3>
+      <p>Maya clicks the waveform at 0:14 and types. Timecoded comments — the Frame.io
+      mechanic, for sound. No "at about the middle…" emails.</p><span class="mood">Control room · review portal</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.6</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">review · version 2</span></div>
+        <div class="body room">
+          <div class="t-word">AURORA ANTHEM · v2</div>
+          <div class="card"><div class="t-mono">✓ 0:14 — brass now enters at 0:19</div>
+          <div class="t-mono">✓ 0:41 — tail extended for end card</div></div>
+          <div class="chip">v1</div><div class="chip acc">v2</div>
+          <span class="btn">Approve this version</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Every note answered, visibly</h3>
+      <p>Version 2 arrives with each of her notes resolved and receipted. She approves
+      from the same page she reviewed on.</p><span class="mood">Control room · review portal</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act III · Delivery — and next time</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.7</span><span class="fr-el orange">E10 · Delivery</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">approval package · invoice</span></div>
+        <div class="body room">
+          <div class="t-h" style="color:var(--cream)">Ready to release</div>
+          <div class="kv"><span>approval package</span><b>signed ✓</b></div>
+          <div class="kv"><span>invoice</span><b>$21,000 · paid ✓</b></div>
+          <div class="kv"><span>rights summary</span><b>attached</b></div>
+          <span class="btn">Unlock deliverables</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Approval, invoice, release</h3>
+      <p>The payment gate keeps release and payment honest in both directions —
+      files unlock the moment the invoice clears.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.8</span><span class="fr-el orange">E10 · Delivery</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">the delivery room</span></div>
+        <div class="body room">
+          <div class="t-word">DELIVERY · AURORA</div>
+          <div class="mx">
+            <span class="hd"></span><span class="hd">:60</span><span class="hd">:30</span><span class="hd">9:16</span>
+            <span class="hd">broadcast</span><span class="ok">✓</span><span class="ok">✓</span><span>—</span>
+            <span class="hd">social</span><span class="ok">✓</span><span class="ok">✓</span><span class="ok">✓</span>
+            <span class="hd">stems</span><span class="ok">✓</span><span class="ok">✓</span><span class="ok">✓</span>
+          </div>
+          <div class="t-mono" style="margin-top:5px">AUR_ANTHEM_60_BCAST_v2F.wav · cue sheet · rights.pdf</div>
+          <span class="btn">Download all</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>The Delivery Room</h3>
+      <p>Cue sheets, rights summary, enforced version names, and a rollout matrix of every
+      placement. Operational clarity as the aesthetic.</p><span class="mood">Control room · client portal</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 1.9</span><span class="fr-el wine">E8 · Continuity</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">three months later</div>
+        <div class="subj">For the Vance Athletic pitch — a thought</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="t-line mid"></div><div class="t-line short"></div>
+          <div class="t-mono" style="margin-top:5px">↳ remembers: brass-forward, hates stock strings, approves fast on v2s</div>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>Chordential remembers</h3>
+      <p>When her next campaign surfaces as a signal, the outreach already knows her taste and
+      cadence. The relationship compounds.</p><span class="mood">Daylight · email</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- STORYBOARD 2 — THE MANAGING DIRECTOR                           -->
+<!-- ============================================================= -->
+<section class="chapter">
+  <div class="ch-head"><span class="ch-num">STORYBOARD 02</span><h2>The managing director — Jon</h2></div>
+  <p class="ch-arc">The machine worked all night. Jon's day is a sequence of decisions, not a sequence
+  of chores — the engines propose, he disposes.</p>
+
+  <div class="act">Act I · The morning read</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.1</span><span class="fr-el wine">E8 · Continuity</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">chordential.com/today</span></div>
+        <div class="body room">
+          <div class="t-word">TODAY</div>
+          <div class="card"><div class="t-mono">14 days silent after a warm reply → send the case-study follow-up</div>
+            <span class="btn">Do it</span> <span class="btn ghost">Snooze</span></div>
+          <div class="card"><div class="t-mono">new signal since last touch → re-open with it</div>
+            <span class="btn">Do it</span> <span class="btn ghost">Not relevant</span></div>
+        </div></div></div>
+      <div class="fr-cap"><h3>/today — the advisor queue</h3>
+      <p>The landing screen: every relationship with a recommended next action and its reason.
+      Jon works one list, top to bottom.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.2</span><span class="fr-el">E3 · Signals</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">/signals</span></div>
+        <div class="body room">
+          <div class="counter"><div><b>1,473</b><span>profiled</span></div><div><b>27</b><span>signals / wk</span></div><div><b>6</b><span>enriching</span></div></div>
+          <div class="card"><div class="chip sl">leadership</div>
+            <div class="t-mono">Harbor&amp;Co — new ECD announced 06-29 · source: press page</div></div>
+          <div class="card"><div class="chip sl">case study</div>
+            <div class="t-mono">Fieldnote — 2 spots shipped · music: uncredited</div></div>
+        </div></div></div>
+      <div class="fr-cap"><h3>What the machine saw overnight</h3>
+      <p>The Signal Feed shows the diff itself, in monospace, with its source — structured
+      evidence, not vibes. Live counters prove the engines run unattended.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.3</span><span class="fr-el">E4 · Opportunity Engine</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">/opportunities · why-today queue</span></div>
+        <div class="body room">
+          <div class="t-word">WHY TODAY</div>
+          <div class="card">
+            <div class="t-h" style="color:var(--cream);font-size:9px">New ECD hired 12 days ago + two case studies shipped without a credited music partner.</div>
+            <div class="chip sl">intel</div><div class="chip sl">signal ×2</div><div class="chip wn">person: ECD</div><div class="chip">history: none</div>
+            <span class="btn">Pursue</span> <span class="btn ghost">Snooze</span> <span class="btn ghost">Dismiss</span>
+          </div>
+        </div></div></div>
+      <div class="fr-cap"><h3>The reasoning, not just a score</h3>
+      <p>Each card leads with one sentence answering "why is today the day?" — the evidence
+      chain linked beneath it. Jon presses Pursue.</p><span class="mood">Control room · signature screen</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act II · From reason to outreach</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.4</span><span class="fr-el wine">E6 · Outreach Strategy</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">strategy card</span></div>
+        <div class="body room">
+          <div class="kv"><span>reach out?</span><b>yes</b></div>
+          <div class="kv"><span>why now</span><b>ECD is new — vendor list still forming</b></div>
+          <div class="kv"><span>to whom</span><b>the new ECD</b></div>
+          <div class="kv"><span>objective</span><b>15-min intro call</b></div>
+          <div class="kv"><span>talking point</span><b>their uncredited music gap</b></div>
+          <span class="btn">Approve strategy → compose</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Five questions before any words</h3>
+      <p>The Strategy Card must be approved before the composer unlocks — the flow itself
+      enforces "machine proposes, Jon disposes."</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.5</span><span class="fr-el wine">E7 · Content Generation</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">compose · email | linkedin | agenda | brief</span></div>
+        <div class="body room">
+          <div class="card"><div class="t-line mid"></div><div class="t-line"></div>
+            <div class="t-mono">↳ from signal: case study 06-24</div></div>
+          <div class="card"><div class="t-line short"></div>
+            <div class="t-mono">↳ from intel: production style</div></div>
+          <span class="btn">Send now</span> <span class="btn ghost">Edit block</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Evidence, assembled into words</h3>
+      <p>Every block carries a provenance footnote — which fact it was built from. Seven output
+      types, one composer, one send button that actually sends.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.6</span><span class="fr-el wine">E5 · Relationship</span></div>
+      <div class="shot"><div class="body" style="background:transparent;min-height:150px;padding:10px">
+        <div class="notif"><span class="ico"></span><div><b>New lead</b> — Fieldnote replied: "call Thursday?"<br>
+        <span style="opacity:.7">chordential · now</span></div></div>
+      </div></div>
+      <div class="fr-cap"><h3>The reply finds him</h3>
+      <p>Replies and inbound leads push to his phone and land in the leads queue —
+      qualify or dismiss, one press each.</p><span class="mood">Phone · push</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act III · Win, produce, ship, remember</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.7</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">project · assign</span></div>
+        <div class="body room">
+          <div class="t-word">AURORA ANTHEM · WON</div>
+          <div class="card"><div class="t-mono">roster match: Ada Lin — composition · brass-forward · $1,500/project</div>
+            <span class="btn">Assign as composer</span></div>
+          <div class="t-mono">→ scope email fires on assignment: client, brief, budget, deadline, rate</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>One press signs the composer</h3>
+      <p>The matcher proposes from the roster; assigning sends the full scope to the
+      composer automatically. No briefing calls lost to memory.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.8</span><span class="fr-el orange">E9/E10 · Production→Delivery</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">production board</span></div>
+        <div class="body room">
+          <div class="t-word">AURORA · BOARD</div>
+          <div class="rail"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i></div>
+          <div class="rail-l"><span>strategy</span><span>comp</span><span>mix</span><span>stems</span></div>
+          <div class="card"><div class="t-mono">rights ✓ · revisions 2/2 · metadata ✓ · approvals ⏳ · assets ✓</div></div>
+          <span class="btn">Release package</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>The stage rail + five agents</h3>
+      <p>The production spine as one horizontal rail; the delivery agents' checklist beneath.
+      Release stays a human button.</p><span class="mood">Control room</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 2.9</span><span class="fr-el wine">E5 · Relationship</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">agency · relationship timeline</span></div>
+        <div class="body room">
+          <div class="t-word">HARBOR&amp;CO · MEMORY</div>
+          <div class="kv"><span>07-02</span><b>won — AURORA anthem</b></div>
+          <div class="kv"><span>06-30</span><b>call: prefers stems early</b></div>
+          <div class="kv"><span>06-12</span><b>signal: new ECD</b></div>
+          <div class="kv"><span>06-01</span><b>outreach sent · replied +2d</b></div>
+          <div class="t-mono" style="margin-top:4px">tendency confirmed: fast approver · brass-forward</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>Institutional memory, growing</h3>
+      <p>Win/loss, calls, signals and sends merge into one timeline per agency. Next year's
+      pitch starts from everything learned this year.</p><span class="mood">Control room</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- STORYBOARD 3 — THE TALENT                                      -->
+<!-- ============================================================= -->
+<section class="chapter">
+  <div class="ch-head"><span class="ch-num">STORYBOARD 03</span><h2>The talent — Ada, composer</h2></div>
+  <p class="ch-arc">Ada is chosen, not bidding. Real paid briefs, clean rights, prompt payment —
+  and she always knows where she stands.</p>
+
+  <div class="act">Act I · Joining the roster</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.1</span><span class="fr-el orange">front of house</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">chordential.com/apply</span></div>
+        <div class="body day">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="t-h">Send your reel</div>
+          <div class="kv"><span>name</span><b>Ada Lin</b></div>
+          <div class="kv"><span>craft</span><b>composition</b></div>
+          <div class="kv"><span>reel</span><b>adalin.com/reel</b></div>
+          <span class="btn">Apply</span>
+          <div class="t-mono" style="margin-top:5px">→ lands in the roster queue · Jon's phone buzzes</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>The two-minute application</h3>
+      <p>Name, craft, reel. Bare links work (no URL pedantry), and the application funnels
+      straight into recruiting with a push alert.</p><span class="mood">Daylight · public</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.2</span><span class="fr-el wine">E7 · Content Generation</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">from&nbsp; jon@chordential.com</div>
+        <div class="subj">You're on the roster, Ada</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="kv"><span>capacity</span><b>composition</b></div>
+          <div class="kv"><span>standing rate</span><b>$1,500/project</b></div>
+          <div class="kv"><span>terms</span><b>never spec · paid promptly · first-look</b></div>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>A real answer, either way</h3>
+      <p>Accepted or declined, she hears back — with capacity, rate and terms in writing when
+      it's a yes. Honest about volume: "we're early."</p><span class="mood">Daylight · email</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.3</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">from&nbsp; jon@chordential.com</div>
+        <div class="subj">You're signed on: AURORA (Composer)</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="kv"><span>client</span><b>AURORA</b></div>
+          <div class="kv"><span>brief</span><b>:60 brand anthem, brass-forward</b></div>
+          <div class="kv"><span>budget</span><b>$18–24k</b></div>
+          <div class="kv"><span>deadline</span><b>2026-08-21</b></div>
+          <div class="kv"><span>your rate</span><b>$1,500/project</b></div>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>The scope arrives with the signing</h3>
+      <p>The moment Jon assigns her, the full scope lands: client, role, brief, budget,
+      deadline, her rate. She starts informed, not guessing.</p><span class="mood">Daylight · email</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act II · Making the work</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.4</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">portal · aurora · upload</span></div>
+        <div class="body room">
+          <div class="t-word">AURORA · YOUR CUES</div>
+          <div class="card" style="border-style:dashed;text-align:center"><div class="t-mono">drop v1 here — WAV/AIFF</div></div>
+          <div class="wave"><i style="height:40%"></i><i style="height:65%"></i><i style="height:80%" class="hot"></i><i style="height:50%"></i><i style="height:72%"></i><i style="height:45%"></i><i style="height:85%"></i><i style="height:38%"></i><i style="height:60%"></i><i style="height:52%"></i></div>
+          <div class="chip acc">v1 · uploaded</div><div class="chip">AUR_ANTHEM_60_v1.wav</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>Upload becomes a waveform</h3>
+      <p>Her cue gets a player, an enforced version name, and a place in the record the
+      instant it lands. Same component the client will see.</p><span class="mood">Control room · talent portal</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.5</span><span class="fr-el orange">E9 · Production</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">portal · notes on v1</span></div>
+        <div class="body room">
+          <div class="t-word">NOTES · FROM THE CLIENT</div>
+          <div class="wave">
+            <span class="pin" style="left:22%">0:14 brass later?</span>
+            <i style="height:35%"></i><i style="height:60%"></i><i style="height:80%" class="hot"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:42%"></i><i style="height:64%"></i><i style="height:50%"></i>
+          </div>
+          <div class="t-mono">2 notes · both timecoded · revision 1 of 2</div>
+          <span class="btn">Upload v2</span>
+        </div></div></div>
+      <div class="fr-cap"><h3>Notes she can act on</h3>
+      <p>Client feedback reaches her pinned to the exact second, with the revision count
+      visible — bounded rounds, no scope creep.</p><span class="mood">Control room · talent portal</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.6</span><span class="fr-el orange">E10 · Delivery</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">portal · approved</span></div>
+        <div class="body room">
+          <div class="t-h" style="color:var(--cream)">v2 approved ✓</div>
+          <div class="kv"><span>stems requested</span><b>8 · named for you</b></div>
+          <div class="kv"><span>your payment</span><b>$1,500 · processing</b></div>
+          <div class="kv"><span>credit</span><b>on the cue sheet</b></div>
+          <div class="t-mono" style="margin-top:5px">AUR_ANTHEM_60_v2F — locked as final</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>Approved, credited, paid</h3>
+      <p>Approval triggers the stem list and her payment together. Her name is on the cue
+      sheet — the credit travels with the work.</p><span class="mood">Control room · talent portal</span></div>
+    </div>
+  </div>
+
+  <div class="act">Act III · Staying</div>
+  <div class="frames">
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.7</span><span class="fr-el wine">E8 · Continuity</span></div>
+      <div class="shot"><div class="mail">
+        <div class="from">from&nbsp; jon@chordential.com</div>
+        <div class="subj">First look: Vance Athletic wants brass</div>
+        <div class="paper">
+          <div class="t-word">CHORDENTIAL</div>
+          <div class="t-line mid"></div><div class="t-line short"></div>
+          <div class="t-mono" style="margin-top:5px">↳ matched: your craft + the AURORA outcome · reply to take it</div>
+        </div>
+      </div></div>
+      <div class="fr-cap"><h3>First-look, honored</h3>
+      <p>The next brief that fits her craft comes to her before anyone else — the recruiting
+      promise kept by the matching engine, not by memory.</p><span class="mood">Daylight · email</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="fr-top"><span class="fr-no">FRAME 3.8</span><span class="fr-el wine">E5 · Relationship</span></div>
+      <div class="shot"><div class="screen"><div class="bar"><i></i><i></i><i></i>
+        <span class="url">roster · ada lin</span></div>
+        <div class="body room">
+          <div class="t-word">ADA LIN · ROSTER</div>
+          <div class="chip acc">composition</div><div class="chip">brass-forward</div><div class="chip">fast on revisions</div>
+          <div class="kv"><span>projects</span><b>2 delivered · 2 approved on v2</b></div>
+          <div class="kv"><span>standing rate</span><b>$1,500/project</b></div>
+          <div class="t-mono" style="margin-top:4px">reel ▶ · last delivered 08-19 · first-look: on</div>
+        </div></div></div>
+      <div class="fr-cap"><h3>A record that works for her</h3>
+      <p>Her profile accrues real outcomes — delivered projects, revision speed, style — which
+      is exactly what routes the next fitting brief her way.</p><span class="mood">Control room · roster</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  chordential · storyboards for docs/platform-website-plan.md · demo brands only (AURORA, Vance Athletic) · no real clients implied
+</footer>
+
+</div>
+</body>
+</html>
