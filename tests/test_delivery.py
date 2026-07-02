@@ -357,6 +357,47 @@ def test_delivery_package_renders_with_client_contributor_and_certificate(client
     assert "indemnif" not in body.lower() or "available on request" in body.lower()
 
 
+def test_content_id_sentence_is_single_source_across_browser_and_zip(client):
+    """The legally-material Content-ID sentence must come from ONE source
+    (delivery.CONTENT_ID_HONEST) in both the browser-reviewed package doc AND the
+    ZIP's self-contained doc — so a wording/legal fix can't land in one but not the
+    other (a procurement-grade credibility risk). The template used to hardcode a
+    literal copy; this locks that it references the constant."""
+    from pathlib import Path
+    from chordential_oia.delivery import CONTENT_ID_HONEST, build_delivery_zip
+    from chordential_oia.web import db as db_mod
+
+    # 1) Source guard: the browser template must NOT re-hardcode the sentence.
+    tpl = (Path(__file__).resolve().parents[1]
+           / "src/chordential_oia/web/templates/delivery_package.html").read_text()
+    assert CONTENT_ID_HONEST not in tpl, (
+        "delivery_package.html hardcodes the Content-ID sentence again — reference "
+        "the CONTENT_ID_HONEST constant so it can't drift from the ZIP doc")
+    assert "{{ content_id_honest }}" in tpl        # it references the shared constant
+
+    # 2) Render guard: the browser doc renders the constant's exact text.
+    pid = _win_and_make_project(client, 1)
+    assert CONTENT_ID_HONEST in client.get(f"/project/{pid}/delivery-package").text
+
+    # 3) The ZIP's self-contained doc carries the same sentence, from the same source.
+    import os
+    import zipfile
+    from chordential_oia.web import app as app_mod
+    conn = db_mod.connect()
+    try:
+        pkg = build_delivery_zip(db_mod.get_project(conn, pid),
+                                 db_mod.list_assignments(conn, pid),
+                                 db_mod.get_delivery(conn, pid),
+                                 app_mod.UPLOAD_DIR)
+    finally:
+        conn.close()
+    with zipfile.ZipFile(os.path.join(app_mod.UPLOAD_DIR, pkg["filename"])) as z:
+        docs = [z.read(n).decode("utf-8", "replace")
+                for n in z.namelist() if n.endswith(".html")]
+    assert any(CONTENT_ID_HONEST in d for d in docs), \
+        "the ZIP HTML docs no longer carry the shared Content-ID sentence"
+
+
 def test_project_detail_has_no_from_opportunity_pill(client):
     """Removed: every project already originates from a won opportunity
     today (the only way to create one is /opportunity/{id}/project), so the

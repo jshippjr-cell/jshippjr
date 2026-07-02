@@ -53,7 +53,7 @@ from ..delivery import (
     license_confirmation, merge_license, merge_signatory, reconcile_brief,
     revision_status, scoped_deliverables, seed_brief, version_label,
     versions_list, version_name,
-    ASSIGNABLE_FOLDERS, BRIEF_FIELDS, DELIVERY_STATES, VERSION_STATES,
+    ASSIGNABLE_FOLDERS, BRIEF_FIELDS, CONTENT_ID_HONEST, DELIVERY_STATES, VERSION_STATES,
 )
 from ..strategic import assess_strategic_value
 from ..talent import Talent, normalize_url, profile_completeness
@@ -3618,6 +3618,9 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
         "cert": cert,
+        # The honest Content-ID sentence — the ONE source of truth (delivery.py),
+        # so the browser doc and the ZIP doc can't drift on legally-material copy.
+        "content_id_honest": CONTENT_ID_HONEST,
         "cues": cues,
         "manifest": manifest,
         "revisions": revisions,
