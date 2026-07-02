@@ -234,7 +234,11 @@
 {% set st = outreach_ws.strategy %}
 <div id="outreach" class="card" style="margin-bottom:16px">
   <strong>Outreach</strong>
-  <span class="muted small">— strategy first; drafts for your review (nothing is sent from here)</span>
+  <span class="muted small">— strategy first; draft, then send, copy, or log the touch</span>
+  {% set _rcpt = (st.brief.contact.email if st.brief.contact else '') or '' %}
+  {% if sent == 'sent' %}<p class="small" style="color:#2e8b57;margin:6px 0 0">✓ Email sent to {{ _rcpt }} — touch logged.</p>
+  {% elif sent == 'manual' %}<p class="small muted" style="margin:6px 0 0">No recipient email on file (or mail isn't set up) — use Open in mail client or Copy below.</p>
+  {% elif sent == 'error' %}<p class="small muted" style="margin:6px 0 0">Mail provider returned an error — use Open in mail client or Copy below.</p>{% endif %}
   <div class="row" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
     <div style="min-width:120px">
       <div class="small">Decision</div>
@@ -259,19 +263,54 @@
 
   <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
     {% for d in outreach_ws.drafts %}
-    <div class="card" style="flex:1;min-width:260px;background:var(--bg2,#fafafa)">
-      <div class="small muted" style="text-transform:capitalize">{{ d.angle }}-focused{% if d.generated_by == 'ai' %} · AI{% endif %}</div>
-      <div class="small"><strong>{{ d.subject }}</strong></div>
-      <pre style="white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0">{{ d.body }}</pre>
-      <form method="post" action="/agencies/{{ agency.id }}/outreach" style="margin:0">
-        <input type="hidden" name="kind" value="email">
-        <input type="hidden" name="contact" value="{{ st.brief.contact.name if st.brief.contact else '' }}">
-        <input type="hidden" name="note" value="{{ d.angle }}: {{ d.subject }}">
-        <button class="btn btn-small" type="submit" onclick="return confirm('Log this as sent? (This records the touch — it does NOT send an email.)')">Log as sent</button>
-      </form>
+    {% set _cname = (st.brief.contact.name if st.brief.contact else '') or '' %}
+    <div class="card draft" style="flex:1;min-width:260px;background:var(--bg2,#fafafa)">
+      <div class="small muted" style="text-transform:capitalize">{{ d.angle }}-focused{% if d.generated_by == 'ai' %} · AI{% endif %}{% if _rcpt %} · to {{ _rcpt }}{% endif %}</div>
+      <div class="small"><strong class="d-subject">{{ d.subject }}</strong></div>
+      <pre class="d-body" style="white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0">{{ d.body }}</pre>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        {% if mail_configured and _rcpt %}
+        <form method="post" action="/agencies/{{ agency.id }}/outreach/send" style="margin:0">
+          <input type="hidden" name="subject" value="{{ d.subject }}">
+          <input type="hidden" name="body" value="{{ d.body }}">
+          <input type="hidden" name="email" value="{{ _rcpt }}">
+          <input type="hidden" name="contact" value="{{ _cname }}">
+          <input type="hidden" name="angle" value="{{ d.angle }}">
+          <button class="btn btn-small" type="submit">✉ Send to {{ _rcpt }}</button>
+        </form>
+        {% endif %}
+        <a class="btn btn-small ghost" href="mailto:{{ _rcpt }}?subject={{ d.subject | urlencode }}&body={{ d.body | urlencode }}">Open in mail client</a>
+        <button class="btn btn-small ghost" type="button" onclick="cdlCopyDraft(this)">Copy</button>
+        <form method="post" action="/agencies/{{ agency.id }}/outreach" style="margin:0">
+          <input type="hidden" name="kind" value="email">
+          <input type="hidden" name="contact" value="{{ _cname }}">
+          <input type="hidden" name="note" value="{{ d.angle }}: {{ d.subject }}">
+          <button class="btn btn-small ghost" type="submit" title="Record the touch without sending from here (e.g. you sent it elsewhere)">Log as sent</button>
+        </form>
+      </div>
     </div>
     {% endfor %}
   </div>
+  <script>
+  // Copy a draft's subject + body to the clipboard (kills the old dead-end where a
+  // draft could only be "logged", never actually used).
+  function cdlCopyDraft(btn) {
+    var card = btn.closest('.draft');
+    var subj = card.querySelector('.d-subject').textContent.trim();
+    var body = card.querySelector('.d-body').textContent.replace(/\s+$/, '');
+    var text = subj + '\n\n' + body;
+    var done = function () { var o = btn.textContent; btn.textContent = 'Copied ✓';
+      setTimeout(function () { btn.textContent = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+    } else {
+      var ta = document.createElement('textarea'); ta.value = text;
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  }
+  </script>
 
   {% if outreach_ws.memory %}
   <details style="margin-top:12px"><summary class="small">Relationship summary (institutional memory)</summary>

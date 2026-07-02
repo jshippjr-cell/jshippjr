@@ -879,7 +879,8 @@ def agency_detail(request: Request, agency_id: int):
                   decision_makers=dm_rows, intel=intel, timeline=timeline,
                   opportunity=opportunity, outreach=outreach,
                   relationship=relationship, stages=relationships.STAGES,
-                  outreach_ws=outreach_ws,
+                  outreach_ws=outreach_ws, mail_configured=mailer.mail_configured(),
+                  sent=request.query_params.get("sent", ""),
                   scrape_on=enrichment.scrape_enabled())
 
 
@@ -973,6 +974,36 @@ def agency_log_outreach(agency_id: int, kind: str = Form("email"),
     return RedirectResponse(f"/agencies/{agency_id}#opportunity", status_code=303)
 
 
+@app.post("/agencies/{agency_id}/outreach/send")
+def agency_send_outreach(agency_id: int, subject: str = Form(""),
+                         body: str = Form(""), email: str = Form(""),
+                         contact: str = Form(""), angle: str = Form("")):
+    """Actually SEND an agency outreach draft through the mailer seam, then log the
+    touch (so the relationship history + score react exactly as 'Log as sent' does).
+    The drafts used to dead-end at 'Log as sent' — recording a touch that never sent
+    anything. Falls back to ?sent=manual when mail isn't configured or there's no
+    recipient email; the panel then offers Copy / Open-in-mail instead."""
+    email = (email or "").strip()
+    if not email or not mailer.mail_configured():
+        return RedirectResponse(
+            f"/agencies/{agency_id}?sent=manual#opportunity", status_code=303)
+    base = _public_base()
+    status = mailer.send_email(email, subject or "Chordential", body or "",
+                               html=mailer.branded_html(base, body or ""))
+    if status == "sent":
+        conn = db.connect()
+        try:
+            db.log_agency_outreach(conn, agency_id, kind="email", contact=contact,
+                                   note=(f"{angle}: {subject}".strip(": ") or "email"))
+            conn.commit()
+            relationships.ensure_followup(conn, agency_id, contact=contact)
+            music_opportunity.score_agency(conn, agency_id)
+        finally:
+            conn.close()
+    return RedirectResponse(
+        f"/agencies/{agency_id}?sent={status}#opportunity", status_code=303)
+
+
 # --------------------------------------------------------------------------- #
 # Relationship Management Platform
 # --------------------------------------------------------------------------- #
@@ -984,16 +1015,9 @@ def relationships_dashboard(request: Request):
     try:
         priorities = relationships.daily_priorities(conn)
         rows = db.top_opportunities(conn, limit=50)
-        pipeline = []
-        for r in rows:
-            interactions = list(db.list_agency_outreach(conn, r["id"]))
-            stage = relationships.current_stage(
-                conn, r["id"], score=r["opportunity_score"],
-                interactions=interactions,
-                responded=any(o["responded"] for o in interactions))
-            pipeline.append({"id": r["id"], "company": r["company"],
-                             "score": r["opportunity_score"], "tier": r["opportunity_tier"],
-                             "stage": stage, "movement": r["score_movement"]})
+        # Batched: one outreach aggregate + one relationships fetch + one commit for
+        # the whole page, instead of a query-per-row + a commit-per-changed-row.
+        pipeline = relationships.pipeline_stages(conn, rows)
     finally:
         conn.close()
     return render(request, "relationships.html", nav="relationships",

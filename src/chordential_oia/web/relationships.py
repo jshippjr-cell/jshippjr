@@ -54,6 +54,53 @@ def derive_stage(*, score: Optional[int], interactions: List, responded: bool) -
     return "Cold"
 
 
+def _stage_from_rollup(score: Optional[int], agg: Optional[dict]) -> str:
+    """derive_stage, computed from the batched outreach rollup ({last_touch,
+    responded, count}) instead of the full interactions list — identical logic, so
+    the pipeline view derives the same stage without loading every touch per row."""
+    if agg and agg.get("count"):
+        last_days = _days_since(agg["last_touch"])
+        if agg.get("responded"):
+            return "Active" if last_days <= 120 else "Dormant"
+        return "Active" if last_days <= 90 else "Dormant"
+    if score is not None and score >= 60:
+        return "Warm Prospect"
+    return "Cold"
+
+
+def pipeline_stages(conn, rows: List) -> List[dict]:
+    """Stage each scored agency in ``rows`` with O(1) queries: ONE outreach aggregate
+    + ONE relationships fetch for the whole set, deriving stages in memory and
+    persisting only the changed (non-overridden) ones in a SINGLE transaction.
+
+    Replaces the per-row loop that ran list_agency_outreach + get_relationship for
+    every row and committed the cached stage per changed row (~150 queries + up to 50
+    fsync commits on the /relationships read path). Behaviour is unchanged: an
+    overridden stage is honored; otherwise the same deterministic stage is derived
+    and cached."""
+    ids = [r["id"] for r in rows]
+    agg = db.outreach_aggregate(conn, ids)
+    rels = db.relationships_by_ids(conn, ids)
+    out: List[dict] = []
+    changed = False
+    for r in rows:
+        aid = r["id"]
+        rel = rels.get(aid)
+        if rel is not None and rel["stage_overridden"] and rel["stage"]:
+            stage = rel["stage"]
+        else:
+            stage = _stage_from_rollup(r["opportunity_score"], agg.get(aid))
+            if rel is None or rel["stage"] != stage:
+                db.upsert_relationship(conn, aid, stage=stage)   # no commit yet
+                changed = True
+        out.append({"id": aid, "company": r["company"],
+                    "score": r["opportunity_score"], "tier": r["opportunity_tier"],
+                    "stage": stage, "movement": r["score_movement"]})
+    if changed:
+        conn.commit()                                            # ONE commit for the batch
+    return out
+
+
 def current_stage(conn, agency_id: int, *, score: Optional[int],
                   interactions: List, responded: bool) -> str:
     rel = db.get_relationship(conn, agency_id)

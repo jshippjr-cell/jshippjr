@@ -1892,6 +1892,39 @@ def last_agency_outreach(
         "ORDER BY occurred_at DESC LIMIT 1", (agency_id, direction)).fetchone()
 
 
+def outreach_aggregate(conn: sqlite3.Connection, agency_ids) -> dict:
+    """Per-agency outreach rollup — {agency_id: {last_touch, responded, count}} — in
+    ONE GROUP BY query for the whole set, instead of a SELECT per agency. Powers the
+    /relationships pipeline's stage derivation at O(1) queries."""
+    ids = [int(a) for a in agency_ids]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    out: dict = {}
+    for r in conn.execute(
+            f"""SELECT agency_id, MAX(occurred_at) AS last_touch,
+                       MAX(responded) AS any_responded, COUNT(*) AS n
+                FROM agency_outreach WHERE agency_id IN ({marks})
+                GROUP BY agency_id""", tuple(ids)):
+        out[r["agency_id"]] = {
+            "last_touch": r["last_touch"],
+            "responded": bool(r["any_responded"]),
+            "count": r["n"],
+        }
+    return out
+
+
+def relationships_by_ids(conn: sqlite3.Connection, agency_ids) -> dict:
+    """{agency_id: relationship_row} for a set of agencies in ONE query (vs a
+    get_relationship per agency)."""
+    ids = [int(a) for a in agency_ids]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["agency_id"]: r for r in conn.execute(
+        f"SELECT * FROM relationships WHERE agency_id IN ({marks})", tuple(ids))}
+
+
 # --------------------------------------------------------------------------- #
 # Relationship Management Platform — stage, tasks, memory, documents
 # --------------------------------------------------------------------------- #
