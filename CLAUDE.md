@@ -1,14 +1,28 @@
-# CLAUDE.md — Chordential
+# CLAUDE.md — Chordential / ChordOS
 
 Guidance for Claude/agents working in this repo. Read this first; it front-loads what
 otherwise gets re-discovered every session.
 
+## ⚑ Read the Constitution before making architectural decisions
+This repository has a permanent architectural source of truth in
+**`docs/architecture/`**. Before any architectural, product, or design decision, read
+**[`docs/architecture/CONSTITUTION.md`](docs/architecture/CONSTITUTION.md)** — it
+teaches what ChordOS *is* and the principles you inherit. Then skim
+**`docs/architecture/PROJECT_STATE.md`** (what's built / deferred right now) and
+consult **`docs/architecture/ARCHITECTURE_DECISIONS.md`** before changing a core
+pattern. CLAUDE.md (this file) is the *tactical* guide — commands, conventions,
+branch discipline; the Constitution is the *why*. When they seem to conflict, the
+Constitution wins and this file is corrected.
+
 ## What this is
 Chordential — a **procurement-grade music studio + the operating system that runs it.**
-The product the market pays for is the *music service* (clearance-certified original
-music); the software (qualification, estimation, the buyer↔creator graph, the Delivery
-OS) is the internal moat. Strategy lives in `docs/company-strategy.md`,
-`docs/product-roadmap.md`, and the deep research in `docs/market-research.md`.
+This software is **ChordOS**, the operating system beneath a creative-service business;
+Chordential is its first instance (see the Constitution). The product the market pays
+for is the *music service* (clearance-certified original music); the software
+(qualification, estimation, the buyer↔creator graph, the Delivery OS) is the internal
+moat. Strategy lives in `docs/company-strategy.md`, `docs/product-roadmap.md`, and the
+deep research in `docs/market-research.md`; the enduring **why** lives in
+`docs/architecture/CONSTITUTION.md`.
 
 ## Architecture
 - **Python package:** `src/chordential_oia/`. Deterministic "engines" (no LLM/AI
@@ -89,7 +103,15 @@ currently local disk); the zero-downtime Postgres cutover (code ready, ops not r
 server-side PDF rendering of the branded delivery docs (best-effort only).
 
 ## Docs index
-`docs/` holds the decision/plan record: `company-strategy.md`, `product-roadmap.md`,
-`market-research.md`, the `*-council.md` deliberations, the `delivery-os-*` plans +
-reviews + user manual, and `efficiency-report.md`. Reconcile re-sequencing into
-`product-roadmap.md`.
+- **`docs/architecture/`** — the **canonical source of truth** (read first):
+  `CONSTITUTION.md` (what ChordOS is + enduring principles), `ARCHITECTURE_DECISIONS.md`
+  (binding technical decisions + rationale), `PROJECT_STATE.md` (what's built/deferred
+  now). Start at `docs/architecture/README.md`.
+- **`docs/` (the rest)** holds the decision/plan **archive**: `company-strategy.md`,
+  `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
+  `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
+  `product-efficiency-audit.md`. Reconcile re-sequencing into `product-roadmap.md`.
+
+Layering: Constitution (why, changes rarely) → ADRs (decisions) → PROJECT_STATE (state,
+changes often) → this file (tactics) → `docs/` archive (history). Higher, slower layers
+win conflicts.

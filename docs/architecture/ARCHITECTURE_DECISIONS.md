@@ -1,0 +1,181 @@
+# Architecture Decision Record (ADR) — ChordOS
+
+*The permanent log of binding technical/architectural decisions and their rationale.
+Read this to understand **why the code is shaped the way it is** before you change
+its shape. The Constitution (`CONSTITUTION.md`) states the principles; this document
+records the specific decisions that serve them.*
+
+## How to use this log
+
+- Each decision is numbered, dated, and has a **status** (Accepted · Superseded ·
+  Reversed). Superseded decisions are kept, not deleted — the history is the value.
+- **Before you reverse one of these, add a new ADR that supersedes it** with the
+  reasoning and the authority. Do not silently contradict an Accepted decision in
+  code; the next contributor will trust this log.
+- New binding decisions append here. Tactical, reversible choices do not need an ADR —
+  reserve this for decisions that would be expensive or dangerous to reverse blindly.
+
+The entries below were **reverse-engineered from the ratified strategy docs and the
+existing codebase (2026-07-02)** to give the historical decisions a durable home.
+Their dates reflect when the decision was effectively made; earlier deliberation
+lives in the cited `docs/*.md`.
+
+---
+
+### ADR-0001 — A→B→C, dogfood-first go-to-market
+**Status:** Accepted (2026-06-16, CEO ruling) · Source: `docs/company-strategy.md`
+**Decision.** Build the studio force-multiplier (A) first as deliberate data
+manufacturing, then the procurement-intelligence platform (B), then the buyer-side
+OS/marketplace (C). Self-funded; each rung funds the next; do not skip A for C's
+optics, do not raise on an inflated B TAM.
+**Why.** The durable moat is the proprietary data (qualification labels, estimation
+actuals, win/loss, the buyer↔creator graph), which is only manufactured by operating
+a real studio. B and C are defensible only *after* that data exists.
+**Consequences.** Internal-first is the default for every feature. Capital discipline
+is a hard constraint. Win/loss capture is mandatory from day one.
+
+### ADR-0002 — Deterministic engines; the web layer adds no business logic
+**Status:** Accepted · Source: `src/chordential_oia/`, `docs/build-loop-charter.md`
+**Decision.** The mission spine is implemented as pure Python engines (`scoring.py`,
+`qualification.py`, `estimation.py`, `strategic.py`, `prepare.py`, `outreach.py`,
+`delivery.py`, `matching.py`, …). The FastAPI/Jinja web layer renders and routes; it
+contains **no** scoring, qualification, estimation, or decision logic.
+**Why.** Determinism makes the business analyzable, testable, and cacheable, and keeps
+the cost model legible. It also keeps the engines reusable as the product is exposed
+to B/C users without a rewrite.
+**Consequences.** Any new business rule goes in an engine with tests, not in a route.
+A route that computes a decision is a defect.
+
+### ADR-0003 — "The machine proposes, the human disposes," enforced by the flow
+**Status:** Accepted · Source: Constitution §4.1; `web/app.py`
+**Decision.** No engine auto-commits a business outcome. Qualify, assign, approve,
+publish, release, and send are human actions. Where feasible the gate is enforced by
+the route wiring (a strategy must be approved before the composer unlocks; a creator
+submission is `pending_version` until a human publishes it), not by convention.
+**Why.** Trust, cost control, and honesty all depend on a human owning every outward
+or committing action.
+**Consequences.** Never add an auto-decide path. When you add a decision surface, wire
+the gate into the flow so it cannot be bypassed.
+
+### ADR-0004 — Provider seams: null by default, real when configured, never blocking
+**Status:** Accepted · Source: `mailer.py`, `payments/`, `web/webpush.py`, LLM seam
+**Decision.** Every external-world dependency (mail, payments, web push/ntfy, storage,
+LLM) is a seam with a no-op default and a real implementation selected by a
+`CHORDENTIAL_*` env var. Seams are best-effort: they never raise and never block a
+request.
+**Why.** The product must run end-to-end with zero credentials (dev, tests, demos);
+production lights up the seams. A slow or dead provider must never fail a user action.
+**Consequences.** New outward integrations follow this shape. Outbound calls that can
+block the event loop are offloaded off the request thread (see ADR-0010).
+
+### ADR-0005 — Gated, deterministic AI; no live agent swarm; no AI-generated craft
+**Status:** Accepted · Source: `docs/company-strategy.md` (CTO ruling), Constitution §8
+**Decision.** LLMs are used only for discrete, cacheable, human-gated steps and only
+after a human "pursue" spends money — never an open-ended agent swarm in production,
+never before the pursue gate. The core creative deliverable (music) is human-made;
+AI never synthesizes the craft.
+**Why.** Cost discipline, inspectability, and the honesty constraint. Expensive
+generation on unqualified leads is a margin leak; fabricated craft breaks trust.
+**Consequences.** Keep expensive generation behind qualification. Label AI assistance
+honestly. Do not put an LLM on a hot, ungated path.
+
+### ADR-0006 — Backend-portable storage: SQLite for dev/tests, Postgres for production
+**Status:** Accepted (code ready; ops cutover pending) · Source: `web/db.py`,
+`docs/zero-downtime-cutover.md`
+**Decision.** One DB layer, two backends, selected by the connection string. A
+`postgresql://` URL routes through a psycopg shim that adapts placeholder style and
+row access so the ~100 query functions are untouched. SQLite remains the dev/test
+default.
+**Why.** Enables the zero-downtime deploy story (remove the single-attach disk) while
+keeping local dev and the test suite fast and credential-free.
+**Consequences.** Keep new SQL portable across both backends (the `count_*`/selector
+LIKE-marker pattern is portable; avoid backend-specific idioms like `json_extract` on
+shared paths). Verify dbperf changes on both backends before relying on
+backend-specific semantics (e.g. `rowcount`/`RETURNING`).
+
+### ADR-0007 — Migration-safe, additive schema
+**Status:** Accepted · Source: `web/db.py` (`_*_COLUMNS` dict + `ALTER TABLE` loop)
+**Decision.** Schema evolves by adding columns to the `_*_COLUMNS` map and the
+`ALTER TABLE` migration loop (fresh DBs get the full `CREATE TABLE`; existing DBs are
+migrated in place). No destructive migrations; old databases upgrade without data loss.
+**Why.** The production database holds real pipeline and payment records; migrations
+must be non-destructive and safe to run on every boot.
+**Consequences.** Add columns; don't drop or rewrite. Per-record editable state uses
+the JSON-blob pattern (`doc_overrides`, `delivery_json`) with merge-one-key helpers.
+
+### ADR-0008 — Fail-soft; hostile work runs in killable, out-of-process workers
+**Status:** Accepted · Source: `web/_enrich_worker.py`, `web/scheduler.py`
+**Decision.** Parsing hostile external pages (enrichment) runs in a separate,
+killable subprocess with a hard timeout and a watchdog. A runaway parse dies alone;
+the web server is never frozen. Any queue that re-selects the earliest unresolved item
+must mark a crashed/timed-out item terminal so it can't wedge the queue forever.
+**Why.** A pathological page can drive a C-level regex into a runaway that holds the
+interpreter lock and cannot be interrupted from a thread — in-process that is the
+"wheel of death." Out-of-process is the only real cure.
+**Consequences.** Any new hostile-input processing follows the killable-worker
+pattern. Queue selectors advance past terminal (error) items. (The auto-fetch/discovery
+path is a known remaining in-process parser — see PROJECT_STATE deferred items.)
+
+### ADR-0009 — Human-gated discovery crawler ("machine proposes where to look")
+**Status:** Accepted (2026-06-17, CEO override of the earlier no-scraping stance) ·
+Source: `docs/company-strategy.md`
+**Decision.** ChordOS may crawl for discovery (demand and supply) under strict
+governance: the system deterministically *proposes* targets; a human explicitly
+approves each; only approved targets are fetched; results land in a review queue as
+Pending. Public pages only, robots.txt respected, rate-limited, identified UA,
+fail-soft, PII delete path, behind an env flag.
+**Why.** Preserves the moat as *curation and qualification* (not volume) while
+allowing real discovery. Supersedes the blanket "no mass scraping" line for the gated
+crawler only; unsupervised mass scraping remains rejected.
+**Consequences.** No crawl auto-enters the pipeline or the matchable roster. The human
+gate is the whole point — do not automate past it.
+
+### ADR-0010 — Never block the event loop; offload outbound I/O
+**Status:** Accepted (2026-07-02) · Source: `web/app.py`, product-efficiency audit
+**Decision.** `async def` route handlers must not perform blocking network I/O
+(SMTP/push loops). Such work is offloaded (`run_in_threadpool`) or fired off the
+request thread (`signals.fire_and_forget`). uvicorn runs one event loop; a blocking
+send would stall every user, including health probes.
+**Why.** A single slow provider inside an async handler is a full-site outage window.
+**Consequences.** Best-effort notifications are fire-and-forget; blocking sends in
+async handlers are threadpooled. New outbound I/O follows this rule.
+
+### ADR-0011 — Token-gated public surfaces, separate from the admin gate
+**Status:** Accepted · Source: `web/app.py` (`_is_public_path`, `_REVIEW_ACTIONS`)
+**Decision.** Client and creator surfaces (first-touch, delivery portal, creator
+portal, review actions) are reached by an unguessable per-record token validated in
+the route, and are exempted from the internal admin login gate. The exemption list is
+derived from a single source so it cannot drift from the actual routes.
+**Why.** External users must reach their surfaces without an internal login, while the
+internal dashboard stays gated. A drift between the exemption and the routes silently
+bounces real clients to the admin login (this happened; ADR records the fix).
+**Consequences.** New client/creator routes token-validate in-route AND are added to
+the single exemption source. Never gate a token surface behind the admin login.
+
+### ADR-0012 — One source of truth for legally-/operationally-material copy
+**Status:** Accepted (2026-07-02) · Source: `delivery.py` (`CONTENT_ID_HONEST`, cert),
+product-efficiency audit
+**Decision.** Legal and rights copy shown to clients has exactly one home (a constant
+on the cert object / a module constant) and is referenced by both the browser-rendered
+document and the ZIP's self-contained document. The delivery ZIP builders remain
+stdlib-only (no Jinja) so the package builds without the web extra.
+**Why.** For a procurement-grade product, the paperwork the client downloads must not
+diverge from the document they reviewed. Duplication of legal copy is a real
+credibility/legal exposure.
+**Consequences.** Never re-hardcode a legal sentence in a template; reference the
+constant. Keep the stdlib-only constraint on the ZIP path.
+
+---
+
+## Adding a new ADR
+
+Copy the template. Keep it short — the decision, the why, and the consequences a
+future contributor must honor.
+
+```
+### ADR-NNNN — <short title>
+**Status:** Accepted (<date>, <authority if strategic>) · Source: <files/docs>
+**Decision.** <what was decided, in the imperative>
+**Why.** <the reasoning that must survive>
+**Consequences.** <what future contributors must do / not do>
+```
