@@ -17,6 +17,21 @@ studio end to end — demand side (find/qualify/estimate/prepare/outreach/win) a
 supply side (recruit/match/assign/produce/review/deliver). Deployed on Render;
 FastAPI + Jinja + SQLite; ~915 tests, must stay green before commit.
 
+## The three-OS model (the architectural pivot)
+
+ChordOS is resolving into three stacked systems:
+- **Intelligence OS** — ✅ built. Discover, understand, qualify, reason, CRM,
+  opportunity, proposal.
+- **Workflow OS** — 🔨 partial. Projects, tasks, production, delivery, status,
+  approvals, QA, rights.
+- **Creative OS** — ⏭️ next major module. The **Campaign Workspace** — one screen,
+  one campaign, everything (brief, direction, team, timeline, references, cues,
+  versions, stems, reviews, approvals, rights, delivery). This is the layer that
+  makes ChordOS impossible to copy. **Fully specified in
+  `docs/campaign-workspace-prd.md`** (PRD, not yet built). Governing law: every
+  feature must make ChordOS feel more like the OS for campaign music, never like
+  generic project management.
+
 ## The three mechanisms — current maturity
 
 | Mechanism | State | Notes |
@@ -52,9 +67,16 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
 
 ## In flight / next candidates
 
+- **Campaign Workspace (Creative OS)** — the next major module and the strategic pivot.
+  Fully specified in `docs/campaign-workspace-prd.md`. Elevates the `projects` record
+  into a music-campaign workspace (cues → versions → stems, structured creative
+  direction, music crew, creative timeline, AI employees that document/analyze but
+  never generate craft). Additive/migration-safe; ships behind
+  `CHORDENTIAL_CAMPAIGN_WORKSPACE`, dogfooded on one real campaign first. Awaiting the
+  open-question decisions in PRD §23 before build.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
-  the hero). This is the largest coherent next body of work.
+  the hero).
 - **Zero-downtime cutover** — run the SQLite→Postgres ops (code ready, see ADR-0006 /
   `docs/zero-downtime-cutover.md`).
 
