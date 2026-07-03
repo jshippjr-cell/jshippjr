@@ -11,11 +11,23 @@
       {{ strat_pill(sv.tier, sv.score) }}
       <span class="pill ghost">{{ row['confidence'] }} confidence</span>
     </div>
-    <h1 class="detail-title">{{ row['need'] }}</h1>
+    <h1 class="detail-title">{{ row['need'] }}
+      <a class="link tiny muted" href="#" onclick="document.getElementById('identity-edit').open=true;return false" title="Edit title / buyer">✎</a>
+    </h1>
     <div class="detail-buyer">
       <a href="/buyer/{{ row['client']|urlencode }}">{{ row['client'] }}</a>
       <span class="muted">· {{ row['buyer_type'].replace('_',' ')|title }}{% if row['location'] %} · {{ row['location'] }}{% endif %}</span>
     </div>
+    {# Editable identity — the automated title/buyer can be wrong; the human correction
+       is authoritative and re-evaluates the opportunity (ADR-0013). #}
+    <details id="identity-edit" class="identity-edit">
+      <summary class="muted small">✎ Correct the title or buyer</summary>
+      <form method="post" action="/opportunity/{{ row['id'] }}/identity" class="identity-form">
+        <label>Title <input type="text" name="need" value="{{ row['need'] }}"></label>
+        <label>Buyer <input type="text" name="client" value="{{ row['client'] }}"></label>
+        <button class="btn tiny primary" type="submit">Save</button>
+      </form>
+    </details>
   </div>
   <div class="detail-fit">
     <div class="big-num">{{ row['alignment']|pct }}</div>
@@ -74,6 +86,162 @@
     {% endif %}
   </div>
 </div>
+
+{# ── Campaign Intake — "Update Intelligence" (ADR-0013): born on and anchored to the
+   opportunity, above the Opportunity section + tabs. The living source of truth. ── #}
+{% if ci_view %}
+<style>
+.ci-panel .ci-head-note{margin:-4px 0 14px;color:var(--muted,#8a8580);font-size:13px}
+.ci-update{background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:12px;padding:14px;margin-bottom:16px}
+.ci-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:10px}
+.ci-stance{display:inline-flex;border:1px solid var(--line,#e7e1d8);border-radius:999px;overflow:hidden}
+.ci-stance label{padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted,#8a8580)}
+.ci-stance input{position:absolute;opacity:0;pointer-events:none}
+.ci-stance input:checked+span{color:#fff}
+.ci-stance label:has(input:checked){background:var(--accent,#c8552b)}
+.ci-update textarea{width:100%;min-height:84px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:10px;font:inherit;resize:vertical}
+.ci-update .ci-file{font-size:12px;color:var(--muted,#8a8580);margin-top:8px}
+.ci-update-actions{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap}
+.ci-section{margin-top:6px}
+.ci-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#8a8580);margin:16px 0 6px}
+.ci-field{display:grid;grid-template-columns:180px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line,#efe9e0)}
+.ci-field-label{font-weight:600;font-size:13px;padding-top:6px}
+.ci-field-label .k{display:block;color:var(--muted,#8a8580);font-weight:500;font-size:11px}
+.ci-field-body{min-width:0}
+.ci-inline{display:flex;gap:6px;align-items:flex-start}
+.ci-inline input,.ci-inline textarea{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:7px;padding:7px 9px;font:inherit;min-width:0}
+.ci-empty input{border-style:dashed;background:transparent}
+.ci-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.ci-chip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2,#f2ece3);color:var(--muted,#7a756e)}
+.ci-chip.src::before{content:"✓ "}
+.ci-kind{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:#eee}
+.ci-kind.insight{background:#e6f0fa;color:#2a5b86}
+.ci-kind.recommendation{background:#eaf5ea;color:#2f6a34}
+.ci-kind.open_question{background:#fdf1e3;color:#9a5a1a}
+.ci-kind.human{background:#efe7fb;color:#5b3a86}
+.ci-risk{color:#b23b2e;font-weight:700;font-size:11px}
+.ci-read li{list-style:none;padding:9px 0;border-top:1px solid var(--line,#efe9e0);display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.ci-conflict{background:#fdf3ec;border:1px solid #f0cdb5;border-radius:9px;padding:10px 12px;margin:8px 0}
+.ci-gap{background:#fbf6ef;border:1px dashed #e7d3ba;border-radius:9px;padding:9px 12px;margin:8px 0}
+.ci-gap form{display:flex;gap:6px;margin-top:6px}
+.ci-gap input{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:7px;padding:6px 9px}
+</style>
+<section class="card ci-panel" id="intelligence">
+  <div class="card-head"><h2>✦ Campaign Intelligence</h2></div>
+  <p class="ci-head-note">The living record for this engagement — dump discovery notes, a
+    transcript, an RFP, or your read here; every module downstream reads from it. Nothing is
+    auto-decided; every field is yours to edit or confirm.</p>
+
+  {% if capture_summary %}
+  <div class="callout">
+    {% if capture_summary.understood != '' and capture_summary.understood is not none %}
+      <span class="callout-ico">✓</span> Understood <b>{{ capture_summary.understood }}%</b> of what the proposal needs · added <b>{{ capture_summary.added }}</b> to the record{% if capture_summary.asked %} · <b>{{ capture_summary.asked }}</b> follow-up{{ 's' if capture_summary.asked != 1 }}{% endif %}.
+    {% else %}
+      <span class="callout-ico">🎙</span> Stored as evidence — transcription is deferred until a provider is configured, so nothing was extracted (no guesses).
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Update Intelligence — one panel, many modalities, two stances. #}
+  <form class="ci-update" method="post" enctype="multipart/form-data"
+        action="/opportunity/{{ row['id'] }}/intelligence/analyze">
+    <div class="ci-controls">
+      <div class="ci-stance">
+        <label><input type="radio" name="stance" value="objective" checked><span>What happened?</span></label>
+        <label><input type="radio" name="stance" value="debrief"><span>What's your read?</span></label>
+      </div>
+      <label class="muted small">Source
+        <select name="modality">
+          {% for m, lbl in intake_modalities.items() %}<option value="{{ m }}">{{ lbl }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <textarea name="text" placeholder="Paste discovery notes, a meeting transcript, an RFP, or an email thread — or type your read after the call…"></textarea>
+    <div class="ci-update-actions">
+      <span class="ci-file">Or attach a file (voice memo, .txt transcript, RFP) — <input type="file" name="file"></span>
+      <button class="btn primary" type="submit">✨ Analyze &amp; update</button>
+    </div>
+  </form>
+
+  {# Conflicts first — a machine value that disagrees with a human one, never silently applied. #}
+  {% for it in ci_view.conflicts %}
+  <div class="ci-conflict">
+    <div><b>{{ it.label or it.key.replace('_',' ')|title }}</b> — the machine proposes a different value:</div>
+    <div class="ci-meta"><span class="ci-chip">yours: {{ it.value }}</span><span class="ci-chip">proposed: {{ it.proposed_value }}</span></div>
+    <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/conflict" style="margin-top:8px;display:flex;gap:8px">
+      <input type="hidden" name="field_id" value="{{ it.id }}">
+      <button class="btn tiny" name="decision" value="keep">Keep yours</button>
+      <button class="btn tiny primary" name="decision" value="accept">Use proposed</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  {# The canonical, always-editable fields (filled or "not yet observed"). #}
+  {% for sec in ci_view.sections %}
+  <div class="ci-section">
+    <h3>{{ sec.label }}</h3>
+    {% for it in sec['items'] %}
+    <div class="ci-field{% if not it.id %} ci-empty{% endif %}">
+      <div class="ci-field-label">{{ it.label }}{% if it.human_value %} <span class="ci-kind human" title="You set this — authoritative">yours</span>{% endif %}</div>
+      <div class="ci-field-body">
+        <form class="ci-inline" method="post" action="/opportunity/{{ row['id'] }}/intelligence/field">
+          <input type="hidden" name="field_id" value="{{ it.id or '' }}">
+          <input type="hidden" name="facet" value="{{ it.facet }}">
+          <input type="hidden" name="key" value="{{ it.key }}">
+          <input type="hidden" name="kind" value="{{ it.kind }}">
+          <input type="text" name="value" value="{{ it.value }}" placeholder="{{ it.placeholder or 'not yet observed' }}">
+          <button class="btn tiny" type="submit">Save</button>
+        </form>
+        <div class="ci-meta">
+          {% for s in it.sources %}<span class="ci-chip src">{{ s.replace('_',' ') }}</span>{% endfor %}
+          {% if it.id and it.open %}
+          <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="display:inline;margin:0">
+            <input type="hidden" name="field_id" value="{{ it.id }}">
+            <button class="btn tiny primary" type="submit">{{ it.dispose_verb }}</button>
+          </form>
+          {% elif it.id %}<span class="ci-chip">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {# The Producer's read — interpretation, kept distinct from fact. #}
+  {% if ci_view.producer_read %}
+  <div class="ci-section">
+    <h3>The producer's read</h3>
+    <ul class="ci-read" style="margin:0;padding:0">
+      {% for it in ci_view.producer_read %}
+      <li>
+        <span class="ci-kind {{ it.kind }}">{{ it.kind_label }}</span>
+        {% if it.is_concern %}<span class="ci-risk">⚠ risk</span>{% endif %}
+        <span style="flex:1;min-width:160px">{{ it.value }}</span>
+        {% if it.open %}
+        <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="margin:0">
+          <input type="hidden" name="field_id" value="{{ it.id }}">
+          <button class="btn tiny" type="submit">{{ it.dispose_verb }}</button>
+        </form>
+        {% else %}<span class="ci-chip">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# Follow-up questions the pipeline raised for missing required facts. #}
+  {% for it in ci_view.gaps %}
+  <div class="ci-gap">
+    <b>?</b> {{ it.label }}
+    <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/answer">
+      <input type="hidden" name="field_id" value="{{ it.id }}">
+      <input type="text" name="answer" placeholder="Answer to record it as a fact…">
+      <button class="btn tiny primary" type="submit">Answer</button>
+    </form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 
 {{ opp_subnav(row, 'overview') }}
 

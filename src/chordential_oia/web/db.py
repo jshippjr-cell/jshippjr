@@ -1006,9 +1006,21 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             origin TEXT DEFAULT '', confidence INTEGER,
             is_concern INTEGER DEFAULT 0,  -- a risk the producer flagged
             contributed_by TEXT DEFAULT '', updated_at TEXT,
+            human_value INTEGER DEFAULT 0,  -- 1 = a human authored/confirmed this value; machine never clobbers it
+            proposed_value TEXT,            -- a machine value that DISAGREES with a human_value field (a conflict)
+            proposed_source TEXT,           -- who proposed the conflicting value
             UNIQUE(ci_id, facet, key, kind)  -- a fact + an insight can coexist on one key
         )"""
     )
+    # ADR-0013: human edits are authoritative; a disagreeing machine value lands as a
+    # surfaced conflict. Migrate increment-1 CI-field rows to carry the new columns.
+    cif_cols = {r["name"] for r in conn.execute(
+        "PRAGMA table_info(campaign_intelligence_field)")}
+    for name, decl in {"human_value": "INTEGER DEFAULT 0",
+                       "proposed_value": "TEXT", "proposed_source": "TEXT"}.items():
+        if name not in cif_cols:
+            conn.execute(
+                f"ALTER TABLE campaign_intelligence_field ADD COLUMN {name} {decl}")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS campaign_intelligence_event (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1128,6 +1140,42 @@ def update_strategic_inputs(
            WHERE id = ?""",
         (opp.buyer_value.value, int(opp.marquee), sv.score, sv.tier, opp_id),
     )
+    conn.commit()
+
+
+def apply_intelligence_to_opportunity(
+        conn: sqlite3.Connection, opp_id: int, *, need: Optional[str] = None,
+        client: Optional[str] = None, budget_min: Optional[float] = None,
+        budget_max: Optional[float] = None) -> None:
+    """Write confirmed Campaign Intelligence engagement facts back to the opportunity's
+    OWN columns and RE-EVALUATE (ADR-0013). Because qualification/estimate/brief/outreach
+    all read the opportunity, this is what makes them recompute from one source — no
+    separate 'refresh', no divergent copy. Only provided fields change."""
+    row = conn.execute("SELECT * FROM opportunities WHERE id = ?", (opp_id,)).fetchone()
+    if row is None:
+        return
+    opp = opportunity_from_row(row)
+    if need is not None and need.strip():
+        opp.need = need.strip()
+    if client is not None and client.strip():
+        opp.client = client.strip()
+    if budget_min is not None:
+        opp.budget_min = budget_min
+    if budget_max is not None:
+        opp.budget_max = budget_max
+    q, s = evaluate(opp)
+    sv = assess_strategic_value(opp)
+    conn.execute(
+        """UPDATE opportunities
+           SET need = ?, client = ?, budget_min = ?, budget_max = ?,
+               qualified = ?, discipline = ?, alignment = ?, action = ?, confidence = ?,
+               needs_review = ?, score = ?, tier = ?, win_probability = ?,
+               strategic_value = ?, strategic_tier = ?
+           WHERE id = ?""",
+        (opp.need, opp.client, opp.budget_min, opp.budget_max,
+         int(q.qualified), q.discipline.value, q.alignment_pct,
+         q.recommended_action.value, q.confidence.value, int(q.needs_human_review),
+         s.score, s.tier.value, s.win_probability.value, sv.score, sv.tier, opp_id))
     conn.commit()
 
 
@@ -3962,7 +4010,8 @@ def add_ci_event(conn: sqlite3.Connection, ci_id: int, *, actor: str, verb: str,
     conn.commit()
 
 
-def insert_capture(conn: sqlite3.Connection, *, ci_id: int, campaign_id: int,
+def insert_capture(conn: sqlite3.Connection, *, ci_id: int,
+                   campaign_id: Optional[int] = None,
                    stance: str, modality: str, raw_text: str, extraction,
                    created_by: str = "operator") -> int:
     """Store an immutable Capture (raw source + extraction). Never updated."""
@@ -3981,6 +4030,70 @@ def list_captures(conn: sqlite3.Connection, ci_id: int) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM captures WHERE ci_id = ? ORDER BY created_at DESC, id DESC",
         (ci_id,)).fetchall()
+
+
+# --- ADR-0013: CI anchored on the opportunity; adopted by the campaign at Won ------ #
+def ci_for_opportunity(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence WHERE opp_id = ? ORDER BY id LIMIT 1",
+        (opp_id,)).fetchone()
+
+
+def attach_ci_to_campaign(conn: sqlite3.Connection, ci_id: int, *, campaign_id: int,
+                          project_id: Optional[int] = None,
+                          agency_id: Optional[int] = None) -> None:
+    """Adopt an opportunity-born CI into a campaign IN PLACE — set the campaign/project
+    links on the same row (never a second CI). The anti-recreation contract (ADR-0013)."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """UPDATE campaign_intelligence
+           SET campaign_id = ?, project_id = COALESCE(?, project_id),
+               agency_id = COALESCE(?, agency_id), state = 'active', updated_at = ?
+           WHERE id = ?""",
+        (campaign_id, project_id, agency_id, now, ci_id))
+    conn.commit()
+
+
+def set_ci_field(conn: sqlite3.Connection, field_id: int, *, value: Optional[str] = None,
+                 status: Optional[str] = None, human_value: Optional[bool] = None,
+                 add_source: Optional[str] = None, is_concern: Optional[bool] = None,
+                 proposed_value: Optional[str] = None, proposed_source: Optional[str] = None,
+                 clear_proposed: bool = False) -> Optional[sqlite3.Row]:
+    """By-id field updater for the edit / conflict paths (upsert_ci_field is the by-key
+    contribute path). Only provided fields change; ``add_source`` merges into sources[];
+    ``clear_proposed`` wipes a resolved conflict. Bumps both updated_at stamps."""
+    row = conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE id = ?", (field_id,)).fetchone()
+    if row is None:
+        return None
+    now = datetime.now(timezone.utc).isoformat()
+    srcs = []
+    try:
+        srcs = json.loads(row["sources"]) or []
+    except (json.JSONDecodeError, TypeError):
+        srcs = []
+    if add_source and add_source not in srcs:
+        srcs.append(add_source)
+    conn.execute(
+        """UPDATE campaign_intelligence_field
+           SET value = ?, status = ?, human_value = ?, sources = ?, is_concern = ?,
+               proposed_value = ?, proposed_source = ?, updated_at = ?
+           WHERE id = ?""",
+        (row["value"] if value is None else value,
+         row["status"] if status is None else status,
+         row["human_value"] if human_value is None else (1 if human_value else 0),
+         json.dumps(srcs),
+         row["is_concern"] if is_concern is None else (1 if is_concern else 0),
+         None if clear_proposed else (proposed_value if proposed_value is not None
+                                      else row["proposed_value"]),
+         None if clear_proposed else (proposed_source if proposed_source is not None
+                                      else row["proposed_source"]),
+         now, field_id))
+    conn.execute("UPDATE campaign_intelligence SET updated_at = ? WHERE id = ?",
+                 (now, row["ci_id"]))
+    conn.commit()
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE id = ?", (field_id,)).fetchone()
 
 
 # --------------------------------------------------------------------------- #

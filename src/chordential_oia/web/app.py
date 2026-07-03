@@ -1753,18 +1753,32 @@ def _load(conn, opp_id: int):
 
 
 @app.get("/opportunity/{opp_id}", response_class=HTMLResponse)
-def opportunity_detail(request: Request, opp_id: int):
+def opportunity_detail(request: Request, opp_id: int, understood: str = "",
+                       added: str = "", asked: str = ""):
     conn = db.connect()
+    ci = ci_view = None
+    intake_modalities = None
     try:
         row, opp, ev = _load(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
         buyer_rows = db.buyer_opportunities(conn, row["client"])
         project = db.project_for_opp(conn, opp_id)
+        # Campaign Intake lives HERE now (ADR-0013): born on and anchored to the
+        # opportunity. Lazily create + seed its CI, then render the provenance view.
+        if campaigns.workspace_enabled():
+            ci = campaign_intelligence.ensure_for_opportunity(conn, row)
+            ci_view = campaign_intelligence.fields_view(conn, ci["id"])
+            intake_modalities = campaign_intake.MODALITY_LABEL
     finally:
         conn.close()
     qual, scored = ev
     sv = assess_strategic_value(opp)
+    capture_summary = None
+    if understood.isdigit():
+        capture_summary = {"understood": int(understood),
+                           "added": int(added) if added.isdigit() else 0,
+                           "asked": int(asked) if asked.isdigit() else 0}
     # Guided-not-gated stepper: the expected next stage along the working flow
     # (New → Reaching out → Proposal out → Won). Computed separately from the
     # action-bar's _NEXT_STATUS so adding Submitted→Won here doesn't change the
@@ -1776,7 +1790,165 @@ def opportunity_detail(request: Request, opp_id: int):
         project_id=(project["id"] if project else None),
         next_status=_NEXT_STATUS.get(row["status"]),
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
+        ci=ci, ci_view=ci_view, intake_modalities=intake_modalities,
+        capture_summary=capture_summary,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Campaign Intake on the Opportunity (ADR-0013) — Update Intelligence + edits.
+# --------------------------------------------------------------------------- #
+@app.post("/opportunity/{opp_id}/intelligence/analyze")
+async def opp_intelligence_analyze(
+        opp_id: int, stance: str = Form("objective"), modality: str = Form("notes"),
+        text: str = Form(""), file: Optional[UploadFile] = File(None)):
+    """Update Intelligence: read ONLY the newly submitted capture, merge it into this
+    opportunity's Campaign Intelligence (preserving provenance, never clobbering a human
+    edit — disagreements surface as conflicts), raise follow-up questions, and reflect
+    mappable facts back onto the opportunity. Multi-modal: text modalities read directly;
+    a voice memo is stored as evidence and marked awaiting transcription (honest seam)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    text = (text or "").strip()
+    modality = modality if modality in campaign_intake.MODALITIES else "notes"
+    upload_name = ""
+    if file is not None and (file.filename or "").strip():
+        ext = os.path.splitext(file.filename)[1].lower()
+        safe = f"intake_{opp_id}_{abs(hash(file.filename)) % 10**8}{ext}"
+        try:
+            data = await file.read()
+            with open(os.path.join(UPLOAD_DIR, safe), "wb") as fh:
+                fh.write(data)
+            upload_name = file.filename
+            # a text-like upload (transcript/rfp/email exported as .txt) can be read now
+            if not text and ext in (".txt", ".md", ".vtt", ".srt"):
+                text = data.decode("utf-8", "ignore").strip()
+        except (OSError, ValueError):
+            pass
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        if not text:
+            # No readable text (e.g. a voice memo with no transcription seam configured):
+            # store the raw evidence honestly — nothing is extracted or invented.
+            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+            db.insert_capture(
+                conn, ci_id=ci_row["id"], stance=stance, modality=modality,
+                raw_text=(f"[{campaign_intake.MODALITY_LABEL.get(modality, modality)}: "
+                          f"{upload_name or 'no text'} — awaiting transcription]"),
+                extraction=[], created_by="operator")
+            return RedirectResponse(
+                f"/opportunity/{opp_id}?understood=&added=0&asked=0#intelligence",
+                status_code=303)
+        summary = campaign_intake.ingest_opportunity(conn, row, stance, text,
+                                                     modality=modality)
+    finally:
+        conn.close()
+    q = summary["questions"]
+    return RedirectResponse(
+        f"/opportunity/{opp_id}?understood={summary['understanding_pct']}"
+        f"&added={summary['added']}&asked={len(q)}#intelligence", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/intelligence/field")
+def opp_intelligence_field(opp_id: int, value: str = Form(""), field_id: str = Form(""),
+                           facet: str = Form(""), key: str = Form(""),
+                           kind: str = Form("fact")):
+    """Human edit of a CI field — authoritative (ADR-0013). Edits an existing field by id,
+    or fills an empty canonical slot by (facet,key,kind). Then reflects to the opportunity."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    value = (value or "").strip()
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+        if not value:
+            pass
+        elif str(field_id).strip().isdigit():
+            campaign_intelligence.edit_field(conn, int(field_id), value, actor="operator")
+        elif facet and key:
+            campaign_intelligence.edit_or_create(conn, ci_row["id"], facet, key,
+                                                 kind or "fact", value, actor="operator")
+        campaign_intake.sync_ci_to_opportunity(conn, ci_row["id"], opp_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/intelligence/answer")
+def opp_intelligence_answer(opp_id: int, field_id: str = Form(...), answer: str = Form("")):
+    """Answer a follow-up open_question → a confirmed fact; reflect to the opportunity."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    answer = (answer or "").strip()
+    conn = db.connect()
+    try:
+        if answer and str(field_id).strip().isdigit():
+            fld = db.get_ci_field(conn, int(field_id))
+            if fld is not None:
+                campaign_intake.answer_gap(conn, fld, answer, created_by="operator")
+                campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/intelligence/dispose")
+def opp_intelligence_dispose(opp_id: int, field_id: str = Form(...)):
+    """The human disposition gate — confirm / acknowledge / accept / mark-answered."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        if str(field_id).strip().isdigit():
+            fld = db.get_ci_field(conn, int(field_id))
+            if fld is not None:
+                campaign_intelligence.dispose(conn, fld, actor="operator")
+                campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/intelligence/conflict")
+def opp_intelligence_conflict(opp_id: int, field_id: str = Form(...),
+                              decision: str = Form("keep")):
+    """Resolve a surfaced conflict: accept the machine's proposed value, or keep your own."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        if str(field_id).strip().isdigit():
+            fld = db.get_ci_field(conn, int(field_id))
+            if fld is not None:
+                campaign_intelligence.resolve_conflict(
+                    conn, int(field_id), accept=(decision == "accept"), actor="operator")
+                campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/identity")
+def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
+    """Edit the opportunity's title (need) and/or buyer name (client) — the human-corrected
+    values are authoritative and re-evaluate the opportunity (ADR-0013)."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        need, client = (need or "").strip(), (client or "").strip()
+        db.apply_intelligence_to_opportunity(
+            conn, opp_id, need=need or None, client=client or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
 
 
 @app.get("/opportunity/{opp_id}/qualification", response_class=HTMLResponse)

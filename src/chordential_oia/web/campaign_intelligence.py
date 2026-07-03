@@ -43,10 +43,52 @@ KIND_DISPOSE_VERB = {  # the button label for disposing an open field
 
 DISPOSED_STATUSES = set(KIND_DISPOSED_STATUS.values())
 
+FACET_LABEL = {
+    "engagement": "The engagement", "buyer": "The buyer",
+    "direction": "Creative direction", "commercial": "Commercial",
+    "relationship": "Relationship", "outcome": "Outcome",
+}
+
+# The canonical, always-editable fields the Opportunity page shows as labeled slots —
+# filled or "not yet observed," never guessed (ADR-0013 / intake-prd §18.4). Ordered for
+# display, grouped by facet. `opp` marks a fact whose confirmed value writes back to the
+# opportunity's own column so downstream engines recompute (§18.5). The dynamic epistemic
+# kinds (Producer Debrief / Risks / Recommendations / Open questions) are NOT fixed slots —
+# they render as lists of the debrief-contributed items.
+CANONICAL_FIELDS = [
+    ("engagement", "business_objective", "fact", "Business objective",
+     "What the brand is trying to achieve", None),
+    ("engagement", "budget_band", "fact", "Budget", "e.g. $18,000–$24,000", "budget"),
+    ("engagement", "deadline", "fact", "Timeline", "Air date / delivery deadline", None),
+    ("engagement", "deliverables", "fact", "Deliverables",
+     "Spot lengths, cutdowns, stems…", None),
+    ("buyer", "decision_makers", "fact", "Decision makers",
+     "Who signs off / final approver", None),
+    ("buyer", "brand_notes", "fact", "Brand notes", "How the brand shows up", None),
+    ("buyer", "agency_notes", "fact", "Agency notes", "How the agency works", None),
+    ("direction", "campaign_objective", "fact", "Campaign objective",
+     "What this piece of music is for", None),
+    ("direction", "emotional_arc", "fact", "Emotional arc",
+     "The feeling / journey the music carries", None),
+    ("direction", "reference_playlist", "fact", "Reference playlist",
+     "Tracks / artists cited as touchstones", None),
+]
+CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
+                    for f, k, kind, label, ph, opp in CANONICAL_FIELDS}
+CANONICAL_FACET_ORDER = ["engagement", "buyer", "direction"]
+
 
 def is_open(status: str) -> bool:
     """True when a field still awaits a human's disposition."""
     return status not in DISPOSED_STATUSES
+
+
+def has_conflict(field_row) -> bool:
+    """A machine value that disagrees with a human-owned value is parked as a conflict."""
+    try:
+        return bool(field_row["proposed_value"])
+    except (KeyError, IndexError):
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -63,11 +105,29 @@ def contribute(conn, ci_id: int, facet: str, key: str, value: str, *,
     owner writing its own facet, disposing directly). Merges the source; logs the event."""
     if facet not in FACETS or kind not in KINDS:
         raise ValueError(f"bad facet/kind: {facet}/{kind}")
+    # Never clobber a human-owned value (ADR-0013). If a human has authored/confirmed this
+    # exact field and the machine now proposes a DIFFERENT non-empty value, park it as a
+    # conflict (proposed_value) for the operator to resolve — the human value stands.
+    existing = conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE ci_id=? AND facet=? AND key=? AND kind=?",
+        (ci_id, facet, key, kind)).fetchone()
+    if (existing is not None and not confirmed and existing["human_value"]
+            and (value or "").strip()
+            and (value or "").strip() != (existing["value"] or "").strip()):
+        db.set_ci_field(conn, existing["id"], proposed_value=value,
+                        proposed_source=source)
+        db.add_ci_event(conn, ci_id, actor=(contributed_by or source), verb="proposed",
+                        facet=facet, key=key, kind=kind,
+                        from_value=(existing["value"] or "")[:200],
+                        to_value=value[:200], source=source)
+        return int(existing["id"])
     status = KIND_DISPOSED_STATUS[kind] if confirmed else KIND_OPEN_STATUS[kind]
     fid = db.upsert_ci_field(
         conn, ci_id, facet, key, kind, value=value, value_json=value_json,
         source=source, status=status, origin=source,
         confidence=confidence, is_concern=is_concern, contributed_by=contributed_by or source)
+    if confirmed:
+        db.set_ci_field(conn, fid, human_value=True)  # operator-confirmed → authoritative
     db.add_ci_event(conn, ci_id, actor=(contributed_by or source),
                     verb=("confirmed" if confirmed else "contributed"),
                     facet=facet, key=key, kind=kind, to_value=value[:200], source=source)
@@ -80,23 +140,72 @@ def dispose(conn, field_row, actor: str = "operator") -> None:
     Only a human calls this — the machine can only ever leave a field OPEN."""
     kind = field_row["kind"]
     new_status = KIND_DISPOSED_STATUS.get(kind, "confirmed")
-    db.set_ci_field_status(conn, field_row["id"], new_status)
+    db.set_ci_field(conn, field_row["id"], status=new_status, human_value=True,
+                    add_source=actor)
     db.add_ci_event(conn, field_row["ci_id"], actor=actor, verb=new_status,
                     facet=field_row["facet"], key=field_row["key"], kind=kind)
+
+
+def edit_field(conn, field_id: int, value: str, *, actor: str = "operator"):
+    """A HUMAN edit is authoritative (ADR-0013): it sets the value, marks the field
+    human-owned (the machine can never silently overwrite it afterward — later
+    disagreements park as conflicts), disposes it, appends the operator to provenance,
+    resolves any pending conflict, and logs the change. Returns the updated row."""
+    row = db.get_ci_field(conn, field_id)
+    if row is None:
+        return None
+    new_status = KIND_DISPOSED_STATUS.get(row["kind"], "confirmed")
+    updated = db.set_ci_field(conn, field_id, value=value.strip(), status=new_status,
+                              human_value=True, add_source=actor, clear_proposed=True)
+    db.add_ci_event(conn, row["ci_id"], actor=actor, verb="edited",
+                    facet=row["facet"], key=row["key"], kind=row["kind"],
+                    from_value=(row["value"] or "")[:200], to_value=value.strip()[:200],
+                    source=actor)
+    return updated
+
+
+def resolve_conflict(conn, field_id: int, accept: bool, *, actor: str = "operator"):
+    """Resolve a surfaced conflict: ``accept`` takes the machine's proposed value as the new
+    authoritative value; otherwise the human value stands. Either way the conflict clears
+    and the choice is logged (machine proposes, human disposes)."""
+    row = db.get_ci_field(conn, field_id)
+    if row is None or not row["proposed_value"]:
+        return row
+    if accept:
+        updated = db.set_ci_field(
+            conn, field_id, value=row["proposed_value"], human_value=True,
+            add_source=row["proposed_source"] or "machine", clear_proposed=True)
+        verb = "accepted_proposed"
+    else:
+        updated = db.set_ci_field(conn, field_id, clear_proposed=True)
+        verb = "kept_own"
+    db.add_ci_event(conn, row["ci_id"], actor=actor, verb=verb,
+                    facet=row["facet"], key=row["key"], kind=row["kind"],
+                    to_value=(row["proposed_value"] or "")[:200])
+    return updated
 
 
 # --------------------------------------------------------------------------- #
 # Lazy creation + seeding — a CI for every campaign, populated from upstream.
 # --------------------------------------------------------------------------- #
 def ensure_for_campaign(conn, campaign_row):
-    """Get (or lazily create + seed) the Campaign Intelligence for a campaign. Idempotent
-    (one CI per campaign). Seeds from the opportunity (engagement facts), the linked
-    agency (buyer snapshot — reachable via the Step-1 agency_id), and the increment-1
-    creative-direction cards (direction facts). Empty upstream → empty CI (honesty:
-    nothing is invented)."""
+    """Get the Campaign Intelligence for a campaign — ADOPTING the opportunity's existing CI
+    in place if there is one (ADR-0013: inherit, never recreate). Only when no upstream CI
+    exists (an engagement that reached production without any intake) is one lazily created
+    and seeded here. Idempotent."""
     existing = db.ci_for_campaign(conn, campaign_row["id"])
     if existing is not None:
         return existing
+    # Inherit: the opportunity already carries the CI — adopt it onto this campaign.
+    if campaign_row["opp_id"]:
+        opp_ci = db.ci_for_opportunity(conn, campaign_row["opp_id"])
+        if opp_ci is not None:
+            db.attach_ci_to_campaign(
+                conn, opp_ci["id"], campaign_id=campaign_row["id"],
+                project_id=campaign_row["project_id"], agency_id=campaign_row["agency_id"])
+            db.add_ci_event(conn, opp_ci["id"], actor="system", verb="inherited")
+            _seed_direction_cards(conn, opp_ci["id"], campaign_row)
+            return db.get_campaign_intelligence(conn, opp_ci["id"])
     ci_id = db.create_campaign_intelligence(
         conn, campaign_id=campaign_row["id"], opp_id=campaign_row["opp_id"],
         agency_id=campaign_row["agency_id"], project_id=campaign_row["project_id"],
@@ -107,8 +216,31 @@ def ensure_for_campaign(conn, campaign_row):
     return db.get_campaign_intelligence(conn, ci_id)
 
 
+def ensure_for_opportunity(conn, opp_row):
+    """Get (or lazily create + seed) the Campaign Intelligence anchored on an OPPORTUNITY
+    (ADR-0013). This is where CI is born — while qualifying/pursuing, before any campaign
+    exists. Seeds engagement facts from the opportunity's own fields and a buyer snapshot
+    from the linked/resolved agency. Empty upstream → empty CI (honesty: nothing invented).
+    Idempotent (one CI per opportunity)."""
+    existing = db.ci_for_opportunity(conn, opp_row["id"])
+    if existing is not None:
+        return existing
+    agency_id = db.resolve_opportunity_agency(conn, opp_row)
+    ci_id = db.create_campaign_intelligence(
+        conn, campaign_id=None, opp_id=opp_row["id"], agency_id=agency_id,
+        project_id=None, title=opp_row["need"], brand=opp_row["client"],
+        agency_client=opp_row["client"])
+    _seed_from_opportunity(conn, ci_id, opp_row, agency_id)
+    db.add_ci_event(conn, ci_id, actor="system", verb="seeded")
+    return db.get_campaign_intelligence(conn, ci_id)
+
+
 def get_for_campaign(conn, campaign_row):
     return db.ci_for_campaign(conn, campaign_row["id"])
+
+
+def get_for_opportunity(conn, opp_row):
+    return db.ci_for_opportunity(conn, opp_row["id"])
 
 
 def _txt(v) -> str:
@@ -122,42 +254,39 @@ def _txt(v) -> str:
     return str(v).strip()
 
 
-def _seed(conn, ci_id: int, campaign) -> None:
-    # ── engagement facts (from the opportunity / campaign) ──────────────────
-    if campaign["brand"]:
-        contribute(conn, ci_id, "engagement", "brand", campaign["brand"],
-                   source="opportunity", contributed_by="system")
-    bmin, bmax = campaign["budget_min"], campaign["budget_max"]
-    if bmin or bmax:
-        band = (f"${int(bmin):,}–${int(bmax):,}" if bmin and bmax and bmin != bmax
-                else f"${int(bmax or bmin):,}")
-        contribute(conn, ci_id, "engagement", "budget_band", band,
-                   source="opportunity", contributed_by="system")
-    if campaign["deadline"]:
-        contribute(conn, ci_id, "engagement", "deadline", campaign["deadline"],
-                   source="opportunity", contributed_by="system")
+def _budget_band(bmin, bmax) -> str:
+    if not (bmin or bmax):
+        return ""
+    return (f"${int(bmin):,}–${int(bmax):,}" if bmin and bmax and bmin != bmax
+            else f"${int(bmax or bmin):,}")
 
-    # ── buyer snapshot (from the linked Agency/Company Intelligence) ─────────
-    if campaign["agency_id"]:
-        intel = db.get_agency_intel(conn, campaign["agency_id"]) or {}
-        for key, ik in (("how_they_work", "executive_summary"),
-                        ("production_complexity", "production_complexity"),
-                        ("music_characteristics", "music_usage"),
-                        ("typical_clients", "typical_clients"),
-                        ("campaign_types", "campaign_types")):
-            val = _txt(intel.get(ik))
-            if val:
-                contribute(conn, ci_id, "buyer", key, val,
-                           source="agency_intelligence", contributed_by="system")
-        state = db.get_agency_enrichment(conn, campaign["agency_id"]) or {}
-        profile = (state.get("profile") or {})
-        if profile.get("portfolio"):
-            contribute(conn, ci_id, "buyer", "previous_campaigns",
-                       _txt(profile["portfolio"]), source="agency_intelligence",
-                       contributed_by="system", value_json=profile["portfolio"])
 
-    # ── direction facts (from the increment-1 creative-direction cards) ─────
-    # The STATED brief is a fact; a section the operator marked complete is disposed.
+def _seed_agency_buyer(conn, ci_id: int, agency_id) -> None:
+    """Snapshot the linked Agency/Company Intelligence into buyer facts (the moat thread)."""
+    if not agency_id:
+        return
+    intel = db.get_agency_intel(conn, agency_id) or {}
+    for key, ik in (("how_they_work", "executive_summary"),
+                    ("production_complexity", "production_complexity"),
+                    ("music_characteristics", "music_usage"),
+                    ("typical_clients", "typical_clients"),
+                    ("campaign_types", "campaign_types")):
+        val = _txt(intel.get(ik))
+        if val:
+            contribute(conn, ci_id, "buyer", key, val,
+                       source="agency_intelligence", contributed_by="system")
+    state = db.get_agency_enrichment(conn, agency_id) or {}
+    profile = (state.get("profile") or {})
+    if profile.get("portfolio"):
+        contribute(conn, ci_id, "buyer", "previous_campaigns",
+                   _txt(profile["portfolio"]), source="agency_intelligence",
+                   contributed_by="system", value_json=profile["portfolio"])
+
+
+def _seed_direction_cards(conn, ci_id: int, campaign) -> None:
+    """Fold the increment-1 creative-direction cards into CI direction facts (the STATED
+    brief is a fact; a section marked complete is disposed). Used when a campaign inherits
+    or is seeded — idempotent through the upsert."""
     for row in conn.execute(
             "SELECT * FROM campaign_direction WHERE campaign_id = ?", (campaign["id"],)):
         body = (row["body"] or "").strip()
@@ -167,44 +296,161 @@ def _seed(conn, ci_id: int, campaign) -> None:
                        confirmed=bool(row["complete"]))
 
 
+def _seed_from_opportunity(conn, ci_id: int, opp, agency_id) -> None:
+    """Seed CI from an opportunity's own fields (ADR-0013) — engagement facts + a buyer
+    snapshot + the known decision-maker. Everything sourced ``opportunity``/needs_review."""
+    if opp["client"]:
+        contribute(conn, ci_id, "buyer", "brand_notes", opp["client"],
+                   source="opportunity", contributed_by="system")
+    band = _budget_band(opp["budget_min"], opp["budget_max"])
+    if band:
+        contribute(conn, ci_id, "engagement", "budget_band", band,
+                   source="opportunity", contributed_by="system")
+    if opp["description"]:
+        contribute(conn, ci_id, "engagement", "business_objective",
+                   _txt(opp["description"])[:400], source="opportunity",
+                   contributed_by="system")
+    # a known contact → the decision-maker starting point
+    if opp["contact_name"]:
+        who = opp["contact_name"] + (f" ({opp['contact_role']})"
+                                     if opp["contact_role"] else "")
+        contribute(conn, ci_id, "buyer", "decision_makers", who,
+                   source="opportunity", contributed_by="system")
+    _seed_agency_buyer(conn, ci_id, agency_id)
+
+
+def _seed(conn, ci_id: int, campaign) -> None:
+    # ── engagement facts (from the opportunity / campaign) ──────────────────
+    if campaign["brand"]:
+        contribute(conn, ci_id, "engagement", "brand", campaign["brand"],
+                   source="opportunity", contributed_by="system")
+    band = _budget_band(campaign["budget_min"], campaign["budget_max"])
+    if band:
+        contribute(conn, ci_id, "engagement", "budget_band", band,
+                   source="opportunity", contributed_by="system")
+    if campaign["deadline"]:
+        contribute(conn, ci_id, "engagement", "deadline", campaign["deadline"],
+                   source="opportunity", contributed_by="system")
+    _seed_agency_buyer(conn, ci_id, campaign["agency_id"])
+    _seed_direction_cards(conn, ci_id, campaign)
+
+
 # --------------------------------------------------------------------------- #
-# Read view for the UI — grouped by facet, with kind/sources/status decorated.
+# Edit / create a field by (facet, key, kind) — the empty-slot path.
 # --------------------------------------------------------------------------- #
-def fields_view(conn, ci_id: int) -> dict:
-    """Fields grouped by facet, each decorated for the provenance card:
-    {facet: [{id, key, kind, kind_label, value, sources[], status, open, is_concern,
-    dispose_verb}]}."""
+def edit_or_create(conn, ci_id: int, facet: str, key: str, kind: str, value: str, *,
+                   actor: str = "operator"):
+    """A human types into a canonical slot: edit the existing field or create it, either way
+    as an authoritative human value (ADR-0013). Returns the row."""
+    row = conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE ci_id=? AND facet=? AND key=? AND kind=?",
+        (ci_id, facet, key, kind)).fetchone()
+    if row is not None:
+        return edit_field(conn, row["id"], value, actor=actor)
+    fid = contribute(conn, ci_id, facet, key, value.strip(), kind=kind, source=actor,
+                     contributed_by=actor, confirmed=True)
+    return db.get_ci_field(conn, fid)
+
+
+# --------------------------------------------------------------------------- #
+# Read view for the UI — decorated fields, canonical slots, producer read, conflicts.
+# --------------------------------------------------------------------------- #
+def _decorate(r) -> dict:
     import json as _json
+    try:
+        sources = _json.loads(r["sources"]) or []
+    except (_json.JSONDecodeError, TypeError):
+        sources = []
+    is_gap = r["kind"] == "open_question" and r["key"].startswith("ask_")
+    canon = CANONICAL_BY_KEY.get((r["facet"], r["key"], r["kind"]))
+    if is_gap:
+        label = r["value"]
+    elif canon:
+        label = canon[0]
+    elif r["kind"] == "fact":
+        label = r["key"].replace("_", " ").title()
+    else:
+        label = ""
+    return {
+        "id": r["id"], "facet": r["facet"], "key": r["key"], "kind": r["kind"],
+        "kind_label": KIND_LABEL.get(r["kind"], r["kind"]),
+        "label": label, "placeholder": (canon[1] if canon else ""),
+        "value": ("" if is_gap else (r["value"] or "")),
+        "sources": sources, "status": r["status"],
+        "open": is_open(r["status"]), "is_concern": bool(r["is_concern"]),
+        "is_gap": is_gap, "editable": (not is_gap),
+        "human_value": bool(_col(r, "human_value")),
+        "has_conflict": bool(_col(r, "proposed_value")),
+        "proposed_value": _col(r, "proposed_value") or "",
+        "proposed_source": _col(r, "proposed_source") or "",
+        "dispose_verb": KIND_DISPOSE_VERB.get(r["kind"], "Confirm"),
+    }
+
+
+def _col(r, name):
+    try:
+        return r[name]
+    except (KeyError, IndexError):
+        return None
+
+
+def fields_view(conn, ci_id: int) -> dict:
+    """The Campaign Intelligence view for the Opportunity page (and the workspace):
+      • ``sections`` — canonical facts as labeled, always-editable slots (filled or empty),
+        grouped by facet in display order, with any extra facts appended.
+      • ``producer_read`` — the debrief items (insight / recommendation / open_question)
+        that carry interpretation, each with its kind badge + disposition.
+      • ``conflicts`` — fields where the machine proposed a value that disagrees with a human
+        one (surface-and-resolve, never silent overwrite).
+      • ``gaps`` — the follow-up open_questions (the ask_* fields) for the inline answer UI.
+      • ``by_facet`` / ``counts`` / ``facets_present`` — kept for the workspace panel."""
+    rows = db.list_ci_fields(conn, ci_id)
+    items = [_decorate(r) for r in rows]
+    by_id = {it["key"] + "|" + it["facet"] + "|" + it["kind"]: it for it in items}
     grouped: dict = {f: [] for f in FACETS}
     counts = {"total": 0, "open": 0}
-    for r in db.list_ci_fields(conn, ci_id):
-        try:
-            sources = _json.loads(r["sources"]) or []
-        except (_json.JSONDecodeError, TypeError):
-            sources = []
-        is_gap = r["kind"] == "open_question" and r["key"].startswith("ask_")
-        # Facts get a labeled key (Budget Band); interpretive items (insight/rec/question
-        # from a debrief) carry their meaning in the kind badge + the value, so no slug
-        # label; a gap follow-up shows the question itself as its label.
-        if is_gap:
-            label = r["value"]
-        elif r["kind"] == "fact":
-            label = r["key"].replace("_", " ").title()
-        else:
-            label = ""
-        item = {
-            "id": r["id"], "key": r["key"], "kind": r["kind"],
-            "kind_label": KIND_LABEL.get(r["kind"], r["kind"]),
-            "label": label,
-            "value": ("" if is_gap else r["value"]),
-            "sources": sources, "status": r["status"],
-            "open": is_open(r["status"]), "is_concern": bool(r["is_concern"]),
-            "is_gap": is_gap,
-            "dispose_verb": KIND_DISPOSE_VERB.get(r["kind"], "Confirm"),
-        }
-        grouped.setdefault(r["facet"], []).append(item)
+    producer_read, conflicts, gaps = [], [], []
+    for it in items:
+        grouped.setdefault(it["facet"], []).append(it)
         counts["total"] += 1
-        if item["open"]:
+        if it["open"]:
             counts["open"] += 1
-    return {"by_facet": grouped, "counts": counts,
+        if it["has_conflict"]:
+            conflicts.append(it)
+        if it["is_gap"]:
+            gaps.append(it)
+        elif it["kind"] in ("insight", "recommendation", "open_question"):
+            producer_read.append(it)
+
+    # Canonical sections — every slot present (filled from a field, or an empty editable
+    # slot) so the operator can type into any of them; extra facts appended per facet.
+    sections = []
+    used = set()
+    for facet in CANONICAL_FACET_ORDER:
+        slots = []
+        for f, k, kind, label, ph, _opp in CANONICAL_FIELDS:
+            if f != facet:
+                continue
+            key = k + "|" + f + "|" + kind
+            if key in by_id:
+                slots.append(by_id[key]); used.add(id(by_id[key]))
+            else:
+                slots.append({"id": None, "facet": f, "key": k, "kind": kind,
+                              "kind_label": KIND_LABEL.get(kind, kind), "label": label,
+                              "placeholder": ph, "value": "", "sources": [],
+                              "status": "empty", "open": False, "is_concern": False,
+                              "is_gap": False, "editable": True, "human_value": False,
+                              "has_conflict": False, "proposed_value": "",
+                              "proposed_source": "", "dispose_verb": "Confirm"})
+        # extra facts on this facet that aren't canonical and aren't producer-read/gaps
+        for it in grouped.get(facet, []):
+            if it["kind"] == "fact" and CANONICAL_BY_KEY.get(
+                    (it["facet"], it["key"], it["kind"])) is None:
+                slots.append(it); used.add(id(it))
+        sections.append({"facet": facet, "label": FACET_LABEL.get(facet, facet.title()),
+                         "items": slots})
+
+    return {"sections": sections, "producer_read": producer_read,
+            "conflicts": conflicts, "gaps": gaps,
+            "by_facet": grouped, "counts": counts,
             "facets_present": [f for f in FACETS if grouped.get(f)]}
