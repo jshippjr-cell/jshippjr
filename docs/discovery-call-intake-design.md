@@ -431,19 +431,25 @@ changing the object.
 
 ---
 
-## 11. Open decisions for Jon (before build)
+## 11. Decisions (locked 2026-07-03, Jon)
 
-1. **First notetaker provider.** *Rec: Recall.ai* (one adapter → Zoom/Meet/Teams; matches the
-   extensible goal) with Zoom AI Companion as the zero-extra-vendor alternate for Zoom-hosted
-   calls. Alternative: start with Fireflies if you already pay for it.
-2. **Downstream timing.** *Rec: apply-on-confirm with a projected-impact preview* (qualification
-   etc. move when you confirm, not on raw extraction) — safer + honest. Alternative: auto-apply
-   high-confidence fields and let the user roll back.
-3. **Calendar ownership.** *Rec: Google Calendar first.* Do you want ChordOS to own the invite,
-   or only generate the Zoom link and let you invite from your own calendar (smaller first step)?
-4. **Consent copy.** Confirm the recording-consent language for the invite (legal/brand).
-5. **Retention.** How long do we keep raw transcripts/recordings, and do we redact PII at rest?
-   (Ties to the deferred durable-storage/S3 work.)
+1. **First notetaker provider → Recall.ai.** ✅ One adapter covers Zoom/Meet/Teams, so the
+   future Meet/Teams lanes are nearly free. Behind the null-by-default `NotetakerProvider` seam;
+   Zoom AI Companion / Fireflies remain first-class alternates.
+2. **Downstream timing → apply-on-confirm, with a projected-impact preview.** ✅ Auto-ingest
+   lands every field `needs_review`; qualification / buyer profile / proposal / brief move only
+   when the operator confirms. The review surface shows the projected deltas first. The machine
+   never moves the numbers on its own; a confirmed human edit is never clobbered.
+3. **Scheduling → ChordOS owns Zoom + the Google Calendar invite.** ✅ At schedule time ChordOS
+   creates the Zoom meeting *and* sends the calendar invite to the client + Jon (with the
+   consent notice). Fullest assistant feel; both the meeting and calendar seams are in scope.
+
+### Still to confirm (not blocking increments 1–3)
+4. **Consent copy.** The exact recording-consent language for the invite (legal/brand) — needed
+   before the calendar seam ships (increment 4).
+5. **Retention.** How long raw transcripts/recordings are kept, and whether PII is redacted at
+   rest — ties to the deferred durable-storage/S3 work; needed before the notetaker lane is
+   used on real calls (increment 5).
 
 ---
 
