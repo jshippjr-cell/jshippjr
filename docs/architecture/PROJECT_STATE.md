@@ -24,11 +24,13 @@ ChordOS is resolving into three stacked systems:
   opportunity, proposal.
 - **Workflow OS** — 🔨 partial. Projects, tasks, production, delivery, status,
   approvals, QA, rights.
-- **Creative OS** — ⏭️ next major module. The **Campaign Workspace** — one screen,
-  one campaign, everything (brief, direction, team, timeline, references, cues,
-  versions, stems, reviews, approvals, rights, delivery). This is the layer that
-  makes ChordOS impossible to copy. **Fully specified in
-  `docs/campaign-workspace-prd.md`** (PRD, not yet built). Governing law: every
+- **Creative OS** — 🔨 building; **increment 1 shipped and flag ON in prod**. The
+  **Campaign Workspace** — one screen, one campaign, everything (brief, direction,
+  team, timeline, references, cues, versions, stems, reviews, approvals, rights,
+  delivery). This is the layer that makes ChordOS impossible to copy. **Fully
+  specified in `docs/campaign-workspace-prd.md`.** Increment 1 (the campaign
+  container + structured creative direction + creative-timeline phases) is live
+  behind `CHORDENTIAL_CAMPAIGN_WORKSPACE=1` (dogfooding). Governing law: every
   feature must make ChordOS feel more like the OS for campaign music, never like
   generic project management.
 
@@ -67,13 +69,14 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
 
 ## In flight / next candidates
 
-- **Campaign Workspace (Creative OS)** — the next major module and the strategic pivot.
-  Fully specified in `docs/campaign-workspace-prd.md`. Elevates the `projects` record
-  into a music-campaign workspace (cues → versions → stems, structured creative
-  direction, music crew, creative timeline, AI employees that document/analyze but
-  never generate craft). Additive/migration-safe; ships behind
-  `CHORDENTIAL_CAMPAIGN_WORKSPACE`, dogfooded on one real campaign first. Awaiting the
-  open-question decisions in PRD §23 before build.
+- **Campaign Workspace (Creative OS)** — the strategic pivot, now building. Increment
+  1 shipped (campaign container + structured creative direction + creative timeline),
+  flag **ON in prod** (`CHORDENTIAL_CAMPAIGN_WORKSPACE=1`) for dogfooding. Next
+  increments (PRD data model): **2** cues + version elevation (move the version ladder
+  under cues; re-home timecoded review); **3** creative team board + first AI employees
+  (Feedback Analyst + Documentarian); **4** assets, structured references, unified
+  activity timeline. Each stays flagged, dogfood-first, and passes the anti-generic-PM
+  gate. Open questions in PRD §23 resolved to the recommended defaults.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).
