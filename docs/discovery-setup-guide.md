@@ -73,8 +73,14 @@ OAuth** app is the right type (no per-user login, runs unattended). Creating mee
 the recording.)*
 
 ### 2a. Create the Zoom app
-1. Go to **https://marketplace.zoom.us/** → sign in → **Develop** (top-right) → **Build App**.
-2. Choose **Server-to-Server OAuth** → name it `Chordential` → **Create**.
+1. Go to **https://developers.zoom.us/** (this is the developer portal — *not*
+   `marketplace.zoom.us`, which Zoom now uses only for browsing/installing published apps) →
+   **Sign In** with your Zoom account.
+2. Click **Build App** (a button on the developer dashboard, or under a **Develop** menu) →
+   choose **Server-to-Server OAuth** → name it `Chordential` → **Create**.
+   - *Don't see "Build App"?* Server-to-Server OAuth apps require the account **owner/admin**.
+     On a free single-user account you're the owner (fine); if it's blocked, enable app creation
+     in Zoom **Admin → Advanced → App Marketplace**.
 3. On **App Credentials**, copy **Account ID**, **Client ID**, **Client Secret**.
 4. **Information** tab: fill the required company/name/email fields (Zoom won't activate the app
    until these are filled).
