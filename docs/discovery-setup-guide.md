@@ -48,10 +48,21 @@ transcription (a 30-min call ≈ $0.33); free trial credits to start.
 ```
 CHORDENTIAL_NOTETAKER_PROVIDER = recall
 CHORDENTIAL_RECALL_API_KEY     = sk_...your key...
-CHORDENTIAL_RECALL_REGION      = us-east-1        # your region; default is us-east-1
+CHORDENTIAL_RECALL_REGION      = us-east-1        # MUST match your workspace's region
 ```
-> Only these two (`_PROVIDER` + `_API_KEY`) are required. **`_PROVIDER=recall` is the switch** —
-> without it the key does nothing.
+> **`_PROVIDER=recall` is the switch** — without it the key does nothing.
+>
+> ⚠️ **Region matters — get it exactly right.** Recall's regions are *completely separate
+> deployments*; a key is valid **only** on its own region's URL. Using the wrong region →
+> **HTTP 401 Unauthorized** ("Recall invite failed" in your logs), *not* a "wrong region" error.
+> Your workspace region is shown at the top-left of the Recall dashboard. The value maps to:
+>
+> | Dashboard region | `CHORDENTIAL_RECALL_REGION` |
+> |---|---|
+> | US East | `us-east-1` |
+> | US West | `us-west-2` |
+> | EU (Frankfurt) | `eu-central-1` |
+> | Asia Pacific (Tokyo) | `ap-northeast-1` |
 
 ### 1c. How ChordOS uses it (no webhook needed)
 ChordOS **polls** Recall: when you schedule a Zoom call, a bot is invited; a background loop
@@ -206,6 +217,7 @@ Phone calls: choose **Phone** — a meeting record + confirmation email, no bot,
 |---|---|
 | Panel shows **Notetaker: Not connected** | `CHORDENTIAL_NOTETAKER_PROVIDER=recall` not set (the key alone isn't enough), or the deploy didn't pick up env changes — redeploy. |
 | **No Join link** after scheduling Zoom | `CHORDENTIAL_MEETING_PROVIDER=zoom` missing, Zoom app not **Activated**, missing `meeting:write` scope, or wrong Account/Client/Secret. Re-check §2. |
+| Logs show **"Recall invite failed (HTTP Error 401: Unauthorized)"** | `CHORDENTIAL_RECALL_REGION` doesn't match your Recall workspace's region — the key is region-locked. Set it to your region (Tokyo = `ap-northeast-1`; see §1b). |
 | Bot never joins the call | Meeting started before the bot was invited (schedule a few min ahead), or the join URL wasn't created (see the row above). Recall dashboard → **Logs** shows the bot's status. |
 | **Transcript never completes** | The bot joined but transcription is off — confirm `meeting_captions` are available, or set `CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER` to a Recall transcription provider. Recall **Logs** shows the transcript status. |
 | Transcript ingests but facts look wrong/empty | The transcript shape differed from the parser's expectation — send the raw Recall transcript JSON; the fix is one edit in `meetings/recall.py` only. |
