@@ -1978,8 +1978,6 @@ def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
 # before it begins. Manual today (log the time + link); the Zoom + Recall auto-flow
 # lights up behind the same routes when the provider seams are configured.
 # --------------------------------------------------------------------------- #
-def _notetaker_provider() -> str:
-    return (os.environ.get("CHORDENTIAL_NOTETAKER_PROVIDER", "") or "").strip()
 
 
 @app.post("/opportunity/{opp_id}/discovery/schedule")

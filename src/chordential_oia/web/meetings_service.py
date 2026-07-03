@@ -88,14 +88,29 @@ def handle_capture_webhook(conn, provider_key: str, headers: Mapping, body: byte
     return {"ok": True}
 
 
-def process_ready_meetings(conn) -> int:
-    """Scheduler fallback: ingest any meeting left at transcript_ready (e.g. a provider that
-    signals then requires a fetch). No-ops with the null provider. Returns the count ingested."""
+def poll_and_ingest(conn) -> int:
+    """POLLING (the webhook-free path): for every meeting with an armed capture bot that hasn't
+    been ingested yet, ask the provider whether its transcript is ready and, if so, ingest it
+    through the Meeting → Campaign Intake boundary. Idempotent and fail-soft — a bot still
+    recording simply returns None and is retried next tick; a transient error never crashes the
+    loop. No-ops entirely with the null provider (no bots). Returns the count ingested."""
     cp = M.get_capture_provider()
     done = 0
-    for meeting in db.meetings_by_status(conn, M.TRANSCRIPT_READY):
-        transcript = cp.fetch_transcript(meeting["bot_id"] or "")
-        if transcript is not None:
-            campaign_intake.ingest_transcript(conn, meeting, transcript)
-            done += 1
+    seen = set()
+    for status in (M.BOT_INVITED, M.IN_PROGRESS, M.TRANSCRIPT_READY):
+        for meeting in db.meetings_by_status(conn, status):
+            if meeting["id"] in seen or not (meeting["bot_id"] or "").strip():
+                continue
+            seen.add(meeting["id"])
+            try:
+                transcript = cp.fetch_transcript(meeting["bot_id"])
+            except Exception:  # noqa: BLE001 — a provider hiccup is not our failure
+                continue
+            if transcript is not None:
+                campaign_intake.ingest_transcript(conn, meeting, transcript)
+                done += 1
     return done
+
+
+# Back-compat alias (the webhook path still refers to the fetch-later fallback by this name).
+process_ready_meetings = poll_and_ingest

@@ -449,8 +449,16 @@ not a silent side effect.
    scheduler ingest → review batch → notify. The hero flow closes here. **✅ Built: CaptureProvider
    seam (null + Recall), the `/webhooks/capture/{provider}` receiver (signature-verified,
    idempotent, offloaded), `campaign_intake.ingest_transcript(meeting, transcript)` as the
-   provider-agnostic boundary, and the gated scheduler fallback tick. Proven end-to-end with a
-   fake Recall webhook (no creds). Live Recall invite/fetch is credential-gated.**
+   provider-agnostic boundary, and the gated scheduler tick. Proven end-to-end with a fake Recall
+   webhook (no creds).**
+   **✅ LIVE Recall via POLLING (webhook-free)** — `recall.py` implements the real API:
+   `invite` (POST /bot with transcription on) + `fetch_transcript` (GET /bot status → GET
+   /bot/{id}/transcript, normalized defensively across Recall's shape variants), region base URL
+   `https://{region}.recall.ai/api/v1` (default `us-east-1`). The scheduler tick polls every
+   armed bot and ingests finished transcripts — so the ONLY setup is `CHORDENTIAL_NOTETAKER_
+   PROVIDER=recall` + `CHORDENTIAL_RECALL_API_KEY`; no webhook required. Verified with unit tests
+   for normalization + polling (fake provider); the live bot-create/transcript field shapes are
+   confirmed against a first real call (isolated to `recall.py`).
 6. **Provider breadth** — Zoom AI Companion / Fireflies adapters; then Google Meet / Teams
    (mostly free once the notetaker seam is Recall).
 7. **Evidence-rich provenance** — speaker/timestamp citations on every field; jump-to-quote.

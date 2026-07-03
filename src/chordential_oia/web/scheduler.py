@@ -1042,12 +1042,13 @@ def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
 
 
 def _ingest_ready_meetings() -> None:
-    """Blocking helper (run off-loop): ingest transcript_ready meetings via the Meeting
-    domain. Lazy imports avoid any import cycle with the web layer."""
+    """Blocking helper (run off-loop): POLL every armed capture bot and ingest any finished
+    transcript via the Meeting domain (the webhook-free path). Lazy imports avoid any import
+    cycle with the web layer."""
     from . import meetings_service
     conn = db.connect()
     try:
-        meetings_service.process_ready_meetings(conn)
+        meetings_service.poll_and_ingest(conn)
     finally:
         conn.close()
 

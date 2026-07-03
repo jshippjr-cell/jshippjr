@@ -137,6 +137,59 @@ def test_capture_webhook_drives_meeting_to_ci_end_to_end(tmp_path, monkeypatch):
         assert r2.json().get("duplicate") is True
 
 
+class _FakeCapture:
+    """A capture provider whose transcript readiness we control — stands in for live Recall."""
+    name = "recall"
+
+    def __init__(self, transcript):
+        self._t = transcript
+        self.calls = 0
+
+    def fetch_transcript(self, external_ref):
+        self.calls += 1
+        return self._t
+
+
+def _poll_setup(tmp_path):
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "poll.db")); dbm.init_db(conn)
+    opp_id = dbm.insert_opportunity(conn, Opportunity(
+        client="Halcyon Creative", need="Holiday anthem", description="Campaign.",
+        buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL,
+        budget_min=0, budget_max=0))
+    mid = dbm.create_meeting(conn, opp_id=opp_id, notetaker_provider="recall",
+                             status="bot_invited")
+    dbm.update_meeting(conn, mid, bot_id="bot-1")
+    return dbm, conn, opp_id, mid
+
+
+def test_polling_ingests_a_finished_bot(tmp_path, monkeypatch):
+    from chordential_oia.web import meetings_service
+    from chordential_oia import meetings as MM
+    dbm, conn, opp_id, mid = _poll_setup(tmp_path)
+    transcript = MM.Transcript(
+        text="Budget is $18,000 to $24,000. Need it by November. :60 anthem plus stems.",
+        speakers=["Sarah"], provider="recall", external_ref="bot-1")
+    monkeypatch.setattr(MM, "get_capture_provider", lambda: _FakeCapture(transcript))
+    # the scheduler's poll finds the armed bot, pulls its transcript, ingests via the Meeting
+    assert meetings_service.poll_and_ingest(conn) == 1
+    assert dbm.get_meeting(conn, mid)["status"] == "ingested"
+    ci_row = dbm.ci_for_opportunity(conn, opp_id)
+    keys = {(f["facet"], f["key"]) for f in dbm.list_ci_fields(conn, ci_row["id"])}
+    assert ("engagement", "budget_band") in keys
+    # polling again does not double-ingest (the meeting left the polled statuses)
+    assert meetings_service.poll_and_ingest(conn) == 0
+
+
+def test_polling_leaves_a_still_recording_bot_alone(tmp_path, monkeypatch):
+    from chordential_oia.web import meetings_service
+    from chordential_oia import meetings as MM
+    dbm, conn, opp_id, mid = _poll_setup(tmp_path)
+    monkeypatch.setattr(MM, "get_capture_provider", lambda: _FakeCapture(None))  # not ready
+    assert meetings_service.poll_and_ingest(conn) == 0
+    assert dbm.get_meeting(conn, mid)["status"] == "bot_invited"   # retried next tick, untouched
+
+
 def test_capture_webhook_is_public_but_unmatched_bot_is_ignored(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     with TestClient(app_mod.app) as c:
