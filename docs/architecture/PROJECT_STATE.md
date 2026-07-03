@@ -71,12 +71,16 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
 
 - **Campaign Workspace (Creative OS)** — the strategic pivot, now building. Increment
   1 shipped (campaign container + structured creative direction + creative timeline),
-  flag **ON in prod** (`CHORDENTIAL_CAMPAIGN_WORKSPACE=1`) for dogfooding. Next
-  increments (PRD data model): **2** cues + version elevation (move the version ladder
-  under cues; re-home timecoded review); **3** creative team board + first AI employees
-  (Feedback Analyst + Documentarian); **4** assets, structured references, unified
-  activity timeline. Each stays flagged, dogfood-first, and passes the anti-generic-PM
-  gate. Open questions in PRD §23 resolved to the recommended defaults.
+  flag **ON in prod** (`CHORDENTIAL_CAMPAIGN_WORKSPACE=1`) for dogfooding.
+  ⚠️ **Architectural prerequisite before deepening the UI:** the workspace currently
+  *recreates* creative direction instead of *inheriting* it — the data lineage from the
+  discovery call is broken (see `docs/architecture/DISCOVERY_INTELLIGENCE_LINEAGE.md`).
+  Fix the spine first: (1) add an `agency_id` link so Agency/Company Intelligence is
+  reachable; (2) name the Discovery Intelligence parent object the proposal/project/
+  campaign all read+enrich; (3) capture the discovery call; (4) inherit at campaign
+  creation with per-field provenance (`{value, sources[], status}`); then (5) the PRD's
+  cues/team/AI-employee increments on top. Each stays flagged, dogfood-first, and passes
+  the anti-generic-PM gate.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).
