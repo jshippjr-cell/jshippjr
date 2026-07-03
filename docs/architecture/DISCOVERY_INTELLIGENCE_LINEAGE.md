@@ -1,5 +1,12 @@
 # Discovery Intelligence — the Lineage Trace
 
+> **Naming update (2026-07-02):** the parent object this trace calls for is now named
+> **Campaign Intelligence** and is fully designed in
+> [`CAMPAIGN_INTELLIGENCE.md`](./CAMPAIGN_INTELLIGENCE.md) (schema, lifecycle, ownership,
+> provenance). This document remains the *trace of the breaks*; that document is the
+> *design of the fix*. "Discovery" now refers to the **call** (the birth event), not the
+> object.
+
 *An architectural trace of how information should flow from a discovery call to a
 Campaign Workspace, and where — today — the chain is broken. No code was changed to
 produce this; it is a map of the current reality against the intended architecture.*
@@ -138,10 +145,11 @@ not a linked intelligence entity.**
 
 ## 4. The breaks, in priority order
 
-1. **No Discovery Intelligence object (the parent doesn't exist).** There is no single
-   record that unifies the demand facts, the buyer intelligence, and the call. Each
-   downstream module re-derives or re-enters what it needs. *This is the root break; the
-   others are its symptoms.*
+1. **No parent intelligence object (it doesn't exist).** There is no single record that
+   unifies the demand facts, the buyer intelligence, and the call. Each downstream module
+   re-derives or re-enters what it needs. *This is the root break; the others are its
+   symptoms.* → **DESIGNED (2026-07-02):** the parent is **Campaign Intelligence**, spec'd
+   in `CAMPAIGN_INTELLIGENCE.md` (schema/lifecycle/ownership/provenance); not yet built.
 2. ~~**No agency link (`opp.client` is a name, not an `agency_id`).**~~ **✅ CLOSED
    (Step 1, 2026-07-02).** `agency_id` now threads Opportunity → Project → Campaign
    (additive columns + carry-through + a name-match source), so a campaign can *reach*

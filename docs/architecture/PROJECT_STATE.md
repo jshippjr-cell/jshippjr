@@ -72,15 +72,17 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
 - **Campaign Workspace (Creative OS)** — the strategic pivot, now building. Increment
   1 shipped (campaign container + structured creative direction + creative timeline),
   flag **ON in prod** (`CHORDENTIAL_CAMPAIGN_WORKSPACE=1`) for dogfooding.
-  ⚠️ **Architectural prerequisite before deepening the UI:** the workspace currently
-  *recreates* creative direction instead of *inheriting* it — the data lineage from the
-  discovery call is broken (see `docs/architecture/DISCOVERY_INTELLIGENCE_LINEAGE.md`).
-  Fix the spine first: (1) add an `agency_id` link so Agency/Company Intelligence is
-  reachable; (2) name the Discovery Intelligence parent object the proposal/project/
-  campaign all read+enrich; (3) capture the discovery call; (4) inherit at campaign
-  creation with per-field provenance (`{value, sources[], status}`); then (5) the PRD's
-  cues/team/AI-employee increments on top. Each stays flagged, dogfood-first, and passes
-  the anti-generic-PM gate.
+  ⚠️ **Architectural spine (in progress):** the workspace must *inherit* creative
+  direction, not *recreate* it (lineage: `DISCOVERY_INTELLIGENCE_LINEAGE.md`). Progress:
+  **✅ Step 1 done** — `agency_id` threads Opportunity→Project→Campaign so Agency/Company
+  Intelligence is reachable. **✅ Parent object designed** — **Campaign Intelligence**
+  (`CAMPAIGN_INTELLIGENCE.md`): the canonical per-engagement record with a per-field
+  provenance model (`{value, sources[], status}`), born at the discovery call, inherited
+  and contributed-back by every module. **Next (awaiting Jon's §9 decisions):** build CI
+  tables + lazy backfill → point the workspace's direction cards at CI with the provenance
+  card → discovery-call capture → proposal/production/delivery read+write CI → flywheel to
+  Agency Intelligence. Then the PRD's cues/team/AI-employee increments on top. Each stays
+  flagged, dogfood-first, and passes the anti-generic-PM gate.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).
