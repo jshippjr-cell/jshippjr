@@ -188,6 +188,26 @@ defaults:
 
 ---
 
+## 4bis. AI extraction — make Campaign Intelligence actually *understand* the call (recommended)
+
+Without this, ChordOS extracts facts with a **deterministic keyword matcher** — it catches
+`$20,000` and "November" but *not* natural speech like "about twenty grand" or "by the fall". To
+have it read a discovery call like a smart analyst (budget from "twenty grand", inferred
+emotional direction, risks, recommendations, follow-up questions), turn on the LLM extractor:
+```
+ANTHROPIC_API_KEY = sk-ant-...            # from console.anthropic.com → API Keys
+```
+That's it — the extractor switches on automatically when the key is present (the `anthropic`
+package is already in the build). Optional tuning:
+```
+CHORDENTIAL_INTAKE_MODEL = claude-sonnet-5   # default; use claude-haiku-4-5-20251001 for lower cost
+CHORDENTIAL_INTAKE_LLM   = 0                  # set to 0 to force the deterministic pass off
+```
+It stays **honest + human-gated**: the LLM only *proposes* fields (they land `needs_review`),
+facts vs. insights vs. recommendations stay distinct, a debrief never becomes objective fact,
+and if the model errors it silently falls back to the deterministic pass. Cost is a few cents per
+call. Get a key at **console.anthropic.com → API Keys**.
+
 ## 5. Test your first real discovery call
 
 1. **Deploy** with the env vars set (Render redeploys on save).

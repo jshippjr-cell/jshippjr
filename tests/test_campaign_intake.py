@@ -60,6 +60,48 @@ def test_llm_seam_is_used_when_present_else_heuristic():
                           llm=lambda t, s: None)[0]["key"] == "budget_band"
 
 
+def test_llm_extractor_is_the_default_seam_and_falls_back(monkeypatch):
+    # With no llm arg, extract() uses the built-in _default_llm seam — the LLM extractor.
+    def fake_default(text, stance):
+        return [{"facet": "engagement", "key": "budget_band", "kind": "fact",
+                 "value": "$20,000", "confidence": 90}]
+    monkeypatch.setattr(intake, "_default_llm", fake_default)
+    # "about twenty grand" — the deterministic regex can't catch this; the LLM does.
+    got = intake.extract("Our budget is about twenty grand.", intake.OBJECTIVE)
+    assert got[0]["value"] == "$20,000" and got[0]["confidence"] == 90
+    # when the seam returns None (no key / disabled), it falls back to deterministic
+    monkeypatch.setattr(intake, "_default_llm", lambda t, s: None)
+    assert intake.extract("Budget is $9,000.", intake.OBJECTIVE)[0]["key"] == "budget_band"
+
+
+def test_llm_default_seam_off_without_a_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert intake._default_llm("Budget is about twenty grand.", intake.OBJECTIVE) is None
+
+
+def test_llm_coerce_validates_normalizes_and_guards_debrief():
+    raw = [
+        {"facet": "engagement", "key": "budget_band", "kind": "fact", "value": "$20,000",
+         "confidence": 90},
+        {"facet": "direction", "key": "Emotional Arc!", "kind": "insight",
+         "value": "nostalgic, warm", "confidence": "high"},          # key normalized, conf→None
+        {"facet": "engagement", "kind": "open_question", "value": "unclear who signs off",
+         "is_concern": True},                                        # key derived from value
+        {"facet": "bogus", "kind": "fact", "value": "x"},            # dropped: bad facet
+        {"facet": "engagement", "kind": "nope", "value": "y"},       # dropped: bad kind
+        {"facet": "engagement", "kind": "fact", "value": ""},        # dropped: empty
+    ]
+    obj = intake._coerce_candidates(raw, intake.OBJECTIVE)
+    by = {c["key"]: c for c in obj}
+    assert len(obj) == 3
+    assert by["budget_band"]["confidence"] == 90
+    assert by["emotional_arc"]["kind"] == "insight" and by["emotional_arc"]["confidence"] is None
+    assert by["unclear_who_signs_off"]["is_concern"] is True
+    # a debrief must never yield an objective fact — the fact is dropped, interpretation kept
+    deb = intake._coerce_candidates(raw, intake.DEBRIEF)
+    assert "fact" not in {c["kind"] for c in deb} and deb
+
+
 # --------------------------------------------------------------------------- #
 # Ingest + gap-fill — writes to Campaign Intelligence, raises material gaps.
 # --------------------------------------------------------------------------- #
