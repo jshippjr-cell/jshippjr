@@ -1009,15 +1009,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             human_value INTEGER DEFAULT 0,  -- 1 = a human authored/confirmed this value; machine never clobbers it
             proposed_value TEXT,            -- a machine value that DISAGREES with a human_value field (a conflict)
             proposed_source TEXT,           -- who proposed the conflicting value
+            capture_id INTEGER,             -- the Capture (raw evidence) that last proposed/changed this value
             UNIQUE(ci_id, facet, key, kind)  -- a fact + an insight can coexist on one key
         )"""
     )
     # ADR-0013: human edits are authoritative; a disagreeing machine value lands as a
-    # surfaced conflict. Migrate increment-1 CI-field rows to carry the new columns.
+    # surfaced conflict. ADR-0014: every field carries the Capture (raw evidence) it came
+    # from. Migrate existing CI-field rows to carry the new columns.
     cif_cols = {r["name"] for r in conn.execute(
         "PRAGMA table_info(campaign_intelligence_field)")}
     for name, decl in {"human_value": "INTEGER DEFAULT 0",
-                       "proposed_value": "TEXT", "proposed_source": "TEXT"}.items():
+                       "proposed_value": "TEXT", "proposed_source": "TEXT",
+                       "capture_id": "INTEGER"}.items():
         if name not in cif_cols:
             conn.execute(
                 f"ALTER TABLE campaign_intelligence_field ADD COLUMN {name} {decl}")
@@ -1026,24 +1029,44 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ci_id INTEGER NOT NULL,
             actor TEXT, verb TEXT, facet TEXT, key TEXT, kind TEXT,
-            from_value TEXT, to_value TEXT, source TEXT, created_at TEXT
+            from_value TEXT, to_value TEXT, source TEXT, created_at TEXT,
+            capture_id INTEGER              -- the raw-evidence Capture behind this event (ADR-0014)
         )"""
     )
-    # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the
-    # raw source + what the pipeline extracted from it. Captures feed Campaign
-    # Intelligence (the synthesis); the raw evidence is never mutated. See
-    # docs/campaign-intake-prd.md.
+    evt_cols = {r["name"] for r in conn.execute(
+        "PRAGMA table_info(campaign_intelligence_event)")}
+    if "capture_id" not in evt_cols:
+        conn.execute("ALTER TABLE campaign_intelligence_event ADD COLUMN capture_id INTEGER")
+    # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
+    # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
+    # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
+    # fields cite the capture they came from — raw evidence is permanent (ADR-0014). Captures
+    # feed Campaign Intelligence (the synthesis); the raw evidence is never mutated.
     conn.execute(
         """CREATE TABLE IF NOT EXISTS captures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ci_id INTEGER, campaign_id INTEGER,
+            ci_id INTEGER, campaign_id INTEGER, opp_id INTEGER,
+            lane TEXT,                -- the intake lane (registry key): meeting_notes|discovery_call|…
             stance TEXT,      -- objective | debrief
-            modality TEXT,    -- notes | voice | rfp | email
+            modality TEXT,    -- notes | transcript | voice | rfp | email | document
+            provenance_source TEXT,   -- the source token stamped on every field it contributes
             raw_text TEXT,
+            artifact_ref TEXT,        -- pointer to the stored source file / recording (evidence)
+            external_ref TEXT,        -- provider id (Zoom meeting id, Recall bot id, …)
+            metadata_json TEXT,       -- speakers[], timestamps, duration, participants, …
             extraction_json TEXT,   -- the candidates extracted (the evidence trail)
+            status TEXT DEFAULT 'ready',  -- received|transcribing|ready|ingested|failed
             created_by TEXT, created_at TEXT
         )"""
     )
+    # ADR-0014: the Capture envelope — migrate existing captures rows to the lane fields.
+    cap_cols = {r["name"] for r in conn.execute("PRAGMA table_info(captures)")}
+    for name, decl in {"opp_id": "INTEGER", "lane": "TEXT",
+                       "provenance_source": "TEXT", "artifact_ref": "TEXT",
+                       "external_ref": "TEXT", "metadata_json": "TEXT",
+                       "status": "TEXT DEFAULT 'ready'"}.items():
+        if name not in cap_cols:
+            conn.execute(f"ALTER TABLE captures ADD COLUMN {name} {decl}")
     # Structured creative direction — the composer's brief as checklist-able sections
     # (emotional arc, reference playlist, agency/producer notes, brand history,
     # previous campaigns). One row per (campaign, section).
@@ -3946,11 +3969,12 @@ def upsert_ci_field(conn: sqlite3.Connection, ci_id: int, facet: str, key: str,
                     kind: str, *, value: str = "", value_json=None, source: str = "",
                     status: Optional[str] = None, origin: str = "",
                     confidence: Optional[int] = None, is_concern: bool = False,
-                    contributed_by: str = "") -> int:
+                    contributed_by: str = "", capture_id: Optional[int] = None) -> int:
     """Upsert one canonical fact on (ci_id, facet, key, kind). Merges the new
-    ``source`` into the field's provenance list; sets status/value when provided.
-    The domain layer (campaign_intelligence.py) decides status per kind and logs the
-    event — this is the storage primitive. Returns the field id."""
+    ``source`` into the field's provenance list; sets status/value when provided; stamps the
+    originating ``capture_id`` (raw evidence, ADR-0014). The domain layer
+    (campaign_intelligence.py) decides status per kind and logs the event — this is the
+    storage primitive. Returns the field id."""
     now = datetime.now(timezone.utc).isoformat()
     row = conn.execute(
         "SELECT * FROM campaign_intelligence_field WHERE ci_id=? AND facet=? AND key=? AND kind=?",
@@ -3969,22 +3993,23 @@ def upsert_ci_field(conn: sqlite3.Connection, ci_id: int, facet: str, key: str,
         cur = conn.execute(
             """INSERT INTO campaign_intelligence_field
                (ci_id, facet, key, kind, value, value_json, sources, status, origin,
-                confidence, is_concern, contributed_by, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                confidence, is_concern, contributed_by, capture_id, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ci_id, facet, key, kind, value, vj, json.dumps(srcs),
              status or "needs_review", origin, confidence,
-             1 if is_concern else 0, contributed_by, now))
+             1 if is_concern else 0, contributed_by, capture_id, now))
         fid = int(cur.lastrowid)
     else:
         conn.execute(
             """UPDATE campaign_intelligence_field
                SET value=?, value_json=?, sources=?, status=?, origin=?, confidence=?,
-                   is_concern=?, contributed_by=?, updated_at=? WHERE id=?""",
+                   is_concern=?, contributed_by=?, capture_id=?, updated_at=? WHERE id=?""",
             (value if value else row["value"], vj, json.dumps(srcs),
              status or row["status"], origin or row["origin"],
              confidence if confidence is not None else row["confidence"],
              1 if is_concern else (row["is_concern"] or 0),
-             contributed_by or row["contributed_by"], now, row["id"]))
+             contributed_by or row["contributed_by"],
+             capture_id if capture_id is not None else row["capture_id"], now, row["id"]))
         fid = int(row["id"])
     conn.execute("UPDATE campaign_intelligence SET updated_at=? WHERE id=?", (now, ci_id))
     conn.commit()
@@ -4000,36 +4025,58 @@ def set_ci_field_status(conn: sqlite3.Connection, field_id: int, status: str) ->
 
 def add_ci_event(conn: sqlite3.Connection, ci_id: int, *, actor: str, verb: str,
                  facet: str = "", key: str = "", kind: str = "",
-                 from_value: str = "", to_value: str = "", source: str = "") -> None:
+                 from_value: str = "", to_value: str = "", source: str = "",
+                 capture_id: Optional[int] = None) -> None:
     conn.execute(
         """INSERT INTO campaign_intelligence_event
-           (ci_id, actor, verb, facet, key, kind, from_value, to_value, source, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+           (ci_id, actor, verb, facet, key, kind, from_value, to_value, source,
+            capture_id, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (ci_id, actor, verb, facet, key, kind, from_value, to_value, source,
-         datetime.now(timezone.utc).isoformat()))
+         capture_id, datetime.now(timezone.utc).isoformat()))
     conn.commit()
 
 
 def insert_capture(conn: sqlite3.Connection, *, ci_id: int,
-                   campaign_id: Optional[int] = None,
-                   stance: str, modality: str, raw_text: str, extraction,
+                   campaign_id: Optional[int] = None, opp_id: Optional[int] = None,
+                   lane: str = "", stance: str, modality: str,
+                   provenance_source: str = "", raw_text: str, extraction,
+                   artifact_ref: str = "", external_ref: str = "",
+                   metadata: Optional[dict] = None, status: str = "ready",
                    created_by: str = "operator") -> int:
-    """Store an immutable Capture (raw source + extraction). Never updated."""
+    """Store an immutable Capture — the normalized envelope every intake LANE produces
+    (ADR-0014): raw source + provenance + provider refs + metadata + extraction. Raw
+    evidence is permanent; a capture is never mutated after ingest."""
     cur = conn.execute(
         """INSERT INTO captures
-           (ci_id, campaign_id, stance, modality, raw_text, extraction_json,
-            created_by, created_at)
-           VALUES (?,?,?,?,?,?,?,?)""",
-        (ci_id, campaign_id, stance, modality, raw_text, json.dumps(extraction or []),
-         created_by, datetime.now(timezone.utc).isoformat()))
+           (ci_id, campaign_id, opp_id, lane, stance, modality, provenance_source,
+            raw_text, artifact_ref, external_ref, metadata_json, extraction_json,
+            status, created_by, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (ci_id, campaign_id, opp_id, lane, stance, modality, provenance_source,
+         raw_text, artifact_ref, external_ref,
+         json.dumps(metadata or {}), json.dumps(extraction or []),
+         status, created_by, datetime.now(timezone.utc).isoformat()))
     conn.commit()
     return int(cur.lastrowid)
+
+
+def get_capture(conn: sqlite3.Connection, capture_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
 
 
 def list_captures(conn: sqlite3.Connection, ci_id: int) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM captures WHERE ci_id = ? ORDER BY created_at DESC, id DESC",
         (ci_id,)).fetchall()
+
+
+def fields_by_capture(conn: sqlite3.Connection, capture_id: int) -> List[sqlite3.Row]:
+    """The CI fields a given Capture last proposed/changed — the raw material of a review
+    batch ("what did this capture change, and why?"). ADR-0014."""
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE capture_id = ? "
+        "ORDER BY facet, key, kind", (capture_id,)).fetchall()
 
 
 # --- ADR-0013: CI anchored on the opportunity; adopted by the campaign at Won ------ #

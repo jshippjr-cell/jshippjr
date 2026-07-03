@@ -61,7 +61,7 @@ from ..matching import match_talent
 from . import (
     campaign_intake, campaign_intelligence, campaigns, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
-    enrichment, intelligence, music_opportunity, opportunity_signals,
+    enrichment, intake_lanes, intelligence, music_opportunity, opportunity_signals,
     outreach_engine, relationships, scheduler, seed, signals, sources, triage,
     webpush,
 )
@@ -1757,7 +1757,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
                        added: str = "", asked: str = ""):
     conn = db.connect()
     ci = ci_view = None
-    intake_modalities = None
+    intake_sync_lanes = intake_async_lanes = None
     try:
         row, opp, ev = _load(conn, opp_id)
         if row is None:
@@ -1766,10 +1766,12 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         project = db.project_for_opp(conn, opp_id)
         # Campaign Intake lives HERE now (ADR-0013): born on and anchored to the
         # opportunity. Lazily create + seed its CI, then render the provenance view.
+        # The intake lanes (ADR-0014) come from the ONE registry — no lane is privileged.
         if campaigns.workspace_enabled():
             ci = campaign_intelligence.ensure_for_opportunity(conn, row)
             ci_view = campaign_intelligence.fields_view(conn, ci["id"])
-            intake_modalities = campaign_intake.MODALITY_LABEL
+            intake_sync_lanes = intake_lanes.sync_lanes()
+            intake_async_lanes = intake_lanes.async_lanes()
     finally:
         conn.close()
     qual, scored = ev
@@ -1790,8 +1792,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         project_id=(project["id"] if project else None),
         next_status=_NEXT_STATUS.get(row["status"]),
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
-        ci=ci, ci_view=ci_view, intake_modalities=intake_modalities,
-        capture_summary=capture_summary,
+        ci=ci, ci_view=ci_view, intake_sync_lanes=intake_sync_lanes,
+        intake_async_lanes=intake_async_lanes, capture_summary=capture_summary,
     )
 
 
@@ -1801,17 +1803,19 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
 @app.post("/opportunity/{opp_id}/intelligence/analyze")
 async def opp_intelligence_analyze(
         opp_id: int, stance: str = Form("objective"), modality: str = Form("notes"),
-        text: str = Form(""), file: Optional[UploadFile] = File(None)):
+        lane: str = Form(""), text: str = Form(""),
+        file: Optional[UploadFile] = File(None)):
     """Update Intelligence: read ONLY the newly submitted capture, merge it into this
-    opportunity's Campaign Intelligence (preserving provenance, never clobbering a human
-    edit — disagreements surface as conflicts), raise follow-up questions, and reflect
-    mappable facts back onto the opportunity. Multi-modal: text modalities read directly;
-    a voice memo is stored as evidence and marked awaiting transcription (honest seam)."""
+    opportunity's Campaign Intelligence (preserving provenance + the raw-evidence capture,
+    never clobbering a human edit — disagreements surface as conflicts), raise follow-up
+    questions, and reflect mappable facts back onto the opportunity. The intake LANE
+    (ADR-0014) resolves from an explicit key or from stance+modality. Text lanes read
+    directly; a binary upload is stored as evidence and marked awaiting transcription."""
     if not campaigns.workspace_enabled():
         return HTMLResponse("Not found", status_code=404)
     text = (text or "").strip()
-    modality = modality if modality in campaign_intake.MODALITIES else "notes"
-    upload_name = ""
+    the_lane = intake_lanes.resolve_lane(lane_key=lane, stance=stance, modality=modality)
+    artifact_ref = upload_name = ""
     if file is not None and (file.filename or "").strip():
         ext = os.path.splitext(file.filename)[1].lower()
         safe = f"intake_{opp_id}_{abs(hash(file.filename)) % 10**8}{ext}"
@@ -1819,7 +1823,7 @@ async def opp_intelligence_analyze(
             data = await file.read()
             with open(os.path.join(UPLOAD_DIR, safe), "wb") as fh:
                 fh.write(data)
-            upload_name = file.filename
+            upload_name, artifact_ref = file.filename, safe
             # a text-like upload (transcript/rfp/email exported as .txt) can be read now
             if not text and ext in (".txt", ".md", ".vtt", ".srt"):
                 text = data.decode("utf-8", "ignore").strip()
@@ -1835,15 +1839,17 @@ async def opp_intelligence_analyze(
             # store the raw evidence honestly — nothing is extracted or invented.
             ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
             db.insert_capture(
-                conn, ci_id=ci_row["id"], stance=stance, modality=modality,
-                raw_text=(f"[{campaign_intake.MODALITY_LABEL.get(modality, modality)}: "
-                          f"{upload_name or 'no text'} — awaiting transcription]"),
-                extraction=[], created_by="operator")
+                conn, ci_id=ci_row["id"], opp_id=opp_id, lane=the_lane.key,
+                stance=the_lane.stance, modality=the_lane.modality,
+                provenance_source=the_lane.provenance_source, artifact_ref=artifact_ref,
+                raw_text=(f"[{the_lane.label}: {upload_name or 'no text'} — "
+                          f"awaiting transcription]"),
+                extraction=[], status="received", created_by="operator")
             return RedirectResponse(
                 f"/opportunity/{opp_id}?understood=&added=0&asked=0#intelligence",
                 status_code=303)
-        summary = campaign_intake.ingest_opportunity(conn, row, stance, text,
-                                                     modality=modality)
+        summary = campaign_intake.ingest_opportunity(
+            conn, row, stance, text, lane_key=the_lane.key, artifact_ref=artifact_ref)
     finally:
         conn.close()
     q = summary["questions"]

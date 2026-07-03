@@ -106,9 +106,20 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   **conflicts** to resolve); confirmed engagement facts **write back to the opportunity's
   own columns** so qualification/estimate/brief/outreach recompute from one source; and at
   Won the Project/Campaign Workspace **adopt the same CI in place** (nothing recreated).
-  **Next:** proposal/production/delivery read+write CI → flywheel to Agency Intelligence,
-  then the PRD's cues/team/AI-employee increments. Each stays flagged, dogfood-first,
-  anti-generic-PM.
+  **✅ Intake framework (Increment 1, ADR-0014)** — Campaign Intake is now an extensible
+  framework of **intake lanes** (`intake_lanes.py`, the single registry: discovery call,
+  producer debrief, meeting notes/transcript, RFP, email thread, client brief), none
+  privileged. Every lane normalizes to the ONE Capture **envelope** (`captures` gains
+  lane/provenance_source/opp_id/metadata/artifact/external/status) and funnels through the
+  ONE shared pipeline; every CI field + event now **cites its raw-evidence `capture_id`**
+  (answers "why did this change?"). The discovery-call lane is present but honestly disabled
+  until its notetaker seam is configured. `review_batch(capture_id)` derives a capture's
+  proposed changes (feeds the Increment-2 review surface). Full design:
+  `docs/discovery-call-intake-design.md`.
+  **Next (Increment 2):** the batched review surface ("review this call's updates" — the
+  diff + confirm-all + projected downstream impact) over the existing lanes; then the
+  document/RFP/email parsers (3), meeting+calendar seams (4), the notetaker webhook + async
+  ingest (5). Each stays flagged, dogfood-first, anti-generic-PM.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).

@@ -101,6 +101,7 @@
 .ci-stance label:has(input:checked){background:var(--accent,#c8552b)}
 .ci-update textarea{width:100%;min-height:84px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:10px;font:inherit;resize:vertical}
 .ci-update .ci-file{font-size:12px;color:var(--muted,#8a8580);margin-top:8px}
+.ci-lane-async{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px}
 .ci-update-actions{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap}
 .ci-section{margin-top:6px}
 .ci-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#8a8580);margin:16px 0 6px}
@@ -142,7 +143,20 @@
   </div>
   {% endif %}
 
-  {# Update Intelligence — one panel, many modalities, two stances. #}
+  {# Discovery-call lane(s) — the richest source. Async: schedule → bot → auto-ingest.
+     Rendered from the registry; disabled + honest until a notetaker seam is configured. #}
+  {% for ln in intake_async_lanes %}
+  <div class="ci-lane-async">
+    <span>{{ ln.icon }} <b>{{ ln.label }}</b> — {{ ln.describe }}</span>
+    {% if ln.is_available() %}
+    <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/meeting/schedule">Schedule →</a>
+    {% else %}
+    <span class="ci-chip" title="Connect Zoom + a notetaker to enable">Connect a notetaker to enable</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# Update Intelligence — one panel, every manual lane, two stances. #}
   <form class="ci-update" method="post" enctype="multipart/form-data"
         action="/opportunity/{{ row['id'] }}/intelligence/analyze">
     <div class="ci-controls">
@@ -151,8 +165,8 @@
         <label><input type="radio" name="stance" value="debrief"><span>What's your read?</span></label>
       </div>
       <label class="muted small">Source
-        <select name="modality">
-          {% for m, lbl in intake_modalities.items() %}<option value="{{ m }}">{{ lbl }}</option>{% endfor %}
+        <select name="lane">
+          {% for ln in intake_sync_lanes if ln.key != 'producer_debrief' %}<option value="{{ ln.key }}">{{ ln.icon }} {{ ln.label }}</option>{% endfor %}
         </select>
       </label>
     </div>

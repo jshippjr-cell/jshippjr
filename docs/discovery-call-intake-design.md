@@ -410,7 +410,8 @@ not a silent side effect.
 
 1. **Intake framework refactor** — the lane registry + Capture envelope + review-batch (derive
    from events). No behavior change to existing lanes; they become registered lanes. *(Pure
-   internal; de-risks everything after it.)*
+   internal; de-risks everything after it.)* **✅ Built (`intake_lanes.py`, the Capture
+   envelope, `capture_id` provenance stamps on every field + event, `review_batch()`).**
 2. **The review surface** — "Review this capture's updates" diff + confirm-all/per-field, with
    projected downstream deltas + evidence citations. Works for the *existing* text lanes first
    (immediately useful, no external deps).

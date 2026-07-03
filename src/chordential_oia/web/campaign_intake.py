@@ -16,14 +16,14 @@ from __future__ import annotations
 import re
 from typing import Callable, Dict, List, Optional
 
-from . import campaign_intelligence as ci, db
+from . import campaign_intelligence as ci, db, intake_lanes
 
 # The two capture STANCES (campaign-intake-prd.md §2bis). Objective capture answers
 # "what happened?" (facts); the Producer Debrief answers "what's your read?" (the human
-# layer — insight / recommendation / open_question / risk).
-OBJECTIVE = "objective"
-DEBRIEF = "debrief"
-STANCE_SOURCE = {OBJECTIVE: "notes", DEBRIEF: "producer_debrief"}
+# layer — insight / recommendation / open_question / risk). Canonical home is intake_lanes.
+OBJECTIVE = intake_lanes.OBJECTIVE
+DEBRIEF = intake_lanes.DEBRIEF
+STANCE_SOURCE = {OBJECTIVE: "notes", DEBRIEF: "producer_debrief"}  # back-compat only
 
 # The REQUIRED set that gates follow-up questions (§8): only what the NEXT step (the
 # proposal) needs. A gap here → a conversational follow-up, nothing else.
@@ -171,40 +171,52 @@ def gaps(conn, ci_id: int) -> List[tuple]:
     return [(f, k, q) for f, k, q in REQUIRED if (f, k) not in have]
 
 
-# The capture modalities (intake-prd §18.2). Text modalities are read directly; binary
-# ones (voice) go through a transcription seam — null by default (honest deferral).
-MODALITIES = ("notes", "transcript", "email", "rfp", "voice")
+# Back-compat surface for callers that still speak in raw modalities; the lane registry
+# (intake_lanes) is the real source of truth for how information arrives.
+MODALITIES = ("notes", "transcript", "email", "rfp", "document", "voice")
 MODALITY_LABEL = {"notes": "Discovery notes", "transcript": "Meeting transcript",
-                  "email": "Email thread", "rfp": "RFP", "voice": "Voice memo"}
+                  "email": "Email thread", "rfp": "RFP", "document": "Client brief",
+                  "voice": "Voice memo"}
 
 
 # --------------------------------------------------------------------------- #
-# Ingest — the orchestration: create Capture → extract → write to CI → gap Qs.
+# Ingest — the shared, lane-agnostic pipeline: Capture → extract → write to CI → gap Qs.
+# Every intake LANE funnels through here (ADR-0014); only the edge (how the text arrived)
+# differs. The Capture is the permanent raw evidence; every field it proposes cites it.
 # --------------------------------------------------------------------------- #
-def _apply_capture(conn, ci_id: int, stance: str, text: str, *, modality: str,
-                   campaign_id, created_by: str, llm: Optional[LLM]) -> Dict:
-    """The shared pipeline: read ONLY the new text → immutable Capture → contribute each
-    candidate through the provenance API (machine proposes; a human-owned field never gets
-    clobbered — a disagreement parks as a conflict) → raise material gaps as open_questions.
-    Anchor-agnostic (works for an opportunity CI or a campaign CI)."""
-    stance = stance if stance in (OBJECTIVE, DEBRIEF) else OBJECTIVE
-    source = STANCE_SOURCE[stance]
+def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_id=None,
+                   metadata: Optional[dict] = None, artifact_ref: str = "",
+                   external_ref: str = "", created_by: str = "operator",
+                   llm: Optional[LLM] = None) -> Dict:
+    """Run one capture end to end for a given LANE, against any CI anchor. Writes the
+    normalized Capture envelope (permanent evidence), then contributes each extracted
+    candidate through the provenance API — stamped with the lane's provenance source and the
+    capture_id, so every field can answer 'why did this change?' Machine proposes; a
+    human-owned field is never clobbered (a disagreement parks as a conflict); material gaps
+    become follow-up open_questions."""
+    stance = lane.stance
+    source = lane.provenance_source
     candidates = extract(text, stance, llm=llm)
-    db.insert_capture(conn, ci_id=ci_id, campaign_id=campaign_id, stance=stance,
-                      modality=modality, raw_text=text, extraction=candidates,
-                      created_by=created_by)
+    cap_id = db.insert_capture(
+        conn, ci_id=ci_id, campaign_id=campaign_id, opp_id=opp_id, lane=lane.key,
+        stance=stance, modality=lane.modality, provenance_source=source, raw_text=text,
+        extraction=candidates, artifact_ref=artifact_ref, external_ref=external_ref,
+        metadata=metadata, status="ingested", created_by=created_by)
     for c in candidates:
         ci.contribute(conn, ci_id, c["facet"], c["key"], c["value"],
                       kind=c["kind"], source=source, contributed_by=created_by,
-                      confidence=c.get("confidence"), is_concern=c.get("is_concern", False))
+                      confidence=c.get("confidence"), is_concern=c.get("is_concern", False),
+                      capture_id=cap_id)
     added_questions = []
     for facet, key, question in gaps(conn, ci_id):
         ci.contribute(conn, ci_id, facet, f"ask_{key}", question,
                       kind="open_question", source="ai", contributed_by="ai",
-                      value_json={"facet": facet, "key": key})
+                      value_json={"facet": facet, "key": key}, capture_id=cap_id)
         added_questions.append(question)
     return {
         "ci_id": ci_id,
+        "capture_id": cap_id,
+        "lane": lane.key,
         "understanding_pct": understanding_pct(conn, ci_id),
         "added": len(candidates),
         "questions": added_questions,
@@ -212,24 +224,50 @@ def _apply_capture(conn, ci_id: int, stance: str, text: str, *, modality: str,
     }
 
 
-def ingest(conn, campaign, stance: str, text: str, *, modality: str = "notes",
-           created_by: str = "operator", llm: Optional[LLM] = None) -> Dict:
+def ingest(conn, campaign, stance: str, text: str, *, lane_key: str = "",
+           modality: str = "notes", created_by: str = "operator",
+           llm: Optional[LLM] = None) -> Dict:
     """Run one capture end to end against a CAMPAIGN's CI (workspace path)."""
+    lane = intake_lanes.resolve_lane(lane_key=lane_key, stance=stance, modality=modality)
     ci_row = ci.ensure_for_campaign(conn, campaign)
-    return _apply_capture(conn, ci_row["id"], stance, text, modality=modality,
-                          campaign_id=campaign["id"], created_by=created_by, llm=llm)
+    return _apply_capture(conn, ci_row["id"], lane, text, campaign_id=campaign["id"],
+                          opp_id=campaign["opp_id"], created_by=created_by, llm=llm)
 
 
-def ingest_opportunity(conn, opp, stance: str, text: str, *, modality: str = "notes",
+def ingest_opportunity(conn, opp, stance: str, text: str, *, lane_key: str = "",
+                       modality: str = "notes", metadata: Optional[dict] = None,
+                       artifact_ref: str = "", external_ref: str = "",
                        created_by: str = "operator", llm: Optional[LLM] = None) -> Dict:
-    """Run one capture against an OPPORTUNITY's CI (ADR-0013 — the primary intake path,
-    while qualifying/pursuing). After writing to CI, sync confirmed engagement facts back to
-    the opportunity's own columns so every downstream engine recomputes from one source."""
+    """Run one capture against an OPPORTUNITY's CI (ADR-0013 — the primary intake path, while
+    qualifying/pursuing). The lane is resolved from an explicit key or from stance+modality.
+    After writing to CI, sync confirmed engagement facts back to the opportunity's own columns
+    so every downstream engine recomputes from one source."""
+    lane = intake_lanes.resolve_lane(lane_key=lane_key, stance=stance, modality=modality)
     ci_row = ci.ensure_for_opportunity(conn, opp)
-    summary = _apply_capture(conn, ci_row["id"], stance, text, modality=modality,
-                             campaign_id=None, created_by=created_by, llm=llm)
+    summary = _apply_capture(conn, ci_row["id"], lane, text, opp_id=opp["id"],
+                             metadata=metadata, artifact_ref=artifact_ref,
+                             external_ref=external_ref, created_by=created_by, llm=llm)
     sync_ci_to_opportunity(conn, ci_row["id"], opp["id"])
     return summary
+
+
+# --------------------------------------------------------------------------- #
+# Review batch — "what did this Capture change, and why?" (derived from stamps).
+# The full review SURFACE is a later increment; this is the derivation primitive.
+# --------------------------------------------------------------------------- #
+def review_batch(conn, capture_id: int) -> Dict:
+    """The proposed changes a single Capture produced — its fields (decorated) plus the raw
+    evidence, so the operator can review 'why did this change?' before disposing. Fields still
+    awaiting a human are the actionable set (machine proposes, human disposes)."""
+    cap = db.get_capture(conn, capture_id)
+    fields = [ci._decorate(f) for f in db.fields_by_capture(conn, capture_id)]
+    return {
+        "capture": cap,
+        "fields": fields,
+        "open": [f for f in fields if f["open"]],
+        "counts": {"total": len(fields),
+                   "open": sum(1 for f in fields if f["open"])},
+    }
 
 
 # --------------------------------------------------------------------------- #

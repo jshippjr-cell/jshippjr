@@ -97,12 +97,14 @@ def has_conflict(field_row) -> bool:
 def contribute(conn, ci_id: int, facet: str, key: str, value: str, *,
                kind: str = "fact", source: str, contributed_by: str = "",
                confidence: Optional[int] = None, is_concern: bool = False,
-               value_json=None, confirmed: bool = False) -> int:
+               value_json=None, confirmed: bool = False,
+               capture_id: Optional[int] = None) -> int:
     """Contribute a fact/insight/recommendation/open_question to Campaign Intelligence
     through the provenance model — the ONE way every module (intake, proposal, workspace,
     production, delivery, client success, retrospective) writes. Lands at the OPEN status
     for its kind (machine/non-owner proposes) unless ``confirmed`` (the operator, or an
-    owner writing its own facet, disposing directly). Merges the source; logs the event."""
+    owner writing its own facet, disposing directly). Merges the source; stamps the raw
+    evidence ``capture_id`` (ADR-0014); logs the event."""
     if facet not in FACETS or kind not in KINDS:
         raise ValueError(f"bad facet/kind: {facet}/{kind}")
     # Never clobber a human-owned value (ADR-0013). If a human has authored/confirmed this
@@ -119,18 +121,19 @@ def contribute(conn, ci_id: int, facet: str, key: str, value: str, *,
         db.add_ci_event(conn, ci_id, actor=(contributed_by or source), verb="proposed",
                         facet=facet, key=key, kind=kind,
                         from_value=(existing["value"] or "")[:200],
-                        to_value=value[:200], source=source)
+                        to_value=value[:200], source=source, capture_id=capture_id)
         return int(existing["id"])
     status = KIND_DISPOSED_STATUS[kind] if confirmed else KIND_OPEN_STATUS[kind]
     fid = db.upsert_ci_field(
         conn, ci_id, facet, key, kind, value=value, value_json=value_json,
-        source=source, status=status, origin=source,
-        confidence=confidence, is_concern=is_concern, contributed_by=contributed_by or source)
+        source=source, status=status, origin=source, confidence=confidence,
+        is_concern=is_concern, contributed_by=contributed_by or source, capture_id=capture_id)
     if confirmed:
         db.set_ci_field(conn, fid, human_value=True)  # operator-confirmed → authoritative
     db.add_ci_event(conn, ci_id, actor=(contributed_by or source),
                     verb=("confirmed" if confirmed else "contributed"),
-                    facet=facet, key=key, kind=kind, to_value=value[:200], source=source)
+                    facet=facet, key=key, kind=kind, to_value=value[:200], source=source,
+                    capture_id=capture_id)
     return fid
 
 
