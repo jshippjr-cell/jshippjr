@@ -182,12 +182,24 @@ def fields_view(conn, ci_id: int) -> dict:
             sources = _json.loads(r["sources"]) or []
         except (_json.JSONDecodeError, TypeError):
             sources = []
+        is_gap = r["kind"] == "open_question" and r["key"].startswith("ask_")
+        # Facts get a labeled key (Budget Band); interpretive items (insight/rec/question
+        # from a debrief) carry their meaning in the kind badge + the value, so no slug
+        # label; a gap follow-up shows the question itself as its label.
+        if is_gap:
+            label = r["value"]
+        elif r["kind"] == "fact":
+            label = r["key"].replace("_", " ").title()
+        else:
+            label = ""
         item = {
             "id": r["id"], "key": r["key"], "kind": r["kind"],
             "kind_label": KIND_LABEL.get(r["kind"], r["kind"]),
-            "label": r["key"].replace("_", " ").title(),
-            "value": r["value"], "sources": sources, "status": r["status"],
+            "label": label,
+            "value": ("" if is_gap else r["value"]),
+            "sources": sources, "status": r["status"],
             "open": is_open(r["status"]), "is_concern": bool(r["is_concern"]),
+            "is_gap": is_gap,
             "dispose_verb": KIND_DISPOSE_VERB.get(r["kind"], "Confirm"),
         }
         grouped.setdefault(r["facet"], []).append(item)

@@ -1017,6 +1017,21 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             from_value TEXT, to_value TEXT, source TEXT, created_at TEXT
         )"""
     )
+    # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the
+    # raw source + what the pipeline extracted from it. Captures feed Campaign
+    # Intelligence (the synthesis); the raw evidence is never mutated. See
+    # docs/campaign-intake-prd.md.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS captures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ci_id INTEGER, campaign_id INTEGER,
+            stance TEXT,      -- objective | debrief
+            modality TEXT,    -- notes | voice | rfp | email
+            raw_text TEXT,
+            extraction_json TEXT,   -- the candidates extracted (the evidence trail)
+            created_by TEXT, created_at TEXT
+        )"""
+    )
     # Structured creative direction — the composer's brief as checklist-able sections
     # (emotional arc, reference playlist, agency/producer notes, brand history,
     # previous campaigns). One row per (campaign, section).
@@ -3945,6 +3960,27 @@ def add_ci_event(conn: sqlite3.Connection, ci_id: int, *, actor: str, verb: str,
         (ci_id, actor, verb, facet, key, kind, from_value, to_value, source,
          datetime.now(timezone.utc).isoformat()))
     conn.commit()
+
+
+def insert_capture(conn: sqlite3.Connection, *, ci_id: int, campaign_id: int,
+                   stance: str, modality: str, raw_text: str, extraction,
+                   created_by: str = "operator") -> int:
+    """Store an immutable Capture (raw source + extraction). Never updated."""
+    cur = conn.execute(
+        """INSERT INTO captures
+           (ci_id, campaign_id, stance, modality, raw_text, extraction_json,
+            created_by, created_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (ci_id, campaign_id, stance, modality, raw_text, json.dumps(extraction or []),
+         created_by, datetime.now(timezone.utc).isoformat()))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_captures(conn: sqlite3.Connection, ci_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM captures WHERE ci_id = ? ORDER BY created_at DESC, id DESC",
+        (ci_id,)).fetchall()
 
 
 # --------------------------------------------------------------------------- #

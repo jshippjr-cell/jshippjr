@@ -76,6 +76,22 @@
   .ci-status.disposed{color:#1d6b43}
   .ci-dispose{font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--sand,#D8CDB6);
     background:#fff;color:var(--wine,#44161E);cursor:pointer;font:inherit;white-space:nowrap}
+  .ci-answer{display:flex;gap:6px;margin-top:2px}
+  .ci-answer input{border:1px solid var(--sand,#D8CDB6);border-radius:7px;padding:5px 9px;
+    font:inherit;font-size:12px;width:200px}
+  /* Capture — "what happened?" / "what's your read?" */
+  .cap{margin:24px 0 6px;padding:14px 16px;border:1px solid var(--sand,#D8CDB6);border-radius:12px;
+    background:var(--cream,#FCF7F8)}
+  .cap-stances{display:flex;gap:8px;margin:6px 0 10px}
+  .cap-stance{font-size:12.5px;padding:6px 12px;border:1px solid var(--sand,#D8CDB6);border-radius:999px;
+    background:#fff;color:var(--slate,#546671);cursor:pointer;font:inherit}
+  .cap-stance.on{background:var(--wine,#44161E);color:#fff;border-color:var(--wine,#44161E)}
+  .cap textarea{width:100%;min-height:64px;border:1px solid var(--sand,#D8CDB6);border-radius:8px;
+    padding:9px 11px;font:inherit;font-size:13.5px;resize:vertical;background:#fff}
+  .cap-hint{color:var(--olive,#737469);font-size:12px;margin:2px 0 0}
+  .cap-summary{margin:10px 0 0;padding:9px 13px;border-radius:10px;background:rgba(228,103,31,.07);
+    border:1px solid var(--orange,#E4671F);font-size:13px}
+  .cap-summary b{color:var(--orange,#E4671F)}
 </style>
 {% endblock %}
 {% block content %}
@@ -174,6 +190,50 @@
 </div>
 {% endfor %}
 
+<!-- Campaign Intake — tell ChordOS what happened (facts) or what's your read (a Producer
+     Debrief: insights, recommendations, risks). ChordOS extracts it into the intelligence
+     below — the user never touches the object. -->
+<div class="cap" id="capture">
+  <strong>Capture</strong>
+  <span class="muted small">— tell ChordOS what happened, and it does the rest</span>
+  <form method="post" action="/campaign/{{ campaign['id'] }}/capture" style="margin:6px 0 0"
+        onsubmit="this.querySelector('.cap-go').textContent='Reading…'">
+    <div class="cap-stances">
+      <label class="cap-stance on" data-stance="objective">
+        <input type="radio" name="stance" value="objective" checked hidden> 📄 What happened?
+      </label>
+      <label class="cap-stance" data-stance="debrief">
+        <input type="radio" name="stance" value="debrief" hidden> ◈ What's your read?
+      </label>
+    </div>
+    <textarea name="text" id="cap-text"
+      placeholder="Paste your notes or transcript — or type a quick debrief. ChordOS pulls out the budget, timeline, deliverables, decision-maker, and your read."></textarea>
+    <p class="cap-hint" id="cap-hint">Objective capture pulls the facts. Switch to a debrief to capture your interpretation, risks, and what you'd recommend.</p>
+    <button class="btn cap-go" type="submit" style="margin-top:8px">Capture</button>
+  </form>
+  {% if capture_summary %}
+  <div class="cap-summary">Understood <b>{{ capture_summary.understood }}%</b> ·
+    added <b>{{ capture_summary.added }}</b> to the record{% if capture_summary.asked and capture_summary.asked != '0' %} ·
+    <b>{{ capture_summary.asked }}</b> quick question{{ '' if capture_summary.asked == '1' else 's' }} below{% endif %}.</div>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var hints = {
+    objective: "Objective capture pulls the facts. Switch to a debrief to capture your interpretation, risks, and what you'd recommend.",
+    debrief: "Your read — what stood out, what worries you, what you'd recommend, what's still unclear. It's captured as interpretation, never as fact."
+  };
+  document.querySelectorAll('.cap-stance').forEach(function (el) {
+    el.addEventListener('click', function () {
+      document.querySelectorAll('.cap-stance').forEach(function (s) { s.classList.remove('on'); });
+      el.classList.add('on');
+      el.querySelector('input').checked = true;
+      document.getElementById('cap-hint').textContent = hints[el.getAttribute('data-stance')];
+    });
+  });
+})();
+</script>
+
 <!-- Campaign Intelligence — the canonical, living record of the engagement. Every fact,
      insight, recommendation, and open question with its kind, sources, and disposition.
      This is the object every module inherits from and contributes back to. -->
@@ -196,12 +256,19 @@
     <span class="ci-kind {{ f.kind }}">{{ f.kind_label }}</span>
     <div class="ci-mid">
       <div class="ci-label">{{ f.label }}{% if f.is_concern %} <span class="ci-risk">⚠ risk</span>{% endif %}</div>
-      <div class="ci-value">{{ f.value }}</div>
+      {% if f.value %}<div class="ci-value">{{ f.value }}</div>{% endif %}
+      {% if f.is_gap and f.open %}
+      <form class="ci-answer" method="post" action="/campaign/{{ campaign['id'] }}/intelligence/answer">
+        <input type="hidden" name="field_id" value="{{ f.id }}">
+        <input type="text" name="answer" placeholder="Answer…" aria-label="Answer this question">
+        <button class="ci-dispose" type="submit">Save</button>
+      </form>
+      {% endif %}
       <div class="ci-prov">Source: <span class="ci-src">{{ f.sources | join(' · ') if f.sources else '—' }}</span></div>
     </div>
     <div class="ci-right">
       <span class="ci-status {{ 'disposed' if not f.open }}">{{ f.status | replace('_',' ') }}</span>
-      {% if f.open %}
+      {% if f.open and not f.is_gap %}
       <form method="post" action="/campaign/{{ campaign['id'] }}/intelligence/dispose" style="margin:0">
         <input type="hidden" name="field_id" value="{{ f.id }}">
         <button class="ci-dispose" type="submit">{{ f.dispose_verb }}</button>

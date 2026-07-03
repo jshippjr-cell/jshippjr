@@ -59,8 +59,8 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, normalize_url, profile_completeness
 from ..matching import match_talent
 from . import (
-    campaign_intelligence, campaigns, db, decision_makers, directory_crawl,
-    directory_parsers, discovery,
+    campaign_intake, campaign_intelligence, campaigns, db, decision_makers,
+    directory_crawl, directory_parsers, discovery,
     enrichment, intelligence, music_opportunity, opportunity_signals,
     outreach_engine, relationships, scheduler, seed, signals, sources, triage,
     webpush,
@@ -3787,6 +3787,11 @@ def campaign_home(request: Request, campaign_id: int):
             return HTMLResponse("Campaign not found", status_code=404)
     finally:
         conn.close()
+    qp = request.query_params
+    view["capture_summary"] = ({
+        "understood": qp.get("understood"), "added": qp.get("added"),
+        "asked": qp.get("asked"),
+    } if qp.get("understood") is not None else None)
     return render(request, "campaign_home.html", nav="projects", **view)
 
 
@@ -3815,6 +3820,50 @@ def campaign_set_direction(campaign_id: int, section: str = Form(...),
     finally:
         conn.close()
     return RedirectResponse(f"/campaign/{campaign_id}#direction", status_code=303)
+
+
+@app.post("/campaign/{campaign_id}/capture")
+def campaign_capture(campaign_id: int, stance: str = Form("objective"),
+                     text: str = Form("")):
+    """Campaign Intake: the user tells ChordOS what happened (objective) or what's their
+    read (Producer Debrief). The pipeline extracts, classifies by kind, and writes to
+    Campaign Intelligence — the user never touches the object. Redirects with a summary
+    (understood %, added, gaps)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    text = (text or "").strip()
+    if not text:
+        return RedirectResponse(f"/campaign/{campaign_id}#capture", status_code=303)
+    conn = db.connect()
+    try:
+        camp = db.get_campaign(conn, campaign_id)
+        if camp is None:
+            return HTMLResponse("Campaign not found", status_code=404)
+        summary = campaign_intake.ingest(conn, camp, stance, text)
+    finally:
+        conn.close()
+    q = summary["questions"]
+    return RedirectResponse(
+        f"/campaign/{campaign_id}?understood={summary['understanding_pct']}"
+        f"&added={summary['added']}&asked={len(q)}#intelligence", status_code=303)
+
+
+@app.post("/campaign/{campaign_id}/intelligence/answer")
+def campaign_ci_answer(campaign_id: int, field_id: str = Form(...), answer: str = Form("")):
+    """Answer a follow-up open_question — the conversational gap-fill. The answer becomes
+    a confirmed fact on the target field and the question is marked answered."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    answer = (answer or "").strip()
+    conn = db.connect()
+    try:
+        if answer and str(field_id).strip().isdigit():
+            row = db.get_ci_field(conn, int(field_id))
+            if row is not None:
+                campaign_intake.answer_gap(conn, row, answer, created_by="operator")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{campaign_id}#intelligence", status_code=303)
 
 
 @app.post("/campaign/{campaign_id}/intelligence/dispose")
