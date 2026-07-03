@@ -165,6 +165,31 @@ credibility/legal exposure.
 **Consequences.** Never re-hardcode a legal sentence in a template; reference the
 constant. Keep the stdlib-only constraint on the ZIP path.
 
+### ADR-0013 — Campaign Intelligence is anchored to the Opportunity; the Campaign inherits it
+**Status:** Accepted (2026-07-03, Jon) · Source: `campaign_intelligence.py`,
+`campaign_intake.py`, `docs/campaign-intake-prd.md` §18
+**Decision.** A Campaign Intelligence record is born on and anchored to the **Opportunity**
+— the stage where the discovery call, RFP, and qualification actually happen — not on the
+Campaign (which exists only after Won). Campaign Intake ("Update Intelligence") is a
+first-class component of the Opportunity page. When an Opportunity converts to a Project,
+the existing CI is **adopted in place** (its `campaign_id`/`project_id` are set on the same
+row) — nothing is recreated or re-entered. The lifecycle is:
+`Lead → Opportunity → Campaign Intake → Campaign Intelligence (living) → Proposal → Won →
+Project → Campaign Workspace`, with one CI carried unbroken across the Won boundary.
+**Why.** The most valuable, most-refined intel is gathered *while qualifying and pursuing*,
+not after the deal is won. Anchoring CI to the Campaign stranded intake behind the Won gate
+and forced re-entry. Anchoring to the Opportunity makes the Opportunity the single working
+source of truth throughout the sales process, and makes "inherit, never recreate" (§7 of
+CAMPAIGN_INTELLIGENCE.md) literal.
+**Consequences.** CI is keyed by `opp_id` first; `ci_for_opportunity` / `ensure_for_opportunity`
+are the entry points; `ensure_for_campaign` **adopts** the opp's CI rather than creating a
+new one. A **human edit is authoritative** — it sets the field value, marks it human-owned,
+and a later machine contribution to a human-owned field never overwrites it: it lands as a
+*proposed* value surfaced as a conflict for the operator to resolve (machine proposes, human
+disposes, §4.1). Confirmed engagement facts (budget/deadline/discipline) **write back to the
+Opportunity's own columns**, so every downstream engine (qualification, estimate, brief,
+outreach) recomputes from the same source with no separate "refresh."
+
 ---
 
 ## Adding a new ADR

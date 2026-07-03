@@ -288,17 +288,20 @@ risks — instead of treating one producer's hunch as gospel or losing it entire
 
 ## 5. Lifecycle — born at the call, enriched to delivery, archived as precedent
 
-### 5.1 Birth — via Campaign Intake (the capture experience, designed separately)
-CI is born from a **Capture** — see the full experience spec in
-`docs/campaign-intake-prd.md`. Two refinements that spec settled and this model adopts:
-**(a)** CI is born at the *first capture of ANY modality* (voice, transcript, RFP, email,
-or auto-seed from an opportunity) — not specifically "a discovery call." **(b)** A
+### 5.1 Birth — on the OPPORTUNITY, via Campaign Intake (ADR-0013)
+CI is born on and **anchored to the Opportunity** (keyed `opp_id`, `campaign_id` still
+null) from a **Capture** — see the full experience spec in `docs/campaign-intake-prd.md`.
+This is where the discovery call, RFP, and qualification actually happen; Campaign Intake
+("Update Intelligence") is a first-class component of the Opportunity page, sitting above
+the Opportunity section and its tabs. Two refinements that spec settled and this model
+adopts: **(a)** CI is born at the *first capture of ANY modality* (voice, transcript, RFP,
+email, or auto-seed from the opportunity) — not specifically "a discovery call." **(b)** A
 **Capture** is an *immutable evidence record* (one per input, holding the raw source + its
 extraction); **Campaign Intelligence** is the *living synthesis* enriched by one or many
 captures. Each CI field cites the capture(s) it came from — source attribution for free.
 
 A capture, once ingested, seeds/enriches CI in one transaction:
-1. creates the `campaign_intelligence` root (`state=seeded`, `discovery_call_at=now`),
+1. creates the `campaign_intelligence` root anchored to the opportunity (`state=seeded`),
 2. links the `opp_id` and resolves/links the `agency_id` (reusing Step 1's matcher),
 3. **seeds `direction.*` fields** from the call (`sources=[discovery_call]`,
    `status=needs_review`),
@@ -319,10 +322,12 @@ The capabilities/first-touch/proposal doc renders from CI (`engagement` + `direc
 proposal stops being a dead-end that strands data in `doc_overrides`.
 
 ### 5.3 Win → Campaign Workspace inherits (stops recreating)
-At win, the campaign is created linked to CI. Its creative-direction cards become a
-**projection of CI.`direction`.*** — pre-filled, each showing its sources + `needs_review`.
-The increment-1 `campaign_direction` rows migrate into CI `direction` fields
-(`source=workspace`). No more empty cards; no more recreation.
+At win, the project's campaign **adopts the opportunity's existing CI in place** — the same
+`campaign_intelligence` row gets its `campaign_id`/`project_id` set (`ensure_for_campaign`
+resolves the opp's CI before it would ever create one). Nothing is recreated or re-entered:
+every fact, its provenance, and its disposition carry across the Won boundary unchanged. The
+workspace's creative-direction cards are a **projection of CI.`direction`.*** — pre-filled,
+each showing its sources + status. No more empty cards; no more recreation.
 
 ### 5.4 Production / Creative — contribute back
 As directions are chosen, versions submitted, and feedback given, the modules **contribute

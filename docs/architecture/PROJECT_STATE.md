@@ -94,10 +94,21 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   provenance panel on the campaign home renders every fact/insight/recommendation/
   open-question with its kind + sources + disposition, and the workspace now writes
   *through* CI (editing a direction contributes a fact — no private copy). Migration-safe
-  (verified on an increment-1 DB). **Next:** the Campaign Intake capture pipeline
-  (paste-notes MVP → Producer Debrief → voice → RFP/email → integrations), then proposal/
-  production/delivery read+write CI → flywheel to Agency Intelligence, then the PRD's
-  cues/team/AI-employee increments. Each stays flagged, dogfood-first, anti-generic-PM.
+  (verified on an increment-1 DB).
+  **✅ Intake-1 built** — the capture pipeline (paste-notes + Producer Debrief →
+  extract/classify by kind → write through CI, with gap follow-ups).
+  **✅ Opportunity-anchored (ADR-0013)** — Campaign Intake is now a first-class panel on
+  the **Opportunity** page (above the Opportunity section + tabs), not gated behind Won.
+  CI is born on and keyed by the opportunity; **"Update Intelligence"** ingests multiple
+  modalities (notes / transcript / voice memo / RFP / email; audio behind a transcription
+  seam); every CI field + the title + buyer name are **inline-editable and human edits are
+  authoritative** (machine never clobbers a human-owned field — disagreements surface as
+  **conflicts** to resolve); confirmed engagement facts **write back to the opportunity's
+  own columns** so qualification/estimate/brief/outreach recompute from one source; and at
+  Won the Project/Campaign Workspace **adopt the same CI in place** (nothing recreated).
+  **Next:** proposal/production/delivery read+write CI → flywheel to Agency Intelligence,
+  then the PRD's cues/team/AI-employee increments. Each stays flagged, dogfood-first,
+  anti-generic-PM.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).

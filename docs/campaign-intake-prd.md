@@ -465,3 +465,63 @@ changing the underlying object. *That separation is the architecture's whole poi
 *This is a design, not a commitment to code. It specifies the experience (Campaign Intake) and
 its contract with the domain object (Campaign Intelligence) so the two can be built and evolved
 independently. The user tells ChordOS what happened; ChordOS does the rest.*
+
+---
+
+## 18. Revision (2026-07-03) — Campaign Intake is anchored to the Opportunity (ADR-0013)
+
+The first build shipped Campaign Intake inside the **Campaign Workspace**, which exists only
+*after* an opportunity is Won. That is too late: the discovery call, the RFP, and the
+qualification conversation — where the richest, most-refined intel is gathered — all happen
+**while pursuing the opportunity.** So Campaign Intake becomes a **first-class component of
+every Opportunity**, and the lifecycle is explicit:
+
+```
+Lead → Opportunity → Campaign Intake → Campaign Intelligence (continuously updated)
+     → Proposal → Won → Project → Campaign Workspace (inherits the same CI)
+```
+
+### 18.1 Where it lives
+The **"Update Intelligence"** panel sits at the top of the Opportunity page — **above the
+Opportunity section and the tabs.** One prominent panel, always available while qualifying.
+
+### 18.2 Input methods (one panel, many modalities)
+- Paste discovery notes · Paste meeting transcript · Upload/record a voice memo (Producer
+  Debrief) · Upload an RFP · Paste an email thread.
+- Two **stances** stay orthogonal to modality: *objective* ("what happened?" → facts) and
+  *Producer Debrief* ("what's your read?" → insight / recommendation / open_question / risk).
+- Voice + binary uploads use a **transcription/extraction seam** (ADR-0004, null-by-default):
+  text modalities work with zero deps today; audio is stored as evidence and marked *awaiting
+  transcription* until a provider is configured — never faked.
+
+### 18.3 Analyze = read-new, merge, preserve, never-clobber
+When the operator presses **Analyze**, the pipeline:
+1. reads **only the newly submitted** capture,
+2. **merges** it into the existing CI through the one provenance API (§9),
+3. **preserves provenance** for every touched field (sources[] append, event logged),
+4. **never overwrites a confirmed human edit** — a machine value that disagrees with a
+   human-owned field lands as a **proposed** value and is **surfaced as a conflict** to resolve,
+5. **generates follow-up questions** for any still-missing required fact.
+
+### 18.4 Everything editable; human edits are authoritative
+Every CI field is inline-editable — plus the **title** and **buyer name** (which write to the
+Opportunity's own `need`/`client`). A human edit **becomes the authoritative value**, is
+marked human-owned, appends `operator` to the field's provenance, and is logged in the event
+history — so nothing is lost and the machine can never silently overwrite it afterward. The
+canonical editable set: Campaign Objective · Business Objective · Budget · Timeline ·
+Deliverables · Decision Makers · Emotional Arc · Reference Playlist · Brand Notes · Agency
+Notes · Producer Debrief · Risks · Recommendations · Open Questions (extensible).
+
+### 18.5 Downstream refresh (the Opportunity is the source of truth)
+Because the existing engines read from the **Opportunity's own columns**, confirmed
+engagement facts (budget → `budget_min/max`, timeline → `deadline`, discipline → `discipline`)
+**write back to the opportunity** on ingest/edit. Qualification score, buyer profile,
+opportunity summary, proposal draft, pursuit brief, and outreach recommendations therefore
+recompute from the same source on next render — **no separate "refresh" and no divergent
+copy.** The Opportunity becomes the single working source of truth across the sales process.
+
+### 18.6 Won → inherit, never recreate
+Marking the Opportunity **Won** creates the Project and Campaign Workspace, which **adopt the
+existing CI in place** (`ensure_for_campaign` resolves the opp's CI and sets its
+`campaign_id`/`project_id`; it never creates a second CI). Nothing is re-entered after
+conversion.
