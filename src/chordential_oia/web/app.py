@@ -1970,6 +1970,34 @@ def opp_intelligence_conflict(opp_id: int, field_id: str = Form(...),
     return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
 
 
+@app.get("/opportunity/{opp_id}/evidence", response_class=HTMLResponse)
+def opportunity_evidence(request: Request, opp_id: int):
+    """The raw evidence behind Campaign Intelligence — every Capture (transcripts, notes, …)
+    with its full text next to what the pipeline extracted from it. Raw evidence is permanent
+    and reviewable (ADR-0014): this is where you check whether a missing fact is a transcript
+    gap (the words weren't captured) or an extraction gap (they were, but not pulled out)."""
+    conn = db.connect()
+    items = []
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        ci = db.ci_for_opportunity(conn, opp_id)
+        for c in (db.list_captures(conn, ci["id"]) if ci else []):
+            try:
+                meta = json.loads(c["metadata_json"] or "{}")
+            except (json.JSONDecodeError, TypeError):
+                meta = {}
+            try:
+                extraction = json.loads(c["extraction_json"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                extraction = []
+            items.append({"c": c, "meta": meta, "extraction": extraction})
+    finally:
+        conn.close()
+    return render(request, "evidence.html", nav="inbox", row=row, items=items)
+
+
 @app.post("/opportunity/{opp_id}/identity")
 def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
     """Edit the opportunity's title (need) and/or buyer name (client) — the human-corrected

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Evidence · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Evidence{% endblock %}
+{% block content %}
+<style>
+.ev-note{color:var(--muted,#8a8580);margin:-4px 0 16px}
+.ev-card{margin-bottom:16px}
+.ev-head{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted,#8a8580)}
+.ev-lane{font-weight:700;color:var(--wine,#5b2b34);background:var(--surface-2,#faf3ee);padding:2px 9px;border-radius:999px}
+.ev-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:12px}
+@media(max-width:760px){.ev-cols{grid-template-columns:1fr}}
+.ev-raw{white-space:pre-wrap;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:12px 14px;max-height:420px;overflow:auto;font-size:13.5px;line-height:1.5}
+.ev-k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#8a8580);margin-bottom:6px}
+.ev-ex li{list-style:none;padding:7px 0;border-top:1px solid var(--line,#efe9e0);font-size:13px}
+.ev-ex .kind{font-size:10px;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:#eee;margin-right:6px}
+.ev-empty{color:var(--muted,#8a8580);font-style:italic}
+</style>
+
+<p class="ev-note">The raw material behind Campaign Intelligence — permanent and unedited. Compare
+  the <b>captured text</b> (left) with <b>what was extracted</b> (right): if a fact is in the text
+  but not extracted, it's an import gap; if it's not in the text either, it's a capture/transcript gap.</p>
+
+{% if not items %}
+<section class="card"><p class="ev-empty">No captures yet — schedule a discovery call, or paste notes on the opportunity.</p></section>
+{% endif %}
+
+{% for it in items %}
+<section class="card ev-card">
+  <div class="ev-head">
+    <span class="ev-lane">{{ it.c['lane'] or it.c['modality'] or 'capture' }}</span>
+    {% if it.c['created_at'] %}<time data-utc="{{ it.c['created_at'] }}">{{ it.c['created_at'][:16] }}</time>{% endif %}
+    {% if it.meta.get('provider') %}· via {{ it.meta['provider'] }}{% endif %}
+    {% if it.meta.get('speakers') %}· speakers: {{ it.meta['speakers']|join(', ') }}{% endif %}
+    {% if it.meta.get('duration_s') %}· {{ (it.meta['duration_s']//60) }} min{% endif %}
+    · status {{ it.c['status'] }}
+  </div>
+  <div class="ev-cols">
+    <div>
+      <div class="ev-k">Captured text</div>
+      {% if it.c['raw_text'] %}<div class="ev-raw">{{ it.c['raw_text'] }}</div>
+      {% else %}<div class="ev-empty">No text captured (e.g. audio awaiting transcription).</div>{% endif %}
+    </div>
+    <div>
+      <div class="ev-k">Extracted → Campaign Intelligence ({{ it.extraction|length }})</div>
+      {% if it.extraction %}
+      <ul class="ev-ex" style="margin:0;padding:0">
+        {% for e in it.extraction %}
+        <li><span class="kind">{{ e.get('kind','fact') }}</span>{{ e.get('value','') }}
+          <span class="muted">· {{ e.get('facet','') }}/{{ e.get('key','') }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}<div class="ev-empty">Nothing was extracted from this capture.</div>{% endif %}
+    </div>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

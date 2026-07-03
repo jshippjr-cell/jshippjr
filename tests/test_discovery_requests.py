@@ -144,6 +144,23 @@ def test_manual_schedule_uses_the_same_engine_without_a_request(tmp_path, monkey
 # --------------------------------------------------------------------------- #
 # Client MANAGE — token-gated reschedule / cancel.
 # --------------------------------------------------------------------------- #
+def test_evidence_page_shows_raw_transcript_next_to_extraction(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    from chordential_oia.web import campaign_intake
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn)
+    row = app_mod.db.get_opportunity(conn, opp_id)
+    campaign_intake.ingest_opportunity(
+        conn, row, "objective",
+        "Budget is $18,000 to $24,000. Need it by November. :60 anthem plus stems.")
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}/evidence").text
+        assert "Captured text" in page
+        assert "$18,000 to $24,000" in page          # the RAW transcript text is readable
+        assert "Extracted" in page and "budget_band" in page  # next to what was pulled out
+
+
 def test_local_time_is_converted_to_utc_on_schedule(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
