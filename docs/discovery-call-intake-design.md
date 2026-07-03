@@ -441,9 +441,16 @@ not a silent side effect.
    extraction), reusing the shared pipeline.
 4. **Meeting + calendar seams** — Zoom meeting creation + Google Calendar invite + the
    `meetings` table + "Schedule Discovery Call" from the three entry points. *(Meeting exists;
-   no transcript yet.)*
+   no transcript yet.)* **✅ Built as the Meeting DOMAIN (ADR-0015): `meetings/` package with
+   the MeetingProvider seam (manual/null + Zoom stub), scheduling routed through
+   `meetings_service.schedule`. Live Zoom + Google Calendar API calls are credential-gated
+   (the seam is wired; the HTTP is the flip).**
 5. **Notetaker seam + webhook + async ingest** — Recall.ai first: invite bot → webhook →
-   scheduler ingest → review batch → notify. The hero flow closes here.
+   scheduler ingest → review batch → notify. The hero flow closes here. **✅ Built: CaptureProvider
+   seam (null + Recall), the `/webhooks/capture/{provider}` receiver (signature-verified,
+   idempotent, offloaded), `campaign_intake.ingest_transcript(meeting, transcript)` as the
+   provider-agnostic boundary, and the gated scheduler fallback tick. Proven end-to-end with a
+   fake Recall webhook (no creds). Live Recall invite/fetch is credential-gated.**
 6. **Provider breadth** — Zoom AI Companion / Fireflies adapters; then Google Meet / Teams
    (mostly free once the notetaker seam is Recall).
 7. **Evidence-rich provenance** — speaker/timestamp citations on every field; jump-to-quote.

@@ -116,10 +116,20 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   until its notetaker seam is configured. `review_batch(capture_id)` derives a capture's
   proposed changes (feeds the Increment-2 review surface). Full design:
   `docs/discovery-call-intake-design.md`.
+  **✅ Meeting domain (ADR-0015, increments 4-5)** — a **Meeting** is the business object;
+  hosting (Zoom/Meet/Teams) and capture (Recall/Zoom AI/Fireflies) are two null-by-default
+  seams (`meetings/` package). Everything downstream consumes a Meeting + a normalized
+  **Transcript**, never a provider event: provider webhooks normalize into domain MeetingEvents
+  in one place, and `campaign_intake.ingest_transcript(meeting, transcript)` is the boundary.
+  The `/webhooks/capture/{provider}` receiver (signature-verified, idempotent, offloaded) +
+  a gated scheduler fallback drive `Meeting → Transcript → Campaign Intake → CI`. Proven
+  end-to-end with a fake Recall webhook (no creds); live Zoom/Recall HTTP is the credential
+  flip. The Campaign Brief is the primary client artifact and carries the discovery CTA; the
+  opp page shows an "Upcoming Discovery" panel only when a meeting exists.
   **Next (Increment 2):** the batched review surface ("review this call's updates" — the
-  diff + confirm-all + projected downstream impact) over the existing lanes; then the
-  document/RFP/email parsers (3), meeting+calendar seams (4), the notetaker webhook + async
-  ingest (5). Each stays flagged, dogfood-first, anti-generic-PM.
+  diff + confirm-all + projected downstream impact) over every lane; then the document/RFP/
+  email parsers (3), and the live Zoom + Google Calendar + Recall credentials flip. Each stays
+  flagged, dogfood-first, anti-generic-PM.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).

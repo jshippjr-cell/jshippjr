@@ -190,6 +190,30 @@ disposes, §4.1). Confirmed engagement facts (budget/deadline/discipline) **writ
 Opportunity's own columns**, so every downstream engine (qualification, estimate, brief,
 outreach) recomputes from the same source with no separate "refresh."
 
+### ADR-0015 — The Meeting is the business object; providers sit behind two seams
+**Status:** Accepted (2026-07-03, Jon) · Source: `meetings/` (base/null/zoom/recall),
+`web/meetings_service.py`, `campaign_intake.ingest_transcript`, `docs/discovery-call-intake-design.md`
+**Decision.** A **Meeting** is a first-class domain object; hosting it (Zoom/Meet/Teams) and
+capturing it (Recall.ai/Zoom AI Companion/Fireflies) are **two independent provider seams**,
+null by default. The chain is `Meeting → MeetingProvider → CaptureProvider → Transcript →
+Campaign Intake → Campaign Intelligence`. Everything downstream consumes the **Meeting** and a
+**normalized Transcript** — never a provider-specific event. Provider webhooks are normalized
+into domain **MeetingEvents** (`transcript_ready`/`failed`/…) in exactly one place (the
+provider's `parse_webhook`); `campaign_intake.ingest_transcript(meeting, transcript)` is the
+boundary and knows nothing about Zoom or Recall.
+**Why.** The meeting is what the business cares about; a vendor is an implementation detail.
+Coupling Campaign Intelligence or Campaign Intake to Zoom/Recall would make every future
+provider a pipeline change. Abstracting at the Meeting keeps the intelligence pipeline stable
+while providers come and go.
+**Consequences.** New providers touch only their seam file (`meetings/zoom.py`,
+`meetings/recall.py`, …) plus the env selector — never Campaign Intake or Campaign Intelligence.
+Seams are null-by-default (ADR-0004): with nothing configured a Meeting is still real
+(scheduled manually, transcript via the paste lanes) and the notetaker honestly reads "not
+connected." The capture webhook (`/webhooks/capture/{provider}`) is signature-verified in the
+provider parser, idempotent, and non-blocking (offloaded); a scheduler tick is the fetch-later
+fallback and is fully gated (no-op without a provider). Transcripts land as **proposed** CI
+fields (machine proposes, human disposes, §4.1); confirmation propagates downstream (ADR-0013).
+
 ---
 
 ## Adding a new ADR

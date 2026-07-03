@@ -234,6 +234,32 @@ def ingest(conn, campaign, stance: str, text: str, *, lane_key: str = "",
                           opp_id=campaign["opp_id"], created_by=created_by, llm=llm)
 
 
+def ingest_transcript(conn, meeting, transcript, *, created_by: str = "capture") -> Dict:
+    """Consume a Meeting + a normalized Transcript (ADR-0015) — the boundary where the
+    discovery-call lane meets the shared pipeline. Downstream is provider-agnostic: this
+    function never sees Zoom or Recall, only a Meeting row and a domain Transcript. Runs the
+    discovery_call lane against the meeting's opportunity CI, stamps speaker/duration
+    metadata + the provider on the Capture (raw evidence), links the Capture back onto the
+    meeting, and returns the review summary. Everything lands proposed — the human reviews.
+    """
+    opp = db.get_opportunity(conn, meeting["opp_id"]) if meeting["opp_id"] else None
+    if opp is None:
+        return {"ci_id": None, "capture_id": None, "added": 0, "questions": [],
+                "understanding_pct": 0, "lane": intake_lanes.LANES_BY_KEY["discovery_call"].key,
+                "stance": OBJECTIVE}
+    ci_row = ci.ensure_for_opportunity(conn, opp)
+    lane = intake_lanes.LANES_BY_KEY["discovery_call"]
+    text = getattr(transcript, "text", "") or ""
+    meta = transcript.metadata() if hasattr(transcript, "metadata") else {}
+    summary = _apply_capture(
+        conn, ci_row["id"], lane, text, opp_id=opp["id"], metadata=meta,
+        external_ref=getattr(transcript, "external_ref", ""), created_by=created_by)
+    db.update_meeting(conn, meeting["id"], status="ingested",
+                      transcript_capture_id=summary["capture_id"])
+    sync_ci_to_opportunity(conn, ci_row["id"], opp["id"])
+    return summary
+
+
 def ingest_opportunity(conn, opp, stance: str, text: str, *, lane_key: str = "",
                        modality: str = "notes", metadata: Optional[dict] = None,
                        artifact_ref: str = "", external_ref: str = "",

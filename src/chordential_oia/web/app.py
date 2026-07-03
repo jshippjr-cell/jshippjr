@@ -61,9 +61,9 @@ from ..matching import match_talent
 from . import (
     campaign_intake, campaign_intelligence, campaigns, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
-    enrichment, intake_lanes, intelligence, music_opportunity, opportunity_signals,
-    outreach_engine, relationships, scheduler, seed, signals, sources, triage,
-    webpush,
+    enrichment, intake_lanes, intelligence, meetings_service, music_opportunity,
+    opportunity_signals, outreach_engine, relationships, scheduler, seed, signals,
+    sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -283,6 +283,7 @@ def _is_public_path(path: str) -> bool:
         or path.startswith("/admin/logout")
         or path == "/signals/ingest"   # email-in webhook (its own shared-secret token)
         or path == "/webhooks/stripe"  # Stripe webhook (verified by Stripe signature)
+        or path.startswith("/webhooks/capture/")  # capture provider (verified by its signature)
     )
 
 
@@ -1997,17 +1998,14 @@ def discovery_schedule(opp_id: int, start_at: str = Form(""), join_url: str = Fo
         if campaigns.workspace_enabled():
             ci_id = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
         existing = db.meeting_for_opp(conn, opp_id)
-        notetaker = _notetaker_provider()
         if existing is not None:                       # reschedule the live meeting in place
             db.update_meeting(conn, existing["id"], start_at=(start_at or "").strip(),
                               join_url=(join_url or "").strip(), status="scheduled")
         else:
-            db.create_meeting(conn, opp_id=opp_id, ci_id=ci_id,
-                              start_at=(start_at or "").strip(),
-                              join_url=(join_url or "").strip(),
-                              duration_min=duration_min or 20,
-                              notetaker_provider=notetaker,
-                              status="scheduled")
+            # Route new meetings through the Meeting domain: it hosts via the meeting provider
+            # (Zoom when configured; manual otherwise) and arms the capture provider (Recall).
+            meetings_service.schedule(conn, row, start_at=start_at, join_url=join_url,
+                                      duration_min=duration_min or 20)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
@@ -2024,6 +2022,27 @@ def discovery_cancel(opp_id: int, meeting_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+@app.post("/webhooks/capture/{provider}")
+async def capture_webhook(provider: str, request: Request):
+    """Capture-provider webhook (Recall.ai, …). The ONE inbound door for meeting transcripts:
+    the provider seam verifies + normalizes the payload into a Meeting event, we correlate it
+    to a Meeting and ingest the transcript through Campaign Intake. Signature-verified in the
+    provider parser, idempotent, and non-blocking (the work is offloaded). Public surface —
+    the provider signature, not the admin login, is the access control (ADR-0011/0015)."""
+    body = await request.body()
+    headers = dict(request.headers)
+
+    def _work():
+        conn = db.connect()
+        try:
+            return meetings_service.handle_capture_webhook(conn, provider, headers, body)
+        finally:
+            conn.close()
+
+    result = await run_in_threadpool(_work)
+    return JSONResponse(result)
 
 
 @app.get("/opportunity/{opp_id}/qualification", response_class=HTMLResponse)

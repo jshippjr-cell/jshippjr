@@ -4140,6 +4140,19 @@ def list_meetings(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
         (opp_id,)).fetchall()
 
 
+def meeting_by_external(conn: sqlite3.Connection, bot_id: str) -> Optional[sqlite3.Row]:
+    """Correlate a capture-provider webhook back to its Meeting by the bot/session id."""
+    if not bot_id:
+        return None
+    return conn.execute(
+        "SELECT * FROM meetings WHERE bot_id = ? ORDER BY id DESC LIMIT 1", (bot_id,)).fetchone()
+
+
+def meetings_by_status(conn: sqlite3.Connection, status: str) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM meetings WHERE status = ? ORDER BY id", (status,)).fetchall()
+
+
 def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
     """Patch a meeting (start_at, join_url, status, bot_id, transcript_capture_id, …)."""
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",

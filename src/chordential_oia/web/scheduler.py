@@ -1041,6 +1041,17 @@ def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
     return found
 
 
+def _ingest_ready_meetings() -> None:
+    """Blocking helper (run off-loop): ingest transcript_ready meetings via the Meeting
+    domain. Lazy imports avoid any import cycle with the web layer."""
+    from . import meetings_service
+    conn = db.connect()
+    try:
+        meetings_service.process_ready_meetings(conn)
+    finally:
+        conn.close()
+
+
 async def run_loop() -> None:
     """The forever loop, started from the app lifespan. Self-heals on errors.
 
@@ -1086,6 +1097,15 @@ async def run_loop() -> None:
                 await asyncio.to_thread(poll_reddit)
             except Exception:
                 pass
+        # Discovery transcripts (ADR-0015): ingest any meeting a signal-then-fetch capture
+        # provider left at transcript_ready. Fully gated — a NO-OP unless a provider is
+        # configured, so dev/tests/prod-without-Recall never touch it.
+        try:
+            from .. import meetings as _M
+            if _M.capture_configured():
+                await asyncio.to_thread(_ingest_ready_meetings)
+        except Exception:
+            pass
         if autofetch_enabled() and due(_last_autofetch_mono, _interval_seconds()):
             _last_autofetch_mono = now_mono
             _status["running"] = True
