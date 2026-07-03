@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
@@ -35,6 +36,8 @@ from typing import Mapping, Optional
 
 from .base import (EV_FAILED, EV_IGNORED, EV_TRANSCRIPT_READY, CaptureProvider,
                    MeetingEvent, Transcript, TranscriptSegment)
+
+_log = logging.getLogger("chordential.recall")
 
 # Bot status codes that mean "recording finished, transcript should be available".
 _DONE_CODES = {"done", "call_ended", "recording_done", "analysis_done", "transcript_done"}
@@ -85,18 +88,24 @@ class RecallCaptureProvider(CaptureProvider):
             return None
         try:
             bot = self._get(f"/bot/{external_ref}/")
-        except Exception:  # noqa: BLE001 — treat as 'not ready yet'
+        except Exception as e:  # noqa: BLE001 — treat as 'not ready yet', but say why
+            _log.warning("Recall bot fetch failed for %s: %s", external_ref, e)
             return None
+        codes = _bot_codes(bot)
         state = _bot_state(bot)
-        if state == "fatal":
-            return None            # the orchestrator marks failure from the status separately
+        _log.info("Recall bot %s state=%s codes=%s", external_ref, state, codes)
         if state != "done":
-            return None            # still recording — poll again later
+            return None            # still recording (or fatal) — poll again later
         try:
             raw = self._get(f"/bot/{external_ref}/transcript/")
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            _log.warning("Recall transcript fetch failed for %s: %s", external_ref, e)
             return None
-        return _normalize_transcript(raw, external_ref)
+        t = _normalize_transcript(raw, external_ref)
+        _log.info("Recall transcript for %s: %s", external_ref,
+                  ("%d chars / %d speakers" % (len(t.text), len(t.speakers)))
+                  if t else "empty or unparseable (shape=%s)" % type(raw).__name__)
+        return t
 
     def parse_webhook(self, headers: Mapping, body: bytes) -> MeetingEvent:
         """Verify the shared secret, then normalize Recall's pushed event into a MeetingEvent.
@@ -156,17 +165,28 @@ class RecallCaptureProvider(CaptureProvider):
 
 
 # ── normalization helpers (defensive across Recall's shape variants) ──────────
-def _bot_state(bot) -> str:
-    """Reduce a Recall bot object to done | fatal | pending, tolerant of its shape."""
+def _bot_codes(bot) -> list:
+    """Every status code a Recall bot object reports (status_changes[].code + top-level
+    status), lower-cased — logged so we can see exactly what Recall calls 'done'."""
     if not isinstance(bot, dict):
-        return "pending"
+        return []
     codes = []
     for sc in (bot.get("status_changes") or []):
         if isinstance(sc, dict) and sc.get("code"):
             codes.append(str(sc["code"]).lower())
-    top = str(bot.get("status") or "").lower()
-    if top:
-        codes.append(top)
+    for key in ("status", "state"):
+        top = str(bot.get(key) or "").lower()
+        if top:
+            codes.append(top)
+    status = bot.get("status_change") or bot.get("latest_status")  # some shapes nest it
+    if isinstance(status, dict) and status.get("code"):
+        codes.append(str(status["code"]).lower())
+    return codes
+
+
+def _bot_state(bot) -> str:
+    """Reduce a Recall bot object to done | fatal | pending, tolerant of its shape."""
+    codes = _bot_codes(bot)
     if any(c in _FATAL_CODES for c in codes):
         return "fatal"
     if any(c in _DONE_CODES for c in codes):
