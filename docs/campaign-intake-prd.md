@@ -525,3 +525,17 @@ Marking the Opportunity **Won** creates the Project and Campaign Workspace, whic
 existing CI in place** (`ensure_for_campaign` resolves the opp's CI and sets its
 `campaign_id`/`project_id`; it never creates a second CI). Nothing is re-entered after
 conversion.
+
+---
+
+## 19. Revision (2026-07-03) — Intake becomes a multi-lane framework; the meeting is the source
+
+The primary source of Campaign Intelligence is the **client meeting**, not typed notes. Intake
+is re-architected as an **extensible framework of intake lanes** (discovery-call scheduling,
+paste notes, paste transcript, producer debrief, RFP, email thread, client brief, and future
+Meet/Teams/Slack/CRM) — **none primary** — all normalizing to one Capture envelope and one
+shared pipeline into the single CI object. The hero lane schedules a Zoom call, invites a
+recording bot, ties the meeting to the Opportunity before it starts, and **auto-ingests the
+transcript** when it ends; the user just reviews the proposed changes. Full architecture, UX,
+integrations, event flow, and data model: **`docs/discovery-call-intake-design.md`** (proposes
+ADR-0014). Design only — not yet built.
