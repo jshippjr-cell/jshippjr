@@ -112,13 +112,17 @@ Booking works without it (you'd just not get a calendar event).
 > follow carefully.
 
 ### 3a. Create the Google Cloud project + OAuth client
+> Google renamed "OAuth consent screen" to the **Google Auth Platform** (tabs: Overview /
+> Branding / Audience / Clients). The steps below use the new UI.
 1. **https://console.cloud.google.com/** → create a project `Chordential`.
 2. **APIs & Services → Library** → search **Google Calendar API** → **Enable**.
-3. **APIs & Services → OAuth consent screen** → **External** → fill app name + your email →
-   **Save**. Under **Test users**, add your own Google address. (You can leave it in "Testing".)
-4. **APIs & Services → Credentials → Create credentials → OAuth client ID** → type **Web
-   application** → under **Authorized redirect URIs** add `https://developers.google.com/oauthplayground`
-   → **Create** → copy the **Client ID** and **Client Secret**.
+3. **APIs & Services → Google Auth Platform** → **Get started** → fill **App name** + **User
+   support email** → for **Audience** pick **External** (the only option on a personal @gmail
+   account) → finish. Leave **Publishing status = Testing** (do *not* publish).
+4. On **Google Auth Platform → Audience → Test users → Add users**, add your own Google address.
+5. **Google Auth Platform → Clients → Create client** → type **Web application** → under
+   **Authorized redirect URIs** add `https://developers.google.com/oauthplayground` → **Create**
+   → copy the **Client ID** and **Client Secret**.
 
 ### 3b. Mint a refresh token (one time, via OAuth Playground)
 1. Go to **https://developers.google.com/oauthplayground**.
