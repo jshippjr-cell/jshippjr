@@ -59,7 +59,8 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, normalize_url, profile_completeness
 from ..matching import match_talent
 from . import (
-    campaigns, db, decision_makers, directory_crawl, directory_parsers, discovery,
+    campaign_intelligence, campaigns, db, decision_makers, directory_crawl,
+    directory_parsers, discovery,
     enrichment, intelligence, music_opportunity, opportunity_signals,
     outreach_engine, relationships, scheduler, seed, signals, sources, triage,
     webpush,
@@ -3734,6 +3735,12 @@ def _campaign_view(conn, campaign_id: int):
     agency = db.get_agency(conn, camp["agency_id"]) if camp["agency_id"] else None
     agency_has_intel = bool(
         db.get_agency_intel(conn, camp["agency_id"])) if camp["agency_id"] else False
+    # Campaign Intelligence — the living canonical record. Lazy-create + seed it (from the
+    # opportunity, the linked agency, and the direction cards), then surface it: the
+    # provenance panel showing every fact/insight/recommendation/open-question with its
+    # kind, sources, and disposition. This is the object every module inherits from.
+    ci = campaign_intelligence.ensure_for_campaign(conn, camp)
+    ci_view = campaign_intelligence.fields_view(conn, ci["id"])
     return {
         "campaign": camp,
         "phases": campaigns.PHASES,
@@ -3743,6 +3750,8 @@ def _campaign_view(conn, campaign_id: int):
         "completeness": campaigns.direction_completeness(direction),
         "agency": agency,
         "agency_has_intel": agency_has_intel,
+        "ci": ci,
+        "ci_view": ci_view,
     }
 
 
@@ -3789,14 +3798,41 @@ def campaign_set_direction(campaign_id: int, section: str = Form(...),
         return HTMLResponse("Not found", status_code=404)
     if section not in campaigns.DIRECTION_KEYS:
         return HTMLResponse("Unknown section", status_code=400)
+    done = str(complete).strip() in ("1", "true", "on", "yes")
     conn = db.connect()
     try:
-        db.update_campaign_direction(
-            conn, campaign_id, section, body=body,
-            complete=str(complete).strip() in ("1", "true", "on", "yes"))
+        db.update_campaign_direction(conn, campaign_id, section, body=body, complete=done)
+        # Contribute the edit back to Campaign Intelligence so the canonical record stays
+        # LIVE — the workspace doesn't keep a private copy, it writes through CI (the
+        # stated brief is a `fact`; marking it complete disposes it).
+        camp = db.get_campaign(conn, campaign_id)
+        if camp is not None and body.strip():
+            ci = campaign_intelligence.ensure_for_campaign(conn, camp)
+            campaign_intelligence.contribute(
+                conn, ci["id"], "direction", section, body.strip(),
+                kind="fact", source="workspace", contributed_by="operator",
+                confirmed=done)
     finally:
         conn.close()
     return RedirectResponse(f"/campaign/{campaign_id}#direction", status_code=303)
+
+
+@app.post("/campaign/{campaign_id}/intelligence/dispose")
+def campaign_ci_dispose(campaign_id: int, field_id: str = Form(...)):
+    """The human disposition gate on a Campaign Intelligence field — confirm a fact,
+    acknowledge an insight, accept a recommendation, answer a question (machine proposes,
+    human disposes, §4.1)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        if str(field_id).strip().isdigit():
+            row = db.get_ci_field(conn, int(field_id))
+            if row is not None:
+                campaign_intelligence.dispose(conn, row, actor="operator")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{campaign_id}#intelligence", status_code=303)
 
 
 @app.post("/campaign/{campaign_id}/agency")

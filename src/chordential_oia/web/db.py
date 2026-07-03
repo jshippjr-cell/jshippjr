@@ -978,6 +978,45 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     for name, decl in _CAMPAIGN_COLUMNS.items():           # migrate increment-1 rows
         if name not in camp_cols:
             conn.execute(f"ALTER TABLE campaigns ADD COLUMN {name} {decl}")
+    # Campaign Intelligence (Creative OS) — the canonical, LIVING per-engagement record.
+    # A stable spine that every module inherits from and contributes back to via one
+    # provenance model. The root holds identity + links; the FACTS live in _field (one
+    # row per fact, so each carries its own {kind, sources[], status} — the only shape
+    # that renders the provenance card); _event is the append-only enrichment log (the
+    # institutional-memory + moat feed). See docs/architecture/CAMPAIGN_INTELLIGENCE.md.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS campaign_intelligence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER, opp_id INTEGER, agency_id INTEGER, project_id INTEGER,
+            title TEXT, brand TEXT DEFAULT '', agency_client TEXT DEFAULT '',
+            state TEXT DEFAULT 'seeded',   -- seeded | active | delivered | archived
+            created_at TEXT, updated_at TEXT, archived_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS campaign_intelligence_field (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ci_id INTEGER NOT NULL,
+            facet TEXT NOT NULL,           -- engagement|buyer|direction|commercial|relationship|outcome
+            key TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'fact',  -- fact|insight|recommendation|open_question
+            value TEXT DEFAULT '', value_json TEXT,
+            sources TEXT DEFAULT '[]',     -- JSON list of provenance sources (the card's ✓ list)
+            status TEXT DEFAULT 'needs_review',
+            origin TEXT DEFAULT '', confidence INTEGER,
+            is_concern INTEGER DEFAULT 0,  -- a risk the producer flagged
+            contributed_by TEXT DEFAULT '', updated_at TEXT,
+            UNIQUE(ci_id, facet, key, kind)  -- a fact + an insight can coexist on one key
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS campaign_intelligence_event (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ci_id INTEGER NOT NULL,
+            actor TEXT, verb TEXT, facet TEXT, key TEXT, kind TEXT,
+            from_value TEXT, to_value TEXT, source TEXT, created_at TEXT
+        )"""
+    )
     # Structured creative direction — the composer's brief as checklist-able sections
     # (emotional arc, reference playlist, agency/producer notes, brand history,
     # previous campaigns). One row per (campaign, section).
@@ -3796,6 +3835,115 @@ def update_campaign_direction(conn: sqlite3.Connection, campaign_id: int, sectio
             "WHERE campaign_id = ? AND section = ?",
             (new_body, new_complete, now, campaign_id, section))
     conn.execute("UPDATE campaigns SET updated_at = ? WHERE id = ?", (now, campaign_id))
+    conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Campaign Intelligence (Creative OS) — the canonical, LIVING per-engagement record.
+# Storage only; the domain model (facets/keys/kinds, provenance rules, seeding) lives
+# in campaign_intelligence.py. See docs/architecture/CAMPAIGN_INTELLIGENCE.md.
+# --------------------------------------------------------------------------- #
+def get_campaign_intelligence(conn: sqlite3.Connection, ci_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence WHERE id = ?", (ci_id,)).fetchone()
+
+
+def ci_for_campaign(conn: sqlite3.Connection, campaign_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence WHERE campaign_id = ? LIMIT 1",
+        (campaign_id,)).fetchone()
+
+
+def create_campaign_intelligence(conn: sqlite3.Connection, *, campaign_id, opp_id,
+                                 agency_id, project_id, title, brand, agency_client) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO campaign_intelligence
+           (campaign_id, opp_id, agency_id, project_id, title, brand, agency_client,
+            state, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (campaign_id, opp_id, agency_id, project_id, title, brand or "",
+         agency_client or "", "seeded", now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_ci_fields(conn: sqlite3.Connection, ci_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE ci_id = ? "
+        "ORDER BY facet, key, kind", (ci_id,)).fetchall()
+
+
+def get_ci_field(conn: sqlite3.Connection, field_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE id = ?", (field_id,)).fetchone()
+
+
+def upsert_ci_field(conn: sqlite3.Connection, ci_id: int, facet: str, key: str,
+                    kind: str, *, value: str = "", value_json=None, source: str = "",
+                    status: Optional[str] = None, origin: str = "",
+                    confidence: Optional[int] = None, is_concern: bool = False,
+                    contributed_by: str = "") -> int:
+    """Upsert one canonical fact on (ci_id, facet, key, kind). Merges the new
+    ``source`` into the field's provenance list; sets status/value when provided.
+    The domain layer (campaign_intelligence.py) decides status per kind and logs the
+    event — this is the storage primitive. Returns the field id."""
+    now = datetime.now(timezone.utc).isoformat()
+    row = conn.execute(
+        "SELECT * FROM campaign_intelligence_field WHERE ci_id=? AND facet=? AND key=? AND kind=?",
+        (ci_id, facet, key, kind)).fetchone()
+    srcs = []
+    if row is not None:
+        try:
+            srcs = json.loads(row["sources"]) or []
+        except (json.JSONDecodeError, TypeError):
+            srcs = []
+    if source and source not in srcs:
+        srcs.append(source)
+    vj = json.dumps(value_json) if value_json is not None else (
+        row["value_json"] if row is not None else None)
+    if row is None:
+        cur = conn.execute(
+            """INSERT INTO campaign_intelligence_field
+               (ci_id, facet, key, kind, value, value_json, sources, status, origin,
+                confidence, is_concern, contributed_by, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (ci_id, facet, key, kind, value, vj, json.dumps(srcs),
+             status or "needs_review", origin, confidence,
+             1 if is_concern else 0, contributed_by, now))
+        fid = int(cur.lastrowid)
+    else:
+        conn.execute(
+            """UPDATE campaign_intelligence_field
+               SET value=?, value_json=?, sources=?, status=?, origin=?, confidence=?,
+                   is_concern=?, contributed_by=?, updated_at=? WHERE id=?""",
+            (value if value else row["value"], vj, json.dumps(srcs),
+             status or row["status"], origin or row["origin"],
+             confidence if confidence is not None else row["confidence"],
+             1 if is_concern else (row["is_concern"] or 0),
+             contributed_by or row["contributed_by"], now, row["id"]))
+        fid = int(row["id"])
+    conn.execute("UPDATE campaign_intelligence SET updated_at=? WHERE id=?", (now, ci_id))
+    conn.commit()
+    return fid
+
+
+def set_ci_field_status(conn: sqlite3.Connection, field_id: int, status: str) -> None:
+    conn.execute(
+        "UPDATE campaign_intelligence_field SET status=?, updated_at=? WHERE id=?",
+        (status, datetime.now(timezone.utc).isoformat(), field_id))
+    conn.commit()
+
+
+def add_ci_event(conn: sqlite3.Connection, ci_id: int, *, actor: str, verb: str,
+                 facet: str = "", key: str = "", kind: str = "",
+                 from_value: str = "", to_value: str = "", source: str = "") -> None:
+    conn.execute(
+        """INSERT INTO campaign_intelligence_event
+           (ci_id, actor, verb, facet, key, kind, from_value, to_value, source, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (ci_id, actor, verb, facet, key, kind, from_value, to_value, source,
+         datetime.now(timezone.utc).isoformat()))
     conn.commit()
 
 

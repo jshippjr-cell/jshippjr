@@ -87,10 +87,16 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   ("what's your read?"). CI preserves the **epistemic kind** of every field —
   `fact` / `insight` / `recommendation` / `open_question` (+ risk flag) — so inferred
   judgment is never laundered into fact and the producer's read is a preserved asset.
-  **Next (awaiting Jon's decisions in both PRDs' open-questions):** build CI tables + lazy
-  backfill → point the workspace's direction cards at CI with the provenance card → the
-  Capture pipeline (paste-notes MVP → voice → RFP/email → integrations) → proposal/
-  production/delivery read+write CI → flywheel to Agency Intelligence. Then the PRD's
+  **✅ CI-1 built** — the living Campaign Intelligence object exists: tables
+  (`campaign_intelligence` + `_field` with the epistemic `kind` + `_event` log),
+  lazy-created + seeded per campaign from the opportunity (engagement facts), the linked
+  agency (buyer facts — the moat, via the Step-1 thread), and the direction cards; the
+  provenance panel on the campaign home renders every fact/insight/recommendation/
+  open-question with its kind + sources + disposition, and the workspace now writes
+  *through* CI (editing a direction contributes a fact — no private copy). Migration-safe
+  (verified on an increment-1 DB). **Next:** the Campaign Intake capture pipeline
+  (paste-notes MVP → Producer Debrief → voice → RFP/email → integrations), then proposal/
+  production/delivery read+write CI → flywheel to Agency Intelligence, then the PRD's
   cues/team/AI-employee increments. Each stays flagged, dogfood-first, anti-generic-PM.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as

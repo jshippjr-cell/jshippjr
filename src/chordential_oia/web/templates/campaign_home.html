@@ -50,6 +50,32 @@
   .cw-tab.on{background:var(--wine,#44161E);color:#fff;border-color:var(--wine,#44161E)}
   .cw-body{color:var(--ink,#1F1E1E);font-size:13.5px;white-space:pre-wrap;margin-top:4px}
   .cw-empty{color:var(--olive,#737469);font-style:italic;font-size:13px}
+  /* Campaign Intelligence — the canonical record + provenance */
+  .ci{margin:26px 0 8px}
+  .ci-head{display:flex;align-items:baseline;gap:12px}
+  .ci-count{font-size:12px;color:var(--olive,#737469)}
+  .ci-count b{color:var(--orange,#E4671F)}
+  .ci-facet{margin:16px 0 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--wine,#44161E);font-weight:700}
+  .ci-field{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line,#E6DFD2)}
+  .ci-field:last-child{border-bottom:0}
+  .ci-kind{flex:0 0 auto;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+    padding:3px 8px;border-radius:999px;white-space:nowrap;margin-top:1px}
+  .ci-kind.fact{background:rgba(84,102,113,.12);color:var(--slate,#546671)}
+  .ci-kind.insight{background:rgba(68,22,30,.09);color:var(--wine,#44161E)}
+  .ci-kind.recommendation{background:rgba(228,103,31,.12);color:var(--orange,#E4671F)}
+  .ci-kind.open_question{background:rgba(120,117,109,.14);color:var(--olive,#737469)}
+  .ci-mid{flex:1 1 auto;min-width:0}
+  .ci-label{font-weight:700;font-size:12.5px;color:var(--ink,#1F1E1E)}
+  .ci-value{font-size:13px;color:var(--ink,#1F1E1E);margin-top:1px}
+  .ci-prov{font-size:10.5px;color:var(--olive,#737469);margin-top:3px}
+  .ci-src{color:var(--slate,#546671)}
+  .ci-risk{color:#b5651d;font-weight:700}
+  .ci-right{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .ci-status{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--olive,#737469)}
+  .ci-status.disposed{color:#1d6b43}
+  .ci-dispose{font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--sand,#D8CDB6);
+    background:#fff;color:var(--wine,#44161E);cursor:pointer;font:inherit;white-space:nowrap}
 </style>
 {% endblock %}
 {% block content %}
@@ -147,5 +173,44 @@
   </form>
 </div>
 {% endfor %}
+
+<!-- Campaign Intelligence — the canonical, living record of the engagement. Every fact,
+     insight, recommendation, and open question with its kind, sources, and disposition.
+     This is the object every module inherits from and contributes back to. -->
+<div class="ci" id="intelligence">
+  <div class="ci-head">
+    <h2 style="margin:0;font-size:18px">Campaign intelligence</h2>
+    <span class="ci-count"><b>{{ ci_view.counts.total }}</b> known
+      {% if ci_view.counts.open %}· <b>{{ ci_view.counts.open }}</b> need review{% endif %}</span>
+  </div>
+  <p class="muted small" style="margin:0 0 6px">What ChordOS knows about this engagement — seeded from the opportunity, the linked agency, and your direction. Every item shows what kind of knowledge it is and where it came from.</p>
+
+  {% if ci_view.counts.total == 0 %}
+    <p class="cw-empty">Nothing captured yet — as the opportunity, agency intelligence, and direction fill in, they'll appear here with their sources.</p>
+  {% endif %}
+
+  {% for facet in ci_view.facets_present %}
+  <div class="ci-facet">{{ facet | replace('_',' ') }}</div>
+  {% for f in ci_view.by_facet[facet] %}
+  <div class="ci-field">
+    <span class="ci-kind {{ f.kind }}">{{ f.kind_label }}</span>
+    <div class="ci-mid">
+      <div class="ci-label">{{ f.label }}{% if f.is_concern %} <span class="ci-risk">⚠ risk</span>{% endif %}</div>
+      <div class="ci-value">{{ f.value }}</div>
+      <div class="ci-prov">Source: <span class="ci-src">{{ f.sources | join(' · ') if f.sources else '—' }}</span></div>
+    </div>
+    <div class="ci-right">
+      <span class="ci-status {{ 'disposed' if not f.open }}">{{ f.status | replace('_',' ') }}</span>
+      {% if f.open %}
+      <form method="post" action="/campaign/{{ campaign['id'] }}/intelligence/dispose" style="margin:0">
+        <input type="hidden" name="field_id" value="{{ f.id }}">
+        <button class="ci-dispose" type="submit">{{ f.dispose_verb }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endfor %}
+</div>
 
 {% endblock %}

@@ -51,6 +51,16 @@ that gets smarter with every step (Constitution §10 + §6).
 
 ## 1. What Campaign Intelligence is (and is not)
 
+**Campaign Intelligence is a *living* object.** It is not created once at intake and frozen.
+It is **continuously enriched across the entire engagement lifecycle** — Campaign Intake seeds
+it, then Proposal, Campaign Workspace, Production, Creative, Client Success, Delivery, and the
+post-project retrospective each contribute new facts, insights, recommendations, and open
+questions through the *same* provenance model. That is what makes it the **institutional
+memory** of the engagement — and, on confirmation, the source that enriches **Agency
+Intelligence** so the next opportunity for that buyer starts smarter (the moat flywheel,
+Constitution §6). No module owns a private copy; every module reads from and writes back to
+this one object.
+
 **It is** the canonical, per-engagement intelligence record: a stable spine that outlives
 the opportunity → project → campaign transitions and unifies four bodies of knowledge that
 today live in disconnected universes:
@@ -174,7 +184,7 @@ per fact" + "machine proposes, human disposes."
 ### 4.1 Sources — *who supports this value* (multiple allowed)
 `transcript` · `producer_debrief` · `rfp` · `email` · `notes` · `agency_intelligence` ·
 `opportunity` · `qualification` · `proposal` · `workspace` · `ai` · `production` ·
-`delivery` · `operator`
+`creative` · `client_success` · `delivery` · `retrospective` · `operator`
 
 A field can have several (the card's ✓ list): e.g. `emotional_arc` supported by
 `transcript` + `agency_intelligence` + `ai`. The **`producer_debrief`** source is
