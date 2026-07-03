@@ -204,17 +204,18 @@ COMPOSE_BLOCK_KEYS = [
     "example_more", "credibility", "ps",
 ]
 
-# The soft tailored-page link → the Phase 2 token-gated first-touch page. The
-# token is the page's access control: an unguessable per-opp ``share_token`` so the
-# URL is shareable but not enumerable. Falls back to a "preview" stub only when no
-# id/token is available (e.g. a bare preview render).
+# The soft tailored-page link → the token-gated **Campaign Brief** (the client-facing
+# deliverable). One artifact: the link in the email opens the same brief the operator
+# edited, so the email and the page can never drift. The token is the access control: an
+# unguessable per-opp ``share_token`` so the URL is shareable but not enumerable. Falls back
+# to a "preview" stub only when no id/token is available (e.g. a bare preview render).
 def _page_url(opp_id, token=None) -> str:
     ident = opp_id if opp_id is not None else "preview"
     k = token if (token and str(token).strip()) else str(ident)
     # Absolute URL so the link is clickable in the email (a relative path is dead
     # in a mail client). Uses the configured public domain; chordential.com default.
     base = os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com").rstrip("/")
-    return f"{base}/opportunity/{ident}/first-touch?k={k}"
+    return f"{base}/opportunity/{ident}/capabilities?k={k}"
 
 
 def _first_brief_line(opp) -> str:

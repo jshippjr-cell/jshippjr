@@ -106,12 +106,16 @@ def test_first_touch_not_yet_viewed_label(client):
 def test_compose_page_link_carries_real_token(client):
     token = _token(client)
     page = client.get("/opportunity/3/compose").text
-    # The composer's page_link block now contains the real unguessable token,
-    # NOT the old ?k=3 stub.
-    assert f"first-touch?k={token}" in page
-    assert "first-touch?k=3" not in page
+    # The composer's client link IS the Campaign Brief (one artifact), carrying the real
+    # unguessable token — NOT the old ?k=3 stub, and no longer a divergent first-touch page.
+    assert f"capabilities?k={token}" in page
+    assert "capabilities?k=3" not in page
     # The link must be ABSOLUTE so it's clickable in an email — not a bare path.
-    assert f"https://chordential.com/opportunity/3/first-touch?k={token}" in page
+    assert f"https://chordential.com/opportunity/3/capabilities?k={token}" in page
+    # The tokened brief opens publicly (client link) …
+    assert client.get(f"/opportunity/3/capabilities?k={token}").status_code == 200
+    # … but a bad token on the brief 404s (never leaks the doc).
+    assert client.get("/opportunity/3/capabilities?k=not-the-token").status_code == 404
 
 
 def test_first_touch_falls_back_to_showcase_music_when_none_picked(client):

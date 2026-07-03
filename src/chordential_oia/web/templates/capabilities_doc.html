@@ -135,8 +135,9 @@
 </head>
 <body>
 
+{% if not public %}
 <div class="toolbar no-print">
-  <a href="/opportunity/{{ row['id'] }}/outreach">← Back to Outreach</a>
+  <a href="/opportunity/{{ row['id'] }}">← Back to Opportunity</a>
   <form method="get" action="/opportunity/{{ row['id'] }}/capabilities" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <input type="hidden" name="submitted" value="1">
     {% if edit %}<input type="hidden" name="edit" value="1">{% endif %}
@@ -168,6 +169,7 @@
   {% endif %}
   <button class="btn pdf" type="button" onclick="window.print()">⤓ Save as PDF</button>
 </div>
+{% endif %}
 
 {# ---- reusable chip macros (insert rail + inserted tokens) ------------------ #}
 {% macro inserted_chips(section) %}

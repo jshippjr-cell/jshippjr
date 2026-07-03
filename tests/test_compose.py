@@ -148,10 +148,10 @@ def test_capabilities_doc_links_to_compose_to_email_it(client):
 
 def test_compose_music_upload_returns_to_composer_and_plays_on_page(client):
     """Uploading a track from the composer returns to the composer, lists the
-    track, and the tailored first-touch page then plays it."""
-    # the composer shows the music section + a preview link
+    track, and the client's Campaign Brief then plays it."""
+    # the composer shows the music section + a preview link (to the Campaign Brief)
     page = client.get("/opportunity/3/compose").text
-    assert "First-touch page · music" in page
+    assert "Campaign Brief · client link" in page
     # upload an audio file with return_to=compose
     r = client.post(
         "/opportunity/3/doc/upload",
@@ -164,12 +164,14 @@ def test_compose_music_upload_returns_to_composer_and_plays_on_page(client):
     assert r.headers["location"] == "/opportunity/3/compose"
     # the composer now lists the track
     assert "Score sketch" in client.get("/opportunity/3/compose").text
-    # and the first-touch page plays it (valid token)
+    # and the client's Campaign Brief plays it (token-gated public link)
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
         token = db_mod.ensure_share_token(conn, 3)
     finally:
         conn.close()
-    ft = client.get(f"/opportunity/3/first-touch?k={token}").text
-    assert "<audio" in ft and "Score sketch" in ft
+    brief = client.get(f"/opportunity/3/capabilities?k={token}").text
+    assert "<audio" in brief and "Score sketch" in brief
+    # the client link hides the admin toolbar (no "Back to Opportunity" / edit chrome)
+    assert "Back to Opportunity" not in brief

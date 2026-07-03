@@ -199,10 +199,20 @@ _PUBLIC_PATHS = frozenset({
 # (not a fixed string in _PUBLIC_PATHS) because the opp id varies — token check in
 # the route is the real access control.
 _FIRST_TOUCH_RE = re.compile(r"^/opportunity/\d+/first-touch/?$")
+# The Campaign Brief is the client-facing deliverable; when opened with a valid share
+# token (?k=<token>) it is a public client link (the route validates the token, 404s on a
+# bad one). Without ?k it stays the admin edit view behind the login gate — so the token,
+# not the path alone, is what opens it publicly (no admin-view leak).
+_CAPABILITIES_RE = re.compile(r"^/opportunity/\d+/capabilities/?$")
 
 
 def _is_first_touch_path(path: str) -> bool:
     return bool(_FIRST_TOUCH_RE.match(path))
+
+
+def _is_tokened_brief(request: Request) -> bool:
+    return bool(_CAPABILITIES_RE.match(request.url.path)
+                and (request.query_params.get("k") or "").strip())
 
 
 # The token-gated client delivery portal: /project/<id>/delivery-portal . Same
@@ -278,7 +288,8 @@ def _is_public_path(path: str) -> bool:
 
 @app.middleware("http")
 async def _admin_gate(request: Request, call_next):
-    if _admin_secret() and not _is_public_path(request.url.path) and not _admin_authed(request):
+    if (_admin_secret() and not _is_public_path(request.url.path)
+            and not _is_tokened_brief(request) and not _admin_authed(request)):
         if request.method == "HEAD":
             return Response(status_code=200)  # let platform health probes through
         return RedirectResponse(f"/admin/login?next={request.url.path}", status_code=303)
@@ -2235,7 +2246,9 @@ def compose_page(request: Request, opp_id: int, sent: str = ""):
         conn.close()
     subject = plan.email_subject
     mailto = _mailto(row["contact_email"] or "", subject, body)
-    page_url = f"/opportunity/{opp_id}/first-touch?k={token}"
+    # The client link the email carries IS the Campaign Brief (the one artifact the operator
+    # edits), token-gated so it's shareable but not enumerable — never a divergent page.
+    page_url = f"/opportunity/{opp_id}/capabilities?k={token}"
     return render(
         request, "compose.html", nav="inbox", row=row, opp=opp, plan=plan,
         blocks=blocks, selected=selected, body=body, subject=subject, mailto=mailto,
@@ -2662,8 +2675,10 @@ def opportunity_buyer(request: Request, opp_id: int):
 
 
 @app.get("/opportunity/{opp_id}/capabilities", response_class=HTMLResponse)
-def opportunity_capabilities(request: Request, opp_id: int):
-    """Branded, toggleable capabilities/proposal doc → preview and Save as PDF.
+def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
+    """The Campaign Brief — the branded, toggleable client-facing deliverable → preview,
+    Save as PDF, and (with a valid ?k=<share_token>) the public client link the outreach
+    email points to. One artifact: the emailed link opens this same brief.
 
     Sections default by deal stage (discovery hides cost; proposal adds the price
     band; contract adds terms + DocuSign). Once the toggle bar is submitted, each
@@ -2673,6 +2688,15 @@ def opportunity_capabilities(request: Request, opp_id: int):
         row, opp, ev = _load(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
+        # Client link: a valid share token opens the brief publicly (no admin chrome); a
+        # missing/bad token on a ?k request 404s so the brief never leaks. No ?k → the
+        # admin edit view (already behind the login gate).
+        public = False
+        if (k or "").strip():
+            token = row["share_token"] if "share_token" in row.keys() else None
+            if not token or not hmac.compare_digest(str(k), str(token)):
+                return HTMLResponse("Not found", status_code=404)
+            public = True
         # The deal's project + its Deposit invoice (if either exists yet) — used to
         # surface the Stripe "Pay deposit" button, exactly as the detail page looks
         # the project up. No project/invoice → we fall back to showing the amount.
@@ -2707,7 +2731,7 @@ def opportunity_capabilities(request: Request, opp_id: int):
     # Edit-mode payload the (later) editable-template UI consumes: the chip library
     # per editable section (deliverable chips scoped to the chosen template), the
     # available delivery templates for the override dropdown, and saved "My chips".
-    edit = qp.get("edit") == "1"
+    edit = qp.get("edit") == "1" and not public   # the client link is never editable
     chip_library = {
         section: chips_for(section, doc.delivery_template)
         for section in SECTION_FAMILY
@@ -2729,7 +2753,7 @@ def opportunity_capabilities(request: Request, opp_id: int):
         deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
         edit=edit, overrides=overrides, chip_library=chip_library,
         custom_chips=custom_chips, delivery_templates=delivery_templates,
-        section_family=SECTION_FAMILY,
+        section_family=SECTION_FAMILY, public=public,
     )
 
 
