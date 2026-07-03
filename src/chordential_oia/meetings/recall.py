@@ -61,15 +61,18 @@ class RecallCaptureProvider(CaptureProvider):
         return bool(self.api_key)
 
     def invite(self, *, join_url: str, meeting_ref: str) -> str:
-        """Send a Recall bot into the meeting (with transcription on). Returns the bot id."""
+        """Send a Recall bot into the meeting (with transcription on). Returns the bot id.
+        Uses Recall's current ``recording_config.transcript`` shape; the provider is
+        env-overridable (default meeting_captions — the platform's own captions, cheapest)."""
         if not self.configured():
             raise RuntimeError(
                 "Recall provider selected but CHORDENTIAL_RECALL_API_KEY is unset.")
         payload = {
             "meeting_url": join_url,
             "bot_name": self.bot_name,
-            "transcription_options": {"provider": self.transcript_provider},
-            "metadata": {"opportunity": str(meeting_ref)},
+            "recording_config": {
+                "transcript": {"provider": {self.transcript_provider: {}}},
+            },
         }
         data = self._post("/bot/", payload)
         return str((data or {}).get("id") or "")
@@ -129,17 +132,27 @@ class RecallCaptureProvider(CaptureProvider):
         return {"Authorization": f"Token {self.api_key}", "Content-Type": "application/json",
                 "Accept": "application/json"}
 
+    def _open(self, req):
+        """Open a request and surface Recall's ERROR BODY on 4xx/5xx — the body says exactly
+        which field it rejected (a bare 'HTTP 400' is useless for debugging)."""
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                raw = r.read().decode("utf-8") or "{}"
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as e:
+            try:
+                body = e.read().decode("utf-8", "ignore")[:600]
+            except Exception:  # noqa: BLE001
+                body = ""
+            raise RuntimeError(f"Recall HTTP {e.code} at {req.full_url}: {body}") from None
+
     def _get(self, path: str):
-        req = urllib.request.Request(self._base() + path, headers=self._headers())
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            return json.loads(r.read().decode("utf-8"))
+        return self._open(urllib.request.Request(self._base() + path, headers=self._headers()))
 
     def _post(self, path: str, payload: dict):
-        req = urllib.request.Request(
+        return self._open(urllib.request.Request(
             self._base() + path, data=json.dumps(payload).encode("utf-8"),
-            headers=self._headers(), method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            return json.loads(r.read().decode("utf-8"))
+            headers=self._headers(), method="POST"))
 
 
 # ── normalization helpers (defensive across Recall's shape variants) ──────────
