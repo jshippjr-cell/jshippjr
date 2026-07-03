@@ -77,12 +77,17 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   **✅ Step 1 done** — `agency_id` threads Opportunity→Project→Campaign so Agency/Company
   Intelligence is reachable. **✅ Parent object designed** — **Campaign Intelligence**
   (`CAMPAIGN_INTELLIGENCE.md`): the canonical per-engagement record with a per-field
-  provenance model (`{value, sources[], status}`), born at the discovery call, inherited
-  and contributed-back by every module. **Next (awaiting Jon's §9 decisions):** build CI
-  tables + lazy backfill → point the workspace's direction cards at CI with the provenance
-  card → discovery-call capture → proposal/production/delivery read+write CI → flywheel to
-  Agency Intelligence. Then the PRD's cues/team/AI-employee increments on top. Each stays
-  flagged, dogfood-first, and passes the anti-generic-PM gate.
+  provenance model (`{value, sources[], status}`), inherited and contributed-back by every
+  module. **✅ Campaign Intake designed** (`campaign-intake-prd.md`) — the *capture
+  experience* that creates/enriches CI (user says "what happened"; AI extracts, asks only
+  material gaps, produces CI invisibly). Two records: immutable **Captures** (evidence) →
+  living **Campaign Intelligence** (synthesis). Vocabulary: *Capture* (user verb) /
+  *Campaign Intake* (module) / *Campaign Intelligence* (system object, never shown).
+  **Next (awaiting Jon's decisions in both PRDs' open-questions):** build CI tables + lazy
+  backfill → point the workspace's direction cards at CI with the provenance card → the
+  Capture pipeline (paste-notes MVP → voice → RFP/email → integrations) → proposal/
+  production/delivery read+write CI → flywheel to Agency Intelligence. Then the PRD's
+  cues/team/AI-employee increments. Each stays flagged, dogfood-first, anti-generic-PM.
 - **Platform UI** — realize `platform-website-plan.md` (control-room theme, Why-Today
   queue, Strategy Card gating outreach, `/today` continuity queue, timecoded review as
   the hero).

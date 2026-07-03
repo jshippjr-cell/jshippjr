@@ -233,10 +233,16 @@ campaign for this buyer start smarter (Constitution §6).
 
 ## 5. Lifecycle — born at the call, enriched to delivery, archived as precedent
 
-### 5.1 Birth — the Discovery Call (the missing intake, now designed)
-A **"Log discovery call"** action is CI's birth event. It captures the call as structured
-input (attendees, date, and the creative content: emotional arc, references, agency intent,
-budget signal, deadline) and, in one transaction:
+### 5.1 Birth — via Campaign Intake (the capture experience, designed separately)
+CI is born from a **Capture** — see the full experience spec in
+`docs/campaign-intake-prd.md`. Two refinements that spec settled and this model adopts:
+**(a)** CI is born at the *first capture of ANY modality* (voice, transcript, RFP, email,
+or auto-seed from an opportunity) — not specifically "a discovery call." **(b)** A
+**Capture** is an *immutable evidence record* (one per input, holding the raw source + its
+extraction); **Campaign Intelligence** is the *living synthesis* enriched by one or many
+captures. Each CI field cites the capture(s) it came from — source attribution for free.
+
+A capture, once ingested, seeds/enriches CI in one transaction:
 1. creates the `campaign_intelligence` root (`state=seeded`, `discovery_call_at=now`),
 2. links the `opp_id` and resolves/links the `agency_id` (reusing Step 1's matcher),
 3. **seeds `direction.*` fields** from the call (`sources=[discovery_call]`,
