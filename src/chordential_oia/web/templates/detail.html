@@ -30,6 +30,9 @@
     </details>
   </div>
   <div class="detail-fit">
+    {# The Campaign Brief is the primary artifact generated from Opportunity + Campaign
+       Intelligence — the deliverable we send to agencies. Primary CTA, upper-right. #}
+    <a class="btn primary" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief →</a>
     <div class="big-num">{{ row['alignment']|pct }}</div>
     <div class="muted">qualification fit</div>
   </div>
@@ -87,6 +90,49 @@
   </div>
 </div>
 
+{# ── Upcoming Discovery — contextual, shown ONLY when a meeting exists. Scheduling itself
+   lives in the Campaign Brief's client-facing CTA; here we just reflect the state. ── #}
+{% if meeting %}
+<style>
+.disc-panel{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:center}
+.disc-panel .disc-field{display:flex;flex-direction:column;gap:2px}
+.disc-panel .disc-k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#8a8580)}
+.disc-panel .disc-v{font-weight:600}
+.disc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+.disc-badge.on{background:#eaf5ea;color:#2f6a34}
+.disc-badge.off{background:#f2ece3;color:#8a7f6e}
+.disc-badge.pending{background:#fdf1e3;color:#9a5a1a}
+.disc-acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+</style>
+<section class="card" id="discovery">
+  <div class="card-head"><h2>🎥 Upcoming Discovery</h2></div>
+  <div class="disc-panel">
+    <div class="disc-field"><span class="disc-k">Date</span><span class="disc-v">{{ meeting['start_at'][:10] if meeting['start_at'] else '— set a date' }}</span></div>
+    <div class="disc-field"><span class="disc-k">Time</span><span class="disc-v">{{ meeting['start_at'][11:16] if meeting['start_at'] and meeting['start_at']|length > 11 else '—' }}</span></div>
+    <div class="disc-field"><span class="disc-k">Notetaker</span>
+      {% if meeting['notetaker_provider'] %}<span class="disc-badge on">Recall connected</span>
+      {% else %}<span class="disc-badge off">Not connected</span>{% endif %}</div>
+    <div class="disc-field"><span class="disc-k">Transcript</span>
+      {% if meeting['transcript_capture_id'] %}<span class="disc-badge on">Complete</span>
+      {% elif meeting['notetaker_provider'] %}<span class="disc-badge pending">Pending</span>
+      {% else %}<span class="disc-badge off">Paste when ready</span>{% endif %}</div>
+    <div class="disc-acts">
+      {% if meeting['join_url'] %}<a class="btn tiny primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join meeting →</a>{% endif %}
+      <details style="display:inline"><summary class="btn tiny" style="cursor:pointer">Reschedule</summary>
+        <form method="post" action="/opportunity/{{ row['id'] }}/discovery/schedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input type="datetime-local" name="start_at" value="{{ meeting['start_at'] }}">
+          <input type="url" name="join_url" placeholder="Zoom / Meet link" value="{{ meeting['join_url'] or '' }}" style="min-width:200px">
+          <button class="btn tiny primary" type="submit">Save</button>
+        </form>
+      </details>
+      <form method="post" action="/opportunity/{{ row['id'] }}/discovery/{{ meeting['id'] }}/cancel" style="margin:0">
+        <button class="btn tiny ghost" type="submit">Cancel</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {# ── Campaign Intake — "Update Intelligence" (ADR-0013): born on and anchored to the
    opportunity, above the Opportunity section + tabs. The living source of truth. ── #}
 {% if ci_view %}
@@ -143,18 +189,9 @@
   </div>
   {% endif %}
 
-  {# Discovery-call lane(s) — the richest source. Async: schedule → bot → auto-ingest.
-     Rendered from the registry; disabled + honest until a notetaker seam is configured. #}
-  {% for ln in intake_async_lanes %}
-  <div class="ci-lane-async">
-    <span>{{ ln.icon }} <b>{{ ln.label }}</b> — {{ ln.describe }}</span>
-    {% if ln.is_available() %}
-    <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/meeting/schedule">Schedule →</a>
-    {% else %}
-    <span class="ci-chip" title="Connect Zoom + a notetaker to enable">Connect a notetaker to enable</span>
-    {% endif %}
-  </div>
-  {% endfor %}
+  {# Discovery scheduling lives in the Campaign Brief now (the client-facing CTA). The opp
+     page shows a call only CONTEXTUALLY — the "Upcoming Discovery" panel below, when one
+     exists. Intelligence still ingests any transcript/notes through the lanes here. #}
 
   {# Update Intelligence — one panel, every manual lane, two stances. #}
   <form class="ci-update" method="post" enctype="multipart/form-data"
@@ -261,7 +298,6 @@
 
 <div class="action-bar">
   {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
-  <a class="btn ghost" href="/opportunity/{{ row['id'] }}/capabilities">📄 Capabilities doc</a>
   {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">

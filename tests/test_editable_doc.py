@@ -222,7 +222,7 @@ def test_custom_chip_endpoint_persists(client):
 def test_capabilities_route_still_renders_with_edit_flag(client):
     page = client.get("/opportunity/1/capabilities?edit=1")
     assert page.status_code == 200
-    assert "Capabilities" in page.text
+    assert "Campaign Brief" in page.text
 
 
 # --- editable-doc UI: edit mode renders affordances, preview stays clean ----- #

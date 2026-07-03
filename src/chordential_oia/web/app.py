@@ -1757,7 +1757,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
                        added: str = "", asked: str = ""):
     conn = db.connect()
     ci = ci_view = None
-    intake_sync_lanes = intake_async_lanes = None
+    intake_sync_lanes = None
+    meeting = None
     try:
         row, opp, ev = _load(conn, opp_id)
         if row is None:
@@ -1771,7 +1772,9 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
             ci = campaign_intelligence.ensure_for_opportunity(conn, row)
             ci_view = campaign_intelligence.fields_view(conn, ci["id"])
             intake_sync_lanes = intake_lanes.sync_lanes()
-            intake_async_lanes = intake_lanes.async_lanes()
+        # Discovery lives in the Campaign Brief now; the opp page shows a meeting only
+        # CONTEXTUALLY (the "Upcoming Discovery" panel), never a standing widget.
+        meeting = db.meeting_for_opp(conn, opp_id)
     finally:
         conn.close()
     qual, scored = ev
@@ -1793,7 +1796,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         next_status=_NEXT_STATUS.get(row["status"]),
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
         ci=ci, ci_view=ci_view, intake_sync_lanes=intake_sync_lanes,
-        intake_async_lanes=intake_async_lanes, capture_summary=capture_summary,
+        meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
+        capture_summary=capture_summary,
     )
 
 
@@ -1952,6 +1956,60 @@ def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
         need, client = (need or "").strip(), (client or "").strip()
         db.apply_intelligence_to_opportunity(
             conn, opp_id, need=need or None, client=client or None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Discovery scheduling (ADR-0014 §4/§6) — the meeting is tied to the opportunity
+# before it begins. Manual today (log the time + link); the Zoom + Recall auto-flow
+# lights up behind the same routes when the provider seams are configured.
+# --------------------------------------------------------------------------- #
+def _notetaker_provider() -> str:
+    return (os.environ.get("CHORDENTIAL_NOTETAKER_PROVIDER", "") or "").strip()
+
+
+@app.post("/opportunity/{opp_id}/discovery/schedule")
+def discovery_schedule(opp_id: int, start_at: str = Form(""), join_url: str = Form(""),
+                       duration_min: int = Form(20)):
+    """Schedule (or log) a discovery call tied to this opportunity. With the Zoom +
+    notetaker seams configured this would create the meeting + invite Recall; in the manual
+    interim it records the time + join link the operator provides. Honest: the notetaker is
+    marked connected only when a provider is configured."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        ci_id = None
+        if campaigns.workspace_enabled():
+            ci_id = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
+        existing = db.meeting_for_opp(conn, opp_id)
+        notetaker = _notetaker_provider()
+        if existing is not None:                       # reschedule the live meeting in place
+            db.update_meeting(conn, existing["id"], start_at=(start_at or "").strip(),
+                              join_url=(join_url or "").strip(), status="scheduled")
+        else:
+            db.create_meeting(conn, opp_id=opp_id, ci_id=ci_id,
+                              start_at=(start_at or "").strip(),
+                              join_url=(join_url or "").strip(),
+                              duration_min=duration_min or 20,
+                              notetaker_provider=notetaker,
+                              status="scheduled")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/discovery/{meeting_id}/cancel")
+def discovery_cancel(opp_id: int, meeting_id: int):
+    """Cancel a scheduled discovery call (the panel disappears; the record is retained)."""
+    conn = db.connect()
+    try:
+        m = db.get_meeting(conn, meeting_id)
+        if m is not None and m["opp_id"] == opp_id:
+            db.update_meeting(conn, meeting_id, status="canceled")
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)

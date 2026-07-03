@@ -84,7 +84,7 @@ def client(tmp_path, monkeypatch):
 def test_capabilities_route_renders_and_toggles(client):
     page = client.get("/opportunity/1/capabilities")
     assert page.status_code == 200
-    assert "Capabilities" in page.text and "Save as PDF" in page.text
+    assert "Campaign Brief" in page.text and "Save as PDF" in page.text
     # The toggle bar drives each section explicitly (independent of stage default).
     off = client.get("/opportunity/1/capabilities?submitted=1&examples=1")  # cost unchecked
     assert "Indicative investment" not in off.text

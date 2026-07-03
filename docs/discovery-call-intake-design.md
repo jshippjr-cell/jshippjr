@@ -322,23 +322,45 @@ src/chordential_oia/
 
 ## 6. UX
 
-### 6.1 Entry points (all three the user named)
-- **Opportunity page** — a "Schedule Discovery Call" action in the intake panel (next to
-  "Update Intelligence").
-- **Outreach email generator** — a "Propose a discovery call" insert that drops a scheduling
-  link/time into the drafted email and, on send, arms the meeting.
-- **Calendar / Meeting section** — a lightweight meetings list ("upcoming / awaiting transcript
-  / processed") scoped to opportunities.
+### 6.0 The discovery CTA lives in the CAMPAIGN BRIEF (revision 2026-07-03)
+The scheduling call-to-action is **not a standing widget on the Opportunity page** — that read
+as disconnected from the workflow. Instead:
 
-### 6.2 Schedule modal
-Provider (Zoom), date/time + duration, attendees (client email prefilled from the opp contact +
-Jon), notetaker choice (default from env), and a **recording-consent notice** toggle (on by
-default; its text goes into the invite — honesty + two-party-consent hygiene). Submitting runs
-§4.3 steps 1–4 and returns to the opp with the scheduled state.
+- **The Campaign Brief is the primary client-facing artifact.** (The doc formerly labeled
+  "Capabilities doc" — same generator, renamed.) Its button is the **primary CTA in the
+  upper-right of the Opportunity page, above Campaign Intelligence** — the one artifact
+  generated from Opportunity + Campaign Intelligence, the thing we send to agencies.
+- **The Discovery Call CTA is embedded at the END of the Brief** — a "NEXT STEP — Schedule a
+  Discovery Call" section (20-minute framing) that naturally guides the client from reading the
+  brief into booking the call. This is where scheduling begins; the client is never asked to
+  fill out a form on our side.
+- **The Opportunity page stays focused on selling.** It shows discovery only *contextually* —
+  an **"Upcoming Discovery"** panel that appears **only when a meeting exists** (date · time ·
+  Join · Reschedule · notetaker status · transcript Pending/Complete), not a standing widget.
 
-### 6.3 Pre-meeting state (on the opp)
-A calm strip: "🎥 Discovery call scheduled · Thu 2:00pm · Join link · 🤖 notetaker armed ·
-Reschedule / Cancel." No CI changes yet.
+Honest sequencing: today the Brief's CTA books via the configured discovery-call link
+(`CHORDENTIAL_DISCOVERY_CALL_URL`) and a scheduled call is logged as a `meetings` row (manual
+until the seams land); the same CTA and the same panel light up the full **Zoom + Recall**
+auto-flow (§4) once those provider seams are configured — no UI change required.
+
+### 6.1 Entry points
+- **Campaign Brief** (primary) — the "Schedule a Discovery Call" CTA at the end of the document.
+- **Opportunity page** — the contextual "Upcoming Discovery" panel (only when a meeting exists)
+  with Reschedule / Cancel; and an operator "log/schedule a call" affordance.
+- **Outreach email generator** (future) — a "Propose a discovery call" insert that arms the
+  meeting on send.
+
+### 6.2 Schedule flow
+When scheduling is triggered (client CTA, or operator log): create the `meetings` row tied to
+the opportunity. With the Zoom + notetaker seams configured, this runs §4.3 steps 1–4 (create
+Zoom, calendar invite with the consent notice, invite Recall). With no seams, the operator sets
+the time + join link manually and the notetaker shows **not connected** — honest, and transcripts
+still enter via the paste/upload lanes until Recall is on.
+
+### 6.3 The "Upcoming Discovery" panel (on the opp, contextual)
+Shown only when a meeting exists: **date · time · Join Meeting · Reschedule · notetaker
+(Connected / not connected) · Transcript (Pending / Complete)**. No CI changes until the
+transcript arrives and is reviewed.
 
 ### 6.4 The post-meeting review surface (the important new UX)
 Because capture is automatic, the review *is* the product. A "**Review this call's updates**"

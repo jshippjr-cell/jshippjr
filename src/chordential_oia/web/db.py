@@ -1082,6 +1082,26 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             UNIQUE(campaign_id, section)
         )"""
     )
+    # Discovery meetings — a meeting is tied to its Opportunity BEFORE it begins (ADR-0014
+    # §4.2). The schedule-time association the async transcript flow depends on; also the
+    # backing for the opportunity's contextual "Upcoming Discovery" panel. Provider fields
+    # (Zoom/Recall) stay null in the manual interim and fill in when the seams are configured.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS meetings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER, ci_id INTEGER,
+            provider TEXT DEFAULT 'manual',      -- manual | zoom | meet | teams
+            external_meeting_id TEXT, join_url TEXT,
+            start_at TEXT, duration_min INTEGER DEFAULT 20, timezone TEXT,
+            attendees_json TEXT,
+            notetaker_provider TEXT DEFAULT '',  -- '' = not connected | recall | zoom_ai | …
+            bot_id TEXT, consent_recorded INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'scheduled',     -- scheduled|bot_invited|in_progress|
+                                                 --   transcript_ready|ingested|failed|canceled
+            transcript_capture_id INTEGER,
+            error TEXT, scheduled_by TEXT, created_at TEXT, updated_at TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -4077,6 +4097,66 @@ def fields_by_capture(conn: sqlite3.Connection, capture_id: int) -> List[sqlite3
     return conn.execute(
         "SELECT * FROM campaign_intelligence_field WHERE capture_id = ? "
         "ORDER BY facet, key, kind", (capture_id,)).fetchall()
+
+
+# --- Discovery meetings (ADR-0014 §4.2) — tied to the opportunity before they begin ---- #
+_MEETING_OPEN_STATUSES = ("scheduled", "bot_invited", "in_progress",
+                          "transcript_ready", "ingested")
+
+
+def create_meeting(conn: sqlite3.Connection, *, opp_id: int, ci_id: Optional[int] = None,
+                   start_at: str = "", join_url: str = "", duration_min: int = 20,
+                   provider: str = "manual", notetaker_provider: str = "",
+                   scheduled_by: str = "operator", status: str = "scheduled") -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO meetings
+           (opp_id, ci_id, provider, join_url, start_at, duration_min,
+            notetaker_provider, status, scheduled_by, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (opp_id, ci_id, provider, join_url, start_at, duration_min,
+         notetaker_provider, status, scheduled_by, now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_meeting(conn: sqlite3.Connection, meeting_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+
+
+def meeting_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    """The opportunity's current (non-canceled) discovery meeting — what the contextual
+    'Upcoming Discovery' panel renders. The most recent live one wins."""
+    ph = ",".join("?" for _ in _MEETING_OPEN_STATUSES)
+    return conn.execute(
+        f"SELECT * FROM meetings WHERE opp_id = ? AND status IN ({ph}) "
+        "ORDER BY start_at IS NULL, start_at, id DESC LIMIT 1",
+        (opp_id, *_MEETING_OPEN_STATUSES)).fetchone()
+
+
+def list_meetings(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM meetings WHERE opp_id = ? ORDER BY created_at DESC, id DESC",
+        (opp_id,)).fetchall()
+
+
+def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
+    """Patch a meeting (start_at, join_url, status, bot_id, transcript_capture_id, …)."""
+    allowed = {"start_at", "join_url", "duration_min", "status", "provider",
+               "notetaker_provider", "bot_id", "external_meeting_id",
+               "transcript_capture_id", "error"}
+    sets, vals = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k} = ?")
+            vals.append(v)
+    if not sets:
+        return
+    sets.append("updated_at = ?")
+    vals.append(datetime.now(timezone.utc).isoformat())
+    vals.append(meeting_id)
+    conn.execute(f"UPDATE meetings SET {', '.join(sets)} WHERE id = ?", vals)
+    conn.commit()
 
 
 # --- ADR-0013: CI anchored on the opportunity; adopted by the campaign at Won ------ #

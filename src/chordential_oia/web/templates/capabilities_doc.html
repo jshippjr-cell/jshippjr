@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chordential — Capabilities · {{ doc.client }}</title>
+  <title>Chordential — Campaign Brief · {{ doc.client }}</title>
   <link rel="stylesheet" href="/static/style.css">
   <style>
     /* This document keeps its own self-contained styling (it's also the print/PDF
@@ -60,6 +60,15 @@
       border-radius:8px;padding:14px 16px;margin-top:8px}
     .callout a{color:var(--orange);font-weight:700}
     .docusign{background:#fbf3ec;border:1px dashed var(--orange);border-radius:8px;padding:14px 16px}
+    /* NEXT STEP — the discovery-call CTA that closes the brief */
+    .cta-block{margin-top:30px;padding:26px 24px;text-align:center;background:var(--wine);
+      color:#fff;border-radius:12px}
+    .cta-kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.7;font-weight:700}
+    .cta-title{font-size:22px;font-weight:760;margin:6px 0 6px;color:#fff;border:0;padding:0}
+    .cta-copy{font-size:15px;line-height:1.5;opacity:.9;max-width:520px;margin:0 auto 16px}
+    .cta-btn{display:inline-block;background:var(--orange);color:#fff;font-weight:700;
+      text-decoration:none;padding:13px 26px;border-radius:9px;font-size:15px}
+    .cta-note{font-size:12px;opacity:.7;margin-top:10px}
     /* delivery-package outline (ported from the static delivery sample) */
     .delivery-head{margin-top:34px;padding-top:18px;border-top:3px solid var(--orange)}
     .delivery-kicker{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;
@@ -250,7 +259,7 @@
 <div class="page">
   <div class="letterhead">
     <img src="/static/public/wordmark-dark.png" alt="Chordential">
-    <div class="doc-kicker">Capabilities &amp; Approach</div>
+    <div class="doc-kicker">Campaign Brief</div>
     <div class="doc-title">{{ doc.need }}</div>
     <div class="doc-sub">Prepared for {{ doc.client }}</div>
     {% if edit %}
@@ -490,16 +499,6 @@
     {% endif %}
     {% endif %}
 
-    {% if doc.show_call %}
-    <section class="block">
-      <h2 class="sec">Next step — a short discovery call</h2>
-      <div class="callout">
-        Let's spend 20 minutes locking the creative direction and timeline.
-        {% if doc.call_url %}<br><a href="{{ doc.call_url }}">Book a time →</a>{% else %}Reply to this and we'll find a slot that works.{% endif %}
-      </div>
-    </section>
-    {% endif %}
-
     {# --- Price + terms + sign/pay ALWAYS LAST (§7): Investment → Terms →
            (DocuSign / Pay deposit). Gated on their toggles; off in discovery. --- #}
     {% if doc.show_cost and doc.price_low %}
@@ -539,6 +538,24 @@
         <span class="placeholder-note">Deposit invoice is generated when the project is spun up.</span>
         {% endif %}
       </div>
+    </section>
+    {% endif %}
+
+    {# NEXT STEP — the discovery-call CTA closes the brief and guides the client into
+       booking. Today it books via the configured discovery link; the same button drives
+       the Zoom + Recall auto-schedule once those seams are on (design §6). #}
+    {% if doc.show_call %}
+    <section class="block cta-block">
+      <div class="cta-kicker">Next step</div>
+      <h2 class="cta-title">Schedule a discovery call</h2>
+      <p class="cta-copy">Let's spend 20 minutes discussing your creative direction, timeline,
+        campaign goals, and production requirements.</p>
+      {% if doc.call_url %}
+      <a class="cta-btn" href="{{ doc.call_url }}">Schedule Discovery Call →</a>
+      {% else %}
+      <a class="cta-btn" href="mailto:?subject=Discovery call — {{ doc.need|urlencode }}">Schedule Discovery Call →</a>
+      <div class="cta-note">Reply to this and we'll find a slot that works.</div>
+      {% endif %}
     </section>
     {% endif %}
 
