@@ -37,6 +37,8 @@
       <div class="sd-field"><label>Client name</label><input type="text" name="client_name" value="{{ prefill_name }}"></div>
       <div class="sd-field"><label>Client email</label><input type="email" name="client_email" value="{{ prefill_email }}"></div>
     </div>
+    <div class="sd-field"><label>Zoom / Meet link <span class="muted">(optional — paste yours, e.g. your Personal Meeting Room, if the Zoom API isn't connected)</span></label>
+      <input type="url" name="join_url" placeholder="https://zoom.us/j/…"></div>
     <button class="btn primary" type="submit">Schedule →</button>
     <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Cancel</a>
   </form>

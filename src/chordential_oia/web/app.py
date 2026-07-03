@@ -2090,9 +2090,11 @@ def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
 def discovery_schedule_submit(opp_id: int, meeting_type: str = Form("zoom"),
                               date: str = Form(""), time: str = Form(""),
                               duration_min: int = Form(30), client_name: str = Form(""),
-                              client_email: str = Form(""), request_id: str = Form("")):
+                              client_email: str = Form(""), join_url: str = Form(""),
+                              request_id: str = Form("")):
     """Schedule the call through the shared engine (Zoom → Zoom+Recall+calendar; Phone → record
-    + email). Initiated by the operator, optionally fulfilling a client request."""
+    + email). ``join_url`` lets the operator PASTE a link (e.g. their Personal Meeting Room) so
+    Recall can join without the Zoom API. Initiated by the operator, optionally from a request."""
     conn = db.connect()
     try:
         row = db.get_opportunity(conn, opp_id)
@@ -2104,7 +2106,8 @@ def discovery_schedule_submit(opp_id: int, meeting_type: str = Form("zoom"),
         meeting_scheduler.schedule(
             conn, row, meeting_type=meeting_type, start_at=start_at,
             duration_min=duration_min or 30, client_name=client_name.strip(),
-            client_email=client_email.strip(), initiated_by=initiated, request_id=rid)
+            client_email=client_email.strip(), join_url=join_url.strip(),
+            initiated_by=initiated, request_id=rid)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)

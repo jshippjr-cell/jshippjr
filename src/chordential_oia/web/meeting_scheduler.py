@@ -39,25 +39,28 @@ def _fmt(start_at: str) -> str:
 
 def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
              duration_min: int = 30, client_name: str = "", client_email: str = "",
-             initiated_by: str = "operator", request_id: Optional[int] = None,
-             scheduled_by: str = "operator") -> dict:
+             join_url: str = "", initiated_by: str = "operator",
+             request_id: Optional[int] = None, scheduled_by: str = "operator") -> dict:
     """Schedule a discovery call (the shared engine). Best-effort across every seam; returns
-    ``{"ok": True, "meeting": row}`` or ``{"ok": False, "error": …}``. Zoom arms Recall; phone
-    never does."""
+    ``{"ok": True, "meeting": row}``. Zoom arms Recall against whatever join link we have —
+    auto-created by the Zoom provider, or one the operator PASTES (e.g. their Personal Meeting
+    Room), so the Zoom API is optional: Recall + a pasted link is enough. Phone never arms Recall.
+    """
     meeting_type = PHONE if meeting_type == PHONE else ZOOM
     ci_id = None
     if campaigns.workspace_enabled():
         ci_id = campaign_intelligence.ensure_for_opportunity(conn, opp)["id"]
     manage_token = secrets.token_urlsafe(24)
 
-    join_url = external_meeting_id = notetaker = bot_id = calendar_event_id = ""
-    provider = "manual"
+    join_url = (join_url or "").strip()   # an operator-pasted link (used if no Zoom provider)
+    external_meeting_id = notetaker = bot_id = calendar_event_id = ""
+    provider = "zoom" if join_url else "manual"
     status = M.SCHEDULED
 
     if meeting_type == ZOOM:
-        # 1) host the Zoom meeting (manual if no provider)
+        # 1) host the Zoom meeting via the provider; a pasted link already covers the manual case
         mp = M.get_meeting_provider()
-        if mp.name != "manual":
+        if mp.name != "manual" and not join_url:
             try:
                 hosted = mp.create(topic=(opp["need"] or "Discovery call"),
                                    start_at=start_at, duration_min=duration_min, attendees=[])

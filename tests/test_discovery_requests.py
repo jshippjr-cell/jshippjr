@@ -106,6 +106,24 @@ def test_accepting_a_request_schedules_it_and_closes_the_request(tmp_path, monke
             conn.close()
 
 
+def test_pasted_zoom_link_is_used_without_the_zoom_api(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    with TestClient(app_mod.app) as c:
+        # operator pastes their Personal Meeting Room link — no Zoom provider needed; Recall
+        # (when configured) can still join it. The Zoom API is optional (ADR-0016 shortcut).
+        c.post(f"/opportunity/{opp_id}/schedule",
+               data={"meeting_type": "zoom", "date": "2026-07-14", "time": "10:00",
+                     "join_url": "https://zoom.us/j/MYPERSONALROOM", "client_email": "s@x.com"})
+        conn = app_mod.db.connect()
+        try:
+            m = app_mod.db.meeting_for_opp(conn, opp_id)
+            assert m["join_url"] == "https://zoom.us/j/MYPERSONALROOM" and m["provider"] == "zoom"
+        finally:
+            conn.close()
+
+
 def test_manual_schedule_uses_the_same_engine_without_a_request(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
