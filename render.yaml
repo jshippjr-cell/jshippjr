@@ -46,9 +46,10 @@ services:
       # Campaign Workspace (Creative OS) — the campaign is the workspace root that
       # elevates a project into "one screen, one campaign, everything" (creative
       # timeline + structured creative direction; more per docs/campaign-workspace-prd.md).
-      # Flagged so it ships dark by default; ON here to dogfood it. Admin-gated —
-      # only the operator sees it. Additive + lazy (campaigns are created on first
-      # open), so enabling it never disturbs existing projects/delivery. Set "0" to hide.
+      # Dogfooded in prod: the code now defaults this ON (so it deploys reliably even
+      # if Render doesn't re-apply this env var); this line is explicit belt-and-braces.
+      # Admin-gated — only the operator sees it. Additive + lazy (campaigns created on
+      # first open), so it never disturbs existing projects/delivery. Set "0" to hide.
       - key: CHORDENTIAL_CAMPAIGN_WORKSPACE
         value: "1"
       # Web Push (native phone alerts for the installed PWA). The VAPID keypair

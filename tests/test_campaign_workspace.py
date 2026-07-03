@@ -41,6 +41,17 @@ def test_direction_sections_are_the_music_brief():
     assert campaigns.DIRECTION_LABELS["emotional_arc"] == "Emotional Arc"
 
 
+def test_workspace_enabled_defaults_on(monkeypatch):
+    # Dogfooding in prod: the flag defaults ON (a code default deploys reliably);
+    # only an explicit "0"/false disables it.
+    monkeypatch.delenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", raising=False)
+    assert campaigns.workspace_enabled() is True
+    monkeypatch.setenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", "0")
+    assert campaigns.workspace_enabled() is False
+    monkeypatch.setenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", "1")
+    assert campaigns.workspace_enabled() is True
+
+
 def test_hydrate_phase_from_delivery_maps_in_flight_work():
     assert campaigns.hydrate_phase_from_delivery({"state": "Delivered"}) == "Delivered"
     assert campaigns.hydrate_phase_from_delivery({"state": "In review"}) == "Agency Review"
@@ -88,10 +99,8 @@ def test_direction_upsert_merges_one_field(tmp_path):
 # --------------------------------------------------------------------------- #
 def _app(tmp_path, monkeypatch, *, flag: bool):
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "web.db"))
-    if flag:
-        monkeypatch.setenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", "1")
-    else:
-        monkeypatch.delenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", raising=False)
+    # The flag defaults ON now (dogfooding in prod); "0" explicitly hides it.
+    monkeypatch.setenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", "1" if flag else "0")
     from chordential_oia.web import db as db_mod
     importlib.reload(db_mod)
     from chordential_oia.web import campaigns as camp_mod
@@ -101,7 +110,9 @@ def _app(tmp_path, monkeypatch, *, flag: bool):
     return app_mod
 
 
-def test_workspace_off_by_default_hides_everything(tmp_path, monkeypatch):
+def test_workspace_disabled_hides_everything(tmp_path, monkeypatch):
+    # CHORDENTIAL_CAMPAIGN_WORKSPACE=0 hides the whole module (routes 404, no entry
+    # point), so it can always be turned back off cleanly.
     app_mod = _app(tmp_path, monkeypatch, flag=False)
     conn = app_mod.db.connect()
     app_mod.db.init_db(conn)

@@ -18,10 +18,12 @@ _FALSEY = {"0", "false", "no", "off", ""}
 
 
 def workspace_enabled() -> bool:
-    """The Campaign Workspace is a flagged module — OFF by default. Flip
-    CHORDENTIAL_CAMPAIGN_WORKSPACE on to dogfood it."""
+    """The Campaign Workspace flag. Now ON by default — Jon has decided to dogfood it
+    in prod, and a code default deploys reliably (unlike a render.yaml env-var-only
+    change, which Render doesn't always re-apply to a running service). Set
+    CHORDENTIAL_CAMPAIGN_WORKSPACE=0 to hide it again."""
     return os.environ.get(
-        "CHORDENTIAL_CAMPAIGN_WORKSPACE", "0").strip().lower() not in _FALSEY
+        "CHORDENTIAL_CAMPAIGN_WORKSPACE", "1").strip().lower() not in _FALSEY
 
 
 # The creative timeline — a music-campaign arc, NOT a generic todo board. The
