@@ -96,15 +96,33 @@ class RecallCaptureProvider(CaptureProvider):
         _log.info("Recall bot %s state=%s codes=%s", external_ref, state, codes)
         if state != "done":
             return None            # still recording (or fatal) — poll again later
+        # New Recall API: the legacy /bot/{id}/transcript/ is retired. The finished transcript
+        # lives at a signed download_url on the bot's recording artifact — find it and fetch it.
+        url = _transcript_download_url(bot)
+        if not url:
+            # Fallback: the bot may carry only a transcript ID → retrieve it (the endpoint the
+            # legacy error pointed to: GET /transcript/{id}/) to get the signed download_url.
+            tid = _transcript_id(bot)
+            if tid:
+                try:
+                    meta = self._get(f"/transcript/{tid}/")
+                    url = _transcript_download_url(meta) or str(
+                        (meta.get("data") or {}).get("download_url") or "")
+                except Exception as e:  # noqa: BLE001
+                    _log.warning("Recall transcript retrieve failed for %s: %s", external_ref, e)
+        if not url:
+            _log.warning("Recall bot %s done but no transcript download_url found; bot shape=%s",
+                         external_ref, _summarize(bot))
+            return None
         try:
-            raw = self._get(f"/bot/{external_ref}/transcript/")
+            raw = self._download(url)
         except Exception as e:  # noqa: BLE001
-            _log.warning("Recall transcript fetch failed for %s: %s", external_ref, e)
+            _log.warning("Recall transcript download failed for %s: %s", external_ref, e)
             return None
         t = _normalize_transcript(raw, external_ref)
         _log.info("Recall transcript for %s: %s", external_ref,
                   ("%d chars / %d speakers" % (len(t.text), len(t.speakers)))
-                  if t else "empty or unparseable (shape=%s)" % type(raw).__name__)
+                  if t else "downloaded but empty/unparseable (shape=%s)" % type(raw).__name__)
         return t
 
     def parse_webhook(self, headers: Mapping, body: bytes) -> MeetingEvent:
@@ -163,6 +181,72 @@ class RecallCaptureProvider(CaptureProvider):
             self._base() + path, data=json.dumps(payload).encode("utf-8"),
             headers=self._headers(), method="POST"))
 
+    def _download(self, url: str):
+        """Fetch a signed transcript download URL (no API auth — the signature is in the URL)."""
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                raw = r.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else None
+        except urllib.error.HTTPError as e:
+            try:
+                body = e.read().decode("utf-8", "ignore")[:400]
+            except Exception:  # noqa: BLE001
+                body = ""
+            raise RuntimeError(f"download HTTP {e.code}: {body}") from None
+
+
+# ── new-API transcript retrieval helpers ─────────────────────────────────────
+def _transcript_download_url(bot) -> str:
+    """Find the transcript's signed download_url anywhere under a 'transcript' key in the bot
+    object (recordings[].media_shortcuts.transcript.data.download_url, tolerant of nesting)."""
+    def walk(obj, under_transcript=False):
+        if isinstance(obj, dict):
+            if under_transcript:
+                dl = obj.get("download_url")
+                if isinstance(dl, str) and dl:
+                    return dl
+            for k, v in obj.items():
+                u = walk(v, under_transcript or k == "transcript")
+                if u:
+                    return u
+        elif isinstance(obj, list):
+            for v in obj:
+                u = walk(v, under_transcript)
+                if u:
+                    return u
+        return ""
+    return walk(bot) or ""
+
+
+def _transcript_id(bot) -> str:
+    """Find a transcript artifact id under a 'transcript' key (for the /transcript/{id}/ call)."""
+    def walk(obj, under_transcript=False):
+        if isinstance(obj, dict):
+            if under_transcript and obj.get("id"):
+                return str(obj["id"])
+            for k, v in obj.items():
+                u = walk(v, under_transcript or k == "transcript")
+                if u:
+                    return u
+        elif isinstance(obj, list):
+            for v in obj:
+                u = walk(v, under_transcript)
+                if u:
+                    return u
+        return ""
+    return walk(bot) or ""
+
+
+def _summarize(bot) -> str:
+    """A compact shape hint for the logs when we can't find the transcript URL."""
+    if not isinstance(bot, dict):
+        return type(bot).__name__
+    recs = bot.get("recordings")
+    rec0 = (recs[0] if isinstance(recs, list) and recs else {})
+    return "top_keys=%s recording_keys=%s" % (
+        list(bot.keys()), list(rec0.keys()) if isinstance(rec0, dict) else type(rec0).__name__)
+
 
 # ── normalization helpers (defensive across Recall's shape variants) ──────────
 def _bot_codes(bot) -> list:
@@ -206,16 +290,22 @@ def _ts(value) -> float:
 
 
 def _normalize_transcript(raw, bot_id: str) -> Optional[Transcript]:
-    """Normalize Recall's transcript (a list of speaker turns, each a run of words OR a text
-    string) into the domain Transcript. Tolerant of ``words``/``text`` and of the several
-    timestamp encodings Recall has used."""
+    """Normalize Recall's transcript into the domain Transcript. Tolerant of: a bare list or a
+    dict wrapper ({transcript|segments|results|data:[…]}); a speaker as ``speaker``/
+    ``speaker_name``/``participant.name``; a turn as ``words``[] OR a ``text`` string; and the
+    several timestamp encodings Recall has used."""
+    if isinstance(raw, dict):
+        raw = (raw.get("transcript") or raw.get("segments") or raw.get("results")
+               or raw.get("data") or raw.get("monologues") or [])
     if not raw or not isinstance(raw, list):
         return None
     segs, speakers, parts = [], [], []
     for turn in raw:
         if not isinstance(turn, dict):
             continue
-        spk = str(turn.get("speaker") or turn.get("speaker_name") or "").strip()
+        part = turn.get("participant") if isinstance(turn.get("participant"), dict) else {}
+        spk = str(turn.get("speaker") or turn.get("speaker_name")
+                  or part.get("name") or "").strip()
         words = turn.get("words")
         if isinstance(words, list) and words:
             text = " ".join(str(w.get("text", "")) for w in words if isinstance(w, dict)).strip()
