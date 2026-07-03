@@ -45,6 +45,19 @@ def capture_configured() -> bool:
         "", "null", "0", "false", "off")
 
 
+def meeting_configured() -> bool:
+    """Is a real meeting (Zoom/Meet/Teams) provider selected?"""
+    return (os.environ.get(MEETING_PROVIDER_ENV, "null") or "null").strip().lower() not in (
+        "", "null", "0", "false", "off", "manual")
+
+
+def integration_status() -> dict:
+    """A secret-free snapshot of which discovery seams are switched on (for the setup banner —
+    the #1 gotcha is setting a key but forgetting its *_PROVIDER switch)."""
+    return {"zoom": meeting_configured(), "recall": capture_configured(),
+            "calendar": calendar_configured()}
+
+
 __all__ = [
     "get_meeting_provider", "get_capture_provider", "capture_configured",
     "MeetingProvider", "CaptureProvider", "NullMeetingProvider", "NullCaptureProvider",
@@ -52,6 +65,7 @@ __all__ = [
     "SCHEDULED", "BOT_INVITED", "IN_PROGRESS", "TRANSCRIPT_READY", "INGESTED", "FAILED",
     "CANCELED", "OPEN_STATUSES", "EV_BOT_JOINED", "EV_TRANSCRIPT_READY", "EV_FAILED",
     "EV_IGNORED", "MEETING_PROVIDER_ENV", "CAPTURE_PROVIDER_ENV",
+    "meeting_configured", "integration_status",
     "WorkingHours", "Slot", "free_slots", "slot_is_free", "parse_iso",
     "CalendarProvider", "NullCalendarProvider", "get_calendar_provider",
     "calendar_configured", "CALENDAR_PROVIDER_ENV",

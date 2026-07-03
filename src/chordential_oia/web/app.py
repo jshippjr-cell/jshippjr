@@ -2080,7 +2080,9 @@ def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
         dr = db.get_discovery_request(conn, int(req)) if req.strip().isdigit() else None
     finally:
         conn.close()
+    from .. import meetings as _M
     return render(request, "discovery_schedule.html", nav="inbox", row=row, dr=dr,
+                  integrations=_M.integration_status(),
                   prefill_name=((dr["name"] if dr else "") or row["contact_name"] or ""),
                   prefill_email=((dr["email"] if dr else "") or row["contact_email"] or ""),
                   prefill_type=((dr["preferred_type"] if dr else "") or "zoom"))

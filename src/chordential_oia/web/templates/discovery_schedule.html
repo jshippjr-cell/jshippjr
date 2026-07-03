@@ -13,9 +13,20 @@
 .sd-types input{position:absolute;opacity:0}
 .sd-types label:has(input:checked){border-color:var(--accent,#c8552b);background:var(--surface-2,#faf3ee)}
 .sd-row{display:flex;gap:12px}.sd-row>*{flex:1}
+.sd-int{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:12px}
+.sd-int span{padding:3px 10px;border-radius:999px;font-weight:700}
+.sd-int .on{background:#eaf5ea;color:#2f6a34}
+.sd-int .off{background:#f2ece3;color:#8a7f6e}
 </style>
 <section class="card sd-card">
   <div class="card-head"><h2>Schedule discovery call</h2></div>
+  {% if integrations %}
+  <div class="sd-int" title="Set each provider's *_PROVIDER switch on Render, not just the key">
+    <span class="{{ 'on' if integrations.zoom else 'off' }}">🎥 Zoom {{ 'connected' if integrations.zoom else 'not connected' }}</span>
+    <span class="{{ 'on' if integrations.recall else 'off' }}">🎙 Recall {{ 'connected' if integrations.recall else 'not connected' }}</span>
+    <span class="{{ 'on' if integrations.calendar else 'off' }}">📅 Calendar {{ 'connected' if integrations.calendar else 'not connected' }}</span>
+  </div>
+  {% endif %}
   {% if dr %}
   <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} — prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
   {% endif %}
