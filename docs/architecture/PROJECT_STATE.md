@@ -83,6 +83,10 @@ Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
   material gaps, produces CI invisibly). Two records: immutable **Captures** (evidence) →
   living **Campaign Intelligence** (synthesis). Vocabulary: *Capture* (user verb) /
   *Campaign Intake* (module) / *Campaign Intelligence* (system object, never shown).
+  Two capture stances — **objective** ("what happened") + a first-class **Producer Debrief**
+  ("what's your read?"). CI preserves the **epistemic kind** of every field —
+  `fact` / `insight` / `recommendation` / `open_question` (+ risk flag) — so inferred
+  judgment is never laundered into fact and the producer's read is a preserved asset.
   **Next (awaiting Jon's decisions in both PRDs' open-questions):** build CI tables + lazy
   backfill → point the workspace's direction cards at CI with the provenance card → the
   Capture pipeline (paste-notes MVP → voice → RFP/email → integrations) → proposal/

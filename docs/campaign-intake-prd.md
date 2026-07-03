@@ -96,6 +96,53 @@ assumes those three.
 
 ---
 
+## 2bis. Two capture stances — *"What happened?"* and *"What's your read?"*
+
+Campaign Intake supports **two fundamentally different kinds of capture**, and keeping them
+distinct is an architectural decision, not a UX nicety:
+
+| Stance | **Objective capture** | **Producer Debrief** |
+|---|---|---|
+| The question | *"What happened?"* | *"What's your read?"* |
+| Modalities | transcript · notes · RFP · email · voice recap of the meeting | voice (usually) · typed |
+| What it captures | the **facts** of the meeting — what was said, asked, agreed | the **human layer** — interpretation, intuition, risks, observations, what to recommend, what's still unclear |
+| Where it comes from | the meeting/document itself | the producer's judgment, which is **not in the transcript** |
+| Produces (kinds) | mostly **`fact`** | mostly **`insight`**, **`recommendation`**, **`open_question`** (`CAMPAIGN_INTELLIGENCE.md` §4bis) |
+| Provenance source | `transcript` / `rfp` / `email` / `notes` | **`producer_debrief`** (attributed to the human, dated) |
+
+**Why this is a first-class distinction, not just another modality:** a transcript tells you
+*they said they want "warm."* Only the producer knows *"warm" means nostalgic-not-saccharine,
+the CD is the real approver even though the producer ran the call, and I'm worried the brand
+team hasn't weighed in.* That interpretive layer — the most valuable, least-recorded knowledge
+in a creative-service business — is **structurally absent from the meeting** and would be lost
+forever without a place to put it. The Producer Debrief is that place, and Campaign
+Intelligence preserves it **labeled as interpretation**, never laundered into fact.
+
+**The Debrief is a companion, not a replacement.** The ideal engagement has both: the
+objective capture (the Fathom transcript → facts) **and** a 30-second debrief (the producer's
+read → insights/recommendations/questions), feeding the *same* Campaign Intelligence,
+distinguished by `kind`. A debrief can also stand alone (a relationship lunch with no formal
+transcript), and it can be added anytime — right after the meeting, or a day later when a
+worry crystallizes.
+
+**How the Debrief behaves differently in the pipeline:**
+- **Prompt.** Not "what happened" but *"What's your read?"* — with gentle, skippable sub-nudges
+  the AI offers only if the debrief is thin: *what stood out · what worries you · what would you
+  recommend · what's still unclear.* Never a form; a producer thinking out loud for 30 seconds.
+- **Extraction classifies by kind.** The AI tags each extracted item `insight` /
+  `recommendation` / `open_question` and flags risks `is_concern`. A debrief is subjective *by
+  design* — if the producer asserts something as fact, it's captured and attributed to them,
+  but it does **not** get objective-fact confidence or displace a source-quoted fact
+  (honesty: inference stays labeled as inference).
+- **No follow-up interrogation.** The Debrief never triggers the "you're missing 4 fields"
+  questioning — that gate is about *facts the proposal needs*. A debrief is a gift of judgment,
+  not a checklist; the system takes whatever the producer offers.
+- **It surfaces differently downstream.** Insights are *shown* beside the facts they interpret;
+  recommendations become *choices* the operator accepts/defers; open questions + risks are
+  *flagged* (they can even seed follow-ups on the objective side).
+
+---
+
 ## 3. User journey (the four archetypes)
 
 **A. Mobile, in-the-moment (the hero flow).** Jon leaves an agency, opens ChordOS on his
@@ -130,8 +177,10 @@ only what's new.
   └───────────────┬────────────────────────────────────────────────────────┘
                   ▼
   ①  ONE QUESTION:  "What happened?"           (skipped entirely for passive ingest)
-       🎙 Record voice debrief   📄 Upload transcript   📋 Paste notes
-       📎 Upload RFP             📧 Import email thread
+       📄 Upload transcript   📋 Paste notes   📎 Upload RFP   📧 Import email thread
+       🎙 Voice recap                        ← objective ("what happened")
+       ── or ──
+       ◈ Producer Debrief  ("What's your read?")  ← interpretive (§2bis) — pairs with any above
                   ▼
   ②  CAPTURE  (modality-specific, seconds)  → "Got it. I'll listen and come back to you."
                   ▼   (async — the user is free to leave)
@@ -330,15 +379,20 @@ The moment the user's judgment is actually needed — kept as light as possible:
 
 ## 13. Entry points & modalities (ranked by user effort)
 
-| Modality | Enters via | AI handling | User effort | Priority |
-|---|---|---|---|---|
-| **Transcript integration** (Fathom/Fireflies/Zoom/Meet) | passive auto-sync | transcribe→extract | **0s** | ★ build first |
-| **Email / RFP forward** | `intake@…` address | thread/PDF parse→extract | ~5s | ★ build first |
-| **Existing Opportunity** | seed, not a capture | pre-load known facts | ~0s | ★ (already have the data) |
-| **Voice debrief** | mobile record | transcribe→extract | ~90s | ★ hero fallback |
-| **Paste notes** | paste box | extract | ~1–2m | ✓ |
-| **Upload transcript/recording** | file drop | transcribe/parse→extract | ~15s | ✓ |
-| **Manual RFP/email upload** | file/paste | parse→extract | ~15s | ✓ |
+| Modality | Stance | Enters via | AI handling | User effort | Priority |
+|---|---|---|---|---|---|
+| **Transcript integration** (Fathom/Fireflies/Zoom/Meet) | objective | passive auto-sync | transcribe→extract facts | **0s** | ★ build first |
+| **Email / RFP forward** | objective | `intake@…` address | thread/PDF parse→extract facts | ~5s | ★ build first |
+| **Existing Opportunity** | objective (seed) | seed, not a capture | pre-load known facts | ~0s | ★ (already have the data) |
+| **🎙 Producer Debrief** | **interpretive** | mobile/desktop record | transcribe→classify **insight/rec/question** | ~30s | ★ the differentiator |
+| **Voice recap** | objective | mobile record | transcribe→extract facts | ~90s | ★ hero fallback |
+| **Paste notes** | objective | paste box | extract facts | ~1–2m | ✓ |
+| **Upload transcript/recording** | objective | file drop | transcribe/parse→extract facts | ~15s | ✓ |
+| **Manual RFP/email upload** | objective | file/paste | parse→extract facts | ~15s | ✓ |
+
+The **Producer Debrief** is the one modality no competitor thinks to build — it captures the
+producer's judgment, which is *why* ChordOS accumulates intelligence a transcript tool never
+can. Objective capture answers *what happened*; the Debrief answers *what it means*.
 
 **The strategic point:** the top three are *near-zero effort* and cover the majority of real
 discovery. Investing in **integrations + email-forward + opportunity-seed first** delivers the

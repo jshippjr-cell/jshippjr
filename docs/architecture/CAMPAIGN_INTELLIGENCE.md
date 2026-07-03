@@ -106,15 +106,17 @@ One row per canonical fact. This is what every card renders and every module rea
 | `ci_id` | → campaign_intelligence |
 | `facet` | the group: `engagement` \| `buyer` \| `direction` \| `commercial` \| `relationship` \| `outcome` (see §3) |
 | `key` | the canonical field key within the facet (e.g. `emotional_arc`) |
+| **`kind`** | **the epistemic type: `fact` \| `insight` \| `recommendation` \| `open_question` (see §4bis) — what *kind* of knowledge this is** |
 | `value` | the text value (short/rendered) |
 | `value_json` | structured value when the fact is a list/object (references, decision makers) |
 | `sources` | JSON list of producers supporting this value — the card's ✓ list (§4) |
-| `status` | the disposition: `empty` \| `proposed` \| `needs_review` \| `confirmed` \| `superseded` \| `conflicted` (§4) |
+| `status` | the disposition (kind-aware — §4bis): facts `needs_review→confirmed`, recommendations `open→accepted/deferred/declined`, questions `open→answered`, insights `noted→acknowledged/dismissed` |
 | `origin` | the primary producer that last authoritatively set it |
 | `confidence` | 0–100, optional |
+| `is_concern` | flag: this insight/question is a **risk** the producer flagged (surfaced prominently) |
 | `contributed_by` | last writer (`operator` \| `ai` \| module name) |
 | `updated_at` | |
-| — | UNIQUE(`ci_id`, `facet`, `key`) — one canonical value per fact |
+| — | UNIQUE(`ci_id`, `facet`, `key`, `kind`) — a fact and an insight can co-exist on the same key (e.g. the *stated* brief vs. the producer's *read* of it) |
 
 ### 2.3 `campaign_intelligence_event` — the enrichment log (append-only)
 
@@ -170,11 +172,15 @@ the model behind the requested card and the literal implementation of "one sourc
 per fact" + "machine proposes, human disposes."
 
 ### 4.1 Sources — *who supports this value* (multiple allowed)
-`discovery_call` · `agency_intelligence` · `opportunity` · `qualification` · `proposal` ·
-`workspace` · `ai` · `production` · `delivery` · `operator`
+`transcript` · `producer_debrief` · `rfp` · `email` · `notes` · `agency_intelligence` ·
+`opportunity` · `qualification` · `proposal` · `workspace` · `ai` · `production` ·
+`delivery` · `operator`
 
 A field can have several (the card's ✓ list): e.g. `emotional_arc` supported by
-`discovery_call` + `agency_intelligence` + `ai`.
+`transcript` + `agency_intelligence` + `ai`. The **`producer_debrief`** source is
+special: it carries the human's *interpretation*, so it predominantly backs `insight`,
+`recommendation`, and `open_question` fields — never dressed up as objective `fact`
+(§4bis). Sources map to the Campaign Intake capture modalities (`campaign-intake-prd.md`).
 
 ### 4.2 Status — *how settled it is* (the disposition gate)
 
@@ -228,6 +234,45 @@ Every direction/buyer card on any surface is a render of one `campaign_intellige
 `[Confirm]` flips `status → confirmed`, writes a `confirmed` event, and (for `buyer`/`outcome`
 facets) can **contribute back to Agency Intelligence** — the flywheel that makes the next
 campaign for this buyer start smarter (Constitution §6).
+
+---
+
+## 4bis. Epistemic kinds — *what kind of knowledge is this?*
+
+Provenance answers *who says so*. **Kind** answers *what kind of knowledge it is* — and the
+two are orthogonal. This is the distinction the Producer Debrief exists to preserve: an
+engagement is not just a pile of facts. It is facts **plus** a producer's read of them,
+**plus** what we should do, **plus** what we still don't know. Collapsing those into one
+undifferentiated "notes" field destroys the most valuable, least-captured asset in a
+creative-service business — human judgment — and it lets inference masquerade as fact.
+
+| Kind | What it is | Typical source | Disposition lifecycle | How downstream treats it |
+|---|---|---|---|---|
+| **`fact`** | An objective statement grounded in a source ("budget is $18–24k") | `transcript`, `rfp`, `email`, `notes`, `opportunity` | `needs_review → confirmed` (or corrected) | **Asserted.** The proposal states it; delivery relies on it. |
+| **`insight`** | An inferred human interpretation ("*warm* means nostalgic, not saccharine"; "the real approver is the CD") | **`producer_debrief`**, `ai` | `noted → acknowledged` (or `dismissed`) | **Weighed, never asserted as fact.** Shapes direction; shown as a read, attributed. |
+| **`recommendation`** | A proposed course of action ("lead with Direction A; don't show the orchestral option") | **`producer_debrief`**, `ai` | `open → accepted / deferred / declined` | **A choice.** Surfaced to the operator as an option to act on. |
+| **`open_question`** | An acknowledged unknown or risk ("unclear if they have final sign-off"; "brand team hasn't been in the room") | **`producer_debrief`**, gap-analysis | `open → answered / dropped` | **Drives follow-ups + risk surfacing.** A blocker to be closed, not a fact. |
+
+Rules:
+- **Kind is never silently promoted.** An `insight` does not become a `fact` because it feels
+  true; a producer or a corroborating source must assert it as fact. Inference stays labeled
+  as inference (honesty rule, §7).
+- **A key can hold more than one kind** (the UNIQUE constraint includes `kind`): the *stated*
+  emotional arc (a `fact` from the transcript) and the producer's *read* of it (an `insight`
+  from the debrief) coexist and are shown side by side — the objective and the interpreted,
+  never conflated.
+- **Risks** are `insight` or `open_question` fields flagged `is_concern` — surfaced
+  prominently (the producer's "watch out for X" is first-class, not buried).
+- **Disposition is kind-aware but still one gate:** in every case a *human* moves it from its
+  open state (machine proposes, human disposes, §4.1). Facts get confirmed; recommendations
+  get accepted/deferred/declined; insights get acknowledged; questions get answered.
+- **The card renders the kind**, so a reader instantly knows what they're looking at:
+  `✓ Fact` · `◈ Insight (producer's read)` · `→ Recommendation [accept · defer]` ·
+  `? Open question / ⚠ Risk`. The objective and the interpreted never look the same.
+
+This is what lets every downstream module behave correctly: the proposal **asserts** facts,
+**weighs** insights, **surfaces** recommendations as choices, and **flags** open questions as
+risks — instead of treating one producer's hunch as gospel or losing it entirely.
 
 ---
 
