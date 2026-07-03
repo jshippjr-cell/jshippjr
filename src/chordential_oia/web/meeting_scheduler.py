@@ -11,6 +11,7 @@ Intelligence never appears here — it only ever receives Meeting events (ADR-00
 """
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from .. import meetings as M
 from . import campaign_intelligence, campaigns, db
 
 ZOOM, PHONE = "zoom", "phone"
+_log = logging.getLogger("chordential.meeting_scheduler")
 
 
 def _public_base() -> str:
@@ -66,8 +68,9 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                                    start_at=start_at, duration_min=duration_min, attendees=[])
                 provider, join_url = hosted.provider, hosted.join_url
                 external_meeting_id = hosted.external_meeting_id
-            except Exception:  # noqa: BLE001 — degrade to manual, never fail the booking
-                pass
+            except Exception as e:  # noqa: BLE001 — degrade to manual, never fail the booking
+                _log.warning("Zoom create failed (%s: %s) — meeting stays manual",
+                             type(e).__name__, e)
         # 2) arm Recall (only for Zoom, only when configured + we have a link)
         if M.capture_configured() and join_url:
             try:
@@ -75,8 +78,12 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                 bot_id = cp.invite(join_url=join_url, meeting_ref=str(opp["id"]))
                 if bot_id:
                     notetaker, status = cp.name, M.BOT_INVITED
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                _log.warning("Recall invite failed (%s: %s) — notetaker not armed",
+                             type(e).__name__, e)
+        elif M.capture_configured() and not join_url:
+            _log.info("Recall is configured but no join link exists — nothing to record; "
+                      "check Zoom creation or paste a meeting link.")
 
     # 3) calendar invite (both types, if a calendar is connected)
     cal = M.get_calendar_provider()
@@ -93,8 +100,9 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                     start=start_dt, end=end_dt,
                     attendees=[e for e in (_operator_email(), client_email) if e],
                     location=where)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            _log.warning("Calendar event create failed (%s: %s) — no invite sent",
+                         type(e).__name__, e)
 
     mid = db.create_meeting(
         conn, opp_id=opp["id"], ci_id=ci_id, start_at=start_at, join_url=join_url,
