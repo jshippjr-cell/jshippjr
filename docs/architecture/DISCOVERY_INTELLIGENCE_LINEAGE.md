@@ -142,9 +142,13 @@ not a linked intelligence entity.**
    record that unifies the demand facts, the buyer intelligence, and the call. Each
    downstream module re-derives or re-enters what it needs. *This is the root break; the
    others are its symptoms.*
-2. **No agency link (`opp.client` is a name, not an `agency_id`).** Universe B — the moat —
-   cannot reach the campaign. `brand_history`, `agency_notes`, `previous_campaigns`,
-   `music characteristics` are all stranded.
+2. ~~**No agency link (`opp.client` is a name, not an `agency_id`).**~~ **✅ CLOSED
+   (Step 1, 2026-07-02).** `agency_id` now threads Opportunity → Project → Campaign
+   (additive columns + carry-through + a name-match source), so a campaign can *reach*
+   the Agency/Company Intelligence record. The campaign home surfaces the link and
+   whether intelligence is available to inherit. This is the thread only — the
+   *inheritance* of `brand_history`/`agency_notes`/`previous_campaigns` from that record
+   is the next step (the parent object + provenance model).
 3. **The discovery call is not captured.** The single richest source of `emotional_arc`,
    references, and agency intent has no structured intake — it evaporates into freeform
    notes or nothing.

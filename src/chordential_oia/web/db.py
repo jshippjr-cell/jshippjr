@@ -94,7 +94,11 @@ CREATE TABLE IF NOT EXISTS opportunities (
     next_action_due TEXT,
     last_contacted TEXT,
     delivery_doc_sent_at TEXT,
-    doc_overrides TEXT
+    doc_overrides TEXT,
+    -- Buyer link: the Agency/Company Intelligence record this opportunity is for, so
+    -- the whole lineage (opp → project → campaign) can reach the agency's intelligence
+    -- instead of only a client NAME. See docs/architecture/DISCOVERY_INTELLIGENCE_LINEAGE.md.
+    agency_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS outreach_events (
@@ -134,7 +138,8 @@ CREATE TABLE IF NOT EXISTS projects (
     roles TEXT,                  -- JSON list of required role names
     created_at TEXT,
     delivery_json TEXT,          -- Delivery OS (Phase 0) per-project state (JSON)
-    share_token TEXT             -- token gating the client delivery portal
+    share_token TEXT,            -- token gating the client delivery portal
+    agency_id INTEGER            -- buyer link threaded from the opportunity
 );
 
 CREATE TABLE IF NOT EXISTS assignments (
@@ -334,7 +339,15 @@ _PROJECT_COLUMNS = {
     # Unguessable per-project share token gating the client delivery portal
     # (?k=<token>), mirroring the opportunities.share_token first-touch pattern.
     "share_token": "TEXT",
+    # Buyer link threaded from the opportunity (see DISCOVERY_INTELLIGENCE_LINEAGE.md).
+    "agency_id": "INTEGER",
 }
+
+# Buyer link migrated onto older opportunities / campaigns the same idempotent way.
+# agency_id threads Opportunity → Project → Campaign so downstream modules reach the
+# Agency/Company Intelligence record instead of only a client name.
+_OPPORTUNITY_LINK_COLUMNS = {"agency_id": "INTEGER"}
+_CAMPAIGN_COLUMNS = {"agency_id": "INTEGER"}
 
 # Company Enrichment Engine state, migrated onto an existing agencies table the
 # same idempotent way. A single JSON blob (see get_agency_enrichment for the
@@ -622,6 +635,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     """
     existing = {r["name"] for r in conn.execute("PRAGMA table_info(opportunities)")}
     for name, decl in _OUTREACH_COLUMNS.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE opportunities ADD COLUMN {name} {decl}")
+    for name, decl in _OPPORTUNITY_LINK_COLUMNS.items():   # buyer link (agency_id)
         if name not in existing:
             conn.execute(f"ALTER TABLE opportunities ADD COLUMN {name} {decl}")
     conn.execute(
@@ -948,6 +964,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER,           -- compat link to the existing project
             opp_id INTEGER,
+            agency_id INTEGER,            -- buyer link threaded from the opportunity
             title TEXT, brand TEXT DEFAULT '', agency_client TEXT DEFAULT '',
             phase TEXT DEFAULT 'Briefing',
             budget_min REAL, budget_max REAL, deadline TEXT,
@@ -957,6 +974,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, updated_at TEXT, archived_at TEXT
         )"""
     )
+    camp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(campaigns)")}
+    for name, decl in _CAMPAIGN_COLUMNS.items():           # migrate increment-1 rows
+        if name not in camp_cols:
+            conn.execute(f"ALTER TABLE campaigns ADD COLUMN {name} {decl}")
     # Structured creative direction — the composer's brief as checklist-able sections
     # (emotional arc, reference playlist, agency/producer notes, brand history,
     # previous campaigns). One row per (campaign, section).
@@ -3594,18 +3615,78 @@ def insert_project(
     budget_max: Optional[float],
     roles: List[str],
     deadline: Optional[str] = None,
+    *,
+    agency_id: Optional[int] = None,
 ) -> int:
     cur = conn.execute(
         """INSERT INTO projects
-           (opp_id, client, need, budget_min, budget_max, deadline, status, roles, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+           (opp_id, client, need, budget_min, budget_max, deadline, status, roles,
+            created_at, agency_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (
             opp_id, client, need, budget_min, budget_max, deadline, "Active",
-            json.dumps(roles), datetime.now(timezone.utc).isoformat(),
+            json.dumps(roles), datetime.now(timezone.utc).isoformat(), agency_id,
         ),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+# --------------------------------------------------------------------------- #
+# Buyer link — thread agency_id from Opportunity → Project → Campaign so the
+# lineage can reach the Agency/Company Intelligence record instead of only a
+# client name (docs/architecture/DISCOVERY_INTELLIGENCE_LINEAGE.md). Step 1: the
+# thread + its source (a name match). NOT the inheritance (the parent object /
+# provenance model is designed next).
+# --------------------------------------------------------------------------- #
+def _norm_company(name: Optional[str]) -> str:
+    """Normalize a company/client name for matching: lowercase, collapse whitespace."""
+    return " ".join((name or "").strip().lower().split())
+
+
+def match_agency_by_name(conn: sqlite3.Connection, name: str) -> Optional[sqlite3.Row]:
+    """Find the agency whose company name matches ``name`` (case/space-insensitive
+    exact match). Deliberately exact, not fuzzy — a wrong link would attach the wrong
+    buyer intelligence, which is worse than no link. Returns the agency row or None."""
+    key = _norm_company(name)
+    if not key:
+        return None
+    for r in conn.execute("SELECT * FROM agencies WHERE company IS NOT NULL"):
+        if _norm_company(r["company"]) == key:
+            return r
+    return None
+
+
+def set_opportunity_agency(conn: sqlite3.Connection, opp_id: int,
+                           agency_id: Optional[int]) -> None:
+    """Link (or unlink, with None) an opportunity to an Agency Intelligence record."""
+    conn.execute("UPDATE opportunities SET agency_id = ? WHERE id = ?",
+                 (agency_id, opp_id))
+    conn.commit()
+
+
+def set_campaign_agency(conn: sqlite3.Connection, campaign_id: int,
+                        agency_id: Optional[int]) -> None:
+    conn.execute("UPDATE campaigns SET agency_id = ?, updated_at = ? WHERE id = ?",
+                 (agency_id, datetime.now(timezone.utc).isoformat(), campaign_id))
+    conn.commit()
+
+
+def resolve_opportunity_agency(conn: sqlite3.Connection, opp_row) -> Optional[int]:
+    """The agency_id for an opportunity: the existing link if set, else a best-effort
+    name match against the agencies table (which is ALSO recorded on the opp so it
+    isn't recomputed). Returns the agency_id or None — never guesses beyond an exact
+    name match. This is the SOURCE that makes the downstream thread non-empty."""
+    if opp_row is None:
+        return None
+    existing = opp_row["agency_id"] if "agency_id" in opp_row.keys() else None
+    if existing:
+        return existing
+    match = match_agency_by_name(conn, opp_row["client"])
+    if match is not None:
+        set_opportunity_agency(conn, opp_row["id"], match["id"])
+        return match["id"]
+    return None
 
 
 def project_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
@@ -3646,13 +3727,25 @@ def ensure_campaign_for_project(conn: sqlite3.Connection, project_id: int,
     proj = get_project(conn, project_id)
     if proj is None:
         return None
+    # Carry the buyer link through: prefer the project's agency_id; if it wasn't set
+    # (older project), fall back to the opportunity's resolved link, then a name match
+    # — so an existing project still connects to the agency intelligence when possible.
+    agency_id = proj["agency_id"] if "agency_id" in proj.keys() else None
+    if not agency_id and proj["opp_id"]:
+        opp = get_opportunity(conn, proj["opp_id"])
+        if opp is not None:
+            agency_id = resolve_opportunity_agency(conn, opp)
+    if not agency_id:
+        m = match_agency_by_name(conn, proj["client"])
+        if m is not None:
+            agency_id = m["id"]
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO campaigns
-           (project_id, opp_id, title, brand, agency_client, phase,
+           (project_id, opp_id, agency_id, title, brand, agency_client, phase,
             budget_min, budget_max, deadline, status, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (project_id, proj["opp_id"], proj["need"] or "Untitled campaign",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (project_id, proj["opp_id"], agency_id, proj["need"] or "Untitled campaign",
          proj["client"] or "", proj["client"] or "", phase,
          proj["budget_min"], proj["budget_max"], proj["deadline"], "Active", now, now))
     conn.commit()

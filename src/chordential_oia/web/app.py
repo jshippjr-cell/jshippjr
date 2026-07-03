@@ -3265,8 +3265,14 @@ def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
     qual, scored = ev
     discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
     roles = qual.team_shape or discipline.team_shape
+    # Thread the buyer link: resolve (and record on the opp) the Agency Intelligence
+    # record this opportunity is for, so the project — and the campaign it becomes —
+    # can reach the agency's intelligence, not just a client name. Best-effort: an
+    # exact name match or nothing (DISCOVERY_INTELLIGENCE_LINEAGE.md, step 1).
+    agency_id = db.resolve_opportunity_agency(conn, row)
     pid = db.insert_project(
-        conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles
+        conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles,
+        agency_id=agency_id,
     )
     db.seed_default_milestones(conn, pid, roles)
     return pid
@@ -3722,6 +3728,12 @@ def _campaign_view(conn, campaign_id: int):
         "body": (direction[key]["body"] if key in direction else ""),
         "complete": bool(direction[key]["complete"]) if key in direction else False,
     } for key, label, hint in campaigns.DIRECTION_SECTIONS]
+    # The buyer link (step 1 of the Discovery Intelligence lineage): the campaign now
+    # reaches the Agency/Company Intelligence record, not just a client name. Surface
+    # whether it's linked and whether intelligence exists to inherit (the next step).
+    agency = db.get_agency(conn, camp["agency_id"]) if camp["agency_id"] else None
+    agency_has_intel = bool(
+        db.get_agency_intel(conn, camp["agency_id"])) if camp["agency_id"] else False
     return {
         "campaign": camp,
         "phases": campaigns.PHASES,
@@ -3729,6 +3741,8 @@ def _campaign_view(conn, campaign_id: int):
         "next_phase": campaigns.next_phase(camp["phase"]),
         "sections": sections,
         "completeness": campaigns.direction_completeness(direction),
+        "agency": agency,
+        "agency_has_intel": agency_has_intel,
     }
 
 
@@ -3783,6 +3797,32 @@ def campaign_set_direction(campaign_id: int, section: str = Form(...),
     finally:
         conn.close()
     return RedirectResponse(f"/campaign/{campaign_id}#direction", status_code=303)
+
+
+@app.post("/campaign/{campaign_id}/agency")
+def campaign_link_agency(campaign_id: int, action: str = Form("match"),
+                         agency_id: str = Form("")):
+    """Link the campaign to an Agency Intelligence record — the buyer thread. Three
+    actions: 'match' re-runs the name match against the agencies DB (useful once an
+    agency has been enriched after the campaign opened); 'set' links a specific
+    agency_id; 'unlink' clears it. Best-effort, honest (an exact match or nothing)."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        camp = db.get_campaign(conn, campaign_id)
+        if camp is None:
+            return HTMLResponse("Campaign not found", status_code=404)
+        if action == "unlink":
+            db.set_campaign_agency(conn, campaign_id, None)
+        elif action == "set" and str(agency_id).strip().isdigit():
+            db.set_campaign_agency(conn, campaign_id, int(agency_id))
+        else:  # match by the campaign's agency/client name
+            m = db.match_agency_by_name(conn, camp["agency_client"] or camp["brand"])
+            db.set_campaign_agency(conn, campaign_id, m["id"] if m else None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/campaign/{campaign_id}", status_code=303)
 
 
 @app.post("/campaign/{campaign_id}/phase")

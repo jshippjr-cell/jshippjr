@@ -95,6 +95,81 @@ def test_direction_upsert_merges_one_field(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Buyer link — agency_id threads Opportunity → Project → Campaign (step 1 of the
+# Discovery Intelligence lineage). The point: the campaign reaches the agency's
+# intelligence, not just a client name.
+# --------------------------------------------------------------------------- #
+def _agency_with_intel(dbm, conn, company="Halcyon Creative"):
+    dbm.upsert_agency(conn, "manual", {"dedup_key": company.lower(),
+                                       "company": company, "website": "https://x.example"})
+    aid = conn.execute("SELECT id FROM agencies WHERE company=?", (company,)).fetchone()["id"]
+    dbm.save_agency_intel(conn, aid, {"status": "complete",
+                                      "executive_summary": {"value": "A brand-films shop."}})
+    conn.commit()
+    return aid
+
+
+def test_agency_id_threads_opp_to_project_to_campaign(tmp_path):
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "thread.db"))
+    dbm.init_db(conn)
+    aid = _agency_with_intel(dbm, conn)
+    oid = conn.execute(
+        "INSERT INTO opportunities (client, need, budget_min, budget_max, created_at) "
+        "VALUES (?,?,?,?,?)", ("Halcyon Creative", "Anthem", 18000, 24000, "2026-01-01")
+    ).lastrowid
+    conn.commit()
+
+    # the source of the thread: resolve the opp's agency by name (and record it)
+    resolved = dbm.resolve_opportunity_agency(conn, dbm.get_opportunity(conn, oid))
+    assert resolved == aid
+    assert dbm.get_opportunity(conn, oid)["agency_id"] == aid   # recorded on the opp
+
+    # project inherits it; campaign inherits it from the project
+    pid = dbm.insert_project(conn, oid, "Halcyon Creative", "Anthem",
+                             18000, 24000, ["Composer"], agency_id=resolved)
+    assert dbm.get_project(conn, pid)["agency_id"] == aid
+    camp = dbm.ensure_campaign_for_project(conn, pid)
+    assert camp["agency_id"] == aid
+
+    # the whole point: the campaign can now REACH the agency's intelligence
+    assert dbm.get_agency_intel(conn, camp["agency_id"])["status"] == "complete"
+
+
+def test_campaign_backfills_agency_from_opp_when_project_unlinked(tmp_path):
+    # An older project created before the link exists: the campaign still connects,
+    # falling back to the opportunity's resolved agency.
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "bf.db"))
+    dbm.init_db(conn)
+    aid = _agency_with_intel(dbm, conn, company="Northwind")
+    oid = conn.execute(
+        "INSERT INTO opportunities (client, need, created_at) VALUES (?,?,?)",
+        ("Northwind", "Spot", "2026-01-01")).lastrowid
+    conn.commit()
+    pid = dbm.insert_project(conn, oid, "Northwind", "Spot", 0, 0, ["Composer"])  # no agency_id
+    assert dbm.get_project(conn, pid)["agency_id"] is None
+    camp = dbm.ensure_campaign_for_project(conn, pid)
+    assert camp["agency_id"] == aid                            # backfilled via the opp/name
+
+
+def test_no_false_agency_link_without_exact_name_match(tmp_path):
+    from chordential_oia.web import db as dbm
+    conn = dbm.connect(str(tmp_path / "nf.db"))
+    dbm.init_db(conn)
+    _agency_with_intel(dbm, conn, company="Halcyon Creative")
+    oid = conn.execute(
+        "INSERT INTO opportunities (client, need, created_at) VALUES (?,?,?)",
+        ("Totally Different Co", "Spot", "2026-01-01")).lastrowid
+    conn.commit()
+    # exact match only — a wrong link would attach the wrong buyer intel (worse than none)
+    assert dbm.resolve_opportunity_agency(conn, dbm.get_opportunity(conn, oid)) is None
+    pid = dbm.insert_project(conn, oid, "Totally Different Co", "Spot", 0, 0, ["Composer"])
+    camp = dbm.ensure_campaign_for_project(conn, pid)
+    assert camp["agency_id"] is None
+
+
+# --------------------------------------------------------------------------- #
 # Web — flagged routes. OFF by default (product untouched); ON = the workspace.
 # --------------------------------------------------------------------------- #
 def _app(tmp_path, monkeypatch, *, flag: bool):
@@ -176,3 +251,30 @@ def test_direction_and_phase_reject_unknown_values(tmp_path, monkeypatch):
         assert c.post(f"/campaign/{cid}/phase",
                       data={"phase": "Not A Phase"}).status_code == 400
         assert c.get("/campaign/99999").status_code == 404
+
+
+def test_campaign_home_surfaces_and_manages_the_agency_link(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch, flag=True)
+    conn = app_mod.db.connect()
+    app_mod.db.init_db(conn)
+    aid = _agency_with_intel(app_mod.db, conn, company="Halcyon Creative")
+    oid = conn.execute(
+        "INSERT INTO opportunities (client, need, created_at) VALUES (?,?,?)",
+        ("Halcyon Creative", "Anthem", "2026-01-01")).lastrowid
+    conn.commit()
+    resolved = app_mod.db.resolve_opportunity_agency(conn, app_mod.db.get_opportunity(conn, oid))
+    pid = app_mod.db.insert_project(conn, oid, "Halcyon Creative", "Anthem",
+                                    0, 0, ["Composer"], agency_id=resolved)
+    cid = app_mod.db.ensure_campaign_for_project(conn, pid)["id"]
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        home = c.get(f"/campaign/{cid}").text
+        # the buyer thread is visible + intelligence is reachable to inherit next
+        assert "Linked to agency intelligence" in home
+        assert "Halcyon Creative" in home
+        assert "company intelligence available to inherit" in home
+        # unlink, then re-match by name
+        c.post(f"/campaign/{cid}/agency", data={"action": "unlink"})
+        assert "No agency linked" in c.get(f"/campaign/{cid}").text
+        c.post(f"/campaign/{cid}/agency", data={"action": "match"})
+        assert "Linked to agency intelligence" in c.get(f"/campaign/{cid}").text

@@ -21,6 +21,16 @@
   .cw-step .lbl{font-size:10.5px;letter-spacing:.02em;color:var(--olive,#737469)}
   .cw-step.cur .lbl{color:var(--wine,#44161E);font-weight:700}
   .cw-phasebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-12px 0 24px}
+  /* buyer link (Discovery Intelligence spine) */
+  .cw-agency{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;
+    margin:16px 0 4px;padding:9px 13px;border-radius:10px;background:var(--cream,#FCF7F8);
+    border:1px solid var(--sand,#D8CDB6)}
+  .cw-agency-on{font-weight:700;color:var(--wine,#44161E)}
+  .cw-agency-off{font-weight:700;color:var(--olive,#737469)}
+  .cw-agency-intel{color:var(--orange,#E4671F);font-weight:600}
+  .cw-agency-none{color:var(--olive,#737469)}
+  .cw-agency-btn{background:none;border:0;color:var(--slate,#546671);text-decoration:underline;
+    cursor:pointer;font:inherit;font-size:12px;padding:0;margin-left:2px}
   /* creative direction */
   .cw-dir-head{display:flex;align-items:baseline;gap:12px;margin:22px 0 4px}
   .cw-meter{font-size:12px;color:var(--olive,#737469)}
@@ -55,6 +65,32 @@
     {% if campaign['deadline'] %}<div>Deadline · <b>{{ campaign['deadline'] }}</b></div>{% endif %}
     {% if campaign['project_id'] %}<div><a href="/project/{{ campaign['project_id'] }}/delivery">Delivery console →</a></div>{% endif %}
   </div>
+</div>
+
+<!-- Buyer link (Discovery Intelligence, step 1): the campaign now reaches the Agency /
+     Company Intelligence record, not just a client name. This is the spine the creative
+     direction will inherit from next (brand history, agency notes, previous campaigns). -->
+<div class="cw-agency">
+  {% if agency %}
+    <span class="cw-agency-on">◈ Linked to agency intelligence:</span>
+    <a href="/agencies/{{ agency['id'] }}">{{ agency['company'] }} ↗</a>
+    {% if agency_has_intel %}
+      <span class="cw-agency-intel">✓ company intelligence available to inherit</span>
+    {% else %}
+      <span class="cw-agency-none">— no company-intelligence profile yet (enrich the agency to populate direction)</span>
+    {% endif %}
+    <form method="post" action="/campaign/{{ campaign['id'] }}/agency" style="display:inline;margin:0">
+      <input type="hidden" name="action" value="unlink">
+      <button class="cw-agency-btn" type="submit" title="Unlink this agency">unlink</button>
+    </form>
+  {% else %}
+    <span class="cw-agency-off">◇ No agency linked</span>
+    <span class="cw-agency-none">— the buyer's intelligence (brand history, notes, past campaigns) can't be inherited until this campaign is linked to an agency record.</span>
+    <form method="post" action="/campaign/{{ campaign['id'] }}/agency" style="display:inline;margin:0">
+      <input type="hidden" name="action" value="match">
+      <button class="cw-agency-btn" type="submit" title="Try to match '{{ campaign['agency_client'] }}' against the agencies database">try to link</button>
+    </form>
+  {% endif %}
 </div>
 
 <!-- Creative timeline — the campaign's arc (Briefing → … → Delivered), current phase lit -->
