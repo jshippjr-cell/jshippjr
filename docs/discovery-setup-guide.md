@@ -146,10 +146,20 @@ Schedule a call with a client email → both of you should receive a Google Cale
 
 ---
 
-## 4. Confirmation emails + your identity (recommended)
+## 4. Confirmation emails + your identity (OPTIONAL — you can skip the SMTP part)
 
-So confirmations actually send (otherwise they're logged, not delivered), set the mail seam and
-your operator address:
+**You can skip this whole SMTP block.** Scheduling, Recall, and — importantly — **Google
+Calendar invites all work without it**, and a calendar invite already serves as the client's
+confirmation. Only set SMTP if you specifically want *ChordOS itself* to send emails.
+
+**Do set these two (no email service needed):** `CHORDENTIAL_OPERATOR_EMAIL` (just your email)
+and `CHORDENTIAL_PUBLIC_DOMAIN` (your Render app URL, e.g. `https://your-app.onrender.com`).
+For free new-request phone pings, set `CHORDENTIAL_NTFY_TOPIC` and subscribe to it in the ntfy
+app — no email server required.
+
+If you *do* want ChordOS to send email, the SMTP settings (Gmail example below) turn it on.
+Gmail needs 2-Step Verification → an **App Password** as `CHORDENTIAL_SMTP_PASS`
+(`CHORDENTIAL_SMTP_HOST=smtp.gmail.com`, `CHORDENTIAL_SMTP_PORT=587`).
 ```
 CHORDENTIAL_MAIL_PROVIDER = smtp
 CHORDENTIAL_SMTP_HOST = ...        CHORDENTIAL_SMTP_FROM = you@yourdomain.com
