@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Your discovery call · Chordential{% endblock %}
+{% block content %}
+<style>
+.mm-wrap{max-width:520px;margin:40px auto;padding:0 18px}
+.mm-card{background:var(--surface,#fff);border:1px solid var(--line,#e7e1d8);border-radius:14px;padding:26px}
+.mm-when{font-size:19px;font-weight:700;margin:2px 0 4px}
+.mm-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.mm-field input{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:9px;font:inherit}
+.mm-row{display:flex;gap:10px}.mm-row>*{flex:1}
+</style>
+<div class="mm-wrap">
+  <div class="mm-card">
+    {% if done %}
+    <h1>✓ Updated</h1>
+    <p class="muted">Your discovery call has been updated — a confirmation is on its way.</p>
+    {% elif m['status'] == 'canceled' %}
+    <h1>Call canceled</h1>
+    <p class="muted">This discovery call was canceled. Reply to your email and we'll find another time.</p>
+    {% else %}
+    <div class="muted small">Your discovery call</div>
+    <div class="mm-when">{{ m['start_at'][:16].replace('T',' · ') if m['start_at'] else 'time to be confirmed' }} UTC</div>
+    <p class="muted">{{ '🎥 Zoom' if m['meeting_type'] == 'zoom' else '📞 Phone' }}{% if m['join_url'] %} · <a href="{{ m['join_url'] }}">join link</a>{% endif %}</p>
+    <hr style="border:0;border-top:1px solid var(--line,#e7e1d8);margin:18px 0">
+    <form method="post" action="/meeting/{{ m['id'] }}/manage">
+      <input type="hidden" name="k" value="{{ k }}">
+      <input type="hidden" name="action" value="reschedule">
+      <div class="mm-row">
+        <div class="mm-field"><label class="muted small">New date</label><input type="date" name="date" required></div>
+        <div class="mm-field"><label class="muted small">New time (UTC)</label><input type="time" name="time" value="09:00" required></div>
+      </div>
+      <button class="btn" type="submit">Request a new time</button>
+    </form>
+    <form method="post" action="/meeting/{{ m['id'] }}/manage" style="margin-top:8px">
+      <input type="hidden" name="k" value="{{ k }}">
+      <input type="hidden" name="action" value="cancel">
+      <button class="btn ghost" type="submit">Cancel this call</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

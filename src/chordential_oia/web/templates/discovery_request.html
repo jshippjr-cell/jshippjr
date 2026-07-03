@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Request a discovery call · Chordential{% endblock %}
+{% block content %}
+<style>
+.dr-wrap{max-width:560px;margin:40px auto;padding:0 18px}
+.dr-card{background:var(--surface,#fff);border:1px solid var(--line,#e7e1d8);border-radius:14px;padding:28px}
+.dr-kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent,#c8552b);font-weight:700}
+.dr-card h1{font-size:24px;margin:6px 0 4px}
+.dr-card p.lead{color:var(--muted,#8a8580);margin:0 0 18px}
+.dr-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.dr-field label{font-weight:600;font-size:13px}
+.dr-field input,.dr-field textarea{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:10px;font:inherit}
+.dr-types{display:flex;gap:10px}
+.dr-types label{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:10px 12px;cursor:pointer;font-weight:600;text-align:center}
+.dr-types input{position:absolute;opacity:0}
+.dr-types label:has(input:checked){border-color:var(--accent,#c8552b);background:var(--surface-2,#faf3ee)}
+.dr-btn{width:100%;background:var(--accent,#c8552b);color:#fff;border:0;border-radius:9px;padding:13px;font-weight:700;font-size:15px;cursor:pointer}
+.dr-done{text-align:center}
+.dr-done .big{font-size:40px}
+</style>
+<div class="dr-wrap">
+  <div class="dr-card">
+    {% if done %}
+    <div class="dr-done">
+      <div class="big">✓</div>
+      <h1>Request received</h1>
+      <p class="lead">Thanks — we'll follow up shortly with a time that works. No need to email us.</p>
+    </div>
+    {% else %}
+    <div class="dr-kicker">Chordential</div>
+    <h1>Request a discovery call</h1>
+    <p class="lead">Tell us how to reach you and we'll follow up with a time. 20 minutes on your
+      creative direction, timeline, and production needs.</p>
+    <form method="post" action="/opportunity/{{ row['id'] }}/request">
+      <input type="hidden" name="k" value="{{ k }}">
+      <div class="dr-field"><label>Name</label>
+        <input type="text" name="name" value="{{ prefill_name }}" required></div>
+      <div class="dr-field"><label>Email</label>
+        <input type="email" name="email" value="{{ prefill_email }}" required></div>
+      <div class="dr-field"><label>Company <span class="muted">(optional)</span></label>
+        <input type="text" name="company"></div>
+      <div class="dr-field"><label>Preferred meeting</label>
+        <div class="dr-types">
+          <label><input type="radio" name="preferred_type" value="zoom" checked> 🎥 Zoom</label>
+          <label><input type="radio" name="preferred_type" value="phone"> 📞 Phone</label>
+        </div>
+      </div>
+      <div class="dr-field"><label>Anything we should know? <span class="muted">(optional)</span></label>
+        <textarea name="message" rows="3" placeholder="Timing, the campaign, questions…"></textarea></div>
+      <button class="dr-btn" type="submit">Request a Discovery Call →</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -77,30 +77,31 @@ def test_opportunity_shows_brief_cta_and_no_standing_discovery_widget(tmp_path, 
         assert "Upcoming Discovery" not in page
 
 
-def test_schedule_creates_a_meeting_and_panel_appears_then_cancels(tmp_path, monkeypatch):
+def test_operator_schedule_creates_a_meeting_and_panel_appears_then_cancels(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
-        c.post(f"/opportunity/{opp_id}/discovery/schedule",
-               data={"start_at": "2026-07-10T14:00", "join_url": "https://zoom.us/j/9"})
+        # the manual "Schedule discovery" path (ADR-0016) — same engine, operator-initiated
+        c.post(f"/opportunity/{opp_id}/schedule",
+               data={"meeting_type": "zoom", "date": "2026-07-10", "time": "14:00",
+                     "duration_min": "30", "client_email": "s@x.com"})
         page = c.get(f"/opportunity/{opp_id}").text
-        # the contextual panel now renders with the real meeting data
         assert "Upcoming Discovery" in page and "2026-07-10" in page
-        assert "Join meeting" in page and "Not connected" in page  # honest notetaker state
-        # cancel → the panel disappears again
+        assert "Not connected" in page                    # honest notetaker state (no Recall)
         conn = app_mod.db.connect()
         mid = app_mod.db.meeting_for_opp(conn, opp_id)["id"]; conn.close()
         c.post(f"/opportunity/{opp_id}/discovery/{mid}/cancel")
         assert "Upcoming Discovery" not in c.get(f"/opportunity/{opp_id}").text
 
 
-def test_campaign_brief_ends_with_the_discovery_cta(tmp_path, monkeypatch):
+def test_campaign_brief_ends_with_the_request_cta(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
         doc = c.get(f"/opportunity/{opp_id}/capabilities").text
         assert "Campaign Brief" in doc
-        assert "Schedule a discovery call" in doc.lower() or "Schedule Discovery Call" in doc
-        assert "20 minutes" in doc                       # the requested framing
+        assert "Request a Discovery Call" in doc          # client requests, not books (ADR-0016)
+        assert "/request?k=" in doc                        # → the token-gated request form
+        assert "20 minutes" in doc

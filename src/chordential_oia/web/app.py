@@ -61,9 +61,9 @@ from ..matching import match_talent
 from . import (
     campaign_intake, campaign_intelligence, campaigns, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
-    enrichment, intake_lanes, intelligence, meetings_service, music_opportunity,
-    opportunity_signals, outreach_engine, relationships, scheduler, seed, signals,
-    sources, triage, webpush,
+    enrichment, intake_lanes, intelligence, meeting_scheduler, meetings_service,
+    music_opportunity, opportunity_signals, outreach_engine, relationships, scheduler,
+    seed, signals, sources, triage, webpush,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -215,6 +215,16 @@ def _is_tokened_brief(request: Request) -> bool:
                 and (request.query_params.get("k") or "").strip())
 
 
+# The client-facing Discovery Request form and the client manage (reschedule/cancel) page are
+# token-gated public surfaces (the route validates the token), like first-touch (ADR-0016).
+_REQUEST_RE = re.compile(r"^/opportunity/\d+/request/?$")
+_MANAGE_RE = re.compile(r"^/meeting/\d+/manage/?$")
+
+
+def _is_public_scheduling(path: str) -> bool:
+    return bool(_REQUEST_RE.match(path) or _MANAGE_RE.match(path))
+
+
 # The token-gated client delivery portal: /project/<id>/delivery-portal . Same
 # pattern as first-touch — the per-project share token (?k=<token>) checked in the
 # route is the access control, so the path bypasses the admin login gate.
@@ -272,6 +282,8 @@ def _is_public_path(path: str) -> bool:
         # bypasses the admin login gate — but it stays protected by the unguessable
         # per-opp share token in the URL (validated in the route), not by login.
         or _is_first_touch_path(path)
+        # Client Discovery Request form + manage page — token-validated in the route (ADR-0016).
+        or _is_public_scheduling(path)
         # The client delivery portal is opened by the buyer — same token-gated
         # exemption as first-touch (the per-project share token IS the access control).
         or _is_delivery_portal_path(path)
@@ -1787,6 +1799,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         # Discovery lives in the Campaign Brief now; the opp page shows a meeting only
         # CONTEXTUALLY (the "Upcoming Discovery" panel), never a standing widget.
         meeting = db.meeting_for_opp(conn, opp_id)
+        # Pending client Discovery Requests to review + schedule (ADR-0016).
+        discovery_requests = db.list_discovery_requests(conn, opp_id, status="new")
     finally:
         conn.close()
     qual, scored = ev
@@ -1809,7 +1823,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
         ci=ci, ci_view=ci_view, intake_sync_lanes=intake_sync_lanes,
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
-        capture_summary=capture_summary,
+        discovery_requests=discovery_requests, capture_summary=capture_summary,
     )
 
 
@@ -1980,30 +1994,17 @@ def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
 # --------------------------------------------------------------------------- #
 
 
-@app.post("/opportunity/{opp_id}/discovery/schedule")
-def discovery_schedule(opp_id: int, start_at: str = Form(""), join_url: str = Form(""),
-                       duration_min: int = Form(20)):
-    """Schedule (or log) a discovery call tied to this opportunity. With the Zoom +
-    notetaker seams configured this would create the meeting + invite Recall; in the manual
-    interim it records the time + join link the operator provides. Honest: the notetaker is
-    marked connected only when a provider is configured."""
+@app.post("/opportunity/{opp_id}/discovery/reschedule")
+def discovery_reschedule(opp_id: int, start_at: str = Form(""),
+                         duration_min: int = Form(0)):
+    """Reschedule the opportunity's current discovery call to a new time (through the shared
+    engine, so the calendar event moves and confirmations resend)."""
     conn = db.connect()
     try:
-        row = db.get_opportunity(conn, opp_id)
-        if row is None:
-            return HTMLResponse("Opportunity not found", status_code=404)
-        ci_id = None
-        if campaigns.workspace_enabled():
-            ci_id = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
-        existing = db.meeting_for_opp(conn, opp_id)
-        if existing is not None:                       # reschedule the live meeting in place
-            db.update_meeting(conn, existing["id"], start_at=(start_at or "").strip(),
-                              join_url=(join_url or "").strip(), status="scheduled")
-        else:
-            # Route new meetings through the Meeting domain: it hosts via the meeting provider
-            # (Zoom when configured; manual otherwise) and arms the capture provider (Recall).
-            meetings_service.schedule(conn, row, start_at=start_at, join_url=join_url,
-                                      duration_min=duration_min or 20)
+        m = db.meeting_for_opp(conn, opp_id)
+        if m is not None and (start_at or "").strip():
+            meeting_scheduler.reschedule(conn, m, start_at.strip(),
+                                         duration_min=duration_min or None)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
@@ -2011,15 +2012,145 @@ def discovery_schedule(opp_id: int, start_at: str = Form(""), join_url: str = Fo
 
 @app.post("/opportunity/{opp_id}/discovery/{meeting_id}/cancel")
 def discovery_cancel(opp_id: int, meeting_id: int):
-    """Cancel a scheduled discovery call (the panel disappears; the record is retained)."""
+    """Cancel a scheduled discovery call (drops the calendar event; the record is retained)."""
     conn = db.connect()
     try:
         m = db.get_meeting(conn, meeting_id)
         if m is not None and m["opp_id"] == opp_id:
-            db.update_meeting(conn, meeting_id, status="canceled")
+            meeting_scheduler.cancel(conn, m)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+# ── Client Discovery REQUEST (ADR-0016) — the client asks; it schedules nothing. ──────
+def _request_token_ok(conn, opp_id: int, k: str):
+    row = db.get_opportunity(conn, opp_id)
+    token = row["share_token"] if row is not None and "share_token" in row.keys() else None
+    if row is None or not token or not k or not hmac.compare_digest(str(k), str(token)):
+        return None
+    return row
+
+
+@app.get("/opportunity/{opp_id}/request", response_class=HTMLResponse)
+def discovery_request_form(request: Request, opp_id: int, k: str = "", done: str = ""):
+    """The client-facing Request-a-Discovery-Call form (token-gated, from the Brief)."""
+    conn = db.connect()
+    try:
+        row = _request_token_ok(conn, opp_id, k)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "discovery_request.html", nav="", row=row, k=k,
+                  done=bool(done), prefill_email=(row["contact_email"] or ""),
+                  prefill_name=(row["contact_name"] or ""))
+
+
+@app.post("/opportunity/{opp_id}/request")
+def discovery_request_submit(opp_id: int, k: str = Form(""), name: str = Form(""),
+                             email: str = Form(""), company: str = Form(""),
+                             preferred_type: str = Form("zoom"), message: str = Form("")):
+    """Create a Discovery Request attached to the opportunity + notify the operator. Schedules
+    nothing (ADR-0016)."""
+    conn = db.connect()
+    try:
+        row = _request_token_ok(conn, opp_id, k)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        rid = db.create_discovery_request(
+            conn, opp_id=opp_id, name=name.strip(), email=email.strip(),
+            company=company.strip(), preferred_type=preferred_type, message=message.strip())
+        meeting_scheduler.notify_new_request(db.get_discovery_request(conn, rid), row)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/request?k={k}&done=1", status_code=303)
+
+
+# ── Operator SCHEDULING (ADR-0016) — one engine, from a request or manually. ──────────
+@app.get("/opportunity/{opp_id}/schedule", response_class=HTMLResponse)
+def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
+    """The operator's Meeting Scheduler — type (Zoom/Phone) + date + time. Prefills from a
+    Discovery Request when ``req`` is given, or blank for a manual (referral/inbound) booking."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        dr = db.get_discovery_request(conn, int(req)) if req.strip().isdigit() else None
+    finally:
+        conn.close()
+    return render(request, "discovery_schedule.html", nav="inbox", row=row, dr=dr,
+                  prefill_name=((dr["name"] if dr else "") or row["contact_name"] or ""),
+                  prefill_email=((dr["email"] if dr else "") or row["contact_email"] or ""),
+                  prefill_type=((dr["preferred_type"] if dr else "") or "zoom"))
+
+
+@app.post("/opportunity/{opp_id}/schedule")
+def discovery_schedule_submit(opp_id: int, meeting_type: str = Form("zoom"),
+                              date: str = Form(""), time: str = Form(""),
+                              duration_min: int = Form(30), client_name: str = Form(""),
+                              client_email: str = Form(""), request_id: str = Form("")):
+    """Schedule the call through the shared engine (Zoom → Zoom+Recall+calendar; Phone → record
+    + email). Initiated by the operator, optionally fulfilling a client request."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        start_at = f"{date.strip()}T{(time.strip() or '09:00')}:00+00:00" if date.strip() else ""
+        rid = int(request_id) if request_id.strip().isdigit() else None
+        initiated = "client_request" if rid else "operator"
+        meeting_scheduler.schedule(
+            conn, row, meeting_type=meeting_type, start_at=start_at,
+            duration_min=duration_min or 30, client_name=client_name.strip(),
+            client_email=client_email.strip(), initiated_by=initiated, request_id=rid)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/request/{req_id}/decline")
+def discovery_request_decline(opp_id: int, req_id: int):
+    conn = db.connect()
+    try:
+        db.set_discovery_request_status(conn, req_id, "declined")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+# ── Client MANAGE (reschedule / cancel their own call) — token-gated. ─────────────────
+@app.get("/meeting/{meeting_id}/manage", response_class=HTMLResponse)
+def meeting_manage(request: Request, meeting_id: int, k: str = "", done: str = ""):
+    conn = db.connect()
+    try:
+        m = db.get_meeting(conn, meeting_id)
+        if m is None or not m["manage_token"] or not k or not hmac.compare_digest(
+                str(k), str(m["manage_token"])):
+            return HTMLResponse("Not found", status_code=404)
+    finally:
+        conn.close()
+    return render(request, "meeting_manage.html", nav="", m=m, k=k, done=bool(done))
+
+
+@app.post("/meeting/{meeting_id}/manage")
+def meeting_manage_action(meeting_id: int, k: str = Form(""), action: str = Form(""),
+                          date: str = Form(""), time: str = Form("")):
+    conn = db.connect()
+    try:
+        m = db.get_meeting(conn, meeting_id)
+        if m is None or not m["manage_token"] or not k or not hmac.compare_digest(
+                str(k), str(m["manage_token"])):
+            return HTMLResponse("Not found", status_code=404)
+        if action == "cancel":
+            meeting_scheduler.cancel(conn, m)
+        elif action == "reschedule" and date.strip():
+            start_at = f"{date.strip()}T{(time.strip() or '09:00')}:00+00:00"
+            meeting_scheduler.reschedule(conn, m, start_at)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/meeting/{meeting_id}/manage?k={k}&done=1", status_code=303)
 
 
 @app.post("/webhooks/capture/{provider}")
@@ -2729,8 +2860,12 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
         # Per-deal hand edits (client name, understanding, chips, links, template).
         overrides = db.get_doc_overrides(conn, opp_id)
         custom_chips = db.list_custom_chips(conn)
+        # The Brief's "Request a Discovery Call" CTA → the token-gated request form (same
+        # share token that opens the brief), so the client requests, Jon schedules (ADR-0016).
+        brief_token = db.ensure_share_token(conn, opp_id)
     finally:
         conn.close()
+    request_url = f"/opportunity/{opp_id}/request?k={brief_token}"
     qual, scored = ev
     discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
     est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
@@ -2770,7 +2905,7 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
         deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
         edit=edit, overrides=overrides, chip_library=chip_library,
         custom_chips=custom_chips, delivery_templates=delivery_templates,
-        section_family=SECTION_FAMILY, public=public,
+        section_family=SECTION_FAMILY, public=public, request_url=request_url,
     )
 
 

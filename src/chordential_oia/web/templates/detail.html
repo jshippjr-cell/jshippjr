@@ -90,9 +90,6 @@
   </div>
 </div>
 
-{# ── Upcoming Discovery — contextual, shown ONLY when a meeting exists. Scheduling itself
-   lives in the Campaign Brief's client-facing CTA; here we just reflect the state. ── #}
-{% if meeting %}
 <style>
 .disc-panel{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:center}
 .disc-panel .disc-field{display:flex;flex-direction:column;gap:2px}
@@ -103,12 +100,45 @@
 .disc-badge.off{background:#f2ece3;color:#8a7f6e}
 .disc-badge.pending{background:#fdf1e3;color:#9a5a1a}
 .disc-acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.dr-item{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;padding:11px 0;border-top:1px solid var(--line,#efe9e0)}
+.dr-item:first-of-type{border-top:0}
+.dr-item .dr-who{font-weight:600}
+.dr-item .dr-acts{margin-left:auto;display:flex;gap:8px}
+.dr-pref{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fdf1e3;color:#9a5a1a}
 </style>
+
+{# ── Discovery Requests — a client asked for a call (ADR-0016); the operator schedules. ── #}
+{% if discovery_requests %}
+<section class="card" id="discovery-requests">
+  <div class="card-head"><h2>📨 Discovery requests</h2><span class="muted small">A client asked to talk — pick a time.</span></div>
+  {% for dr in discovery_requests %}
+  <div class="dr-item">
+    <div>
+      <div class="dr-who">{{ dr['name'] or 'A client' }} <span class="dr-pref">{{ dr['preferred_type'] }}</span></div>
+      <div class="muted small">{{ dr['email'] }}{% if dr['company'] %} · {{ dr['company'] }}{% endif %}</div>
+      {% if dr['message'] %}<div class="muted small" style="margin-top:3px">“{{ dr['message'] }}”</div>{% endif %}
+    </div>
+    <div class="dr-acts">
+      <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/schedule?req={{ dr['id'] }}">Accept &amp; schedule →</a>
+      <form method="post" action="/opportunity/{{ row['id'] }}/request/{{ dr['id'] }}/decline" style="margin:0">
+        <button class="btn tiny ghost" type="submit">Decline</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ── Upcoming Discovery — contextual, shown ONLY when a meeting exists. ── #}
+{% if meeting %}
 <section class="card" id="discovery">
-  <div class="card-head"><h2>🎥 Upcoming Discovery</h2></div>
+  <div class="card-head"><h2>{{ '📞' if meeting['meeting_type'] == 'phone' else '🎥' }} Upcoming Discovery</h2></div>
   <div class="disc-panel">
     <div class="disc-field"><span class="disc-k">Date</span><span class="disc-v">{{ meeting['start_at'][:10] if meeting['start_at'] else '— set a date' }}</span></div>
     <div class="disc-field"><span class="disc-k">Time</span><span class="disc-v">{{ meeting['start_at'][11:16] if meeting['start_at'] and meeting['start_at']|length > 11 else '—' }}</span></div>
+    <div class="disc-field"><span class="disc-k">Type</span><span class="disc-v">{{ meeting['meeting_type']|title }}</span></div>
+    {% if meeting['client_name'] %}<div class="disc-field"><span class="disc-k">With</span><span class="disc-v">{{ meeting['client_name'] }}</span></div>{% endif %}
+    {% if meeting['meeting_type'] != 'phone' %}
     <div class="disc-field"><span class="disc-k">Notetaker</span>
       {% if meeting['notetaker_provider'] %}<span class="disc-badge on">Recall connected</span>
       {% else %}<span class="disc-badge off">Not connected</span>{% endif %}</div>
@@ -116,12 +146,12 @@
       {% if meeting['transcript_capture_id'] %}<span class="disc-badge on">Complete</span>
       {% elif meeting['notetaker_provider'] %}<span class="disc-badge pending">Pending</span>
       {% else %}<span class="disc-badge off">Paste when ready</span>{% endif %}</div>
+    {% endif %}
     <div class="disc-acts">
       {% if meeting['join_url'] %}<a class="btn tiny primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join meeting →</a>{% endif %}
       <details style="display:inline"><summary class="btn tiny" style="cursor:pointer">Reschedule</summary>
-        <form method="post" action="/opportunity/{{ row['id'] }}/discovery/schedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <input type="datetime-local" name="start_at" value="{{ meeting['start_at'] }}">
-          <input type="url" name="join_url" placeholder="Zoom / Meet link" value="{{ meeting['join_url'] or '' }}" style="min-width:200px">
+        <form method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input type="datetime-local" name="start_at" value="{{ meeting['start_at'][:16] if meeting['start_at'] else '' }}">
           <button class="btn tiny primary" type="submit">Save</button>
         </form>
       </details>
@@ -298,6 +328,7 @@
 
 <div class="action-bar">
   {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
+  {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule">🎥 Schedule discovery</a>{% endif %}
   {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">

@@ -1099,7 +1099,35 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             status TEXT DEFAULT 'scheduled',     -- scheduled|bot_invited|in_progress|
                                                  --   transcript_ready|ingested|failed|canceled
             transcript_capture_id INTEGER,
-            error TEXT, scheduled_by TEXT, created_at TEXT, updated_at TEXT
+            error TEXT, scheduled_by TEXT, created_at TEXT, updated_at TEXT,
+            meeting_type TEXT DEFAULT 'zoom',    -- zoom | phone (phone never arms Recall)
+            request_id INTEGER,                  -- the Discovery Request this fulfils (or null)
+            client_name TEXT, client_email TEXT,
+            calendar_event_id TEXT,              -- the calendar event (for reschedule/cancel)
+            manage_token TEXT,                   -- unguessable token for client reschedule/cancel
+            initiated_by TEXT DEFAULT 'operator' -- client_request | operator
+        )"""
+    )
+    # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
+    mtg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(meetings)")}
+    for name, decl in {"meeting_type": "TEXT DEFAULT 'zoom'", "request_id": "INTEGER",
+                       "client_name": "TEXT", "client_email": "TEXT",
+                       "calendar_event_id": "TEXT", "manage_token": "TEXT",
+                       "initiated_by": "TEXT DEFAULT 'operator'"}.items():
+        if name not in mtg_cols:
+            conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {decl}")
+    # A Discovery Request is the client's ASK (ADR-0016) — it schedules nothing; the operator
+    # reviews it and drives the Meeting Scheduler. One row per request, attached to the opp.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS discovery_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            name TEXT, email TEXT, company TEXT,
+            preferred_type TEXT DEFAULT 'zoom',  -- zoom | phone
+            message TEXT,
+            status TEXT DEFAULT 'new',           -- new | scheduled | declined
+            meeting_id INTEGER,                  -- set once the operator schedules it
+            created_at TEXT, updated_at TEXT
         )"""
     )
     conn.commit()
@@ -4107,17 +4135,80 @@ _MEETING_OPEN_STATUSES = ("scheduled", "bot_invited", "in_progress",
 def create_meeting(conn: sqlite3.Connection, *, opp_id: int, ci_id: Optional[int] = None,
                    start_at: str = "", join_url: str = "", duration_min: int = 20,
                    provider: str = "manual", notetaker_provider: str = "",
-                   scheduled_by: str = "operator", status: str = "scheduled") -> int:
+                   scheduled_by: str = "operator", status: str = "scheduled",
+                   meeting_type: str = "zoom", request_id: Optional[int] = None,
+                   client_name: str = "", client_email: str = "",
+                   external_meeting_id: str = "", calendar_event_id: str = "",
+                   manage_token: str = "", bot_id: str = "",
+                   initiated_by: str = "operator") -> int:
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO meetings
-           (opp_id, ci_id, provider, join_url, start_at, duration_min,
-            notetaker_provider, status, scheduled_by, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (opp_id, ci_id, provider, join_url, start_at, duration_min,
-         notetaker_provider, status, scheduled_by, now, now))
+           (opp_id, ci_id, provider, join_url, external_meeting_id, start_at, duration_min,
+            notetaker_provider, bot_id, status, scheduled_by, meeting_type, request_id,
+            client_name, client_email, calendar_event_id, manage_token, initiated_by,
+            created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (opp_id, ci_id, provider, join_url, external_meeting_id, start_at, duration_min,
+         notetaker_provider, bot_id, status, scheduled_by, meeting_type, request_id,
+         client_name, client_email, calendar_event_id, manage_token, initiated_by, now, now))
     conn.commit()
     return int(cur.lastrowid)
+
+
+# --- Discovery Requests (ADR-0016) — the client's ASK, before any scheduling ---------- #
+def create_discovery_request(conn: sqlite3.Connection, *, opp_id: int, name: str = "",
+                             email: str = "", company: str = "",
+                             preferred_type: str = "zoom", message: str = "") -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO discovery_requests
+           (opp_id, name, email, company, preferred_type, message, status, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (opp_id, name, email, company,
+         "phone" if preferred_type == "phone" else "zoom", message, "new", now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_discovery_request(conn: sqlite3.Connection, req_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM discovery_requests WHERE id = ?", (req_id,)).fetchone()
+
+
+def list_discovery_requests(conn: sqlite3.Connection, opp_id: Optional[int] = None,
+                            status: str = "") -> List[sqlite3.Row]:
+    q = "SELECT * FROM discovery_requests"
+    where, args = [], []
+    if opp_id is not None:
+        where.append("opp_id = ?"); args.append(opp_id)
+    if status:
+        where.append("status = ?"); args.append(status)
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += " ORDER BY created_at DESC, id DESC"
+    return conn.execute(q, args).fetchall()
+
+
+def set_discovery_request_status(conn: sqlite3.Connection, req_id: int, status: str,
+                                 meeting_id: Optional[int] = None) -> None:
+    conn.execute(
+        "UPDATE discovery_requests SET status = ?, meeting_id = COALESCE(?, meeting_id), "
+        "updated_at = ? WHERE id = ?",
+        (status, meeting_id, datetime.now(timezone.utc).isoformat(), req_id))
+    conn.commit()
+
+
+def pending_discovery_request_count(conn: sqlite3.Connection) -> int:
+    return int(conn.execute(
+        "SELECT COUNT(*) c FROM discovery_requests WHERE status = 'new'").fetchone()["c"])
+
+
+def meeting_by_manage_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
+    if not (token or "").strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM meetings WHERE manage_token = ? LIMIT 1", (token,)).fetchone()
 
 
 def get_meeting(conn: sqlite3.Connection, meeting_id: int) -> Optional[sqlite3.Row]:

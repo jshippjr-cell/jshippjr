@@ -14,6 +14,9 @@ from .base import (BOT_INVITED, CANCELED, EV_BOT_JOINED, EV_FAILED, EV_IGNORED,
                    EV_TRANSCRIPT_READY, FAILED, INGESTED, IN_PROGRESS, OPEN_STATUSES,
                    SCHEDULED, TRANSCRIPT_READY, CaptureProvider, MeetingEvent, MeetingProvider,
                    ScheduledMeeting, Transcript, TranscriptSegment)
+from .availability import Slot, WorkingHours, free_slots, parse_iso, slot_is_free
+from .calendar import (CALENDAR_PROVIDER_ENV, CalendarProvider, NullCalendarProvider,
+                       calendar_configured, get_calendar_provider)
 from .null import NullCaptureProvider, NullMeetingProvider
 
 MEETING_PROVIDER_ENV = "CHORDENTIAL_MEETING_PROVIDER"
@@ -49,4 +52,7 @@ __all__ = [
     "SCHEDULED", "BOT_INVITED", "IN_PROGRESS", "TRANSCRIPT_READY", "INGESTED", "FAILED",
     "CANCELED", "OPEN_STATUSES", "EV_BOT_JOINED", "EV_TRANSCRIPT_READY", "EV_FAILED",
     "EV_IGNORED", "MEETING_PROVIDER_ENV", "CAPTURE_PROVIDER_ENV",
+    "WorkingHours", "Slot", "free_slots", "slot_is_free", "parse_iso",
+    "CalendarProvider", "NullCalendarProvider", "get_calendar_provider",
+    "calendar_configured", "CALENDAR_PROVIDER_ENV",
 ]

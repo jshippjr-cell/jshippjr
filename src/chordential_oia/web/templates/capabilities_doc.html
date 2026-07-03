@@ -543,21 +543,16 @@
     </section>
     {% endif %}
 
-    {# NEXT STEP — the discovery-call CTA closes the brief and guides the client into
-       booking. Today it books via the configured discovery link; the same button drives
-       the Zoom + Recall auto-schedule once those seams are on (design §6). #}
+    {# NEXT STEP — the discovery-call CTA closes the brief. The client REQUESTS a call
+       (ADR-0016); Jon reviews the request and schedules. No client calendar access. #}
     {% if doc.show_call %}
     <section class="block cta-block">
       <div class="cta-kicker">Next step</div>
-      <h2 class="cta-title">Schedule a discovery call</h2>
+      <h2 class="cta-title">Request a discovery call</h2>
       <p class="cta-copy">Let's spend 20 minutes discussing your creative direction, timeline,
-        campaign goals, and production requirements.</p>
-      {% if doc.call_url %}
-      <a class="cta-btn" href="{{ doc.call_url }}">Schedule Discovery Call →</a>
-      {% else %}
-      <a class="cta-btn" href="mailto:?subject=Discovery call — {{ doc.need|urlencode }}">Schedule Discovery Call →</a>
-      <div class="cta-note">Reply to this and we'll find a slot that works.</div>
-      {% endif %}
+        campaign goals, and production requirements. Tell us how to reach you and we'll follow up
+        with a time.</p>
+      <a class="cta-btn" href="{{ request_url }}">Request a Discovery Call →</a>
     </section>
     {% endif %}
 

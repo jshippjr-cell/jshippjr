@@ -214,6 +214,34 @@ provider parser, idempotent, and non-blocking (offloaded); a scheduler tick is t
 fallback and is fully gated (no-op without a provider). Transcripts land as **proposed** CI
 fields (machine proposes, human disposes, §4.1); confirmation propagates downstream (ADR-0013).
 
+### ADR-0016 — Clients REQUEST; the operator SCHEDULES; one Meeting Scheduler, two initiators
+**Status:** Accepted (2026-07-03, Jon) · Source: `web/meeting_scheduler.py`, `meetings/` seams,
+`docs/discovery-call-intake-design.md` §7bis, `docs/discovery-setup-guide.md`
+**Decision.** Clients **do not book onto the operator's calendar**. The Campaign Brief ends with
+**"Request a Discovery Call"** → a lightweight form (name, email, company, preferred type
+**Zoom | Phone**, optional message) that creates a **Discovery Request** attached to the
+Opportunity and notifies the operator. It schedules nothing. The **operator** then reviews the
+request and, on accept, drives the **Meeting Scheduler** (pick type + date + time). The scheduler
+is the ONE engine, reached two ways — **from a client request** or the operator's **"Schedule
+Discovery"** on any Opportunity (referrals, conferences, inbound calls). The only difference is
+who initiated it. By type: **Zoom** → create the Zoom meeting, arm Recall, send the calendar
+invite, associate the Meeting with the Opportunity; **Phone** → a phone Meeting record + a
+confirmation email, **no Recall**. Everything external (Zoom, Recall, Calendar, email) sits
+behind a null-by-default seam.
+**Why.** The operator must stay in control of their calendar — clients requesting (not booking)
+removes double-booking and calendar-exposure risk, keeps the human decision ("the machine
+proposes, Jon disposes"), and still means the client never has to email asking for a time. One
+engine for both initiators keeps request-driven and manual scheduling identical downstream.
+**Consequences.** A `discovery_requests` record is the client's ask; a `meetings` record is the
+scheduled call (typed `zoom`|`phone`, linked back to its request + Opportunity, with client
+identity and who initiated it). Phone meetings never arm Recall. **Campaign Intelligence and
+Campaign Intake stay provider-agnostic** — they receive only Meeting events (ADR-0015); the
+Scheduler is the only place Zoom/Recall/Calendar are orchestrated, so a new provider touches only
+its seam file. With nothing configured the Scheduler degrades honestly: Zoom/Calendar/email/Recall
+no-op and the operator still gets a real Meeting record (manual link, "not connected"). The
+optional availability engine (`meetings/availability.py`) is an operator-side conflict check, not
+a client-facing calendar.
+
 ---
 
 ## Adding a new ADR

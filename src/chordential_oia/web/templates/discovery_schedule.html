@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Schedule discovery · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Schedule discovery{% endblock %}
+{% block content %}
+<style>
+.sd-card{max-width:560px}
+.sd-req{background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px}
+.sd-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.sd-field label{font-weight:600;font-size:13px}
+.sd-field input,.sd-field select{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:9px;font:inherit}
+.sd-types{display:flex;gap:10px}
+.sd-types label{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:10px;cursor:pointer;font-weight:600;text-align:center}
+.sd-types input{position:absolute;opacity:0}
+.sd-types label:has(input:checked){border-color:var(--accent,#c8552b);background:var(--surface-2,#faf3ee)}
+.sd-row{display:flex;gap:12px}.sd-row>*{flex:1}
+</style>
+<section class="card sd-card">
+  <div class="card-head"><h2>Schedule discovery call</h2></div>
+  {% if dr %}
+  <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} — prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
+  {% endif %}
+  <form method="post" action="/opportunity/{{ row['id'] }}/schedule">
+    {% if dr %}<input type="hidden" name="request_id" value="{{ dr['id'] }}">{% endif %}
+    <div class="sd-field"><label>Meeting type</label>
+      <div class="sd-types">
+        <label><input type="radio" name="meeting_type" value="zoom" {{ 'checked' if prefill_type != 'phone' }}> 🎥 Zoom <span class="muted">(records + transcribes)</span></label>
+        <label><input type="radio" name="meeting_type" value="phone" {{ 'checked' if prefill_type == 'phone' }}> 📞 Phone</label>
+      </div>
+    </div>
+    <div class="sd-row">
+      <div class="sd-field"><label>Date</label><input type="date" name="date" required></div>
+      <div class="sd-field"><label>Time (UTC)</label><input type="time" name="time" value="09:00" required></div>
+      <div class="sd-field"><label>Minutes</label>
+        <select name="duration_min"><option>20</option><option selected>30</option><option>45</option><option>60</option></select></div>
+    </div>
+    <div class="sd-row">
+      <div class="sd-field"><label>Client name</label><input type="text" name="client_name" value="{{ prefill_name }}"></div>
+      <div class="sd-field"><label>Client email</label><input type="email" name="client_email" value="{{ prefill_email }}"></div>
+    </div>
+    <button class="btn primary" type="submit">Schedule →</button>
+    <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Cancel</a>
+  </form>
+  <p class="muted small" style="margin-top:12px">Zoom creates the meeting, arms the notetaker (if connected), sends calendar invites, and links it to this opportunity. Phone creates a record and a confirmation email.</p>
+</section>
+{% endblock %}
