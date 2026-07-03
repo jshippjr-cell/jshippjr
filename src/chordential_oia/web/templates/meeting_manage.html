@@ -19,15 +19,16 @@
     <p class="muted">This discovery call was canceled. Reply to your email and we'll find another time.</p>
     {% else %}
     <div class="muted small">Your discovery call</div>
-    <div class="mm-when">{{ m['start_at'][:16].replace('T',' · ') if m['start_at'] else 'time to be confirmed' }} UTC</div>
+    <div class="mm-when">{% if m['start_at'] %}<time data-utc="{{ m['start_at'] }}">{{ m['start_at'][:16].replace('T',' · ') }} UTC</time>{% else %}time to be confirmed{% endif %}</div>
     <p class="muted">{{ '🎥 Zoom' if m['meeting_type'] == 'zoom' else '📞 Phone' }}{% if m['join_url'] %} · <a href="{{ m['join_url'] }}">join link</a>{% endif %}</p>
     <hr style="border:0;border-top:1px solid var(--line,#e7e1d8);margin:18px 0">
-    <form method="post" action="/meeting/{{ m['id'] }}/manage">
+    <form class="js-localtime" method="post" action="/meeting/{{ m['id'] }}/manage">
       <input type="hidden" name="k" value="{{ k }}">
       <input type="hidden" name="action" value="reschedule">
+      <input type="hidden" name="tz_offset" value="">
       <div class="mm-row">
         <div class="mm-field"><label class="muted small">New date</label><input type="date" name="date" required></div>
-        <div class="mm-field"><label class="muted small">New time (UTC)</label><input type="time" name="time" value="09:00" required></div>
+        <div class="mm-field"><label class="muted small">New time <span class="js-tzname">(your zone)</span></label><input type="time" name="time" value="09:00" required></div>
       </div>
       <button class="btn" type="submit">Request a new time</button>
     </form>

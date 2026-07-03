@@ -144,6 +144,23 @@ def test_manual_schedule_uses_the_same_engine_without_a_request(tmp_path, monkey
 # --------------------------------------------------------------------------- #
 # Client MANAGE — token-gated reschedule / cancel.
 # --------------------------------------------------------------------------- #
+def test_local_time_is_converted_to_utc_on_schedule(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    with TestClient(app_mod.app) as c:
+        # operator enters 10:00 local in US Eastern (browser offset 240) → 14:00 UTC stored
+        c.post(f"/opportunity/{opp_id}/schedule",
+               data={"meeting_type": "phone", "date": "2026-07-12", "time": "10:00",
+                     "tz_offset": "240", "client_email": "s@x.com"})
+        conn = app_mod.db.connect()
+        try:
+            m = app_mod.db.meeting_for_opp(conn, opp_id)
+            assert m["start_at"] == "2026-07-12T14:00:00+00:00"   # 10:00 EDT → 14:00 UTC
+        finally:
+            conn.close()
+
+
 def test_client_manage_link_cancels_the_call(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)

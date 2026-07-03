@@ -134,8 +134,8 @@
 <section class="card" id="discovery">
   <div class="card-head"><h2>{{ '📞' if meeting['meeting_type'] == 'phone' else '🎥' }} Upcoming Discovery</h2></div>
   <div class="disc-panel">
-    <div class="disc-field"><span class="disc-k">Date</span><span class="disc-v">{{ meeting['start_at'][:10] if meeting['start_at'] else '— set a date' }}</span></div>
-    <div class="disc-field"><span class="disc-k">Time</span><span class="disc-v">{{ meeting['start_at'][11:16] if meeting['start_at'] and meeting['start_at']|length > 11 else '—' }}</span></div>
+    <div class="disc-field"><span class="disc-k">Date</span><span class="disc-v">{% if meeting['start_at'] %}<time data-utc-date="{{ meeting['start_at'] }}">{{ meeting['start_at'][:10] }}</time>{% else %}— set a date{% endif %}</span></div>
+    <div class="disc-field"><span class="disc-k">Time</span><span class="disc-v">{% if meeting['start_at'] and meeting['start_at']|length > 11 %}<time data-utc-time="{{ meeting['start_at'] }}">{{ meeting['start_at'][11:16] }}</time>{% else %}—{% endif %}</span></div>
     <div class="disc-field"><span class="disc-k">Type</span><span class="disc-v">{{ meeting['meeting_type']|title }}</span></div>
     {% if meeting['client_name'] %}<div class="disc-field"><span class="disc-k">With</span><span class="disc-v">{{ meeting['client_name'] }}</span></div>{% endif %}
     {% if meeting['meeting_type'] != 'phone' %}
@@ -150,8 +150,9 @@
     <div class="disc-acts">
       {% if meeting['join_url'] %}<a class="btn tiny primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join meeting →</a>{% endif %}
       <details style="display:inline"><summary class="btn tiny" style="cursor:pointer">Reschedule</summary>
-        <form method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <input type="datetime-local" name="start_at" value="{{ meeting['start_at'][:16] if meeting['start_at'] else '' }}">
+        <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input type="hidden" name="tz_offset" value="">
+          <input type="datetime-local" name="start_at">
           <button class="btn tiny primary" type="submit">Save</button>
         </form>
       </details>

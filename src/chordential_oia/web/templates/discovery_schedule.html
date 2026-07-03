@@ -30,7 +30,8 @@
   {% if dr %}
   <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} — prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
   {% endif %}
-  <form method="post" action="/opportunity/{{ row['id'] }}/schedule">
+  <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/schedule">
+    <input type="hidden" name="tz_offset" value="">
     {% if dr %}<input type="hidden" name="request_id" value="{{ dr['id'] }}">{% endif %}
     <div class="sd-field"><label>Meeting type</label>
       <div class="sd-types">
@@ -40,7 +41,7 @@
     </div>
     <div class="sd-row">
       <div class="sd-field"><label>Date</label><input type="date" name="date" required></div>
-      <div class="sd-field"><label>Time (UTC)</label><input type="time" name="time" value="09:00" required></div>
+      <div class="sd-field"><label>Time <span class="muted">(<span class="js-tzname">your zone</span>)</span></label><input type="time" name="time" value="09:00" required></div>
       <div class="sd-field"><label>Minutes</label>
         <select name="duration_min"><option>20</option><option selected>30</option><option>45</option><option>60</option></select></div>
     </div>

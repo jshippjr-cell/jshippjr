@@ -165,5 +165,32 @@
   }
 })();
 </script>
+<script>
+// Timezone helper: show times in the VIEWER's zone, and let them enter local times.
+(function () {
+  function loc(sel, fmt) {
+    document.querySelectorAll(sel).forEach(function (el) {
+      var iso = el.getAttribute('data-utc') || el.getAttribute('data-utc-date')
+              || el.getAttribute('data-utc-time');
+      if (!iso) return;
+      var d = new Date(iso); if (isNaN(d.getTime())) return;
+      el.textContent = fmt(d);
+    });
+  }
+  loc('time[data-utc]', function (d) { return d.toLocaleString([], {weekday:'short',
+      month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}); });
+  loc('time[data-utc-date]', function (d) { return d.toLocaleDateString([], {month:'short',
+      day:'numeric', year:'numeric'}); });
+  loc('time[data-utc-time]', function (d) { return d.toLocaleTimeString([], {hour:'2-digit',
+      minute:'2-digit'}); });
+  // Stamp forms that take a local time so the server can convert to UTC.
+  var tz = new Date().getTimezoneOffset();
+  var name = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  document.querySelectorAll('form.js-localtime input[name="tz_offset"]').forEach(function (h) {
+    h.value = tz;
+  });
+  document.querySelectorAll('.js-tzname').forEach(function (el) { el.textContent = name; });
+})();
+</script>
 </body>
 </html>

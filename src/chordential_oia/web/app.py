@@ -1995,16 +1995,16 @@ def opp_identity(opp_id: int, need: str = Form(""), client: str = Form("")):
 
 
 @app.post("/opportunity/{opp_id}/discovery/reschedule")
-def discovery_reschedule(opp_id: int, start_at: str = Form(""),
+def discovery_reschedule(opp_id: int, start_at: str = Form(""), tz_offset: str = Form(""),
                          duration_min: int = Form(0)):
-    """Reschedule the opportunity's current discovery call to a new time (through the shared
-    engine, so the calendar event moves and confirmations resend)."""
+    """Reschedule the opportunity's current discovery call to a new time (local → UTC via
+    tz_offset) through the shared engine, so the calendar event moves and confirmations resend."""
     conn = db.connect()
     try:
         m = db.meeting_for_opp(conn, opp_id)
-        if m is not None and (start_at or "").strip():
-            meeting_scheduler.reschedule(conn, m, start_at.strip(),
-                                         duration_min=duration_min or None)
+        new_start = _to_utc_iso(start_at, tz_offset)
+        if m is not None and new_start:
+            meeting_scheduler.reschedule(conn, m, new_start, duration_min=duration_min or None)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
@@ -2021,6 +2021,25 @@ def discovery_cancel(opp_id: int, meeting_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
+def _to_utc_iso(local_iso: str, tz_offset_min: str) -> str:
+    """Convert a naive LOCAL wall-clock datetime (what the user typed) to a UTC ISO string,
+    using the browser's ``getTimezoneOffset()`` minutes (positive when local is behind UTC —
+    e.g. US Eastern = 240). No offset → treated as UTC. So the operator never does the math."""
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    s = (local_iso or "").strip().replace(" ", "T")
+    if not s:
+        return ""
+    try:
+        naive = _dt.fromisoformat(s)
+    except ValueError:
+        return ""
+    try:
+        off = int(str(tz_offset_min).strip())
+    except (ValueError, TypeError):
+        off = 0
+    return (naive + _td(minutes=off)).replace(tzinfo=_tz.utc).isoformat()
 
 
 # ── Client Discovery REQUEST (ADR-0016) — the client asks; it schedules nothing. ──────
@@ -2091,18 +2110,21 @@ def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
 @app.post("/opportunity/{opp_id}/schedule")
 def discovery_schedule_submit(opp_id: int, meeting_type: str = Form("zoom"),
                               date: str = Form(""), time: str = Form(""),
+                              tz_offset: str = Form(""),
                               duration_min: int = Form(30), client_name: str = Form(""),
                               client_email: str = Form(""), join_url: str = Form(""),
                               request_id: str = Form("")):
     """Schedule the call through the shared engine (Zoom → Zoom+Recall+calendar; Phone → record
     + email). ``join_url`` lets the operator PASTE a link (e.g. their Personal Meeting Room) so
-    Recall can join without the Zoom API. Initiated by the operator, optionally from a request."""
+    Recall can join without the Zoom API. The time is entered in the operator's local zone and
+    converted to UTC via ``tz_offset``. Initiated by the operator, optionally from a request."""
     conn = db.connect()
     try:
         row = db.get_opportunity(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
-        start_at = f"{date.strip()}T{(time.strip() or '09:00')}:00+00:00" if date.strip() else ""
+        start_at = (_to_utc_iso(f"{date.strip()}T{time.strip() or '09:00'}", tz_offset)
+                    if date.strip() else "")
         rid = int(request_id) if request_id.strip().isdigit() else None
         initiated = "client_request" if rid else "operator"
         meeting_scheduler.schedule(
@@ -2141,7 +2163,7 @@ def meeting_manage(request: Request, meeting_id: int, k: str = "", done: str = "
 
 @app.post("/meeting/{meeting_id}/manage")
 def meeting_manage_action(meeting_id: int, k: str = Form(""), action: str = Form(""),
-                          date: str = Form(""), time: str = Form("")):
+                          date: str = Form(""), time: str = Form(""), tz_offset: str = Form("")):
     conn = db.connect()
     try:
         m = db.get_meeting(conn, meeting_id)
@@ -2151,8 +2173,9 @@ def meeting_manage_action(meeting_id: int, k: str = Form(""), action: str = Form
         if action == "cancel":
             meeting_scheduler.cancel(conn, m)
         elif action == "reschedule" and date.strip():
-            start_at = f"{date.strip()}T{(time.strip() or '09:00')}:00+00:00"
-            meeting_scheduler.reschedule(conn, m, start_at)
+            start_at = _to_utc_iso(f"{date.strip()}T{time.strip() or '09:00'}", tz_offset)
+            if start_at:
+                meeting_scheduler.reschedule(conn, m, start_at)
     finally:
         conn.close()
     return RedirectResponse(f"/meeting/{meeting_id}/manage?k={k}&done=1", status_code=303)
