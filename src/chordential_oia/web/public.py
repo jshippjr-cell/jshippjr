@@ -137,9 +137,11 @@ _GALLERY_GRADIENTS = [
 
 @router.get("/reel", response_class=HTMLResponse)
 def public_reel(request: Request):
-    """The gallery index: a draggable 3D carousel drum of capability tracks
-    (audio only — no case studies) in Chordential's palette. A new page —
-    does NOT replace the converting homepage (/) — linked from the footer.
+    """The gallery index: a spiral stream of capability tracks — a helix of
+    cards flowing through depth (scroll = travel, focus card crisp, the rest
+    depth-blurred — translated from the pacomepertant.com teardown, see
+    docs/design/ux-teardown-pacomepertant.md). Audio only — no case studies —
+    in Chordential's palette. Does NOT replace the converting homepage (/).
     Case studies used to sit in this same carousel as non-audio cards, but
     several of them share a brand name with an actual track (e.g. a track
     "Financial Services — Brand Theme" alongside a case study "Financial

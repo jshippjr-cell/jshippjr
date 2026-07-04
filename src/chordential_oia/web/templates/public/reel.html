@@ -16,7 +16,7 @@
   <header class="rg-chrome">
     <a class="rg-logo" href="/"><img src="/static/public/wordmark-dark.png" alt="Chordential"></a>
     <label for="rg-view-toggle" class="rg-toggle">
-      <span class="rg-toggle-spiral">carousel</span>
+      <span class="rg-toggle-spiral">spiral</span>
       <span class="rg-toggle-dot" aria-hidden="true">&#9679;</span>
       <span class="rg-toggle-list">list</span>
     </label>
@@ -37,8 +37,8 @@
       </a>
       {% endfor %}
     </div>
-    <p class="rg-hint rg-hint-desktop" aria-hidden="true">Scroll to spin faster &#183; click a track to play it</p>
-    <p class="rg-hint rg-hint-touch" aria-hidden="true">Drag to look around &#183; click a track to play it</p>
+    <p class="rg-hint rg-hint-desktop" aria-hidden="true">Scroll to travel the spiral &#183; click a track to play it</p>
+    <p class="rg-hint rg-hint-touch" aria-hidden="true">Drag to travel the spiral &#183; tap a track to play it</p>
   </main>
 
   <!-- Docked player — reuses the exact showreel player styling (.sr-*), shown
@@ -65,6 +65,6 @@
     <a class="rg-foot-cases" href="/capabilities">case studies</a>
   </div>
 
-  <script src="/static/public/reel-carousel.js?v=4"></script>
+  <script src="/static/public/reel-spiral.js?v={{ asset_v }}"></script>
 </body>
 </html>

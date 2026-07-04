@@ -36,7 +36,7 @@ def _reel_css():
 def _carousel_js():
     return (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
 
 
@@ -121,10 +121,13 @@ def test_list_mode_clears_the_dimming_and_shrinking_even_with_an_active_card(cli
 
 
 def test_carousel_js_spins_the_clicked_track_to_face_front(client):
+    """Spiral engine: 'to face front' means easing the travel parameter to the
+    card's index along the SHORTEST wrap — never the long way round the
+    stream (same guarantee the drum's angleToFront gave)."""
     js = _carousel_js()
-    assert "function angleToFront(slotAngle)" in js
-    assert "function spinToFront(card)" in js
-    assert "function setActiveCard(card)" in js
+    assert "function travelToFront(card)" in js
+    assert "targetT = t + wrap(i - t)" in js
+    assert "travelToFront(card)" in js.split("function loadTrack", 1)[1].split("\n  }", 1)[0]
 
 
 def test_carousel_js_still_guards_against_a_card_with_no_audio_url(client):
@@ -222,17 +225,14 @@ def test_tilt_is_gated_to_real_pointer_devices(client):
 
 
 def test_tilt_and_drag_are_mutually_exclusive_by_device_capability(client):
-    """Tilt (desktop-only, mouse-driven) and drag (touch-only) never run at
-    the same time on the same device — isDesktop picks exactly one
-    interaction model, so there's no runtime state needed to keep them from
-    fighting each other."""
+    """Spiral engine: the holographic tilt stays gated to real pointer
+    devices (touch has no hover to drive it and no mouseleave to reset it).
+    Drag, by contrast, is now DELIBERATELY universal — dragging the stream
+    is as natural with a mouse as with a finger, and costs nothing."""
     js = _carousel_js()
-    assert "drum.addEventListener(\"pointerdown\", onDown);" in js
-    # The pointerdown attach (drag) and the tilt attach are each gated by
-    # isDesktop in opposite directions.
-    drag_attach = js.split('drum.addEventListener("pointerdown", onDown);', 1)[0]
-    assert "if (isDesktop) {" in drag_attach
-    assert "} else {" in js
+    assert "if (isDesktop) {" in js
+    assert "mousemove" in js.split("if (isDesktop) {", 1)[1]
+    assert 'drum.addEventListener("pointerdown"' in js
 
 
 def test_mouseleave_resets_tilt_to_neutral(client):
@@ -247,41 +247,48 @@ def test_mouseleave_resets_tilt_to_neutral(client):
 # --------------------------------------------------------------------------- #
 
 def test_desktop_auto_rotates_and_scroll_boosts_the_rate(client):
+    """Spiral equivalent of the drum's auto-rotate + scroll boost: a gentle
+    ambient IDLE_SPEED travels the stream on its own, and the wheel adds
+    velocity (passive listener — the stage never scrolls the page)."""
     js = _carousel_js()
-    assert "function autoRotateStep(t) {" in js
-    assert "function startAutoRotate() {" in js
-    assert "function stopAutoRotate() {" in js
-    assert 'drum.addEventListener("wheel", function (e) {' in js
-    assert "boost += Math.min(Math.abs(e.deltaY), 120) * 0.6;" in js
+    assert "IDLE_SPEED" in js
+    assert "velocity += e.deltaY" in js
+    assert '{ passive: true }' in js
 
 
 def test_auto_rotate_starts_immediately_on_desktop_and_never_on_touch(client):
+    """Spiral engine: one rAF loop drives everyone (it also integrates drag
+    momentum on touch); what differs by capability is only the tilt (above).
+    The loop starts as soon as the page loads in spiral mode."""
     js = _carousel_js()
-    assert "if (isDesktop) {\n    startAutoRotate();" in js
+    assert "function start()" in js
+    assert "requestAnimationFrame(tick)" in js
+    assert "else { layout(); start(); }" in js.replace("\n", " ") or "start()" in js
 
 
 def test_auto_rotate_respects_reduced_motion(client):
+    """Reduced motion zeroes the AMBIENT drift (automatic motion) while the
+    user's own scroll/drag still travels the stream — same split the drum
+    made between auto-rotate and live drag."""
     js = _carousel_js()
-    body = js.split("function startAutoRotate() {", 1)[1].split("\n  }", 1)[0]
-    assert "if (autoRotateId || reduceMotion) return;" in body
+    assert "IDLE_SPEED = reduceMotion ? 0 : 0.07" in js
 
 
 def test_popping_a_card_pauses_ambient_motion_deactivating_resumes_it_on_desktop(client):
+    """A popped card parks the stream: ambient drift gates on hasActive, and
+    the wheel is a no-op while a track is active. Deactivating clears
+    hasActive, so the drift resumes on its own — no explicit restart call."""
     js = _carousel_js()
-    assert "function pauseAmbientMotion() {" in js
-    body = js.split("function pauseAmbientMotion() {", 1)[1].split("\n  }", 1)[0]
-    assert "stopMomentum();" in body
-    assert "stopAutoRotate();" in body
-    assert "pauseAmbientMotion();" in js.split("function spinToFront(card) {", 1)[1].split("\n  }", 1)[0]
-    assert "if (isDesktop) startAutoRotate();" in js.split("function deactivate() {", 1)[1].split("\n  }", 1)[0]
+    assert "var idle = hasActive ? 0 : IDLE_SPEED" in js
+    assert "if (hasActive) return" in js.split('addEventListener("wheel"', 1)[1].split("passive", 1)[0]
 
 
 def test_desktop_hint_says_scroll_not_drag(client):
     t = client.get("/reel").text
     assert 'class="rg-hint rg-hint-desktop"' in t
-    assert "Scroll to spin faster" in t
+    assert "Scroll to travel the spiral" in t
     assert 'class="rg-hint rg-hint-touch"' in t
-    assert "Drag to look around" in t
+    assert "Drag to travel the spiral" in t
 
 
 def test_hint_variants_are_gated_by_device_capability_not_screen_width(client):

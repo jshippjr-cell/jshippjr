@@ -100,9 +100,9 @@ def test_reel_cards_get_evenly_spaced_slot_angles(client):
 
 def test_reel_loads_the_drag_carousel_engine(client):
     t = client.get("/reel").text
-    assert '<script src="/static/public/reel-carousel.js?v=4"></script>' in t
+    assert '<script src="/static/public/reel-spiral.js?v=' in t
     assert 'id="rg-drum"' in t
-    r = client.get("/static/public/reel-carousel.js")
+    r = client.get("/static/public/reel-spiral.js")
     assert r.status_code == 200
     assert "pointerdown" in r.text
 
@@ -137,17 +137,16 @@ def test_reel_cards_hide_their_backface():
 
 
 def test_reel_drum_radius_is_computed_from_measured_card_width_not_hardcoded():
-    """The old build hand-tuned a fixed --orbit-r per card via nth-child. The
-    drag carousel instead measures the actual card width at load and derives
-    one shared radius from the "N tiles around a circle" formula, so it still
-    looks right whatever the number of tracks/cases happens to be."""
+    """Spiral engine: the helix radius derives from the viewport (and is
+    recomputed on resize) instead of being a hardcoded constant — same
+    spirit as the drum deriving its ring radius from measured card width."""
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
-    assert "getBoundingClientRect" in js
-    assert "Math.tan(Math.PI / n)" in js
-    assert "--radius" in js
+    assert "function computeGeometry()" in js
+    assert "window.innerWidth" in js
+    assert 'window.addEventListener("resize", computeGeometry)' in js
 
 
 def test_reel_fallback_resets_the_3d_properties():
@@ -177,19 +176,23 @@ def test_reel_carousel_runs_at_every_screen_size_including_mobile():
 def test_drag_past_threshold_suppresses_the_card_click():
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
     assert "moved > 6" in js
     assert "e.preventDefault()" in js
 
 
 def test_reduced_motion_drops_only_the_release_momentum_not_the_live_drag():
+    """The drag itself is user-initiated 1:1 motion (t += du applies right in
+    the move handler); only the automatic continuation — release momentum —
+    is zeroed under reduced motion."""
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
     assert "prefers-reduced-motion: reduce" in js
-    assert "if (!reduceMotion && Math.abs(velocity) > 0.05) momentumStep();" in js
+    assert "t += du;" in js
+    assert "velocity = reduceMotion ? 0 : du / dt" in js
 
 
 def test_carousel_avoids_setpointercapture_which_swallows_real_clicks():
@@ -201,7 +204,7 @@ def test_carousel_avoids_setpointercapture_which_swallows_real_clicks():
     (attached only while dragging) avoid the pitfall entirely."""
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
     assert "drum.setPointerCapture(" not in js
     assert 'window.addEventListener("pointermove", onMove)' in js
@@ -219,31 +222,28 @@ def test_list_mode_hides_the_drag_hint(client):
 
 
 def test_drag_frame_flush_is_not_gated_on_the_dragging_flag():
-    """Confirmed live via Playwright: for a short/quick drag, pointerup (which
-    sets dragging=false) frequently beats the queued rAF callback that was
-    meant to apply the frame's motion. Gating the flush on `dragging` silently
-    dropped that final bit of rotation and its velocity — the drag reading as
-    "stuck" or unresponsive for exactly the kind of quick flick a real user
-    tries constantly. lastX/frameX stay meaningful after release, so the
-    flush must run unconditionally."""
+    """The drum queued drag motion into a rAF and had to flush it carefully
+    on release (two real regressions lived there). The spiral engine designs
+    that failure class out: pointermove applies travel to t SYNCHRONOUSLY —
+    there is no queued frame to lose, so there is nothing to flush."""
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
-    body = js.split("function applyDragFrame() {", 1)[1].split("\n  }", 1)[0]
-    assert "if (!dragging) return;" not in body
+    assert "frameQueued" not in js
+    body = js.split("function onMove(e) {", 1)[1].split("\n  }", 1)[0]
+    assert "t += du" in body
 
 
 def test_pointerup_flushes_and_cancels_any_pending_drag_frame():
-    """Without cancelling the pending rAF before the manual flush, it would
-    still fire on its own next tick, recompute dx as 0 (frameX already caught
-    up), and stomp the just-flushed velocity back to 0 — killing momentum a
-    tick after it started."""
+    """Companion to the test above: with motion applied synchronously in
+    onMove, pointerup only detaches listeners — it has no pending frame to
+    cancel or flush, so the whole stomped-velocity bug class is gone."""
     js = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "src/chordential_oia/web/static/public/reel-carousel.js"
+        / "src/chordential_oia/web/static/public/reel-spiral.js"
     ).read_text()
-    assert "cancelAnimationFrame(frameId);\n      applyDragFrame();" in js
+    assert "cancelAnimationFrame(frameId)" not in js.split("function onUp()", 1)[1].split("drum.addEventListener", 1)[0]
 
 
 def test_drag_still_works_while_a_card_is_active_and_popped():

@@ -592,6 +592,17 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px)) scale(.82)
     rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))}
 
+/* ── Spiral mode (reel-spiral.js) — the helix stream. The engine writes
+   transform/filter/opacity inline once per rAF; a CSS transform transition
+   here would rubber-band against those per-frame writes, so spiral cards
+   carry none (the JS lerp IS the animation — same rule as the source site
+   this was translated from). box-shadow/opacity keep gentle eases. ── */
+.rg-drum.rg-spiral .rg-card,
+.rg-drum.rg-spiral .rg-card.rg-tilting{
+  transition:box-shadow .3s ease}
+.rg-drum.rg-spiral{cursor:grab}
+.rg-drum.rg-spiral.rg-dragging{cursor:grabbing}
+
 /* Chordential-palette gradient tiles (no external imagery needed). */
 .rg-wine-orange{background:linear-gradient(135deg,var(--wine),var(--orange))}
 .rg-slate-sand{background:linear-gradient(135deg,var(--slate),var(--sand))}
