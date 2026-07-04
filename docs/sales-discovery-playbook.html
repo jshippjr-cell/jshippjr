@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Discovery Call Sales Playbook</title>
+<style>
+  :root{
+    --cream:#FCF7F8; --sand:#D8CDB6; --olive:#737469; --slate:#546671;
+    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{max-width:830px;margin:0 auto;padding:44px 54px;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+
+  .kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:800}
+  h1{font-size:32px;line-height:1.1;margin:8px 0 8px;color:var(--wine);letter-spacing:-.5px}
+  .lede{font-size:14.5px;color:#4b433c;margin:0;max-width:640px}
+  .rule{height:3px;background:var(--orange);border-radius:2px;margin:18px 0 22px;width:70px}
+  h2{font-size:19px;color:var(--wine);letter-spacing:-.3px;margin:0 0 4px}
+  .h2-kick{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--orange);font-weight:800;margin-bottom:4px}
+  h3{font-size:13px;color:var(--wine);margin:18px 0 6px}
+  p{margin:7px 0}
+  b{color:var(--wine)}
+  ul{margin:6px 0;padding-left:18px}
+  li{margin:4px 0}
+
+  .box{background:var(--cream);border:1px solid #EAE2D4;border-radius:11px;padding:14px 16px;margin:12px 0}
+  .box.accent{border-left:4px solid var(--orange)}
+  .box.wine{background:var(--wine);color:#fff;border:0}
+  .box.wine b{color:#fff}
+  .box.wine .bx-label{color:rgba(255,255,255,.65)}
+  .bx-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);font-weight:800;margin-bottom:6px}
+
+  .stat-row{display:flex;gap:12px;margin:14px 0}
+  .stat{flex:1;background:var(--cream);border:1px solid #EAE2D4;border-radius:11px;padding:12px 14px;text-align:center}
+  .stat .n{font-size:22px;font-weight:800;color:var(--wine);letter-spacing:-.5px}
+  .stat .l{font-size:10.5px;color:var(--olive);margin-top:3px;line-height:1.35}
+
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+  th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);
+    border-bottom:2px solid var(--wine);padding:7px 9px;font-weight:800}
+  td{padding:8px 9px;border-bottom:1px solid #EAE2D4;vertical-align:top}
+  tr{page-break-inside:avoid}
+  .say{font-style:italic;color:#403d3c;background:#fff;border-left:3px solid var(--sand);
+    padding:6px 10px;border-radius:0 6px 6px 0;display:block;margin-top:4px}
+
+  .qblock{margin:10px 0;padding:11px 14px;background:var(--cream);border:1px solid #EAE2D4;border-radius:10px;page-break-inside:avoid}
+  .qblock .stage{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--orange);font-weight:800}
+  .qblock .why{font-size:11.5px;color:var(--olive);margin-top:2px}
+  .qblock ul{margin-top:6px}
+  .qblock li{font-size:12.5px}
+
+  .foot{margin-top:22px;padding-top:12px;border-top:1px solid #EAE2D4;font-size:10.5px;color:var(--olive);
+    display:flex;justify-content:space-between}
+  .conf{font-size:10px;color:var(--olive)}
+  .conf.hi{color:#2f6a34}
+  .src{font-size:10.5px;color:var(--olive);line-height:1.6}
+  .num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+    background:var(--wine);color:#fff;font-size:11px;font-weight:800;margin-right:8px;flex-shrink:0}
+  .step{display:flex;gap:4px;align-items:flex-start;margin:8px 0;page-break-inside:avoid}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .pill{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 9px;
+    border-radius:999px;background:var(--cream);border:1px solid var(--sand);color:var(--wine);margin:0 4px 4px 0}
+  @page{size:Letter;margin:0}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ PAGE 1 — COVER + HOW TO USE ═══════════ -->
+<div class="page">
+  <div class="kicker">Chordential · Sales Enablement</div>
+  <h1>The Discovery Call Playbook</h1>
+  <p class="lede">How to run a Chordential discovery call — grounded in how ad agencies actually
+    buy music, and in the strongest available evidence on what makes B2B discovery calls convert.
+    For every Chordential seller, on every call.</p>
+  <div class="rule"></div>
+
+  <div class="box accent">
+    <div class="bx-label">What we sell — say it the same way every time</div>
+    <p style="margin:0"><b>Clearance-certified original music, made by people.</b> One signature covers
+    every right — master and publishing, worldwide, in perpetuity. Delivered procurement-ready:
+    stems, cutdowns, and complete rights documentation. Guaranteed no AI-generated audio.
+    Engagements typically run <b>$4,000–$90,000</b>.</p>
+  </div>
+
+  <h3>How to use this playbook</h3>
+  <ul>
+    <li><b>Before a call:</b> read pages 2–3 (who you're talking to, the numbers to know cold) and run the prep checklist (p. 4).</li>
+    <li><b>During:</b> the call structure and question arc (pp. 5–6) and the objection table (p. 7) are the working pages.</li>
+    <li><b>After:</b> the follow-through routine (p. 8). Your call is recorded and transcribed into Campaign
+      Intelligence automatically — your job on the call is to <i>listen</i>, not take notes.</li>
+    <li>The one-page cheat sheet (p. 9) is printable on its own.</li>
+  </ul>
+
+  <h3>The five principles behind everything here</h3>
+  <div class="step"><span class="num">1</span><div><b>Sell like an expert, not a persuader.</b> Buyers of professional
+    services pick on reputation and specialized expertise; cost is the deciding factor only ~8% of the time — sellers
+    overestimate price sensitivity almost 2-to-1 (Hinge Research, 1,000+ buyer studies). Your calm command of the
+    music-clearance domain IS the pitch.</div></div>
+  <div class="step"><span class="num">2</span><div><b>Questions do the selling.</b> The largest observational study of
+    selling ever run (Rackham/Huthwaite, ~35,000 calls) found that in considered purchases — exactly our deal size —
+    top performers win by asking questions that surface a problem's <i>consequences</i>, not by pitching or closing hard.</div></div>
+  <div class="step"><span class="num">3</span><div><b>Teach one thing.</b> Independent research on 700+ B2B purchases
+    (RAIN Group) found winners educate buyers with a new perspective ~3× more often than runners-up. Every call should
+    leave the buyer knowing something they didn't (see "teach moments," p. 6).</div></div>
+  <div class="step"><span class="num">4</span><div><b>Disqualify early and honestly.</b> A small team can't afford long
+    unqualified pursuits. If there's no music need, no budget authority in reach, or a done deal with an incumbent,
+    say so warmly and leave the door open. (Sandler's core discipline — the part of it that fits us.)</div></div>
+  <div class="step"><span class="num">5</span><div><b>The machine remembers; you connect.</b> Every call is recorded,
+    transcribed, and extracted into Campaign Intelligence. Confirm the record after — don't split attention during.</div></div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 1</span></div>
+</div>
+
+<!-- ═══════════ PAGE 2 — KNOW THE BUYER ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part one · The buyer</div>
+  <h2>How agencies actually buy music</h2>
+  <div class="rule"></div>
+
+  <h3>Who's who on the other side</h3>
+  <table>
+    <tr><th>Role</th><th>What they control</th><th>What they want from you</th></tr>
+    <tr><td><b>Agency / music producer, music supervisor</b><br><span class="conf">← your primary contact</span></td>
+      <td>Runs the music search; curates what creatives hear; pre-vets clearability against budget before anyone falls in love with a track</td>
+      <td>Options that are <b>instantly clearable</b>, on-brief, and won't embarrass them. They pass on music they love when rights are too complex to clear in time.</td></tr>
+    <tr><td><b>Creative director</b></td><td>Creative approval; briefs music in cultural language, not musical terms ("a pop song, but something guys would be into")</td>
+      <td>You translating vague emotional language into playable directions — fast</td></tr>
+    <tr><td><b>Business affairs</b></td><td>Papers and negotiates the deal; carries the clearance liability</td>
+      <td>One signature, all rights, clean docs. You make their job disappear.</td></tr>
+    <tr><td><b>Procurement (brand or holdco)</b></td><td>Vendor onboarding: MSA, compliance docs, banking, PO — <b>gates your first payment</b></td>
+      <td>A vendor whose paperwork is already procurement-shaped</td></tr>
+    <tr><td><b>The client (brand)</b></td><td>Final approval and the actual money</td><td>No risk. No surprises. No headlines.</td></tr>
+  </table>
+
+  <div class="box accent">
+    <div class="bx-label">The two structural facts that shape every deal</div>
+    <p><b>1. Music usually happens in post.</b> In most campaigns the spot is shot first; music is sourced against a
+    finished cut, under compressed timelines — supervisors report clearance windows as short as 24–48 hours in
+    social-first work. Unilever's marketing VP said it publicly: music is <i>"too often an afterthought."</i>
+    Your fast, structured delivery is built for exactly this moment — and your long game is getting briefed at
+    script stage instead.</p>
+    <p style="margin-bottom:0"><b>2. Producers buy from a habitual shortlist.</b> A handful of trusted sources —
+    often three to five — supply most searches. The goal of your first deal is not the fee;
+    it's a <b>place on the shortlist</b>. Price the first engagement to win it.</p>
+  </div>
+
+  <h3>What they use today (your competitive field)</h3>
+  <table>
+    <tr><th>Source</th><th>Cost reality</th><th>Their exposure (your opening)</th></tr>
+    <tr><td>Famous-song sync</td><td>$50k–$500k+ for national TV; master fee often doubles it; weeks-to-months of negotiation</td>
+      <td>Two separate clearances (master + publishing); timelines that don't fit production</td></tr>
+    <tr><td>Stock / subscription libraries</td><td>$15–$50/mo subscriptions; ~$1.45B market</td>
+      <td>Zero exclusivity — the same track scores competitors' ads; license terms often exclude paid media</td></tr>
+    <tr><td>Music houses (custom)</td><td>Full worldwide buyout for a 12-month TVC roughly $10k–$20k</td>
+      <td>Spec-demo model ($200–$500 demos, composers win ~5–10%); ~3-week turnarounds</td></tr>
+    <tr><td>AI generation</td><td>Nearly free</td><td>Unresolved training-data litigation, protectability questions, consumer and industry backlash (p. 3)</td></tr>
+  </table>
+
+  <p><b>Payment landmines to catch in discovery:</b> big advertisers push 90–120-day payment terms, and agency
+  contracts commonly include <b>sequential liability</b> — the agency owes you only when the brand pays them.
+  Ask about terms early; negotiate deposits; start vendor-onboarding paperwork in parallel with the creative
+  conversation, because the MSA/PO process gates first payment.</p>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 2</span></div>
+</div>
+
+<!-- ═══════════ PAGE 3 — THE NUMBERS ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part one · The buyer</div>
+  <h2>The numbers to know cold</h2>
+  <div class="rule"></div>
+
+  <h3>Clearance risk is not hypothetical — name these cases</h3>
+  <table>
+    <tr><th>Case</th><th>What happened</th><th>Use it when…</th></tr>
+    <tr><td><b>Sony v. Marriott</b> (2024)</td><td>931 allegedly infringing uses in social posts; statutory exposure ~$140M; settled in ~6 months — Marriott then billed costs back to franchisees</td>
+      <td>Buyer says "it's just social media"</td></tr>
+    <tr><td><b>DSW</b> (2025, sued twice)</td><td>Warner in May, Sony in August — influencer/social ads using Cardi B, Fleetwood Mac, Madonna. Labels' position: platform music libraries cover personal use only</td>
+      <td>Buyer assumes TikTok/IG library music is fine for ads</td></tr>
+    <tr><td><b>Sony v. Gymshark</b></td><td>~$44M claim over social-media music use</td><td>Mid-size brand thinks it's too small to be a target</td></tr>
+    <tr><td><b>UMG v. Chili's</b>; Beastie Boys v. Chili's</td><td>62 Instagram/TikTok videos; two suits within months</td><td>Showing it's a pattern, not lightning</td></tr>
+  </table>
+  <p class="conf">All from court filings via trade press and law-firm analyses. Say "allegedly" for unresolved claims; Marriott settled.</p>
+
+  <h3>The AI-music picture (as of mid-2026)</h3>
+  <div class="stat-row">
+    <div class="stat"><div class="n">62%</div><div class="l">of US consumers say they're less likely to engage — or won't — with AI-generated music (Bain 2025)</div></div>
+    <div class="stat"><div class="n">97%</div><div class="l">of surveyed music supervisors, filmmakers &amp; advertisers want AI music disclosed (144-person industry survey)</div></div>
+    <div class="stat"><div class="n">49%</div><div class="l">of that same survey will work with human-made music only</div></div>
+  </div>
+  <p><b>The legal state:</b> the majors sued Suno and Udio over training data. Warner and Universal settled
+  (late 2025); <b>Sony's case is still live, with a summary-judgment hearing in July 2026</b>, plus pending
+  independent-artist class actions. Purely AI-generated works also face copyright-protectability problems — a buyer
+  can't confidently own, enforce, or indemnify what they paid for. Translation for the call:
+  <i>"Cheap music can carry the most expensive rights problem in the room."</i></p>
+
+  <div class="box wine">
+    <div class="bx-label">Why this is our weather</div>
+    <p style="margin:0">A supervisor quoted in the industry survey: <i>"Clients are increasingly asking us to prove
+    music is human-made… It's not just a creative choice anymore. It's a must."</i> Chordential's no-AI guarantee and
+    clearance certification aren't features — they're the answer to a question the market is already asking.</p>
+  </div>
+
+  <h3>Price anchors you should carry</h3>
+  <ul>
+    <li>Known-song national sync: <b>$50k–$500k+</b> (and the master fee can double it)</li>
+    <li>Music-house custom buyout, 12-month TVC: <b>~$10k–$20k</b> — our range brackets this with more certainty attached</li>
+    <li>One two-week flight of a single national car ad: <b>$40k</b> for the license alone</li>
+    <li>Statutory copyright damages: up to <b>$150k per work</b> — the number that reframes "expensive"</li>
+  </ul>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 3</span></div>
+</div>
+
+<!-- ═══════════ PAGE 4 — BEFORE THE CALL ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part two · The call</div>
+  <h2>Before the call</h2>
+  <div class="rule"></div>
+
+  <div class="box accent">
+    <div class="bx-label">Speed is a strategy</div>
+    <p style="margin:0">When a discovery request comes in, respond <b>within the hour — ideally within minutes</b>.
+    The classic lead-response study (MIT/InsideSales) found contact odds ~100× higher at 5 minutes vs 30; HBR's audit
+    found firms responding within an hour were ~7× likelier to qualify the lead, while the average B2B response
+    takes 42 hours and 23% never respond at all. Being fast is rare enough to be a differentiator by itself.</p>
+  </div>
+
+  <h3>Prep checklist (10 minutes, not 60)</h3>
+  <ul>
+    <li><b>Open the Opportunity.</b> Read the Campaign Intelligence record — what the machine already knows,
+      which fields are confirmed, what's flagged <i>needs review</i>, and the open questions it raised. Those open
+      questions are pre-written discovery questions; bring them.</li>
+    <li><b>Read the request itself.</b> Zoom or phone? What did they write in the message field? Which Campaign
+      Brief did they come from — and which sections did that brief lead with?</li>
+    <li><b>Research the buyer for 5 minutes:</b> agency or brand-direct? Recent campaigns (watch one spot — note
+      what the music does). Holding company (procurement style follows). Who else at the shop might touch music
+      (a producer? business affairs?).</li>
+    <li><b>Pick ONE teach moment</b> (p. 6) you can deliver credibly for this buyer.</li>
+    <li><b>Set your anchor range</b> for their likely tier before the call — you will discuss price on this call
+      (p. 6), and you should never improvise a number.</li>
+    <li><b>Confirm the recorder is armed</b> (Zoom calls). If phone: you'll dictate your read into the debrief
+      lane after. Either way — plan to take zero notes live.</li>
+  </ul>
+
+  <h3>Set the frame in the first 90 seconds</h3>
+  <p>Open with warmth, then an <b>upfront contract</b> — a mutually agreed agenda and outcome. It sets you as a
+  peer, not a vendor auditioning:</p>
+  <span class="say">"Thanks for grabbing time. Here's what I'd suggest we do with our 25 minutes: I want to understand
+  the campaign and how you're handling music today; I'll share how we work and what it costs; and if it looks like a
+  fit, we'll agree on a concrete next step — and if it doesn't, I'll say so and point you somewhere useful.
+  Sound fair?"</span>
+  <p>Notes on openers: proactively stating the reason for the call correlates with ~2× success in Gong's data;
+  never open with "did I catch you at a bad time?" — it measurably hurts. On a warm call, "how've you been?" is the
+  single strongest opener they measured (6.6×) — use it when there's been prior contact.</p>
+
+  <div class="box">
+    <div class="bx-label">Disqualify with grace</div>
+    <p style="margin:0">If discovery reveals no real music need, no path to budget, or a locked incumbent — say so:
+    <i>"From what you've described, I don't think we're the right spend for this one. Here's what I'd do instead…"</i>
+    An honest disqualification builds the reputation that fills the shortlist later. Log it; the machine remembers
+    why, and the next campaign is smarter.</p>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 4</span></div>
+</div>
+
+<!-- ═══════════ PAGE 5 — THE QUESTION ARC ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part two · The call</div>
+  <h2>The question arc</h2>
+  <div class="rule"></div>
+
+  <p><b>The mechanics, from ~519,000 analyzed discovery calls (Gong):</b> top performers ask <b>11–14 questions</b>,
+  spread naturally through the conversation — not front-loaded like an intake form. They talk about
+  <b>43%</b> of the time and listen 57% (win rates fall sharply past 65% talk time). Let them monologue; long buyer
+  answers are a buying signal, not dead air.</p>
+
+  <p>The arc below is Rackham's validated sequence (situation → problem → implication → payoff) tuned to our domain.
+  Every answer feeds a Campaign Intelligence field — the transcript captures it, so stay in the conversation.</p>
+
+  <div class="qblock">
+    <div class="stage">1 · Situation — the campaign (3–4 questions, keep this tight)</div>
+    <div class="why">Facts you need; don't linger — supervisors live this all day and over-asking here reads junior.</div>
+    <ul>
+      <li>"Tell me about the campaign — what's it for, and where will it run?" <i>(media, territory, term — the license scope)</i></li>
+      <li>"Where are you in production — script, shooting, or already in the edit?"</li>
+      <li>"When does it ship — and when would music need to be locked?"</li>
+      <li>"Who else weighs in on music — creative, business affairs, the client?"</li>
+    </ul>
+  </div>
+
+  <div class="qblock">
+    <div class="stage">2 · Problem — how they source music today (3–4 questions)</div>
+    <div class="why">Surface the friction they've normalized. Ask about the last time, not hypotheticals.</div>
+    <ul>
+      <li>"How do you usually handle music — library, licensing, a music house you trust?"</li>
+      <li>"Walk me through the last search: how long did it take, and how many revision rounds?"</li>
+      <li>"Ever had a track you loved die in clearance — or a license that couldn't cover the media you needed?"</li>
+      <li>"Who ends up handling the rights paperwork — and how do they feel about it?"</li>
+    </ul>
+  </div>
+
+  <div class="qblock">
+    <div class="stage">3 · Implication — the cost of those problems (2–3 questions; the money questions)</div>
+    <div class="why">Rackham's strongest finding: these questions separate top performers in considered purchases. Ask, then be quiet.</div>
+    <ul>
+      <li>"If a track fails clearance two weeks before air, what does that do to the schedule — and to your week?"</li>
+      <li>"If the campaign really works and the client wants to extend it to new markets or a second year — what happens to your music license then?"</li>
+      <li>"What's it worth to never have a music-rights question land on this campaign at all?"</li>
+    </ul>
+  </div>
+
+  <div class="qblock">
+    <div class="stage">4 · Payoff — let them say the value (1–2 questions)</div>
+    <div class="why">A need they articulate themselves outperforms any pitch of the same point.</div>
+    <ul>
+      <li>"If the music showed up composed to the cut, with stems and cutdowns, and one signature covered every right forever — what would that change about how you run this?"</li>
+      <li>"Would it help if the rights documentation were shaped for your procurement team from day one?"</li>
+    </ul>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 5</span></div>
+</div>
+
+<!-- ═══════════ PAGE 6 — TEACH, QUALIFY, PRICE ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part two · The call</div>
+  <h2>Teach, qualify, and talk price</h2>
+  <div class="rule"></div>
+
+  <h3>Pick one teach moment (never more than one)</h3>
+  <table>
+    <tr><th>If the buyer is…</th><th>Teach this</th></tr>
+    <tr><td>Using platform/stock music in paid social</td><td>The Marriott/DSW/Gymshark suits — platform libraries cover <i>personal</i> use; brands are being sued at $150k statutory per work. Most buyers genuinely don't know this.</td></tr>
+    <tr><td>Curious about AI music</td><td>The July 2026 Sony/Suno ruling is still open; Warner and Universal settled; ownership of AI output is unsettled. 62% of consumers say they disengage from AI music; half of surveyed supervisors won't touch it.</td></tr>
+    <tr><td>Sync-licensing a known song</td><td>The real all-in math: sync + master often doubles the quote, scoped to one term/territory — a custom buyout can cost less than the renewal alone.</td></tr>
+    <tr><td>A music-house loyalist</td><td>How the spec-demo model works against them on speed (composers paid $200–$500 to gamble; ~3-week turnarounds) vs. a committed engagement.</td></tr>
+  </table>
+
+  <h3>Qualification — what must be true to advance</h3>
+  <p>Confirm these five before proposing anything (they map 1:1 to Campaign Intelligence fields):</p>
+  <p>
+    <span class="pill">1 · Real music need with a date</span>
+    <span class="pill">2 · Budget band acknowledged</span>
+    <span class="pill">3 · Decision path named (who approves, incl. client)</span>
+    <span class="pill">4 · Paper process understood (MSA? PO? terms?)</span>
+    <span class="pill">5 · Competing alternative identified</span>
+  </p>
+  <p>And begin <b>multi-threading now</b>: won deals typically have 3+ engaged buyer-side stakeholders; lost ones
+  often have one (Gong). On the call:
+  <span class="say">"For the proposal to be useful, it should answer business affairs' questions too — who should I
+  include, or what will they ask?"</span></p>
+
+  <h3>Talk price on this call — in the back third</h3>
+  <p>The data is unambiguous: deals where price is discussed on the first call win <b>~10% more</b> — but top reps
+  raise it about three-quarters through (the 38–46-minute window of an hour), after the implication questions have
+  established what's at stake. Rules:</p>
+  <ul>
+    <li><b>Anchor first and precisely.</b> First numbers set ranges (meta-analytic finding), and precise numbers
+      anchor harder than round ones: say <i>"engagements like this typically land between $18,500 and $27,500,"</i>
+      not "about twenty grand."</li>
+    <li><b>Three options, always</b> (in the proposal): a premium tier that anchors, the recommended middle, a lean
+      entry. Buyers gravitate to the middle — and the top tier makes it feel reasonable.</li>
+    <li><b>One bundled price, itemized value.</b> List everything included (composition, revisions, stems, cutdowns,
+      rights docs, certification) under a single number. Never surcharge-itemize.</li>
+    <li><b>Never answer "what's your best price?" with a number.</b> Explore it:
+      <span class="say">"Happy to talk numbers — help me understand what you're comparing us against, so I quote the right scope."</span></li>
+  </ul>
+
+  <div class="box accent">
+    <div class="bx-label">Remember Hinge's finding</div>
+    <p style="margin:0">Cost decides ~8% of professional-services purchases; sellers assume it's ~54%. The buyer across
+    the table is almost certainly less price-sensitive than your instinct says. Hold the anchor.</p>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 6</span></div>
+</div>
+
+<!-- ═══════════ PAGE 7 — OBJECTIONS ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part two · The call</div>
+  <h2>The objection table</h2>
+  <div class="rule"></div>
+
+  <p><b>The pattern for every objection (LAER + labeling):</b> pause — Gong's data shows top reps slow down after
+  objections while weak reps interrupt and counter. Then: <b>Listen</b> fully → <b>Acknowledge</b> with a label
+  (<i>"It sounds like budget's the concern…"</i>) → <b>Explore</b> with one clarifying question → <b>Respond</b>.
+  For predictable pushback, run an <b>accusation audit</b> — name it before they do:
+  <span class="say">"You're probably thinking this costs multiples of a library subscription — let me show you what
+  the difference actually buys."</span></p>
+
+  <table>
+    <tr><th>Objection</th><th>What it usually means</th><th>Your move</th></tr>
+    <tr><td><b>"Stock is $49/month."</b></td><td>They're pricing the file, not the rights or the distinctiveness</td>
+      <td>Agree — then reframe on exclusivity ("that track is scoring other brands' ads right now, possibly a
+      competitor's") and risk (license terms vs. paid media; the lawsuit list). Ask: "what's the campaign spend this
+      music sits on top of?" A $25k score under a $2M media buy is 1% of budget carrying 100% of the sound.</td></tr>
+    <tr><td><b>"We'll just use AI."</b></td><td>Cost pressure + curiosity; they haven't priced the risk</td>
+      <td>Don't mock it — audit it: "totally get the appeal. Two things worth knowing…" → unsettled litigation
+      (Sony/Suno, July 2026) + protectability (can they own/enforce it?) + 62% consumer disengagement. Then the
+      guarantee: every Chordential delivery is certified human-made — <i>"the market's already asking vendors to
+      prove it."</i></td></tr>
+    <tr><td><b>"Too expensive."</b></td><td>No value baseline yet, or wrong tier</td>
+      <td>Explore first: "compared to what?" If sync: show the all-in math. If stock: exclusivity + risk. If genuinely
+      out of range: offer the lean tier or a scoped-down first engagement — protect the anchor, flex the scope,
+      never just discount the same scope.</td></tr>
+    <tr><td><b>"We have music houses we trust."</b></td><td>You're pitching for the shortlist, not this job</td>
+      <td>Respect it — position as the clearance-certain lane: "keep them — use us where rights certainty,
+      procurement paperwork, or a brutal timeline is the job." Ask what their current vendors are weakest at.
+      Propose a low-risk first brief.</td></tr>
+    <tr><td><b>"Send me your reel and pricing."</b></td><td>Polite deferral — or a real gatekeeper task</td>
+      <td>Comply AND convert: "absolutely — I'll send the reel today. The pricing depends on scope, so let me send a
+      one-page brief tailored to this campaign instead of a generic rate card. Fifteen minutes Thursday to react to
+      it together?"</td></tr>
+    <tr><td><b>"We need it next week."</b></td><td>A gift dressed as an objection</td>
+      <td>This is the one-stop advantage: no third-party clearances to chase — composition and rights move together.
+      Confirm scope on the call, propose the lean tier with expedited terms, and get the kickoff booked before you hang up.</td></tr>
+    <tr><td><b>"The client picks the music."</b></td><td>You're one hop from the decision-maker</td>
+      <td>Multi-thread: "then let's make you the hero in that room — I'll build you two directions with a one-page
+      rights story the client can approve in one read. Would it help if I joined the review as your music vendor?"</td></tr>
+  </table>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 7</span></div>
+</div>
+
+<!-- ═══════════ PAGE 8 — CLOSE + AFTER ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Part two · The call</div>
+  <h2>Land the next step, then follow through</h2>
+  <div class="rule"></div>
+
+  <h3>The last five minutes decide the deal</h3>
+  <p>Successful reps spend measurably more time on next steps (~13% more; ~4 extra minutes) — and booking a
+  <b>specific date and time</b> beats an open-ended "I'll follow up" (37% vs 32% meeting-book rate in Gong's CTA data).
+  Never end on "I'll send some stuff over."</p>
+  <span class="say">"Here's what I'd suggest: I'll send a one-page campaign brief today with two creative directions
+  and the three engagement options we discussed. Can we take 15 minutes Thursday at 2 to walk through it — and should
+  business affairs join so we can clear their questions in the same pass?"</span>
+
+  <h3>First-deal wedges (when they like you but won't commit)</h3>
+  <ul>
+    <li><b>Paid discovery / scoped first brief:</b> a small paid engagement (a cutdown package, a 30-second re-score)
+      proves delivery before the big commitment — the standard first-deal wedge in agency services.</li>
+    <li><b>Risk reversal:</b> the classic agency-sales example is guaranteeing the outcome or refunding the fee.
+      Ours is structural: clearance certification IS risk reversal — every right, one signature, documented. Say it
+      that way: <i>"if a rights question ever lands on this music, that's our problem, in writing."</i></li>
+    <li><b>Start procurement in parallel:</b> at first serious interest, offer your vendor-onboarding pack (W-9,
+      insurance, banking, MSA redlines). It signals professionalism and removes the 4-week paperwork lag from
+      the critical path. Flag sequential-liability clauses; negotiate a deposit.</li>
+  </ul>
+
+  <h3>After the call — the follow-through routine</h3>
+  <div class="step"><span class="num">1</span><div><b>Same hour:</b> open the Opportunity. The transcript has been
+    extracted into Campaign Intelligence — review the proposed fields, confirm what's right, fix what's wrong,
+    resolve conflicts. Your edits are authoritative; downstream documents recompute from them.</div></div>
+  <div class="step"><span class="num">2</span><div><b>Same day:</b> send the updated Campaign Brief (it now reflects
+    everything from the call) plus the recap: what you heard, the three options, the booked next step. Speed compounds
+    the same way it did at lead-response.</div></div>
+  <div class="step"><span class="num">3</span><div><b>Log your read</b> in the debrief lane ("What's your read?"):
+    risks you sensed, the politics, who the champion is. Interpretation stays separate from fact — that's the point —
+    and it makes the next campaign smarter.</div></div>
+  <div class="step"><span class="num">4</span><div><b>Multi-thread within 48 hours:</b> ask your contact to introduce
+    business affairs or the producer ("so the proposal answers their questions too"). Three engaged stakeholders is
+    the won-deal pattern.</div></div>
+
+  <div class="box wine">
+    <div class="bx-label">The standard you're held to</div>
+    <p style="margin:0">Every claim in a Chordential call is true, sourced, and current — the honesty rule applies to
+    sales hardest of all. Say "allegedly" on unresolved suits. Never invent a client story. If you don't know,
+    say "I'll find out" — and then be fast about it.</p>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 8</span></div>
+</div>
+
+<!-- ═══════════ PAGE 9 — CHEAT SHEET ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Print me</div>
+  <h2>The one-page cheat sheet</h2>
+  <div class="rule"></div>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-top:0">The mechanics</h3>
+      <ul>
+        <li>Talk <b>43%</b> / listen 57% — never past 65%</li>
+        <li><b>11–14 questions</b>, spread through the call</li>
+        <li>Price on call one, <b>back third</b> of the call</li>
+        <li>Anchor <b>first</b>, with <b>precise</b> numbers</li>
+        <li>Three options in every proposal</li>
+        <li>Next step = <b>specific date + time</b>, booked live</li>
+        <li>Respond to new leads <b>within the hour</b></li>
+        <li>3+ stakeholders engaged by call two</li>
+      </ul>
+      <h3>The five qualifiers</h3>
+      <ul>
+        <li>Music need with a date</li>
+        <li>Budget band acknowledged</li>
+        <li>Decision path named</li>
+        <li>Paper process understood</li>
+        <li>Competing alternative identified</li>
+      </ul>
+      <h3>Objection reflex</h3>
+      <ul>
+        <li>Pause → label → one clarifying question → respond</li>
+        <li>"Best price?" → never a number; explore the comparison</li>
+        <li>Predictable pushback → name it first (accusation audit)</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">The ammunition</h3>
+      <ul>
+        <li>Marriott: <b>~$140M</b> exposure, settled; DSW sued twice ('25); Gymshark <b>~$44M</b>; Chili's ×2</li>
+        <li>Statutory damages: up to <b>$150k/work</b></li>
+        <li>Known-song sync: <b>$50k–$500k+</b>; master fee can double it</li>
+        <li>AI music: Sony/Suno ruling <b>July 2026</b>; <b>62%</b> of consumers disengage; <b>97%</b> of supers want disclosure; <b>49%</b> human-only</li>
+        <li>Cost decides only <b>~8%</b> of professional-services buys</li>
+      </ul>
+      <h3>The four sentences that sell</h3>
+      <ul>
+        <li>"One signature covers every right — master and publishing, worldwide, forever."</li>
+        <li>"That library track may be scoring a competitor's ad right now."</li>
+        <li>"Cheap music can carry the most expensive rights problem in the room."</li>
+        <li>"If a rights question ever lands on this music, that's our problem — in writing."</li>
+      </ul>
+      <h3>The system</h3>
+      <ul>
+        <li>Call is recorded → transcribed → extracted. <b>Take zero notes.</b></li>
+        <li>Same hour: confirm Campaign Intelligence fields</li>
+        <li>Same day: updated Brief + recap + booked next step</li>
+        <li>Your read → debrief lane (facts ≠ interpretation)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Playbook · p. 9</span></div>
+</div>
+
+<!-- ═══════════ PAGE 10 — SOURCES ═══════════ -->
+<div class="page">
+  <div class="h2-kick">Appendix</div>
+  <h2>Sources &amp; evidence notes</h2>
+  <div class="rule"></div>
+  <p class="src">
+    <b>Call mechanics (conversation-intelligence data).</b> Talk ratio 43/57, 11–14 questions, even distribution, price
+    in the back third (38–46 min) and +10% win rate when discussed on call one, next-step time +12.7%, specific-time CTA
+    37% vs 32%, 3+ stakeholders on won deals: Gong.io research blog and guides (gong.io/blog/talk-to-listen-conversion-ratio;
+    /deal-closing-discovery-call; /data-reveals-the-best-time-to-talk-price-and-budget; /sales-call-steps; multithreading
+    guide PDF). Verified against Gong's own pages; note these are correlational findings from Gong's customer base, and
+    widely re-quoted figures drift (43/57 is canonical). Lead response (100×/21×): MIT–InsideSales Lead Response Management
+    study (Oldroyd, 2007); 42-hour average / 23% never respond / 7× within-the-hour: HBR 2011 audit. Old but unreplaced.<br><br>
+    <b>Methodology evidence.</b> SPIN: Rackham, "SPIN Selling" (Huthwaite, ~35,000 calls; vendor-owned data, never
+    independently replicated). Challenger: Dixon &amp; Adamson (CEB, ~6,000 reps) with academic critique in Rapp et al.,
+    JPSSM 34(4) 2014. Teach-buyers finding independently: RAIN Group "What Sales Winners Do Differently" (700+ purchases).
+    Professional-services buying (referrals 71%, expertise-led selection, cost decisive ~8%, price-sensitivity gap 54/28):
+    Hinge Research Institute buyer studies. MEDDIC fit-by-deal-size and Sandler quota claims are vendor-reported — used
+    here only for structure, not statistics. No peer-reviewed head-to-head methodology comparison exists; this playbook
+    deliberately borrows components rather than adopting one branded system.<br><br>
+    <b>Agency workflows.</b> Grey music-department structure and post-first sourcing: Josh Rabinowitz interview
+    (SongwriterUniverse). Supervisor panel on decision dynamics and cultural-language briefs: Billboard (Advertising Week
+    panel). Shortlist behavior: Forbes (Passman), Track Club. Music-house demo economics: Splice. Payment terms and
+    sequential liability: TrinityP3, Ad Age, Law Insider. "Music as afterthought": The Drum (Unilever VP, 2015).<br><br>
+    <b>Market &amp; risk numbers.</b> Sync ranges: Artyfile, ThatPitch licensing guides (guide estimates, not audited).
+    Stock-market size ($1.45B→$2.4B): Research&amp;Markets via GlobeNewswire. IFPI 2024 sync revenue $650M. Lawsuits:
+    Sony/Marriott (Music Business Worldwide; Akerman), DSW (National Law Review; Reed Smith), Gymshark and Chili's
+    (Kohl&amp;Cook; Miami Law Review) — from filings/settlement coverage; amounts are claims unless settled. AI:
+    Bain 2025 Media Consumption Survey (62%); Deezer/Ipsos (9,000-person blind test); 144-person supervisor survey
+    (Record of the Day — small sample, verify before quoting in writing); Suno/Udio litigation status: Chartlex tracker,
+    Forbes (Berger), TechTimes (as of mid-2026 — <b>re-verify the July 2026 ruling before citing it after that date</b>).<br><br>
+    <b>Pricing &amp; negotiation science.</b> Anchoring: Tversky &amp; Kahneman 1974; first-offer correlation ~0.5:
+    Orr &amp; Guthrie 2006 meta-analysis. Precise anchors: Janiszewski &amp; Uy 2008 (peer-reviewed, replicated).
+    Good-better-best/compromise effect: Simonson &amp; Tversky 1992; HBR (Mohammed, 2018). Partitioned-pricing review:
+    Morwitz et al. Objection handling: Gong objection studies (67,149 meetings); LAER (Carew); labeling/mirroring/accusation
+    audit: Voss, "Never Split the Difference" (practitioner method, affect-labeling rationale). Value-based pricing for
+    creative services: Enns, "Pricing Creativity." Paid discovery: Sakas &amp; Company. Risk reversal: Abraham (anecdotal).<br><br>
+    <b>Standing caution.</b> Statistics from sales-tooling vendors (Gong, Chorus, RAIN, Hinge, Huthwaite, Challenger Inc.)
+    describe their own datasets and interests; treat them as strong directional evidence, not physics. Time-sensitive
+    items (AI litigation, lawsuit statuses) were current as of July 2026 and must be re-verified before client-facing use.
+  </p>
+
+  <div class="foot"><span>Chordential · chordential.com · compiled July 2026</span><span>Discovery Call Playbook · p. 10</span></div>
+</div>
+
+</body>
+</html>
