@@ -167,9 +167,59 @@
     });
   }
 
+  /* ---- view switch (§2.4): same data, two representations ---- */
+  function initViewSwitch() {
+    document.querySelectorAll('[data-viewswitch]').forEach(function (sw) {
+      var key = 'chordential.view.' + sw.getAttribute('data-viewswitch');
+      var panes = document.querySelectorAll('.view-pane[data-viewname]');
+      var btns = sw.querySelectorAll('button[data-view]');
+      function show(name, save) {
+        btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-view') === name); });
+        panes.forEach(function (p) {
+          var on = p.getAttribute('data-viewname') === name;
+          if (on) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
+        });
+        if (save) { try { localStorage.setItem(key, name); } catch (e) {} }
+      }
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () { show(b.getAttribute('data-view'), true); });
+      });
+      var saved = null;
+      try { saved = localStorage.getItem(key); } catch (e) {}
+      if (saved && sw.querySelector('button[data-view="' + saved + '"]')) show(saved, false);
+    });
+  }
+
+  /* ---- queue keyboard (§2.5 adapted): j/k navigate, Enter = the row's primary ---- */
+  function initQstack() {
+    var table = document.querySelector('[data-qstack]');
+    if (!table) return;
+    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+    if (!rows.length) return;
+    var pos = -1;
+    function focusRow(i) {
+      if (pos >= 0 && rows[pos]) rows[pos].classList.remove('q-focus');
+      pos = Math.max(0, Math.min(rows.length - 1, i));
+      rows[pos].classList.add('q-focus');
+      rows[pos].scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+    }
+    document.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (e.key === 'j') { focusRow(pos + 1); }
+      else if (e.key === 'k') { focusRow(pos - 1); }
+      else if (e.key === 'Enter' && pos >= 0) {
+        var btn = rows[pos].querySelector('.btn.primary, .btn-live');
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initArrive();
     initProgressForms();
     initDrawerLinks();
+    initViewSwitch();
+    initQstack();
   });
 })();

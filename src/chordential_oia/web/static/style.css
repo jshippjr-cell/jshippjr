@@ -229,6 +229,23 @@ a{color:inherit;text-decoration:none}
 .src-badge.src-sample,.src-badge.src-demo,.src-badge.src-crawl{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
 .pill-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
+/* view switch (ux-build-spec §2.4) — same data, two representations, one click.
+   top-center of the content region; choice persists per surface. */
+.viewswitch{display:flex;align-items:center;justify-content:center;gap:10px;
+  font-size:12.5px;margin:0 0 14px}
+.viewswitch button{background:none;border:0;padding:4px 2px;cursor:pointer;
+  color:var(--muted);opacity:.55;font-weight:600;font-size:12.5px;
+  transition:opacity var(--t-react) ease,color var(--t-react) ease}
+.viewswitch button.active{color:var(--ink);opacity:1}
+.viewswitch .sep{width:4px;height:4px;border-radius:50%;background:var(--border2)}
+.view-pane[hidden]{display:none}
+.view-pane{animation:view-in var(--t-move) var(--ease-out)}
+@keyframes view-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+/* queue keyboard focus (ux-build-spec §2.5, adapted to table queues) */
+.q-focus{outline:2px solid var(--accent);outline-offset:-2px}
+.q-hint{color:var(--muted2);font-size:11.5px;margin:8px 2px 0}
+
 /* drawer (ux-build-spec §2.3) — act on an entity without leaving it. the page
    behind stays alive, dimmed + blurred; Escape / backdrop / ✕ all close. */
 .drawer-backdrop{

@@ -33,7 +33,35 @@
 
 <p class="summary-line">Your pipeline as a working board — advance a deal a stage with one click; this mirrors the status you set on each opportunity. Lost and passed deals are archived together under Closed.</p>
 
-<div class="kanban" data-arrive>
+{# Same data, two representations (ux-build-spec §2.4): the board for working
+   deals, the table for scanning. One click apart; choice persists locally. #}
+<div class="viewswitch" data-viewswitch="pipeline">
+  <button data-view="board" class="active" type="button">board</button>
+  <span class="sep"></span>
+  <button data-view="table" type="button">table</button>
+</div>
+
+<div class="view-pane" data-viewname="table" hidden>
+  <div class="card no-pad">
+    <table class="table">
+      <thead><tr><th>Opportunity</th><th>Client</th><th>Stage</th><th>Tier</th><th>Budget</th><th>Fit</th></tr></thead>
+      <tbody>
+        {% for col in columns %}{% for r in col.rows %}
+        <tr>
+          <td><a class="strong" href="/opportunity/{{ r['id'] }}">{{ r['need'] }}</a></td>
+          <td class="muted">{{ r['client'] }}</td>
+          <td><span class="pill st-{{ status_class(col.status) }}">{{ stage_label(col.status) }}</span></td>
+          <td>{{ tier_pill(r['tier']) }}</td>
+          <td class="muted">{{ (r['budget_max'] or r['budget_min'])|money if (r['budget_max'] or r['budget_min']) else '—' }}</td>
+          <td>{{ align_bar(r['alignment']) }}</td>
+        </tr>
+        {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="kanban view-pane" data-viewname="board" data-arrive>
   {% for col in columns %}
   <div class="kcol kcol-{{ status_class(col.status) }}">
     <div class="kcol-head">{{ stage_label(col.status) }} <span class="lane-count">{{ col.rows|length }}</span></div>

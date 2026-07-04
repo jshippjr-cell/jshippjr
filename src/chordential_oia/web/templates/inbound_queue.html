@@ -19,7 +19,7 @@
 
 {% if leads %}
 <div class="card no-pad" style="margin-top:18px">
-<table class="table">
+<table class="table" data-qstack>
   <thead>
     <tr>
       <th>Lead</th><th>Project</th><th>Budget / timeline</th>
@@ -85,6 +85,7 @@
     {% endfor %}
   </tbody>
 </table>
+<p class="q-hint">keyboard: <b>j</b>/<b>k</b> move · <b>Enter</b> promotes the focused lead</p>
 </div>
 {% else %}
 <div class="card" style="margin-top:18px">
