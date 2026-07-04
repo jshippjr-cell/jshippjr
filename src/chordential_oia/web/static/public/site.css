@@ -701,7 +701,11 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
    ring radius (computed at runtime from the measured card width) shrinks to
    match automatically. */
 @media (max-width:640px){
-  .rg-stage{height:56vh;padding-top:80px}
+  /* fill the phone screen — 56vh left the bottom half of the page dead;
+     the spiral IS the page, so give it the viewport (minus chrome + the
+     footer strip). dvh tracks the real visible height under mobile
+     browser chrome; vh is the fallback. */
+  .rg-stage{height:84vh;height:calc(100dvh - 120px);padding-top:80px}
   .rg-card{left:-110px;top:-72px;width:220px;height:144px;padding:14px}
   .rg-card-title{font-size:16px}
 }

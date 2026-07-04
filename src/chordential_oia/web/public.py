@@ -36,10 +36,24 @@ templates.env.filters["money"] = money
 templates.env.filters["pct"] = pct
 templates.env.filters["slug"] = slug
 templates.env.filters["displayurl"] = displayurl
-# One source for the static-asset cache-buster. Bump this ONCE to force every public
-# page to re-fetch site.css after a change — it used to be hardcoded as ?v=22 in four
-# templates, so a bump had to be made in all four (and once wasn't, serving stale CSS).
-ASSET_VERSION = "22"
+# One source for the static-asset cache-buster. This used to be a hand-bumped
+# constant ("22") — and the failure mode it warned about happened AGAIN: a CSS
+# change shipped without a bump and browsers kept the 7-day-cached stylesheet
+# (the reel's curtain effect arrived in HTML with no styles). Now computed from
+# the static bundle's newest mtime, which changes on every Render build — no
+# human step, every deploy busts every browser cache.
+def _asset_version() -> str:
+    latest = 0.0
+    for dirpath, _dirs, files in os.walk(os.path.join(_HERE, "static")):
+        for fname in files:
+            try:
+                latest = max(latest, os.path.getmtime(os.path.join(dirpath, fname)))
+            except OSError:
+                pass
+    return str(int(latest))
+
+
+ASSET_VERSION = _asset_version()
 templates.env.globals["asset_v"] = ASSET_VERSION
 
 router = APIRouter(tags=["public"])

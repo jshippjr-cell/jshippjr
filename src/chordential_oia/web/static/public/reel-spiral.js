@@ -273,6 +273,29 @@
     });
   });
 
+  // Clicking anywhere OUTSIDE the popped card (or the player/chrome) puts the
+  // card back and resumes the stream — the card itself must not be the only
+  // way out. The chosen track KEEPS PLAYING in the docked player (you clicked
+  // out to keep browsing, not to stop the music); clicking the card again is
+  // still the full deactivate back to the quiet ambient. Escape = same release.
+  function release() {
+    if (activeCard) activeCard.classList.remove("rg-active");
+    activeCard = null;
+    hasActive = false;
+    drum.classList.remove("rg-has-active");
+    // player stays on; audio keeps playing; ambient drift resumes on its own
+  }
+  document.addEventListener("click", function (e) {
+    if (!hasActive) return;
+    if (e.target.closest && (e.target.closest(".rg-card") ||
+        e.target.closest("[data-rg-player]") ||
+        e.target.closest(".rg-chrome"))) return;
+    release();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && hasActive) release();
+  });
+
   // ------------------------------------------------------------------ //
   // Holographic tilt + cursor sheen — unchanged; the tilt vars are read
   // by the inline transform string layout() writes, so they compose.
