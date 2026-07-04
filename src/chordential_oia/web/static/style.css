@@ -229,6 +229,18 @@ a{color:inherit;text-decoration:none}
 .src-badge.src-sample,.src-badge.src-demo,.src-badge.src-crawl{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
 .pill-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
+/* attention by subtraction (ux-build-spec §2.6) — the hovered row is highlighted
+   by dimming its peers, not by decorating itself. read surfaces only; a row
+   being edited (focus-within) never dims. hover-capable pointers only. */
+@media (hover:hover) and (pointer:fine){
+  .table tbody tr,.kcol-body .kcard,.lane-body .opp-card,.deal-list .deal{
+    transition:opacity var(--t-react) ease,border-color var(--t-react) ease}
+  .table tbody:hover tr:not(:hover):not(:focus-within){opacity:var(--dim-sibling)}
+  .kcol-body:hover .kcard:not(:hover):not(:focus-within){opacity:var(--dim-sibling)}
+  .lane-body:hover .opp-card:not(:hover):not(:focus-within){opacity:var(--dim-sibling)}
+  .deal-list:hover .deal:not(:hover):not(:focus-within){opacity:var(--dim-sibling)}
+}
+
 /* provenance pills (ux-build-spec §2.2) — every CI value answers "why is this
    here?" at a glance. pills annotate, never act; orange is never status. */
 .pill.pv-machine{background:var(--panel);color:var(--olive);border-color:var(--border2)}
@@ -261,6 +273,28 @@ a{color:inherit;text-decoration:none}
 .btn.primary{background:linear-gradient(135deg,#E4671F,#cc551a);border:none;color:#fff;box-shadow:0 4px 14px rgba(228,103,31,.28)}
 .btn.primary:hover{filter:brightness(1.05)}
 .btn.ghost{background:transparent}
+
+/* THE primary action (ux-build-spec §2.1) — one per screen; names the state
+   machine's next move. The breathing dot is the quiet kin of an orbiting dot. */
+.btn-live{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--accent);color:#fff;border:0;border-radius:999px;
+  height:40px;padding:0 22px 0 16px;   /* asymmetric: dot lane on the right */
+  font-size:13.5px;font-weight:650;cursor:pointer;text-decoration:none;
+  box-shadow:0 4px 14px rgba(228,103,31,.28);
+  transition:transform var(--t-react) var(--ease-spring),
+             background-color var(--t-react) ease,
+             box-shadow var(--t-react) ease;
+}
+.btn-live .live-dot{
+  width:6px;height:6px;border-radius:50%;background:#fff;flex-shrink:0;
+  animation:dot-breathe 2s ease-in-out infinite;
+  transition:transform var(--t-react) var(--ease-spring);
+}
+@keyframes dot-breathe{0%,100%{opacity:.5}50%{opacity:1}}
+.btn-live:hover{transform:translateY(-1px);box-shadow:var(--shadow);filter:brightness(1.04)}
+.btn-live:hover .live-dot{transform:translateX(2px)}
+.btn-live:active{transform:translateY(0) scale(.98);transition-duration:var(--t-micro)}
 
 /* lanes */
 .lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}

@@ -11,7 +11,7 @@
 <div class="card">
   <p class="muted">No proposal generated yet.</p>
   <form method="post" action="/project/{{ project['id'] }}/proposal">
-    <button class="btn primary" type="submit">Generate proposal</button>
+    <button class="btn-live" type="submit">Generate proposal <span class="live-dot"></span></button>
   </form>
   <p class="muted small" style="margin-top:8px">Built deterministically from the estimator — line items and total come straight from the budget estimate.</p>
 </div>

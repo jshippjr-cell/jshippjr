@@ -32,7 +32,7 @@
   <div class="detail-fit">
     {# The Campaign Brief is the primary artifact generated from Opportunity + Campaign
        Intelligence — the deliverable we send to agencies. Primary CTA, upper-right. #}
-    <a class="btn primary" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief →</a>
+    <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     <div class="big-num">{{ row['alignment']|pct }}</div>
     <div class="muted">qualification fit</div>
   </div>
@@ -226,6 +226,7 @@
 
   {# Update Intelligence — one panel, every manual lane, two stances. #}
   <form class="ci-update" method="post" enctype="multipart/form-data"
+        data-progress="✨ Analyzing…"
         action="/opportunity/{{ row['id'] }}/intelligence/analyze">
     <div class="ci-controls">
       <div class="ci-stance">
@@ -335,7 +336,7 @@
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
     <input type="hidden" name="status" value="{{ next_status }}">
-    <button class="btn primary" type="submit">→ Mark {{ stage_label(next_status) }}</button>
+    <button class="btn" type="submit">→ Mark {{ stage_label(next_status) }}</button>
   </form>
   {% endif %}
 </div>
