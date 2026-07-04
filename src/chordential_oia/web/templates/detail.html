@@ -31,8 +31,12 @@
   </div>
   <div class="detail-fit">
     {# The Campaign Brief is the primary artifact generated from Opportunity + Campaign
-       Intelligence — the deliverable we send to agencies. Primary CTA, upper-right. #}
-    <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
+       Intelligence — the deliverable we send to agencies. Primary CTA, upper-right;
+       Schedule Discovery rides next to it (opens in the drawer) when no call exists. #}
+    <div class="detail-cta">
+      {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
+      <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
+    </div>
     <div class="big-num">{{ row['alignment']|pct }}</div>
     <div class="muted">qualification fit</div>
   </div>
@@ -331,7 +335,6 @@
 
 <div class="action-bar">
   {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
-  {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
   {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
