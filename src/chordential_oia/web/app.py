@@ -74,6 +74,25 @@ from .public import router as public_router
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 
+
+def _static_version() -> str:
+    """Cache-buster for /static assets (?v=): the newest mtime in the bundle.
+    Static files are browser-cached for 7 days (see the Cache-Control
+    middleware), so without this a deploy that ships new CSS/JS looks like
+    "the site didn't change" until the cache expires. Render clones fresh on
+    every build, so mtimes — and therefore this stamp — change per deploy."""
+    latest = 0.0
+    for dirpath, _dirs, files in os.walk(os.path.join(_HERE, "static")):
+        for fname in files:
+            try:
+                latest = max(latest, os.path.getmtime(os.path.join(dirpath, fname)))
+            except OSError:
+                pass
+    return str(int(latest))
+
+
+templates.env.globals["static_v"] = _static_version()
+
 # Founder-uploaded audio samples for the "Relevant work" section. Path is
 # overridable (CHORDENTIAL_UPLOAD_DIR) with a module-relative default; created on
 # import so the upload + serve routes can rely on it existing.
