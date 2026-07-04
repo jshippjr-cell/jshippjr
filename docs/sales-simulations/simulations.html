@@ -1,0 +1,866 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Chordential — Discovery Call Simulations</title><style>
+  :root{--cream:#FCF7F8;--sand:#D8CDB6;--olive:#737469;--slate:#546671;
+    --ink:#1F1E1E;--wine:#44161E;--orange:#E4671F}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font:12.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{max-width:830px;margin:0 auto;padding:44px 54px;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:800}
+  h1{font-size:30px;line-height:1.1;margin:8px 0;color:var(--wine);letter-spacing:-.5px}
+  .lede{font-size:14px;color:#4b433c;margin:0;max-width:640px}
+  .rule{height:3px;background:var(--orange);border-radius:2px;margin:18px 0 20px;width:70px}
+  h2{font-size:18px;color:var(--wine);letter-spacing:-.3px;margin:0 0 10px}
+  .h2-kick{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--orange);font-weight:800;margin-bottom:4px}
+  h3{font-size:13px;color:var(--wine);margin:16px 0 6px}
+  p{margin:6px 0} b,strong{color:var(--wine)} em{color:#4b433c}
+  ul{margin:6px 0;padding-left:18px} li{margin:3px 0}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11.5px}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);
+    border-bottom:2px solid var(--wine);padding:6px 8px;font-weight:800}
+  td{padding:7px 8px;border-bottom:1px solid #EAE2D4;vertical-align:top}
+  tr{page-break-inside:avoid}
+  .box{background:var(--cream);border:1px solid #EAE2D4;border-radius:11px;padding:13px 16px;margin:12px 0}
+  .box.accent{border-left:4px solid var(--orange)}
+  .box.wine{background:var(--wine);color:#fff;border:0}
+  .box.wine b,.box.wine strong{color:#fff}
+  .bx-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);font-weight:800;margin-bottom:6px}
+  .box.wine .bx-label{color:rgba(255,255,255,.65)}
+  .foot{margin-top:20px;padding-top:12px;border-top:1px solid #EAE2D4;font-size:10.5px;color:var(--olive);
+    display:flex;justify-content:space-between}
+  /* transcript styling */
+  .transcript p{margin:8px 0}
+  .transcript hr{border:0;border-top:1px solid #EAE2D4;margin:16px 0}
+  .transcript h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);
+    border-top:1px solid #EAE2D4;padding-top:14px;margin-top:22px}
+  .callhead{background:var(--wine);color:#fff;border-radius:12px;padding:16px 20px;margin-bottom:18px}
+  .callhead .ch-kick{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:800}
+  .callhead .ch-title{font-size:19px;font-weight:800;margin:3px 0}
+  .callhead .ch-sub{font-size:12px;color:rgba(255,255,255,.8)}
+  .pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 9px;border-radius:999px;
+    background:var(--cream);border:1px solid var(--sand);color:var(--wine);margin-right:5px}
+  .pill.win{background:#eaf5ea;color:#2f6a34;border-color:#cfe6cf}
+  .pill.loss{background:#f6e9eb;color:var(--wine);border-color:#e8d3d7}
+  .pill.mixed{background:#fdf1e3;color:#9a5a1a;border-color:#f0dcbc}
+  @page{size:Letter;margin:0}
+</style></head>
+<body>
+<div class="page">
+  <div class="kicker">Chordential · Sales Enablement</div>
+  <h1>Discovery Call Simulations</h1>
+  <p class="lede">Five simulated discovery calls between a Sr. Chordential sales rep and five
+  distinct buyer personas — each run against the Discovery Call Playbook, each graded, and each
+  mined for the seed objection library. Companion to <i>The Discovery Call Playbook</i>.</p>
+  <div class="rule"></div>
+
+  <h3>The five calls</h3>
+  <table>
+    <tr><th>#</th><th>Buyer</th><th>Scenario</th><th>Outcome</th></tr>
+    <tr><td>1</td><td><b>Dana Merrick</b><br>EP, mid-size indie agency</td>
+      <td>Six-year incumbent music houses; delivery week; Suno creeping in via CDs</td>
+      <td><span class="pill loss">no sale</span> paper-first test earned; free-re-direction concession given; BA access blocked</td></tr>
+    <tr><td>2</td><td><b>Marcus Webb</b><br>Head of Brand, DTC apparel</td>
+      <td>Label demand letter over influencer posts; content engine frozen; Q4 at risk</td>
+      <td><span class="pill win">strong advance</span> 60-min meeting w/ counsel + content lead; Epidemic quote still live</td></tr>
+    <tr><td>3</td><td><b>Priya Sharma</b><br>VP Marketing, regional QSR</td>
+      <td>CMO saw a Suno demo and asked "why pay for music at all?"</td>
+      <td><span class="pill mixed">mixed win</span> follow-up booked; lean tier scoped; CMO reachable only by memo; net-90 handled</td></tr>
+    <tr><td>4</td><td><b>Sam Okafor</b><br>Sr. Producer, production co.</td>
+      <td>Track failed clearance 10 days before air; client review Friday</td>
+      <td><span class="pill win">closed — $8,000</span> deposit same day; kill-fee cap and round-3 split conceded with structure</td></tr>
+    <tr><td>5</td><td><b>Elena Ruiz</b><br>Music Supervisor, holdco agency</td>
+      <td>No live brief; 200+ pitches/month; "send me your reel" by minute 6</td>
+      <td><span class="pill loss">no meeting</span> — graceful disqualification converted into sampler + September search inclusion</td></tr>
+  </table>
+
+  <div class="box accent">
+    <div class="bx-label">How to read this document</div>
+    <p style="margin:0">The <b>debrief</b> (pp. 2–3) is what to internalize — the patterns that repeated across
+    all five rooms. The <b>objection library</b> (pp. 4–5) is the working reference — and the seed
+    data for the Discovery Call Simulator. The <b>full transcripts</b> follow, each with its
+    scorecard, for close study. All five calls are simulations: the buyers are fictional,
+    built from the market research behind the playbook.</p>
+  </div>
+
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations</span></div>
+</div>
+
+<div class="page">
+  <div class="h2-kick">Cross-call debrief</div>
+  <h2>What repeated in every room</h2>
+  <div class="rule"></div>
+
+  <h3>1 · Honesty was the top-scoring move in all five calls — by a wide margin</h3>
+  <p>Every credibility breakthrough traces to a <b>concession</b>, not a claim: admitting the no-AI guarantee
+  can't audit laptops (Dana: led to her most-engaged moment), "we're early, no logo wall" (Elena: directly
+  earned the sampler invitation), "on one listen, maybe your CMO can't hear the difference" (Priya),
+  volunteering the indemnity carve-outs unprompted (Marcus: <i>"the first non-slippery answer I've gotten in
+  three weeks"</i>), and "I'm not promising final masters Thursday" (Sam). The pattern: <b>concede the true
+  limitation before the buyer finds it, then differentiate inside what remains.</b></p>
+
+  <h3>2 · One differentiator landed in all five rooms: provable human authorship</h3>
+  <p>The AI-provenance attestation / session-file archive was the only claim no buyer could shrug off.
+  Dana: <i>"the first thing you've said my music houses genuinely don't do."</i> Elena: <i>"the only thing
+  my bench doesn't have — lead with that next time, not the tidy folders."</i> Sam: <i>"quietly the most
+  valuable page in the binder."</i> Marcus and Priya both routed it to legal/CMO. <b>Lead with the
+  attestation; let "tidier paperwork" be the supporting cast.</b> Clearance alone is NOT differentiating
+  against good music houses — Elena proved a knowledgeable supervisor will call that bluff.</p>
+
+  <h3>3 · Techniques get caught; structure gets signed</h3>
+  <p>Both times the rep used a recognizable sales move, the buyer named it out loud ("you're doing a
+  technique on me right now"; "that's the second trial-close"). But every <b>structured concession</b>
+  closed: the signed brief as revision referee, the kill fee capped-with-conditions, the free re-direction
+  put in writing. <b>Buyers in this market are professional negotiators — trade terms, don't deploy moves.</b></p>
+
+  <h3>4 · The playbook's mechanics held under fire</h3>
+  <ul>
+    <li><b>Talk ratio:</b> 43–45% rep across all five calls, including the 12-minute one.</li>
+    <li><b>Questions:</b> 13–14 in full calls; correctly compressed to 7 under deadline pressure without skipping scope confirmation.</li>
+    <li><b>Price in the back third, precise, three tiers:</b> executed in every call; <b>recommending the floor tier</b> twice produced the strongest trust moments ("that's either honest or a very good trick").</li>
+    <li><b>One teach moment:</b> the calls that converted each had exactly one, and it was the turn the deal advanced on (music-system reframe for Marcus; master/publishing rent-trap for Priya; provenance-warranty trend for Dana).</li>
+    <li><b>LAER (pause → label → clarify → respond):</b> defused every hard objection; the two interruptions the rep suffered both followed answers that ran past ~45 seconds.</li>
+  </ul>
+
+  <h3>5 · Coaching flags that recurred</h3>
+  <ul>
+    <li><b>Monologue drift</b> after a good answer — twice interrupted. The fix both times: "short version" restatement in one sentence.</li>
+    <li><b>Detail slips under pressure</b> (":60" vs ":30", 120 vs 140 locations, garbled deposit terms) — each recovered by owning it instantly, but each cost a beat of exactly the reliability being stress-tested.</li>
+    <li><b>Language sensitivity with burned buyers:</b> "when the lawsuit hit" nearly detonated the Marcus call — it was a demand letter. With legally anxious buyers, precision of language IS the product demo.</li>
+    <li><b>Overreach on access:</b> asking for client business affairs before clearing the gatekeeper (Dana: hard no), pushing for a meeting with no live brief (Elena: "that's how vendors talk themselves off my list"). The recovery pattern that worked: name the overreach, shrink the ask.</li>
+  </ul>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · Debrief</span></div>
+</div>
+
+<div class="page">
+  <div class="h2-kick">Cross-call debrief</div>
+  <h2>The win condition, by buyer type</h2>
+  <div class="rule"></div>
+  <table>
+    <tr><th>Buyer type</th><th>What "winning" actually is</th><th>The move that worked</th><th>What kills it</th></tr>
+    <tr><td><b>Incumbent-loyal EP</b></td><td>A paper-first, low-blast-radius test — not a sale</td>
+      <td>Propose the smallest possible evaluation; concede a risk term to prove you'll wear the risk</td>
+      <td>Pitching against six years of trust; jargon; visible technique</td></tr>
+    <tr><td><b>Clearance-burned brand</b></td><td>A scoped meeting with legal + the workflow owner</td>
+      <td>Documents over adjectives — send verbatim indemnity language for counsel to shoot at</td>
+      <td>Characterizing their incident; any whiff of gloating or FUD</td></tr>
+    <tr><td><b>Cost-pressured arbitrator</b></td><td>Arming the champion to win the internal argument</td>
+      <td>An honest hand-to-the-CMO memo (concede AI's strengths) + recommend the floor tier</td>
+      <td>Vendor FUD ("if it reads like propaganda, he dismisses it and me with it")</td></tr>
+    <tr><td><b>Deadline buyer</b></td><td>Close on the call — with the company protected</td>
+      <td>Hour-by-hour concreteness with named buffer; hold deposit + revision lines; concede structured contingencies</td>
+      <td>Vague reassurance; padding the rush; overpromising finals</td></tr>
+    <tr><td><b>No-brief stonewall</b></td><td>Shortlist position — explicitly not a meeting</td>
+      <td>Name the disqualification out loud; ask for something smaller than a meeting (sampler, next constrained brief)</td>
+      <td>Pushing for a meeting after the exit line; free-spec capitulation</td></tr>
+  </table>
+
+  <div class="box wine">
+    <div class="bx-label">The sentence to write on the wall</div>
+    <p style="margin:0">From the supervisor who's watched vendors try for fourteen years: <i>"Everyone auditions
+    with their best work; almost nobody auditions with their reliability. The vendor who makes my worst
+    Tuesday easier is the vendor who gets the anthem brief eventually."</i></p>
+  </div>
+
+  <h3>Open items the simulations exposed (real work, not roleplay)</h3>
+  <ul>
+    <li><b>The spec-demo gap:</b> two buyers expect three demos in 48 hours on spec; Chordential's no-spec position
+      needs a productized answer (the matched sampler worked once — formalize it) before the September-style
+      competitive searches.</li>
+    <li><b>Deposit vs. net-90 collision:</b> the 40%-deposit / net-90-balance structure worked in simulation;
+      it should be written into standard terms before a real procurement team tests it.</li>
+    <li><b>Indemnity language:</b> two calls advanced specifically on "send the verbatim clause." That document
+      must exist and be counsel-reviewed before it's promised again.</li>
+    <li><b>Kill-fee and re-direction policies:</b> both were invented under pressure. Codify: kill fee = deposit,
+      conditioned on verified campaign death; first-engagement V1 direction-miss = free re-direction.</li>
+  </ul>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · Debrief</span></div>
+</div>
+
+<div class="page">
+  <div class="h2-kick">Seed data · Objection library v1</div>
+  <h2>The objection library</h2>
+  <div class="rule"></div>
+  <p>Every objection raised across the five calls, organized by family. <b>Response pattern</b> is what worked
+  (or what should have been said); <b>result</b> is how it actually landed in simulation. This table is the
+  seed for the Discovery Call Simulator — as real calls are transcribed into Campaign Intelligence, new
+  objections and outcomes join it, and personas get harder where we're weakest.</p>
+
+  <h3>Family 1 · Trust &amp; incumbency</h3>
+  <table>
+    <tr><th>Objection</th><th>Response pattern</th><th>Sim result</th></tr>
+    <tr><td>"Why risk a client relationship on an unknown vendor?"</td><td>Agree they shouldn't — propose the smallest low-blast-radius test; offer a risk-bearing term</td><td>Partial → toehold (C1)</td></tr>
+    <tr><td>"My music houses answer Friday night. Will you?"</td><td>Contractual SLA (4-hr response in writing) + honest concession of no shared history: "contractual, not cultural"</td><td>Partial (C1)</td></tr>
+    <tr><td>"Who have you scored for? Why be your guinea pig?"</td><td>Full honesty (early-stage, fictional demo brands) + contained-entry framing</td><td>Yes — unlocked concessions (C5)</td></tr>
+    <tr><td>"Send me your reel, I'll keep you in mind" (exit line)</td><td>Do NOT push a meeting. Name the disqualification; ask for two tiny non-meeting things (sampler, next constrained brief)</td><td>Yes — exit converted (C5)</td></tr>
+  </table>
+
+  <h3>Family 2 · Cheap alternatives</h3>
+  <table>
+    <tr><th>Objection</th><th>Response pattern</th><th>Sim result</th></tr>
+    <tr><td>"Epidemic is $499/year" / "buy a bigger library license"</td><td>Honest comparison: rental vs owned; subscription-conditional rights; aggregation risk ("allegedly" on live suits); exclusivity. Concede where libraries win.</td><td>Partial ×2 (C1, C2)</td></tr>
+    <tr><td>"We'll just use Suno — it's free"</td><td>Concede output quality on short listens; differentiate on enforceable ownership (protectability) + audience (Bain 62%); offer an honest memo, never FUD</td><td>Partial — memo routed to CMO (C3)</td></tr>
+    <tr><td>"Would my CMO hear the difference blind?"</td><td>"On one listen, maybe not." Shift criterion: compounding sonic identity + audience disclosure norms</td><td>Partial — honesty banked (C3)</td></tr>
+    <tr><td>"Custom can't scale to 140 posts/month"</td><td>Clarify real usage (25–30 sounds in rotation) → music-SYSTEM reframe: owned stems = hundreds of cues</td><td>Partial→Yes; gated on workflow owner (C2)</td></tr>
+  </table>
+
+  <h3>Family 3 · Product &amp; guarantee skepticism</h3>
+  <table>
+    <tr><th>Objection</th><th>Response pattern</th><th>Sim result</th></tr>
+    <tr><td>"Your no-AI guarantee is unenforceable — you can't audit laptops"</td><td>Three layers honestly ranked: personal warranties + insured E&amp;O; session-file archive (inspectable, not asserted); concede the limit — "we built for the question; they're hoping nobody asks"</td><td>Yes — strongest moment (C1)</td></tr>
+    <tr><td>"Buyouts are already one-stop — what does 'clearance-certified' add?"</td><td>NEVER pretend houses can't clear. Differentiate: human-authorship attestation, built-in indemnification, procurement-formatted package</td><td>Partial-to-yes; attestation acknowledged (C5)</td></tr>
+    <tr><td>"What's your indemnification actually worth? I've seen Swiss-cheese clauses"</td><td>State coverage AND carve-outs unprompted; admit it can't fix the past; send verbatim language for counsel</td><td>Yes — credibility turn (C2)</td></tr>
+    <tr><td>"You don't do spec? My houses demo 3 in 48h free"</td><td>Hold the no-free-spec line with the reason (composer strip-mining); offer the matched sampler as alternate proof</td><td>Partial — sampler accepted, spec expectation stands (C5)</td></tr>
+  </table>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Objection Library v1 · 1 of 2</span></div>
+</div>
+
+<div class="page">
+  <div class="h2-kick">Seed data · Objection library v1</div>
+  <h2>The objection library, continued</h2>
+  <div class="rule"></div>
+
+  <h3>Family 4 · Delivery &amp; revision risk</h3>
+  <table>
+    <tr><th>Objection</th><th>Response pattern</th><th>Sim result</th></tr>
+    <tr><td>"What happens when the client hates V1?"</td><td>Named rounds in the SOW; V1 direction-miss doesn't burn a round; shared revision log; composer ego is our job. Keep the answer SHORT.</td><td>Yes on substance; monologue drew interruption (C1)</td></tr>
+    <tr><td>"Everyone says they hit deadlines — walk me through hour by hour"</td><td>A real clock with times, owners, dependencies, and a NAMED buffer ("you get Thursday night with it, on purpose")</td><td>Yes — closed (C4)</td></tr>
+    <tr><td>"Third round shouldn't be on me if you missed"</td><td>Split by cause with the signed brief as referee: contradicts brief → billed; consistent → free</td><td>Yes — buyer-won, structured (C4)</td></tr>
+    <tr><td>"What am I out if the whole spot dies?"</td><td>Kill fee capped at deposit, conditioned on verified campaign death, rights reverting</td><td>Yes — buyer-won, bounded (C4)</td></tr>
+    <tr><td>"Don't pad the rush"</td><td>Itemize the surcharge against real costs (priority displacement, dedicated producer); steer to the lean tier</td><td>Yes (C4)</td></tr>
+  </table>
+
+  <h3>Family 5 · Money, politics &amp; process</h3>
+  <table>
+    <tr><th>Objection</th><th>Response pattern</th><th>Sim result</th></tr>
+    <tr><td>"What's the cheapest viable engagement — the floor, not the pitch"</td><td>Give the floor first, precisely, and recommend it if it fits ("I'd rather own the relationship at $6,500 than lose the recommendation at $42,000")</td><td>Yes (C3)</td></tr>
+    <tr><td>"You're in a weird middle on price"</td><td>Own it: "cheap enough that failure is survivable, real enough that success means something"</td><td>Partial (C1)</td></tr>
+    <tr><td>"My agency handles creative — why am I talking to you?"</td><td>Label the politics; position as supply-chain upgrade THROUGH the agency; invite their agency contact to the next call</td><td>Yes (C3)</td></tr>
+    <tr><td>"Procurement: onboarding + net-90, non-negotiable"</td><td>Start onboarding in parallel Monday (costs nothing if no); deposit at signature net-30, balance net-90 from delivery</td><td>Partial — accepted in principle (C3)</td></tr>
+    <tr><td>"It's a demand letter, NOT a lawsuit" (language correction)</td><td>Immediate unqualified apology; adopt their exact language; never characterize their legal situation</td><td>Recovered (C2)</td></tr>
+  </table>
+
+  <div class="box accent">
+    <div class="bx-label">How the library learns (the simulator feature, next)</div>
+    <p style="margin:0">Every real discovery call is already recorded, transcribed, and extracted into Campaign
+    Intelligence. The simulator closes the loop: objections detected in real transcripts are added to this
+    library with their actual response and outcome; personas are rebuilt from the freshest library so reps
+    always train against the objections currently being lost; and each rep's practice scorecards track the
+    same metrics as their real calls (talk ratio, question count, price timing, next-step specificity).
+    The library above is v1 — twenty-two objections, five families, seeded from these simulations.</p>
+  </div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Objection Library v1 · 2 of 2</span></div>
+</div>
+
+<div class="page">
+  <div class="callhead">
+    <div class="ch-kick">Full transcript</div>
+    <div class="ch-title">CALL 1 · The Incumbent-Loyal EP</div>
+    <div class="ch-sub">Dana Merrick, Executive Producer, Meridian & Park (independent agency) — delivery week, 20-minute hard stop · <b>no sale · paper-first test earned</b></div>
+  </div>
+  <div class="transcript"><p>[00:00] <strong>JORDAN:</strong> Dana, hi — Jordan Hale from Chordential. I know you said twenty minutes and I saw your calendar note about delivery week, so I've got us at nineteen and I'll watch the clock. Fair?</p>
+<p>[00:07] <strong>DANA:</strong> Fair. And I mean it. I have a color session at the half hour.</p>
+<p>[00:11] <strong>JORDAN:</strong> Understood. So the reason I asked for the time: we work with independent agencies on original, human-composed music where the rights paperwork is built to survive procurement review. Before I say anything else, though — can I ask how music is actually getting made and cleared at Meridian &amp; Park today?</p>
+<p>[00:26] <strong>DANA:</strong> Two music houses we've used for six years. They're good, they know our clients. Epidemic subscription for social and internal stuff. And honestly a couple of our CDs have started messing around with Suno for scratch tracks, which I have feelings about, but it's happening.</p>
+<p>[00:40] <strong>JORDAN:</strong> Okay. When the CDs bring a Suno scratch to a client presentation, whose job does it become to replace it with something clearable?</p>
+<p>[00:47] <strong>DANA:</strong> Mine. Obviously mine.</p>
+<p>[00:49] <strong>JORDAN:</strong> How often is that happening now versus a year ago?</p>
+<p>[00:52] <strong>DANA:</strong> A year ago, never. This quarter? Three times. And twice the client said "just use the scratch," and I had to explain why we can't broadcast a Suno track, which is a fun conversation to have with a CMO who thinks AI is free.</p>
+<p>[01:05] <strong>JORDAN:</strong> That's actually the exact — sorry, one more question first. Your two music houses. What do they charge you, roughly, for a :30 national spot, all-in with the license?</p>
+<p>[01:15] <strong>DANA:</strong> Depends. Twenty-five to sixty, typically. Why, are you about to tell me you're cheaper? Because that pitch dies fast with me.</p>
+<p>[01:22] <strong>JORDAN:</strong> No. Honestly, on some jobs we'd be comparable or higher. I asked because the number matters less than what's inside it. When you get their license paperwork — is it one document, or a stack?</p>
+<p>[01:33] <strong>DANA:</strong> <em>(pause)</em> A stack. Master license, sync side, sometimes a separate composer agreement if they used a freelancer. Why?</p>
+<p>[01:41] <strong>JORDAN:</strong> Here's the one thing I'll teach on this call, and then I'll go back to asking questions. In the last eighteen months, client-side procurement and business affairs teams have started adding AI-provenance warranties to agency contracts — language where the agency warrants no generative-AI audio is in the deliverable, and indemnifies if that's wrong. Holding-company agencies are signing these right now. The problem is your music house's paper wasn't written to let you make that warranty. A stack of licenses with a freelance composer somewhere in the chain — you can't actually promise your client what the composer did or didn't use. That gap lands on the agency. On you, specifically, as the EP who signed off. What we sell is a single signature: one document, master and publishing together, worldwide, in perpetuity, with a contractual no-AI-audio warranty and a named-human composer chain of title you can hand straight to the client's business affairs. That's what I mean when I say procurement-grade—</p>
+<p>[02:34] <strong>DANA:</strong> "Procurement-grade." <em>(laughs)</em> Do you guys workshop these? It sounds like a filing cabinet that went to business school. Music either moves people or it doesn't. Nobody ever won a pitch with paperwork.</p>
+<p>[02:45] <strong>JORDAN:</strong> <em>(beat)</em> That's fair, and you're right that nobody buys the paperwork — sounds like you've been burned by vendors leading with process instead of the work. Can I ask you one clarifying question on that? Has a client's legal team ever held up final payment or air date over music documentation?</p>
+<p>[02:59] <strong>DANA:</strong> ...Once. Last November. A pharma client. Their BA team wanted proof of publishing control on a track and our music house took eleven days to produce it. We aired on time but it was ugly, and I ate a weekend.</p>
+<p>[03:12] <strong>JORDAN:</strong> Eleven days. What did those eleven days cost you internally — not money, I mean attention?</p>
+<p>[03:18] <strong>DANA:</strong> My attention, mostly. Which is the most expensive thing at this agency, ask anyone.</p>
+<p>[03:22] <strong>JORDAN:</strong> So if that pharma scenario repeats on a bigger client, what's actually at risk?</p>
+<p>[03:27] <strong>DANA:</strong> The relationship. Look — that's my real question for you, so let's just do it now. Why would I risk a six-year client relationship on an unknown vendor? My music houses have made mistakes, sure, but I know <em>which</em> mistakes they make. You're a total unknown. Your downside is unbounded.</p>
+<p>[03:43] <strong>JORDAN:</strong> <em>(pause)</em> Sounds like the risk you're pricing isn't the music — it's the unknown-unknowns of a new vendor on a client that matters. Is that right?</p>
+<p>[03:51] <strong>DANA:</strong> That's exactly right.</p>
+<p>[03:53] <strong>JORDAN:</strong> Then I'd never ask you to start there, and I'd think less of you if you did. Nobody sane trials a vendor on a flagship account. The way this starts, if it starts, is a job where the blast radius is small — a regional spot, a sizzle, something your music houses are too busy or too expensive for. You judge us on that. What I'd want in return is that you judge the whole delivery: music, stems, cutdowns, and the rights file, against what you get from the incumbents on a comparable job. What kind of work would qualify as low-stakes enough on your slate?</p>
+<p>[04:22] <strong>DANA:</strong> <em>(dry)</em> You're doing a technique on me right now. I can feel it. "What would qualify" — that's a trial-close with a haircut.</p>
+<p>[04:29] <strong>JORDAN:</strong> It is a technique. It's also a real question.</p>
+<p>[04:32] <strong>DANA:</strong> <em>(short laugh)</em> Fine. We have B-tier stuff constantly. Regional retail, case-study films. But so does Epidemic, for $499 a year, and it's instant. Why would I pay you four figures minimum for what a subscription handles?</p>
+<p>[04:45] <strong>JORDAN:</strong> Do your Epidemic tracks ever end up somewhere the license didn't anticipate — a paid media buy, a broadcast lift, a client re-using it next year?</p>
+<p>[04:53] <strong>DANA:</strong> <em>(pause)</em> We had a case-study film end up as a :15 pre-roll buy last spring. Someone had to go back and upgrade the license. It got handled.</p>
+<p>[05:01] <strong>DANA:</strong> But "it got handled" — see, that's the thing about my incumbents too. Things get handled. Which brings me to hard question number two. My music houses answer the phone on Friday night. Mix falls apart Thursday, client review Monday, they're re-scoring over the weekend and they don't invoice me for the panic. That relationship took six years. What's your Friday-night story? Actually answer this one, don't reframe it.</p>
+<p>[05:22] <strong>JORDAN:</strong> Straight answer: today, Chordential is a small roster of senior composers with me as your single point of contact, and my cell is on every SOW. On active engagements we commit in writing to a four-hour response window, seven days a week, and weekend turnarounds are scoped into the fee, not billed as panic. What I won't claim is six years of scar tissue with your clients — we don't have it. What I can claim is that the response commitment is contractual, not cultural. Your music houses answer Friday nights because they like you. We answer because we've signed something that says we will. You can decide which you trust more, and honestly, for the first job you shouldn't have to trust either — that's the point of starting small.</p>
+<p>[06:00] <strong>DANA:</strong> "Contractual, not cultural." That's a good line. Lines don't score commercials.</p>
+<p>[06:04] <strong>JORDAN:</strong> Agreed. Let me ask about the work itself, then, because it matters more than anything I've said. When your CDs brief music today, what does the brief actually look like — reference tracks, adjectives, a rough cut?</p>
+<p>[06:16] <strong>DANA:</strong> Rough cut plus three reference tracks plus the word "elevated," usually. <em>(beat)</em> Sometimes "cinematic but fun."</p>
+<p>[06:22] <strong>JORDAN:</strong> And when V1 comes back and the client hates it — walk me through what happens with your current houses.</p>
+<p>[06:29] <strong>DANA:</strong> Ha — no, that's <em>my</em> question, question three. What happens when the client hates V1 of <em>yours</em>? Because that's where music vendors die. Everyone's great until revision three, and then suddenly there are "additional demo fees" and the composer's ego shows up to the call.</p>
+<p>[06:44] <strong>JORDAN:</strong> <em>(pause)</em> Sounds like you've watched a vendor get precious about revisions while your air date didn't move. What did that cost you, the worst time?</p>
+<p>[06:52] <strong>DANA:</strong> A re-brief to the second music house at week-of pricing. Client never knew. I knew.</p>
+<p>[06:57] <strong>JORDAN:</strong> So here's how we structure it, and I'll give you the actual mechanics rather than a promise. Every engagement scopes named revision rounds up front — our standard is three full rounds, and a round means anything: new direction, not just tweaks. It's tracked in a shared revision log both sides see, so there's no ambiguity about what round we're on or what was asked. If the client hates V1 on direction — not polish, direction — we treat that as a briefing failure, ours and yours jointly, and the re-direction doesn't burn a round. That's written into the SOW. And because the composer is contracted to us, not to you, ego management is my job, not yours. You never talk a composer off a ledge; I do. Now — the honest caveat: if a client is on round six because their CMO's spouse has opinions, we're having a change-order conversation like anyone would. But three real rounds with a no-fault re-direction on V1 covers, in our experience, better than ninety percent of jobs. The revision log also gives you something you don't currently have, which is a paper trail when the client is the problem, because when the client burns four rounds and then complains about timeline, you can show business affairs exactly where the weeks went, and that protects your margin story internally, and frankly it also helps us both when—</p>
+<p>[08:04] <strong>DANA:</strong> —Jordan. You've been talking for a minute straight. I have a color session.</p>
+<p>[08:08] <strong>JORDAN:</strong> <em>(beat)</em> You're right. Sorry. Short version: three rounds, V1 direction-miss doesn't count, it's in the SOW.</p>
+<p>[08:15] <strong>DANA:</strong> Better. Okay, real talk on the AI thing, because your whole pitch leans on it. Question four. You "guarantee" no AI audio. How? You can't audit a composer's laptop. If one of your people quietly uses AI stems and it surfaces in two years, that warranty is just a piece of paper and <em>my</em> client is the one holding the lawsuit.</p>
+<p>[08:32] <strong>JORDAN:</strong> <em>(pause)</em> Sounds like the worry isn't whether we intend it — it's whether a guarantee is even enforceable. Fair?</p>
+<p>[08:38] <strong>DANA:</strong> Fair.</p>
+<p>[08:39] <strong>JORDAN:</strong> Three layers, honestly ranked. First, contractual: every composer signs a personal warranty and indemnity to us, we back-to-back it to you, and it's insured — we carry E&amp;O that specifically covers provenance claims, and you can be named on the cert. Second, procedural: session files, not just stems, are archived per delivery — DAW sessions with every source audio file, so provenance is inspectable, not asserted. Third — and this is the honest part — no, I cannot watch anyone's laptop. Nobody selling you music can, including your current houses, whose freelancers are on the same internet as everyone else. The difference is we've built for the question and they're hoping nobody asks it. If "inspectable and insured" isn't good enough for a given client, then that client shouldn't license music from anyone right now, ours included.</p>
+<p>[09:24] <strong>DANA:</strong> <em>(pause)</em> The session-file archive is the first thing you've said that my music houses genuinely don't do. They'd scream if I asked for DAW sessions.</p>
+<p>[09:32] <strong>JORDAN:</strong> It's the thing procurement people hug. Can I ask where decisions like trying a new music vendor actually get made at M&amp;P? Is that yours alone, or does it route through anyone?</p>
+<p>[09:42] <strong>DANA:</strong> Under ten grand, mine alone. Over that, our head of production co-signs. Over twenty-five, the client has to approve the vendor and sometimes their procurement onboards you, which takes six weeks and a blood sample.</p>
+<p>[09:52] <strong>JORDAN:</strong> And paper on your side — do you issue POs against an SOW, or is it your MSA?</p>
+<p>[09:56] <strong>DANA:</strong> Our paper, our MSA, always. Non-negotiable, before you ask.</p>
+<p>[09:59] <strong>JORDAN:</strong> Wasn't going to fight it. Timeline question: anything on the slate in the next sixty days that fits that under-ten, low-blast-radius shape?</p>
+<p>[10:07] <strong>DANA:</strong> <em>(checks something off-screen)</em> Maybe. There's a regional grocery campaign in August. Two :30s and cutdowns. My houses are both slammed with upfront work in August, actually.</p>
+<p>[10:16] <strong>JORDAN:</strong> Would it be crazy to pencil that as the test?</p>
+<p>[10:18] <strong>DANA:</strong> That's the second trial-close, and it's not even a good one. Slow down. You haven't said a single number yet, and I'm not sending anyone a brief without knowing if you're a $6k shop or a $60k shop, because the answer changes what I'd ever use you for.</p>
+<p>[10:30] <strong>JORDAN:</strong> Fully fair — I was going to get there and you got there first. Three tiers, real numbers. <strong>Essentials</strong>, $4,500 to $9,000: one original track, up to :60, three cutdowns, full stems, the single-signature worldwide perpetual license, no-AI warranty, seven business days. That grocery job lands here — I'd quote it at $8,200 for both :30s plus cutdowns as one engagement. <strong>Campaign</strong>, $18,000 to $42,000: campaign-level — anthem track plus adaptations, sonic-palette doc, priority turnaround, the archive I described. <strong>Signature</strong>, $60,000 to $90,000: sonic identity — brand theme, toolkit, ongoing adaptation rights, business-affairs support for your client's procurement. Same license structure at every tier: one signature, master and publishing, worldwide, in perpetuity. No annual renewals hiding in year two.</p>
+<p>[11:14] <strong>DANA:</strong> $8,200 for two :30s. My houses would be twenty-five plus for that, but Epidemic is functionally free for regional grocery. You're in a weird middle.</p>
+<p>[11:22] <strong>JORDAN:</strong> The middle is deliberate — it's original and ownable, which the subscription isn't, and it's paper your client's legal never questions, which is the part the incumbents charge you twenty-five for without actually delivering. For a test job, weird middle is exactly where you want us: cheap enough that failure is survivable, real enough that success means something.</p>
+<p>[11:38] <strong>DANA:</strong> Hm. <em>(pause)</em> Here's where I actually am, and I'll be straight because you've mostly been straight. The session-file thing is interesting. The provenance-warranty trend is real — I've seen the language show up in one client MSA already, and my music houses gave me a blank stare when I forwarded it. That's the only reason you're getting past minute five. But I'm not "penciling in" the grocery job. What I'll do: I'll send you that brief when it exists — mid-July probably — as a <em>paper</em> exercise first. You come back with a treatment and a full sample rights package against our MSA, and my head of production and I look at it before any note of music gets commissioned. If the paperwork is what you say it is, then we talk about actually scoring it. Condition: if we commission and the client kills the track for direction, first replacement direction is on your dime, full stop, not "doesn't burn a round" — free. You want to be the low-risk option, wear the risk.</p>
+<p>[12:22] <strong>JORDAN:</strong> <em>(pause)</em> A free re-direction on the first engagement if the client kills V1 — done, and I'll put it in writing before you send the brief. One ask back: when we review the treatment and rights package, I'd like fifteen minutes with you and your head of production together rather than notes over email — and if your client's business affairs contact is willing, I'd love them to eyeball the license format early, because their sign-off is the whole product. Could we hold Tuesday, July 21st at 10 a.m. for that?</p>
+<p>[12:48] <strong>DANA:</strong> BA is a hard no — you don't get near my client until <em>after</em> you've cleared me, that's the entire point of the test. Fifteen minutes with me and Priya, fine, but I'm not booking a July 21st meeting for a brief that doesn't exist yet. Send me the warranty language and a sample license this week. If it survives Priya, my coordinator will find you fifteen minutes the week of the 20th. That's the offer.</p>
+<p>[13:05] <strong>JORDAN:</strong> Then that's the deal. Sample license, the E&amp;O cert, and the free-re-direction commitment in writing — in your inbox by Thursday. And Dana — if the grocery brief evaporates, I'm going to check in once in September and then leave you alone.</p>
+<p>[13:16] <strong>DANA:</strong> Once. <em>(beat)</em> The filing-cabinet-with-an-MBA thing was mean but your paperwork might actually be the product. Go away now, I have color.</p>
+<p>[13:23] <strong>JORDAN:</strong> Enjoy the session. Thanks, Dana.</p>
+<p><em>Call ends — 13:26 elapsed, well inside the hard stop.</em></p>
+<hr />
+<h2>OUTCOME</h2>
+<p>No sale, as expected for a first call against six-year incumbents — Jordan secured a narrow toehold: a paper-first evaluation (sample license + warranty language + E&amp;O cert due Thursday) against a possible August regional grocery brief, with a tentative 15-minute review with Dana and her head of production the week of July 20th. Dana extracted a real concession — a free full re-direction if the client kills V1 on the first engagement — and firmly blocked early access to client business affairs.</p>
+<h2>SCORECARD</h2>
+<p><strong>Did well</strong>
+- <strong>Listened more than he talked overall</strong> and opened with situation questions before pitching; ~13 questions delivered in a clean situation → problem (Suno scratch, license stacks) → implication (pharma eleven-day scare, "what's at risk") → payoff arc.
+- <strong>Exactly one teach moment</strong> (AI-provenance warranties in client MSAs) — well chosen, and it was the single thing that earned Dana's genuine interest ("that's the only reason you're getting past minute five").
+- <strong>Objection handling followed the playbook</strong>: visible pauses, labels ("sounds like the risk you're pricing…", "sounds like the worry is enforceability"), one clarifying question, then a substantive answer — most notably on the unknown-vendor and AI-guarantee objections.
+- <strong>Price in the back third with precise anchors and three named tiers</strong> ($4,500–$9,000 / $18,000–$42,000 / $60,000–$90,000), including a specific quote ($8,200) tied to a real job.
+- <strong>Qualified all five</strong>: budget thresholds ($10k/$25k approval gates), decision path (Dana + Priya + client procurement), paper process (M&amp;P MSA, non-negotiable), timeline (August brief), alternatives (two houses, Epidemic, Suno).
+- <strong>Honest answers over clever ones</strong> — conceded he can't audit laptops, conceded no six-year track record; both moments visibly moved Dana.</p>
+<p><strong>Mistakes for coaching</strong>
+- <strong>[08:04] monologue</strong> — the revisions answer ran ~65 seconds and drifted into margin-story tangents until Dana cut him off; on a 20-minute hard stop that's expensive.
+- <strong>[10:16] "Would it be crazy to pencil that in?"</strong> — a weak, gimmicky trial-close that Dana called out by name; it also came <em>before</em> price, prompting her to demand numbers, meaning Dana controlled the price transition, not Jordan.
+- <strong>Minor:</strong> the proposed next step (July 21, 10 a.m., include BA) followed the playbook but overreached on business affairs; he recovered by accepting her counter rather than pushing.</p>
+<h2>OBJECTIONS LOG</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Dana's objection</th>
+<th>Jordan's response</th>
+<th>Landed?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>"Procurement-grade" is jargon; nobody wins pitches with paperwork</td>
+<td>Label + clarifying question surfaced the pharma eleven-day documentation scare</td>
+<td><strong>Partial</strong> — she conceded the pain but kept mocking the language</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Why risk a client relationship on an unknown vendor?</td>
+<td>Agreed she shouldn't; reframed to low-blast-radius test job</td>
+<td><strong>Partial</strong> — accepted the frame, flagged the technique</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Epidemic is $499/year for small stuff</td>
+<td>Question exposing license-scope creep (pre-roll upgrade incident)</td>
+<td><strong>Partial</strong> — acknowledged, but "it got handled" defused it</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Will you answer on Friday night like my incumbents?</td>
+<td>Contractual 4-hour SLA, cell on SOW, "contractual not cultural"; conceded no scar tissue</td>
+<td><strong>Partial</strong> — respected the honesty, dismissed the line</td>
+</tr>
+<tr>
+<td>5</td>
+<td>What happens when the client hates V1?</td>
+<td>Three named rounds, no-fault V1 re-direction, shared revision log, composer ego = Jordan's problem</td>
+<td><strong>Yes</strong> on substance — but delivery ran long and drew an interruption</td>
+</tr>
+<tr>
+<td>6</td>
+<td>No-AI guarantee is unenforceable — you can't audit laptops</td>
+<td>Warranty + insured E&amp;O + session-file archive; admitted the limit honestly</td>
+<td><strong>Yes</strong> — session-file archive was the single most persuasive moment of the call</td>
+</tr>
+<tr>
+<td>7</td>
+<td>"You're in a weird middle" on price</td>
+<td>Reframed middle as intentional test-sized risk</td>
+<td><strong>Partial</strong> — didn't block the test, didn't excite her either</td>
+</tr>
+<tr>
+<td>8</td>
+<td>No BA access; no premature meeting; free re-direction demanded</td>
+<td>Accepted concession immediately, put commitments in writing, took her counter-process</td>
+<td><strong>Yes</strong> — closed the toehold on her terms</td>
+</tr>
+</tbody>
+</table></div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · CALL 1</span></div>
+</div>
+<div class="page">
+  <div class="callhead">
+    <div class="ch-kick">Full transcript</div>
+    <div class="ch-title">CALL 2 · The Clearance-Burned Brand</div>
+    <div class="ch-sub">Marcus Webb, Head of Brand Marketing, DTC fitness apparel — post-demand-letter, content engine frozen · <b>strong advance · counsel + content lead meeting booked</b></div>
+  </div>
+  <div class="transcript"><h1>DISCOVERY CALL TRANSCRIPT — Chordential × Marcus Webb (DTC fitness apparel)</h1>
+<p><strong>Attendees:</strong> Jordan Hale (Sr. Sales Rep, Chordential), Marcus Webb (Head of Brand Marketing)
+<strong>Scheduled: 30 min. Actual: 33 min.</strong></p>
+<hr />
+<p><strong>[00:00] JORDAN:</strong> Marcus, thanks for making time — I know from your email that "time" is the wrong word for what you have right now. I want to be respectful of that, so quick proposed agenda: I mostly ask questions for twenty minutes, we figure out if there's a real fit, and if there isn't, I'll tell you that and point you somewhere else. Fair?</p>
+<p><strong>[00:19] MARCUS:</strong> Fine. I'll be straight with you — I took this call because someone on my team forwarded me your one-pager and the word "clearance-certified" was in the subject line. That's the only reason. I've got thirty minutes and I'm skeptical.</p>
+<p><strong>[00:34] JORDAN:</strong> Skeptical is the right posture, honestly. So let me start there — what made "clearance-certified" the words that got me thirty minutes?</p>
+<p><strong>[00:44] MARCUS:</strong> <em>(pause)</em> We're... reassessing how music gets used across our content. There's been some legal attention on it. I'm not going to go deep on specifics on a recorded call, you understand.</p>
+<p><strong>[00:58] JORDAN:</strong> Completely understand, and I don't need specifics to be useful. Let me ask about the machine instead of the incident. How does music get into your content today — who's actually choosing tracks, and where are they pulling from?</p>
+<p><strong>[01:12] MARCUS:</strong> In-house content team, about nine people, plus roughly forty active influencers on contract. Historically the team pulled from platform libraries — TikTok's sound library, Instagram's, some Epidemic Sound. The influencers used whatever. That's... part of the problem, as it turns out.</p>
+<p><strong>[01:33] JORDAN:</strong> Got it. And volume-wise — roughly how many posts a month across all of it?</p>
+<p><strong>[01:39] MARCUS:</strong> Sixty-ish from us. Influencers add another eighty to a hundred on top. Volume is the whole model. We're not a Super Bowl brand, we're a "show up in your feed four times a week" brand.</p>
+<p><strong>[01:52] JORDAN:</strong> That's a useful number. So when legal got involved — and I don't need the details — what's the operational guidance your team is working under right now?</p>
+<p><strong>[02:04] MARCUS:</strong> Every post with music goes through legal review before publishing. Which means, functionally, we've stopped using music. My team is posting workout content with no music. Have you ever watched a training montage in silence? It's a hostage video.</p>
+<p><strong>[02:20] JORDAN:</strong> <em>(laughs)</em> How's that showing up in the numbers?</p>
+<p><strong>[02:24] MARCUS:</strong> Engagement's down high-teens percent in three weeks. On TikTok specifically it's worse — the algorithm treats soundless video like it's radioactive. And my content leads are spending, I'd guess, six or eight hours a week in legal review queues instead of making things.</p>
+<p><strong>[02:41] JORDAN:</strong> So if I play that forward — if this stays unresolved through the back half of the year, what does that actually cost you? Not the legal side, the marketing side.</p>
+<p><strong>[02:52] MARCUS:</strong> <em>(exhales)</em> Q4 is forty percent of our revenue. If my content engine is running at seventy percent going into October, that's a real number. I don't want to say it out loud but it's seven figures of pipeline influence. Look, can we —</p>
+<p><strong>[03:07] JORDAN:</strong> Go ahead.</p>
+<p><strong>[03:08] MARCUS:</strong> Can we skip to the part where you tell me what you actually sell? Because I've been pitched three times this month since the lawyers got loud, and everyone wants to ask me "discovery questions" for an hour and then send me a deck. I don't have the patience for it right now.</p>
+<p><strong>[03:22] JORDAN:</strong> That's fair, and I'll earn the rest of my questions. Sixty seconds, plainly: Chordential delivers original music — composed by humans, no AI generation, ever — where one signature covers both the master recording and the publishing, worldwide, in perpetuity. You get the full tracks, stems, cutdowns in every aspect ratio and length your team needs, and a rights-documentation package your legal counsel can actually read: chain of title, composer declarations, no-sample and no-AI attestations, and a contractual indemnification from us as a single counterparty. Engagements run from about four thousand for a single track to ninety-plus for a full brand music system. That's the whole thing. No subscription, no library, no terms-of-service license.</p>
+<p><strong>[04:04] MARCUS:</strong> Okay. Two immediate problems. One: how do I <em>know</em> your certification actually protects us? Everyone says "cleared." The stuff that blew up on us was also supposedly "covered." What is your certification actually worth, legally, when a label's lawyer sends a letter?</p>
+<p><strong>[04:22] JORDAN:</strong> <em>(pause)</em> So the real question underneath that is: when you've already been burned by paperwork that turned out to be decorative, why would you trust new paperwork. Is that right?</p>
+<p><strong>[04:32] MARCUS:</strong> ...Yeah. That's right.</p>
+<p><strong>[04:35] JORDAN:</strong> Then let me answer with the boring, specific version rather than adjectives. Three layers. First, structural: we don't aggregate rights from third parties, so there's no chain where an artist licensed something to a library that sub-licensed it to you and one link is broken. Our composers assign or exclusively license master and publishing to us under a written agreement before a note reaches a client. One entity controls both copyrights — that's rare, and it's the thing that makes single-signature clearance possible at all. Second, documentary: every delivery includes the actual chain-of-title file — not a certificate that <em>says</em> it's cleared, the documents that <em>show</em> it. Your counsel reviews the underlying paper, not our word. Third, contractual: we warrant we own and control one hundred percent of both rights, and we indemnify you against third-party infringement claims arising from the music as delivered, backed by our E&amp;O coverage. If someone comes after you over our track, that's contractually our fight and our bill.</p>
+<p><strong>[05:31] MARCUS:</strong> What does that indemnification actually look like in the contract? Because I've seen indemnity clauses that are Swiss cheese. Caps at the contract value, carve-outs for "user modifications" —</p>
+<p><strong>[05:42] JORDAN:</strong> Good — you've read a few of these. I'll be honest about what it does and doesn't cover, because the carve-outs are where trust dies. It covers: any claim that the music we delivered infringes a third party's copyright, in any territory, forever, including your defense costs. It does not cover: use outside the license scope — though our scope is broad enough that's hard to do — and it can't retroactively cover music we didn't make. I want to be direct about that second one: nothing I sell fixes what's already been posted. That's between your counsel and whoever sent the letter. What I can fix is that it never happens again. On caps — that's a real negotiation point and I'd rather your lawyer see actual language than have me characterize it. I'll send you our standard rights-documentation package and the indemnity section verbatim before we ever talk price seriously. You can put it in front of counsel and let them shoot at it.</p>
+<p><strong>[06:34] MARCUS:</strong> <em>(pause)</em> Okay. That's the first non-slippery answer I've gotten in three weeks. Send that. But here's my bigger problem, and it might be a dealbreaker: our whole model is volume. Sixty posts a month from my team alone. Custom music is what — weeks per track? You cannot scale bespoke composition to a hundred and forty posts a month. This feels like buying a tailored suit for someone who needs a hundred and forty t-shirts.</p>
+<p><strong>[06:58] JORDAN:</strong> <em>(pause)</em> So the concern is that "custom" means one-track-per-post, and at your volume the math is absurd. Let me check — when your team was pulling from libraries, were they using a hundred and forty <em>different</em> songs a month, or a rotating set they kept coming back to?</p>
+<p><strong>[07:14] MARCUS:</strong> ...Honestly? Probably twenty-five, thirty sounds in heavy rotation. The team has taste. They reuse what works.</p>
+<p><strong>[07:22] JORDAN:</strong> Right — and here's the one thing I'd genuinely ask you to take away from this call even if you never talk to me again, because most brands get this backwards. You don't have a hundred-and-forty-track problem. You have a <em>music system</em> problem. The brands doing this well — think of how a Nike or a Peloton sounds consistent across ten thousand pieces of content — aren't licensing ten thousand songs. They own a core set of tracks built specifically to be taken apart. When we deliver a track, we deliver the stems: drums, bass, melody, texture, as separate files, all cleared under the same signature. Your nine-person content team can strip it to just percussion for a lifting clip, run the melodic bed under a talking-head, speed it up for a transition edit — every one of those is a new-feeling sound, and every one is already covered. Ten core tracks, professionally stemmed, realistically yields your team a few hundred distinct usable cues. The volume doesn't come from us composing faster. It comes from your team remixing assets they fully own.</p>
+<p><strong>[08:20] MARCUS:</strong> Huh. So my editors become the DJs, basically, and the rights travel with the stems.</p>
+<p><strong>[08:26] JORDAN:</strong> Exactly. One license covers the track and everything your team makes from the stems. Which is also, candidly, why I'd want your content lead in the next conversation — the system only works if the people cutting video daily say "yes, we'd actually use this." What would they say?</p>
+<p><strong>[08:41] MARCUS:</strong> Dana would love it, probably. She's been begging for a "brand sound" for two years and I kept deprioritizing it because the library stuff was free-ish. <em>(pause)</em> Which, in hindsight — anyway. Next question. Why shouldn't I just buy a bigger Epidemic Sound license? Their enterprise tier exists. It's built for volume. It's certainly cheaper than you.</p>
+<p><strong>[09:02] JORDAN:</strong> <em>(pause)</em> So — is this "convince me you're better," or "I'm going to evaluate both and I want your honest comparison"?</p>
+<p><strong>[09:10] MARCUS:</strong> The second one. I'm getting a quote from them this week. I'm not hiding that.</p>
+<p><strong>[09:14] JORDAN:</strong> Good, and you should get that quote — I mean that. Here's my honest comparison, and I'm going to be careful because your situation makes this easy to demagogue and I'm not going to do that. Subscription libraries solve real problems for a lot of teams, and an enterprise tier with commercial coverage is a legitimate step up from what — from platform libraries. Three genuine structural differences. One: with most subscription models, your right to the music is conditional on the subscription. You're renting; read carefully what happens to already-published content if you ever lapse or downgrade — the answer varies and it matters at your archive size. With us, one payment, you own the license forever; the paperwork outlives the relationship. Two: libraries aggregate rights from thousands of independent artists, which means your protection depends on their intake diligence across thousands of counterparties. Some library models have drawn litigation from rights-holders over the years — those disputes are allegedly about exactly that aggregation question, and I'll say "allegedly" because I'm not going to try cases from a sales call or pretend I know how they resolve. With us it's one counterparty, in-house rights, and you hold the chain of title yourself. Three: distinctiveness — everyone on Epidemic can license the track you licensed, including your competitors. Your music system is yours alone. Where they win: if you need five hundred wildly different genres a month, a library is the right tool and I'd tell you to buy one. At twenty-five sounds in rotation and a brand trying to <em>sound like something</em>, I think ownership beats rental. But put both quotes in front of your counsel and let the paperwork compete.</p>
+<p><strong>[10:41] MARCUS:</strong> <em>(typing)</em> Okay. What does this cost? Ballpark. Before I invest more time.</p>
+<p><strong>[10:47] JORDAN:</strong> Sure — and let me scope it first with a couple of quick ones so the number means something. Is there a budget attached to "fix music permanently," or is this coming out of contingency because nobody planned for it?</p>
+<p><strong>[10:59] MARCUS:</strong> The CFO has said, and I quote, "make it go away and don't be stupid about it." So there's money, it's unbudgeted, and it has a low ceiling for anything that smells like vanity. Call it — I'm not giving you a number, actually.</p>
+<p><strong>[11:12] JORDAN:</strong> <em>(laughs)</em> Worth a shot. Then here's mine. For a brand your size and volume, engagements like this typically land between $9,450 and $28,500 for the initial system, and I'd scope you three ways. Tier one, around that $9,450 mark: a six-track Foundation set with full stems and cutdowns — enough to get your team publishing with music again fast, fully papered. Tier two, mid-teens: a ten-to-twelve track Brand Music System with a sonic identity brief, influencer-use licensing baked in so your forty creators are covered under the same paper, and a training session for Dana's team on working with stems. Tier three, mid-to-high twenties: everything in tier two plus quarterly refresh drops through Q4 so the system stays fresh going into your heavy season. Given the influencer exposure is where — given where your risk concentrated when the lawsuit hit, tier two is probably —</p>
+<p><strong>[12:05] MARCUS:</strong> — It's a demand letter. Nobody has been sued. There is no lawsuit. That distinction matters a great deal in my building right now.</p>
+<p><strong>[12:12] JORDAN:</strong> You're right, and I apologize — that was sloppy language on my part, not a characterization I'm entitled to make. Demand letter. My point stands on the scoping only: the influencer coverage in tier two maps to where your volume actually is.</p>
+<p><strong>[12:25] MARCUS:</strong> <em>(pause)</em> Fine. Accepted. And yes — the influencer licensing piece is actually the part nobody else has addressed. Epidemic's answer for creators is that each influencer needs their own subscription, which I cannot police across forty people.</p>
+<p><strong>[12:39] JORDAN:</strong> That's exactly the gap. Our license names your brand and covers content commissioned by you, whoever posts it — the coverage follows the campaign, not the individual's account. Your counsel will want to verify that language; it's in the sample I'm sending. Speaking of which — who papers vendor contracts on your side? In-house counsel or outside firm?</p>
+<p><strong>[12:57] MARCUS:</strong> Outside counsel normally, but we brought someone in-house on a contract basis three weeks ago, for obvious reasons. Priya. She'd review this.</p>
+<p><strong>[13:05] JORDAN:</strong> And beyond you and Priya — who else has to be comfortable before you could sign something in the tier-two range? The CFO?</p>
+<p><strong>[13:12] MARCUS:</strong> CFO signs anything over ten grand right now, but if legal blesses it and I sponsor it, that's a formality. He wants this closed more than anyone. The real gate is Priya and, honestly, Dana — if my content lead says the workflow doesn't work, it's dead regardless of the paperwork.</p>
+<p><strong>[13:27] JORDAN:</strong> Then those are exactly the two people I'd want in the next conversation. Last scoping question: when does the team need to be publishing with music again — no legal review on every post — for Q4 not to be at risk?</p>
+<p><strong>[13:39] MARCUS:</strong> Content lockups for October start mid-August. So: fully operational by August 15, which means decided by mid-July, realistically. It's July third, so. Yeah.</p>
+<p><strong>[13:50] JORDAN:</strong> Tight but workable — tier one delivers in three weeks, tier two in five. Here's what I'd propose. Sixty minutes, you, Priya, and Dana. Before that meeting I send three things: the full rights-documentation sample so Priya can mark it up in advance, the indemnity language verbatim, and a written tiered proposal with real numbers so nobody's seeing prices live for the first time. We spend the hour on Priya's markup and Dana's workflow questions, not on a pitch. I'm looking at Tuesday July 8th — does 2:00 PM Eastern work?</p>
+<p><strong>[14:22] MARCUS:</strong> <em>(checking calendar)</em> Tuesday the 8th... 2 PM is out, I have a board prep. 3:30?</p>
+<p><strong>[14:28] JORDAN:</strong> 3:30 Eastern, Tuesday July 8th, sixty minutes. I'll send the invite today with the three documents attached by end of day tomorrow so Priya has the weekend-plus if she wants it. Anyone else who should be on the invite — anyone from the CFO's side?</p>
+<p><strong>[14:41] MARCUS:</strong> No. Keep it small. If it survives Priya and Dana, I'll walk it to finance myself. And Jordan — I want to be transparent since you were straight with me. Epidemic's enterprise team calls me Thursday. If their paper is good enough and it's a third of your price, I'll take good-enough. This isn't a courtesy process.</p>
+<p><strong>[14:57] JORDAN:</strong> Understood, and that's the right way to run it. All I'd ask is that Priya reviews both sets of paperwork side by side — I'm confident in that comparison, and if I'm wrong, you'll have bought the right thing. Talk Tuesday, Marcus.</p>
+<p><strong>[15:08] MARCUS:</strong> Tuesday. Send the docs.</p>
+<p><em>(call ends)</em></p>
+<hr />
+<h2>OUTCOME</h2>
+<p>Strong advance: a 60-minute scoped meeting booked for Tuesday, July 8 at 3:30 PM ET with Marcus, his contract in-house counsel (Priya), and his content lead (Dana), with Jordan committed to sending the rights-documentation sample, verbatim indemnity language, and a written three-tier proposal beforehand. Marcus remains a genuinely contested deal — he disclosed an active Epidemic Sound enterprise quote arriving Thursday and stated plainly he'll take "good-enough" at a third of the price.</p>
+<h2>SCORECARD (vs. playbook)</h2>
+<ul>
+<li><strong>Talk ratio:</strong> ~43/57 achieved — Jordan's only long turns were the requested 60-second pitch, the teach moment, and the pricing block; Marcus carried the detail elsewhere. ✔</li>
+<li><strong>Question arc:</strong> 14 questions in a clean situation (how music gets in, volume) → problem (legal review bottleneck) → implication (engagement down, Q4 seven-figure exposure) → payoff (what "fixed permanently" means) arc. ✔</li>
+<li><strong>Teach moment:</strong> Exactly one — "you have a music-system problem, not a 140-track problem" (stems as scalable inventory) — and it was the turn that converted the hardest objection. ✔</li>
+<li><strong>Pricing:</strong> Held to the back third, precise anchors ($9,450–$28,500), three tiers mapped to scoped needs. ✔</li>
+<li><strong>Qualification:</strong> All five hit — budget (unbudgeted, CFO ceiling &gt;$10k approval), decision path (Marcus sponsors, Priya + Dana are the real gates), paper process (contract in-house counsel), timeline (decide mid-July, live Aug 15), alternative (Epidemic enterprise, disclosed). ✔</li>
+<li><strong>Sensitivity discipline:</strong> No gloating or fearmongering about the demand letter; declined to demagogue the competitor comparison; used "allegedly" on unresolved library litigation and refused to elaborate. ✔</li>
+<li><strong>Mistake:</strong> Said "when the lawsuit hit" — a genuinely damaging slip with a legally anxious buyer; recovered with an immediate, unqualified apology rather than a deflection. Cost a beat of trust; didn't lose the room. ✘→recovered</li>
+<li><strong>Close:</strong> Specific date/time secured, multi-threaded to the two named blockers, pre-meeting collateral committed with a deadline. ✔</li>
+</ul>
+<h2>OBJECTIONS LOG</h2>
+<table>
+<thead>
+<tr>
+<th>Objection</th>
+<th>Response</th>
+<th>Landed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"How do I KNOW your certification protects us — what's it worth legally?"</td>
+<td>Labeled the underlying distrust of paperwork; three concrete layers (no aggregation chain, reviewable chain-of-title docs, warranty + indemnification + E&amp;O); offered documents over adjectives</td>
+<td><strong>Yes</strong> — "first non-slippery answer in three weeks"</td>
+</tr>
+<tr>
+<td>"What does indemnification actually look like?"</td>
+<td>Covered scope honestly, volunteered the carve-outs unprompted, admitted it can't fix past posts, deferred cap language to counsel with verbatim text to follow</td>
+<td><strong>Yes</strong> — credibility turn of the call</td>
+</tr>
+<tr>
+<td>"Volume model — custom can't scale to 60+/month"</td>
+<td>Clarifying question exposed real usage (25–30 sounds in rotation); teach moment reframed to owned stem-based music system</td>
+<td><strong>Partial</strong> — Marcus intrigued, but validity gated on Dana's workflow review</td>
+</tr>
+<tr>
+<td>"Why not just a bigger Epidemic license?"</td>
+<td>Honest comparison: ownership vs. subscription-conditional rights, single counterparty vs. aggregation, exclusivity; conceded where libraries win; "allegedly" on litigation</td>
+<td><strong>Partial</strong> — respected the answer, still getting the quote Thursday</td>
+</tr>
+<tr>
+<td>Implicit price resistance ("don't be stupid about it" ceiling)</td>
+<td>Precise anchors, three tiers tied to scoped needs, influencer coverage differentiation on the mid tier</td>
+<td><strong>Partial</strong> — no flinch, but price/value verdict deferred to the side-by-side</td>
+</tr>
+</tbody>
+</table></div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · CALL 2</span></div>
+</div>
+<div class="page">
+  <div class="callhead">
+    <div class="ch-kick">Full transcript</div>
+    <div class="ch-title">CALL 3 · The AI-Curious Cost-Cutter</div>
+    <div class="ch-sub">Priya Sharma, VP Marketing, regional QSR — CMO cost mandate vs. brand instincts · <b>mixed win · follow-up booked, CMO via memo</b></div>
+  </div>
+  <div class="transcript"><p><strong>DISCOVERY CALL TRANSCRIPT — Chordential × Hearth &amp; Honey Kitchens (regional QSR)</strong>
+<em>Jordan Hale (Sr. Sales Rep, Chordential) / Priya Sharma (VP Marketing, Hearth &amp; Honey)</em></p>
+<hr />
+<p><strong>[00:00] JORDAN:</strong> Priya, thanks for making time — I know Fridays before a holiday weekend are brutal. Twenty-five minutes still work on your end?</p>
+<p><strong>[00:09] PRIYA:</strong> I've got a hard stop at the half hour, so let's move.</p>
+<p><strong>[00:13] JORDAN:</strong> Perfect, I'll be disciplined. Quick frame: I'm not going to pitch for twenty minutes. I want to understand how music actually shows up in your marketing today, and then you can decide if a second conversation is worth it. Fair?</p>
+<p><strong>[00:26] PRIYA:</strong> Fair. And I'll be honest about why you got this meeting. My CMO sat in a demo of Suno two weeks ago, typed "upbeat jingle for a chicken sandwich," got something usable in forty seconds, and walked into my office asking why we pay for music at all. So I'm doing diligence in both directions. You're one direction.</p>
+<p><strong>[00:47] JORDAN:</strong> That's genuinely useful context — most people don't lead with the real agenda. So before I respond to that at all: where does music show up for you today? Broadcast, social, in-store?</p>
+<p><strong>[01:00] PRIYA:</strong> All three. Regional TV and CTV around three campaign windows a year, always-on social, and we license a background music service for the restaurants — that last one's separate, don't sell me on that. The campaign music comes through our agency, Fieldnote. They pull library tracks, we approve, they license per campaign.</p>
+<p><strong>[01:22] JORDAN:</strong> Got it. And roughly how many distinct spots a year across your 120 locations —</p>
+<p><strong>[01:27] PRIYA:</strong> A hundred forty. We opened twenty-two stores last year.</p>
+<p><strong>[01:29] JORDAN:</strong> A hundred forty — apologies, I had an old number in my notes. Congratulations, that's real growth. So: how many distinct spots annually?</p>
+<p><strong>[01:37] PRIYA:</strong> Eight to ten hero spots, maybe forty cutdowns and social edits off those.</p>
+<p><strong>[01:42] JORDAN:</strong> When Fieldnote licenses a library track for a hero spot, do you know what term they're buying — one year, in perpetuity, which media?</p>
+<p><strong>[01:51] PRIYA:</strong> <em>(pause)</em> Honestly? No. I assume they handle it. Why?</p>
+<p><strong>[01:55] JORDAN:</strong> I ask because it's the most common surprise we find. Quick teach and then back to questions, because this is the one thing worth knowing regardless of whether you ever work with us. Every piece of music has two copyrights — the recording, called the master, and the composition underneath it, the publishing. Library licenses usually rent both for a term and a media list. So when your agency re-cuts a 2024 spot into a 2026 social edit, that can quietly require a re-license — and if the track blew up on a streaming playlist in between, the renewal price isn't your price. Most brands your size are renting the same song three or four times without a line item that says so.</p>
+<p><strong>[02:33] PRIYA:</strong> Okay. That's worth checking. But notice it's also an argument for Suno — if AI music is basically free, I never re-license anything.</p>
+<p><strong>[02:41] JORDAN:</strong> It's a fair jump, and I'll get there directly. First though — when your CMO asked "why pay for music," what did he actually ask you to <em>do</em>? Kill the budget, or bring him an answer?</p>
+<p><strong>[02:52] PRIYA:</strong> Bring him a recommendation by end of month. He's cost-obsessed but he's not stupid. If I come back and say "human music, trust me," I lose. If I come back with a real trade-off analysis, I can win either way.</p>
+<p><strong>[03:04] JORDAN:</strong> Have you generated anything yourselves yet, as a test?</p>
+<p><strong>[03:08] PRIYA:</strong> My content lead made four tracks in an afternoon. Two were unusable, one was fine, one was honestly pretty good. That's the problem, Jordan. One of them was pretty good.</p>
+<p><strong>[03:17] JORDAN:</strong> <em>(pause)</em> So let me say the uncomfortable part out loud, because you'll respect me less if I dodge it: on a blind five-second listen, a good Suno track can hold its own. If your evaluation is "does it sound fine behind a sandwich," AI passes that bar sometimes. Our argument was never that it can't.</p>
+<p><strong>[03:34] PRIYA:</strong> Then give me the real answer. What can you do that AI genuinely can't — today, not in some hypothetical lawsuit future?</p>
+<p><strong>[03:41] JORDAN:</strong> Two things, and they're present-tense. First: ownership you can enforce. Under current US copyright doctrine, purely AI-generated works have real protectability problems — the Copyright Office's position is that output without human authorship isn't registrable. Practically, that means the "pretty good" track your content lead made may be something you can't actually own or stop a competitor from using. If the QSR down the road runs a near-identical Suno track — and they can, same prompt space — you likely have no infringement claim. You paid for an asset; you may have bought air. What we sell is the opposite: one signature, you own master and publishing, worldwide, in perpetuity, with the paper trail to enforce it.</p>
+<p><strong>[04:21] PRIYA:</strong> And the second thing?</p>
+<p><strong>[04:24] JORDAN:</strong> Craft under direction. A composer sits with your brand team, takes notes like "warmer, less corporate, that horn line at the end of the third pass," and iterates toward <em>your</em> sound. Prompting is a slot machine. Direction is —</p>
+<p><strong>[04:34] PRIYA:</strong> — that's getting abstract. Here's my sharper version: if I put your track and the good Suno track in front of my CMO blind, does he hear the difference?</p>
+<p><strong>[04:42] JORDAN:</strong> <em>(pause)</em> Honest answer: on one listen, maybe not. On the tenth campaign, absolutely — because ours is built as one evolving sonic identity and the AI tracks are ten unrelated pulls from a slot machine. But I'd add one thing, because it's his audience that matters, not his ears: Bain ran consumer research in 2025 and 62% of US consumers said they're less likely to engage with AI-generated music when they know that's what it is. Disclosure norms are tightening. He should assume "when they know" becomes the default state, not the exception.</p>
+<p><strong>[05:12] PRIYA:</strong> Hm. Sixty-two percent. He'll want the source — send it. Okay, next hard one. We're a 140-location regional chain, not Nike. Is custom music even <em>for</em> us at our budget? Because every sonic-branding pitch I've ever seen was built for a Fortune 500 CMO with a vanity project.</p>
+<p><strong>[05:29] JORDAN:</strong> What did you actually spend on music last year — library licenses through Fieldnote, all in?</p>
+<p><strong>[05:34] PRIYA:</strong> Somewhere between fifteen and twenty grand, buried across campaign invoices.</p>
+<p><strong>[05:38] JORDAN:</strong> Then yes, it's for you, and here's why the math is friendlier at your size than at Nike's: you're spending fifteen to twenty a year <em>renting</em>, forever, with re-license exposure you haven't audited. Our entry work starts at four thousand dollars for a single fully-owned track. You don't need a forty-five-piece orchestra. You need one ownable sonic asset that stops the meter. If you owned one anthem track with a stem package, where would it work hardest for you?</p>
+<p><strong>[06:03] PRIYA:</strong> The three campaign windows, honestly. And the fifteen-second social cutdowns, which is where the library costs pile up. Okay — but here's question three, and it's the political one. Fieldnote handles our creative. Why am I talking to you and not them?</p>
+<p><strong>[06:17] JORDAN:</strong> <em>(pause)</em> So the concern underneath that — tell me if I'm reading it right — is partly "I don't want to manage another vendor" and partly "I don't want to step on my agency's toes."</p>
+<p><strong>[06:26] PRIYA:</strong> Both. Mostly the second. They'll notice.</p>
+<p><strong>[06:29] JORDAN:</strong> Right. Two answers. Structurally: we're not competing with Fieldnote — they don't compose, they license, and agencies mark up library licensing without owning the rights problem I described. We routinely work <em>through</em> agencies; the deliverable lands in their edit suite as stems and cutdowns, and they keep the creative lead. Politically: the strongest version of this is you looping in your Fieldnote lead on the next call so it's framed as "we're upgrading the music supply chain," not "we're going around you." Who's your day-to-day there?</p>
+<p><strong>[06:56] PRIYA:</strong> Marcus. He'd actually be relieved — music clearance is his least favorite email thread. Fine. Let's do the part you've been circling. Money. And before you show me a pyramid with a "most popular" tier in the middle — what does the <em>cheapest</em> viable engagement look like? Not the one you want to sell me. The floor.</p>
+<p><strong>[07:14] JORDAN:</strong> Straight answer, floor first. The honest floor is <strong>$6,500</strong> — sorry, I said "starts at four thousand" earlier; four is our absolute program minimum for a single track with basic deliverables, but for what <em>you</em> described — broadcast plus CTV plus social cutdowns — $6,500 is the real floor. That's our Anthem tier: one original hero track, human-composed, full stems, :30/:15/:06 cutdowns, complete rights documentation, master and publishing assigned to you worldwide in perpetuity, one signature. Contractually guaranteed zero AI audio anywhere in the chain.</p>
+<p><strong>[07:44] PRIYA:</strong> And the other tiers, quickly.</p>
+<p><strong>[07:47] JORDAN:</strong> <strong>$18,000</strong> — Sonic Identity Starter: the anthem plus two campaign variations and a three-second audio mnemonic, the thing that plays when the sandwich lands. <strong>$42,000</strong> — full sonic identity system: brand theme, mnemonic, seasonal variation kit, in-store-ready arrangements, usage guidelines your agency works from. Given where you are — arbitrating a build-versus-generate decision by end of month — I'd scope you at the floor, prove it in one campaign window, and let the work argue for tier two next year.</p>
+<p><strong>[08:12] PRIYA:</strong> You just recommended your cheapest option. That's either honest or a very good trick.</p>
+<p><strong>[08:16] JORDAN:</strong> It's honest, and it's also self-interested — QSR sonic assets compound, and I'd rather own the relationship at $6,500 than lose the recommendation at $42,000. Now let me qualify a few things so I don't waste your Tuesday. If your recommendation says "buy," who signs besides you and the CMO?</p>
+<p><strong>[08:31] PRIYA:</strong> Under ten K, my signature with his nod. Over ten, him plus finance. Either way — and write this down — procurement requires vendor onboarding. Security questionnaire, W-9, insurance certs, the works. Takes three to four weeks. And we pay net-90. Non-negotiable; it's a franchise-side cash policy.</p>
+<p><strong>[08:50] JORDAN:</strong> <em>(writing)</em> Good, this is exactly what I needed. Two responses. Onboarding: send me the vendor packet Monday and we start it <em>in parallel</em> — it costs you nothing if you decide no, and saves three weeks if you decide yes. On net-90: we can work with net-90 on the balance, but our composers get paid on delivery, so we take a 40% deposit at signature — on the Anthem tier that's $2,600, with the remaining $3,900 on your net-90 clock from delivery. I'll flag the deposit is due net-30 —</p>
+<p><strong>[09:14] PRIYA:</strong> — you just said deposit at signature <em>and</em> net-30. Which is it?</p>
+<p><strong>[09:18] JORDAN:</strong> You're right, I garbled that — deposit invoiced at signature on net-30 terms, balance at delivery on net-90. So worst case your first dollar leaves the building thirty days after signing. I'll put both numbers in writing so there's no drift.</p>
+<p><strong>[09:31] PRIYA:</strong> Fine. Timeline pressure: our fall window locks creative August 14. If music isn't in Fieldnote's hands by end of July, this whole conversation is academic until Q1.</p>
+<p><strong>[09:41] JORDAN:</strong> Anthem tier is a three-week production cycle, so a mid-July signature makes end-of-July delivery real but not comfortable — which is another argument for starting onboarding Monday. Last qualifying question: if you <em>don't</em> do this, what actually happens? CMO mandates Suno, or status quo with Fieldnote's library?</p>
+<p><strong>[09:57] PRIYA:</strong> Truthfully? He mandates a Suno pilot for social, we keep library tracks for broadcast because legal will refuse to clear AI for TV, and we end up with the worst of both — paying for music <em>and</em> running a two-track process. Which is partly why I took this call.</p>
+<p><strong>[10:10] JORDAN:</strong> That's the exact scenario I'd want your CMO to see written down. So here's the specific next step I'd propose. Twenty minutes — you said thirty is generous, so twenty — you, me, ideally Marcus from Fieldnote, and your CMO if he'll come. I present two things: a scoped Anthem-tier proposal with the fall-window timeline and the exact payment schedule, and a one-page memo on AI-music risk — ownership, enforceability, consumer sentiment, with sources cited — written so you can hand it to your CMO whether or not you pick us. Tuesday July 14th at 10:30 your time?</p>
+<p><strong>[10:38] PRIYA:</strong> Tuesday's out, I'm in Charlotte. Wednesday the 15th, same time. And don't count on my CMO showing — I'll bring him the memo myself, that lands better. Marcus I'll invite.</p>
+<p><strong>[10:47] JORDAN:</strong> Wednesday July 15th, 10:30 Eastern, twenty minutes, you and Marcus, invite goes out today. You send the vendor onboarding packet Monday, I turn the security questionnaire around within the week. And I'll include that Bain citation with the memo.</p>
+<p><strong>[10:59] PRIYA:</strong> One condition. The memo has to be honest about what AI <em>can</em> do, not just scare copy. If it reads like vendor FUD, he'll dismiss it and me with it.</p>
+<p><strong>[11:06] JORDAN:</strong> Agreed — it'll say plainly that the output quality is real and the risk is ownership and audience, not sound. If the memo only works as propaganda, it doesn't work.</p>
+<p><strong>[11:14] PRIYA:</strong> Then we're done early. That's a first for a sales call.</p>
+<p><strong>[11:17] JORDAN:</strong> I'll take it. Talk Wednesday the 15th, Priya.</p>
+<p><strong>[11:19] PRIYA:</strong> <em>(already reaching for the leave button)</em> Send the invite before you send anything else.</p>
+<p><em>(Call ends — 11:20.)</em></p>
+<hr />
+<h2>OUTCOME</h2>
+<p>Mixed win: Priya committed to a specific 20-minute follow-up (Wed July 15, 10:30 ET, with agency contact Marcus) where Jordan will present a lean-tier ($6,500) scoped proposal plus a hand-to-CMO one-page AI-risk memo, and agreed to start vendor onboarding in parallel Monday. Risks remain: the CMO won't attend and will be reached only via the memo, net-90/procurement stretches timing against an August 14 creative lock, and the agency relationship is a live political variable.</p>
+<h2>SCORECARD (vs. playbook)</h2>
+<ul>
+<li><strong>Talk ratio:</strong> ~44/56 Jordan/Priya — on target; Priya's interruptions were absorbed rather than talked over.</li>
+<li><strong>Questions:</strong> 13 discovery/qualifying questions, roughly SPIN-ordered (situation 01:00–01:42, problem 02:41–03:08, implication 04:41–05:12, payoff 05:38–06:03). ✓</li>
+<li><strong>Teach moment:</strong> exactly one (master/publishing split + re-license exposure, 01:55) — well placed, prompted a diligence action ("that's worth checking").</li>
+<li><strong>Data deployment:</strong> two of four permitted points used (copyright protectability at 04:41; Bain 62% at 04:42 exchange) — both answered live questions rather than being dumped. Sony/Suno litigation and the 97% supervisor stat correctly held in reserve.</li>
+<li><strong>Pricing:</strong> back third (07:14), precise anchor ($6,500) plus three tiers; recommending the floor tier built credibility. Minor wobble reconciling the earlier "$4k" mention.</li>
+<li><strong>Qualification:</strong> budget ($15–20k current spend), decision path (sub-$10k = her signature + CMO nod), paper process (onboarding + net-90 surfaced and handled with parallel start + deposit structure), timeline (Aug 14 lock), alternative (Suno pilot + library status quo) — all five covered. ✓</li>
+<li><strong>Close:</strong> specific date/time secured on second attempt; multi-threading partial — agency contact added, CMO attendance not secured (memo as proxy).</li>
+<li><strong>Mistakes (intentional realism):</strong> wrong location count (120 vs 140, corrected at 01:29); garbled deposit/net-30 terms (09:14, caught by prospect and cleaned up in writing).</li>
+</ul>
+<h2>OBJECTIONS LOG</h2>
+<table>
+<thead>
+<tr>
+<th>Objection</th>
+<th>Response</th>
+<th>Landed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Why pay for music at all — Suno is free" (CMO proxy)</td>
+<td>Conceded sound quality on short listens; reframed to enforceable ownership (copyright protectability) + consumer sentiment (Bain 62%)</td>
+<td><strong>Partial</strong> — she wants sources and an honest memo, not a verdict</td>
+</tr>
+<tr>
+<td>"Would my CMO hear the difference blind?"</td>
+<td>Honest "maybe not on one listen"; shifted criterion from ears to audience + compounding identity</td>
+<td><strong>Partial</strong> — honesty bought credibility, didn't settle the question</td>
+</tr>
+<tr>
+<td>"We're regional, not Nike — is custom for us?"</td>
+<td>Reframed vs. current $15–20k/yr rental spend; anchored $6,500 owned-asset floor</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>"My agency handles creative — why you?"</td>
+<td>Label→clarify (vendor sprawl vs. politics); positioned as supply-chain upgrade through agency; invited Marcus</td>
+<td><strong>Yes</strong> — Marcus joining next call</td>
+</tr>
+<tr>
+<td>"Cheapest viable engagement — the floor, not the pitch"</td>
+<td>Gave floor first ($6,500) and recommended it over upsell</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>"Procurement: onboarding + net-90, non-negotiable"</td>
+<td>Parallel onboarding starting Monday; 40% deposit net-30, balance net-90 from delivery</td>
+<td><strong>Partial</strong> — accepted in principle, terms to be confirmed in writing</td>
+</tr>
+</tbody>
+</table></div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · CALL 3</span></div>
+</div>
+<div class="page">
+  <div class="callhead">
+    <div class="ch-kick">Full transcript</div>
+    <div class="ch-title">CALL 4 · The Brutal-Timeline Producer</div>
+    <div class="ch-sub">Sam Okafor, Senior Producer, Forgelight Productions — track failed clearance, 10 days to air · <b>closed on the call · $8,000 expedited</b></div>
+  </div>
+  <div class="transcript"><p><strong>DISCOVERY CALL TRANSCRIPT — CHORDENTIAL x FORGELIGHT PRODUCTIONS</strong>
+<em>Tuesday, 2:47 PM ET. Inbound call, referral source: post-house colleague. Scheduled ad hoc. Sam has a hard stop at 3:00.</em></p>
+<hr />
+<p><strong>[00:00] SAM:</strong> Jordan? Sam Okafor, Forgelight. Dana Reyes gave me your number an hour ago. I have twelve minutes and a problem. Go.</p>
+<p><strong>[00:09] JORDAN:</strong> Then I'll skip the deck. Dana told me the shape of it — licensed track died in clearance on an insurance spot. Tell me three things fast: when does it air, when does the client see it next, and what exactly killed the track?</p>
+<p><strong>[00:21] SAM:</strong> Airs a week from Friday — ten days. Client review is this Friday, 11 AM. The agency licensed an indie track, publisher side came back yesterday and refused the insurance category. Full stop, no negotiation. So I have a locked cut with a hole where the music was.</p>
+<p><strong>[00:38] JORDAN:</strong> Okay. That's survivable, and I'll show you the hours in a second. First, scope, because I'm going to quote you a real number and I don't quote until I know what I'm licensing. What's the spot — length, cutdowns, media, territory?</p>
+<p><strong>[00:50] SAM:</strong> One :30 for broadcast, a :15 cutdown for digital and pre-roll. Regional TV — five-state buy — plus the client's owned channels. Insurance brand, family-forward, mid-tempo, warm. The dead track was acoustic-leaning with a build.</p>
+<p><strong>[01:06] JORDAN:</strong> Term? Is the buy thirteen weeks, a year —</p>
+<p><strong>[01:09] SAM:</strong> — Agency will ask for a year and then renew, and I don't want to have this conversation again in twelve months.</p>
+<p><strong>[01:15] JORDAN:</strong> You won't, and that's actually the whole pitch, so let me spend my one sales sentence: everything we deliver is original, human-composed, and we control both sides — master and publishing — so one signature gives you worldwide, perpetual, all-media. There is no publisher on Thursday night who can change their mind, because we're the publisher. That's it, that's the sentence.</p>
+<p><strong>[01:33] SAM:</strong> Everyone says version of that. Walk me through what actually happens between now and Friday. Hour by hour. Because "we can hit deadlines" is the most common lie in this business.</p>
+<p><strong>[01:43] JORDAN:</strong> Fair. Here's the real clock. Today, by 4 PM: you get a deposit invoice and the license agreement — one document, you can send it to legal immediately, it's four pages. Today at 5 PM: thirty-minute creative-direction call, and I want your agency CD on it, not a brief-by-email — briefs lie, CDs don't. Tonight: I assign one of two composers I already have in mind for family-forward insurance; both have open decks this week, I checked before this call. Wednesday: composition day, we cut to your locked picture — send me the ProRes with timecode tonight. Thursday morning: internal review against the brief, we kill anything that's drifting. Thursday 6 PM: you receive two distinct directions, both cut to the :60 —</p>
+<p><strong>[02:31] SAM:</strong> — :30. It's a :30 and a :15.</p>
+<p><strong>[02:34] JORDAN:</strong> :30, you're right, I wrote it down and said it wrong anyway — two directions, both conformed to your :30, scratch conform of the :15 on whichever you flag as the leader. Thursday 6 PM. That gives you Thursday night with it before your client sees anything Friday at 11. I'm not delivering to you at 10:45 Friday morning. You get an evening of buffer, on purpose.</p>
+<p><strong>[02:53] SAM:</strong> Two full directions by Thursday six. In writing?</p>
+<p><strong>[02:56] JORDAN:</strong> In the agreement, with the date on it. And I'll tell you what I'm <em>not</em> promising: I'm not promising final broadcast masters Thursday. You get two directions at full production quality — good enough that if the client says yes in the room, we're finishing, not restarting. Finals with stems and cutdowns land after your revision pass.</p>
+<p><strong>[03:12] SAM:</strong> Okay — the revision pass. Here's my real question. What happens if the client hates both directions Friday? Where does that leave me Monday? Because if the answer is "we go back to the drawing board," I've just burned my last three days on you.</p>
+<p><strong>[03:25] JORDAN:</strong> Two answers. First, the honest math: two directions from a briefed composer against locked picture, with your CD in the room at 5 PM today shaping it — a total whiff on both is rare, and the 5 PM call is where we prevent it. That's why I won't skip it. Second, the mechanics if Friday is rough: the package includes two revision rounds. Round one starts the moment you send Friday notes — consolidated notes, one thread, not five stakeholders emailing me separately. Revised direction back to you Monday by 2 PM. Round two if needed, Tuesday. Final broadcast masters — :30, :15, full stems, plus the rights binder — Wednesday end of day. That's two clear days before air. I'm building a day of slack into that Wednesday date; internally we're targeting Tuesday night.</p>
+<p><strong>[04:02] SAM:</strong> Two rounds. And if the client's difficult and we need a third?</p>
+<p><strong>[04:06] JORDAN:</strong> Third round is billed — $750 per round on this tier. I have to hold that line, Sam. Unlimited revisions on a ten-day clock is how everyone misses air.</p>
+<p><strong>[04:14] SAM:</strong> I'm not asking for unlimited. I'm asking for reality. Regional insurance client, first time buying custom music, review committee of four. There's a real chance I need round three through no fault of your composer. If round three exists because your first delivery missed the brief, I'm not paying for it. If it exists because my client's CMO changed his mind, fine, bill me. Split it that way.</p>
+<p><strong>[04:31] JORDAN:</strong> <em>(beat)</em> That's a fair split, and it's a real distinction. Here's how I'll paper it: if round-three notes contradict the approved creative brief from tonight's 5 PM call — client changed direction — it's billed. If round-three notes are consistent with the brief and we just haven't landed it, round three is on us, no charge. The brief document from tonight becomes the referee. That means the brief has to be signed off by your agency CD tonight — which you want anyway.</p>
+<p><strong>[04:52] SAM:</strong> Done. That's the version I'll sign. Now the paper. I need the license in hand before air — actually executed, not "in process." The whole reason I'm on this call is paperwork that fell through. How fast is yours, really?</p>
+<p><strong>[05:05] JORDAN:</strong> Faster than the music, and that's not a line — it's structural. The license is executed <em>before</em> kickoff, not after delivery. You sign today, we countersign today. It's a work-for-hire-plus-license hybrid: you get worldwide, perpetual, all-media rights to the delivered work — master and sync and publishing in one grant — effective on final payment. The rights binder that ships Wednesday with the masters includes the executed license, a clearance certificate, cue-sheet-ready metadata, and a signed no-AI attestation, because your client's legal team may ask, and increasingly they do. There is no third party. There is nothing to chase. The document you sign this afternoon is the whole chain of title.</p>
+<p><strong>[05:38] SAM:</strong> Wait — rights effective on <em>final</em> payment. So Friday, when my client is watching the cut, do I technically have rights or not?</p>
+<p><strong>[05:45] JORDAN:</strong> Good catch, and I'll be precise: from deposit, you have full evaluation and internal-review rights — screen it for anyone, cut it in, present it. The broadcast grant perfects when the balance clears, which on your calendar means invoice Wednesday with delivery, net-immediate, and you're fully papered two days before air. If your finance team can't turn a wire in two days, tell me now and we'll restructure the split today.</p>
+<p><strong>[06:02] SAM:</strong> They can. Okay. The number. And Jordan — don't pad it. I know what a rush premium smells like when it's fake.</p>
+<p><strong>[06:09] JORDAN:</strong> Straight quote. Our lean tier — which is the right tier for this, you don't need the campaign package for a :30 and a :15 — is $6,500. Broadcast, worldwide perpetual, two directions, two revision rounds, full stems, cutdown, rights binder. The expedited surcharge for a three-day first-delivery clock is $1,500 — that's real money for real things: composer priority displacement and a producer on your project through Thursday night. <strong>$8,000 all-in.</strong> No usage tiers, no renewal invoice next year, no per-market fees when your five-state buy goes national — and Sam, with insurance brands it usually goes national.</p>
+<p><strong>[06:41] SAM:</strong> What's the deposit?</p>
+<p><strong>[06:43] JORDAN:</strong> Fifty percent — $4,000 — and I have to be rigid on this one: composers don't start until the deposit clears. On an expedited job that's not me protecting margin, it's me protecting your Thursday. Invoice hits your inbox within the hour; if you can pay by card or same-day ACH before 5, tonight's call is a kickoff, not a maybe.</p>
+<p><strong>[06:58] SAM:</strong> And if this dies entirely — client kills the spot Thursday, pulls the buy, whatever — what am I out?</p>
+<p><strong>[07:04] JORDAN:</strong> If you kill after delivery of the two directions, the full $8,000 is due — the work exists —</p>
+<p><strong>[07:09] SAM:</strong> — No. Cap it. If the <em>client</em> kills the campaign before final masters — not rejects your music, kills the whole spot — I'm out the deposit and we're done. Four grand kill fee, capped. That's the risk I can carry without going back to my EP.</p>
+<p><strong>[07:19] JORDAN:</strong> <em>(pause)</em> If the campaign itself dies before finals — verified, buy cancelled — kill fee is the deposit, $4,000, and rights to the unfinished work revert to us. If the campaign is alive and you've simply moved on from us, full fee. I can live with that line.</p>
+<p><strong>[07:31] SAM:</strong> Agreed. Two questions left. One: who's actually composing this? Do I get a person or a pool?</p>
+<p><strong>[07:38] JORDAN:</strong> A person, named in the brief tonight, and your CD hears their reel on the 5 PM call before we lock. Everything is human-composed — no generative audio anywhere in the chain, and we attest to that in writing, which for an insurance client's legal review is quietly becoming the most valuable page in the binder.</p>
+<p><strong>[07:52] SAM:</strong> Two: references. Someone who had a real deadline, not a testimonial.</p>
+<p><strong>[07:57] JORDAN:</strong> I'll send you two contacts with the invoice — one post producer, one agency EP, both hit-the-air-date situations. Call them while the deposit's processing; if either one spooks you, don't pay it. Fair?</p>
+<p><strong>[08:08] SAM:</strong> Fair. Recap it. Everything, dates and dollars, because I'm about to say yes and I want to know exactly what I'm saying yes to.</p>
+<p><strong>[08:14] JORDAN:</strong> $8,000 total, lean tier plus expedite. $4,000 deposit today before kickoff — invoice and the four-page license to you by 4 PM, kill fee capped at the deposit if the campaign itself dies pre-finals. 5 PM today: thirty minutes, you, me, your agency CD, composer locked, brief signed off — the brief is the referee. Thursday 6 PM: two directions against your locked :30, scratch :15 on the leader. Friday you review with the client; consolidated notes by end of day Friday. Round one back Monday 2 PM, round two Tuesday if needed. Round three billed at $750 <em>only</em> if it contradicts the signed brief; on us if we missed. Final masters, stems, :15 conform, and the executed rights binder — worldwide, perpetual, all-media, one chain of title — Wednesday EOD, two days before air. Balance due on delivery.</p>
+<p><strong>[08:52] SAM:</strong> Send the invoice. I'll have my EP's card on it by 4:30, and I'll drag the CD onto the 5 PM myself. One warning, Jordan — if Thursday 6 PM comes and goes quietly, I don't do quiet. I'll be loud in every producer Slack in this city.</p>
+<p><strong>[09:01] JORDAN:</strong> If Thursday slips, you'll hear from me by Thursday noon, not 6:01 — but it won't. Sending the invoice, license, calendar invite, and both references now. Send me the ProRes and the dead track tonight — I want the composer to hear what almost worked and why.</p>
+<p><strong>[09:14] SAM:</strong> ProRes by 4. Go.</p>
+<p><strong>[09:16] JORDAN:</strong> Talk at 5, Sam.</p>
+<p><em>(Call ends, 9:16 elapsed.)</em></p>
+<hr />
+<p><strong>OUTCOME</strong></p>
+<p>Closed on the call: lean tier expedited at $8,000 all-in, with a $4,000 deposit invoiced within the hour, a 5 PM same-day creative-direction call booked with the agency CD, and two directions committed for Thursday 6 PM ahead of the Friday client review. Sam successfully negotiated two term modifications — a brief-refereed third-revision-round contingency and a kill fee capped at the deposit — while Jordan held the deposit-before-kickoff and two-included-rounds lines.</p>
+<p><strong>SCORECARD</strong></p>
+<ul>
+<li><strong>Compressed question arc — strong.</strong> Seven discovery questions total (air date, review date, failure cause, format/cutdowns, media, territory, term), all scope-load-bearing; zero rapport filler, appropriate to a 12-minute buyer. The playbook's full arc was collapsed without skipping the scope-confirmation layer.</li>
+<li><strong>Teach moment — executed once, on cue.</strong> The "we're the publisher, so no one can change their mind Thursday night" framing landed at [01:15] and was explicitly capped ("that's my one sales sentence"), which bought credibility with an interruption-prone buyer.</li>
+<li><strong>Price discipline — strong.</strong> Precise anchor ($6,500 + $1,500 = $8,000), lean tier affirmatively steered ("you don't need the campaign package"), rush premium itemized rather than padded, future-value reframe (national expansion at no added fee) delivered in one breath.</li>
+<li><strong>Company protection — strong.</strong> Deposit-before-kickoff held rigid, two revision rounds held as the default, delivery dates stated with explicit buffer (Thursday-night delivery for a Friday review; Wednesday finals against internal Tuesday target), and rights-perfection timing disclosed unprompted-adjacent when Sam probed.</li>
+<li><strong>Concessions — controlled, not free.</strong> Both terms Sam won (round-three split, kill-fee cap) were conceded with structure attached: the signed brief as referee, and rights reversion plus a "campaign verifiably dead" condition. Neither concession touched price.</li>
+<li><strong>Next step — correct for the scenario.</strong> Same-day kickoff mechanics (invoice, license, 5 PM call, asset request) instead of a booked follow-up meeting; the playbook's "specific next step" flexed from calendar-based to hour-based.</li>
+<li><strong>Mistake — minor, well-recovered.</strong> Jordan said ":60" at [02:31] despite Sam stating ":30" at [00:50]; owned it instantly without over-apologizing. Cost: one flicker of the exact doubt (attention to detail) Sam was stress-testing.</li>
+<li><strong>Improvement note.</strong> Jordan volunteered the rights-perfect-on-final-payment nuance only after Sam caught it at [05:38]; on a clearance-burned buyer, that should be disclosed proactively.</li>
+</ul>
+<p><strong>OBJECTIONS LOG</strong></p>
+<table>
+<thead>
+<tr>
+<th>Objection</th>
+<th>Response</th>
+<th>Landed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Everyone says they hit deadlines — hour by hour, now to Friday."</td>
+<td>Concrete clock with times, owners, and dependencies (4 PM paper, 5 PM CD call, Thursday 6 PM delivery with built-in overnight buffer).</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>"What if the client hates it Friday — where am I Monday?"</td>
+<td>Two-directions hedge + prevention via CD-attended brief + dated revision schedule (Monday 2 PM round one, Wednesday finals, 2-day air buffer).</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>"Two rounds isn't reality with this client — third round shouldn't be on me if you missed."</td>
+<td>Split by cause with the signed brief as referee: contradicts brief → billed $750; consistent with brief → free.</td>
+<td><strong>Yes</strong> (buyer-won concession, structured)</td>
+</tr>
+<tr>
+<td>"How fast is your paperwork, really? I need executed license before air."</td>
+<td>License executed at deposit today; rights binder with clearance cert + no-AI attestation Wednesday. Partial friction: broadcast grant perfects on final payment, which Sam had to catch.</td>
+<td><strong>Partial</strong></td>
+</tr>
+<tr>
+<td>"Don't pad the rush."</td>
+<td>Itemized surcharge ($1,500 tied to composer displacement + dedicated producer), lean-tier steer, no-renewal/no-usage-tier contrast.</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>"What am I out if the whole spot dies?"</td>
+<td>Initial full-fee position; conceded a deposit-capped kill fee conditioned on verified campaign death, with rights reversion.</td>
+<td><strong>Yes</strong> (buyer-won concession, bounded)</td>
+</tr>
+<tr>
+<td>"Do I get a person or a pool?" / "References, not testimonials."</td>
+<td>Named composer with reel audition at 5 PM; two deadline-scenario references sent with invoice, with an explicit "call them before you pay" out.</td>
+<td><strong>Yes</strong></td>
+</tr>
+</tbody>
+</table></div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · CALL 4</span></div>
+</div>
+<div class="page">
+  <div class="callhead">
+    <div class="ch-kick">Full transcript</div>
+    <div class="ch-title">CALL 5 · The Polite Stonewall</div>
+    <div class="ch-sub">Elena Ruiz, Music Supervisor, holding-company agency — no live brief, 200+ pitches a month · <b>no meeting · graceful disqualification, September search inclusion</b></div>
+  </div>
+  <div class="transcript"><p><strong>DISCOVERY CALL TRANSCRIPT — Chordential × Meridian Group (Holding Co. Agency)</strong>
+<strong>Jordan Hale (Sr. Sales Rep, Chordential) / Elena Ruiz (Music Supervisor)</strong>
+<strong>Scheduled: 20 min. Actual: 19:40.</strong></p>
+<hr />
+<p><strong>[00:00] JORDAN:</strong> Elena, hi — Jordan Hale, Chordential. Thanks for taking this. I know your calendar is a war zone.</p>
+<p><strong>[00:06] ELENA:</strong> <em>(friendly, brisk)</em> It is. You get twenty minutes because your email actually referenced the Northline rebrand correctly. Most people cite work I didn't do. So — points for research, clock's running.</p>
+<p><strong>[00:16] JORDAN:</strong> Then I'll spend it carefully. Before I say a word about us — that Northline spot ran across broadcast, social cutdowns, and I think a stadium activation. When something has that many endpoints, how does music licensing actually get handled on your side? One master deal up front, or per-medium?</p>
+<p><strong>[00:34] ELENA:</strong> Depends. Northline we scored custom through one of my music houses, full buyout, so endpoints weren't an issue. When we license from catalog it gets uglier — options, renewals, territory carve-outs. But that's the job. I've been doing this fourteen years; the ugliness is priced in.</p>
+<p><strong>[00:52] JORDAN:</strong> "Priced in" — meaning the team absorbs it, or the client pays for it?</p>
+<p><strong>[00:57] ELENA:</strong> <em>(small laugh)</em> Both. Look, Jordan, I'll save you some discovery. I get two hundred plus pitches a month. I have two music houses I trust with my life, three licensing reps, and library subscriptions for the small stuff. My bench is deep and it's earned. So the honest question is: what do you do that they don't?</p>
+<p><strong>[01:16] JORDAN:</strong> Fair. Chordential delivers clearance-certified original music — human-composed, no AI anywhere in the chain, four thousand to ninety thousand a project. One signature gets your client master and publishing, worldwide, perpetual. Stems, cutdowns, and a rights documentation package built to survive procurement and legal review.</p>
+<p><strong>[01:36] ELENA:</strong> Mm. Everyone says "quality" and everyone says "clearance." Give me the differentiator in one sentence, and it can't contain either word.</p>
+<p><strong>[01:44] JORDAN:</strong> <em>(beat)</em> We hand your legal and procurement teams a signed, auditable paper trail — authorship verification, chain of title, indemnification — shaped like the documents they already know how to approve, so music stops being the asset that stalls the launch.</p>
+<p><strong>[01:58] ELENA:</strong> Okay. That's a better sentence than most. But here's the thing — you know music-house buyouts are already one-stop, right? When Northline closed, I owned master and publishing. Done. So what does "clearance-certified" get me that my music house's buyout doesn't already give me?</p>
+<p><strong>[02:16] JORDAN:</strong> <em>(pause)</em> That's the right question, and I want to answer it without pretending your music houses can't clear — they can, and the good ones do it cleanly.</p>
+<p><strong>[02:25] ELENA:</strong> They do.</p>
+<p><strong>[02:27] JORDAN:</strong> So the difference isn't <em>whether</em> the rights transfer. It's the shape and depth of the paper. Three concrete things. One: a certification document per track — named composers, session records, a signed attestation of human authorship. That last one is new: client legal teams have started asking "can you prove no generative AI touched this?" and most buyout paperwork is silent on it. Two: indemnification language written into the deliverable, not negotiated per project. Three: the package is formatted for procurement — the way an MSA exhibit reads — so when a holding-company audit or a client's brand-safety review happens two years later, the answer is a folder, not an email archaeology dig.</p>
+<p><strong>[03:04] ELENA:</strong> The AI attestation is genuinely new, I'll give you that. Legal at two of our clients asked about it this quarter. The rest is… tidier paperwork. Which, fine, tidy matters. Next hard one: who have you actually scored for? And if the answer is "we're new" — why should I be your guinea pig?</p>
+<p><strong>[03:20] JORDAN:</strong> Honest answer: we're early. Our composer roster has individually scored broadcast work, but Chordential as a company doesn't have a logo wall I can show you, and I'm not going to invent one. Our demo materials use fictional brands for exactly that reason. So no, you shouldn't be a guinea pig on a flagship campaign. Where a new vendor earns a shot is usually smaller — a regional spot, a cutdown package, something where the downside is contained. Is that how new music vendors have historically gotten onto your roster?</p>
+<p><strong>[03:47] ELENA:</strong> When they get on at all — which is rare — yes. A small brief, low stakes, they overdeliver, then maybe. But Jordan, I need to be straight with you: there's no live brief right now. Nothing. Q3 is quiet until the fall campaigns spin up. And adding a vendor here means holding-company procurement — an MSA that takes six to eight weeks on a good day. Nobody starts that without a project attached.</p>
+<p><strong>[04:08] JORDAN:</strong> Understood. When the fall campaigns do spin up — what does that look like on your end? How does a brief actually reach vendors?</p>
+<p><strong>[04:16] ELENA:</strong> I write a two-page creative brief — references, tempo, emotional arc, deliverables, usage. Goes to two or three houses simultaneously. They demo, we pick, we negotiate. Whole cycle is maybe three weeks.</p>
+<p><strong>[04:26] JORDAN:</strong> And when you say they demo — your houses give you demos on spec?</p>
+<p><strong>[04:31] ELENA:</strong> Three demos in forty-eight hours, on spec, every time. That's table stakes with my bench. Your pricing model — four to ninety K, signature up front — that reads like you <em>don't</em> do spec. Am I right?</p>
+<p><strong>[04:42] JORDAN:</strong> <em>(pause)</em> You're right, and I want to name that tension rather than dance around it. You're used to hearing three options before a dollar moves — so a no-spec model sounds like more risk, not less. Is that the core of it?</p>
+<p><strong>[04:54] ELENA:</strong> That's exactly it.</p>
+<p><strong>[04:56] JORDAN:</strong> So here's where I'll draw the line honestly: on a live, competitive brief, we don't do free spec against your houses — full custom on spec is how composers get strip-mined, and we don't build on that. What we do instead is a matched sampler <em>before</em> any brief exists: three finished tracks composed against your agency's actual aesthetic, off the clock, no strings. You'd hear the quality bar with zero commitment. Different mechanism, same purpose — you never buy blind.</p>
+<p><strong>[05:20] ELENA:</strong> Hm. That's at least a real answer instead of "our quality speaks for itself." But — <em>(checks something off-screen)</em> — Jordan, I'm going to be honest with you, because you've been honest with me. This has been a better call than most. And my standard line at this point is: send me your reel, I'll keep you in mind. Which is what I'm going to say, and we both know what it usually means.</p>
+<p><strong>[05:40] JORDAN:</strong> <em>(slight laugh)</em> I do know what it usually means. Which is why — look, rather than the reel going into the folder, what if we got thirty minutes on the calendar with you and maybe one of your producers, and I walk through the certification package properly? Even two weeks out —</p>
+<p><strong>[05:53] ELENA:</strong> — Jordan. No. <em>(not unkind)</em> You were doing so well. There's no brief, there's no budget, and a meeting about paperwork for a project that doesn't exist is exactly the meeting I never take. That's how vendors talk themselves off my list.</p>
+<p><strong>[06:06] JORDAN:</strong> <em>(beat)</em> You're right, and I appreciate you saying it plainly instead of ghosting me after a polite yes. Let me back all the way up, because I over-reached there. No brief, no budget, no near-term need — by my own playbook that means the right move today is <em>not</em> to sell you anything. Trying to force a next meeting would just make me pitch number two hundred and one.</p>
+<p><strong>[06:26] ELENA:</strong> <em>(dry)</em> Two hundred and seven, this month.</p>
+<p><strong>[06:29] JORDAN:</strong> Then let me aim at something smaller and more useful. Two asks, both tiny. First: you said client legal is starting to ask about AI provenance. The next time a brief crosses your desk with a clearance or provenance constraint attached — any brief, even one we're not remotely right for — would you send it my way? Not to bid. I want to see how those constraints are actually being written, and in exchange I'll tell you honestly whether your existing paperwork already covers it.</p>
+<p><strong>[06:52] ELENA:</strong> That's… actually a reasonable ask. Seeing how the sausage gets briefed. Fine. What's the second?</p>
+<p><strong>[06:58] JORDAN:</strong> Permission to send the sampler I described — three tracks, composed against the Northline rebrand's sonic direction specifically, since that's work you supervised and can judge us against. Delivered with the full certification package attached, so you see the paperwork on real deliverables instead of in a slide. No follow-up meeting attached to it. If it's not at the level of your houses, delete it and we never speak again.</p>
+<p><strong>[07:16] ELENA:</strong> <em>(pause; considering)</em> You understand I'm still not promising anything. No meeting, no brief, no procurement conversation.</p>
+<p><strong>[07:22] JORDAN:</strong> Completely understood. The sampler either earns a spot in your memory or it doesn't. That's the whole transaction.</p>
+<p><strong>[07:28] ELENA:</strong> Then yes — send it. And I'll go one further, because you took the "no" well, which is rarer than it should be. There's an anthem brief I'm expecting in September. Big fall campaign, and the client's legal team is one of the two asking about AI provenance. If it lands the way I think it will, I'll include you in that search. <em>Include</em> — you'd be demoing alongside my houses, on their terms, and you'd have to solve your spec problem for that one. But you'd be in the room.</p>
+<p><strong>[07:52] JORDAN:</strong> That's more than I asked for, and I'll take it exactly as offered. Can I ask one last question before I let you go?</p>
+<p><strong>[07:58] ELENA:</strong> One.</p>
+<p><strong>[08:00] JORDAN:</strong> You've watched new music vendors try to crack your roster for fourteen years. What's the one thing — the single thing — that actually gets someone onto your shortlist?</p>
+<p><strong>[08:08] ELENA:</strong> <em>(without hesitating)</em> Turn one thing around perfectly, fast, when it doesn't matter. A cutdown nobody wants to do, a revision at 6 p.m. on a Friday, a stems re-delivery because the edit changed. Everyone auditions with their best work; almost nobody auditions with their <em>reliability</em>. The vendor who makes my worst Tuesday easier is the vendor who gets the anthem brief eventually. That's it. That's the whole secret.</p>
+<p><strong>[08:29] JORDAN:</strong> "Make my worst Tuesday easier." Writing that on the wall. Elena — sampler within two weeks, matched to Northline, certification docs attached, no meeting request hiding inside it. And if that September brief lands, I'll be ready to have a real conversation about the spec question rather than a rehearsed one.</p>
+<p><strong>[08:44] ELENA:</strong> Good. And Jordan — the AI attestation angle. That's the only thing you said today my bench genuinely doesn't have yet. Lead with that next time, not the tidy folders.</p>
+<p><strong>[08:52] JORDAN:</strong> Noted, and thank you for the free consulting. Enjoy the quiet Q3.</p>
+<p><strong>[08:56] ELENA:</strong> <em>(laughing)</em> No such thing. Bye, Jordan.</p>
+<p><strong>[08:58] — CALL ENDS —</strong></p>
+<hr />
+<h2>OUTCOME</h2>
+<p>No meeting booked and no live opportunity — correctly diagnosed as a disqualification within five minutes and converted into a shortlist play rather than a forced next step. Elena voluntarily granted three assets: permission to send a Northline-matched 3-track sampler with certification docs, agreement to forward the next provenance-constrained brief, and conditional inclusion in an expected September anthem search — plus the explicit shortlist criterion ("make my worst Tuesday easier").</p>
+<h2>SCORECARD</h2>
+<ul>
+<li><strong>Talk ratio:</strong> Jordan ~45/55 — close to the 43/57 target; Elena carried the middle third, which is where the intelligence was.</li>
+<li><strong>Question arc:</strong> Executed — opened on process (how licensing is handled), moved to cost-of-status-quo ("absorbs it or client pays?"), then briefing mechanics, then the shortlist question as the closer. The final question ("what gets someone on your shortlist?") extracted the single most valuable sentence of the call.</li>
+<li><strong>One teach moment:</strong> Delivered once, at [02:27]–[03:04] — the certification/attestation/procurement-paper distinction — and not repeated. Correctly conceded that music-house buyouts are one-stop rather than strawmanning them; Elena rewarded the honesty.</li>
+<li><strong>Disqualification with grace (the core test):</strong> Strong. Jordan named the no-brief/no-budget/no-need reality out loud at [06:06] rather than negotiating around it, explicitly declined to sell, and pivoted to two small, specific, non-meeting asks. Result: the polite stonewall voluntarily opened — Elena upgraded "send your reel" into a real sampler invitation plus conditional search inclusion.</li>
+<li><strong>Mistake #1 (scripted-realistic):</strong> Pushed for a 30-minute meeting at [05:40] immediately after Elena signaled her exit line — classic misread of "this was a good call" as buying signal. Gently rebuffed. Recovery was fast, owned the over-reach by name, and became the pivot that earned the disqualification credit.</li>
+<li><strong>Mistake #2:</strong> Led the differentiation answer with paperwork breadth instead of the AI-provenance attestation — the one element Elena confirmed her bench lacks. Elena had to hand him the positioning correction at [08:44]. Cost nothing here; would cost a competitive deal.</li>
+<li><strong>Honesty discipline:</strong> Held. Admitted "no logo wall," conceded competitors clear cleanly, drew a real line on spec instead of caving or bluffing. Every credibility gain in the call traces to one of these concessions.</li>
+<li><strong>Unresolved risk carried forward:</strong> The spec-demo model is incompatible with how the September anthem search will run. Jordan flagged it but has no answer yet — must be solved before that brief lands, not during it.</li>
+</ul>
+<h2>OBJECTIONS LOG</h2>
+<table>
+<thead>
+<tr>
+<th>Objection</th>
+<th>Response</th>
+<th>Landed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Deep bench — two houses, three reps, libraries; what do they not do?"</td>
+<td>One-sentence differentiator: procurement-shaped auditable paper trail so music never stalls the launch</td>
+<td><strong>Partial</strong> — "better sentence than most," but bench remains unthreatened</td>
+</tr>
+<tr>
+<td>"Buyouts are already one-stop — what does clearance-certified add?"</td>
+<td>Pause→label→clarify→respond: conceded houses clear cleanly; differentiated on human-authorship attestation, built-in indemnification, procurement-formatted package</td>
+<td><strong>Partial-to-yes</strong> — AI attestation acknowledged as "genuinely new"; rest dismissed as "tidier paperwork"</td>
+</tr>
+<tr>
+<td>"Who have you scored for — why be your guinea pig?"</td>
+<td>Full honesty: early-stage, no logo wall, fictional demo brands; reframed entry path to contained low-stakes work</td>
+<td><strong>Yes</strong> — honesty directly earned the later concessions</td>
+</tr>
+<tr>
+<td>"My houses demo on spec in 48 hours — you don't do spec?"</td>
+<td>Labeled the risk perception; held the no-free-spec line; offered matched sampler as alternate proof mechanism</td>
+<td><strong>Partial</strong> — sampler accepted; spec expectation explicitly still governs the September search</td>
+</tr>
+<tr>
+<td>"Send me your reel, I'll keep you in mind" (the exit)</td>
+<td>First attempt: pushed for meeting — <strong>rebuffed</strong>. Second attempt: named the disqualification, asked for next constrained brief + sampler permission</td>
+<td><strong>Yes</strong> — standard exit converted into three concrete micro-commitments</td>
+</tr>
+<tr>
+<td>"No live brief, procurement takes 6–8 weeks"</td>
+<td>No counter — accepted as disqualifying fact and repositioned for the next real search</td>
+<td><strong>Yes</strong> — accepting it is what unlocked the September inclusion</td>
+</tr>
+</tbody>
+</table></div>
+  <div class="foot"><span>Chordential · chordential.com</span><span>Discovery Call Simulations · CALL 5</span></div>
+</div></body></html>
