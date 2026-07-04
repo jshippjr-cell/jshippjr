@@ -72,8 +72,104 @@
     });
   }
 
+  /* ---- drawer (§2.3): act on an entity without leaving it ---- */
+  var drawerEls = null, drawerTrigger = null;
+
+  function ensureDrawer() {
+    if (drawerEls) return drawerEls;
+    var backdrop = document.createElement('div');
+    backdrop.className = 'drawer-backdrop';
+    var panel = document.createElement('aside');
+    panel.className = 'drawer';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('inert', '');
+    document.body.appendChild(backdrop);
+    document.body.appendChild(panel);
+    backdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.classList.contains('open')) closeDrawer();
+    });
+    drawerEls = { backdrop: backdrop, panel: panel };
+    return drawerEls;
+  }
+
+  function closeDrawer() {
+    if (!drawerEls) return;
+    drawerEls.panel.classList.add('closing');
+    drawerEls.panel.classList.remove('open');
+    drawerEls.backdrop.classList.remove('open');
+    drawerEls.panel.setAttribute('inert', '');
+    setTimeout(function () { drawerEls.panel.classList.remove('closing'); }, 400);
+    if (drawerTrigger && drawerTrigger.focus) drawerTrigger.focus();
+    drawerTrigger = null;
+  }
+
+  function openDrawer(url, trigger) {
+    var els = ensureDrawer();
+    drawerTrigger = trigger || null;
+    els.panel.innerHTML = '<button class="drawer-close" aria-label="Close">✕</button>' +
+                          '<div class="drawer-body muted small">Loading…</div>';
+    els.panel.querySelector('.drawer-close').addEventListener('click', closeDrawer);
+    els.panel.removeAttribute('inert');
+    els.panel.classList.add('open');
+    els.backdrop.classList.add('open');
+    fetch(url, { headers: { 'X-Requested-With': 'drawer' } })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var content = doc.querySelector('.content') || doc.querySelector('main') || doc.body;
+        var body = els.panel.querySelector('.drawer-body');
+        body.classList.remove('muted', 'small');
+        body.innerHTML = '';
+        body.appendChild(content);
+        // re-run the enhancements the page load would have applied
+        stampTimezones(body);
+        var h = body.querySelector('.topbar-title, h1');
+        if (h && h.focus) { h.setAttribute('tabindex', '-1'); h.focus(); }
+      })
+      .catch(function () { window.location.href = url; }); // graceful fallback
+  }
+
+  /* the base-page timezone enhancement, re-runnable for injected content */
+  function stampTimezones(root) {
+    root.querySelectorAll('form.js-localtime input[name="tz_offset"]').forEach(function (h) {
+      h.value = String(new Date().getTimezoneOffset());
+    });
+    function loc(sel, fmt) {
+      root.querySelectorAll(sel).forEach(function (el) {
+        var iso = el.getAttribute('data-utc') || el.getAttribute('data-utc-date')
+                || el.getAttribute('data-utc-time');
+        if (!iso) return;
+        var d = new Date(iso);
+        if (!isNaN(d)) el.textContent = fmt(d);
+      });
+    }
+    loc('time[data-utc]', function (d) {
+      return d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    });
+    loc('time[data-utc-date]', function (d) {
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    });
+    loc('time[data-utc-time]', function (d) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+  }
+
+  function initDrawerLinks() {
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('[data-drawer-src]');
+      if (!a) return;
+      // let modified clicks (new tab etc.) behave normally
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      openDrawer(a.getAttribute('data-drawer-src') || a.getAttribute('href'), a);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initArrive();
     initProgressForms();
+    initDrawerLinks();
   });
 })();

@@ -119,7 +119,7 @@
       {% if dr['message'] %}<div class="muted small" style="margin-top:3px">“{{ dr['message'] }}”</div>{% endif %}
     </div>
     <div class="dr-acts">
-      <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/schedule?req={{ dr['id'] }}">Accept &amp; schedule →</a>
+      <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/schedule?req={{ dr['id'] }}" data-drawer-src>Accept &amp; schedule →</a>
       <form method="post" action="/opportunity/{{ row['id'] }}/request/{{ dr['id'] }}/decline" style="margin:0">
         <button class="btn tiny ghost" type="submit">Decline</button>
       </form>
@@ -331,7 +331,7 @@
 
 <div class="action-bar">
   {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
-  {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule">🎥 Schedule discovery</a>{% endif %}
+  {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
   {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
   {% if next_status %}
   <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
