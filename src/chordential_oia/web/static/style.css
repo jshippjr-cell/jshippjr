@@ -54,6 +54,16 @@ html,body{margin:0;padding:0}
 /* visible keyboard focus, sitewide (never remove an outline without this) */
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 
+/* content arrival (ux-build-spec §2.11) — things move into place; never on chrome */
+.arrive{opacity:0;transform:translateY(10px)}
+.arrive.in{opacity:1;transform:none;
+  transition:opacity var(--t-move) ease,transform var(--t-move) var(--ease-spring)}
+@media (prefers-reduced-motion:reduce){.arrive{opacity:1;transform:none}}
+
+/* eased hairline progress (§2.8) — replaces spinners; the bar never lies backwards */
+.progress-hairline{height:2px;background:var(--panel2);border-radius:1px;overflow:hidden;margin-top:10px;display:none}
+.progress-hairline>i{display:block;height:100%;background:var(--accent);width:0}
+
 /* reduced motion: collapse all animation/transition to instant */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{

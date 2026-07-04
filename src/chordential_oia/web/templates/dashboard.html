@@ -4,7 +4,7 @@
 {% block heading %}Today{% endblock %}
 {% block content %}
 
-<div class="kpi-strip">
+<div class="kpi-strip" data-arrive>
   <a class="kpi-cell" href="/lanes">
     <div class="kpi-cell-val">{{ metrics.pursuing }}</div>
     <div class="kpi-cell-lbl">in flight · {{ metrics.pipeline_value|money }}</div>
@@ -104,7 +104,7 @@
   {% endif %}
 </section>
 
-<div class="pipeline-grid">
+<div class="pipeline-grid" data-arrive>
 
   {# ── Column 1 — top targets to pursue ─────────────────────────────────── #}
   <section class="card pipe pipe-pursue">

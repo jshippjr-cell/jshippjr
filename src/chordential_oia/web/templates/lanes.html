@@ -33,7 +33,7 @@
 
 <p class="summary-line">Your pipeline as a working board — advance a deal a stage with one click; this mirrors the status you set on each opportunity. Lost and passed deals are archived together under Closed.</p>
 
-<div class="kanban">
+<div class="kanban" data-arrive>
   {% for col in columns %}
   <div class="kcol kcol-{{ status_class(col.status) }}">
     <div class="kcol-head">{{ stage_label(col.status) }} <span class="lane-count">{{ col.rows|length }}</span></div>
