@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Call Simulator{% endblock %}
+{% block heading %}Discovery Call Simulator{% endblock %}
+{% block content %}
+
+<style>
+.sim-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.sim-card{display:flex;flex-direction:column;gap:6px}
+.sim-card .who{font-size:12px;color:var(--muted)}
+.sim-card .sit{font-size:12.5px;color:var(--text);line-height:1.45;flex:1}
+.sim-diff{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 8px;border-radius:999px;background:var(--panel);color:var(--muted);border:1px solid var(--border2)}
+.sim-diff.hard,.sim-diff.expert{background:#F6E9EB;color:var(--wine);border-color:#E8D3D7}
+.sim-diff.fast{background:#FBEFE4;color:#B5500F;border-color:#F2D9C2}
+.sim-mode{font-size:12px;color:var(--muted);margin:4px 0 14px}
+</style>
+
+<p class="summary-line">Practice discovery calls against the buyers you'll actually meet.
+The buyer pushes back from the <a class="link" href="/simulator/library">objection library</a>
+— which learns from your real call transcripts. Every practice call is graded against the
+playbook: talk share, questions, price timing, next step.</p>
+
+<p class="sim-mode">
+  {% if ai_on %}🟢 <b>AI buyer connected</b> — personas improvise in character (Anthropic).
+  {% else %}⚪ <b>Scripted mode</b> — the buyer replays real library objections in order.
+  Set <code>ANTHROPIC_API_KEY</code> for the improvising AI buyer.{% endif %}
+  · Library: <b>{{ n_confirmed }}</b> confirmed{% if n_proposed %} ·
+  <a class="link" href="/simulator/library"><b>{{ n_proposed }}</b> proposed — review</a>{% endif %}
+</p>
+
+<div class="sim-grid" data-arrive>
+  {% for key, p in personas.items() %}
+  <div class="card sim-card">
+    <div class="card-head" style="margin-bottom:4px"><h2>{{ p.label }}</h2>
+      <span class="sim-diff {{ p.difficulty }}">{{ p.difficulty }}</span></div>
+    <div class="who">{{ p.who }}</div>
+    <div class="sit">{{ p.situation }}</div>
+    <div class="muted small">Win here = {{ p.win_condition }}.</div>
+    <form method="post" action="/simulator/start" style="margin-top:8px">
+      <input type="hidden" name="persona" value="{{ key }}">
+      <button class="btn" type="submit">📞 Take the call</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+{% if sessions %}
+<section class="card" style="margin-top:18px">
+  <div class="card-head"><h2>Past practice calls</h2></div>
+  <table class="table compact">
+    <thead><tr><th>#</th><th>Buyer</th><th>Mode</th><th>Status</th><th>Score</th><th></th></tr></thead>
+    <tbody>
+      {% for s in sessions %}
+      <tr>
+        <td class="muted">{{ s['id'] }}</td>
+        <td>{{ personas.get(s['persona'], {}).get('label', s['persona']) }}</td>
+        <td class="muted">{{ s['mode'] }}</td>
+        <td><span class="pill {{ 'pv-done' if s['status'] == 'ended' else 'pv-review' }}">{{ s['status'] }}</span></td>
+        <td>{% if s['scorecard_json'] %}<b>{{ (s['scorecard_json']|fromjson).score }}%</b>{% else %}—{% endif %}</td>
+        <td><a class="link small" href="/simulator/{{ s['id'] }}">{{ 'review' if s['status'] == 'ended' else 'resume' }} →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1130,6 +1130,43 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, updated_at TEXT
         )"""
     )
+    # The objection library — the durable memory behind the Discovery Call Simulator.
+    # Seeded from the five call simulations (docs/sales-simulations); GROWS from real
+    # calls: objections harvested from transcripts land as status='proposed' with the
+    # capture_id they came from (provenance), and the human confirms or retires them —
+    # machine proposes, Jon disposes, same as Campaign Intelligence.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS objections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            family TEXT NOT NULL,                -- trust_incumbency | cheap_alternatives |
+                                                 --   guarantee_skepticism | delivery_risk |
+                                                 --   money_process
+            objection TEXT NOT NULL,
+            context TEXT DEFAULT '',             -- when/why this comes up
+            response_pattern TEXT DEFAULT '',    -- what works (playbook-derived)
+            result TEXT DEFAULT 'untested',      -- yes | partial | no | untested
+            source TEXT DEFAULT 'manual',        -- simulation | transcript | manual
+            status TEXT DEFAULT 'confirmed',     -- proposed | confirmed | retired
+            capture_id INTEGER,                  -- provenance when harvested from a call
+            times_seen INTEGER DEFAULT 1,
+            created_at TEXT, last_seen_at TEXT
+        )"""
+    )
+    # Simulator practice sessions — one row per practice call; the transcript is a
+    # per-record JSON blob (same pattern as projects.delivery_json) and the scorecard
+    # is computed deterministically at end-of-call by simulator.grade().
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS sim_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            persona TEXT NOT NULL,               -- key into simulator.PERSONAS
+            mode TEXT DEFAULT 'scripted',        -- scripted (no LLM) | ai (Anthropic seam)
+            status TEXT DEFAULT 'live',          -- live | ended
+            transcript_json TEXT DEFAULT '[]',   -- [{"who":"buyer"|"seller","text":...}, ...]
+            scorecard_json TEXT DEFAULT '',
+            objections_used TEXT DEFAULT '[]',   -- objection ids already raised this session
+            started_at TEXT, ended_at TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -4901,3 +4938,95 @@ def exec_metrics(conn: sqlite3.Connection) -> Dict:
         "avg_alignment": avg_alignment,
         "by_discipline": [(r["discipline"], r["n"]) for r in by_discipline],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Objection library + Discovery Call Simulator (see simulator.py)
+# --------------------------------------------------------------------------- #
+def _norm_objection(text: str) -> str:
+    """Dedup key: lowercase, collapse whitespace/punctuation-light."""
+    import re as _re
+    out = _re.sub(r"[^a-z0-9 ]+", "", text.lower())
+    return _re.sub(r"\s+", " ", out).strip()
+
+
+def upsert_objection(conn: sqlite3.Connection, *, family: str, objection: str,
+                     context: str = "", response_pattern: str = "",
+                     result: str = "untested", source: str = "manual",
+                     status: str = "confirmed", capture_id: Optional[int] = None) -> int:
+    """Insert an objection, or — if an equivalent one exists — bump times_seen.
+
+    The library LEARNS by repetition: the same objection harvested again from a
+    new call raises its count instead of duplicating, so the simulator can weight
+    personas toward what buyers actually keep saying."""
+    now = datetime.now(timezone.utc).isoformat()
+    key = _norm_objection(objection)
+    for row in conn.execute("SELECT id, objection FROM objections"):
+        if _norm_objection(row["objection"]) == key:
+            conn.execute(
+                "UPDATE objections SET times_seen = times_seen + 1, last_seen_at = ? WHERE id = ?",
+                (now, row["id"]))
+            conn.commit()
+            return int(row["id"])
+    cur = conn.execute(
+        """INSERT INTO objections
+           (family, objection, context, response_pattern, result, source, status,
+            capture_id, times_seen, created_at, last_seen_at)
+           VALUES (?,?,?,?,?,?,?,?,1,?,?)""",
+        (family, objection, context, response_pattern, result, source, status,
+         capture_id, now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_objections(conn: sqlite3.Connection, *, status: Optional[str] = None,
+                    family: Optional[str] = None) -> list:
+    q = "SELECT * FROM objections"
+    conds, args = [], []
+    if status:
+        conds.append("status = ?"); args.append(status)
+    if family:
+        conds.append("family = ?"); args.append(family)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY family, times_seen DESC, id"
+    return conn.execute(q, args).fetchall()
+
+
+def set_objection_status(conn: sqlite3.Connection, objection_id: int, status: str) -> None:
+    if status not in ("proposed", "confirmed", "retired"):
+        return
+    conn.execute("UPDATE objections SET status = ? WHERE id = ?", (status, objection_id))
+    conn.commit()
+
+
+def create_sim_session(conn: sqlite3.Connection, *, persona: str, mode: str = "scripted") -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO sim_sessions (persona, mode, status, transcript_json,
+           objections_used, started_at) VALUES (?,?, 'live', '[]', '[]', ?)""",
+        (persona, mode, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_sim_session(conn: sqlite3.Connection, session_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM sim_sessions WHERE id = ?", (session_id,)).fetchone()
+
+
+def list_sim_sessions(conn: sqlite3.Connection, limit: int = 30) -> list:
+    return conn.execute(
+        "SELECT * FROM sim_sessions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def update_sim_session(conn: sqlite3.Connection, session_id: int, **fields) -> None:
+    allowed = {"status", "transcript_json", "scorecard_json", "objections_used", "ended_at"}
+    sets, args = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k} = ?"); args.append(v)
+    if not sets:
+        return
+    args.append(session_id)
+    conn.execute(f"UPDATE sim_sessions SET {', '.join(sets)} WHERE id = ?", args)
+    conn.commit()

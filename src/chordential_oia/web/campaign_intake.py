@@ -361,6 +361,14 @@ def ingest_transcript(conn, meeting, transcript, *, created_by: str = "capture")
     db.update_meeting(conn, meeting["id"], status="ingested",
                       transcript_capture_id=summary["capture_id"])
     sync_ci_to_opportunity(conn, ci_row["id"], opp["id"])
+    # The learning loop: harvest buyer objections from the real call into the
+    # simulator's objection library as PROPOSED rows (human confirms on the
+    # library page). Best-effort — a harvest failure never blocks intake.
+    try:
+        from . import simulator
+        simulator.harvest_objections(conn, text, capture_id=summary["capture_id"])
+    except Exception:  # noqa: BLE001
+        pass
     return summary
 
 

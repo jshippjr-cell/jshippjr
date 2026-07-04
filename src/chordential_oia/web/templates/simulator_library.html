@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Objection Library{% endblock %}
+{% block heading %}<a class="crumb" href="/simulator">Simulator</a> / Objection Library{% endblock %}
+{% block content %}
+
+<p class="summary-line">Every objection the market has raised — seeded from the five call
+simulations, growing from your real transcripts. Harvested objections arrive as
+<span class="pill pv-review">proposed</span> with the capture they came from; you confirm
+what's real. Confirmed objections arm the simulator's personas, weighted by how often
+buyers actually say them.</p>
+
+{% for fam_key, fam_label in families.items() %}
+{% set rows = by_family.get(fam_key, []) %}
+{% if rows %}
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>{{ fam_label }}</h2><span class="muted small">{{ rows|length }} objection(s)</span></div>
+  <table class="table compact">
+    <thead><tr><th style="width:34%">Objection</th><th style="width:36%">Response pattern</th>
+      <th>Landed</th><th>Seen</th><th>Source</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><b>{{ r['objection'] }}</b>{% if r['context'] %}<div class="muted small">{{ r['context'] }}</div>{% endif %}</td>
+        <td class="muted">{{ r['response_pattern'] or '—' }}</td>
+        <td><span class="pill {{ 'st-accepted' if r['result'] == 'yes' else ('st-sent' if r['result'] == 'partial' else 'ghost') }}">{{ r['result'] }}</span></td>
+        <td>{{ r['times_seen'] }}×</td>
+        <td class="muted small">{{ r['source'] }}{% if r['capture_id'] %} · cap #{{ r['capture_id'] }}{% endif %}</td>
+        <td><span class="pill {{ 'pv-review' if r['status'] == 'proposed' else ('pv-done' if r['status'] == 'confirmed' else 'ghost') }}">{{ r['status'] }}</span></td>
+        <td class="row-action">
+          {% if r['status'] == 'proposed' %}
+          <form method="post" action="/simulator/library/{{ r['id'] }}/status" style="display:inline">
+            <input type="hidden" name="status" value="confirmed">
+            <button class="btn tiny primary" type="submit">Confirm</button>
+          </form>
+          {% endif %}
+          {% if r['status'] != 'retired' %}
+          <form method="post" action="/simulator/library/{{ r['id'] }}/status" style="display:inline">
+            <input type="hidden" name="status" value="retired">
+            <button class="btn tiny ghost" type="submit">Retire</button>
+          </form>
+          {% else %}
+          <form method="post" action="/simulator/library/{{ r['id'] }}/status" style="display:inline">
+            <input type="hidden" name="status" value="confirmed">
+            <button class="btn tiny" type="submit">Restore</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Practice call · {{ persona.get('label', s['persona']) }}{% endblock %}
+{% block heading %}<a class="crumb" href="/simulator">Simulator</a> / {{ persona.get('label', s['persona']) }}{% endblock %}
+{% block content %}
+
+<style>
+.simchat{display:flex;flex-direction:column;gap:10px;max-width:760px}
+.turn{max-width:82%;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.5}
+.turn.buyer{align-self:flex-start;background:var(--panel);border:1px solid var(--border);
+  border-bottom-left-radius:4px}
+.turn.seller{align-self:flex-end;background:var(--wine);color:#fff;border-bottom-right-radius:4px}
+.turn .who{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  opacity:.6;margin-bottom:3px}
+.sim-say{display:flex;gap:8px;margin-top:14px;max-width:760px}
+.sim-say textarea{flex:1;background:var(--white);border:1px solid var(--border2);border-radius:10px;
+  padding:10px 12px;font:inherit;min-height:70px;resize:vertical}
+.sim-say textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,103,31,.12)}
+.sim-acts{display:flex;flex-direction:column;gap:8px}
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:10px}
+.sc-check{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);font-size:12.5px}
+.sc-check.ok{border-left:3px solid #2e8b57}
+.sc-check.bad{border-left:3px solid var(--wine)}
+.sc-check .rule{font-weight:650}
+.sc-check .note{color:var(--muted);font-size:11.5px;margin-top:2px}
+.sc-score{font-size:34px;font-weight:800;letter-spacing:-1px;color:var(--wine)}
+</style>
+
+<div class="card contact-card">
+  <div class="contact-row">
+    <div>
+      <b>{{ persona.get('who', '') }}</b>
+      <div class="muted small">{{ persona.get('situation', '') }}</div>
+    </div>
+    <div class="pill-row">
+      <span class="pill ghost">{{ s['mode'] }} buyer</span>
+      <span class="pill {{ 'pv-done' if s['status'] == 'ended' else 'pv-review' }}">{{ s['status'] }}</span>
+    </div>
+  </div>
+</div>
+
+{% if scorecard %}
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Scorecard</h2><span class="sc-score">{{ scorecard.score }}%</span></div>
+  <p class="muted small" style="margin-top:-6px">Graded deterministically against the playbook —
+    the same rules your real calls are held to. {{ scorecard.objections_faced }} objection(s) faced.</p>
+  <div class="sc-grid">
+    {% for c in scorecard.checks %}
+    <div class="sc-check {{ 'ok' if c.ok else 'bad' }}">
+      <div class="rule">{{ '✓' if c.ok else '✗' }} {{ c.rule }}</div>
+      <div class="note">{{ c.note }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>The call</h2>
+    <span class="muted small">Say what you'd actually say — the buyer answers.</span></div>
+  <div class="simchat">
+    {% for t in transcript %}
+    <div class="turn {{ t.who }}">
+      <div class="who">{{ 'Buyer' if t.who == 'buyer' else 'You' }}</div>
+      {{ t.text }}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if s['status'] == 'live' %}
+  <form class="sim-say" method="post" action="/simulator/{{ s['id'] }}/say">
+    <textarea name="text" placeholder="Your response… (remember: label the objection, ask one clarifying question, then answer)" required autofocus></textarea>
+    <div class="sim-acts">
+      <button class="btn primary" type="submit">Say it</button>
+    </div>
+  </form>
+  <form method="post" action="/simulator/{{ s['id'] }}/end" style="margin-top:10px">
+    <button class="btn ghost" type="submit"
+      title="End the practice call and get graded">⏹ End call &amp; grade me</button>
+  </form>
+  {% else %}
+  <p class="muted small" style="margin-top:12px">This call has ended.
+    <a class="link" href="/simulator">Take another →</a></p>
+  {% endif %}
+</section>
+
+{% endblock %}
