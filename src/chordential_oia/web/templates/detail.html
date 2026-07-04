@@ -248,8 +248,8 @@
   {# Conflicts first — a machine value that disagrees with a human one, never silently applied. #}
   {% for it in ci_view.conflicts %}
   <div class="ci-conflict">
-    <div><b>{{ it.label or it.key.replace('_',' ')|title }}</b> — the machine proposes a different value:</div>
-    <div class="ci-meta"><span class="ci-chip">yours: {{ it.value }}</span><span class="ci-chip">proposed: {{ it.proposed_value }}</span></div>
+    <div><span class="pill pv-conflict">conflict</span> <b>{{ it.label or it.key.replace('_',' ')|title }}</b> — the machine proposes a different value:</div>
+    <div class="ci-meta"><span class="pill pv-human">yours: {{ it.value }}</span><span class="pill pv-machine">proposed: {{ it.proposed_value }}</span></div>
     <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/conflict" style="margin-top:8px;display:flex;gap:8px">
       <input type="hidden" name="field_id" value="{{ it.id }}">
       <button class="btn tiny" name="decision" value="keep">Keep yours</button>
@@ -264,7 +264,7 @@
     <h3>{{ sec.label }}</h3>
     {% for it in sec['items'] %}
     <div class="ci-field{% if not it.id %} ci-empty{% endif %}">
-      <div class="ci-field-label">{{ it.label }}{% if it.human_value %} <span class="ci-kind human" title="You set this — authoritative">yours</span>{% endif %}</div>
+      <div class="ci-field-label">{{ it.label }}{% if it.human_value %} <span class="pill pv-human" title="You set this — authoritative">you · confirmed</span>{% endif %}</div>
       <div class="ci-field-body">
         <form class="ci-inline" method="post" action="/opportunity/{{ row['id'] }}/intelligence/field">
           <input type="hidden" name="field_id" value="{{ it.id or '' }}">
@@ -275,13 +275,14 @@
           <button class="btn tiny" type="submit">Save</button>
         </form>
         <div class="ci-meta">
-          {% for s in it.sources %}<span class="ci-chip src">{{ s.replace('_',' ') }}</span>{% endfor %}
+          {% for s in it.sources %}<span class="pill pv-machine" title="Where this value came from">machine · {{ s.replace('_',' ') }}</span>{% endfor %}
           {% if it.id and it.open %}
+          <span class="pill pv-review">needs review</span>
           <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="display:inline;margin:0">
             <input type="hidden" name="field_id" value="{{ it.id }}">
             <button class="btn tiny primary" type="submit">{{ it.dispose_verb }}</button>
           </form>
-          {% elif it.id %}<span class="ci-chip">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
+          {% elif it.id %}<span class="pill pv-done">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
         </div>
       </div>
     </div>

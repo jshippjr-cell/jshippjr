@@ -219,6 +219,16 @@ a{color:inherit;text-decoration:none}
 .src-badge.src-sample,.src-badge.src-demo,.src-badge.src-crawl{background:rgba(84,102,113,.13);color:#3C4D58;border-color:rgba(84,102,113,.3)}
 .pill-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
+/* provenance pills (ux-build-spec §2.2) — every CI value answers "why is this
+   here?" at a glance. pills annotate, never act; orange is never status. */
+.pill.pv-machine{background:var(--panel);color:var(--olive);border-color:var(--border2)}
+.pill.pv-human{background:#fff;color:var(--ink);border-color:var(--border2)}
+.pill.pv-review{background:#FBEFE4;color:#B5500F;border-color:#F2D9C2}
+.pill.pv-conflict{background:#F6E9EB;color:var(--wine);border-color:#E8D3D7}
+.pill.pv-done{background:var(--wine);color:#fff;border-color:var(--wine)}
+.pill.pv-machine,.pill.pv-human,.pill.pv-review,.pill.pv-conflict,.pill.pv-done{
+  transition:background-color var(--t-react) ease,color var(--t-react) ease}
+
 /* alignment bar */
 .align{display:flex;align-items:center;gap:8px}
 .align-track{flex:1;height:6px;background:var(--panel2);border-radius:999px;overflow:hidden;min-width:46px}
