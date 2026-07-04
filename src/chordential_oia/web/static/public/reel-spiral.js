@@ -126,7 +126,9 @@
     } else {
       var idle = hasActive ? 0 : IDLE_SPEED;   // park while a card is active
       t += (velocity + idle) * dt;
-      velocity *= Math.pow(0.12, dt);          // strong frame-rate-independent decay
+      // softer frame-rate-independent decay (~1.7s to fade a flick) — the
+      // glide is what reads as fluid; a hard stop reads as friction
+      velocity *= Math.pow(0.25, dt);
       if (Math.abs(velocity) < 0.001) velocity = 0;
     }
     layout();
@@ -148,8 +150,8 @@
   stage.addEventListener("wheel", function (e) {
     if (hasActive) return;              // parked while a track is popped
     targetT = null;
-    velocity += e.deltaY * 0.006;
-    velocity = Math.max(-6, Math.min(6, velocity));
+    velocity += e.deltaY * 0.010;       // ~1 card of travel per wheel notch
+    velocity = Math.max(-8, Math.min(8, velocity));
   }, { passive: true });
 
   // Drag = travel (touch, and desktop mouse-drag too — it costs nothing).
@@ -163,9 +165,9 @@
     var dt = Math.max(1, now - lastMoveT) / 1000;
     lastMoveT = now;
     // horizontal OR vertical drag both travel the stream (diagonal object)
-    var du = -(dx + dy) * 0.0045;
+    var du = -(dx + dy) * 0.006;
     t += du;
-    velocity = reduceMotion ? 0 : du / dt * 0.35;
+    velocity = reduceMotion ? 0 : du / dt * 0.45;
     targetT = null;
   }
   function onUp() {
