@@ -16,6 +16,18 @@
   padding:10px 12px;font:inherit;min-height:70px;resize:vertical}
 .sim-say textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,103,31,.12)}
 .sim-acts{display:flex;flex-direction:column;gap:8px}
+.mic-btn{display:none;align-items:center;gap:7px;background:var(--white);
+  border:1px solid var(--border2);border-radius:999px;padding:8px 14px;
+  font-size:13px;font-weight:600;cursor:pointer;color:var(--text);
+  transition:border-color var(--t-react) ease,background var(--t-react) ease}
+.mic-btn.available{display:inline-flex}
+.mic-btn .mic-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);flex-shrink:0;
+  transition:background var(--t-react) ease}
+.mic-btn.listening{border-color:var(--wine);background:#F6E9EB;color:var(--wine)}
+.mic-btn.listening .mic-dot{background:var(--wine);animation:mic-pulse 1.2s ease-in-out infinite}
+@keyframes mic-pulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
+@media (prefers-reduced-motion:reduce){.mic-btn.listening .mic-dot{animation:none;opacity:1}}
+.mic-hint{font-size:11px;color:var(--muted2);margin-top:4px}
 .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:10px}
 .sc-check{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);font-size:12.5px}
 .sc-check.ok{border-left:3px solid #2e8b57}
@@ -68,15 +80,81 @@
 
   {% if s['status'] == 'live' %}
   <form class="sim-say" method="post" action="/simulator/{{ s['id'] }}/say">
-    <textarea name="text" placeholder="Your response… (remember: label the objection, ask one clarifying question, then answer)" required autofocus></textarea>
+    <textarea name="text" id="sim-text" placeholder="Your response… (remember: label the objection, ask one clarifying question, then answer)" required autofocus></textarea>
     <div class="sim-acts">
       <button class="btn primary" type="submit">Say it</button>
+      <button class="mic-btn" type="button" id="sim-mic" aria-label="Dictate your response">
+        <span class="mic-dot" aria-hidden="true"></span><span class="mic-label">Speak</span>
+      </button>
     </div>
   </form>
+  <p class="mic-hint" id="sim-mic-hint" hidden>Speak naturally — your words stream into the box;
+    review, then hit “Say it”. Click again to stop.</p>
   <form method="post" action="/simulator/{{ s['id'] }}/end" style="margin-top:10px">
     <button class="btn ghost" type="submit"
       title="End the practice call and get graded">⏹ End call &amp; grade me</button>
   </form>
+
+  <script>
+  // Voice input — browser-native speech recognition (Chrome/Edge/Safari).
+  // Progressive enhancement: the mic button only appears when the API exists
+  // and never replaces typing. Transcription streams into the textarea; the
+  // seller reviews and submits — the human stays in the loop, mis-hearings
+  // never get sent unread.
+  (function () {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var btn = document.getElementById('sim-mic');
+    var box = document.getElementById('sim-text');
+    var hint = document.getElementById('sim-mic-hint');
+    if (!SR || !btn || !box) return;
+    btn.classList.add('available');
+    if (hint) hint.hidden = false;
+
+    var rec = null;
+    var listening = false;
+    var settled = '';          // text finalized so far this dictation
+
+    function setUI(on) {
+      listening = on;
+      btn.classList.toggle('listening', on);
+      btn.querySelector('.mic-label').textContent = on ? 'Listening… tap to stop' : 'Speak';
+    }
+
+    function start() {
+      rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = document.documentElement.lang || 'en-US';
+      settled = box.value ? box.value.replace(/\s*$/, ' ') : '';
+      rec.onresult = function (e) {
+        var interim = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) settled += t.replace(/\s*$/, ' ');
+          else interim += t;
+        }
+        box.value = settled + interim;
+      };
+      rec.onend = function () { setUI(false); box.focus(); };
+      rec.onerror = function (ev) {
+        setUI(false);
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          alert('Microphone access was blocked — allow it in your browser to dictate.');
+        }
+      };
+      try { rec.start(); setUI(true); } catch (e) { setUI(false); }
+    }
+
+    function stop() {
+      if (rec) { try { rec.stop(); } catch (e) {} }
+      setUI(false);
+    }
+
+    btn.addEventListener('click', function () { listening ? stop() : start(); });
+    // submitting while dictating should stop the mic first
+    btn.closest('form').addEventListener('submit', stop);
+  })();
+  </script>
   {% else %}
   <p class="muted small" style="margin-top:12px">This call has ended.
     <a class="link" href="/simulator">Take another →</a></p>
