@@ -2131,6 +2131,9 @@ def discovery_request_submit(opp_id: int, k: str = Form(""), name: str = Form(""
         meeting_scheduler.notify_new_request(db.get_discovery_request(conn, rid), row)
     finally:
         conn.close()
+    # Automated acknowledgment to the client (best-effort, off-thread; no-op until
+    # SMTP is configured) — same confirmation every inbound intake sends.
+    signals.fire_and_forget(mailer.send_intake_ack, email.strip(), name.strip())
     return RedirectResponse(f"/opportunity/{opp_id}/request?k={k}&done=1", status_code=303)
 
 
@@ -3843,7 +3846,16 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
         row = db.get_talent(conn, talent_id)
         t = db.talent_from_row(row) if row is not None else None
         name = t.name if t else "a creator"
-        db.add_update(conn, project_id, f"{name} assigned to {role}.", "assignment")
+        # The assignment IS the broadcast — post a roster line to the crew feed
+        # automatically (no manual "post an update" step). Names the whole team so
+        # everyone on the project sees who they're now working with.
+        crew = db.project_crew(conn, project_id)
+        names = ", ".join(c["name"] for c in crew) or name
+        db.add_update(
+            conn, project_id,
+            f"{name} joined the crew as {role}. Current team: {names}.",
+            "assignment",
+        )
         project = db.get_project(conn, project_id)
     finally:
         conn.close()
@@ -3857,6 +3869,16 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
         mailer.send_email(
             t.email, scope["subject"], scope["body"],
             html=mailer.branded_html(base, scope["body"]),
+        )
+    # Broadcast the new assignment to the rest of the project crew (the new hire
+    # already got the tailored scope email above, so they're excluded here).
+    if project is not None:
+        _notify_assigned_creators(
+            project_id, project,
+            subject=f"New teammate on {project['client']} — {project['need']}",
+            body_text=(f"{name} just joined the crew as {role}. "
+                       f"The full team is now: {names}."),
+            exclude_email=(t.email if t is not None else ""),
         )
     return RedirectResponse(f"/project/{project_id}", status_code=303)
 
@@ -5135,12 +5157,14 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
 
 
 def _notify_assigned_creators(project_id: int, project, *, subject: str,
-                              body_text: str) -> None:
+                              body_text: str, exclude_email: str = "") -> None:
     """Composer-direction notification: email each assigned creator (with an email)
-    when the client acts on their work — approved, or changes requested. Closes the
-    loop the review portal opened: the composer hears the verdict from us instead of
-    Jon relaying it by hand. Best-effort, per creator, never raises. Runs in its own
-    DB connection so it's safe to fire-and-forget off the request thread."""
+    when the client acts on their work — approved, or changes requested. Also used to
+    broadcast a new assignment to the whole project crew. Closes the loop the review
+    portal opened: the composer hears the verdict from us instead of Jon relaying it by
+    hand. ``exclude_email`` skips one recipient (e.g. the just-assigned creator who has
+    already had a tailored email). Best-effort, per creator, never raises. Runs in its
+    own DB connection so it's safe to fire-and-forget off the request thread."""
     conn = db.connect()
     try:
         assignments = db.list_assignments(conn, project_id)
@@ -5150,6 +5174,8 @@ def _notify_assigned_creators(project_id: int, project, *, subject: str,
         return
     base = _public_base()
     seen = set()
+    if exclude_email:
+        seen.add(exclude_email.strip().lower())
     for a in assignments:
         email = (a["talent_email"] or "").strip() if "talent_email" in a.keys() else ""
         if not email or email.lower() in seen:

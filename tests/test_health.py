@@ -35,7 +35,7 @@ def test_get_root_renders_public_home(client):
     # Root is the public marketing site now; the dashboard moved to /dashboard.
     r = client.get("/")
     assert r.status_code == 200
-    assert "Start a project" in r.text
+    assert "Start a conversation" in r.text
 
 
 def test_dashboard_renders_at_dashboard(client):

@@ -49,7 +49,6 @@
       <input id="due" type="date" name="next_action_due" value="{{ row['next_action_due'] or '' }}">
       <button class="btn primary" type="submit">Save outreach</button>
     </form>
-    <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities" style="margin-top:12px;display:inline-block">📄 Capabilities doc →</a>
     <p class="muted small" style="margin-top:10px">
       {% set views = row['first_touch_views'] or 0 %}
       {% if views %}

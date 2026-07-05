@@ -378,18 +378,16 @@ def test_relationship_reflects_outreach_and_wins(client):
     assert "Client" in client.get("/buyers").text
 
 
-def test_opportunity_overview_action_bar(client):
+def test_opportunity_overview_stage_advance(client):
     # Reset to New so the advance button is deterministic (seed may stage opp 1).
     client.post("/opportunity/1/status", data={"status": "New"}, follow_redirects=True)
     page = client.get("/opportunity/1").text
-    # The Overview carries a quick-action bar; the redundant brief/outreach/match
-    # buttons were removed (those live in the subnav now).
-    assert "action-bar" in page
     assert "Plan outreach" not in page  # redundant button removed
-    # A New opportunity offers a one-click advance, pushed to the right
-    # (label relabeled at the view layer: Pursuing → "Reaching out").
+    # Stage advance now lives ONLY in the guided stepper (the redundant action-bar
+    # advance button was removed). New → "Reaching out", shown once.
     assert "Mark Reaching out" in page
-    assert "action-right" in page
+    assert "stepper-acts" in page
+    assert page.count("Mark Reaching out") == 1
 
 
 def test_overview_subnav_order(client):
@@ -600,7 +598,7 @@ def test_milestone_move_auto_broadcasts(client):
     import re
     pid = _win_and_make_project(client, 1)
     page = client.get(f"/project/{pid}").text
-    assert "Activity & broadcast" in page or "Activity &amp; broadcast" in page
+    assert "Crew activity" in page
     mid = re.search(r'name="milestone_id" value="(\d+)"', page).group(1)
     client.post(f"/project/{pid}/milestone/status",
                 data={"milestone_id": mid, "status": "Done"}, follow_redirects=True)
@@ -617,12 +615,14 @@ def test_assign_auto_broadcasts_and_lists_crew(client):
     client.post(f"/project/{pid}/assign",
                 data={"role": "Composer", "talent_id": talent_id}, follow_redirects=True)
     page = client.get(f"/project/{pid}").text
-    assert "assigned to Composer" in page          # auto-broadcast entry
-    assert "Broadcasts to" in page                 # crew recipient line
+    assert "joined the crew as Composer" in page    # auto-broadcast roster entry
+    assert "Auto-broadcasts to" in page             # crew recipient line
     assert name in page
 
 
-def test_manual_broadcast_post(client):
+def test_manual_broadcast_route_still_posts(client):
+    # The manual "Broadcast" box was removed from the UI (assignments/milestones
+    # now auto-broadcast), but the underlying update route stays functional.
     pid = _win_and_make_project(client, 1)
     client.post(f"/project/{pid}/update",
                 data={"body": "Kickoff call Thursday 10am"}, follow_redirects=True)
@@ -751,24 +751,23 @@ def test_incoming_dismiss_lead_sets_status(client):
 # --------------------------------------------------------------------------- #
 # Phase 4 — tab consolidation + stage relabel + the two-list "Today" home.
 # --------------------------------------------------------------------------- #
-def test_today_home_shows_needs_triage(client):
-    # An inbound lead is waiting; the "Today" home surfaces it in Needs triage
-    # with inline Promote/Dismiss, above the qualified Top-targets list.
+def test_today_home_omits_needs_triage(client):
+    # The Needs-triage module was removed from Today (owner request); incoming
+    # leads live on the dedicated /incoming page instead. Top-targets stays.
     _seed_incoming()
     r = client.get("/dashboard")
     assert r.status_code == 200
-    assert "Needs triage" in r.text          # the new first module
-    assert "Brand film" in r.text            # the waiting inbound lead's title
-    assert "Promote" in r.text and "Dismiss" in r.text
-    # Top-targets stays below, qualified-only.
+    assert "Needs triage" not in r.text
     assert "Top targets to pursue" in r.text
+    # The waiting lead still surfaces on the dedicated incoming page.
+    assert "Brand film" in client.get("/incoming").text
 
 
-def test_today_home_triage_empty_state(client):
-    # No leads/signals seeded → a clean all-caught-up state, still renders 200.
+def test_today_home_renders_without_triage(client):
+    # No leads/signals seeded → still renders 200, no triage module.
     r = client.get("/dashboard")
     assert r.status_code == 200
-    assert "Needs triage" in r.text
+    assert "Needs triage" not in r.text
     assert "all caught up" in r.text
 
 

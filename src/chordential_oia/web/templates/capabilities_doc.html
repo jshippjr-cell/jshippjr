@@ -366,7 +366,10 @@
       {{ chip_rail('team') }}
     </section>
 
-    {% if doc.show_examples %}
+    {# Only render when there's real work to show — the brief no longer
+       auto-fills placeholder reels, so a client view with no curated tracks
+       hides this section entirely (edit mode still shows the upload UI). #}
+    {% if doc.show_examples and (edit or doc.relevant_uploads or doc.relevant_links or doc.examples) %}
     <section class="block">
       <h2 class="sec">Relevant work</h2>
 

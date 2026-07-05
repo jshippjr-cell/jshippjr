@@ -125,12 +125,12 @@ def _price_band(est: Estimate) -> tuple:
 
 
 def _relevant_examples(qual: QualificationResult) -> List[WorkExample]:
-    """Showcase reels in scope of the lead — matched on discipline, with a
-    fallback to the full reel so the section is never empty."""
-    wanted = {qual.discipline, *getattr(qual, "secondary_disciplines", [])}
-    matched = [s for s in showcase.SAMPLES if s.discipline in wanted]
-    chosen = matched or list(showcase.SAMPLES)
-    return [WorkExample(s.title, s.blurb, s.client_type, s.placeholder) for s in chosen]
+    """The client-facing Campaign Brief no longer auto-injects placeholder
+    "sample reels" (e.g. the anthem-for-a-national-brand demo card) as if they
+    were relevant work — that read as fabricated. "Relevant work" now carries
+    only the tracks the operator hand-picks for the lead (relevant_links /
+    relevant_uploads). The marketing showcase (showcase.SAMPLES) is unaffected."""
+    return []
 
 
 # The standard delivery outline by discipline — the *types* of assets this craft

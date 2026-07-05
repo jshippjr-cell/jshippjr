@@ -592,35 +592,16 @@ audio.case-player{display:block;width:100%;padding:18px 18px 16px;background:#24
   transform:rotateY(var(--slot-angle,0deg)) translateZ(var(--radius,300px)) scale(.82)
     rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))}
 
-/* ── Curtain reveal (translated from a React/motion CardCurtainReveal
-   component to plain CSS — same clip-path polygons, same 0.4s-in/0.3s-out
-   timings, same overshoot ease). On hover a cream curtain sweeps open from
-   the card's center line; mix-blend-difference inverts the gradient and
-   text beneath it, and the title lifts. Hover-capable pointers only; the
-   old flat darken is retired in its favor. ── */
-.rg-card-curtain{position:absolute;inset:0;pointer-events:none;
-  background:#FCF7F8;mix-blend-mode:difference;
-  clip-path:polygon(50% 0,50% 0,50% 100%,50% 100%);
-  transition:clip-path .3s cubic-bezier(.25,1,.5,1)}
+/* Card hover keeps the simple flat darken (.rg-card::after above) plus the
+   holographic sheen; the "▶ play" affordance stays visible at rest. (An
+   earlier cream curtain-reveal overlay was removed at the owner's request.) */
 @media (hover:hover) and (pointer:fine){
-  .rg-card:hover .rg-card-curtain{
-    clip-path:polygon(0 0,100% 0,100% 100%,0 100%);
-    transition:clip-path .4s cubic-bezier(.25,1.5,.5,1)}
-  /* the "▶ play" affordance arrives WITH the curtain (the component's
-     Description reveal): a center sliver at rest, swept open on hover */
-  .rg-card-kind{clip-path:polygon(50% 0,50% 0,50% 100%,50% 100%);
-    transition:clip-path .3s cubic-bezier(.25,1,.5,1)}
-  .rg-card:hover .rg-card-kind{
-    clip-path:polygon(0 0,100% 0,100% 100%,0 100%);
-    transition:clip-path .4s cubic-bezier(.25,1.5,.5,1)}
-  /* the title lift (the component's Title y-slide, at card scale) */
+  /* the title lifts slightly on hover */
   .rg-card-title{transition:transform .3s ease-out}
   .rg-card:hover .rg-card-title{transform:translateY(-6px)}
-  /* curtain replaces the flat hover darken */
-  .rg-card:hover::after{opacity:0}
 }
 @media (prefers-reduced-motion:reduce){
-  .rg-card-curtain,.rg-card-kind,.rg-card-title{transition:none}
+  .rg-card-title{transition:none}
 }
 
 /* ── Spiral mode (reel-spiral.js) — the helix stream. The engine writes

@@ -152,4 +152,48 @@ def send_email(to: str, subject: str, text: str, html: Optional[str] = None) -> 
         return "error"
 
 
-__all__ = ["send_email", "mail_configured", "PROVIDER_ENV"]
+def _public_base() -> str:
+    """Absolute origin for branded-email assets/links (mirrors the web app's
+    ``CHORDENTIAL_PUBLIC_DOMAIN``); chordential.com by default."""
+    return (os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN")
+            or "https://chordential.com").strip().rstrip("/")
+
+
+def intake_ack_body(name: str) -> tuple:
+    """Subject + plain-text body for the automated acknowledgment sent after ANY
+    inbound client intake (project questionnaire, book-a-call, discovery request).
+    The greeting uses the first name they entered; blank falls back to a warm
+    generic. Copy is fixed by the owner — keep it verbatim."""
+    raw = (name or "").strip()
+    first = raw.split()[0] if raw else "there"
+    subject = "Thanks for reaching out to Chordential"
+    body = (
+        f"Hi {first},\n\n"
+        "Thanks for reaching out. We've received your request and are reviewing "
+        "your project. We'll take a look at what you've shared and follow up with "
+        "the most appropriate next step.\n\n"
+        "If a discovery conversation makes sense, we'll reach out with a few "
+        "proposed meeting times based on our availability.\n\n"
+        "If there's anything else you'd like us to know in the meantime, simply "
+        "reply to this email.\n\n"
+        "We appreciate the opportunity and look forward to connecting.\n\n"
+        "Best,\nJon Shipp"
+    )
+    return subject, body
+
+
+def send_intake_ack(to: str, name: str = "") -> str:
+    """Send the intake acknowledgment to the client. Best-effort, NEVER raises;
+    a no-op (logged) until an SMTP provider is configured, like every seam here.
+    Safe to fire-and-forget off the request thread."""
+    to = (to or "").strip()
+    if not to:
+        return "error"
+    subject, body = intake_ack_body(name)
+    return send_email(to, subject, body, html=branded_html(_public_base(), body))
+
+
+__all__ = [
+    "send_email", "mail_configured", "branded_html",
+    "intake_ack_body", "send_intake_ack", "PROVIDER_ENV",
+]

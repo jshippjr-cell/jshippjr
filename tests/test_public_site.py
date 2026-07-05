@@ -29,7 +29,7 @@ def test_public_home_loads(client):
     r = client.get("/")
     assert r.status_code == 200
     # Hero + the marketing CTAs are present.
-    assert "Start a project" in r.text
+    assert "Start a conversation" in r.text
     assert "Book a call" in r.text
 
 

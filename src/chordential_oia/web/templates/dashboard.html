@@ -57,52 +57,8 @@
 </section>
 {% endif %}
 
-{# ── Needs triage — every new lead/signal, inline Promote/Dismiss (ruling #4) ── #}
-{% set chip = {
-  'Website': ('🌐', 'st-won'),
-  'Crawler': ('🤖', 'st-reviewed'),
-  'Signal':  ('📡', 'st-new'),
-  'Email':   ('✉', '')
-} %}
-<section class="card">
-  <div class="card-head">
-    <h2>📥 Needs triage{% if incoming_total %} <span class="muted small">· {{ incoming_total }} waiting</span>{% endif %}</h2>
-    <a class="link" href="/incoming">View all →</a>
-  </div>
-  {% if incoming %}
-  <div class="no-pad" style="overflow-x:auto">
-  <table class="table compact">
-    <thead><tr><th>Source</th><th>Lead</th><th>Status</th><th style="width:1%">Actions</th></tr></thead>
-    <tbody>
-      {% for r in incoming %}
-      {% set c = chip.get(r['source_chip'], ('•', '')) %}
-      <tr>
-        <td><span class="pill {{ c[1] }}">{{ c[0] }} {{ r['source_chip'] }}</span></td>
-        <td style="max-width:380px;overflow-wrap:anywhere">
-          <div class="strong">{{ r['title'] }}</div>
-          {% if r['subtitle'] %}<div class="muted small">{{ r['subtitle'] }}</div>{% endif %}
-        </td>
-        <td><span class="pill st-{{ r['status']|lower }}">{{ r['status'] }}</span></td>
-        <td>
-          <div class="lead-actions">
-            <form method="post" action="{{ r['promote_url'] }}">
-              <button class="btn tiny primary" type="submit" title="Create an opportunity from this">Promote</button>
-            </form>
-            <form method="post" action="{{ r['dismiss_url'] }}">
-              <input type="hidden" name="status" value="Dismissed">
-              <button class="btn tiny ghost" type="submit">Dismiss</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% else %}
-  <p class="muted">✨ Nothing waiting — you're all caught up.</p>
-  {% endif %}
-</section>
+{# Needs-triage module removed from Today at the owner's request — incoming
+   leads still live on the dedicated /incoming page. #}
 
 <div class="pipeline-grid" data-arrive>
 

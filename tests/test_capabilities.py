@@ -52,11 +52,12 @@ def test_contract_stage_adds_terms_and_docusign():
     assert doc.show_terms is True and doc.show_docusign is True
 
 
-def test_examples_match_discipline_and_nonempty():
+def test_brief_does_not_autoinject_placeholder_reels():
+    # The client-facing brief must not fabricate "relevant work" — the auto
+    # placeholder sample reels (e.g. the national-brand anthem) were removed;
+    # the section is now driven only by operator-curated tracks.
     doc, _ = _doc("New")
-    assert doc.examples, "should always show at least the fallback reel"
-    # a composition lead surfaces the composition reel
-    assert any("Anthem" in e.title for e in doc.examples)
+    assert doc.examples == []
 
 
 def test_manual_toggle_overrides_stage_default():

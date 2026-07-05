@@ -289,6 +289,11 @@ def public_start_submit(
     from . import signals
     signals.fire_and_forget(
         signals.notify_new_lead, company.strip() or contact_name.strip(), "website")
+    # Automated acknowledgment to the client (best-effort, off-thread; a no-op
+    # until SMTP is configured). Confirms we received their request.
+    from .. import mailer
+    signals.fire_and_forget(
+        mailer.send_intake_ack, contact_email.strip(), contact_name.strip())
     # The indicative band is stored on the lead for the internal quoted-vs-won
     # moat, but is NOT shown back to the client — quoting a range at intake reads
     # as untactful (founder call). So the thank-you response carries no price.
@@ -341,6 +346,10 @@ def public_book_submit(
     from . import signals
     signals.fire_and_forget(
         signals.notify_new_lead, company.strip() or contact_name.strip(), "website")
+    # Automated acknowledgment to the client (best-effort, off-thread).
+    from .. import mailer
+    signals.fire_and_forget(
+        mailer.send_intake_ack, contact_email.strip(), contact_name.strip())
     return RedirectResponse("/thanks?kind=call", status_code=303)
 
 

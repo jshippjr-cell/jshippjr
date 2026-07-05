@@ -34,6 +34,7 @@
        Intelligence — the deliverable we send to agencies. Primary CTA, upper-right;
        Schedule Discovery rides next to it (opens in the drawer) when no call exists. #}
     <div class="detail-cta">
+      {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
       {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
       <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     </div>
@@ -167,6 +168,10 @@
   </div>
 </section>
 {% endif %}
+
+{# Opportunity tabs (Overview / Outreach / …) sit above Campaign Intelligence
+   so navigation is reachable before the long living record. #}
+{{ opp_subnav(row, 'overview') }}
 
 {# ── Campaign Intake — "Update Intelligence" (ADR-0013): born on and anchored to the
    opportunity, above the Opportunity section + tabs. The living source of truth. ── #}
@@ -331,18 +336,13 @@
 </section>
 {% endif %}
 
-{{ opp_subnav(row, 'overview') }}
-
+{# Stage advance lives in the stepper above (single source); the action bar
+   only carries the project shortcut now. #}
+{% if project_id %}
 <div class="action-bar">
-  {% if project_id %}<a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
-  {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">↗ Original posting</a>{% endif %}
-  {% if next_status %}
-  <form method="post" action="/opportunity/{{ row['id'] }}/status" class="action-right">
-    <input type="hidden" name="status" value="{{ next_status }}">
-    <button class="btn" type="submit">→ Mark {{ stage_label(next_status) }}</button>
-  </form>
-  {% endif %}
+  <a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>
 </div>
+{% endif %}
 
 {% if sv.callout and row['qualified'] %}
 <div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>

@@ -163,3 +163,42 @@ def test_branded_html_strips_trailing_slash_from_base_url():
     out = mailer_mod.branded_html("https://chordential.com/", "Hi.")
     assert "https://chordential.com/static/public/wordmark-dark.png" in out
     assert "chordential.com//static" not in out
+
+
+# --------------------------------------------------------------------------- #
+# Intake acknowledgment — the automated "thanks for reaching out" every inbound
+# client intake (questionnaire, book-a-call, discovery request) fires.
+# --------------------------------------------------------------------------- #
+def test_intake_ack_body_uses_first_name_and_fixed_copy():
+    subject, body = mailer_mod.intake_ack_body("Dana Reyes")
+    assert subject == "Thanks for reaching out to Chordential"
+    assert body.startswith("Hi Dana,")           # first name only
+    assert "We've received your request" in body
+    assert "a few proposed meeting times" in body
+    assert body.rstrip().endswith("Best,\nJon Shipp")
+
+
+def test_intake_ack_body_falls_back_when_name_blank():
+    _subject, body = mailer_mod.intake_ack_body("")
+    assert body.startswith("Hi there,")
+
+
+def test_send_intake_ack_is_noop_but_logged_by_default(monkeypatch):
+    m = _reload(monkeypatch, {})                  # null provider
+    assert m.send_intake_ack("dana@agency.com", "Dana") == "logged"
+    assert m.send_intake_ack("", "Dana") == "error"   # no recipient
+
+
+def test_send_intake_ack_delivers_when_configured(monkeypatch):
+    m = _reload(monkeypatch, {})
+    sent = {}
+
+    def fake_send(to, subject, text, html=None):
+        sent.update(to=to, subject=subject, text=text, html=html)
+        return "sent"
+
+    monkeypatch.setattr(m, "send_email", fake_send)
+    assert m.send_intake_ack("dana@agency.com", "Dana Reyes") == "sent"
+    assert sent["to"] == "dana@agency.com"
+    assert sent["subject"] == "Thanks for reaching out to Chordential"
+    assert sent["html"] and "wordmark-dark.png" in sent["html"]
