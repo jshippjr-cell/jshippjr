@@ -475,3 +475,114 @@ def harvest_objections(conn: sqlite3.Connection, text: str, *,
             capture_id=capture_id)
         count += 1
     return count
+
+
+# ---------------------------------------------------------------------------- #
+# Coaching — the "suggested answer" next to each buyer turn after a call ends.
+# The trainee attempts their own answer live; on end-of-call they see, per
+# objection, the proven APPROACH (from the library, always) plus a concrete
+# model LINE (LLM seam, when configured). Deterministic-first: the approach
+# is always available offline; the model line is polish.
+# ---------------------------------------------------------------------------- #
+_GENERIC_APPROACH = (
+    "Pause. Label what you heard (\"sounds like…\"), ask one clarifying question, then "
+    "answer with a concrete specific — a number, a document, or a named mechanism, not an "
+    "adjective. Concede any true limitation before differentiating.")
+
+
+def _keyword_overlap(a: str, b: str) -> float:
+    aw = set(re.findall(r"[a-z]{4,}", (a or "").lower()))
+    bw = set(re.findall(r"[a-z]{4,}", (b or "").lower()))
+    if not aw or not bw:
+        return 0.0
+    return len(aw & bw) / len(aw | bw)
+
+
+def match_objection(conn: sqlite3.Connection, text: str):
+    """Best-effort match of free buyer text (AI mode / the opener) to a confirmed
+    library objection, by keyword overlap. Returns the row or None below threshold —
+    never a bad match dressed up as a good one."""
+    best, score = None, 0.0
+    for r in db.list_objections(conn, status="confirmed"):
+        s = _keyword_overlap(text, r["objection"])
+        if s > score:
+            best, score = r, s
+    return best if score >= 0.18 else None
+
+
+def _build_examples_prompt(pairs: List) -> str:
+    items = "\n".join(
+        f'{i + 1}. Buyer said: "{o}"\n   Proven approach: {a}'
+        for i, (o, a) in enumerate(pairs))
+    return f"""You are coaching a Chordential seller (clearance-certified, human-composed
+original music for ad agencies/brands; $4k-$90k; one signature = master+publishing worldwide
+perpetual; stems, cutdowns, rights docs; guaranteed no AI audio).
+
+For each buyer objection below, write ONE model response line the seller could say OUT LOUD —
+concrete, honest, under 55 words, in the spirit of the given approach. Use real specifics
+(numbers, documents, named mechanisms); never vague adjectives; never fabricate a client story.
+
+{items}
+
+Return a JSON array of exactly {len(pairs)} strings, in order — just the model lines, nothing else."""
+
+
+def _default_examples_llm(pairs: List) -> Optional[List[str]]:  # pragma: no cover - networked
+    """Model example lines for each (objection, approach) pair. Off unless the seam
+    is configured; returns None to fall back to approach-only coaching."""
+    if os.environ.get("CHORDENTIAL_SIM_LLM", "1").strip().lower() in (
+            "0", "false", "off", "no", ""):
+        return None
+    if not os.environ.get("ANTHROPIC_API_KEY") or not pairs:
+        return None
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+        model = os.environ.get("CHORDENTIAL_INTAKE_MODEL") or "claude-sonnet-5"
+        resp = client.messages.create(
+            model=model, max_tokens=1200,
+            messages=[{"role": "user", "content": _build_examples_prompt(pairs)}])
+        raw = next((b.text for b in resp.content if b.type == "text"), "")
+        start, end = raw.find("["), raw.rfind("]")
+        if start < 0 or end <= start:
+            return None
+        data = json.loads(raw[start:end + 1])
+        if isinstance(data, list) and len(data) == len(pairs):
+            return [str(x) for x in data]
+        return None
+    except Exception:  # noqa: BLE001 — coaching must never break the end-of-call view
+        return None
+
+
+def coach_turns(conn: sqlite3.Connection, transcript: List[Dict], *,
+                llm: Optional[LLM] = None) -> List[Dict]:
+    """For every buyer turn, the suggested answer: the proven approach (matched by
+    objection_id, else by keyword, else generic) plus — when the seam is on — a
+    concrete model line. One batched LLM call for the whole call, so ending a call
+    stays fast. Returns [{idx, approach, family, result, example}, …]."""
+    entries = []
+    for i, turn in enumerate(transcript):
+        if turn.get("who") != "buyer":
+            continue
+        row = None
+        oid = turn.get("objection_id")
+        if oid:
+            row = db.get_objection(conn, int(oid))
+        if row is None:
+            row = match_objection(conn, turn.get("text", ""))
+        if row is None:
+            approach, family, result = _GENERIC_APPROACH, "", ""
+        else:
+            approach = row["response_pattern"] or _GENERIC_APPROACH
+            family = FAMILIES.get(row["family"], row["family"])
+            result = row["result"] or ""
+        entries.append({"idx": i, "text": turn.get("text", ""),
+                        "approach": approach, "family": family, "result": result,
+                        "example": ""})
+    if entries:
+        fn = llm if llm is not None else _default_examples_llm
+        examples = fn([(e["text"], e["approach"]) for e in entries])
+        if examples and len(examples) == len(entries):
+            for e, ex in zip(entries, examples):
+                e["example"] = ex
+    return entries

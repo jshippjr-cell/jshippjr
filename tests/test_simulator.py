@@ -226,3 +226,88 @@ def test_transcript_ingest_harvests_into_the_library(tmp_path, monkeypatch):
     assert proposed[0]["source"] == "transcript"
     assert proposed[0]["capture_id"] is not None    # provenance to the real call
     conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Coaching — the "suggested answer" next to each buyer turn after a call ends
+# --------------------------------------------------------------------------- #
+def test_coach_uses_library_approach_for_a_scripted_objection(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    from chordential_oia.web import simulator
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    simulator.seed_objections(conn)
+    oid = app_mod.db.list_objections(conn, status="confirmed")[0]["id"]
+    row = app_mod.db.get_objection(conn, oid)
+    transcript = [
+        {"who": "buyer", "text": row["objection"], "objection_id": oid},
+        {"who": "seller", "text": "my answer"},
+    ]
+    coaching = simulator.coach_turns(conn, transcript)      # no LLM (no key)
+    assert len(coaching) == 1
+    assert coaching[0]["idx"] == 0
+    assert coaching[0]["approach"] == row["response_pattern"]   # the proven approach
+    assert coaching[0]["family"]                               # a readable family label
+    assert coaching[0]["example"] == ""                       # no model line offline
+    conn.close()
+
+
+def test_coach_matches_free_ai_text_by_keyword(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    from chordential_oia.web import simulator
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    simulator.seed_objections(conn)
+    # an AI-mode buyer line (no objection_id) that echoes the stock-price objection
+    transcript = [{"who": "buyer",
+                   "text": "honestly stock music is basically free, why would we pay you thousands"}]
+    coaching = simulator.coach_turns(conn, transcript)
+    assert coaching[0]["approach"] != simulator._GENERIC_APPROACH   # matched a real one
+    assert "exclusivity" in coaching[0]["approach"].lower() or coaching[0]["family"]
+    conn.close()
+
+
+def test_coach_falls_back_to_generic_when_nothing_matches(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    from chordential_oia.web import simulator
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    simulator.seed_objections(conn)
+    transcript = [{"who": "buyer", "text": "the weather is lovely today isn't it"}]
+    coaching = simulator.coach_turns(conn, transcript)
+    assert coaching[0]["approach"] == simulator._GENERIC_APPROACH
+    conn.close()
+
+
+def test_coach_example_line_uses_the_llm_seam_when_provided(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    from chordential_oia.web import simulator
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    simulator.seed_objections(conn)
+    oid = app_mod.db.list_objections(conn, status="confirmed")[0]["id"]
+    transcript = [{"who": "buyer", "text": "pushback", "objection_id": oid}]
+
+    def fake_examples(pairs):
+        assert len(pairs) == 1                     # one batched call
+        return ["Totally fair — here's the specific paperwork that answers it."]
+
+    coaching = simulator.coach_turns(conn, transcript, llm=fake_examples)
+    assert coaching[0]["example"].startswith("Totally fair")
+    conn.close()
+
+
+def test_end_call_renders_suggested_answers(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    with TestClient(app_mod.app) as c:
+        r = c.post("/simulator/start", data={"persona": "incumbent_ep"},
+                   follow_redirects=False)
+        sid = r.headers["location"].rstrip("/").split("/")[-1]
+        c.post(f"/simulator/{sid}/say", data={"text": "How do you make music today?"})
+        # before ending: no suggested answers yet
+        assert "Suggested answer" not in c.get(f"/simulator/{sid}").text
+        c.post(f"/simulator/{sid}/end")
+        page = c.get(f"/simulator/{sid}").text
+        assert "Suggested answer" in page          # coaching now shown
+        assert "Approach:" in page
+        conn = app_mod.db.connect()
+        card = app_mod.db.get_sim_session(conn, int(sid))["scorecard_json"]
+        import json as _j
+        assert _j.loads(card).get("coaching")       # persisted with the scorecard
+        conn.close()

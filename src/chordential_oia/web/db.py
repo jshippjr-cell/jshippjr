@@ -4993,6 +4993,10 @@ def list_objections(conn: sqlite3.Connection, *, status: Optional[str] = None,
     return conn.execute(q, args).fetchall()
 
 
+def get_objection(conn: sqlite3.Connection, objection_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM objections WHERE id = ?", (objection_id,)).fetchone()
+
+
 def set_objection_status(conn: sqlite3.Connection, objection_id: int, status: str) -> None:
     if status not in ("proposed", "confirmed", "retired"):
         return

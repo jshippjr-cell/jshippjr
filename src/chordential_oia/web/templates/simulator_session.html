@@ -35,6 +35,19 @@
 .sc-check .rule{font-weight:650}
 .sc-check .note{color:var(--muted);font-size:11.5px;margin-top:2px}
 .sc-score{font-size:34px;font-weight:800;letter-spacing:-1px;color:var(--wine)}
+/* suggested-answer coaching, shown under each buyer turn after the call ends */
+.coach{align-self:flex-start;max-width:82%;margin:-4px 0 8px;padding:10px 13px;
+  background:var(--cream);border:1px solid var(--border);border-left:3px solid var(--orange);
+  border-radius:0 12px 12px 12px;font-size:12.5px}
+.coach-head{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--olive);margin-bottom:6px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.coach-fam{color:var(--wine)}
+.coach-result{padding:1px 7px;border-radius:999px;background:#fff;border:1px solid var(--border2);color:var(--muted)}
+.coach-result.yes{background:#eaf5ea;color:#2f6a34;border-color:#cfe6cf}
+.coach-result.partial{background:#fdf1e3;color:#9a5a1a;border-color:#f0dcbc}
+.coach-example{font-style:italic;color:var(--ink);margin-bottom:6px;line-height:1.55}
+.coach-approach{color:var(--muted);line-height:1.5}
+.coach-approach .lbl{font-weight:700;color:var(--olive);font-style:normal}
 </style>
 
 <div class="card contact-card">
@@ -69,12 +82,27 @@
 <section class="card">
   <div class="card-head"><h2>The call</h2>
     <span class="muted small">Say what you'd actually say — the buyer answers.</span></div>
+  {% if scorecard and coaching %}
+  <p class="muted small" style="margin:-4px 0 12px">💡 Suggested answers appear under each buyer
+    turn — study how a top seller would have handled the ones you faced.</p>
+  {% endif %}
   <div class="simchat">
     {% for t in transcript %}
     <div class="turn {{ t.who }}">
       <div class="who">{{ 'Buyer' if t.who == 'buyer' else 'You' }}</div>
       {{ t.text }}
     </div>
+    {% if scorecard and coaching and loop.index0 in coaching %}
+    {% set co = coaching[loop.index0] %}
+    <div class="coach">
+      <div class="coach-head">💡 Suggested answer
+        {% if co.family %}· <span class="coach-fam">{{ co.family }}</span>{% endif %}
+        {% if co.result %}· <span class="coach-result {{ co.result }}">landed: {{ co.result }}</span>{% endif %}
+      </div>
+      {% if co.example %}<div class="coach-example">“{{ co.example }}”</div>{% endif %}
+      <div class="coach-approach"><span class="lbl">Approach:</span> {{ co.approach }}</div>
+    </div>
+    {% endif %}
     {% endfor %}
   </div>
 

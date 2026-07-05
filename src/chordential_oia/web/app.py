@@ -6004,9 +6004,12 @@ def simulator_session(request: Request, session_id: int):
             return RedirectResponse("/simulator", status_code=303)
         transcript = json.loads(s["transcript_json"] or "[]")
         scorecard = json.loads(s["scorecard_json"]) if s["scorecard_json"] else None
+        coaching = {}
+        if scorecard and scorecard.get("coaching"):
+            coaching = {c["idx"]: c for c in scorecard["coaching"]}
         return render(request, "simulator_session.html", nav="simulator",
                       s=s, persona=simulator.PERSONAS.get(s["persona"], {}),
-                      transcript=transcript, scorecard=scorecard)
+                      transcript=transcript, scorecard=scorecard, coaching=coaching)
     finally:
         conn.close()
 
@@ -6023,7 +6026,10 @@ def simulator_say(session_id: int, text: str = Form(...)):
         db.update_sim_session(conn, session_id, transcript_json=json.dumps(transcript))
         s = db.get_sim_session(conn, session_id)
         reply = simulator.buyer_reply(conn, s)
-        transcript.append({"who": "buyer", "text": reply["text"]})
+        buyer_turn = {"who": "buyer", "text": reply["text"]}
+        if reply.get("objection_id"):
+            buyer_turn["objection_id"] = reply["objection_id"]
+        transcript.append(buyer_turn)
         used = json.loads(s["objections_used"] or "[]")
         if reply.get("objection_id"):
             used.append(reply["objection_id"])
@@ -6044,6 +6050,7 @@ def simulator_end(session_id: int):
         transcript = json.loads(s["transcript_json"] or "[]")
         used = json.loads(s["objections_used"] or "[]")
         card = simulator.grade(transcript, used)
+        card["coaching"] = simulator.coach_turns(conn, transcript)
         from datetime import datetime, timezone
         db.update_sim_session(conn, session_id, status="ended",
                               scorecard_json=json.dumps(card),
