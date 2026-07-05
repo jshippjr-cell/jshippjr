@@ -142,9 +142,12 @@ def send_email(to: str, subject: str, text: str, html: Optional[str] = None) -> 
     if not to:
         return "error"
     try:
-        if _provider() == "smtp":
+        # Gate on the FULL config (provider + host + from), not just the provider
+        # switch: a half-set env (e.g. provider=smtp but no host yet) must be a
+        # clean no-op, never a blind connection attempt that could hang.
+        if mail_configured():
             return _send_smtp(to, subject, text, html)
-        # Null provider (default): log the intent, send nothing.
+        # Null / unconfigured provider (default): log the intent, send nothing.
         logger.info("mailer(null): would send to=%s subject=%r", to, subject)
         return "logged"
     except Exception:  # noqa: BLE001 — defensive; send_email must never raise

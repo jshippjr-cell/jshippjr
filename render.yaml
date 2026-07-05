@@ -56,6 +56,31 @@ services:
       # and subject are set in the Render dashboard (the private key is a secret),
       # NOT committed here: CHORDENTIAL_VAPID_PUBLIC, CHORDENTIAL_VAPID_PRIVATE,
       # CHORDENTIAL_VAPID_SUBJECT (a mailto:). Optional: CHORDENTIAL_DISCOVERY_CALL_URL.
+      #
+      # ── Outbound email (transactional) ──────────────────────────────────────
+      # Powers every outbound send: the website-intake acknowledgment, outreach
+      # "Send now", crew broadcasts, and recruiting invites. Until these are set
+      # the mailer is a safe no-op (logs intent, sends nothing) — mail_configured()
+      # needs provider=smtp AND host AND from before anything leaves the server.
+      #
+      # Recommended: a transactional provider (Postmark / Resend / SendGrid) over
+      # its SMTP endpoint, with SPF/DKIM on chordential.com so mail lands in the
+      # inbox, not spam. Set the four secrets (HOST/USER/PASS/FROM) in the Render
+      # dashboard, then flip PROVIDER to "smtp" LAST to turn sending on.
+      # These declarations carry no values — sync:false means "managed in the
+      # dashboard, never synced from git" (no secret ever lives in the repo).
+      - key: CHORDENTIAL_MAIL_PROVIDER   # set to "smtp" to enable sending
+        sync: false
+      - key: CHORDENTIAL_SMTP_HOST       # e.g. smtp.postmarkapp.com / smtp.resend.com
+        sync: false
+      - key: CHORDENTIAL_SMTP_PORT
+        value: "587"
+      - key: CHORDENTIAL_SMTP_USER       # provider's SMTP username / API-key id
+        sync: false
+      - key: CHORDENTIAL_SMTP_PASS       # provider's SMTP password / API key (secret)
+        sync: false
+      - key: CHORDENTIAL_SMTP_FROM       # verified sender, e.g. hello@chordential.com
+        sync: false
     # ⚠️ ZERO-DOWNTIME CUTOVER: this disk is what blocks zero-downtime deploys
     # (single-attach). At cutover, REMOVE this disk block and the CHORDENTIAL_DB
     # value above, add a Render Postgres `databases:` block + a fromDatabase env,
