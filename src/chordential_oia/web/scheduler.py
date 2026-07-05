@@ -365,6 +365,16 @@ def _run_one_supervised(conn, action: str, agency_id: int, timeout: int,
     whenever the worker doesn't exit cleanly, not just on a hang."""
     spec = {"action": action, "agency_id": agency_id, "reset": reset}
     args = [sys.executable, "-m", "chordential_oia.web._enrich_worker", json.dumps(spec)]
+    # WRITE-AHEAD failure mark: if the whole INSTANCE dies mid-run (observed live —
+    # a worker OOM'd the box on one agency's huge page), no code survives to mark
+    # this agency, and the queue re-picks the SAME row on restart: a crash loop on
+    # one bad site every cycle. So assume failure BEFORE spawning; a worker that
+    # finishes cleanly overwrites this mark with its real result.
+    if on_timeout:
+        try:
+            on_timeout(conn, agency_id)
+        except Exception:
+            pass
     try:
         proc = subprocess.Popen(args, env=dict(os.environ))
     except Exception as e:

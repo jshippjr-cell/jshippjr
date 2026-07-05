@@ -28,6 +28,7 @@ offline). The engine is deterministic: same site in, same profile out.
 from __future__ import annotations
 
 import html as _html
+import os
 import re
 import time
 import urllib.request
@@ -586,12 +587,33 @@ MICRO_AGENTS: List[_Agent] = [
 # --------------------------------------------------------------------------- #
 # Default fetcher (network only when scraping is enabled)
 # --------------------------------------------------------------------------- #
+# One unbounded resp.read() OOM-killed the production instance (a single huge/
+# streaming response on one agency's site ballooned the worker past the box's
+# 512MB). Pages worth parsing for people/links are small; anything bigger is
+# capped mid-stream and anything binary is skipped outright.
+_FETCH_MAX_BYTES = max(256_000, int(os.environ.get("CHORDENTIAL_FETCH_MAX_BYTES",
+                                                   str(3 * 1024 * 1024))))
+_BINARY_CTYPES = ("application/pdf", "application/zip", "application/octet-stream",
+                  "image/", "video/", "audio/", "font/")
+
+
 def _default_fetch(url: str, timeout: float = 15.0) -> Tuple[str, bool]:
     req = urllib.request.Request(url, headers=_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            ctype = (resp.headers.get_content_type() or "").lower()
+            if any(ctype.startswith(b) for b in _BINARY_CTYPES):
+                return "", False                   # not a page — nothing to parse
             charset = resp.headers.get_content_charset() or "utf-8"
-            return resp.read().decode(charset, errors="replace"), True
+            chunks, total = [], 0
+            while total < _FETCH_MAX_BYTES:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+            # capped: keep what we have — truncated HTML still parses fine
+            return b"".join(chunks).decode(charset, errors="replace"), True
     except Exception:
         return "", False
 

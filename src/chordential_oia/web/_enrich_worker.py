@@ -20,6 +20,18 @@ import json
 import os
 import sys
 
+# Memory ceiling: this worker parses arbitrary web pages, and one runaway
+# allocation must kill THIS process, not the 512MB instance it shares with the
+# web server (an instance-level OOM takes the whole site down — observed live).
+# RLIMIT_AS makes a runaway die here as MemoryError -> non-zero exit, which the
+# supervisor already handles by marking the agency and moving on.
+try:  # pragma: no cover - platform-dependent
+    import resource
+    _cap_mb = max(128, int(os.environ.get("CHORDENTIAL_WORKER_MAX_MB", "320")))
+    resource.setrlimit(resource.RLIMIT_AS, (_cap_mb * 1024 * 1024,) * 2)
+except Exception:  # noqa: BLE001 — best-effort; absent on non-POSIX
+    pass
+
 from . import db
 
 
