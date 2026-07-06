@@ -208,36 +208,48 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   transition:transform var(--b8) cubic-bezier(.19,1,.22,1), filter var(--b8) ease}
 .reelteaser canvas:hover{transform:translateY(-5px) scale(1.015) perspective(800px) rotateX(2deg);
   filter:drop-shadow(0 18px 30px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(228,103,31,.25))}
-/* the listening room — the card lifts off the desk; the room stays behind */
-.lroom{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;
-  background:rgba(12,9,11,.55);backdrop-filter:blur(7px);
-  opacity:0;pointer-events:none;transition:opacity .45s ease}
+/* the capability demonstration — a card from the reel comes forward and opens.
+   Warm paper on the dark room; authored motion, no bounce. */
+.lroom{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;
+  background:rgba(12,9,11,.6);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity .5s ease}
 .lroom.open{opacity:1;pointer-events:auto}
-.lcard{width:min(520px,94vw);border-radius:18px;overflow:hidden;position:relative;
-  background:linear-gradient(165deg,#2a2125,#191316);border:1px solid rgba(243,176,116,.35);
-  box-shadow:0 50px 120px rgba(0,0,0,.7), 0 0 80px rgba(228,103,31,.18);
-  transform:scale(.62) translateY(60px);transition:transform .6s cubic-bezier(.34,1.3,.64,1)}
-.lroom.open .lcard{transform:none}
-.lart{height:200px;display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(90% 130% at 50% 0%, rgba(228,103,31,.28), transparent 60%)}
-.lart .lw{display:flex;gap:2.5px;height:90px;align-items:center;width:78%}
-.lart .lw i{flex:1;border-radius:2px;background:var(--amber);opacity:.9}
-.lroom.playing .lart .lw i{animation:wb 1.1s ease-in-out infinite}
-.lmeta{padding:16px 20px 12px}
-.lmeta .lt{font-family:var(--serif);font-size:19px;color:#fff}
-.lmeta .ls{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);margin-top:5px}
-.ldock{display:flex;align-items:center;gap:12px;padding:12px 20px 16px;border-top:1px solid rgba(216,205,182,.14)}
-.lplay{width:42px;height:42px;border-radius:50%;border:0;cursor:pointer;flex:none;color:#fff;font-size:14px;
+.lcard{width:min(860px,92vw);max-height:86vh;display:flex;flex-direction:column;
+  border-radius:16px;overflow:hidden;position:relative;
+  background:linear-gradient(170deg,#FCF7F8,#F1E9DD);color:#1F1E1E;
+  border:1px solid rgba(243,176,116,.4);
+  box-shadow:0 60px 140px rgba(0,0,0,.75), 0 0 90px rgba(228,103,31,.15);
+  transform:translateY(46px) scale(.94);opacity:.6;
+  transition:transform .65s cubic-bezier(.22,1,.36,1), opacity .5s ease}
+.lroom.open .lcard{transform:none;opacity:1}
+.lbody{overflow-y:auto;padding:26px 32px 18px}
+.lkick{font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#9a5a1a}
+.lt{font-family:var(--serif);font-size:clamp(22px,3.4vw,30px);color:#44161E;margin-top:6px;line-height:1.1}
+.lcat{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#737469;margin-top:6px}
+.lsec{margin-top:18px}
+.lsec .lsk{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#9a5a1a}
+.lsec p{margin:6px 0 0;font-size:13.5px;color:#3a3735;line-height:1.6;max-width:62ch}
+.lchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.lchips span{font-size:11.5px;font-weight:600;color:#44161E;
+  background:rgba(228,103,31,.08);border:1px solid rgba(228,103,31,.3);
+  border-radius:999px;padding:4px 11px}
+.lnext{display:inline-block;margin:20px 0 6px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:#9a5a1a;cursor:pointer;
+  background:none;border:0;padding:0}
+.lnext:hover{color:var(--ember)}
+.ldock{display:flex;align-items:center;gap:12px;padding:14px 22px;flex:none;
+  background:rgba(31,30,30,.95);border-top:1px solid rgba(216,205,182,.2)}
+.ldock .lw{display:flex;gap:2px;height:26px;align-items:center;flex:1;max-width:120px}
+.ldock .lw i{flex:1;border-radius:1px;background:var(--amber);opacity:.85}
+.lroom.playing .ldock .lw i{animation:wb 1.1s ease-in-out infinite}
+.lplay{width:40px;height:40px;border-radius:50%;border:0;cursor:pointer;flex:none;color:#fff;font-size:13px;
   background:radial-gradient(120% 120% at 30% 20%,#F3B183,var(--ember));
   box-shadow:0 6px 16px rgba(228,103,31,.35)}
-.lbar{flex:1;height:4px;border-radius:3px;background:rgba(216,205,182,.18);overflow:hidden;cursor:pointer}
+.lbar{flex:2;height:4px;border-radius:3px;background:rgba(216,205,182,.2);overflow:hidden;cursor:pointer}
 .lbar i{display:block;height:100%;width:0;background:var(--ember)}
-.ltime{font-family:var(--mono);font-size:10.5px;color:var(--olive);font-variant-numeric:tabular-nums}
-.lclose{position:absolute;right:12px;top:10px;background:none;border:0;color:var(--sand);
-  font-size:18px;cursor:pointer;padding:6px;line-height:1}
-.reelteaser .rt{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--olive);margin-top:4px}
-.reelteaser .rt a{color:var(--amber);text-decoration:none}
+.ltime{font-family:var(--mono);font-size:10.5px;color:var(--sand);font-variant-numeric:tabular-nums}
+.lclose{position:absolute;right:12px;top:10px;background:none;border:0;color:#737469;
+  font-size:18px;cursor:pointer;padding:6px;line-height:1;z-index:2}
 
 /* the client's folder */
 .folder{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%) translateY(30px);
@@ -333,18 +345,26 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
       <div class="rt"><a href="/reel">hear the work — open the reel →</a></div>
     </div>
   </div>
-  <div class="lroom" id="lroom" role="dialog" aria-modal="true" aria-label="Listening room">
+  <div class="lroom" id="lroom" role="dialog" aria-modal="true" aria-label="Capability demonstration">
     <div class="lcard">
       <button class="lclose" id="lclose" aria-label="Put it back">✕</button>
-      <div class="lart"><div class="lw" id="lwave"></div></div>
-      <div class="lmeta"><div class="lt">AURORA — Summer Anthem</div>
-        <div class="ls">:60 master · capability demo · cleared worldwide</div></div>
+      <div class="lbody">
+        <div class="lkick">Capability demonstration</div>
+        <div class="lt" id="dt"></div>
+        <div class="lcat" id="dcat"></div>
+        <div class="lsec"><div class="lsk">Creative challenge</div><p id="dch"></p></div>
+        <div class="lsec"><div class="lsk">Our interpretation</div><p id="din"></p></div>
+        <div class="lsec"><div class="lsk">Musical approach</div><p id="dap"></p></div>
+        <div class="lsec"><div class="lsk">What this demonstrates</div><div class="lchips" id="ddm"></div></div>
+        <button class="lnext" id="dnext">Listen to another demonstration →</button>
+      </div>
       <div class="ldock">
-        <button class="lplay" id="lplay" aria-label="Play">▶</button>
+        <button class="lplay" id="lplay" aria-label="Pause">❚❚</button>
+        <div class="lw" id="lwave"></div>
         <div class="lbar" id="lbar"><i id="lfill"></i></div>
         <span class="ltime" id="ltime">0:00</span>
       </div>
-      <audio id="laudio" preload="none" src="/static/public/demo-anthem.mp3"></audio>
+      <audio id="laudio" preload="none"></audio>
     </div>
   </div>
   <div class="caption" id="caption">
@@ -622,25 +642,96 @@ window.CH=(function(){
     c.addEventListener('click',function(){window.lroomOpen();});
   })();
 
-  /* the listening room — lift, listen, put it back */
+  /* THE DEMONSTRATION LIBRARY — ten fictional creative scenarios, each built
+     to demonstrate a capability. No clients, no invented results — "imagine we
+     were handed this creative challenge." */
+  var DEMOS=[
+    {t:'Holiday Retail Anthem',c:'Campaign Music',src:'demo-retail-anthem.mp3',
+     ch:'Create original campaign music capable of carrying a premium holiday campaign without relying on cliché seasonal music.',
+     iv:'Warmth should come from orchestration rather than holiday references.',
+     ap:'Contemporary strings, piano, restrained brass, organic percussion.',
+     dm:['Original Composition','Campaign Themes','Orchestration','Broadcast Delivery','Campaign Adaptability']},
+    {t:'Luxury Automotive Launch',c:'Brand Anthem',src:'demo-anthem.mp3',
+     ch:'Communicate precision engineering and premium craftsmanship through music.',
+     iv:'Luxury is confidence, not aggression.',
+     ap:'Hybrid orchestra, analog synth, large brass, controlled dynamics.',
+     dm:['Hybrid Composition','Automotive Branding','Campaign Themes','Premium Sound Design']},
+    {t:'Healthcare Brand Film',c:'Narrative Score',src:'demo-holiday-strings.mp3',
+     ch:'Support emotionally authentic documentary storytelling.',
+     iv:'Music should support people rather than manipulate emotion.',
+     ap:'Solo piano, strings, woodwinds, ambient textures.',
+     dm:['Narrative Scoring','Healthcare Campaigns','Emotional Storytelling','Broadcast Mixing']},
+    {t:'Technology Product Reveal',c:'Launch Campaign',src:'demo-title-sequence.mp3',
+     ch:'Create launch music that feels innovative while remaining human.',
+     iv:'Technology should inspire curiosity.',
+     ap:'Electronic textures, minimal orchestra, pulse, atmosphere.',
+     dm:['Technology Branding','Hybrid Scoring','Launch Films','Motion Graphics']},
+    {t:'Podcast Network Identity',c:'Sonic Branding',src:'demo-financial-theme.mp3',
+     ch:'Create a recognizable sonic identity for an entire podcast network.',
+     iv:'Recognition comes through memorable simplicity.',
+     ap:'Short motifs, an audio logo, organic instrumentation.',
+     dm:['Sonic Branding','Podcast Themes','Audio Logos','Brand Systems']},
+    {t:'Sports Campaign',c:'Campaign Score',src:'demo-anthem.mp3',
+     ch:'Capture determination without becoming trailer music.',
+     iv:'Momentum over aggression.',
+     ap:'Percussion, strings, brass, electronic layers.',
+     dm:['Sports Advertising','Hybrid Orchestra','Broadcast Music','Campaign Themes']},
+    {t:'Title Sequence Sound Design',c:'Sound Design',src:'demo-title-sequence.mp3',
+     ch:'Establish narrative tone before dialogue.',
+     iv:'Atmosphere becomes storytelling.',
+     ap:'Textures, impacts, transitions, spatial design.',
+     dm:['Sound Design','Film Titles','Atmosphere','Narrative Support']},
+    {t:'Financial Brand Film',c:'Corporate Storytelling',src:'demo-financial-theme.mp3',
+     ch:'Create confidence without sounding corporate.',
+     iv:'Trust is quiet.',
+     ap:'Piano, strings, warm brass, minimal percussion.',
+     dm:['Corporate Branding','Financial Campaigns','Narrative Music','Brand Films']},
+    {t:'Destination Marketing',c:'Travel Campaign',src:'demo-holiday-strings.mp3',
+     ch:'Capture anticipation rather than geography.',
+     iv:'Travel begins before arrival.',
+     ap:'Acoustic instruments expanding into orchestra.',
+     dm:['Travel Advertising','Lifestyle Campaigns','Cinematic Music','Destination Branding']},
+    {t:'Children’s Hospital Campaign',c:'Documentary',src:'demo-retail-anthem.mp3',
+     ch:'Support emotionally honest storytelling.',
+     iv:'Restraint creates sincerity.',
+     ap:'Piano, strings, woodwinds, light choir.',
+     dm:['Healthcare Storytelling','Emotional Composition','Documentary Music','Broadcast Readiness']}
+  ];
   (function(){
     var room=document.getElementById('lroom'), au=document.getElementById('laudio');
     var play=document.getElementById('lplay'), fill=document.getElementById('lfill');
     var bar=document.getElementById('lbar'), time=document.getElementById('ltime');
-    var lw=document.getElementById('lwave');
-    for(var i=0;i<44;i++){var b=document.createElement('i');
-      b.style.height=(18+Math.abs(Math.sin(i*.8)*Math.sin(i*.31))*82)+'%';
-      b.style.animationDelay=(i*45)+'ms';lw.appendChild(b);}
-    function fmt(x){x=Math.floor(x||0);return Math.floor(x/60)+':' +('0'+(x%60)).slice(-2);}
-    window.lroomOpen=function(){room.classList.add('open');window.rtStop&&window.rtStop();};
-    function close(){room.classList.remove('open','playing');au.pause();
+    var lw=document.getElementById('lwave'), idx=0;
+    for(var i=0;i<28;i++){var bb=document.createElement('i');
+      bb.style.height=(18+Math.abs(Math.sin(i*.8)*Math.sin(i*.31))*82)+'%';
+      bb.style.animationDelay=(i*45)+'ms';lw.appendChild(bb);}
+    function fmt(x){x=Math.floor(x||0);return Math.floor(x/60)+':'+('0'+(x%60)).slice(-2);}
+    function load(i){idx=(i+DEMOS.length)%DEMOS.length;var d=DEMOS[idx];
+      document.getElementById('dt').textContent=d.t;
+      document.getElementById('dcat').textContent=d.c;
+      document.getElementById('dch').textContent=d.ch;
+      document.getElementById('din').textContent=d.iv;
+      document.getElementById('dap').textContent=d.ap;
+      document.getElementById('ddm').innerHTML=d.dm.map(function(x){return '<span>'+x+'</span>';}).join('');
+      au.src='/static/public/'+d.src;}
+    function start(){au.volume=1;var pr=au.play();
+      if(pr&&pr.catch)pr.catch(function(){});
+      play.textContent='❚❚';room.classList.add('playing');}
+    window.lroomOpen=function(i){load(i==null?idx:i);room.classList.add('open');
+      window.rtStop&&window.rtStop();start();
+      document.querySelector('.lbody').scrollTop=0;};
+    function fadeClose(){
+      var v=au.volume,iv=setInterval(function(){v-=0.12;
+        if(v<=0){clearInterval(iv);au.pause();au.volume=1;}else au.volume=v;},50);
+      room.classList.remove('open','playing');play.textContent='▶';
       if(document.getElementById('reelteaser').classList.contains('show'))window.rtStart();}
-    document.getElementById('lclose').addEventListener('click',close);
-    room.addEventListener('click',function(e){if(e.target===room)close();});
-    document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+    document.getElementById('lclose').addEventListener('click',fadeClose);
+    room.addEventListener('click',function(e){if(e.target===room)fadeClose();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&room.classList.contains('open'))fadeClose();});
+    document.getElementById('dnext').addEventListener('click',function(){
+      load(idx+1);start();document.querySelector('.lbody').scrollTop=0;});
     play.addEventListener('click',function(){
-      if(au.paused){au.play();play.textContent='❚❚';room.classList.add('playing');}
-      else{au.pause();play.textContent='▶';room.classList.remove('playing');}});
+      if(au.paused){start();}else{au.pause();play.textContent='▶';room.classList.remove('playing');}});
     au.addEventListener('ended',function(){play.textContent='▶';room.classList.remove('playing');});
     au.addEventListener('timeupdate',function(){
       var d=au.duration||60;fill.style.width=(au.currentTime/d*100)+'%';time.textContent=fmt(au.currentTime);});
