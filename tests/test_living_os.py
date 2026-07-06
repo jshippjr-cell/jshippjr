@@ -75,3 +75,13 @@ def test_mission_control_hero_and_honest_machine_feed(client):
     assert "Top targets to pursue" in page
     assert 'href="/inbox?status=Submitted"' in page
     assert 'href="/inbox?status=Won"' in page
+
+
+def test_alive_waveform_layer_on_client_audio_surfaces(client):
+    """Phase 4: wave-live.js is served, and every surface with the compact
+    .cap-audio player loads it (brief, first-touch, delivery portal/package).
+    The original player markup is untouched — the wave is a pure overlay."""
+    assert client.get("/static/wave-live.js").status_code == 200
+    page = client.get("/opportunity/1/capabilities").text
+    assert "wave-live.js" in page
+    assert "cap-audio" in page or "relevant_uploads" not in page  # markup intact

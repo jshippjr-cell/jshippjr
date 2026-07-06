@@ -932,3 +932,5 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
   padding:8px 0;border-top:1px solid var(--border);font-size:13px}
 .machine-feed li:first-child{border-top:0}
 .machine-feed .mf-at{font-size:11px;color:var(--muted2);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* alive waveform layer over the compact player (wave-live.js) */
+.cap-wave{display:block;width:100%;height:18px;margin-bottom:4px}
