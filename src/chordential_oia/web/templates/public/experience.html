@@ -136,7 +136,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* the master — center, on the reflection floor */
 .stage{position:relative;width:min(720px,94vw);height:420px;perspective:1100px}
 .master{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
-  width:210px;height:132px;border-radius:12px;cursor:pointer;
+  width:240px;height:148px;border-radius:12px;cursor:pointer;overflow:hidden;
+  animation:mglow 2.5s ease-in-out infinite;
   background:linear-gradient(160deg,#2e2428,#1d171a);
   border:1px solid rgba(216,205,182,.35);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.55), 0 0 44px rgba(228,103,31,.10);
@@ -146,7 +147,18 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .master::after{content:"";position:absolute;left:8%;right:8%;top:100%;height:56px;
   background:linear-gradient(180deg,rgba(228,103,31,.10),transparent);
   transform:scaleY(-1);filter:blur(6px);opacity:.5;border-radius:12px}
-.master .mt{font-family:var(--mono);font-size:9.5px;color:var(--sand);letter-spacing:.02em}
+.master .mt{font-family:var(--mono);font-size:8.5px;color:var(--sand);letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes mglow{0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.55), 0 0 34px rgba(228,103,31,.12)}
+  50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 24px 60px rgba(0,0,0,.55), 0 0 64px rgba(228,103,31,.42), 0 0 0 1px rgba(243,176,116,.35)}}
+.master.played{animation:none}
+.sndbtn{position:fixed;left:22px;bottom:20px;z-index:30;display:inline-flex;align-items:center;gap:8px;
+  background:rgba(20,16,20,.6);border:1px solid rgba(216,205,182,.35);color:var(--sand);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  padding:9px 15px;border-radius:999px;cursor:pointer;backdrop-filter:blur(6px)}
+.sndbtn .sd{width:7px;height:7px;border-radius:50%;background:#57504b;transition:background .3s ease}
+.sndbtn.on{color:var(--amber);border-color:rgba(243,176,116,.5)}
+.sndbtn.on .sd{background:var(--ember);box-shadow:0 0 10px rgba(228,103,31,.6);animation:pulse 2.5s ease-in-out infinite}
 .master .wave{display:flex;gap:2px;height:34px;align-items:center;margin:8px 0 4px}
 .master .wave i{flex:1;border-radius:1px;background:var(--amber);opacity:.85;
   animation:wb 1.25s ease-in-out infinite}
@@ -332,6 +344,36 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 </section>
 
 <script>
+/* THE SOUND LAYER — opt-in only, everything in D major (the brand key).
+   Every audio moment has a visual twin; the site is complete silent. */
+window.CH=(function(){
+  var ac=null,on=false;
+  var btn=document.createElement('button');btn.className='sndbtn';
+  btn.innerHTML='<span class="sd"></span><span class="sl">Sound on</span>';
+  btn.setAttribute('aria-pressed','false');document.body.appendChild(btn);
+  function ctx(){var A=window.AudioContext||window.webkitAudioContext;
+    if(!ac&&A)ac=new A();if(ac&&ac.state==='suspended')ac.resume();return ac;}
+  function tone(f,dur,peak,type,cut){var a=ctx();if(!a||!on)return;var t=a.currentTime;
+    var o=a.createOscillator();o.type=type||'triangle';o.frequency.value=f;
+    o.detune.value=(Math.random()-.5)*5;
+    var g=a.createGain();g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(peak||.08,t+.05);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+(dur||1));
+    var lp=a.createBiquadFilter();lp.type='lowpass';lp.frequency.value=cut||1800;
+    o.connect(g);g.connect(lp);lp.connect(a.destination);o.start(t);o.stop(t+(dur||1)+.05);}
+  function chord(fs,dur,peak){fs.forEach(function(f,i){
+    setTimeout(function(){tone(f,dur,(peak||.07)/(1+i*.25),i<2?'sine':'triangle');},i*45);});}
+  btn.addEventListener('click',function(){on=!on;btn.classList.toggle('on',on);
+    btn.setAttribute('aria-pressed',String(on));
+    btn.querySelector('.sl').textContent=on?'Sound off':'Sound on';
+    if(on){ctx();tone(293.66,1.6,.06,'sine',1200);}});   /* the hero note: D */
+  return{tone:tone,chord:chord,
+    explode:function(){chord([146.83,220,293.66,369.99,440],2.6,.09);},         /* D maj */
+    solo:function(i){tone([293.66,146.83,440,369.99,587.33][i]||293.66,.9,.07);},
+    row:function(){tone(880,.25,.03,'sine',3000);},
+    stamp:function(){chord([73.42,146.83,293.66,369.99],3.2,.1);},              /* low resolve */
+    brief:function(){tone(587.33,1.4,.05,'sine',1400);}};
+})();
 (function(){
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var BEAT=625,B16=156;
@@ -364,6 +406,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   function makeStems(){
     STEMS.forEach(function(name,i){
       var s=document.createElement('div');s.className='stem';
+      s.addEventListener('mouseenter',function(){window.CH.solo(i);});
       s.innerHTML='<div class="sl">'+name+'</div><div class="sw"></div>';
       stage.appendChild(s);bars(s.querySelector('.sw'),22);stems.push(s);
     });
@@ -394,6 +437,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 
   function explode(){
     if(played)return;played=true;
+    master.classList.add('played');window.CH.explode();
     touch.style.display='none';
     master.style.transform='translate(-50%,-50%) scale(.9)';
     master.style.opacity='0';
@@ -428,7 +472,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
           else if(i===2){ fileAway(docs[1],'rotate(4deg)'); }
         }, reduce?0:i*BEAT*0.7);
       });
-      setTimeout(function(){ stamp.classList.add('land');
+      setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
         setTimeout(function(){caption.classList.add('in');replay.classList.add('in');}, reduce?0:BEAT);
       }, reduce?50:rows.length*BEAT*0.7+BEAT);
     }, reduce?50:5*B16+BEAT);
@@ -452,6 +496,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     var rows=[].slice.call(brief.querySelectorAll('.brow'));
     var bnext=brief.querySelector('.bnext'), pblock=brief.querySelector('.promiseblock');
     function play(){
+      window.CH.brief();
       brief.classList.add('in');
       rows.forEach(function(r,i){setTimeout(function(){r.classList.add('in');},500+i*300);});
       setTimeout(function(){bnext.classList.add('in');},500+rows.length*300+200);
