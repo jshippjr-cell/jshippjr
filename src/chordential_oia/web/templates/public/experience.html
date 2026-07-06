@@ -107,15 +107,23 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .brief .bt{font-family:var(--serif);font-size:17px;font-weight:700;color:#44161E}
 .brief .bs{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#737469;margin-top:3px}
 .brow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:baseline;
-  padding:9px 0;border-bottom:1px solid #E7DECE;font-size:12px}
+  padding:9px 0;border-bottom:1px solid #E7DECE;font-size:12px;
+  opacity:0;transform:translateY(8px);
+  transition:opacity var(--b8) ease, transform var(--b8) cubic-bezier(.19,1,.22,1)}
+.brow.in{opacity:1;transform:none}
 .brow .bk{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#737469}
 .brow .bv{color:#33302f;line-height:1.45}
 .brow .bv .ok{color:#2f6a34;font-family:var(--mono);font-size:9px;letter-spacing:.06em}
-.bmeta{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:#9a917f;
-  text-transform:uppercase;margin-top:8px}
-.brief .bnext{margin-top:14px;font-size:12.5px;color:#44161E;font-weight:600}
+.bmetagrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin-top:10px}
+.bmetagrid .mi .mk{font-family:var(--mono);font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#9a917f}
+.bmetagrid .mi .mv{font-size:11px;color:#33302f;margin-top:1px;font-variant-numeric:tabular-nums}
+.bmetagrid .mi .mv.st{color:#2f6a34;font-weight:600}
+.brief .bnext{margin-top:14px;font-size:12.5px;color:#44161E;font-weight:600;
+  opacity:0;transition:opacity var(--beat) ease}
+.brief .bnext.in{opacity:1}
 .promiseblock{margin-top:14px;background:#fff;border:1px solid #E7DECE;border-left:3px solid var(--ember);
-  border-radius:4px;padding:10px 12px}
+  border-radius:4px;padding:10px 12px;opacity:0;transition:opacity var(--beat) ease}
+.promiseblock.in{opacity:1}
 .promiseblock .pk{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#9a5a1a}
 .promiseblock p{margin:5px 0 0;font-size:11.5px;color:#33302f;line-height:1.5}
 .ma .macap{margin-top:30px;text-align:center;opacity:0;transform:translateY(10px);
@@ -273,8 +281,12 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
         <div class="bh">
           <img src="/static/public/wordmark-dark.png" alt="Chordential">
           <div class="bt">Campaign Brief — Holiday Retail Anthem</div>
-          <div class="bs">Prepared for Vance Athletic · Tuesday, 9:14 AM</div>
-          <div class="bmeta">Discovery call 22:17 · prepared 8:42 AM · last updated 9:03 AM · rev 2</div>
+          <div class="bmetagrid">
+            <div class="mi"><div class="mk">Discovery call</div><div class="mv">Nov 3, 2026 • 3:14 PM</div></div>
+            <div class="mi"><div class="mk">Prepared</div><div class="mv">Nov 4, 2026 • 8:42 AM</div></div>
+            <div class="mi"><div class="mk">Prepared for</div><div class="mv">Vance Athletic</div></div>
+            <div class="mi"><div class="mk">Status</div><div class="mv st">Ready for Review</div></div>
+          </div>
         </div>
         <div class="brow"><span class="bk">Direction</span>
           <span class="bv">“Optimistic without feeling sentimental. Strings should feel
@@ -436,9 +448,18 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   (function(){
     var wrap=document.getElementById('mawrap');
     var brief=document.getElementById('brief'), cap=document.getElementById('macap');
-    function play(){ brief.classList.add('in');
-      setTimeout(function(){cap.classList.add('in');},1100); }
-    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');cap.classList.add('in');return;}
+    var rows=[].slice.call(brief.querySelectorAll('.brow'));
+    var bnext=brief.querySelector('.bnext'), pblock=brief.querySelector('.promiseblock');
+    function play(){
+      brief.classList.add('in');
+      rows.forEach(function(r,i){setTimeout(function(){r.classList.add('in');},500+i*300);});
+      setTimeout(function(){bnext.classList.add('in');},500+rows.length*300+200);
+      setTimeout(function(){pblock.classList.add('in');},500+rows.length*300+600);
+      setTimeout(function(){cap.classList.add('in');},500+rows.length*300+1000);
+    }
+    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');
+      rows.forEach(function(r){r.classList.add('in');});
+      bnext.classList.add('in');pblock.classList.add('in');cap.classList.add('in');return;}
     var seen=false;
     var io=new IntersectionObserver(function(es){es.forEach(function(e){
       if(e.isIntersecting&&!seen){seen=true;play();io.disconnect();}});},{threshold:.3});
