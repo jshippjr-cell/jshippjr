@@ -61,6 +61,33 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   color:var(--olive);opacity:0;transition:opacity var(--beat) ease;animation:pulse 2.5s ease-in-out infinite}
 .pull.in{opacity:1}
 
+/* THE TRAILER OPEN — warm from frame one; promise, then the master, 8s to hooked */
+.promise{text-align:center;margin-bottom:8px}
+.promise h1{font-size:clamp(30px,5.4vw,52px);color:#fff;line-height:1.08;
+  opacity:0;transform:translateY(12px);
+  transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
+.promise .psub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--olive);margin:14px 0 0;opacity:0;transition:opacity var(--beat) ease .2s}
+.promise.in h1{opacity:1;transform:none}
+.promise.in .psub{opacity:1}
+/* recognition — AFTER the evidence: what you're not fighting anymore */
+.recog{width:min(640px,92vw);margin:70px auto 0;display:flex;flex-direction:column;gap:14px}
+.recog .rk{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--olive);text-align:center;margin-bottom:6px}
+.rrow{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;
+  padding:12px 0;border-top:1px solid rgba(216,205,182,.14)}
+.rrow .was{font-family:var(--mono);font-size:12px;color:#8a8075;text-decoration:line-through;
+  text-decoration-color:rgba(228,103,31,.5)}
+.rrow .now{font-size:13.5px;color:#EFE7DC}
+.invite{text-align:center;margin:60px 0 30px}
+.invite .btn{display:inline-flex;align-items:center;gap:9px;background:linear-gradient(135deg,var(--ember),#c8501a);
+  color:#fff;font-weight:650;font-size:15px;padding:14px 26px;border-radius:999px;text-decoration:none;
+  box-shadow:0 10px 26px rgba(228,103,31,.32), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform var(--b16) cubic-bezier(.19,1,.22,1)}
+.invite .btn:active{transform:scale(.97)}
+.invite .note{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--olive);
+  text-transform:uppercase;margin-top:12px}
+
 /* the master — center, on the reflection floor */
 .stage{position:relative;width:min(720px,94vw);height:420px;perspective:1100px}
 .master{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
@@ -175,24 +202,11 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   <a href="/start" style="transition-delay:.15s">Begin a session</a>
 </nav>
 
-<section class="scene hero" id="hero" aria-label="Campaigns fail in production">
-  <div class="frag" style="left:12%;top:22%">new track by Friday</div>
-  <div class="frag" style="right:10%;top:30%">the license fell through</div>
-  <div class="frag" style="left:18%;bottom:26%">v9_FINAL_final2.wav</div>
-  <h1 class="thesis" id="thesis">Campaigns don’t fail on creativity.<br>
-    They fail when the details don’t survive production.</h1>
-  <div class="reassure" id="reassure">
-    <p class="r1">You need the track, the stems, the cutdowns, and the clearance —
-      and you needed them Friday.</p>
-    <p class="r2">That’s the part we run.</p>
-    <p class="r3">Original music for campaigns — produced on an operating system
-      we built for exactly this.</p>
-  </div>
-  <div class="pull" id="pull">↓ see a delivery</div>
-</section>
-
 <section class="scene" id="delivery" aria-label="This is a delivery">
-  <span class="eyebrow" style="margin-bottom:18px">Beat 3 · Evidence</span>
+  <div class="promise" id="promise">
+    <h1>Original music.<br>Ready for campaign.</h1>
+    <p class="psub">Composition · Versions · Rights · Delivery — handled as one system.</p>
+  </div>
   <div class="stage" id="stage">
     <div class="master" id="master" role="button" tabindex="0" aria-label="Open the delivery">
       <div class="wave" id="mwave"></div>
@@ -216,6 +230,19 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     <p>This lands in your drive. Organized like this. Every time.</p>
     <button class="replay" id="replay">↺ Open it again</button>
   </div>
+  <div class="recog">
+    <div class="rk">What you’re not fighting anymore</div>
+    <div class="rrow"><span class="was">Client presentation, 9:00 AM tomorrow.</span>
+      <span class="now">The package is already organized.</span></div>
+    <div class="rrow"><span class="was">Legal rejected the track.</span>
+      <span class="now">Original and cleared — certificate on file.</span></div>
+    <div class="rrow"><span class="was">Still missing stems.</span>
+      <span class="now">Stems ship with the master. Always.</span></div>
+  </div>
+  <div class="invite">
+    <a class="btn" href="/start">Begin a session</a>
+    <div class="note">Tell us about the campaign · we reply with an approach and a price range</div>
+  </div>
 </section>
 
 <script>
@@ -227,33 +254,18 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     b.style.animationDelay=(i*40)+'ms';el.appendChild(b);}}
   bars(document.getElementById('mwave'),34);
 
-  /* BEATS 1-2 timeline: 0s fragments(cold) -> 2s thesis -> ~4s settle+warmth+
-     record light+logo -> 5-6s reassurance + nav + pull. Reduced motion: settled. */
+  /* THE TRAILER OPEN: warm immediately. Logo+record light ~0.5s, promise ~0.8s,
+     sub ~1.4s, the master already breathing and touchable. 8s rule: promise read
+     + interaction discovered before second eight. Reduced motion: all settled. */
   (function(){
-    var hero=document.getElementById('hero'), frags=[].slice.call(hero.querySelectorAll('.frag'));
-    var thesis=document.getElementById('thesis'), re=document.getElementById('reassure');
     var wm=document.querySelector('.wm'), rec=document.getElementById('rec');
-    var nav=document.getElementById('nav'), pull=document.getElementById('pull');
-    function settled(){
-      hero.classList.remove('cold');frags.forEach(function(f){f.classList.add('die');});
-      thesis.classList.add('in');wm.classList.add('on');rec.classList.add('on');
-      re.querySelectorAll('p').forEach(function(p){p.classList.add('in');});
-      nav.classList.add('on');pull.classList.add('in');
-    }
-    if(reduce){settled();return;}
-    hero.classList.add('cold');
-    frags.forEach(function(f,i){setTimeout(function(){f.classList.add('in');},200+i*260);});
-    setTimeout(function(){thesis.classList.add('in');},2000);
-    setTimeout(function(){                                   /* the settle: we arrive */
-      hero.classList.remove('cold');
-      frags.forEach(function(f){f.classList.add('die');});
-      wm.classList.add('on');
-      setTimeout(function(){rec.classList.add('on');},312);
-    },3750);
-    var rs=re.querySelectorAll('p');
-    setTimeout(function(){rs[0].classList.add('in');},4600);
-    setTimeout(function(){rs[1].classList.add('in');},5200);
-    setTimeout(function(){rs[2].classList.add('in');nav.classList.add('on');pull.classList.add('in');},5900);
+    var nav=document.getElementById('nav'), promise=document.getElementById('promise');
+    if(reduce){wm.classList.add('on');rec.classList.add('on');nav.classList.add('on');
+      promise.classList.add('in');return;}
+    setTimeout(function(){wm.classList.add('on');},400);
+    setTimeout(function(){rec.classList.add('on');},700);
+    setTimeout(function(){promise.classList.add('in');},800);
+    setTimeout(function(){nav.classList.add('on');},1400);
   })();
 
 
