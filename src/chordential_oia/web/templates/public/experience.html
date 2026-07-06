@@ -208,6 +208,9 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   transition:transform var(--b8) cubic-bezier(.19,1,.22,1), filter var(--b8) ease}
 .reelteaser canvas:hover{transform:translateY(-5px) scale(1.015) perspective(800px) rotateX(2deg);
   filter:drop-shadow(0 18px 30px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(228,103,31,.25))}
+.reelteaser .rt{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--olive);margin-top:4px}
+.reelteaser .rt a{color:var(--amber);text-decoration:none;cursor:pointer}
 /* the capability demonstration — a card from the reel comes forward and opens.
    Warm paper on the dark room; authored motion, no bounce. */
 .lroom{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;
@@ -342,7 +345,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     </div>
     <div class="reelteaser" id="reelteaser">
       <canvas id="rtc" aria-label="The reel — a spiral of tracks"></canvas>
-      <div class="rt"><a href="/reel">hear the work — open the reel →</a></div>
+      <div class="rt"><a id="rtopen">hear the work — open a demonstration →</a></div>
     </div>
   </div>
   <div class="lroom" id="lroom" role="dialog" aria-modal="true" aria-label="Capability demonstration">
@@ -640,6 +643,8 @@ window.CH=(function(){
     window.rtStart=function(){rtOn=true;size();requestAnimationFrame(draw);if(reduce)draw(0);};
     window.rtStop=function(){rtOn=false;};
     c.addEventListener('click',function(){window.lroomOpen();});
+    var ro=document.getElementById('rtopen');
+    if(ro)ro.addEventListener('click',function(){window.lroomOpen();});
   })();
 
   /* THE DEMONSTRATION LIBRARY — ten fictional creative scenarios, each built
