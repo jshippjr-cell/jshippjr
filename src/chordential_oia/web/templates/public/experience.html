@@ -193,6 +193,16 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .doc .dseal{position:absolute;right:7px;bottom:7px;width:16px;height:16px;border-radius:50%;
   border:1.5px solid var(--ember);color:var(--ember);font-size:8px;display:grid;place-items:center}
 
+/* the reel teaser — fades into the space the master leaves behind */
+.reelteaser{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);
+  width:min(560px,88vw);text-align:center;opacity:0;pointer-events:none;
+  transition:opacity 1.2s ease}
+.reelteaser.show{opacity:1;pointer-events:auto}
+.reelteaser canvas{display:block;width:100%;height:190px;cursor:pointer}
+.reelteaser .rt{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--olive);margin-top:4px}
+.reelteaser .rt a{color:var(--amber);text-decoration:none}
+
 /* the client's folder */
 .folder{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%) translateY(30px);
   width:min(460px,90vw);opacity:0;transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
@@ -280,6 +290,10 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
         <div class="frow"><span class="fk">05_DELIVERY_MANIFEST/</span> 11 files · checklist complete <span class="tick">✓</span></div>
       </div>
       <div class="stamp" id="stamp">Campaign Ready</div>
+    </div>
+    <div class="reelteaser" id="reelteaser">
+      <canvas id="rtc" aria-label="The reel — a spiral of tracks"></canvas>
+      <div class="rt"><a href="/reel">hear the work — open the reel →</a></div>
     </div>
   </div>
   <div class="caption" id="caption">
@@ -473,7 +487,8 @@ window.CH=(function(){
         }, reduce?0:i*BEAT*0.7);
       });
       setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
-        setTimeout(function(){caption.classList.add('in');replay.classList.add('in');}, reduce?0:BEAT);
+        setTimeout(function(){caption.classList.add('in');replay.classList.add('in');
+        document.getElementById('reelteaser').classList.add('show');window.rtStart();}, reduce?0:BEAT);
       }, reduce?50:rows.length*BEAT*0.7+BEAT);
     }, reduce?50:5*B16+BEAT);
   }
@@ -485,6 +500,7 @@ window.CH=(function(){
       s.style.transform='translate(-50%,-50%) scale(.6)';});
     docs.forEach(function(d,i){d.style.transition='';d.style.opacity='0';
       d.style.transform='translate(-50%,-50%) rotate('+(i?4:-4)+'deg) scale(.6)';});
+    document.getElementById('reelteaser').classList.remove('show');window.rtStop();
     master.style.opacity='1';master.style.transform='translate(-50%,-50%)';
     touch.style.display='';
   }
@@ -510,6 +526,47 @@ window.CH=(function(){
     var io=new IntersectionObserver(function(es){es.forEach(function(e){
       if(e.isIntersecting&&!seen){seen=true;play();io.disconnect();}});},{threshold:.3});
     io.observe(brief);
+  })();
+
+  /* mini reel spiral in the vacated stage */
+  var rtOn=false;
+  (function(){
+    var c=document.getElementById('rtc'),x=c.getContext('2d'),W=0,H=190;
+    function dprR(){return Math.min(window.devicePixelRatio||1,2);}
+    function size(){var r=c.getBoundingClientRect();W=r.width||520;
+      c.width=Math.round(W*dprR());c.height=Math.round(H*dprR());
+      x.setTransform(dprR(),0,0,dprR(),0,0);}
+    window.addEventListener('resize',size);
+    var N=11;
+    function draw(now){
+      if(!rtOn)return;
+      x.clearRect(0,0,W,H);
+      var base=reduce?-Math.PI/2:(-Math.PI/2+now/1000*0.25);
+      var cards=[];
+      for(var i=0;i<N;i++){var a=base+i*(Math.PI*2/N);
+        cards.push({d:Math.cos(a),px:W/2+Math.sin(a)*W*0.36,py:H*0.5+Math.sin(a+0.6)*6});}
+      cards.sort(function(pq,q){return pq.d-q.d;});
+      cards.forEach(function(cd){
+        var sc=0.6+(cd.d+1)/2*0.5, w=44*sc,h=60*sc, front=cd.d>0.86;
+        var al=0.25+(cd.d+1)/2*0.75;
+        x.globalAlpha=al;
+        x.shadowColor='rgba(0,0,0,'+(0.3*al)+')';x.shadowBlur=14*sc;x.shadowOffsetY=8*sc;
+        var g=x.createLinearGradient(0,cd.py-h/2,0,cd.py+h/2);
+        if(front){g.addColorStop(0,'#F3B183');g.addColorStop(1,'#E4671F');}
+        else{g.addColorStop(0,'#FFFDFA');g.addColorStop(1,'#E5DAC9');}
+        x.fillStyle=g;
+        x.beginPath();
+        if(x.roundRect)x.roundRect(cd.px-w/2,cd.py-h/2,w,h,7*sc);else x.rect(cd.px-w/2,cd.py-h/2,w,h);
+        x.fill();
+        x.shadowColor='transparent';
+        if(front){x.fillStyle='rgba(255,255,255,.95)';
+          x.beginPath();x.moveTo(cd.px-5,cd.py-8);x.lineTo(cd.px+7,cd.py);x.lineTo(cd.px-5,cd.py+8);x.closePath();x.fill();}
+        x.globalAlpha=1;});
+      if(!reduce)requestAnimationFrame(draw);
+    }
+    window.rtStart=function(){rtOn=true;size();requestAnimationFrame(draw);if(reduce)draw(0);};
+    window.rtStop=function(){rtOn=false;};
+    c.addEventListener('click',function(){location.href='/reel';});
   })();
 
   master.addEventListener('click',explode);
