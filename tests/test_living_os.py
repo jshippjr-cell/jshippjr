@@ -61,3 +61,17 @@ def test_update_intelligence_carries_the_honest_thinking_hooks(client):
                           "text": "Budget is $18,000. Need it by November."},
                     follow_redirects=False)
     assert r.status_code == 303
+
+
+def test_mission_control_hero_and_honest_machine_feed(client):
+    """Phase 3: 'Waiting on you' counts only human-blocking decisions; the
+    machine feed shows only real recorded events; the living element is the
+    ticking clock (data-live-clock). Existing dashboard anchors preserved."""
+    page = client.get("/dashboard").text
+    assert "Waiting on you" in page and "mc-count" in page
+    assert "Machine running" in page
+    assert "data-live-clock" in page                  # the page's living element
+    # existing anchors survive (council ruling: the hero is additive)
+    assert "Top targets to pursue" in page
+    assert 'href="/inbox?status=Submitted"' in page
+    assert 'href="/inbox?status=Won"' in page

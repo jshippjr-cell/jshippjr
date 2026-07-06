@@ -1263,6 +1263,51 @@ def dashboard(request: Request):
             "quiet": sum(1 for r in health["rows"] if r["status"] == "Quiet"),
             "monthly_cost": health["total_monthly_cost"],
         }
+        # ── Mission Control (Living OS P3) ──────────────────────────────────
+        # "Waiting on you" counts ONLY decisions that truly block on the human
+        # (council ruling): follow-ups due, unactioned incoming, new discovery
+        # requests. The machine can't do any of these.
+        dr_new = conn.execute(
+            "SELECT COUNT(*) AS n FROM discovery_requests WHERE status='new'"
+        ).fetchone()["n"]
+        waiting_count = len(followups) + incoming_total + dr_new
+        featured = None
+        if followups:
+            f = followups[0]
+            featured = {"kind": "Follow-up due", "title": f["need"],
+                        "sub": f"{f['client']} · {f['next_action'] or 'follow up'}",
+                        "href": f"/opportunity/{f['id']}", "cta": "Open & act →"}
+        elif incoming_total:
+            i0 = incoming[0]
+            featured = {"kind": "Lead to triage", "title": i0["title"],
+                        "sub": i0["subtitle"] or "promote or dismiss",
+                        "href": "/incoming", "cta": "Triage →"}
+        elif dr_new:
+            featured = {"kind": "Discovery requested", "title": "A client asked for a call",
+                        "sub": "pick a time", "href": "/inbox", "cta": "Schedule →"}
+        # "Machine running" — ONLY real recorded events with real timestamps
+        # (council ruling: no invented feed lines).
+        def _feed(sql, icon, fmt):
+            out = []
+            for r in conn.execute(sql).fetchall():
+                try:
+                    out.append({"icon": icon, "text": fmt(r), "at": r["at"] or ""})
+                except Exception:  # noqa: BLE001 — one bad row never kills the feed
+                    pass
+            return out
+        machine_feed = sorted(
+            _feed("SELECT title, found_at AS at FROM signals ORDER BY found_at DESC LIMIT 4",
+                  "📡", lambda r: f"Signal found — {r['title']}")
+            + _feed("SELECT company, updated_at AS at FROM agencies "
+                    "WHERE updated_at IS NOT NULL ORDER BY updated_at DESC LIMIT 4",
+                    "✦", lambda r: f"Agency profile updated — {r['company']}")
+            + _feed("SELECT contact_name, company, created_at AS at FROM inbound_leads "
+                    "ORDER BY created_at DESC LIMIT 3",
+                    "📥", lambda r: f"Lead received — {r['company'] or r['contact_name']}")
+            + _feed("SELECT name, created_at AS at FROM discovery_requests "
+                    "ORDER BY created_at DESC LIMIT 2",
+                    "🎥", lambda r: f"Discovery call requested — {r['name'] or 'a client'}"),
+            key=lambda e: e["at"], reverse=True)[:8]
     finally:
         conn.close()
     return render(
@@ -1270,6 +1315,7 @@ def dashboard(request: Request):
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,
+        waiting_count=waiting_count, featured=featured, machine_feed=machine_feed,
     )
 
 

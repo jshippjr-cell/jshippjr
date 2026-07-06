@@ -57,8 +57,50 @@
 </section>
 {% endif %}
 
-{# Needs-triage module removed from Today at the owner's request — incoming
-   leads still live on the dedicated /incoming page. #}
+{# ── Mission Control hero (Living OS P3): ONE number owns the page — the
+   decisions only the human can make. The living elements are the ticking
+   clock + the topbar beacon; idle motion budget stops there (council). ── #}
+<section class="card mc-hero" data-arrive>
+  <div class="mc-grid">
+    <div class="mc-wait">
+      <div class="kpi-label">Waiting on you</div>
+      <div class="mc-count">{{ waiting_count }}</div>
+      <div class="mc-sub">decision{{ 's' if waiting_count != 1 }} the machine can't make</div>
+    </div>
+    <div class="mc-feature">
+      {% if featured %}
+      <div class="mc-kind">{{ featured.kind }}</div>
+      <div class="mc-title">{{ featured.title }}</div>
+      <div class="mc-fsub">{{ featured.sub }}</div>
+      <a class="btn-live" href="{{ featured.href }}">{{ featured.cta }} <span class="live-dot"></span></a>
+      {% else %}
+      <div class="mc-kind">All clear</div>
+      <div class="mc-title">Nothing is waiting on you.</div>
+      <div class="mc-fsub">The machine keeps running — you'll be summoned when it needs you.</div>
+      {% endif %}
+    </div>
+    <div class="mc-clockbox">
+      <span class="mc-clock" data-live-clock></span>
+      <div class="mc-clocksub">Mission Control · Today</div>
+    </div>
+  </div>
+</section>
+
+{# ── Machine running — only real recorded events, real timestamps (council). ── #}
+<section class="card" data-arrive>
+  <div class="card-head"><h2>⚙ Machine running</h2>
+    <span class="muted small">what the engines did, from the record</span></div>
+  {% if machine_feed %}
+  <ul class="machine-feed">
+    {% for e in machine_feed %}
+    <li><span class="mf-ico">{{ e.icon }}</span><span class="mf-tx">{{ e.text }}</span>
+      <span class="mf-at">{{ e.at[:16]|replace('T',' ') }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">The machine has nothing new to report.</p>
+  {% endif %}
+</section>
 
 <div class="pipeline-grid" data-arrive>
 

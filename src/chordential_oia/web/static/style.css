@@ -910,3 +910,25 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
   .lv-halo{animation:none}
   .lv-veil{transition:none}
 }
+
+/* ── Mission Control hero (Living OS P3) — one number owns the page ── */
+.mc-hero{padding:22px 26px;margin-bottom:16px;
+  background:linear-gradient(105deg,var(--card),#FFF6F0);border-color:#F0DCC8}
+.mc-grid{display:grid;gap:18px 30px;align-items:center}
+@media(min-width:820px){.mc-grid{grid-template-columns:auto 1fr auto}}
+.mc-count{font-size:clamp(56px,8vw,92px);font-weight:800;letter-spacing:-.045em;
+  line-height:.9;color:var(--accent-deep);font-variant-numeric:tabular-nums}
+.mc-wait .kpi-label{color:var(--accent)}
+.mc-sub{font-size:12px;color:var(--muted);margin-top:6px;max-width:22ch}
+.mc-kind{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.mc-title{font-size:19px;font-weight:750;letter-spacing:-.01em;margin:6px 0 2px}
+.mc-fsub{font-size:13px;color:var(--muted);margin-bottom:12px}
+.mc-clockbox{text-align:right}
+.mc-clock{font-size:22px;font-weight:650;letter-spacing:.04em;color:var(--accent-deep);
+  font-variant-numeric:tabular-nums;font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.mc-clocksub{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-top:3px}
+.machine-feed{list-style:none;margin:0;padding:0}
+.machine-feed li{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:baseline;
+  padding:8px 0;border-top:1px solid var(--border);font-size:13px}
+.machine-feed li:first-child{border-top:0}
+.machine-feed .mf-at{font-size:11px;color:var(--muted2);font-variant-numeric:tabular-nums;white-space:nowrap}
