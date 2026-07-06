@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chordential — The One That Ships</title>
+<link rel="icon" href="/static/public/wordmark-dark.png">
+<style>
+/* THE CHORDENTIAL EXPERIENCE — Beat 3 first (production per the direction stack:
+   Trust Law > Final Cut > Shooting Script > Bible). 96 BPM grid: 1 beat = 625ms.
+   Camera spec (Beat 3): 35mm orbit, one warm key top-left, master center on a
+   reflection floor, folder builds lower-third. Every motion teaches delivery. */
+:root{
+  --ink:#141014; --cream:#FCF7F8; --sand:#D8CDB6; --olive:#9a917f;
+  --wine:#44161E; --ember:#E4671F; --amber:#F3B074;
+  --beat:625ms; --b16:156ms; --b8:312ms; --bar:2500ms;
+  --serif:Georgia,'Iowan Old Style','Times New Roman',serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:#EFE7DC;overflow-x:hidden;
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:40;opacity:.05;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.scene{min-height:100vh;position:relative;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:60px 20px;overflow:hidden;
+  background:radial-gradient(110% 90% at 32% 8%, #241c20 0%, #181216 52%, #120e11 100%)}
+h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--olive)}
+.mono{font-family:var(--mono)}
+
+/* the master — center, on the reflection floor */
+.stage{position:relative;width:min(720px,94vw);height:420px;perspective:1100px}
+.master{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+  width:210px;height:132px;border-radius:12px;cursor:pointer;
+  background:linear-gradient(160deg,#2e2428,#1d171a);
+  border:1px solid rgba(216,205,182,.35);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.55), 0 0 44px rgba(228,103,31,.10);
+  display:flex;flex-direction:column;justify-content:flex-end;padding:12px 14px;
+  transition:transform var(--b8) cubic-bezier(.19,1,.22,1), box-shadow var(--beat) ease}
+.master:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 28px 66px rgba(0,0,0,.6), 0 0 60px rgba(228,103,31,.22)}
+.master::after{content:"";position:absolute;left:8%;right:8%;top:100%;height:56px;
+  background:linear-gradient(180deg,rgba(228,103,31,.10),transparent);
+  transform:scaleY(-1);filter:blur(6px);opacity:.5;border-radius:12px}
+.master .mt{font-family:var(--mono);font-size:9.5px;color:var(--sand);letter-spacing:.02em}
+.master .wave{display:flex;gap:2px;height:34px;align-items:center;margin:8px 0 4px}
+.master .wave i{flex:1;border-radius:1px;background:var(--amber);opacity:.85;
+  animation:wb 1.25s ease-in-out infinite}
+@keyframes wb{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1)}}
+.touch{position:absolute;left:50%;top:calc(38% + 96px);transform:translateX(-50%);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--amber);animation:pulse 2.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+
+/* stems */
+.stem{position:absolute;left:50%;top:38%;width:190px;height:44px;border-radius:9px;
+  background:linear-gradient(160deg,#2a2125,#1b1518);border:1px solid rgba(216,205,182,.3);
+  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:6px 10px;opacity:0;
+  transform:translate(-50%,-50%) scale(.6);
+  transition:transform var(--beat) cubic-bezier(.34,1.45,.64,1), opacity var(--b8) ease, box-shadow var(--b8) ease}
+.stem .sl{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive)}
+.stem .sw{display:flex;gap:1.5px;height:14px;align-items:center;margin-top:3px}
+.stem .sw i{flex:1;border-radius:1px;background:var(--sand);opacity:.8;animation:wb 1.25s ease-in-out infinite}
+.stem:hover{box-shadow:0 14px 34px rgba(0,0,0,.5), 0 0 26px rgba(228,103,31,.3)}
+.stem:hover .sw i{background:var(--ember)}
+
+/* the client's folder */
+.folder{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%) translateY(30px);
+  width:min(460px,90vw);opacity:0;transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
+.folder.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.fhead{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;color:var(--cream)}
+.fhead .fico{width:26px;height:19px;border-radius:3px 6px 3px 3px;background:linear-gradient(160deg,#3a2f27,#2a211c);
+  border:1px solid rgba(216,205,182,.4);position:relative}
+.fhead .fico::before{content:"";position:absolute;left:0;top:-4px;width:12px;height:5px;
+  border-radius:3px 3px 0 0;background:#3a2f27;border:1px solid rgba(216,205,182,.4);border-bottom:0}
+.ftree{margin-top:10px;border-left:1px solid rgba(216,205,182,.2);padding-left:14px;
+  display:flex;flex-direction:column;gap:5px}
+.frow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:#c9bdae;
+  opacity:0;transform:translateX(-10px);
+  transition:opacity var(--b8) ease, transform var(--b8) cubic-bezier(.19,1,.22,1)}
+.frow.in{opacity:1;transform:none}
+.frow .fk{color:var(--amber)}
+.frow .tick{color:#8ec08e;opacity:0;transition:opacity var(--b16) ease}
+.frow.in .tick{opacity:1}
+.stamp{position:absolute;right:-8px;bottom:34px;padding:8px 16px;border:2px solid var(--ember);
+  border-radius:6px;color:var(--ember);font-family:var(--mono);font-size:12px;letter-spacing:.18em;
+  text-transform:uppercase;transform:rotate(-7deg) scale(1.6);opacity:0;
+  box-shadow:0 0 30px rgba(228,103,31,.25)}
+.stamp.land{animation:stampin var(--b8) cubic-bezier(.6,0,.4,1) forwards}
+@keyframes stampin{60%{opacity:1;transform:rotate(-7deg) scale(.97)}
+  100%{opacity:1;transform:rotate(-7deg) scale(1)}}
+
+.caption{margin-top:26px;text-align:center;max-width:52ch;opacity:0;transform:translateY(10px);
+  transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
+.caption.in{opacity:1;transform:none}
+.caption h2{font-size:clamp(19px,3vw,26px);color:#fff}
+.caption p{color:var(--olive);font-size:13.5px;margin:8px 0 0}
+.replay{margin-top:14px;background:none;border:1px solid rgba(216,205,182,.35);color:var(--sand);
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  padding:8px 16px;border-radius:999px;cursor:pointer;opacity:0;transition:opacity var(--beat) ease}
+.replay.in{opacity:1}
+.wm{position:fixed;left:22px;top:20px;z-index:30;font-family:var(--serif);font-size:17px;color:#fff;
+  animation:breath 5s ease-in-out infinite}
+@keyframes breath{0%,100%{opacity:.75}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .master .wave i,.stem .sw i,.touch,.wm{animation:none}
+  .stem,.frow,.folder,.caption,.replay{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<span class="wm">Chordential</span>
+
+<section class="scene" aria-label="This is a delivery">
+  <span class="eyebrow" style="margin-bottom:18px">Beat 3 · Evidence</span>
+  <div class="stage" id="stage">
+    <div class="master" id="master" role="button" tabindex="0" aria-label="Open the delivery">
+      <div class="wave" id="mwave"></div>
+      <div class="mt">AURORA_Anthem_60_MASTER_v3_FINAL.wav</div>
+    </div>
+    <div class="touch" id="touch">This is a delivery · touch it</div>
+    <div class="folder" id="folder">
+      <div class="fhead"><span class="fico" aria-hidden="true"></span>VANCE_HOLIDAY_2026/</div>
+      <div class="ftree" id="ftree">
+        <div class="frow"><span class="fk">01_MUSIC/</span> master · 5 stems · :60 :30 :15 :06 · 9:16 <span class="tick">✓</span></div>
+        <div class="frow"><span class="fk">02_RIGHTS/</span> certificate — cleared worldwide, perpetual <span class="tick">✓</span></div>
+        <div class="frow"><span class="fk">03_CUE_SHEET/</span> AURORA_Anthem_CUE_SHEET.pdf <span class="tick">✓</span></div>
+        <div class="frow"><span class="fk">04_VERSIONS/</span> v1 · v2 · v3 FINAL — named by a system <span class="tick">✓</span></div>
+        <div class="frow"><span class="fk">05_DELIVERY_MANIFEST/</span> 11 files · checklist complete <span class="tick">✓</span></div>
+      </div>
+      <div class="stamp" id="stamp">Campaign Ready</div>
+    </div>
+  </div>
+  <div class="caption" id="caption">
+    <h2>One master. Five stems. Every cutdown. Cleared.</h2>
+    <p>This lands in your drive. Organized like this. Every time.</p>
+    <button class="replay" id="replay">↺ Open it again</button>
+  </div>
+</section>
+
+<script>
+(function(){
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var BEAT=625,B16=156;
+  function bars(el,n,h){for(var i=0;i<n;i++){var b=document.createElement('i');
+    b.style.height=(20+Math.abs(Math.sin(i*.8)*Math.sin(i*.31))*80)+'%';
+    b.style.animationDelay=(i*40)+'ms';el.appendChild(b);}}
+  bars(document.getElementById('mwave'),34);
+
+  var stage=document.getElementById('stage'), master=document.getElementById('master');
+  var touch=document.getElementById('touch'), folder=document.getElementById('folder');
+  var caption=document.getElementById('caption'), stamp=document.getElementById('stamp');
+  var replay=document.getElementById('replay');
+  var STEMS=['DRUMS','BASS','STRINGS','SYNTHS','VOICE'], stems=[], played=false;
+
+  function makeStems(){
+    STEMS.forEach(function(name,i){
+      var s=document.createElement('div');s.className='stem';
+      s.innerHTML='<div class="sl">'+name+'</div><div class="sw"></div>';
+      stage.appendChild(s);bars(s.querySelector('.sw'),22);stems.push(s);
+    });
+  }
+  makeStems();
+
+  /* 35mm orbit: pointer-damped tilt on the master (spec: ±10°, spring return) */
+  var tx=0,ty=0,cx=0,cy=0;
+  if(!reduce){
+    stage.addEventListener('mousemove',function(e){
+      var r=stage.getBoundingClientRect();
+      tx=((e.clientX-r.left)/r.width-.5)*16; ty=-((e.clientY-r.top)/r.height-.5)*10;
+    });
+    stage.addEventListener('mouseleave',function(){tx=0;ty=0;});
+    (function orbit(){cx+=(tx-cx)*.08;cy+=(ty-cy)*.08;
+      if(!played) master.style.transform='translate(-50%,-50%) rotateY('+cx+'deg) rotateX('+cy+'deg)';
+      requestAnimationFrame(orbit);})();
+  }
+
+  function explode(){
+    if(played)return;played=true;
+    touch.style.display='none';
+    master.style.transform='translate(-50%,-50%) scale(.9)';
+    master.style.opacity='0';
+    var fan=[[-42,-30],[-22,-8],[0,-38],[22,-8],[42,-30]];   /* % offsets */
+    stems.forEach(function(s,i){
+      setTimeout(function(){
+        s.style.opacity='1';
+        s.style.transform='translate(calc(-50% + '+fan[i][0]*4+'px), calc(-50% + '+fan[i][1]*2.2+'px)) scale(1)';
+      }, reduce?0:i*B16);
+    });
+    /* the turn: stems file themselves into THEIR folder */
+    setTimeout(function(){
+      folder.classList.add('show');
+      var rows=folder.querySelectorAll('.frow');
+      rows.forEach(function(r,i){
+        setTimeout(function(){
+          r.classList.add('in');
+          if(i<stems.length){var s=stems[i];
+            s.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
+            s.style.transform='translate(-50%, 150px) scale(.25)';s.style.opacity='0';}
+        }, reduce?0:i*BEAT*0.7);
+      });
+      setTimeout(function(){ stamp.classList.add('land');
+        setTimeout(function(){caption.classList.add('in');replay.classList.add('in');}, reduce?0:BEAT);
+      }, reduce?50:rows.length*BEAT*0.7+BEAT);
+    }, reduce?50:5*B16+BEAT);
+  }
+  function reset(){
+    played=false;folder.classList.remove('show');caption.classList.remove('in');
+    replay.classList.remove('in');stamp.classList.remove('land');
+    folder.querySelectorAll('.frow').forEach(function(r){r.classList.remove('in');});
+    stems.forEach(function(s){s.style.transition='';s.style.opacity='0';
+      s.style.transform='translate(-50%,-50%) scale(.6)';});
+    master.style.opacity='1';master.style.transform='translate(-50%,-50%)';
+    touch.style.display='';
+  }
+  master.addEventListener('click',explode);
+  master.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();explode();}});
+  replay.addEventListener('click',reset);
+})();
+</script>
+</body>
+</html>

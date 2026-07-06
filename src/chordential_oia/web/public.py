@@ -149,6 +149,16 @@ _GALLERY_GRADIENTS = [
 ]
 
 
+@router.get("/experience", response_class=HTMLResponse)
+def public_experience(request: Request):
+    """The Chordential Experience — 'The One That Ships' (client-facing film,
+    built beat by beat per docs/design/chordential-experience-*). Beat 3 (the
+    signature: master -> stems -> the client's folder -> CAMPAIGN READY) ships
+    first; the remaining beats assemble around it. Standalone until complete,
+    then it becomes the homepage."""
+    return render(request, "public/experience.html", active="")
+
+
 @router.get("/reel", response_class=HTMLResponse)
 def public_reel(request: Request):
     """The gallery index: a spiral stream of capability tracks — a helix of
