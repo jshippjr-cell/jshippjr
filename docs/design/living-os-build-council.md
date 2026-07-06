@@ -91,3 +91,26 @@ creative campaigns become production-ready.*
   honest and simple — with the endpoint shaped so SSE can replace it without
   breaking the client; (5) presence shows name + role only, never activity
   surveillance.
+
+## Phase 5 review — the Session Room (increment 1)
+
+- **Marcus (Product):** "The boundary lives in one SQL predicate and the test
+  proves an operator-only event never reaches a client. That's the product.
+  Accepted. Next increment: talent role + emit on version upload, and converge
+  Phase 3's dashboard feed onto this table so there's exactly one record of
+  what the machine and the room did."
+- **Dana (Brand):** "Presence copy is right — 'you're the only one here' is
+  warmer than an empty widget. The strip stays quiet until something真 happens;
+  dose ratified." *(chair strikes the stray glyph; sentiment stands)*
+- **Ellis (Design):** "Arrivals ride the same halo grammar as everything else —
+  one motion language end to end. When SSE lands, kill the 6s poll delay; a
+  comment should arrive in a breath, not a refresh cycle."
+- **Priya (Revenue):** "A client seeing 'in the room: Studio' while they review
+  is trust you can't buy with copy. Ship increment 2 with talent presence
+  before the next real delivery."
+- **Theo (Chair) — binding:** Phase 5 accepted; the Living-OS build is live in
+  the product end to end. Standing orders for the next session: (1) increment 2
+  — talent role, version-upload events, SSE transport; (2) converge the
+  dashboard machine feed onto project_events; (3) full-suite verification run
+  when the environment allows; (4) the law stands — every NEW page ships with
+  its living element or it doesn't ship.
