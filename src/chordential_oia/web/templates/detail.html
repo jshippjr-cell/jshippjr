@@ -38,7 +38,7 @@
       {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
       <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     </div>
-    <div class="big-num">{{ row['alignment']|pct }}</div>
+    <div class="big-num" data-fit-pct="{{ row['alignment']|round|int }}">{{ row['alignment']|pct }}</div>
     <div class="muted">qualification fit</div>
   </div>
 </div>
@@ -234,8 +234,12 @@
      exists. Intelligence still ingests any transcript/notes through the lanes here. #}
 
   {# Update Intelligence — one panel, every manual lane, two stances. #}
+  {# data-think: live.js runs the honest thinking veil for exactly the duration
+     of the real analyze request; the path tokens name the REAL modules the
+     capture propagates through (council ruling — no theater). No JS: plain post. #}
   <form class="ci-update" method="post" enctype="multipart/form-data"
-        data-progress="✨ Analyzing…"
+        data-progress="✨ Analyzing…" data-think
+        data-think-path="Source|Campaign Intelligence|Qualification|Buyer Profile|Campaign Brief"
         action="/opportunity/{{ row['id'] }}/intelligence/analyze">
     <div class="ci-controls">
       <div class="ci-stance">

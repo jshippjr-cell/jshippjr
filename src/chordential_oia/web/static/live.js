@@ -138,3 +138,56 @@
     });
   });
 })();
+
+/* ---- The machine thinks (Phase 2): forms marked data-think get the honest
+ * thinking experience — the veil runs EXACTLY as long as the real request
+ * (council ruling: no minimum-duration padding), the propagation tokens name
+ * the real modules (data-think-path), and on return the arrival choreography
+ * touches only what the server reports changed (the capture callout + a fit%
+ * that actually moved). No JS → the form posts normally, unchanged. ---- */
+(function () {
+  "use strict";
+  var Live = window.Live;
+  var KEY_THOUGHT = "lv:thought", KEY_FIT = "lv:fit-before";
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.hasAttribute || !form.hasAttribute("data-think")) return;
+    if (!window.fetch || !window.FormData) return;   // no-JS/legacy: normal post
+    e.preventDefault();
+    var path = (form.getAttribute("data-think-path") || "").split("|").filter(Boolean);
+    var think = Live.think(path);
+    // remember the fit% on screen so the count-up animates only a REAL change
+    var fitEl = document.querySelector("[data-fit-pct]");
+    if (fitEl) sessionStorage.setItem(KEY_FIT, fitEl.getAttribute("data-fit-pct"));
+    sessionStorage.setItem(KEY_THOUGHT, "1");
+    fetch(form.action, { method: "POST", body: new FormData(form) })
+      .then(function (resp) {
+        think.done();
+        window.location.href = resp.url ? resp.url + "#intelligence" : window.location.href;
+      })
+      .catch(function () {           // network hiccup: fall back to the plain post
+        think.done();
+        sessionStorage.removeItem(KEY_THOUGHT);
+        form.removeAttribute("data-think");
+        form.submit();
+      });
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    if (sessionStorage.getItem(KEY_THOUGHT) !== "1") return;
+    sessionStorage.removeItem(KEY_THOUGHT);
+    // halo the ONE thing the server reports changed: the capture callout
+    var callout = document.querySelector("#intelligence .callout");
+    if (callout) Live.halo(callout);
+    // fit% becomes true only if it actually moved
+    var fitEl = document.querySelector("[data-fit-pct]");
+    var before = parseInt(sessionStorage.getItem(KEY_FIT) || "", 10);
+    sessionStorage.removeItem(KEY_FIT);
+    if (fitEl && !isNaN(before)) {
+      var after = parseInt(fitEl.getAttribute("data-fit-pct"), 10);
+      if (!isNaN(after) && after !== before)
+        Live.count(fitEl, after, { from: before, ms: 1100, suffix: "%" });
+    }
+  });
+})();
