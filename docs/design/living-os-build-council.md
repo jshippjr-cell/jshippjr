@@ -50,3 +50,23 @@ creative campaigns become production-ready.*
   (2) "Waiting on you" counts only decisions that truly block on the human;
   (3) every existing dashboard test anchor is preserved — the hero is additive;
   (4) idle motion budget = the clock + the beacon, nothing else.
+
+## Phase 3 review — Mission Control (Waiting-on-you hero + machine feed + clock)
+
+- **Marcus (Product):** "The hero count derives from the same queries the page
+  already trusts, and the feed is four real SELECTs over the record — accepted.
+  Watch-item: as volume grows, four UNION-ish queries per load want to converge
+  on a single events table. That's Phase 5's table — converge them there."
+- **Dana (Brand):** "The page finally has a spine: one enormous number, one
+  featured decision, everything else supporting. The ticking clock does more
+  emotional work than any gradient we've shipped. Idle motion held at clock +
+  beacon — ratified."
+- **Ellis (Design):** "The hero earns a hairline pipeline arc in a later pass —
+  parked, not required. Don't let anyone add a chart here out of habit."
+- **Priya (Revenue):** "'Waiting on you · N' is the first screen I'd demo. Note
+  for sales: demo it live — the tick is the pitch; a screenshot kills it."
+- **Theo (Chair) — binding:** Phase 3 accepted. Rulings for Phase 4 (alive
+  waveform): (1) driven by the REAL audio element via AnalyserNode — never a
+  loop; (2) full graceful fallback when AudioContext is unavailable (the
+  existing bar keeps working); (3) client-facing surface: warm-light, calm —
+  the wave is the only new motion; (4) never intercept or delay playback.
