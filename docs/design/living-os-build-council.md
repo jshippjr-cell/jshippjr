@@ -70,3 +70,24 @@ creative campaigns become production-ready.*
   loop; (2) full graceful fallback when AudioContext is unavailable (the
   existing bar keeps working); (3) client-facing surface: warm-light, calm —
   the wave is the only new motion; (4) never intercept or delay playback.
+
+## Phase 4 review — the alive waveform (real players)
+
+- **Marcus (Product):** "Tap-don't-intercept is right: playback is untouched,
+  the analyser rides the existing element, failure removes the layer. Accepted."
+- **Dana (Brand):** "Client surfaces stayed calm — still wave at rest, motion
+  only while sound flows. This is the perceived-quality jump for the least
+  code we've shipped. Ratified."
+- **Ellis (Design):** "The delivery package now literally breathes with the
+  work. Next: the Session Room must apply the same honesty to *people* —
+  presence and arrivals from real state, no simulated liveliness."
+- **Priya (Revenue):** "A client pressing play on the brief now *sees* the
+  music — this sells. Ship it to prod as-is."
+- **Theo (Chair) — binding:** Phase 4 accepted. Rulings for Phase 5 (Session
+  Room increment): (1) an append-only project_events table is the one bus —
+  Phase 3's feed converges on it later; (2) role filtering happens server-side
+  in the query, never in the client; (3) increment 1 = operator + client roles
+  (talent joins in increment 2); (4) polling is an acceptable first transport —
+  honest and simple — with the endpoint shaped so SSE can replace it without
+  breaking the client; (5) presence shows name + role only, never activity
+  surveillance.
