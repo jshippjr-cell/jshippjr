@@ -85,3 +85,77 @@ def test_alive_waveform_layer_on_client_audio_surfaces(client):
     page = client.get("/opportunity/1/capabilities").text
     assert "wave-live.js" in page
     assert "cap-audio" in page or "relevant_uploads" not in page  # markup intact
+
+
+def _won_project(client):
+    import re
+    client.post("/opportunity/1/status", data={"status": "Won"},
+                follow_redirects=True)
+    client.post("/opportunity/1/project", follow_redirects=True)
+    page = client.get("/opportunity/1").text
+    m = re.search(r'href="/project/(\d+)"', page)
+    return int(m.group(1))
+
+
+def test_session_room_bus_is_role_filtered_server_side(client):
+    """Phase 5: one event bus, filtered in SQL — an operator-only event never
+    reaches the client role, no matter what the client asks for."""
+    from chordential_oia.web import db as db_mod
+    pid = _won_project(client)
+    conn = db_mod.connect()
+    try:
+        db_mod.add_project_event(conn, pid, "comment", actor_role="client",
+                                 actor_name="Elena", body="note for everyone")
+        db_mod.add_project_event(conn, pid, "payout", actor_role="operator",
+                                 actor_name="Studio", body="internal",
+                                 audience="operator")
+        token = db_mod.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+    # operator (no token) sees both
+    ops = client.get(f"/project/{pid}/session.json").json()
+    assert len(ops["events"]) == 2
+    # client (share token) sees only the shared event — the boundary held
+    cl = client.get(f"/project/{pid}/session.json?k={token}").json()
+    kinds = [e["kind"] for e in cl["events"]]
+    assert kinds == ["comment"]
+    # a bad token gets nothing at all
+    assert client.get(f"/project/{pid}/session.json?k=wrong").status_code == 404
+
+
+def test_session_room_presence_and_comment_event_roundtrip(client):
+    from chordential_oia.web import db as db_mod
+    pid = _won_project(client)
+    conn = db_mod.connect()
+    try:
+        token = db_mod.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+    # client pings presence via their token; operator sees them in the room
+    r = client.post(f"/project/{pid}/presence",
+                    data={"k": token, "name": "Elena"})
+    assert r.json() == {"ok": True}
+    d = client.get(f"/project/{pid}/session.json").json()
+    assert {"name": "Elena", "role": "client"} in d["presence"]
+    # a real portal comment lands on the bus for every role
+    client.post(f"/project/{pid}/review/comment",
+                data={"k": token, "author": "Elena", "email": "e@vance.com",
+                      "body": "Love the bridge."}, follow_redirects=False)
+    d2 = client.get(f"/project/{pid}/session.json?k={token}").json()
+    assert any(e["kind"] == "comment" and "bridge" in e["body"]
+               for e in d2["events"])
+
+
+def test_session_room_strip_mounted_on_console_and_portal(client):
+    from chordential_oia.web import db as db_mod
+    pid = _won_project(client)
+    conn = db_mod.connect()
+    try:
+        token = db_mod.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+    console = client.get(f"/project/{pid}/delivery").text
+    assert 'id="session-room"' in console and 'data-role="operator"' in console
+    portal = client.get(f"/project/{pid}/delivery-portal?k={token}").text
+    assert 'id="session-room"' in portal and 'data-role="client"' in portal
+    assert "session-room.js" in portal

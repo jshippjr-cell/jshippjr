@@ -268,6 +268,10 @@ _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
 # submit work versions). The per-creator portal token IS the access control, so it
 # bypasses the admin login gate (same exemption as the client delivery portal).
 _CREATOR_PORTAL_RE = re.compile(r"^/creator/[A-Za-z0-9_-]+(/project/\d+/version)?/?$")
+# Session Room (Living OS P5): the live-room poll + presence ping are hit from the
+# token-gated client portal too — each route token-validates in-route (a bad token
+# gets the operator-only view refused / 404), so the paths bypass the login gate.
+_SESSION_ROOM_RE = re.compile(r"^/project/\d+/(session\.json|presence)/?$")
 
 
 def _is_delivery_portal_path(path: str) -> bool:
@@ -276,6 +280,7 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _REVIEW_ACTION_RE.match(path)
         or _DELIVERY_DL_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
+        or _SESSION_ROOM_RE.match(path)
     )
 
 
@@ -5339,6 +5344,12 @@ def review_comment(
                 kind="comment", parent_id=parent, verified=reviewer is not None,
             )
             verb = "replied" if parent is not None else "commented"
+            # Session Room bus: the comment becomes an event everyone in the
+            # room may see (client-side act; audience = all roles).
+            db.add_project_event(
+                conn, project_id, "comment", actor_role="client",
+                actor_name=name, body=body.strip()[:200],
+            )
             _notify_operator_review(
                 project_id, project,
                 title=f"{_campaign_label(project)} — new note",
@@ -5347,6 +5358,69 @@ def review_comment(
     finally:
         conn.close()
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
+
+
+# --------------------------------------------------------------------------- #
+# Session Room (Living OS P5) — the live layer over the delivery surfaces.
+# One event bus (project_events), role-filtered SERVER-SIDE; presence is
+# name + role only (council: never activity surveillance). Increment 1 covers
+# the operator console + client portal; talent joins in increment 2. Polling
+# transport for now — the endpoint shape (after=cursor) is SSE-compatible.
+# --------------------------------------------------------------------------- #
+_PRESENCE: dict = {}          # {project_id: {key: (name, role, ts)}} — in-process
+_PRESENCE_TTL = 90            # seconds; single-worker deployment, honest scope
+
+
+def _session_role(conn, project_id: int, k: str, r: str):
+    """Resolve the caller's room role. A valid share/reviewer token → client;
+    no token → operator (the login gate already protected the path)."""
+    if k or r:
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return None, ""
+        return "client", ((reviewer or {}).get("name") or "Client")
+    return "operator", "Studio"
+
+
+@app.get("/project/{project_id}/session.json")
+def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = ""):
+    conn = db.connect()
+    try:
+        role, _name = _session_role(conn, project_id, k, r)
+        if role is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        events = [
+            {"id": e["id"], "kind": e["kind"], "role": e["actor_role"],
+             "name": e["actor_name"], "body": e["body"], "at": e["created_at"]}
+            for e in db.list_project_events(conn, project_id, role=role,
+                                            after_id=after)
+        ]
+    finally:
+        conn.close()
+    import time as _t
+    now = _t.time()
+    room = _PRESENCE.get(project_id, {})
+    alive = {kk: v for kk, v in room.items() if now - v[2] < _PRESENCE_TTL}
+    _PRESENCE[project_id] = alive
+    return {"events": events,
+            "last": events[-1]["id"] if events else after,
+            "presence": [{"name": v[0], "role": v[1]} for v in alive.values()]}
+
+
+@app.post("/project/{project_id}/presence")
+def session_room_presence(project_id: int, k: str = Form(""), r: str = Form(""),
+                          name: str = Form("")):
+    conn = db.connect()
+    try:
+        role, fallback = _session_role(conn, project_id, k, r)
+    finally:
+        conn.close()
+    if role is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    import time as _t
+    who = (name.strip() or fallback)[:40]
+    _PRESENCE.setdefault(project_id, {})[f"{role}:{who}"] = (who, role, _t.time())
+    return {"ok": True}
 
 
 @app.post("/project/{project_id}/review/resolve")
@@ -5475,6 +5549,12 @@ def review_approve(
             db.update_delivery(conn, project_id, "state", "Delivered")
         except Exception:
             db.update_delivery(conn, project_id, "state", "Approved")
+        # Session Room bus: the approval is the room's biggest moment — everyone
+        # present sees it arrive live.
+        db.add_project_event(
+            conn, project_id, "approval", actor_role="client", actor_name=name,
+            body=f"Approved v{approved_n} for delivery.",
+        )
         _notify_operator_review(
             project_id, project,
             title=f"{_campaign_label(project)} — approved by {name}",

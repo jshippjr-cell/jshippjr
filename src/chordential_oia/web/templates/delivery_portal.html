@@ -743,5 +743,12 @@
 </script>
 
 <script src="/static/wave-live.js?v={{ static_v }}" defer></script>
+<div id="session-room"
+  data-project="{{ project['id'] }}" data-role="client"
+  data-name="{{ reviewer.name if reviewer else 'Client' }}"
+  data-token="{{ reviewer.token if reviewer and reviewer.token else share_token }}"
+  data-token-kind="{{ 'r' if reviewer and reviewer.token else 'k' }}"></div>
+<script src="/static/live.js?v={{ static_v }}" defer></script>
+<script src="/static/session-room.js?v={{ static_v }}" defer></script>
 </body>
 </html>

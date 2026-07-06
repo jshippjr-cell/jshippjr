@@ -67,6 +67,12 @@
 {% endblock %}
 {% block content %}
 
+{# Session Room (Living OS P5): live presence + arrivals over the one event bus #}
+<div id="session-room" data-project="{{ project['id'] }}" data-role="operator"
+     data-name="Studio"></div>
+<script src="/static/session-room.js?v={{ static_v }}" defer></script>
+
+
 <!-- HEADER -->
 <div class="detail-head card">
   <div>

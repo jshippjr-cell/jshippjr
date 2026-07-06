@@ -934,3 +934,18 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .machine-feed .mf-at{font-size:11px;color:var(--muted2);font-variant-numeric:tabular-nums;white-space:nowrap}
 /* alive waveform layer over the compact player (wave-live.js) */
 .cap-wave{display:block;width:100%;height:18px;margin-bottom:4px}
+
+/* ── Session Room strip (Living OS P5) — presence + live arrivals ── */
+#session-room{margin:0 0 14px}
+.sr-line{display:flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);font-weight:700}
+.sr-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  animation:lv-breathe 2.6s ease-in-out infinite}
+.sr-who{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted2)}
+.sr-feed{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.sr-ev{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:baseline;
+  font-size:12.5px;background:var(--card);border:1px solid var(--border);border-radius:9px;
+  padding:6px 10px}
+.sr-ev-approval{border-color:#cfe6cf;background:#f4faf4}
+.sr-ev .sr-at{font-size:10.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.sr-dot{animation:none}}

@@ -1167,6 +1167,22 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             started_at TEXT, ended_at TEXT
         )"""
     )
+    # Session Room (Living OS P5) — the ONE project event bus, append-only.
+    # Every meaningful delivery act becomes an event; `audience` is the
+    # server-side role filter (council ruling: filtering happens in the query,
+    # never in the client). Roles: operator | client | talent.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS project_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            kind TEXT NOT NULL,                  -- comment | version | approval | ...
+            actor_role TEXT DEFAULT '',
+            actor_name TEXT DEFAULT '',
+            body TEXT DEFAULT '',
+            audience TEXT DEFAULT 'operator,client,talent',
+            created_at TEXT
+        )"""
+    )
     conn.commit()
 
 
@@ -5034,3 +5050,31 @@ def update_sim_session(conn: sqlite3.Connection, session_id: int, **fields) -> N
     args.append(session_id)
     conn.execute(f"UPDATE sim_sessions SET {', '.join(sets)} WHERE id = ?", args)
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Session Room (Living OS P5) — project event bus helpers. Append-only; the
+# audience column is the trust boundary, enforced here in SQL.
+# --------------------------------------------------------------------------- #
+def add_project_event(conn: sqlite3.Connection, project_id: int, kind: str, *,
+                      actor_role: str = "", actor_name: str = "", body: str = "",
+                      audience: str = "operator,client,talent") -> int:
+    cur = conn.execute(
+        "INSERT INTO project_events (project_id, kind, actor_role, actor_name,"
+        " body, audience, created_at) VALUES (?,?,?,?,?,?,?)",
+        (project_id, kind, actor_role, actor_name, body, audience,
+         datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_project_events(conn: sqlite3.Connection, project_id: int, *, role: str,
+                        after_id: int = 0, limit: int = 50) -> list:
+    """Events this ROLE is allowed to see, oldest-first after ``after_id``.
+    The filter is server-side SQL — a client can never widen its own audience."""
+    return conn.execute(
+        "SELECT * FROM project_events WHERE project_id = ? AND id > ?"
+        " AND (',' || audience || ',') LIKE ? ORDER BY id ASC LIMIT ?",
+        (project_id, after_id, f"%,{role},%", limit),
+    ).fetchall()
