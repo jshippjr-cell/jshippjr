@@ -158,10 +158,14 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.55),
     0 0 40px rgba(228,103,31,.18), 0 0 0 30px rgba(228,103,31,0)}}
 .master.played{animation:none}
-.sndbtn{position:fixed;left:22px;bottom:20px;z-index:30;display:inline-flex;align-items:center;gap:8px;
+.sndbtn{position:fixed;right:18px;bottom:18px;z-index:30;display:inline-flex;align-items:center;gap:6px;
   background:rgba(20,16,20,.6);border:1px solid rgba(216,205,182,.35);color:var(--sand);
-  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
-  padding:9px 15px;border-radius:999px;cursor:pointer;backdrop-filter:blur(6px)}
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:7px 12px;border-radius:999px;cursor:pointer;backdrop-filter:blur(6px);
+  transition:opacity .9s ease}
+/* the button introduces itself, then recedes — present, never loud */
+.sndbtn.faded{opacity:.22}
+.sndbtn:hover,.sndbtn:focus-visible{opacity:1}
 .sndbtn .sd{width:7px;height:7px;border-radius:50%;background:#57504b;transition:background .3s ease}
 .sndbtn.on{color:var(--amber);border-color:rgba(243,176,116,.5)}
 .sndbtn.on .sd{background:var(--ember);box-shadow:0 0 10px rgba(228,103,31,.6);animation:pulse 2.5s ease-in-out infinite}
@@ -171,7 +175,9 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 @keyframes wb{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1)}}
 .touch{position:absolute;left:50%;top:calc(38% + 96px);transform:translateX(-50%);
   font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--amber);animation:pulse 2.5s ease-in-out infinite}
+  color:var(--amber);animation:pulse 2.5s ease-in-out infinite;white-space:nowrap}
+/* after the fan holds, the room asks for one gesture — the scroll packs it */
+.packcue{top:auto;bottom:4px}
 @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 
 /* stems */
@@ -187,9 +193,9 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .stem:hover .sw i{background:var(--ember)}
 
 /* the two PAPER objects — the realization: two of these aren't audio */
-.doc{position:absolute;left:50%;top:38%;width:120px;height:74px;border-radius:4px;
+.doc{position:absolute;left:50%;top:38%;width:124px;height:auto;min-height:76px;border-radius:4px;
   background:linear-gradient(165deg,#FCF7F8,#EFE6DA);border:1px solid #D8CDB6;
-  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:9px 10px;opacity:0;color:#44161E;pointer-events:none;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:9px 10px 18px;opacity:0;color:#44161E;pointer-events:none;
   transform:translate(-50%,-50%) rotate(-3deg) scale(.6);
   transition:transform var(--beat) cubic-bezier(.34,1.45,.64,1), opacity var(--b8) ease}
 .doc .dl{font-family:var(--mono);font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#737469}
@@ -341,7 +347,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* small stages: the choreography scales down, it never clips */
 @media (max-width:560px){
   .stem{width:146px;height:40px}
-  .doc{width:102px;height:64px}
+  .doc{width:106px}
+  .sndbtn{right:12px;bottom:12px;padding:6px 10px;font-size:8px}
   /* the folder tree wraps to two lines here — the stage grows so the reel
      and the filed delivery each keep their own air */
   .stage{height:580px}
@@ -379,6 +386,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
       <div class="mt">AURORA_Anthem_60_MASTER_v3_FINAL.wav</div>
     </div>
     <div class="touch" id="touch">This is a delivery · touch it</div>
+    <div class="touch packcue" id="packcue" style="display:none">Scroll — we pack it for you</div>
     <div class="folder" id="folder">
       <div class="fhead"><span class="fico" aria-hidden="true"></span>VANCE_HOLIDAY_2026/</div>
       <div class="ftree" id="ftree">
@@ -503,6 +511,11 @@ window.CH=(function(){
     btn.setAttribute('aria-pressed',String(on));
     btn.querySelector('.sl').textContent=on?'Sound off':'Sound on';
     if(on){ctx();tone(293.66,1.6,.06,'sine',1200);}});   /* the hero note: D */
+  /* introduce, then recede: fade to faint after 3s; any attention restores it */
+  var fadeT=setTimeout(function(){btn.classList.add('faded');},3000);
+  function wake(){btn.classList.remove('faded');clearTimeout(fadeT);
+    fadeT=setTimeout(function(){btn.classList.add('faded');},3000);}
+  ['pointerenter','focus','click'].forEach(function(ev){btn.addEventListener(ev,wake);});
   return{tone:tone,chord:chord,
     explode:function(){chord([146.83,220,293.66,369.99,440],2.6,.09);},         /* D maj */
     solo:function(i){tone([293.66,146.83,440,369.99,587.33][i]||293.66,.9,.07);},
@@ -594,33 +607,63 @@ window.CH=(function(){
         d.style.transform='translate(calc(-50% + '+dfan[i][0]*3.4*fs+'px), calc(-50% + '+dfan[i][1]*2.2*fs+'px)) rotate('+(i?4:-4)+'deg) scale(1)';
       }, reduce?0:(5+i)*B16);
     });
-    /* the turn: stems file themselves into THEIR folder */
-    setTimeout(function(){
-      folder.classList.add('show');
-      var rows=folder.querySelectorAll('.frow');
-      rows.forEach(function(r,i){
-        setTimeout(function(){
-          r.classList.add('in');
-          function fileAway(el,extra){
-            el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
-            el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';
-            el.style.opacity='0';el.style.pointerEvents='none';}
-          if(i===0){ stems.forEach(function(st,k){
-            setTimeout(function(){fileAway(st);}, reduce?0:k*B16*0.6); }); }
-          else if(i===1){ fileAway(docs[0],'rotate(-4deg)'); }
-          else if(i===2){ fileAway(docs[1],'rotate(4deg)'); }
-        }, reduce?0:i*BEAT*0.7);
-      });
-      setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
-        setTimeout(function(){caption.classList.add('in');replay.classList.add('in');
-        /* let the headline breathe — the reel arrives after it's been read */
-        setTimeout(function(){document.getElementById('reelteaser').classList.add('show');
-          window.rtStart();}, reduce?0:2200);}, reduce?0:BEAT);
-      }, reduce?50:rows.length*BEAT*0.7+BEAT);
-    }, reduce?50:5*B16+BEAT);
+    /* the fan HOLDS — the named objects are the point. The user looks, hovers,
+       reads. The first scroll down is the gesture that packs the delivery. */
+    setTimeout(function(){ armPack(); }, reduce?50:7*B16+BEAT);
+  }
+
+  /* the turn: stems file themselves into THEIR folder */
+  function runFiling(){
+    document.getElementById('packcue').style.display='none';
+    folder.classList.add('show');
+    var rows=folder.querySelectorAll('.frow');
+    rows.forEach(function(r,i){
+      setTimeout(function(){
+        r.classList.add('in');
+        function fileAway(el,extra){
+          el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
+          el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';
+          el.style.opacity='0';el.style.pointerEvents='none';}
+        if(i===0){ stems.forEach(function(st,k){
+          setTimeout(function(){fileAway(st);}, reduce?0:k*B16*0.6); }); }
+        else if(i===1){ fileAway(docs[0],'rotate(-4deg)'); }
+        else if(i===2){ fileAway(docs[1],'rotate(4deg)'); }
+      }, reduce?0:i*BEAT*0.7);
+    });
+    setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
+      setTimeout(function(){caption.classList.add('in');replay.classList.add('in');
+      /* let the headline breathe — the reel arrives after it's been read.
+         If the user has scrolled on, the wheel is waiting when they return. */
+      setTimeout(function(){document.getElementById('reelteaser').classList.add('show');
+        window.rtStart();}, reduce?0:2200);}, reduce?0:BEAT);
+    }, reduce?50:rows.length*BEAT*0.7+BEAT);
+  }
+
+  /* the scroll gate: filing waits for one downward gesture */
+  var packGen=0;
+  function armPack(){
+    if(reduce){runFiling();return;}
+    var gen=++packGen, done=false, y0=window.scrollY, ty=null;
+    document.getElementById('packcue').style.display='';
+    function off(){window.removeEventListener('wheel',wh);
+      window.removeEventListener('scroll',sc);window.removeEventListener('keydown',kd);
+      window.removeEventListener('touchstart',ts);window.removeEventListener('touchmove',tm);}
+    function go(){if(done||gen!==packGen||!played){off();return;}
+      done=true;off();runFiling();}
+    function wh(e){if(e.deltaY>0)go();}
+    function sc(){if(window.scrollY>y0+24)go();}
+    function kd(e){if(e.key==='ArrowDown'||e.key==='PageDown'||e.key===' ')go();}
+    function ts(e){ty=e.touches[0].clientY;}
+    function tm(e){if(ty!=null&&ty-e.touches[0].clientY>16)go();}
+    window.addEventListener('wheel',wh,{passive:true});
+    window.addEventListener('scroll',sc,{passive:true});
+    window.addEventListener('keydown',kd);
+    window.addEventListener('touchstart',ts,{passive:true});
+    window.addEventListener('touchmove',tm,{passive:true});
   }
   function reset(){
-    played=false;folder.classList.remove('show');caption.classList.remove('in');
+    played=false;packGen++;document.getElementById('packcue').style.display='none';
+    folder.classList.remove('show');caption.classList.remove('in');
     replay.classList.remove('in');stamp.classList.remove('land');
     folder.querySelectorAll('.frow').forEach(function(r){r.classList.remove('in');});
     stems.forEach(function(s){s.style.transition='';s.style.opacity='0';
