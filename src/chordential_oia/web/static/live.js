@@ -1,0 +1,140 @@
+/* live.js — the Living-OS layer (progressive enhancement only).
+ *
+ * Philosophy (art-direction bible, "The Living OS principle"): every page
+ * carries at least one living element that cannot exist in print, and every
+ * motion communicates STATE — the machine thinking, an event arriving, a
+ * number becoming true — never decoration. No frameworks; no page requires
+ * this file to function. Reduced-motion collapses everything to dignified
+ * instant states.
+ */
+(function () {
+  "use strict";
+  var reduce = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var Live = (window.Live = { reduced: reduce });
+
+  /* ---- Live.clock(el): a ticking clock — the cheapest proof the page is
+     alive. Blinking colon via CSS (.lv-colon). ---- */
+  Live.clock = function (el) {
+    function two(n) { return ("0" + n).slice(-2); }
+    function tick() {
+      var d = new Date();
+      el.innerHTML = two(d.getHours()) + '<span class="lv-colon">:</span>' +
+        two(d.getMinutes()) + '<span class="lv-colon">:</span>' + two(d.getSeconds());
+    }
+    tick(); setInterval(tick, 1000);
+  };
+
+  /* ---- Live.count(el, to, opts): a number becoming true — eased count-up.
+     Honest: only used when the value really changed. ---- */
+  Live.count = function (el, to, opts) {
+    opts = opts || {};
+    var from = opts.from != null ? opts.from : 0;
+    var ms = opts.ms || 900, suffix = opts.suffix || "";
+    if (reduce) { el.textContent = to + suffix; return; }
+    var t0 = performance.now();
+    (function step(now) {
+      var p = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * e) + suffix;
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  };
+
+  /* ---- Live.halo(el): an arrival — the element materializes with a light
+     ring. Used when the server reports something CHANGED. ---- */
+  Live.halo = function (el) {
+    if (reduce || !el) return;
+    el.classList.add("lv-halo");
+    el.addEventListener("animationend", function h() {
+      el.classList.remove("lv-halo"); el.removeEventListener("animationend", h);
+    });
+  };
+
+  /* ---- Live.think(steps): the machine visibly thinking. Dims the page and
+     shows the propagation path while REAL server work runs; resolves when
+     done() is called. Never used to fake work (ADR honesty rule). ---- */
+  Live.think = function (steps) {
+    var veil = document.createElement("div");
+    veil.className = "lv-veil";
+    veil.innerHTML =
+      '<div class="lv-veil-inner">' +
+      '<div class="lv-think-dot" aria-hidden="true"></div>' +
+      '<div class="lv-think-label">The machine is thinking…</div>' +
+      '<div class="lv-path">' + (steps || []).map(function (s) {
+        return '<span class="lv-tok">' + s + "</span>";
+      }).join('<span class="lv-arr">→</span>') + "</div></div>";
+    document.body.appendChild(veil);
+    requestAnimationFrame(function () { veil.classList.add("on"); });
+    var toks = veil.querySelectorAll(".lv-tok"), i = 0, iv = null;
+    if (!reduce && toks.length) {
+      iv = setInterval(function () {
+        toks[i % toks.length].classList.add("lit"); i++;
+      }, 550);
+    } else { toks.forEach(function (t) { t.classList.add("lit"); }); }
+    return {
+      done: function () {
+        if (iv) clearInterval(iv);
+        veil.classList.remove("on");
+        setTimeout(function () { veil.remove(); }, 450);
+      }
+    };
+  };
+
+  /* ---- Live.pulse(fromEl, toEl, cb): an event as light — a comet travels
+     between two on-screen elements on a transient overlay canvas. ---- */
+  var fx = null, fctx = null, pulses = [], raf = null;
+  function ensureFx() {
+    if (fx) return;
+    fx = document.createElement("canvas");
+    fx.className = "lv-fx"; document.body.appendChild(fx);
+    fctx = fx.getContext("2d");
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    fx.width = Math.round(window.innerWidth * dpr);
+    fx.height = Math.round(window.innerHeight * dpr);
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function fxLoop(now) {
+    fctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    fctx.globalCompositeOperation = "lighter";
+    for (var i = pulses.length - 1; i >= 0; i--) {
+      var p = pulses[i], t = Math.min(1, (now - p.t0) / p.dur);
+      for (var s = 0; s < 6; s++) {
+        var q = Math.max(0, t - s * 0.05), u = 1 - q;
+        var x = u * u * p.a[0] + 2 * u * q * p.c[0] + q * q * p.b[0];
+        var y = u * u * p.a[1] + 2 * u * q * p.c[1] + q * q * p.b[1];
+        var al = (1 - s / 6) * 0.85 * (t > 0.92 ? (1 - t) * 12 : 1);
+        var g = fctx.createRadialGradient(x, y, 0, x, y, 14 - s * 1.6);
+        g.addColorStop(0, "rgba(228,103,31," + Math.max(0, al) + ")");
+        g.addColorStop(1, "rgba(228,103,31,0)");
+        fctx.fillStyle = g; fctx.beginPath(); fctx.arc(x, y, 14 - s * 1.6, 0, 7); fctx.fill();
+      }
+      if (t >= 1) { if (p.cb) p.cb(); pulses.splice(i, 1); }
+    }
+    fctx.globalCompositeOperation = "source-over";
+    if (pulses.length) { raf = requestAnimationFrame(fxLoop); }
+    else { raf = null; fx.remove(); fx = null; }
+  }
+  Live.pulse = function (fromEl, toEl, cb) {
+    if (reduce || !fromEl || !toEl) { if (cb) cb(); return; }
+    ensureFx();
+    var fr = fromEl.getBoundingClientRect(), tr = toEl.getBoundingClientRect();
+    var a = [fr.left + fr.width / 2, fr.top + fr.height / 2];
+    var b = [tr.left + tr.width / 2, tr.top + tr.height / 2];
+    var c = [(a[0] + b[0]) / 2, Math.min(a[1], b[1]) - 60];
+    pulses.push({ a: a, b: b, c: c, t0: performance.now(), dur: 750, cb: cb });
+    if (!raf) raf = requestAnimationFrame(fxLoop);
+  };
+
+  /* ---- auto-wiring ---- */
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("[data-live-clock]").forEach(Live.clock);
+    document.querySelectorAll("[data-count-to]").forEach(function (el) {
+      var to = parseInt(el.dataset.countTo, 10);
+      if (!isNaN(to)) Live.count(el, to, {
+        from: parseInt(el.dataset.countFrom || "0", 10),
+        suffix: el.dataset.countSuffix || ""
+      });
+    });
+  });
+})();

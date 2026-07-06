@@ -6,6 +6,7 @@
   <title>{% block title %}Chordential{% endblock %} · Procurement OS</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
   <script src="/static/ui.js?v={{ static_v }}" defer></script>
+  <script src="/static/live.js?v={{ static_v }}" defer></script>
   <link rel="icon" href="/static/public/wordmark-dark.png">
   <!-- PWA: installable iOS/desktop app + native Web Push -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -110,6 +111,12 @@
       <form class="topbar-search" action="/inbox" method="get">
         <input type="search" name="q" placeholder="Search opportunities, buyers, locations…">
       </form>
+      {# The sitewide living element: the machine beacon — breathing only when the
+         autonomous engines are actually running (honest liveness, not decoration). #}
+      <span class="machine-beacon{{ '' if machine_on() else ' off' }}"
+            title="{{ 'Autonomous engines running' if machine_on() else 'Autonomous engines off' }}">
+        <span class="mb-dot" aria-hidden="true"></span>{{ 'machine running' if machine_on() else 'machine idle' }}
+      </span>
     </header>
     <div class="content">
       {% block content %}{% endblock %}

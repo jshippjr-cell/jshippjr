@@ -93,6 +93,9 @@ def _static_version() -> str:
 
 templates.env.globals["static_v"] = _static_version()
 templates.env.filters["fromjson"] = json.loads
+# The sitewide machine beacon (base.html) breathes only when the autonomous
+# engines are actually on — honest liveness. Callable so env changes apply live.
+templates.env.globals["machine_on"] = scheduler.autonomous_engines_on
 
 # Founder-uploaded audio samples for the "Relevant work" section. Path is
 # overridable (CHORDENTIAL_UPLOAD_DIR) with a module-relative default; created on

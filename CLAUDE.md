@@ -91,6 +91,10 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   impl, best-effort, never raise/block.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from
   engine data; the client doc + delivery package are editable via overrides.
+- **Living OS layer:** every page carries ≥1 living element that can't exist in print
+  (`static/live.js` + `lv-*` CSS grammar; see the bible's "Living OS principle").
+  Motion communicates state/automation/intelligence only — honest liveness, never
+  decoration; thinking states run only while real server work runs.
 
 ## Deploy
 Render, from `render.yaml` (service `chordential`, `autoDeploy: true` on the dev branch

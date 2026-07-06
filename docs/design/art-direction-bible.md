@@ -26,6 +26,19 @@ temperature.
 
 Three words govern every decision: **Warm. Precise. Made.**
 
+### The Living OS principle *(amendment, 2026-07-06 — core law)*
+
+ChordOS is a **living operating system, not a beautifully typeset document.**
+**Every page carries at least one living element that cannot exist in print** —
+a breathing beacon, a ticking clock, a number becoming true, light traveling
+between modules, a waveform moving with real audio. The print test is the gate:
+*if a printout of the page loses nothing, the page has failed.* And the motion
+law stands above it: every living element communicates **state, confidence,
+automation, or intelligence — never decoration.** The implementation layer is
+`static/live.js` + the `lv-*` grammar in `style.css`; the honesty rule applies
+(a thinking state runs only while real work runs; a beacon breathes only when
+the machine is actually on).
+
 **The North-Star test.** Before shipping any surface, ask: *"Does this feel like it
 came from a studio with taste, or from a component library?"* If it could belong to
 any B2B tool, it's wrong.
