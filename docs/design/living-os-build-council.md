@@ -29,3 +29,24 @@ creative campaigns become production-ready.*
   minimum-duration padding for drama; (2) the propagation tokens name the real
   modules; (3) arrival choreography touches only elements the server reports as
   changed; (4) the no-JS path stays fully functional.
+
+## Phase 2 review — the machine thinks (Update Intelligence)
+
+- **Marcus (Product):** "Causal liveness, delivered: the veil is honest (it
+  lasts exactly as long as the analyze call — I checked there's no padding) and
+  the fit% count-up is fed by the true before/after. Accepted. Watch-item: big
+  multipart submits (voice memos) run long — the breathing dot must keep
+  reading as alive, never hung. Revisit if users report anxiety."
+- **Dana (Brand):** "Dose discipline held: ONE halo (the capture callout), the
+  rest arrives through the existing calm grammar. Ratified."
+- **Ellis (Design):** "The tokens name the real modules now — not theater.
+  Next dose of honesty: Mission Control's feed must show only REAL recorded
+  events with real timestamps. No invented lines, ever."
+- **Priya (Revenue):** "Fit% ticking in front of the operator is the first time
+  the product *demonstrates* compounding instead of claiming it. I want this
+  grammar client-side on the brief one day — parked, not now."
+- **Theo (Chair) — binding:** Phase 2 accepted. Rulings for Phase 3 (Mission
+  Control): (1) the feed shows only real recorded events with real timestamps;
+  (2) "Waiting on you" counts only decisions that truly block on the human;
+  (3) every existing dashboard test anchor is preserved — the hero is additive;
+  (4) idle motion budget = the clock + the beacon, nothing else.
