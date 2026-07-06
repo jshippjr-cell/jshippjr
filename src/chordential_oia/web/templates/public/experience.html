@@ -11,7 +11,7 @@
    Camera spec (Beat 3): 35mm orbit, one warm key top-left, master center on a
    reflection floor, folder builds lower-third. Every motion teaches delivery. */
 :root{
-  --ink:#141014; --cream:#FCF7F8; --sand:#D8CDB6; --olive:#9a917f;
+  --ink:#38121A; --cream:#FCF7F8; --sand:#D8CDB6; --olive:#9a917f;
   --wine:#44161E; --ember:#E4671F; --amber:#F3B074;
   --beat:625ms; --b16:156ms; --b8:312ms; --bar:2500ms;
   --serif:Georgia,'Iowan Old Style','Times New Roman',serif;
@@ -26,7 +26,7 @@ body{margin:0;background:var(--ink);color:#EFE7DC;overflow-x:hidden;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .scene{min-height:100vh;position:relative;display:flex;flex-direction:column;
   align-items:center;justify-content:center;padding:90px 20px 70px;
-  background:radial-gradient(110% 90% at 32% 8%, #241c20 0%, #181216 52%, #120e11 100%)}
+  background:radial-gradient(110% 90% at 32% 8%, #5A2029 0%, #44161E 52%, #2E0D13 100%)}
 h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--olive)}
 .mono{font-family:var(--mono)}
@@ -35,9 +35,9 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* BEATS 1-2 — the six-second open. Cold grade, faint handheld, off-grid
    fragments; the settle + warmth + record light = Chordential arriving. */
 .hero{transition:background 1.2s ease}
-.hero.cold{background:radial-gradient(110% 90% at 50% 10%, #1a171c 0%, #131015 55%, #0f0d10 100%)}
+.hero.cold{background:radial-gradient(110% 90% at 50% 10%, #3E1D28 0%, #2F1119 55%, #230A10 100%)}
 .hero.cold .stagejitter{}
-.hero:not(.cold){background:radial-gradient(110% 90% at 32% 8%, #241c20 0%, #181216 52%, #120e11 100%)}
+.hero:not(.cold){background:radial-gradient(110% 90% at 32% 8%, #5A2029 0%, #44161E 52%, #2E0D13 100%)}
 .frag{position:absolute;font-family:var(--mono);font-size:12px;color:#8a8075;filter:blur(1.2px);
   opacity:0;transition:opacity var(--b8) ease}
 .hero.cold .frag{animation:jit 1.1s steps(2) infinite}
@@ -91,10 +91,10 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* THE MORNING AFTER — never show the machine; show what arrives. One warm
    reading lamp, one cream document, assembling itself calmly as you scroll.
    No AI, no fields, no explanation. Just the outcome. */
-.mawrap{position:relative}
+.mawrap{position:relative;width:calc(100% + 40px);margin:0 -20px}
 .ma{min-height:100vh;display:flex;flex-direction:column;
   align-items:center;justify-content:center;padding:90px 20px 70px;
-  background:radial-gradient(70% 55% at 50% 34%, #2a2118 0%, #191216 55%, #141014 100%)}
+  background:radial-gradient(70% 55% at 50% 34%, #55231F 0%, #3D141B 55%, #2E0D13 100%)}
 .ma .maead{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--olive);margin-bottom:22px}
 .brief{width:min(430px,90vw);background:linear-gradient(170deg,#FCF7F8,#F3EBE0);
@@ -212,7 +212,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* the capability demonstration — a card from the reel comes forward and opens.
    Warm paper on the dark room; authored motion, no bounce. */
 .lroom{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;
-  background:rgba(12,9,11,.6);backdrop-filter:blur(8px);
+  background:rgba(32,8,13,.62);backdrop-filter:blur(8px);
   opacity:0;pointer-events:none;transition:opacity .5s ease}
 .lroom.open{opacity:1;pointer-events:auto}
 .lcard{width:min(860px,92vw);max-height:86vh;display:flex;flex-direction:column;
