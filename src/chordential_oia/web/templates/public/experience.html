@@ -177,7 +177,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* stems */
 .stem{position:absolute;left:50%;top:38%;width:190px;height:44px;border-radius:9px;
   background:linear-gradient(160deg,#2a2125,#1b1518);border:1px solid rgba(216,205,182,.3);
-  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:6px 10px;opacity:0;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:6px 10px;opacity:0;pointer-events:none;
   transform:translate(-50%,-50%) scale(.6);
   transition:transform var(--beat) cubic-bezier(.34,1.45,.64,1), opacity var(--b8) ease, box-shadow var(--b8) ease}
 .stem .sl{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive)}
@@ -189,7 +189,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* the two PAPER objects — the realization: two of these aren't audio */
 .doc{position:absolute;left:50%;top:38%;width:120px;height:74px;border-radius:4px;
   background:linear-gradient(165deg,#FCF7F8,#EFE6DA);border:1px solid #D8CDB6;
-  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:9px 10px;opacity:0;color:#44161E;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:9px 10px;opacity:0;color:#44161E;pointer-events:none;
   transform:translate(-50%,-50%) rotate(-3deg) scale(.6);
   transition:transform var(--beat) cubic-bezier(.34,1.45,.64,1), opacity var(--b8) ease}
 .doc .dl{font-family:var(--mono);font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#737469}
@@ -204,10 +204,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   width:min(560px,88vw);text-align:center;opacity:0;pointer-events:none;
   transition:opacity 1.2s ease}
 .reelteaser.show{opacity:1;pointer-events:auto}
-.reelteaser canvas{display:block;width:100%;height:210px;cursor:pointer;
-  transition:transform var(--b8) cubic-bezier(.19,1,.22,1), filter var(--b8) ease}
-.reelteaser canvas:hover{transform:translateY(-5px) scale(1.015) perspective(800px) rotateX(2deg);
-  filter:drop-shadow(0 18px 30px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(228,103,31,.25))}
+.reelteaser canvas{display:block;width:100%;height:210px;cursor:pointer}
+/* hover lives on the artifact itself, in-canvas — lifting the object, not scaling a button */
 .reelteaser .rt{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--olive);margin-top:4px}
 .reelteaser .rt a{color:var(--amber);text-decoration:none;cursor:pointer}
@@ -219,28 +217,62 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .lroom.open{opacity:1;pointer-events:auto}
 .lcard{width:min(860px,92vw);max-height:86vh;display:flex;flex-direction:column;
   border-radius:16px;overflow:hidden;position:relative;
-  background:linear-gradient(170deg,#FCF7F8,#F1E9DD);color:#1F1E1E;
-  border:1px solid rgba(243,176,116,.4);
-  box-shadow:0 60px 140px rgba(0,0,0,.75), 0 0 90px rgba(228,103,31,.15);
+  background:var(--lc-bg, linear-gradient(170deg,#FCF7F8,#F1E9DD));color:var(--lc-ink,#1F1E1E);
+  border:1px solid var(--lc-border, rgba(243,176,116,.4));
+  box-shadow:0 60px 140px rgba(0,0,0,.75), var(--lc-glow, 0 0 90px rgba(228,103,31,.15));
   transform:translateY(46px) scale(.94);opacity:.6;
   transition:transform .65s cubic-bezier(.22,1,.36,1), opacity .5s ease}
 .lroom.open .lcard{transform:none;opacity:1}
-.lbody{overflow-y:auto;padding:26px 32px 18px}
-.lkick{font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#9a5a1a}
-.lt{font-family:var(--serif);font-size:clamp(22px,3.4vw,30px);color:#44161E;margin-top:6px;line-height:1.1}
-.lcat{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#737469;margin-top:6px}
+/* the artifact's material lives on two layers: texture beneath the text,
+   edgework and signature detail above the surface */
+.lcard::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:0}
+.lcard::after{content:"";position:absolute;pointer-events:none;z-index:1}
+/* TEN MATERIALS — the opened card is the hero artifact, not a dialog */
+.lcard[data-mat=holiday]::before{background:repeating-linear-gradient(0deg,transparent 0 25px,rgba(160,138,92,.10) 25px 26px)}
+.lcard[data-mat=holiday]::after{inset:9px;border:1px solid rgba(190,150,70,.55);border-radius:10px;
+  box-shadow:inset 0 0 0 1px rgba(255,244,214,.5)}
+.lcard[data-mat=auto]::before{background:
+  linear-gradient(115deg,transparent 32%,rgba(255,255,255,.09) 46%,transparent 58%),
+  repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px)}
+.lcard[data-mat=auto]::after{inset:0;border-radius:16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(0,0,0,.5)}
+.lcard[data-mat=health]::before{background:radial-gradient(120% 60% at 50% 0%,rgba(255,255,255,.5),transparent 60%)}
+.lcard[data-mat=tech]::before{background:
+  repeating-linear-gradient(90deg,rgba(140,170,180,.06) 0 1px,transparent 1px 46px),
+  repeating-linear-gradient(0deg,rgba(140,170,180,.045) 0 1px,transparent 1px 64px)}
+.lcard[data-mat=tech]::after{inset:8px;border:1px solid rgba(255,255,255,.08);border-radius:11px;
+  background:rgba(255,255,255,.02)}
+.lcard[data-mat=podcast]::before{background:
+  repeating-linear-gradient(90deg,rgba(42,37,33,.28) 0 1px,transparent 1px 9px) top/100% 6px no-repeat,
+  linear-gradient(rgba(228,103,31,.85),rgba(228,103,31,.85)) 0 10px/100% 2px no-repeat,
+  linear-gradient(rgba(243,176,116,.7),rgba(243,176,116,.7)) 0 15px/100% 1px no-repeat}
+.lcard[data-mat=sports]::before{background:
+  repeating-linear-gradient(45deg,rgba(255,255,255,.022) 0 1px,transparent 1px 4px),
+  repeating-linear-gradient(-45deg,rgba(255,255,255,.022) 0 1px,transparent 1px 4px)}
+.lcard[data-mat=sports]::after{inset:9px;border:1px dashed rgba(255,255,255,.20);border-radius:10px}
+.lcard[data-mat=titles]::before{background:
+  linear-gradient(rgba(0,0,0,.75),rgba(0,0,0,.75)) top/100% 16px no-repeat,
+  linear-gradient(rgba(0,0,0,.75),rgba(0,0,0,.75)) bottom/100% 16px no-repeat,
+  radial-gradient(70% 45% at 50% 50%,rgba(200,180,150,.05),transparent 70%)}
+.lcard[data-mat=financial]::before{background:repeating-linear-gradient(90deg,rgba(46,52,64,.05) 0 1px,transparent 1px 7px)}
+.lcard[data-mat=travel]::before{background:radial-gradient(65% 42% at 30% 82%,rgba(240,150,60,.20),transparent 72%)}
+.lcard[data-mat=children]::before{background:radial-gradient(70% 55% at 50% 40%,rgba(240,170,140,.09),transparent 75%)}
+.lbody{overflow-y:auto;padding:26px 32px 18px;position:relative;z-index:2}
+.lkick{font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--lc-kick,#9a5a1a)}
+.lt{font-family:var(--serif);font-size:clamp(22px,3.4vw,30px);color:var(--lc-title,#44161E);margin-top:6px;line-height:1.1}
+.lcat{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--lc-sub,#737469);margin-top:6px}
 .lsec{margin-top:18px}
-.lsec .lsk{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#9a5a1a}
-.lsec p{margin:6px 0 0;font-size:13.5px;color:#3a3735;line-height:1.6;max-width:62ch}
+.lsec .lsk{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--lc-kick,#9a5a1a)}
+.lsec p{margin:6px 0 0;font-size:13.5px;color:var(--lc-body,#3a3735);line-height:1.6;max-width:62ch}
 .lchips{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
-.lchips span{font-size:11.5px;font-weight:600;color:#44161E;
-  background:rgba(228,103,31,.08);border:1px solid rgba(228,103,31,.3);
+.lchips span{font-size:11.5px;font-weight:600;color:var(--lc-chipink,#44161E);
+  background:var(--lc-chipbg, rgba(228,103,31,.08));border:1px solid var(--lc-chipbd, rgba(228,103,31,.3));
   border-radius:999px;padding:4px 11px}
 .lnext{display:inline-block;margin:20px 0 6px;font-family:var(--mono);font-size:10px;
-  letter-spacing:.14em;text-transform:uppercase;color:#9a5a1a;cursor:pointer;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--lc-kick,#9a5a1a);cursor:pointer;
   background:none;border:0;padding:0}
 .lnext:hover{color:var(--ember)}
-.ldock{display:flex;align-items:center;gap:12px;padding:14px 22px;flex:none;
+.ldock{display:flex;align-items:center;gap:12px;padding:14px 22px;flex:none;position:relative;z-index:2;
   background:rgba(31,30,30,.95);border-top:1px solid rgba(216,205,182,.2)}
 .ldock .lw{display:flex;gap:2px;height:26px;align-items:center;flex:1;max-width:120px}
 .ldock .lw i{flex:1;border-radius:1px;background:var(--amber);opacity:.85}
@@ -251,8 +283,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .lbar{flex:2;height:4px;border-radius:3px;background:rgba(216,205,182,.2);overflow:hidden;cursor:pointer}
 .lbar i{display:block;height:100%;width:0;background:var(--ember)}
 .ltime{font-family:var(--mono);font-size:10.5px;color:var(--sand);font-variant-numeric:tabular-nums}
-.lclose{position:absolute;right:12px;top:10px;background:none;border:0;color:#737469;
-  font-size:18px;cursor:pointer;padding:6px;line-height:1;z-index:2}
+.lclose{position:absolute;right:12px;top:10px;background:none;border:0;color:var(--lc-sub,#737469);
+  font-size:18px;cursor:pointer;padding:6px;line-height:1;z-index:3}
 
 /* the client's folder */
 .folder{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%) translateY(30px);
@@ -532,7 +564,7 @@ window.CH=(function(){
     var fan=[[-42,-30],[-22,-8],[0,-38],[22,-8],[42,-30]];   /* % offsets */
     stems.forEach(function(s,i){
       setTimeout(function(){
-        s.style.opacity='1';
+        s.style.opacity='1';s.style.pointerEvents='auto';
         s.style.transform='translate(calc(-50% + '+fan[i][0]*4+'px), calc(-50% + '+fan[i][1]*2.2+'px)) scale(1)';
       }, reduce?0:i*B16);
     });
@@ -553,7 +585,8 @@ window.CH=(function(){
           r.classList.add('in');
           function fileAway(el,extra){
             el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
-            el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';el.style.opacity='0';}
+            el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';
+            el.style.opacity='0';el.style.pointerEvents='none';}
           if(i===0){ stems.forEach(function(st,k){
             setTimeout(function(){fileAway(st);}, reduce?0:k*B16*0.6); }); }
           else if(i===1){ fileAway(docs[0],'rotate(-4deg)'); }
@@ -573,9 +606,9 @@ window.CH=(function(){
     replay.classList.remove('in');stamp.classList.remove('land');
     folder.querySelectorAll('.frow').forEach(function(r){r.classList.remove('in');});
     stems.forEach(function(s){s.style.transition='';s.style.opacity='0';
-      s.style.transform='translate(-50%,-50%) scale(.6)';});
+      s.style.pointerEvents='none';s.style.transform='translate(-50%,-50%) scale(.6)';});
     docs.forEach(function(d,i){d.style.transition='';d.style.opacity='0';
-      d.style.transform='translate(-50%,-50%) rotate('+(i?4:-4)+'deg) scale(.6)';});
+      d.style.pointerEvents='none';d.style.transform='translate(-50%,-50%) rotate('+(i?4:-4)+'deg) scale(.6)';});
     document.getElementById('reelteaser').classList.remove('show');window.rtStop();
     master.style.opacity='1';master.style.transform='translate(-50%,-50%)';
     touch.style.display='';
@@ -604,8 +637,256 @@ window.CH=(function(){
     io.observe(brief);
   })();
 
-  /* the rotating demo reel — ten cards, one voltage forward. The front card
-     announces only its title and the invitation; the card IS the interface. */
+  /* THE MATERIAL LIBRARY — ten artifacts, not ten buttons. Each demonstration
+     is a hand-finished object from a different campaign: its own material,
+     edgework, waveform signature and micro-detail. Motion animates light,
+     shadow and material — never UI. Cards are drawn in a 44×60 unit space. */
+  function rrp(g,xx,yy,ww,hh,r){g.beginPath();
+    if(g.roundRect){g.roundRect(xx,yy,ww,hh,r);return;}
+    g.moveTo(xx+r,yy);g.arcTo(xx+ww,yy,xx+ww,yy+hh,r);g.arcTo(xx+ww,yy+hh,xx,yy+hh,r);
+    g.arcTo(xx,yy+hh,xx,yy,r);g.arcTo(xx,yy,xx+ww,yy,r);g.closePath();}
+  function TH(o){var b={ink:'#1F1E1E',body:'#3a3735',sub:'#737469',title:'#44161E',
+    kick:'#9a5a1a',cbg:'rgba(228,103,31,.08)',cbd:'rgba(228,103,31,.3)',cink:'#44161E',
+    bd:'rgba(243,176,116,.4)',glow:'0 0 90px rgba(228,103,31,.15)'};
+    for(var k in o)b[k]=o[k];return b;}
+  var MATS=[
+    /* 01 · warm ivory paper, gold-foil edge, embossed orchestral staff, ember glow */
+    {k:'holiday',w:'arcs',wc:'rgba(228,103,31,.9)',sweep:'soft',eb:'rgba(120,95,50,.35)',
+     th:TH({bg:'linear-gradient(168deg,#FCF6E8,#EFE3C6)',bd:'rgba(216,185,102,.55)',
+       glow:'0 0 100px rgba(228,103,31,.22)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);
+       gr.addColorStop(0,'#FBF4E6');gr.addColorStop(1,'#EDE0C2');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       g.strokeStyle='rgba(160,138,92,.30)';g.lineWidth=.5;
+       for(var i=0;i<5;i++){g.beginPath();g.moveTo(8,15+i*3.5);g.lineTo(36,15+i*3.5);g.stroke();}
+       var fg=g.createLinearGradient(0,0,44,60);fg.addColorStop(0,'#E8CD84');
+       fg.addColorStop(.5,'#B98F3E');fg.addColorStop(1,'#F3DFA6');
+       g.strokeStyle=fg;g.lineWidth=.9;rrp(g,2,2,40,56,5.5);g.stroke();
+       g.fillStyle=fg;g.beginPath();g.arc(35,51,2.3,0,7);g.fill();
+       g.strokeStyle='rgba(255,250,235,.8)';g.lineWidth=.5;
+       g.beginPath();g.arc(34.4,50.4,1.2,3.4,5.2);g.stroke();}},
+    /* 02 · graphite aluminum, brushed finish, machined corner details, gloss */
+    {k:'auto',w:'machined',wc:'#D9DEE3',wa:5.5,sweep:'sharp',eb:'rgba(255,255,255,.20)',
+     th:TH({bg:'linear-gradient(170deg,#42474D,#1E2125)',ink:'#E7E4DE',body:'#C5C9CE',
+       sub:'#8E969E',title:'#F4F1EA',kick:'#F3B074',cbg:'rgba(255,255,255,.06)',
+       cbd:'rgba(255,255,255,.25)',cink:'#F4F1EA',bd:'rgba(255,255,255,.18)',
+       glow:'0 0 90px rgba(160,180,200,.14)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#4A4F55');
+       gr.addColorStop(.45,'#33373C');gr.addColorStop(1,'#202327');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       for(var i=0;i<20;i++){g.strokeStyle='rgba(255,255,255,'+(.02+.05*Math.abs(Math.sin(i*7.3)))+')';
+         g.lineWidth=.5;g.beginPath();g.moveTo(0,i*3+1);g.lineTo(44,i*3+1);g.stroke();}
+       g.strokeStyle='rgba(255,255,255,.10)';g.lineWidth=.7;rrp(g,1,1,42,58,6);g.stroke();
+       g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=.6;
+       g.beginPath();g.moveTo(4,1.2);g.lineTo(40,1.2);g.stroke();
+       [[4.5,4.5],[39.5,4.5],[4.5,55.5],[39.5,55.5]].forEach(function(p){
+         g.fillStyle='rgba(0,0,0,.55)';g.beginPath();g.arc(p[0],p[1],.9,0,7);g.fill();
+         g.fillStyle='rgba(255,255,255,.28)';g.beginPath();g.arc(p[0]-.3,p[1]-.3,.35,0,7);g.fill();});}},
+    /* 03 · soft archival paper, calm light, embossed waveform */
+    {k:'health',w:'gentle',wa:5,sweep:'soft',eb:'rgba(0,0,0,.08)',
+     th:TH({bg:'linear-gradient(172deg,#F7F3EC,#EAE3D7)',bd:'rgba(180,170,150,.4)',
+       glow:'0 0 80px rgba(228,103,31,.08)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#F6F2EB');
+       gr.addColorStop(1,'#E9E2D5');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       var rg=g.createRadialGradient(22,4,2,22,4,30);rg.addColorStop(0,'rgba(255,255,255,.45)');
+       rg.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=rg;g.fillRect(0,0,44,34);
+       g.strokeStyle='rgba(0,0,0,.05)';g.lineWidth=.6;rrp(g,1.5,1.5,41,57,6);g.stroke();}},
+    /* 04 · smoked acrylic, inner layer, circuit traces, LED pulse */
+    {k:'tech',w:'steps',wc:'#F3B074',wa:5.5,sweep:'glass',eb:'rgba(150,185,195,.25)',
+     th:TH({bg:'linear-gradient(165deg,#14171C,#242A33)',ink:'#DDE3E7',body:'#B9C2C9',
+       sub:'#7C8790',title:'#EFF3F5',kick:'#F3B074',cbg:'rgba(140,170,180,.08)',
+       cbd:'rgba(140,170,180,.3)',cink:'#EFF3F5',bd:'rgba(140,170,180,.25)',
+       glow:'0 0 90px rgba(120,160,175,.15)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#191C21');
+       gr.addColorStop(1,'#2B313A');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       g.fillStyle='rgba(255,255,255,.045)';rrp(g,3,3,38,54,5);g.fill();
+       g.strokeStyle='rgba(255,255,255,.10)';g.lineWidth=.6;rrp(g,3,3,38,54,5);g.stroke();
+       g.strokeStyle='rgba(150,185,195,.20)';g.lineWidth=.6;
+       g.beginPath();g.moveTo(10,12);g.lineTo(20,12);g.lineTo(20,20);g.lineTo(30,20);g.stroke();
+       g.beginPath();g.moveTo(14,52);g.lineTo(14,44);g.lineTo(26,44);g.stroke();
+       g.fillStyle='rgba(150,185,195,.5)';
+       [[10,12],[30,20],[26,44]].forEach(function(p){g.beginPath();g.arc(p[0],p[1],.8,0,7);g.fill();});},
+     anim:function(g,t,em){var a=.35+.55*(.5+.5*Math.sin(t/450));
+       g.fillStyle='rgba(228,103,31,'+a+')';g.beginPath();g.arc(37,8,1.3,0,7);g.fill();
+       g.fillStyle='rgba(243,176,116,'+(a*.35)+')';g.beginPath();g.arc(37,8,2.6,0,7);g.fill();}},
+    /* 05 · cassette label — cream label on a dark shell, hubs, timing marks */
+    {k:'podcast',w:'vu',wc:'rgba(243,176,116,.85)',wa:4,wy:51,sweep:'soft',eb:'rgba(255,255,255,.14)',
+     th:TH({bg:'linear-gradient(175deg,#F5ECD6,#EADCBE)',title:'#3B2B1B',
+       bd:'rgba(120,95,60,.4)',glow:'0 0 80px rgba(228,103,31,.12)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#2A2521');
+       gr.addColorStop(1,'#1B1714');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       g.fillStyle='#F2E8D3';rrp(g,4,14,36,24,2);g.fill();
+       g.fillStyle='rgba(228,103,31,.9)';g.fillRect(4,17,36,1.6);
+       g.fillStyle='rgba(243,176,116,.8)';g.fillRect(4,20,36,.9);
+       g.strokeStyle='rgba(90,78,64,.85)';g.lineWidth=.8;
+       [[16,30],[28,30]].forEach(function(p){g.beginPath();g.arc(p[0],p[1],3,0,7);g.stroke();
+         g.fillStyle='rgba(90,78,64,.7)';g.beginPath();g.arc(p[0],p[1],.7,0,7);g.fill();});
+       g.fillStyle='rgba(42,37,33,.45)';
+       for(var i=0;i<15;i++)g.fillRect(6+i*2.2,35.4,.6,1.5);},
+     anim:function(g,t,em){g.strokeStyle='rgba(90,78,64,.9)';g.lineWidth=.6;
+       [[16,30],[28,30]].forEach(function(p,pi){var a=t/900*(pi?-1:1);
+         g.beginPath();g.moveTo(p[0]-Math.cos(a)*2.2,p[1]-Math.sin(a)*2.2);
+         g.lineTo(p[0]+Math.cos(a)*2.2,p[1]+Math.sin(a)*2.2);g.stroke();});}},
+    /* 06 · matte black technical fabric, stitched border, high-energy pulse */
+    {k:'sports',w:'spikes',wc:'#E4671F',wa:6,sweep:'none',eb:'rgba(255,255,255,.16)',
+     th:TH({bg:'linear-gradient(170deg,#17181B,#0D0E10)',ink:'#E9E9E7',body:'#BFBFBC',
+       sub:'#84847F',title:'#FFFFFF',kick:'#F3B074',cbg:'rgba(228,103,31,.16)',
+       cbd:'rgba(228,103,31,.5)',cink:'#FFFFFF',bd:'rgba(255,255,255,.14)',
+       glow:'0 0 90px rgba(228,103,31,.18)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#17181B');
+       gr.addColorStop(1,'#0E0F11');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       g.strokeStyle='rgba(255,255,255,.04)';g.lineWidth=.5;
+       for(var i=-20;i<20;i++){g.beginPath();g.moveTo(i*3,0);g.lineTo(i*3+60,60);g.stroke();
+         g.beginPath();g.moveTo(i*3+60,0);g.lineTo(i*3,60);g.stroke();}
+       g.setLineDash([1.8,1.8]);g.strokeStyle='rgba(255,255,255,.22)';g.lineWidth=.7;
+       rrp(g,2.5,2.5,39,55,5.5);g.stroke();g.setLineDash([]);}},
+    /* 07 · cinema glass — letterbox bars, atmospheric haze, frame ticks */
+    {k:'titles',w:'ribbon',sweep:'glass',eb:'rgba(200,180,150,.18)',
+     th:TH({bg:'linear-gradient(170deg,#101016,#1D1A24)',ink:'#E2DDD2',body:'#BDB7AA',
+       sub:'#7E7A70',title:'#F2EEE4',kick:'#F3B074',cbg:'rgba(200,180,150,.08)',
+       cbd:'rgba(200,180,150,.3)',cink:'#F2EEE4',bd:'rgba(200,180,150,.2)',
+       glow:'0 0 100px rgba(90,80,120,.25)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#0F0F14');
+       gr.addColorStop(1,'#1D1A24');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       var rg=g.createRadialGradient(22,30,2,22,30,22);rg.addColorStop(0,'rgba(200,180,150,.10)');
+       rg.addColorStop(1,'rgba(200,180,150,0)');g.fillStyle=rg;g.fillRect(0,8,44,44);
+       g.fillStyle='rgba(0,0,0,.75)';g.fillRect(0,0,44,7);g.fillRect(0,53,44,7);
+       g.fillStyle='rgba(255,255,255,.25)';
+       for(var i=0;i<9;i++)g.fillRect(1.5,10+i*4.8,1,.6);}},
+    /* 08 · heavyweight cotton stock, engraved pinstripes — trust is quiet */
+    {k:'financial',w:'calm',wc:'#3A4150',wa:4,sweep:'soft',eb:'rgba(0,0,0,.10)',
+     th:TH({bg:'linear-gradient(172deg,#F0EEE7,#DFDACE)',ink:'#2E3440',body:'#454C58',
+       sub:'#737B88',title:'#1E2430',cbg:'rgba(46,52,64,.05)',cbd:'rgba(46,52,64,.3)',
+       cink:'#1E2430',bd:'rgba(46,52,64,.25)',glow:'0 0 70px rgba(46,52,64,.15)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#EFEDE6');
+       gr.addColorStop(1,'#DFDACE');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       g.strokeStyle='rgba(58,65,80,.07)';g.lineWidth=.5;
+       for(var i=0;i<19;i++){g.beginPath();g.moveTo(2.4+i*2.4,0);g.lineTo(2.4+i*2.4,60);g.stroke();}
+       g.strokeStyle='rgba(255,255,255,.8)';g.lineWidth=.6;
+       g.beginPath();g.moveTo(4,1.2);g.lineTo(40,1.2);g.stroke();
+       g.fillStyle='rgba(255,255,255,.85)';g.fillRect(34,50,4,4);
+       g.strokeStyle='rgba(58,65,80,.25)';g.lineWidth=.5;g.strokeRect(33.6,49.6,4,4);}},
+    /* 09 · sun-bleached linen, warm horizon, postmark */
+    {k:'travel',w:'expand',wc:'rgba(200,120,50,.9)',sweep:'soft',eb:'rgba(120,90,50,.20)',
+     th:TH({bg:'linear-gradient(180deg,#F7F0E2 0%,#F3E6CC 55%,#ECD6AC 100%)',
+       bd:'rgba(214,170,100,.45)',glow:'0 0 90px rgba(240,150,60,.18)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#F5EEDF');
+       gr.addColorStop(.55,'#F2E4C6');gr.addColorStop(1,'#E9D2A6');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       var rg=g.createRadialGradient(16,42,1,16,42,13);rg.addColorStop(0,'rgba(240,150,60,.32)');
+       rg.addColorStop(1,'rgba(240,150,60,0)');g.fillStyle=rg;g.fillRect(0,26,44,34);
+       g.strokeStyle='rgba(180,140,80,.35)';g.lineWidth=.5;
+       g.beginPath();g.moveTo(4,42);g.lineTo(40,42);g.stroke();
+       g.strokeStyle='rgba(90,70,50,.25)';g.lineWidth=.6;
+       g.beginPath();g.arc(34,11,4,0,7);g.stroke();
+       g.beginPath();g.arc(34,11,2.2,.6,2.8);g.stroke();}},
+    /* 10 · soft cotton paper, faint blush, one hand-pressed mark — restraint */
+    {k:'children',w:'tender',wc:'rgba(228,103,31,.75)',wa:5,sweep:'soft',eb:'rgba(0,0,0,.07)',
+     th:TH({bg:'linear-gradient(172deg,#FBF6EE,#F2E8DA)',bd:'rgba(228,160,130,.35)',
+       glow:'0 0 80px rgba(240,170,140,.14)'}),
+     d:function(g){var gr=g.createLinearGradient(0,0,0,60);gr.addColorStop(0,'#FBF6EE');
+       gr.addColorStop(1,'#F1E7D9');g.fillStyle=gr;g.fillRect(0,0,44,60);
+       var rg=g.createRadialGradient(22,26,2,22,26,17);rg.addColorStop(0,'rgba(240,170,140,.13)');
+       rg.addColorStop(1,'rgba(240,170,140,0)');g.fillStyle=rg;g.fillRect(0,6,44,42);
+       g.save();g.translate(35.5,51.5);g.rotate(-.14);
+       g.fillStyle='rgba(228,103,31,.25)';rrp(g,-2.5,-2.5,5,5,1.5);g.fill();
+       g.strokeStyle='rgba(228,103,31,.35)';g.lineWidth=.5;rrp(g,-2.5,-2.5,5,5,1.5);g.stroke();
+       g.restore();}}
+  ];
+  /* pre-rendered material sprites — rich at rest, cheap at 60fps */
+  var SPR=[];
+  function sprite(i){if(SPR[i])return SPR[i];
+    var S=4,cv=document.createElement('canvas');cv.width=44*S;cv.height=60*S;
+    var g=cv.getContext('2d');g.scale(S,S);
+    g.save();rrp(g,0,0,44,60,7);g.clip();MATS[i].d(g);g.restore();
+    g.strokeStyle=MATS[i].eb||'rgba(255,255,255,.14)';g.lineWidth=.7;
+    rrp(g,.35,.35,43.3,59.3,6.7);g.stroke();
+    return SPR[i]=cv;}
+  /* each artifact carries its waveform signature — drawn live so it breathes */
+  function drawWF(g,m,t,em){
+    var ym=m.wy||41,x0=8,wd=28,A=(m.wa||6)*(1+.13*em*Math.sin(t/520));
+    g.save();g.globalAlpha=g.globalAlpha*(.42+.58*em);
+    var col=m.wc||'rgba(228,103,31,.9)',i,u,ph=em?1:0;
+    switch(m.w){
+      case 'arcs':g.strokeStyle=col;g.lineWidth=1.1;g.beginPath();
+        for(i=0;i<=40;i++){u=i/40;
+          var y=ym-(Math.sin(u*9.42+ph*t/900)*.65+Math.sin(u*20.1)*.35)*A*Math.sin(u*Math.PI);
+          i?g.lineTo(x0+u*wd,y):g.moveTo(x0+u*wd,y);}g.stroke();break;
+      case 'machined':g.fillStyle=col;
+        for(i=0;i<15;i++){u=i/14;var hh=Math.min(1,.3+.7*Math.abs(Math.sin(u*6.28)))*A;
+          g.fillRect(x0+u*wd-.45,ym-hh,.9,hh*2);}break;
+      case 'gentle':for(var p=0;p<2;p++){
+        g.strokeStyle=p?'rgba(101,96,86,.55)':'rgba(255,255,255,.9)';g.lineWidth=1;g.beginPath();
+        for(i=0;i<=32;i++){u=i/32;
+          var y2=ym-Math.sin(u*6.28+ph*t/1400)*A*.5*Math.sin(u*Math.PI)+(p?0:.7);
+          i?g.lineTo(x0+u*wd,y2):g.moveTo(x0+u*wd,y2);}g.stroke();}break;
+      case 'steps':g.strokeStyle=col;g.lineWidth=1;g.beginPath();var lv=ym;
+        for(i=0;i<12;i++){u=i/11;
+          var q=Math.round((Math.sin(u*13+ph*t/700)+1)*1.5)/3,y3=ym-(q*2-1)*A*.8;
+          if(!i)g.moveTo(x0,y3);else{g.lineTo(x0+u*wd,lv);g.lineTo(x0+u*wd,y3);}lv=y3;}
+        g.lineTo(x0+wd,lv);g.stroke();break;
+      case 'vu':g.fillStyle=col;
+        for(i=0;i<14;i++){u=i/13;
+          var hv=(.25+.75*Math.abs(Math.sin(i*4.7)*Math.cos(i*1.3)))*A*
+            (em?(.8+.35*Math.abs(Math.sin(t/300+i))):1);
+          g.fillRect(x0+u*wd-.7,ym-hv,1.4,hv);}break;
+      case 'spikes':g.strokeStyle=col;g.lineWidth=1;g.beginPath();
+        for(i=0;i<=28;i++){u=i/28;
+          var sp=Math.pow(Math.abs(Math.sin(u*31+ph*t/600)),3);
+          var y4=ym-sp*A*1.15*Math.sin(u*Math.PI)+A*.35;
+          i?g.lineTo(x0+u*wd,y4):g.moveTo(x0+u*wd,y4);}g.stroke();break;
+      case 'ribbon':g.fillStyle='rgba(228,103,31,.55)';g.beginPath();
+        for(i=0;i<=30;i++){u=i/30;
+          var th2=(.25+.75*Math.abs(Math.sin(u*8+ph*t/1100)))*A*.55*Math.sin(u*Math.PI);
+          i?g.lineTo(x0+u*wd,ym-th2):g.moveTo(x0+u*wd,ym-th2);}
+        for(i=30;i>=0;i--){u=i/30;
+          th2=(.25+.75*Math.abs(Math.sin(u*8+ph*t/1100)))*A*.55*Math.sin(u*Math.PI);
+          g.lineTo(x0+u*wd,ym+th2);}g.closePath();g.fill();break;
+      case 'calm':g.strokeStyle=col;g.lineWidth=1;g.beginPath();
+        for(i=0;i<=30;i++){u=i/30;var y5=ym-Math.sin(u*6.28+ph*t/1600)*A*.22;
+          i?g.lineTo(x0+u*wd,y5):g.moveTo(x0+u*wd,y5);}g.stroke();break;
+      case 'expand':g.strokeStyle=col;g.lineWidth=1;g.beginPath();
+        for(i=0;i<=36;i++){u=i/36;var y6=ym-Math.sin(u*15+ph*t/800)*A*u;
+          i?g.lineTo(x0+u*wd,y6):g.moveTo(x0+u*wd,y6);}g.stroke();break;
+      case 'tender':g.strokeStyle=col;g.lineWidth=1;g.beginPath();
+        for(i=0;i<=24;i++){u=i/24;
+          var y7=ym-Math.sin(u*6.28+ph*t/1300)*A*.4*Math.sin(u*Math.PI);
+          i?g.lineTo(x0+u*wd,y7):g.moveTo(x0+u*wd,y7);}g.stroke();
+        g.fillStyle=col;for(i=0;i<3;i++){var ux=.25+i*.25;
+          g.beginPath();g.arc(x0+ux*wd,ym-A*.72-(i===1?1.2:0),.9,0,7);g.fill();}break;
+    }
+    g.restore();}
+  /* light moves across the material — each material reflects its own way */
+  function matSweep(g,m,t,hv){if(m.sweep==='none')return;
+    var pos=((t/2800)%1)*74-15;
+    g.save();rrp(g,0,0,44,60,7);g.clip();
+    g.translate(pos,30);g.rotate(-.35);
+    var wdt=m.sweep==='sharp'?7:(m.sweep==='glass'?5:22);
+    var al=m.sweep==='sharp'?.10+.25*hv:(m.sweep==='glass'?.07+.16*hv:.05+.11*hv);
+    var cc=m.sweep==='soft'?'255,235,205':'255,255,255';
+    var gr=g.createLinearGradient(-wdt,0,wdt,0);
+    gr.addColorStop(0,'rgba('+cc+',0)');gr.addColorStop(.5,'rgba('+cc+','+al+')');
+    gr.addColorStop(1,'rgba('+cc+',0)');
+    g.fillStyle=gr;g.fillRect(-wdt,-45,wdt*2,90);
+    if(m.sweep==='glass'){g.translate(9,0);
+      var g2=g.createLinearGradient(-2.5,0,2.5,0);
+      g2.addColorStop(0,'rgba(255,255,255,0)');g2.addColorStop(.5,'rgba(255,255,255,'+(al*.6)+')');
+      g2.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=g2;g.fillRect(-3,-45,6,90);}
+    g.restore();}
+  /* the dock's waveform takes the artifact's signature shape */
+  function wfBar(m,u,j){switch(m.w){
+    case 'arcs':return Math.abs(Math.sin(u*9.42)*.65+Math.sin(u*20.1)*.35)*Math.sin(u*Math.PI);
+    case 'machined':return Math.min(1,.3+.7*Math.abs(Math.sin(u*6.28)));
+    case 'gentle':return .25+.35*Math.abs(Math.sin(u*6.28))*Math.sin(u*Math.PI);
+    case 'steps':return .25+.75*(Math.round((Math.sin(u*13)+1)*1.5)/3);
+    case 'vu':return .25+.75*Math.abs(Math.sin(j*4.7)*Math.cos(j*1.3));
+    case 'spikes':return Math.pow(Math.abs(Math.sin(u*31)),3)*Math.sin(u*Math.PI)+.08;
+    case 'ribbon':return .25+.75*Math.abs(Math.sin(u*8))*Math.sin(u*Math.PI);
+    case 'calm':return .3+.15*Math.sin(u*6.28);
+    case 'expand':return u*Math.abs(Math.sin(u*15))+.06;
+    case 'tender':return .18+.4*Math.abs(Math.sin(u*6.28))*Math.sin(u*Math.PI);
+    }return .5;}
+
+  /* the rotating demo reel — ten artifacts, one voltage forward. The front card
+     announces only its title and the invitation; the object IS the interface.
+     Hover lifts the artifact off the desk: shadow deepens, light answers. */
   var rtOn=false;
   (function(){
     var c=document.getElementById('rtc'),x=c.getContext('2d'),W=0,H=210;
@@ -615,6 +896,10 @@ window.CH=(function(){
       x.setTransform(dprR(),0,0,dprR(),0,0);}
     window.addEventListener('resize',size);
     var N=10;window.rtFront=0;
+    var hov=0,hovT=0,mx=-1,my=-1;
+    c.addEventListener('pointermove',function(e){var r=c.getBoundingClientRect();
+      mx=e.clientX-r.left;my=e.clientY-r.top;});
+    c.addEventListener('pointerleave',function(){mx=my=-1;});
     function draw(now){
       if(!rtOn)return;
       x.clearRect(0,0,W,H);
@@ -624,22 +909,38 @@ window.CH=(function(){
         if(d>best){best=d;window.rtFront=i;}
         cards.push({i:i,d:d,px:W/2+Math.sin(a2)*W*0.36,py:H*0.42+Math.sin(a2+0.6)*6});}
       cards.sort(function(pq,q){return pq.d-q.d;});
+      /* is the pointer resting on the front artifact? */
+      var fc=cards[cards.length-1];
+      cards.forEach(function(cd){if(cd.i===window.rtFront)fc=cd;});
+      var fw0=44*(0.6+(fc.d+1)/2*0.5)*1.25,fh0=fw0/44*60;
+      hovT=(mx>=fc.px-fw0/2-6&&mx<=fc.px+fw0/2+6&&my>=fc.py-fh0/2-8&&my<=fc.py+fh0/2+8)?1:0;
+      hov+=(hovT-hov)*(reduce?1:.12);
       cards.forEach(function(cd){
         var front=cd.i===window.rtFront;
-        var sc=(0.6+(cd.d+1)/2*0.5)*(front?1.25:1), w=44*sc,h=60*sc;
+        var em=front?(.55+.45*hov):0;
+        var sc=(0.6+(cd.d+1)/2*0.5)*(front?1.25+.07*hov:1),w=44*sc,h=60*sc;
         var al=0.25+(cd.d+1)/2*0.75;
-        x.globalAlpha=al;
-        x.shadowColor='rgba(0,0,0,'+(0.3*al)+')';x.shadowBlur=14*sc;x.shadowOffsetY=8*sc;
-        var g=x.createLinearGradient(0,cd.py-h/2,0,cd.py+h/2);
-        if(front){g.addColorStop(0,'#F3B183');g.addColorStop(1,'#E4671F');}
-        else{g.addColorStop(0,'#FFFDFA');g.addColorStop(1,'#E5DAC9');}
-        x.fillStyle=g;
-        x.beginPath();
-        if(x.roundRect)x.roundRect(cd.px-w/2,cd.py-h/2,w,h,7*sc);else x.rect(cd.px-w/2,cd.py-h/2,w,h);
-        x.fill();
-        x.shadowColor='transparent';
-        if(front){x.fillStyle='rgba(255,255,255,.95)';
-          x.beginPath();x.moveTo(cd.px-6,cd.py-9);x.lineTo(cd.px+8,cd.py);x.lineTo(cd.px-6,cd.py+9);x.closePath();x.fill();}
+        var lift=front?hov*9:0,py=cd.py-lift;
+        /* ambient shadow — the object sits on air; lifting deepens and spreads it */
+        x.save();x.globalAlpha=al*(front?(.55-.18*hov):.45);
+        x.translate(cd.px,cd.py+h/2+6*sc);x.scale(1+(front?hov*.25:0),1);
+        var sg=x.createRadialGradient(0,0,0,0,0,w*.62);
+        sg.addColorStop(0,'rgba(0,0,0,.5)');sg.addColorStop(1,'rgba(0,0,0,0)');
+        x.fillStyle=sg;x.beginPath();x.ellipse(0,0,w*.62,4.6*sc,0,0,7);x.fill();x.restore();
+        /* the selected artifact earns the room's ember */
+        if(front){x.save();x.globalAlpha=.10+.12*hov+.03*Math.sin(now/800);
+          var eg=x.createRadialGradient(cd.px,py,0,cd.px,py,w*1.05);
+          eg.addColorStop(0,'rgba(228,103,31,.8)');eg.addColorStop(1,'rgba(228,103,31,0)');
+          x.fillStyle=eg;x.fillRect(cd.px-w*1.1,py-h*1.1,w*2.2,h*2.2);x.restore();}
+        x.save();x.globalAlpha=al;
+        x.translate(cd.px,py);if(front)x.rotate(-.035*hov);
+        x.drawImage(sprite(cd.i),-w/2,-h/2,w,h);
+        /* material-space overlays: waveform signature, light, micro-motion */
+        x.scale(w/44,h/60);x.translate(-22,-30);
+        drawWF(x,MATS[cd.i],now,em);
+        if(front){matSweep(x,MATS[cd.i],now,hov);
+          if(MATS[cd.i].anim)MATS[cd.i].anim(x,now,em);}
+        x.restore();
         x.globalAlpha=1;});
       /* the front card speaks: title · hear the work — nothing else */
       var d0=DEMOS[window.rtFront];
@@ -719,11 +1020,22 @@ window.CH=(function(){
     var play=document.getElementById('lplay'), fill=document.getElementById('lfill');
     var bar=document.getElementById('lbar'), time=document.getElementById('ltime');
     var lw=document.getElementById('lwave'), idx=0;
+    var lc=room.querySelector('.lcard');
     for(var i=0;i<28;i++){var bb=document.createElement('i');
       bb.style.height=(18+Math.abs(Math.sin(i*.8)*Math.sin(i*.31))*82)+'%';
       bb.style.animationDelay=(i*45)+'ms';lw.appendChild(bb);}
     function fmt(x){x=Math.floor(x||0);return Math.floor(x/60)+':'+('0'+(x%60)).slice(-2);}
+    /* the opened card wears its material: palette, texture, edgework, signature */
+    function dress(i){var m=MATS[i],t=m.th;lc.setAttribute('data-mat',m.k);
+      var v={'--lc-bg':t.bg,'--lc-ink':t.ink,'--lc-body':t.body,'--lc-sub':t.sub,
+        '--lc-title':t.title,'--lc-kick':t.kick,'--lc-chipbg':t.cbg,'--lc-chipbd':t.cbd,
+        '--lc-chipink':t.cink,'--lc-border':t.bd,'--lc-glow':t.glow};
+      for(var k in v)lc.style.setProperty(k,v[k]);
+      var bars=lw.children;
+      for(var j=0;j<bars.length;j++)
+        bars[j].style.height=(14+wfBar(m,j/(bars.length-1),j)*80)+'%';}
     function load(i){idx=(i+DEMOS.length)%DEMOS.length;var d=DEMOS[idx];
+      dress(idx);
       document.getElementById('dt').textContent=d.t;
       document.getElementById('dcat').textContent=d.c;
       document.getElementById('dch').textContent=d.ch;
