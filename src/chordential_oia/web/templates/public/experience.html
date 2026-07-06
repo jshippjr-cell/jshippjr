@@ -25,7 +25,7 @@ body{margin:0;background:var(--ink);color:#EFE7DC;overflow-x:hidden;
 .grain{position:fixed;inset:0;pointer-events:none;z-index:40;opacity:.05;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .scene{min-height:100vh;position:relative;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;padding:60px 20px;overflow:hidden;
+  align-items:center;justify-content:center;padding:90px 20px 70px;
   background:radial-gradient(110% 90% at 32% 8%, #241c20 0%, #181216 52%, #120e11 100%)}
 h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--olive)}
@@ -91,9 +91,9 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* THE MORNING AFTER — never show the machine; show what arrives. One warm
    reading lamp, one cream document, assembling itself calmly as you scroll.
    No AI, no fields, no explanation. Just the outcome. */
-.mawrap{height:200vh;position:relative}
-.ma{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;overflow:hidden;
+.mawrap{position:relative}
+.ma{min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:90px 20px 70px;
   background:radial-gradient(70% 55% at 50% 34%, #2a2118 0%, #191216 55%, #141014 100%)}
 .ma .maead{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--olive);margin-bottom:22px}
@@ -427,19 +427,19 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     var wrap=document.getElementById('mawrap');
     var brief=document.getElementById('brief'), rows=[].slice.call(brief.querySelectorAll('.brow'));
     var bnext=document.getElementById('bnext'), cap=document.getElementById('macap');
-    function apply(p){
-      brief.classList.toggle('in', p>0.06);
-      rows.forEach(function(r,i){ r.classList.toggle('in', p > 0.16 + i*0.13); });
-      bnext.classList.toggle('in', p>0.84);
-      cap.classList.toggle('in', p>0.9);
+    function play(){
+      brief.classList.add('in');
+      rows.forEach(function(r,i){setTimeout(function(){r.classList.add('in');},500+i*320);});
+      setTimeout(function(){bnext.classList.add('in');},500+rows.length*320+250);
+      setTimeout(function(){cap.classList.add('in');},500+rows.length*320+650);
     }
-    if(reduce){brief.classList.add('in');rows.forEach(function(r){r.classList.add('in');});
+    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');
+      rows.forEach(function(r){r.classList.add('in');});
       bnext.classList.add('in');cap.classList.add('in');return;}
-    function onScroll(){
-      var r=wrap.getBoundingClientRect(), vh=window.innerHeight;
-      apply(Math.min(1,Math.max(0,(-r.top)/(r.height-vh))));
-    }
-    window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+    var seen=false;
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){
+      if(e.isIntersecting&&!seen){seen=true;play();io.disconnect();}});},{threshold:.3});
+    io.observe(brief);
   })();
 
   master.addEventListener('click',explode);
