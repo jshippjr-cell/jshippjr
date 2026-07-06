@@ -204,7 +204,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   width:min(560px,88vw);text-align:center;opacity:0;pointer-events:none;
   transition:opacity 1.2s ease}
 .reelteaser.show{opacity:1;pointer-events:auto}
-.reelteaser canvas{display:block;width:100%;height:190px;cursor:pointer;
+.reelteaser canvas{display:block;width:100%;height:210px;cursor:pointer;
   transition:transform var(--b8) cubic-bezier(.19,1,.22,1), filter var(--b8) ease}
 .reelteaser canvas:hover{transform:translateY(-5px) scale(1.015) perspective(800px) rotateX(2deg);
   filter:drop-shadow(0 18px 30px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(228,103,31,.25))}
@@ -345,7 +345,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     </div>
     <div class="reelteaser" id="reelteaser">
       <canvas id="rtc" aria-label="The reel — a spiral of tracks"></canvas>
-      <div class="rt"><a id="rtopen">hear the work — open a demonstration →</a></div>
+      
     </div>
   </div>
   <div class="lroom" id="lroom" role="dialog" aria-modal="true" aria-label="Capability demonstration">
@@ -604,26 +604,29 @@ window.CH=(function(){
     io.observe(brief);
   })();
 
-  /* mini reel spiral in the vacated stage */
+  /* the rotating demo reel — ten cards, one voltage forward. The front card
+     announces only its title and the invitation; the card IS the interface. */
   var rtOn=false;
   (function(){
-    var c=document.getElementById('rtc'),x=c.getContext('2d'),W=0,H=190;
+    var c=document.getElementById('rtc'),x=c.getContext('2d'),W=0,H=210;
     function dprR(){return Math.min(window.devicePixelRatio||1,2);}
     function size(){var r=c.getBoundingClientRect();W=r.width||520;
       c.width=Math.round(W*dprR());c.height=Math.round(H*dprR());
       x.setTransform(dprR(),0,0,dprR(),0,0);}
     window.addEventListener('resize',size);
-    var N=11;
+    var N=10;window.rtFront=0;
     function draw(now){
       if(!rtOn)return;
       x.clearRect(0,0,W,H);
-      var base=reduce?-Math.PI/2:(-Math.PI/2+now/1000*0.25);
-      var cards=[];
-      for(var i=0;i<N;i++){var a=base+i*(Math.PI*2/N);
-        cards.push({d:Math.cos(a),px:W/2+Math.sin(a)*W*0.36,py:H*0.5+Math.sin(a+0.6)*6});}
+      var base=reduce?-Math.PI/2:(-Math.PI/2+now/1000*0.22);
+      var cards=[],best=-2;
+      for(var i=0;i<N;i++){var a2=base+i*(Math.PI*2/N),d=Math.cos(a2);
+        if(d>best){best=d;window.rtFront=i;}
+        cards.push({i:i,d:d,px:W/2+Math.sin(a2)*W*0.36,py:H*0.42+Math.sin(a2+0.6)*6});}
       cards.sort(function(pq,q){return pq.d-q.d;});
       cards.forEach(function(cd){
-        var sc=0.6+(cd.d+1)/2*0.5, w=44*sc,h=60*sc, front=cd.d>0.86;
+        var front=cd.i===window.rtFront;
+        var sc=(0.6+(cd.d+1)/2*0.5)*(front?1.25:1), w=44*sc,h=60*sc;
         var al=0.25+(cd.d+1)/2*0.75;
         x.globalAlpha=al;
         x.shadowColor='rgba(0,0,0,'+(0.3*al)+')';x.shadowBlur=14*sc;x.shadowOffsetY=8*sc;
@@ -636,67 +639,76 @@ window.CH=(function(){
         x.fill();
         x.shadowColor='transparent';
         if(front){x.fillStyle='rgba(255,255,255,.95)';
-          x.beginPath();x.moveTo(cd.px-5,cd.py-8);x.lineTo(cd.px+7,cd.py);x.lineTo(cd.px-5,cd.py+8);x.closePath();x.fill();}
+          x.beginPath();x.moveTo(cd.px-6,cd.py-9);x.lineTo(cd.px+8,cd.py);x.lineTo(cd.px-6,cd.py+9);x.closePath();x.fill();}
         x.globalAlpha=1;});
+      /* the front card speaks: title · hear the work — nothing else */
+      var d0=DEMOS[window.rtFront];
+      x.textAlign='center';
+      x.fillStyle='rgba(255,255,255,.95)';
+      x.font='700 16px Georgia, "Times New Roman", serif';
+      x.fillText(d0.t, W/2, H-34);
+      x.fillStyle='rgba(243,176,116,.9)';
+      x.font='600 9px ui-monospace, Menlo, monospace';
+      x.fillText('▶  H E A R   T H E   W O R K', W/2, H-14);
       if(!reduce)requestAnimationFrame(draw);
     }
     window.rtStart=function(){rtOn=true;size();requestAnimationFrame(draw);if(reduce)draw(0);};
     window.rtStop=function(){rtOn=false;};
-    c.addEventListener('click',function(){window.lroomOpen();});
+    c.addEventListener('click',function(){window.lroomOpen(window.rtFront);});
     var ro=document.getElementById('rtopen');
-    if(ro)ro.addEventListener('click',function(){window.lroomOpen();});
+    if(ro)ro.addEventListener('click',function(){window.lroomOpen(window.rtFront);});
   })();
 
   /* THE DEMONSTRATION LIBRARY — ten fictional creative scenarios, each built
      to demonstrate a capability. No clients, no invented results — "imagine we
      were handed this creative challenge." */
   var DEMOS=[
-    {t:'Holiday Retail Anthem',c:'Campaign Music',src:'demo-retail-anthem.mp3',
+    {t:'Holiday Retail Anthem',c:'Campaign Music',src:'exp-01-holiday-retail-anthem.mp3',
      ch:'Create original campaign music capable of carrying a premium holiday campaign without relying on cliché seasonal music.',
      iv:'Warmth should come from orchestration rather than holiday references.',
      ap:'Contemporary strings, piano, restrained brass, organic percussion.',
      dm:['Original Composition','Campaign Themes','Orchestration','Broadcast Delivery','Campaign Adaptability']},
-    {t:'Luxury Automotive Launch',c:'Brand Anthem',src:'demo-anthem.mp3',
+    {t:'Luxury Automotive Launch',c:'Brand Anthem',src:'exp-02-luxury-automotive-launch.mp3',
      ch:'Communicate precision engineering and premium craftsmanship through music.',
      iv:'Luxury is confidence, not aggression.',
      ap:'Hybrid orchestra, analog synth, large brass, controlled dynamics.',
      dm:['Hybrid Composition','Automotive Branding','Campaign Themes','Premium Sound Design']},
-    {t:'Healthcare Brand Film',c:'Narrative Score',src:'demo-holiday-strings.mp3',
+    {t:'Healthcare Brand Film',c:'Narrative Score',src:'exp-03-healthcare-brand-film.mp3',
      ch:'Support emotionally authentic documentary storytelling.',
      iv:'Music should support people rather than manipulate emotion.',
      ap:'Solo piano, strings, woodwinds, ambient textures.',
      dm:['Narrative Scoring','Healthcare Campaigns','Emotional Storytelling','Broadcast Mixing']},
-    {t:'Technology Product Reveal',c:'Launch Campaign',src:'demo-title-sequence.mp3',
+    {t:'Technology Product Reveal',c:'Launch Campaign',src:'exp-04-technology-product-reveal.mp3',
      ch:'Create launch music that feels innovative while remaining human.',
      iv:'Technology should inspire curiosity.',
      ap:'Electronic textures, minimal orchestra, pulse, atmosphere.',
      dm:['Technology Branding','Hybrid Scoring','Launch Films','Motion Graphics']},
-    {t:'Podcast Network Identity',c:'Sonic Branding',src:'demo-financial-theme.mp3',
+    {t:'Podcast Network Identity',c:'Sonic Branding',src:'exp-05-podcast-network-identity.mp3',
      ch:'Create a recognizable sonic identity for an entire podcast network.',
      iv:'Recognition comes through memorable simplicity.',
      ap:'Short motifs, an audio logo, organic instrumentation.',
      dm:['Sonic Branding','Podcast Themes','Audio Logos','Brand Systems']},
-    {t:'Sports Campaign',c:'Campaign Score',src:'demo-anthem.mp3',
+    {t:'Sports Campaign',c:'Campaign Score',src:'exp-06-sports-campaign.mp3',
      ch:'Capture determination without becoming trailer music.',
      iv:'Momentum over aggression.',
      ap:'Percussion, strings, brass, electronic layers.',
      dm:['Sports Advertising','Hybrid Orchestra','Broadcast Music','Campaign Themes']},
-    {t:'Title Sequence Sound Design',c:'Sound Design',src:'demo-title-sequence.mp3',
+    {t:'Title Sequence Sound Design',c:'Sound Design',src:'exp-07-title-sequence-sound-design.mp3',
      ch:'Establish narrative tone before dialogue.',
      iv:'Atmosphere becomes storytelling.',
      ap:'Textures, impacts, transitions, spatial design.',
      dm:['Sound Design','Film Titles','Atmosphere','Narrative Support']},
-    {t:'Financial Brand Film',c:'Corporate Storytelling',src:'demo-financial-theme.mp3',
+    {t:'Financial Brand Film',c:'Corporate Storytelling',src:'exp-08-financial-brand-film.mp3',
      ch:'Create confidence without sounding corporate.',
      iv:'Trust is quiet.',
      ap:'Piano, strings, warm brass, minimal percussion.',
      dm:['Corporate Branding','Financial Campaigns','Narrative Music','Brand Films']},
-    {t:'Destination Marketing',c:'Travel Campaign',src:'demo-holiday-strings.mp3',
+    {t:'Destination Marketing',c:'Travel Campaign',src:'exp-09-destination-marketing.mp3',
      ch:'Capture anticipation rather than geography.',
      iv:'Travel begins before arrival.',
      ap:'Acoustic instruments expanding into orchestra.',
      dm:['Travel Advertising','Lifestyle Campaigns','Cinematic Music','Destination Branding']},
-    {t:'Children’s Hospital Campaign',c:'Documentary',src:'demo-retail-anthem.mp3',
+    {t:'Children’s Hospital Campaign',c:'Documentary',src:'exp-10-childrens-hospital-campaign.mp3',
      ch:'Support emotionally honest storytelling.',
      iv:'Restraint creates sincerity.',
      ap:'Piano, strings, woodwinds, light choir.',
