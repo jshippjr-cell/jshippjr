@@ -335,6 +335,21 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .nav.on a{opacity:1;transform:none}
 .nav a:hover{color:var(--amber)}
 @keyframes breath{0%,100%{opacity:.75}50%{opacity:1}}
+/* keyboard: the objects are reachable and visibly lit when focused */
+.master:focus-visible{outline:2px solid var(--amber);outline-offset:5px}
+#rtc:focus-visible{outline:2px solid var(--amber);outline-offset:6px;border-radius:10px}
+/* small stages: the choreography scales down, it never clips */
+@media (max-width:560px){
+  .stem{width:146px;height:40px}
+  .doc{width:102px;height:64px}
+  /* the folder tree wraps to two lines here — the stage grows so the reel
+     and the filed delivery each keep their own air */
+  .stage{height:580px}
+  .master{top:30%}
+  .touch{top:calc(30% + 96px)}
+  .reelteaser{top:22%}
+  .stamp{right:2px;bottom:30px;font-size:10.5px;padding:6px 12px}
+}
 @media (prefers-reduced-motion:reduce){
   .master .wave i,.stem .sw i,.touch,.wm{animation:none}
   .stem,.doc,.frow,.folder,.caption,.replay,.thesis,.reassure p,.frag,.wm,.nav a{transition:none}\n  .hero.cold .frag,.pull,.rec.on{animation:none}
@@ -376,7 +391,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
       <div class="stamp" id="stamp">Campaign Ready</div>
     </div>
     <div class="reelteaser" id="reelteaser">
-      <canvas id="rtc" aria-label="The reel — a spiral of tracks"></canvas>
+      <canvas id="rtc" tabindex="0" role="button"
+        aria-label="The reel — press Enter to hear the front demonstration"></canvas>
       
     </div>
   </div>
@@ -562,10 +578,12 @@ window.CH=(function(){
     master.style.transform='translate(-50%,-50%) scale(.9)';
     master.style.opacity='0';
     var fan=[[-42,-30],[-22,-8],[0,-38],[22,-8],[42,-30]];   /* % offsets */
+    /* the fan breathes with the stage — small screens get the same shape, scaled */
+    var fs=Math.min(1,(Math.min(window.innerWidth,720)-56)/660);
     stems.forEach(function(s,i){
       setTimeout(function(){
         s.style.opacity='1';s.style.pointerEvents='auto';
-        s.style.transform='translate(calc(-50% + '+fan[i][0]*4+'px), calc(-50% + '+fan[i][1]*2.2+'px)) scale(1)';
+        s.style.transform='translate(calc(-50% + '+fan[i][0]*4*fs+'px), calc(-50% + '+fan[i][1]*2.2*fs+'px)) scale(1)';
       }, reduce?0:i*B16);
     });
     /* two of the seven are PAPER — the realization lands when they file */
@@ -573,7 +591,7 @@ window.CH=(function(){
     docs.forEach(function(d,i){
       setTimeout(function(){
         d.style.opacity='1';
-        d.style.transform='translate(calc(-50% + '+dfan[i][0]*3.4+'px), calc(-50% + '+dfan[i][1]*2.2+'px)) rotate('+(i?4:-4)+'deg) scale(1)';
+        d.style.transform='translate(calc(-50% + '+dfan[i][0]*3.4*fs+'px), calc(-50% + '+dfan[i][1]*2.2*fs+'px)) rotate('+(i?4:-4)+'deg) scale(1)';
       }, reduce?0:(5+i)*B16);
     });
     /* the turn: stems file themselves into THEIR folder */
@@ -956,6 +974,8 @@ window.CH=(function(){
     window.rtStart=function(){rtOn=true;size();requestAnimationFrame(draw);if(reduce)draw(0);};
     window.rtStop=function(){rtOn=false;};
     c.addEventListener('click',function(){window.lroomOpen(window.rtFront);});
+    c.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();window.lroomOpen(window.rtFront);}});
     var ro=document.getElementById('rtopen');
     if(ro)ro.addEventListener('click',function(){window.lroomOpen(window.rtFront);});
   })();
@@ -1048,12 +1068,14 @@ window.CH=(function(){
       play.textContent='❚❚';room.classList.add('playing');}
     window.lroomOpen=function(i){load(i==null?idx:i);room.classList.add('open');
       window.rtStop&&window.rtStop();start();
-      document.querySelector('.lbody').scrollTop=0;};
+      document.querySelector('.lbody').scrollTop=0;
+      document.getElementById('lclose').focus({preventScroll:true});};
     function fadeClose(){
       var v=au.volume,iv=setInterval(function(){v-=0.12;
         if(v<=0){clearInterval(iv);au.pause();au.volume=1;}else au.volume=v;},50);
       room.classList.remove('open','playing');play.textContent='▶';
-      if(document.getElementById('reelteaser').classList.contains('show'))window.rtStart();}
+      if(document.getElementById('reelteaser').classList.contains('show')){window.rtStart();
+        var rc=document.getElementById('rtc');if(rc)rc.focus({preventScroll:true});}}
     document.getElementById('lclose').addEventListener('click',fadeClose);
     room.addEventListener('click',function(e){if(e.target===room)fadeClose();});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'&&room.classList.contains('open'))fadeClose();});
