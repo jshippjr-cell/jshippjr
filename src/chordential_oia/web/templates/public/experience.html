@@ -106,17 +106,18 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .brief .bh img{height:16px;display:block;margin-bottom:8px}
 .brief .bt{font-family:var(--serif);font-size:17px;font-weight:700;color:#44161E}
 .brief .bs{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#737469;margin-top:3px}
-.brow{display:grid;grid-template-columns:16px 92px 1fr;gap:8px;align-items:baseline;
-  padding:8px 0;border-bottom:1px solid #E7DECE;font-size:12px;
-  opacity:0;transform:translateY(8px);transition:opacity var(--b8) ease, transform var(--b8) cubic-bezier(.19,1,.22,1)}
-.brow.in{opacity:1;transform:none}
+.brow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:baseline;
+  padding:9px 0;border-bottom:1px solid #E7DECE;font-size:12px}
 .brow .bk{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#737469}
-.brow .bv{color:#33302f}
-.brow .btick{color:#2f6a34;font-weight:700;opacity:0;transition:opacity var(--b16) ease .2s}
-.brow.in .btick{opacity:1}
-.brief .bnext{margin-top:12px;font-size:12.5px;color:#44161E;font-weight:600;
-  opacity:0;transition:opacity var(--beat) ease .2s}
-.brief .bnext.in{opacity:1}
+.brow .bv{color:#33302f;line-height:1.45}
+.brow .bv .ok{color:#2f6a34;font-family:var(--mono);font-size:9px;letter-spacing:.06em}
+.bmeta{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:#9a917f;
+  text-transform:uppercase;margin-top:8px}
+.brief .bnext{margin-top:14px;font-size:12.5px;color:#44161E;font-weight:600}
+.promiseblock{margin-top:14px;background:#fff;border:1px solid #E7DECE;border-left:3px solid var(--ember);
+  border-radius:4px;padding:10px 12px}
+.promiseblock .pk{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#9a5a1a}
+.promiseblock p{margin:5px 0 0;font-size:11.5px;color:#33302f;line-height:1.5}
 .ma .macap{margin-top:30px;text-align:center;opacity:0;transform:translateY(10px);
   transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
 .ma .macap.in{opacity:1;transform:none}
@@ -271,24 +272,33 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
       <div class="brief" id="brief">
         <div class="bh">
           <img src="/static/public/wordmark-dark.png" alt="Chordential">
-          <div class="bt">Holiday 2026 — Campaign Brief</div>
-          <div class="bs">Prepared for Vance Athletic · draft for your sign-off</div>
+          <div class="bt">Campaign Brief — Holiday Retail Anthem</div>
+          <div class="bs">Prepared for Vance Athletic · Tuesday, 9:14 AM</div>
+          <div class="bmeta">Discovery call 22:17 · prepared 8:42 AM · last updated 9:03 AM · rev 2</div>
         </div>
-        <div class="brow"><span class="btick">✓</span><span class="bk">Direction</span>
-          <span class="bv">Warm, cinematic, human — brass forward, no synth gloss.</span></div>
-        <div class="brow"><span class="btick">✓</span><span class="bk">Deliverables</span>
-          <span class="bv">:60 anthem · :30 / :15 / :06 · 9:16 vertical · full stems</span></div>
-        <div class="brow"><span class="btick">✓</span><span class="bk">Timeline</span>
-          <span class="bv">First cut Tuesday · final masters in ten working days</span></div>
-        <div class="brow"><span class="btick">✓</span><span class="bk">Rights</span>
-          <span class="bv">Original, cleared worldwide — certificate included</span></div>
-        <div class="brow"><span class="btick">✓</span><span class="bk">Budget</span>
-          <span class="bv">Confirmed in writing — no surprises later</span></div>
-        <div class="bnext" id="bnext">Next step: nothing. We’re already writing.</div>
+        <div class="brow"><span class="bk">Direction</span>
+          <span class="bv">“Optimistic without feeling sentimental. Strings should feel
+          expensive, not orchestral.” <span class="ok">✓ client approved</span></span></div>
+        <div class="brow"><span class="bk">Reference</span>
+          <span class="bv">Nike “You Can’t Stop Us” — not the music; the emotional pacing.</span></div>
+        <div class="brow"><span class="bk">Deliverables</span>
+          <span class="bv">:60 anthem · :30 / :15 / :06 · 9:16 vertical · full stems <span class="ok">✓ confirmed</span></span></div>
+        <div class="brow"><span class="bk">Timeline</span>
+          <span class="bv">First cut Tuesday · final masters in ten working days <span class="ok">✓ understood</span></span></div>
+        <div class="brow"><span class="bk">Rights</span>
+          <span class="bv">Original, cleared worldwide — certificate included <span class="ok">✓ accounted for</span></span></div>
+        <div class="brow"><span class="bk">Open risk</span>
+          <span class="bv">VO may extend to :37 — alternate endings prepared.</span></div>
+        <div class="bnext">Next step: nothing. We’re already writing.</div>
+        <div class="promiseblock">
+          <div class="pk">The Chordential Promise</div>
+          <p>This brief is our understanding of your campaign. If anything here is
+          inaccurate, we correct it before a single note is written.</p>
+        </div>
       </div>
       <div class="macap" id="macap">
-        <h2>Nothing falls through the cracks.</h2>
-        <p>This arrives before you’ve had coffee · every campaign, every time</p>
+        <h2>Everything from the conversation. Ready for production.</h2>
+        <p>Every campaign · every time</p>
       </div>
     </div>
   </div>
@@ -425,17 +435,10 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
      no explanation: it simply arrives complete. The mystery is the brand. */
   (function(){
     var wrap=document.getElementById('mawrap');
-    var brief=document.getElementById('brief'), rows=[].slice.call(brief.querySelectorAll('.brow'));
-    var bnext=document.getElementById('bnext'), cap=document.getElementById('macap');
-    function play(){
-      brief.classList.add('in');
-      rows.forEach(function(r,i){setTimeout(function(){r.classList.add('in');},500+i*320);});
-      setTimeout(function(){bnext.classList.add('in');},500+rows.length*320+250);
-      setTimeout(function(){cap.classList.add('in');},500+rows.length*320+650);
-    }
-    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');
-      rows.forEach(function(r){r.classList.add('in');});
-      bnext.classList.add('in');cap.classList.add('in');return;}
+    var brief=document.getElementById('brief'), cap=document.getElementById('macap');
+    function play(){ brief.classList.add('in');
+      setTimeout(function(){cap.classList.add('in');},1100); }
+    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');cap.classList.add('in');return;}
     var seen=false;
     var io=new IntersectionObserver(function(es){es.forEach(function(e){
       if(e.isIntersecting&&!seen){seen=true;play();io.disconnect();}});},{threshold:.3});
