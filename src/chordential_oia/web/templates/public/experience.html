@@ -176,8 +176,12 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .touch{position:absolute;left:50%;top:calc(38% + 96px);transform:translateX(-50%);
   font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--amber);animation:pulse 2.5s ease-in-out infinite;white-space:nowrap}
-/* after the fan holds, the room asks for one gesture — the scroll packs it */
-.packcue{top:auto;bottom:4px}
+/* after the fan holds, the room asks for one gesture — the scroll packs it.
+   Double class outranks the mobile .touch offset; its own layer + a soft
+   backdrop keep it legible above the fanned objects on every screen. */
+.touch.packcue{top:auto;bottom:4px;z-index:6;white-space:nowrap;
+  background:rgba(24,7,12,.55);padding:7px 14px;border-radius:999px;
+  backdrop-filter:blur(4px);border:1px solid rgba(243,176,116,.25)}
 @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 
 /* stems */
