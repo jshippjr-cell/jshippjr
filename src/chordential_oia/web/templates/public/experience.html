@@ -136,7 +136,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 /* the master — center, on the reflection floor */
 .stage{position:relative;width:min(720px,94vw);height:420px;perspective:1100px}
 .master{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
-  width:240px;height:148px;border-radius:12px;cursor:pointer;overflow:hidden;
+  width:240px;height:148px;border-radius:12px;cursor:pointer;overflow:hidden;z-index:2;
   animation:mglow 2.5s ease-in-out infinite;
   background:linear-gradient(160deg,#2e2428,#1d171a);
   border:1px solid rgba(216,205,182,.35);
@@ -609,10 +609,12 @@ window.CH=(function(){
       requestAnimationFrame(orbit);})();
   }
 
-  function explode(){
+  function explode(auto){
+    auto=(auto===true);
     if(played)return;played=true;
     master.classList.add('played');window.CH.explode();
     touch.style.display='none';
+    master.style.pointerEvents='none';
     master.style.transform='translate(-50%,-50%) scale(.9)';
     master.style.opacity='0';
     var fan=[[-42,-30],[-22,-8],[0,-38],[22,-8],[42,-30]];   /* % offsets */
@@ -620,6 +622,7 @@ window.CH=(function(){
     var fs=Math.min(1,(Math.min(window.innerWidth,720)-56)/660);
     stems.forEach(function(s,i){
       setTimeout(function(){
+        s.style.transition='';   /* the breath may have left its own curve behind */
         s.style.opacity='1';s.style.pointerEvents='auto';
         s.style.transform='translate(calc(-50% + '+fan[i][0]*4*fs+'px), calc(-50% + '+fan[i][1]*2.2*fs+'px)) scale(1)';
       }, reduce?0:i*B16);
@@ -633,8 +636,10 @@ window.CH=(function(){
       }, reduce?0:(5+i)*B16);
     });
     /* the fan HOLDS — the named objects are the point. The user looks, hovers,
-       reads. The first scroll down is the gesture that packs the delivery. */
-    setTimeout(function(){ armPack(); }, reduce?50:7*B16+BEAT);
+       reads. The first scroll down is the gesture that packs the delivery.
+       When the film plays itself (auto), the hold is a breath, then it packs. */
+    setTimeout(function(){ auto?runFiling():armPack(); },
+      reduce?50:7*B16+BEAT+(auto?900:0));
   }
 
   /* the turn: stems file themselves into THEIR folder */
@@ -697,8 +702,42 @@ window.CH=(function(){
       d.style.pointerEvents='none';d.style.transform='translate(-50%,-50%) rotate('+(i?4:-4)+'deg) scale(.6)';});
     document.getElementById('reelteaser').classList.remove('show');window.rtStop();
     master.style.opacity='1';master.style.transform='translate(-50%,-50%)';
+    master.style.pointerEvents='';
     touch.style.display='';
   }
+
+  /* THE BREATH — the box isn't quite closed. One tell, once: two stems peek
+     out from behind the master and settle back. Curiosity does the rest. */
+  function breathTell(){
+    if(reduce||played)return;
+    [[2,'0px','-86px'],[4,'64px','12px']].forEach(function(p,k){
+      var st=stems[p[0]];
+      setTimeout(function(){ if(played)return;
+        st.style.transition='transform .6s cubic-bezier(.19,1,.22,1), opacity .4s ease';
+        st.style.opacity='1';
+        st.style.transform='translate(calc(-50% + '+p[1]+'), calc(-50% + '+p[2]+')) scale(.92)';
+        setTimeout(function(){ if(played)return;
+          st.style.transition='transform .5s cubic-bezier(.6,0,.4,1), opacity .35s ease';
+          st.style.opacity='0';
+          st.style.transform='translate(-50%,-50%) scale(.6)';
+          setTimeout(function(){st.style.transition='';},550);
+        },820);
+      },k*150);
+    });
+  }
+  setTimeout(breathTell,2600);
+
+  /* THE FILM PLAYS ITSELF FOR SCROLLERS — the touch path is the director's
+     cut, but nobody leaves without seeing the delivery pack itself. Scroll
+     past half the first scene untouched and the master opens on its own. */
+  (function(){
+    function onSc(){
+      if(played){window.removeEventListener('scroll',onSc);return;}
+      if(window.scrollY>window.innerHeight*0.55){
+        window.removeEventListener('scroll',onSc);explode(true);}
+    }
+    window.addEventListener('scroll',onSc,{passive:true});
+  })();
   /* THE MORNING AFTER — the brief assembles calmly as you scroll. No machine,
      no explanation: it simply arrives complete. The mystery is the brand. */
   (function(){
@@ -1158,7 +1197,7 @@ window.CH=(function(){
       if(au.duration)au.currentTime=(e.clientX-r.left)/r.width*au.duration;});
   })();
 
-  master.addEventListener('click',explode);
+  master.addEventListener('click',function(){explode(false);});
   master.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();explode();}});
   replay.addEventListener('click',reset);
 })();
