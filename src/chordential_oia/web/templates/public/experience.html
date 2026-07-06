@@ -488,7 +488,9 @@ window.CH=(function(){
       });
       setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
         setTimeout(function(){caption.classList.add('in');replay.classList.add('in');
-        document.getElementById('reelteaser').classList.add('show');window.rtStart();}, reduce?0:BEAT);
+        /* let the headline breathe — the reel arrives after it's been read */
+        setTimeout(function(){document.getElementById('reelteaser').classList.add('show');
+          window.rtStart();}, reduce?0:4500);}, reduce?0:BEAT);
       }, reduce?50:rows.length*BEAT*0.7+BEAT);
     }, reduce?50:5*B16+BEAT);
   }
