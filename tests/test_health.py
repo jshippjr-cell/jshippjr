@@ -32,10 +32,10 @@ def test_healthz_get_and_head(client):
 
 
 def test_get_root_renders_public_home(client):
-    # Root is the public marketing site now; the dashboard moved to /dashboard.
+    # Root is the Chordential Experience now; the dashboard lives at /dashboard.
     r = client.get("/")
     assert r.status_code == 200
-    assert "Start a conversation" in r.text
+    assert "Original music." in r.text
 
 
 def test_dashboard_renders_at_dashboard(client):

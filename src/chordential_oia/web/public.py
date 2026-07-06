@@ -123,7 +123,10 @@ def _validate_lead_contact(email: str, phone: str, linkedin: str):
 
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
-    return render(request, "public/home.html", active="home", show=get_showcase())
+    """The front door IS the Chordential Experience — the client-facing film
+    (docs/design/chordential-experience-final-cut.md). The brochure homepage
+    retired when the film passed its ship gate; /start remains the intake."""
+    return render(request, "public/experience.html", active="home")
 
 
 @router.get("/capabilities", response_class=HTMLResponse)
@@ -152,10 +155,8 @@ _GALLERY_GRADIENTS = [
 @router.get("/experience", response_class=HTMLResponse)
 def public_experience(request: Request):
     """The Chordential Experience — 'The One That Ships' (client-facing film,
-    built beat by beat per docs/design/chordential-experience-*). Beat 3 (the
-    signature: master -> stems -> the client's folder -> CAMPAIGN READY) ships
-    first; the remaining beats assemble around it. Standalone until complete,
-    then it becomes the homepage."""
+    built beat by beat per docs/design/chordential-experience-*). Now the
+    homepage; this route stays so existing deep links keep working."""
     return render(request, "public/experience.html", active="")
 
 

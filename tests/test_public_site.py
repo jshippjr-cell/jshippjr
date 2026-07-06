@@ -25,12 +25,12 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_public_home_loads(client):
+def test_public_home_is_the_experience(client):
+    # The front door IS the Chordential Experience film — promise + invitation.
     r = client.get("/")
     assert r.status_code == 200
-    # Hero + the marketing CTAs are present.
-    assert "Start a conversation" in r.text
-    assert "Book a call" in r.text
+    assert "Original music." in r.text and "Ready for campaign." in r.text
+    assert "Begin a session" in r.text and "/start" in r.text
 
 
 def test_public_home_at_root(client):
@@ -38,11 +38,13 @@ def test_public_home_at_root(client):
 
 
 def test_public_uses_standalone_layout_not_internal_shell(client):
-    r = client.get("/")
-    # Public pages render the public stylesheet/shell, NOT the internal dashboard.
-    assert "/static/public/site.css" in r.text
-    assert "Procurement OS" not in r.text          # internal title suffix
-    assert 'class="sidebar"' not in r.text          # internal nav must not leak
+    # Public surfaces never leak the internal dashboard chrome.
+    for path in ("/", "/capabilities"):
+        r = client.get(path)
+        assert "Procurement OS" not in r.text       # internal title suffix
+        assert 'class="sidebar"' not in r.text      # internal nav must not leak
+    # Brochure pages still render the public stylesheet/shell.
+    assert "/static/public/site.css" in client.get("/capabilities").text
 
 
 def test_capabilities_lists_every_discipline(client):
@@ -66,17 +68,17 @@ def test_samples_page_renders_capability_demos(client):
     assert r.text.count("<audio") == 4 and "<video" not in r.text
 
 
-def test_home_work_section_is_truthful_capability_demos(client):
-    # The home "work" section must not imply delivered client engagements.
+def test_home_work_is_truthful_capability_demonstrations(client):
+    # The front door must not imply delivered client engagements — the reel is
+    # ten fictional creative scenarios, framed as capability demonstrations.
     r = client.get("/")
     assert r.status_code == 200
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
         assert past_claim not in r.text
-    # It shows the real demo players and routes to the demos page.
-    assert "Capability Demonstrations" in r.text
-    # Demo players (now served from the Cloudinary media CDN) + the brief toggle.
-    assert "res.cloudinary.com" in r.text and "See the brief" in r.text
+    assert "Capability demonstration" in r.text
+    # Honest demo branding only (invented brands, never real trademarks).
+    assert "AURORA" in r.text and "VANCE_HOLIDAY_2026/" in r.text
 
 
 def test_delivery_sample_page(client):
@@ -87,8 +89,6 @@ def test_delivery_sample_page(client):
         assert doc in r.text
     assert "SAMPLE" in r.text and "wordmark-ko.png" in r.text  # honest + real logo
     assert "Save as PDF" in r.text and "window.print()" in r.text  # crisp browser PDF
-    # The home delivery section links to it.
-    assert "/delivery-sample" in client.get("/").text
 
 
 def test_internal_dashboard_unaffected_by_public_mount(client):
