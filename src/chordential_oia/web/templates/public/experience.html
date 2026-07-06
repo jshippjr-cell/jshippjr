@@ -66,6 +66,19 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 .stem:hover{box-shadow:0 14px 34px rgba(0,0,0,.5), 0 0 26px rgba(228,103,31,.3)}
 .stem:hover .sw i{background:var(--ember)}
 
+/* the two PAPER objects — the realization: two of these aren't audio */
+.doc{position:absolute;left:50%;top:38%;width:120px;height:74px;border-radius:4px;
+  background:linear-gradient(165deg,#FCF7F8,#EFE6DA);border:1px solid #D8CDB6;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);padding:9px 10px;opacity:0;color:#44161E;
+  transform:translate(-50%,-50%) rotate(-3deg) scale(.6);
+  transition:transform var(--beat) cubic-bezier(.34,1.45,.64,1), opacity var(--b8) ease}
+.doc .dl{font-family:var(--mono);font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#737469}
+.doc .dt{font-family:var(--serif);font-size:10.5px;font-weight:700;margin-top:3px;line-height:1.2}
+.doc .dlines{margin-top:5px;display:flex;flex-direction:column;gap:3px}
+.doc .dlines i{display:block;height:2px;border-radius:1px;background:#D8CDB6}
+.doc .dseal{position:absolute;right:7px;bottom:7px;width:16px;height:16px;border-radius:50%;
+  border:1.5px solid var(--ember);color:var(--ember);font-size:8px;display:grid;place-items:center}
+
 /* the client's folder */
 .folder{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%) translateY(30px);
   width:min(460px,90vw);opacity:0;transition:opacity var(--beat) ease, transform var(--beat) cubic-bezier(.19,1,.22,1)}
@@ -106,7 +119,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 @keyframes breath{0%,100%{opacity:.75}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){
   .master .wave i,.stem .sw i,.touch,.wm{animation:none}
-  .stem,.frow,.folder,.caption,.replay{transition:none}
+  .stem,.doc,.frow,.folder,.caption,.replay{transition:none}
 }
 </style>
 </head>
@@ -135,7 +148,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     </div>
   </div>
   <div class="caption" id="caption">
-    <h2>One master. Five stems. Every cutdown. Cleared.</h2>
+    <h2>One master. Five stems. Every cutdown. And the paperwork.</h2>
     <p>This lands in your drive. Organized like this. Every time.</p>
     <button class="replay" id="replay">↺ Open it again</button>
   </div>
@@ -164,6 +177,15 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     });
   }
   makeStems();
+  var docs=[];
+  [['Rights certificate','RIGHTS · CLEARED WORLDWIDE',true],
+   ['Cue sheet','DOCUMENTATION · PDF',false]].forEach(function(d,i){
+    var el=document.createElement('div');el.className='doc';
+    el.innerHTML='<div class="dl">'+d[1]+'</div><div class="dt">'+d[0]+'</div>'+
+      '<div class="dlines"><i style="width:80%"></i><i style="width:62%"></i><i style="width:71%"></i></div>'+
+      (d[2]?'<div class="dseal">✓</div>':'');
+    stage.appendChild(el);docs.push(el);
+  });
 
   /* 35mm orbit: pointer-damped tilt on the master (spec: ±10°, spring return) */
   var tx=0,ty=0,cx=0,cy=0;
@@ -190,6 +212,14 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
         s.style.transform='translate(calc(-50% + '+fan[i][0]*4+'px), calc(-50% + '+fan[i][1]*2.2+'px)) scale(1)';
       }, reduce?0:i*B16);
     });
+    /* two of the seven are PAPER — the realization lands when they file */
+    var dfan=[[-52,22],[52,22]];
+    docs.forEach(function(d,i){
+      setTimeout(function(){
+        d.style.opacity='1';
+        d.style.transform='translate(calc(-50% + '+dfan[i][0]*3.4+'px), calc(-50% + '+dfan[i][1]*2.2+'px)) rotate('+(i?4:-4)+'deg) scale(1)';
+      }, reduce?0:(5+i)*B16);
+    });
     /* the turn: stems file themselves into THEIR folder */
     setTimeout(function(){
       folder.classList.add('show');
@@ -197,9 +227,13 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
       rows.forEach(function(r,i){
         setTimeout(function(){
           r.classList.add('in');
-          if(i<stems.length){var s=stems[i];
-            s.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
-            s.style.transform='translate(-50%, 150px) scale(.25)';s.style.opacity='0';}
+          function fileAway(el,extra){
+            el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
+            el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';el.style.opacity='0';}
+          if(i===0){ stems.forEach(function(st,k){
+            setTimeout(function(){fileAway(st);}, reduce?0:k*B16*0.6); }); }
+          else if(i===1){ fileAway(docs[0],'rotate(-4deg)'); }
+          else if(i===2){ fileAway(docs[1],'rotate(4deg)'); }
         }, reduce?0:i*BEAT*0.7);
       });
       setTimeout(function(){ stamp.classList.add('land');
@@ -213,6 +247,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
     folder.querySelectorAll('.frow').forEach(function(r){r.classList.remove('in');});
     stems.forEach(function(s){s.style.transition='';s.style.opacity='0';
       s.style.transform='translate(-50%,-50%) scale(.6)';});
+    docs.forEach(function(d,i){d.style.transition='';d.style.opacity='0';
+      d.style.transform='translate(-50%,-50%) rotate('+(i?4:-4)+'deg) scale(.6)';});
     master.style.opacity='1';master.style.transform='translate(-50%,-50%)';
     touch.style.display='';
   }
