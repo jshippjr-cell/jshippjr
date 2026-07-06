@@ -335,11 +335,16 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   animation:breath 5s ease-in-out infinite;opacity:0;transform:translateY(-10px) scale(.97);
   transition:opacity .8s ease, transform .8s cubic-bezier(.19,1,.22,1)}
 .wm.on{opacity:1;transform:none}
+/* the chrome belongs to the opening scene — past the hero it steps out of
+   frame instead of sitting on the film */
+.wm.on.away{opacity:0;transform:translateY(-8px) scale(.97);animation:none;pointer-events:none}
 .wm img{height:28px;width:auto;display:block}
 .rec{width:9px;height:9px;border-radius:50%;background:#57504b;transition:background var(--b8) ease, box-shadow var(--b8) ease}
 .rec.on{background:var(--ember);box-shadow:0 0 12px rgba(228,103,31,.6);animation:pulse 2.5s ease-in-out infinite}
 .nav{position:fixed;right:22px;top:22px;z-index:30;display:flex;gap:18px;font-family:var(--mono);
-  font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  transition:opacity .5s ease, transform .5s ease}
+.nav.away{opacity:0;transform:translateY(-8px);pointer-events:none}
 .nav a{color:var(--sand);text-decoration:none;opacity:0;transform:translateY(-6px);
   transition:opacity var(--b8) ease, transform var(--b8) cubic-bezier(.19,1,.22,1)}
 .nav.on a{opacity:1;transform:none}
@@ -353,6 +358,8 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   .stem{width:146px;height:40px}
   .doc{width:106px}
   .sndbtn{right:12px;bottom:12px;padding:6px 10px;font-size:8px}
+  /* small screens carry one action, not a menu */
+  .nav a[href="#delivery"]{display:none}
   /* the folder tree wraps to two lines here — the stage grows so the reel
      and the filed delivery each keep their own air */
   .stage{height:580px}
@@ -547,6 +554,17 @@ window.CH=(function(){
     setTimeout(function(){rec.classList.add('on');},700);
     setTimeout(function(){promise.classList.add('in');},800);
     setTimeout(function(){nav.classList.add('on');},1400);
+  })();
+
+  /* the chrome belongs to the opening scene: once the visitor scrolls into
+     the film it steps out of frame, and returns with the hero */
+  (function(){
+    var wm=document.querySelector('.wm'), nav=document.getElementById('nav'), tick=false;
+    function upd(){var away=window.scrollY>window.innerHeight*.7;
+      wm.classList.toggle('away',away);nav.classList.toggle('away',away);}
+    window.addEventListener('scroll',function(){if(tick)return;tick=true;
+      requestAnimationFrame(function(){tick=false;upd();});},{passive:true});
+    upd();
   })();
 
 
