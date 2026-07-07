@@ -84,8 +84,8 @@ def test_operator_schedule_creates_a_meeting_and_panel_appears_then_cancels(tmp_
     with TestClient(app_mod.app) as c:
         # the manual "Schedule discovery" path (ADR-0016) — same engine, operator-initiated
         c.post(f"/opportunity/{opp_id}/schedule",
-               data={"meeting_type": "zoom", "date": "2026-07-10", "time": "14:00",
-                     "duration_min": "30", "client_email": "s@x.com"})
+               data={"mode": "direct", "meeting_type": "zoom", "date": "2026-07-10",
+                     "time": "14:00", "duration_min": "30", "client_email": "s@x.com"})
         page = c.get(f"/opportunity/{opp_id}").text
         assert "Upcoming Discovery" in page and "2026-07-10" in page
         assert "Not connected" in page                    # honest notetaker state (no Recall)

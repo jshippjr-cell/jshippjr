@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Schedule discovery · {{ row['need'][:40] }}{% endblock %}
-{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Schedule discovery{% endblock %}
+{% block title %}Discovery call · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Discovery call{% endblock %}
 {% block content %}
 <style>
 .sd-card{max-width:560px}
 .sd-req{background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px}
 .sd-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
 .sd-field label{font-weight:600;font-size:13px}
-.sd-field input,.sd-field select{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:9px;font:inherit}
+.sd-field input,.sd-field select,.sd-field textarea{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:9px;font:inherit}
 .sd-types{display:flex;gap:10px}
 .sd-types label{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:10px;cursor:pointer;font-weight:600;text-align:center}
 .sd-types input{position:absolute;opacity:0}
@@ -17,9 +17,18 @@
 .sd-int span{padding:3px 10px;border-radius:999px;font-weight:700}
 .sd-int .on{background:#eaf5ea;color:#2f6a34}
 .sd-int .off{background:#f2ece3;color:#8a7f6e}
+.sd-slot{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.sd-slot .num{font-weight:700;font-size:12px;color:var(--accent,#c8552b);width:64px;flex:none}
+.sd-slot input{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px;font:inherit;flex:1;min-width:0}
+.sd-mode{display:flex;gap:10px;margin-bottom:16px}
+.sd-mode label{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:10px 12px;cursor:pointer;font-size:12.5px}
+.sd-mode input{position:absolute;opacity:0}
+.sd-mode label b{display:block;margin-bottom:2px;font-size:13.5px}
+.sd-mode label:has(input:checked){border-color:var(--accent,#c8552b);background:var(--surface-2,#faf3ee)}
+form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
 </style>
 <section class="card sd-card">
-  <div class="card-head"><h2>Schedule discovery call</h2></div>
+  <div class="card-head"><h2>Discovery call</h2></div>
   {% if integrations %}
   <div class="sd-int" title="Set each provider's *_PROVIDER switch on Render, not just the key">
     <span class="{{ 'on' if integrations.zoom else 'off' }}">🎥 Zoom {{ 'connected' if integrations.zoom else 'not connected' }}</span>
@@ -30,30 +39,40 @@
   {% if dr %}
   <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} — prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
   {% endif %}
-  <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/schedule">
-    <input type="hidden" name="tz_offset" value="">
+  <form method="post" action="/opportunity/{{ row['id'] }}/schedule">
     {% if dr %}<input type="hidden" name="request_id" value="{{ dr['id'] }}">{% endif %}
+    <div class="sd-mode">
+      <label><input type="radio" name="mode" value="propose" checked>
+        <b>Offer times</b><span class="muted">Email up to three options — the client picks, everything books itself.</span></label>
+      <label><input type="radio" name="mode" value="direct">
+        <b>Book directly</b><span class="muted">The time is already agreed — schedule it now.</span></label>
+    </div>
     <div class="sd-field"><label>Meeting type</label>
       <div class="sd-types">
         <label><input type="radio" name="meeting_type" value="zoom" {{ 'checked' if prefill_type != 'phone' }}> 🎥 Zoom <span class="muted">(records + transcribes)</span></label>
         <label><input type="radio" name="meeting_type" value="phone" {{ 'checked' if prefill_type == 'phone' }}> 📞 Phone</label>
       </div>
     </div>
-    <div class="sd-row">
-      <div class="sd-field"><label>Date</label><input type="date" name="date" required></div>
-      <div class="sd-field"><label>Time <span class="muted">(<span class="js-tzname">your zone</span>)</span></label><input type="time" name="time" value="09:00" required></div>
-      <div class="sd-field"><label>Minutes</label>
-        <select name="duration_min"><option>20</option><option selected>30</option><option>45</option><option>60</option></select></div>
+    <div class="sd-field"><label>Times <span class="muted">(Eastern — exactly what the client sees)</span></label>
+      <div class="sd-slot"><span class="num">Option 1</span><input type="date" name="date" required><input type="time" name="time" value="10:00" required></div>
+      <div class="sd-slot sd-propose-only"><span class="num">Option 2</span><input type="date" name="date2"><input type="time" name="time2" value="14:00"></div>
+      <div class="sd-slot sd-propose-only"><span class="num">Option 3</span><input type="date" name="date3"><input type="time" name="time3" value="11:30"></div>
     </div>
     <div class="sd-row">
       <div class="sd-field"><label>Client name</label><input type="text" name="client_name" value="{{ prefill_name }}"></div>
       <div class="sd-field"><label>Client email</label><input type="email" name="client_email" value="{{ prefill_email }}"></div>
     </div>
-    <div class="sd-field"><label>Zoom / Meet link <span class="muted">(optional — paste yours, e.g. your Personal Meeting Room, if the Zoom API isn't connected)</span></label>
-      <input type="url" name="join_url" placeholder="https://zoom.us/j/…"></div>
-    <button class="btn-live" type="submit">Schedule the call <span class="live-dot"></span></button>
+    <div class="sd-row">
+      <div class="sd-field"><label>Minutes</label>
+        <select name="duration_min"><option>20</option><option selected>30</option><option>45</option><option>60</option></select></div>
+      <div class="sd-field"><label>Zoom / Meet link <span class="muted">(optional — paste yours if the Zoom API isn't connected)</span></label>
+        <input type="url" name="join_url" placeholder="https://zoom.us/j/…"></div>
+    </div>
+    <div class="sd-field sd-propose-only"><label>Note to the client <span class="muted">(optional, woven into the email)</span></label>
+      <textarea name="message" rows="2" placeholder="Looking forward to hearing about the campaign…"></textarea></div>
+    <button class="btn-live" type="submit">Continue <span class="live-dot"></span></button>
     <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Cancel</a>
   </form>
-  <p class="muted small" style="margin-top:12px">Zoom creates the meeting, arms the notetaker (if connected), sends calendar invites, and links it to this opportunity. Phone creates a record and a confirmation email.</p>
+  <p class="muted small" style="margin-top:12px">Offer times: you review the exact email before anything sends; the client's pick locks that option, expires the rest, creates the meeting, arms the notetaker, and sends calendar invites to both sides. Book directly: same engine, immediately — Option 1 is the time.</p>
 </section>
 {% endblock %}

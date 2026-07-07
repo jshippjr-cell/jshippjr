@@ -92,9 +92,9 @@ def test_accepting_a_request_schedules_it_and_closes_the_request(tmp_path, monke
         assert "From" in form and "Sarah" in form
         # schedule it as a PHONE call → meeting created, request closed, no Recall
         c.post(f"/opportunity/{opp_id}/schedule",
-               data={"meeting_type": "phone", "date": "2026-07-12", "time": "10:00",
-                     "duration_min": "30", "client_name": "Sarah", "client_email": "s@x.com",
-                     "request_id": str(rid)})
+               data={"mode": "direct", "meeting_type": "phone", "date": "2026-07-12",
+                     "time": "10:00", "duration_min": "30", "client_name": "Sarah",
+                     "client_email": "s@x.com", "request_id": str(rid)})
         conn = app_mod.db.connect()
         try:
             m = app_mod.db.meeting_for_opp(conn, opp_id)
@@ -114,8 +114,9 @@ def test_pasted_zoom_link_is_used_without_the_zoom_api(tmp_path, monkeypatch):
         # operator pastes their Personal Meeting Room link — no Zoom provider needed; Recall
         # (when configured) can still join it. The Zoom API is optional (ADR-0016 shortcut).
         c.post(f"/opportunity/{opp_id}/schedule",
-               data={"meeting_type": "zoom", "date": "2026-07-14", "time": "10:00",
-                     "join_url": "https://zoom.us/j/MYPERSONALROOM", "client_email": "s@x.com"})
+               data={"mode": "direct", "meeting_type": "zoom", "date": "2026-07-14",
+                     "time": "10:00", "join_url": "https://zoom.us/j/MYPERSONALROOM",
+                     "client_email": "s@x.com"})
         conn = app_mod.db.connect()
         try:
             m = app_mod.db.meeting_for_opp(conn, opp_id)
@@ -130,8 +131,8 @@ def test_manual_schedule_uses_the_same_engine_without_a_request(tmp_path, monkey
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
         c.post(f"/opportunity/{opp_id}/schedule",
-               data={"meeting_type": "zoom", "date": "2026-07-13", "time": "11:00",
-                     "duration_min": "30", "client_email": "ref@x.com"})
+               data={"mode": "direct", "meeting_type": "zoom", "date": "2026-07-13",
+                     "time": "11:00", "duration_min": "30", "client_email": "ref@x.com"})
         conn = app_mod.db.connect()
         try:
             m = app_mod.db.meeting_for_opp(conn, opp_id)
@@ -166,14 +167,14 @@ def test_local_time_is_converted_to_utc_on_schedule(tmp_path, monkeypatch):
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
-        # operator enters 10:00 local in US Eastern (browser offset 240) → 14:00 UTC stored
+        # operator enters 10:00 — Eastern wall clock by definition (ADR-0017) → 14:00 UTC
         c.post(f"/opportunity/{opp_id}/schedule",
-               data={"meeting_type": "phone", "date": "2026-07-12", "time": "10:00",
-                     "tz_offset": "240", "client_email": "s@x.com"})
+               data={"mode": "direct", "meeting_type": "phone", "date": "2026-07-12",
+                     "time": "10:00", "client_email": "s@x.com"})
         conn = app_mod.db.connect()
         try:
             m = app_mod.db.meeting_for_opp(conn, opp_id)
-            assert m["start_at"] == "2026-07-12T14:00:00+00:00"   # 10:00 EDT → 14:00 UTC
+            assert m["start_at"].startswith("2026-07-12T14:00:00")   # 10:00 EDT → 14:00 UTC
         finally:
             conn.close()
 

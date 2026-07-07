@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Pick a time · Chordential{% endblock %}
+{% block content %}
+<style>
+.mt-wrap{max-width:560px;margin:40px auto;padding:0 18px}
+.mt-card{background:var(--surface,#fff);border:1px solid var(--line,#e7e1d8);border-radius:14px;padding:28px}
+.mt-kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent,#c8552b);font-weight:700}
+.mt-card h1{font-size:24px;margin:6px 0 4px}
+.mt-card p.lead{color:var(--muted,#8a8580);margin:0 0 18px}
+.mt-opts{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.mt-opt{display:flex;align-items:center;gap:12px;border:1.5px solid var(--line,#e7e1d8);
+  border-radius:11px;padding:14px 16px;cursor:pointer;font-size:15px;font-weight:600}
+.mt-opt input{accent-color:var(--accent,#c8552b);width:18px;height:18px}
+.mt-opt .num{font-size:11px;letter-spacing:.08em;color:var(--accent,#c8552b);font-weight:700}
+.mt-opt:has(input:checked){border-color:var(--accent,#c8552b);background:var(--surface-2,#faf3ee)}
+.mt-btn{width:100%;background:var(--accent,#c8552b);color:#fff;border:0;border-radius:9px;
+  padding:13px;font-weight:700;font-size:15px;cursor:pointer}
+.mt-done{text-align:center}
+.mt-done .big{font-size:40px}
+.mt-done .when{font-size:18px;font-weight:700;margin:6px 0 2px}
+.mt-note{color:var(--muted,#8a8580);font-size:13px;margin-top:14px;line-height:1.5}
+</style>
+<div class="mt-wrap">
+  <div class="mt-card">
+    {% if prop['status'] == 'booked' %}
+    <div class="mt-done">
+      <div class="big">✓</div>
+      <h1>You're booked</h1>
+      <div class="when">{{ chosen_et }}</div>
+      <p class="lead">{{ 'A calendar invite and the meeting link are on their way to your inbox.'
+          if prop['meeting_type'] != 'phone' else "A calendar invite is on its way — we'll call you." }}</p>
+      {% if meeting and meeting['join_url'] %}
+      <p><a class="mt-btn" style="display:block;text-decoration:none;text-align:center" href="{{ meeting['join_url'] }}">Join link →</a></p>
+      {% endif %}
+      <p class="mt-note">Need to change it? Use the manage link in your confirmation email, or just reply to it.</p>
+    </div>
+    {% elif prop['status'] in ('expired', 'canceled') %}
+    <div class="mt-done">
+      <div class="big">🕑</div>
+      <h1>These times have expired</h1>
+      <p class="lead">Reply to our email and we'll offer fresh options.</p>
+    </div>
+    {% else %}
+    <div class="mt-kicker">Chordential</div>
+    <h1>Pick a time{% if prop['client_name'] %}, {{ prop['client_name'].split(' ')[0] }}{% endif %}</h1>
+    <p class="lead">{{ 'A %d-minute Zoom call'|format(prop['duration_min']) if prop['meeting_type'] != 'phone'
+        else 'A %d-minute phone call'|format(prop['duration_min']) }}
+      about {{ opp['need'] if opp else 'your campaign' }}. All times Eastern.
+      Pick one — calendar invites{{ ' and the meeting link' if prop['meeting_type'] != 'phone' }} follow automatically.</p>
+    <form method="post" action="/meet/{{ prop['token'] }}/pick">
+      <div class="mt-opts">
+        {% for s in slots_et %}
+        <label class="mt-opt">
+          <input type="radio" name="pick" value="{{ loop.index0 }}" {{ 'checked' if sel == loop.index0 or (sel is none and loop.first) }} required>
+          <span><span class="num">OPTION {{ loop.index }}</span><br>{{ s }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <button class="mt-btn" type="submit">Confirm this time</button>
+    </form>
+    <p class="mt-note">None of these work? Just reply to our email and we'll offer more.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

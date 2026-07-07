@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Review times email · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Offer times{% endblock %}
+{% block content %}
+<style>
+.mp-card{max-width:640px}
+.mp-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:13px}
+.mp-meta b{font-weight:700}
+.mp-slots{display:flex;flex-direction:column;gap:6px;margin:10px 0 16px}
+.mp-slot{border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:9px 13px;font-size:13.5px}
+.mp-slot .num{font-weight:700;color:var(--accent,#c8552b);margin-right:8px;font-size:11.5px}
+.mp-email{background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.mp-email .sub{font-weight:700;margin-bottom:8px}
+.mp-email pre{white-space:pre-wrap;font:inherit;font-size:13px;margin:0;line-height:1.55}
+.mp-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+</style>
+<section class="card mp-card">
+  <div class="card-head"><h2>🕑 Review before it sends</h2>
+    <span class="muted small">The machine proposed; you dispose.</span></div>
+  <div class="mp-meta">
+    <span>To <b>{{ prop['client_name'] or 'the client' }}</b> · {{ prop['client_email'] or 'no email — add one and recreate' }}</span>
+    <span>{{ prop['meeting_type']|title }} · {{ prop['duration_min'] }} min</span>
+    <span class="pill {{ 'live' if prop['status'] == 'sent' else '' }}">{{ prop['status'] }}</span>
+  </div>
+  <div class="mp-slots">
+    {% for s in slots_et %}
+    <div class="mp-slot"><span class="num">OPTION {{ loop.index }}</span>{{ s }}</div>
+    {% endfor %}
+  </div>
+  <div class="mp-email">
+    <div class="sub">{{ email.subject }}</div>
+    <pre>{{ email.body }}</pre>
+  </div>
+  <div class="mp-acts">
+    {% if prop['status'] in ('draft', 'sent') %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/send" style="margin:0">
+      <button class="btn-live" type="submit">{{ 'Send to the client' if prop['status'] == 'draft' else 'Resend' }} <span class="live-dot"></span></button>
+    </form>
+    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/cancel" style="margin:0">
+      <button class="btn ghost" type="submit">Withdraw</button>
+    </form>
+    {% endif %}
+    <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Back</a>
+    <span class="muted small">Client link: <a href="{{ pick_url }}">{{ pick_url }}</a></span>
+  </div>
+  {% if request.query_params.get('err') == 'send' %}
+  <p class="muted small" style="margin-top:10px">⚠ The email could not be sent — check the mail provider configuration (or copy the client link above and send it yourself).</p>
+  {% endif %}
+</section>
+{% endblock %}

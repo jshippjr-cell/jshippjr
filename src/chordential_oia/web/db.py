@@ -1130,6 +1130,28 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, updated_at TEXT
         )"""
     )
+    # A Meeting Proposal is the OPERATOR's offer of up to three times (ADR-0016 extended):
+    # the client picks one, the pick books through the Meeting Scheduler, the other options
+    # expire. slots_json is the per-record JSON state blob (house pattern): a list of
+    # ISO-UTC strings. status: draft → sent → booked | expired | canceled.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS meeting_proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            token TEXT,                          -- unguessable client link token
+            slots_json TEXT DEFAULT '[]',        -- up to 3 ISO-UTC start times
+            meeting_type TEXT DEFAULT 'zoom',    -- zoom | phone
+            duration_min INTEGER DEFAULT 30,
+            client_name TEXT, client_email TEXT,
+            message TEXT,                        -- operator note woven into the email
+            join_url TEXT,                       -- optional operator-pasted link
+            request_id INTEGER,                  -- Discovery Request this answers (or null)
+            status TEXT DEFAULT 'draft',         -- draft | sent | booked | expired | canceled
+            chosen_slot TEXT,                    -- the ISO-UTC slot the client picked
+            meeting_id INTEGER,                  -- the Meeting created by the pick
+            created_at TEXT, updated_at TEXT
+        )"""
+    )
     # The objection library — the durable memory behind the Discovery Call Simulator.
     # Seeded from the five call simulations (docs/sales-simulations); GROWS from real
     # calls: objections harvested from transcripts land as status='proposed' with the
@@ -4255,6 +4277,59 @@ def set_discovery_request_status(conn: sqlite3.Connection, req_id: int, status: 
 def pending_discovery_request_count(conn: sqlite3.Connection) -> int:
     return int(conn.execute(
         "SELECT COUNT(*) c FROM discovery_requests WHERE status = 'new'").fetchone()["c"])
+
+
+# --- Meeting Proposals — the operator's offer of times; the client's pick books it ------ #
+def create_meeting_proposal(conn: sqlite3.Connection, *, opp_id: int, token: str,
+                            slots: List[str], meeting_type: str = "zoom",
+                            duration_min: int = 30, client_name: str = "",
+                            client_email: str = "", message: str = "", join_url: str = "",
+                            request_id: Optional[int] = None) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO meeting_proposals
+           (opp_id, token, slots_json, meeting_type, duration_min, client_name, client_email,
+            message, join_url, request_id, status, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (opp_id, token, json.dumps(list(slots)[:3]),
+         "phone" if meeting_type == "phone" else "zoom", duration_min, client_name,
+         client_email, message, join_url, request_id, "draft", now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_meeting_proposal(conn: sqlite3.Connection, pid: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM meeting_proposals WHERE id = ?", (pid,)).fetchone()
+
+
+def meeting_proposal_by_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
+    if not (token or "").strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM meeting_proposals WHERE token = ? LIMIT 1", (token,)).fetchone()
+
+
+def list_meeting_proposals(conn: sqlite3.Connection, opp_id: int,
+                           status: str = "") -> List[sqlite3.Row]:
+    q, args = "SELECT * FROM meeting_proposals WHERE opp_id = ?", [opp_id]
+    if status:
+        q += " AND status = ?"; args.append(status)
+    return conn.execute(q + " ORDER BY created_at DESC, id DESC", args).fetchall()
+
+
+def update_meeting_proposal(conn: sqlite3.Connection, pid: int, **fields) -> None:
+    allowed = {"status", "chosen_slot", "meeting_id", "slots_json", "client_name",
+               "client_email", "message", "join_url", "meeting_type", "duration_min"}
+    sets, args = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k} = ?"); args.append(v)
+    if not sets:
+        return
+    sets.append("updated_at = ?"); args.append(datetime.now(timezone.utc).isoformat())
+    args.append(pid)
+    conn.execute(f"UPDATE meeting_proposals SET {', '.join(sets)} WHERE id = ?", args)
+    conn.commit()
 
 
 def meeting_by_manage_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:

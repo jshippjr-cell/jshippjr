@@ -242,10 +242,13 @@ def _is_tokened_brief(request: Request) -> bool:
 # token-gated public surfaces (the route validates the token), like first-touch (ADR-0016).
 _REQUEST_RE = re.compile(r"^/opportunity/\d+/request/?$")
 _MANAGE_RE = re.compile(r"^/meeting/\d+/manage/?$")
+# The client slot-pick page: /meet/<proposal-token>[/pick] — the unguessable proposal
+# token IS the access control (validated in-route), so it bypasses the admin gate.
+_MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
-    return bool(_REQUEST_RE.match(path) or _MANAGE_RE.match(path))
+    return bool(_REQUEST_RE.match(path) or _MANAGE_RE.match(path) or _MEET_RE.match(path))
 
 
 # The token-gated client delivery portal: /project/<id>/delivery-portal . Same
@@ -1875,6 +1878,13 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting = db.meeting_for_opp(conn, opp_id)
         # Pending client Discovery Requests to review + schedule (ADR-0016).
         discovery_requests = db.list_discovery_requests(conn, opp_id, status="new")
+        # Open Meeting Proposals — times offered, awaiting the client's pick (or unsent drafts).
+        open_proposals = [p for p in db.list_meeting_proposals(conn, opp_id)
+                          if p["status"] in ("draft", "sent")]
+        proposal_slots_et = {
+            p["id"]: [meeting_scheduler.fmt_et(s)
+                      for s in meeting_scheduler.proposal_slots(p)]
+            for p in open_proposals}
     finally:
         conn.close()
     qual, scored = ev
@@ -1897,7 +1907,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
         ci=ci, ci_view=ci_view, intake_sync_lanes=intake_sync_lanes,
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
-        discovery_requests=discovery_requests, capture_summary=capture_summary,
+        discovery_requests=discovery_requests, open_proposals=open_proposals,
+        proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
     )
 
 
@@ -2214,32 +2225,135 @@ def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
 
 @app.post("/opportunity/{opp_id}/schedule")
 def discovery_schedule_submit(opp_id: int, meeting_type: str = Form("zoom"),
+                              mode: str = Form("propose"),
                               date: str = Form(""), time: str = Form(""),
-                              tz_offset: str = Form(""),
+                              date2: str = Form(""), time2: str = Form(""),
+                              date3: str = Form(""), time3: str = Form(""),
+                              message: str = Form(""),
                               duration_min: int = Form(30), client_name: str = Form(""),
                               client_email: str = Form(""), join_url: str = Form(""),
                               request_id: str = Form("")):
-    """Schedule the call through the shared engine (Zoom → Zoom+Recall+calendar; Phone → record
-    + email). ``join_url`` lets the operator PASTE a link (e.g. their Personal Meeting Room) so
-    Recall can join without the Zoom API. The time is entered in the operator's local zone and
-    converted to UTC via ``tz_offset``. Initiated by the operator, optionally from a request."""
+    """One form, two modes (ADR-0016/0017). ``propose`` (default): up to three Eastern-time
+    options become a Meeting Proposal + a reviewable client email — the client's pick books
+    through the shared engine. ``direct``: the time is already agreed; book it now. All wall
+    clocks here are Eastern (the client's zone); storage is UTC."""
     conn = db.connect()
     try:
         row = db.get_opportunity(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
-        start_at = (_to_utc_iso(f"{date.strip()}T{time.strip() or '09:00'}", tz_offset)
-                    if date.strip() else "")
         rid = int(request_id) if request_id.strip().isdigit() else None
-        initiated = "client_request" if rid else "operator"
-        meeting_scheduler.schedule(
-            conn, row, meeting_type=meeting_type, start_at=start_at,
+        slots = [meeting_scheduler.et_to_utc_iso(d.strip(), (t.strip() or "09:00"))
+                 for d, t in ((date, time), (date2, time2), (date3, time3)) if d.strip()]
+        slots = [s for s in slots if s]
+        if mode == "direct":
+            meeting_scheduler.schedule(
+                conn, row, meeting_type=meeting_type, start_at=(slots[0] if slots else ""),
+                duration_min=duration_min or 30, client_name=client_name.strip(),
+                client_email=client_email.strip(), join_url=join_url.strip(),
+                initiated_by=("client_request" if rid else "operator"), request_id=rid)
+            return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
+        res = meeting_scheduler.propose(
+            conn, row, slots=slots, meeting_type=meeting_type,
             duration_min=duration_min or 30, client_name=client_name.strip(),
-            client_email=client_email.strip(), join_url=join_url.strip(),
-            initiated_by=initiated, request_id=rid)
+            client_email=client_email.strip(), message=message.strip(),
+            join_url=join_url.strip(), request_id=rid)
+        if not res.get("ok"):
+            return RedirectResponse(f"/opportunity/{opp_id}/schedule?err=slots",
+                                    status_code=303)
+        pid = res["proposal"]["id"]
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/proposal/{pid}", status_code=303)
+
+
+@app.get("/opportunity/{opp_id}/proposal/{pid}", response_class=HTMLResponse)
+def meeting_proposal_preview(request: Request, opp_id: int, pid: int):
+    """The machine proposes, the operator disposes: review the exact client email (options in
+    Eastern time) before anything is sent."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        prop = db.get_meeting_proposal(conn, pid)
+        if row is None or prop is None or prop["opp_id"] != opp_id:
+            return HTMLResponse("Not found", status_code=404)
+        email = meeting_scheduler.proposal_email(row, prop)
+        slots = [meeting_scheduler.fmt_et(s, long=True)
+                 for s in meeting_scheduler.proposal_slots(prop)]
+    finally:
+        conn.close()
+    return render(request, "meeting_proposal.html", nav="inbox", row=row, prop=prop,
+                  email=email, slots_et=slots,
+                  pick_url=f"{_public_base()}/meet/{prop['token']}")
+
+
+@app.post("/opportunity/{opp_id}/proposal/{pid}/send")
+def meeting_proposal_send(opp_id: int, pid: int):
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        prop = db.get_meeting_proposal(conn, pid)
+        if row is None or prop is None or prop["opp_id"] != opp_id:
+            return HTMLResponse("Not found", status_code=404)
+        res = meeting_scheduler.send_proposal(conn, row, prop)
+        if not res.get("ok"):
+            return RedirectResponse(
+                f"/opportunity/{opp_id}/proposal/{pid}?err=send", status_code=303)
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/proposal/{pid}/cancel")
+def meeting_proposal_cancel(opp_id: int, pid: int):
+    conn = db.connect()
+    try:
+        prop = db.get_meeting_proposal(conn, pid)
+        if prop is not None and prop["opp_id"] == opp_id and prop["status"] in ("draft", "sent"):
+            db.update_meeting_proposal(conn, pid, status="canceled")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
+
+
+# ── Client slot pick — public, token-gated by the unguessable proposal token. ─────────
+@app.get("/meet/{token}", response_class=HTMLResponse)
+def meet_pick_page(request: Request, token: str, pick: str = ""):
+    """The client's view of the offered times (Eastern, never UTC). GET never books —
+    email scanners prefetch links — it only preselects; the POST confirms."""
+    conn = db.connect()
+    try:
+        prop = db.meeting_proposal_by_token(conn, token)
+        if prop is None:
+            return HTMLResponse("Not found", status_code=404)
+        opp = db.get_opportunity(conn, prop["opp_id"])
+        slots = meeting_scheduler.proposal_slots(prop)
+        meeting = (db.get_meeting(conn, prop["meeting_id"])
+                   if prop["meeting_id"] else None)
+    finally:
+        conn.close()
+    sel = int(pick) if pick.strip().isdigit() and int(pick) < len(slots) else None
+    return render(request, "meet.html", nav="", prop=prop, opp=opp, sel=sel,
+                  slots_et=[meeting_scheduler.fmt_et(s, long=True) for s in slots],
+                  chosen_et=(meeting_scheduler.fmt_et(prop["chosen_slot"], long=True)
+                             if prop["chosen_slot"] else ""),
+                  meeting=meeting)
+
+
+@app.post("/meet/{token}/pick")
+def meet_pick_submit(token: str, pick: int = Form(...)):
+    """The client confirmed an option: first pick wins (transactional lock), the booking runs
+    the full engine — Zoom, Recall, calendar invites both sides, confirmations, timeline —
+    and the other options expire with the proposal."""
+    conn = db.connect()
+    try:
+        prop = db.meeting_proposal_by_token(conn, token)
+        if prop is None:
+            return HTMLResponse("Not found", status_code=404)
+        meeting_scheduler.book_from_proposal(conn, prop, pick)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/meet/{token}", status_code=303)
 
 
 @app.post("/opportunity/{opp_id}/request/{req_id}/decline")

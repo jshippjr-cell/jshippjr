@@ -35,7 +35,7 @@
        Schedule Discovery rides next to it (opens in the drawer) when no call exists. #}
     <div class="detail-cta">
       {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
-      {% if not meeting %}<a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Schedule discovery</a>{% endif %}
+      <a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
       <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     </div>
     <div class="big-num" data-fit-pct="{{ row['alignment']|round|int }}">{{ row['alignment']|pct }}</div>
@@ -127,6 +127,33 @@
       <a class="btn tiny primary" href="/opportunity/{{ row['id'] }}/schedule?req={{ dr['id'] }}" data-drawer-src>Accept &amp; schedule →</a>
       <form method="post" action="/opportunity/{{ row['id'] }}/request/{{ dr['id'] }}/decline" style="margin:0">
         <button class="btn tiny ghost" type="submit">Decline</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ── Meeting Proposals — times offered, awaiting the client's pick. ── #}
+{% if open_proposals %}
+<section class="card" id="proposals">
+  <div class="card-head"><h2>🕑 Times offered</h2><span class="muted small">The client picks one; everything books itself.</span></div>
+  {% for p in open_proposals %}
+  <div class="dr-item">
+    <div>
+      <div class="dr-who">{{ p['client_name'] or 'Client' }}
+        <span class="dr-pref">{{ p['meeting_type'] }}</span>
+        {% if p['status'] == 'draft' %}<span class="pill">draft — not sent</span>
+        {% else %}<span class="pill live">sent · awaiting pick</span>{% endif %}
+      </div>
+      <div class="muted small">{{ p['client_email'] }}</div>
+      <div class="muted small" style="margin-top:3px">{{ proposal_slots_et[p['id']]|join(' · ') }}</div>
+    </div>
+    <div class="dr-acts">
+      <a class="btn tiny {{ 'primary' if p['status'] == 'draft' else '' }}"
+         href="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}">{{ 'Review & send →' if p['status'] == 'draft' else 'View / resend' }}</a>
+      <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}/cancel" style="margin:0">
+        <button class="btn tiny ghost" type="submit">Withdraw</button>
       </form>
     </div>
   </div>

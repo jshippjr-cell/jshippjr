@@ -11,11 +11,13 @@ Intelligence never appears here — it only ever receives Meeting events (ADR-00
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from .. import mailer
 from .. import meetings as M
@@ -34,9 +36,40 @@ def _operator_email() -> str:
             or os.environ.get("CHORDENTIAL_SMTP_FROM", "")).strip()
 
 
-def _fmt(start_at: str) -> str:
+CLIENT_TZ = ZoneInfo("America/New_York")
+
+
+def to_client_tz(start_at: str) -> Optional[datetime]:
     dt = M.parse_iso(start_at)
-    return dt.strftime("%a %b %d, %Y · %H:%M UTC") if dt else (start_at or "a time to be set")
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(CLIENT_TZ)
+
+
+def fmt_et(start_at: str, *, long: bool = False) -> str:
+    """Client-facing time — always Eastern, never UTC (ADR-0017). The tz label is honest
+    (EST in winter, EDT in summer) courtesy of zoneinfo."""
+    dt = to_client_tz(start_at)
+    if dt is None:
+        return start_at or "a time to be set"
+    hm = dt.strftime("%I:%M %p").lstrip("0")
+    if long:
+        return f"{dt.strftime('%A')} · {dt.strftime('%B')} {dt.day} · {hm} {dt.strftime('%Z')}"
+    return f"{dt.strftime('%a %b')} {dt.day}, {dt.year} · {hm} {dt.strftime('%Z')}"
+
+
+def et_to_utc_iso(date_str: str, time_str: str) -> str:
+    """An operator-entered Eastern wall-clock → ISO UTC for storage."""
+    try:
+        local = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        return local.replace(tzinfo=CLIENT_TZ).astimezone(timezone.utc).isoformat()
+    except ValueError:
+        return ""
+
+
+_fmt = fmt_et   # every scheduling email speaks Eastern now
 
 
 def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
@@ -115,6 +148,14 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
 
     if request_id:
         db.set_discovery_request_status(conn, request_id, "scheduled", mid)
+    # the Opportunity timeline records the meeting (ADR-0017)
+    if ci_id:
+        try:
+            db.add_ci_event(conn, ci_id, actor=scheduled_by or "operator",
+                            verb="meeting_scheduled", facet="engagement", key="discovery_call",
+                            to_value=f"{meeting_type} · {fmt_et(start_at)}", source="scheduler")
+        except Exception:  # noqa: BLE001 — the timeline never blocks the booking
+            pass
     _send_confirmations(opp, db.get_meeting(conn, mid))
     return {"ok": True, "meeting": db.get_meeting(conn, mid)}
 
@@ -155,6 +196,99 @@ def cancel(conn, meeting) -> dict:
                    f"Discovery call canceled — {opp['client']}",
                    f"Your discovery call has been canceled. Reply and we'll find another time.")
     return {"ok": True}
+
+
+# --- Meeting Proposals — the operator offers up to three times; one pick books it ------- #
+def propose(conn, opp, *, slots: list, meeting_type: str = ZOOM, duration_min: int = 30,
+            client_name: str = "", client_email: str = "", message: str = "",
+            join_url: str = "", request_id: Optional[int] = None) -> dict:
+    """Create a proposal (status=draft). ``slots`` are ISO-UTC strings, at most three.
+    Nothing is emailed yet — the machine proposes, the operator reviews then sends."""
+    slots = [s for s in slots if s][:3]
+    if not slots:
+        return {"ok": False, "error": "Pick at least one time."}
+    pid = db.create_meeting_proposal(
+        conn, opp_id=opp["id"], token=secrets.token_urlsafe(24), slots=slots,
+        meeting_type=meeting_type, duration_min=duration_min, client_name=client_name,
+        client_email=client_email, message=message, join_url=join_url,
+        request_id=request_id)
+    return {"ok": True, "proposal": db.get_meeting_proposal(conn, pid)}
+
+
+def proposal_slots(proposal) -> list:
+    try:
+        return list(json.loads(proposal["slots_json"] or "[]"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def proposal_email(opp, proposal) -> dict:
+    """The client email presenting the options — Eastern times, pick links, no calendar
+    exposure. Returned (not sent) so the operator can review it first."""
+    pick_base = f"{_public_base()}/meet/{proposal['token']}"
+    slots = proposal_slots(proposal)
+    lines = []
+    for i, s in enumerate(slots):
+        lines.append(f"  Option {i + 1} — {fmt_et(s, long=True)}\n  {pick_base}?pick={i}")
+    how = ("a Zoom call" if proposal["meeting_type"] == ZOOM else "a phone call")
+    first = (proposal["client_name"] or "").split(" ")[0] or "there"
+    note = (proposal["message"] or "").strip()
+    body = (
+        f"Hi {first},\n\n"
+        f"Let's find a time for {how} about {opp['need'] or 'your campaign'}. "
+        f"Here are a few times that work on our side — pick whichever suits you and "
+        f"everything else (calendar invites, the meeting link) is handled automatically:\n\n"
+        + "\n\n".join(lines)
+        + (f"\n\n{note}" if note else "")
+        + f"\n\nOr see every option here: {pick_base}"
+        + "\n\nIf none of these work, just reply and we'll offer more times.\n\n"
+        + "— Chordential")
+    return {"subject": f"Times for our call — {opp['client'] or 'Chordential'}",
+            "to": proposal["client_email"] or "", "body": body}
+
+
+def send_proposal(conn, opp, proposal) -> dict:
+    """Operator pressed Send: mail the options to the client, mark the proposal sent."""
+    email = proposal_email(opp, proposal)
+    if not email["to"]:
+        return {"ok": False, "error": "No client email on the proposal."}
+    try:
+        mailer.send_email(email["to"], email["subject"], email["body"],
+                          html=mailer.branded_html(_public_base(), email["body"]))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Email failed: {e}"}
+    db.update_meeting_proposal(conn, proposal["id"], status="sent")
+    return {"ok": True}
+
+
+def book_from_proposal(conn, proposal, pick_index: int) -> dict:
+    """The client picked an option. Locks it transactionally: first pick wins, the booking
+    runs through the ONE engine (Zoom, Recall, calendar invites, confirmations, timeline),
+    and the remaining options expire with the proposal."""
+    slots = proposal_slots(proposal)
+    if not (0 <= pick_index < len(slots)):
+        return {"ok": False, "error": "unknown_option"}
+    # the lock: only a 'sent' proposal can be booked, exactly once
+    cur = conn.execute(
+        "UPDATE meeting_proposals SET status = 'booked', chosen_slot = ?, updated_at = ? "
+        "WHERE id = ? AND status = 'sent'",
+        (slots[pick_index], datetime.now(timezone.utc).isoformat(), proposal["id"]))
+    conn.commit()
+    if cur.rowcount == 0:
+        return {"ok": False, "error": "already_booked",
+                "proposal": db.get_meeting_proposal(conn, proposal["id"])}
+    opp = db.get_opportunity(conn, proposal["opp_id"])
+    if opp is None:
+        return {"ok": False, "error": "unknown_option"}
+    res = schedule(
+        conn, opp, meeting_type=proposal["meeting_type"], start_at=slots[pick_index],
+        duration_min=proposal["duration_min"] or 30,
+        client_name=proposal["client_name"] or "", client_email=proposal["client_email"] or "",
+        join_url=proposal["join_url"] or "", initiated_by="client_pick",
+        request_id=proposal["request_id"], scheduled_by="client")
+    db.update_meeting_proposal(conn, proposal["id"], meeting_id=res["meeting"]["id"])
+    return {"ok": True, "meeting": res["meeting"],
+            "proposal": db.get_meeting_proposal(conn, proposal["id"])}
 
 
 # --------------------------------------------------------------------------- #
