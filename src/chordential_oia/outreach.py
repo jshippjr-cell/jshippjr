@@ -210,12 +210,16 @@ COMPOSE_BLOCK_KEYS = [
 # unguessable per-opp ``share_token`` so the URL is shareable but not enumerable. Falls back
 # to a "preview" stub only when no id/token is available (e.g. a bare preview render).
 def _page_url(opp_id, token=None) -> str:
-    ident = opp_id if opp_id is not None else "preview"
-    k = token if (token and str(token).strip()) else str(ident)
     # Absolute URL so the link is clickable in the email (a relative path is dead
     # in a mail client). Uses the configured public domain; chordential.com default.
     base = os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com").rstrip("/")
-    return f"{base}/opportunity/{ident}/capabilities?k={k}"
+    # ADR-0018: the client's ONE durable destination is the Workspace — its URL never
+    # changes across the engagement, and it renders the live Brief inline. Only fall back
+    # to the standalone brief preview when there's no workspace token yet (preview mode).
+    if token and str(token).strip():
+        return f"{base}/workspace/{token}"
+    ident = opp_id if opp_id is not None else "preview"
+    return f"{base}/opportunity/{ident}/capabilities?k={ident}"
 
 
 def _first_brief_line(opp) -> str:

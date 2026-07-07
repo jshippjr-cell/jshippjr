@@ -2774,13 +2774,15 @@ def compose_send(opp_id: int):
     email = (row["contact_email"] or "").strip()
     if not email or not mailer.mail_configured():
         return RedirectResponse(f"/opportunity/{opp_id}/compose?sent=manual", status_code=303)
-    # ADR-0017: sending freezes the brief. The mailed link renders the snapshot verbatim —
-    # the client opens exactly the document the operator approved, never a later re-render.
+    # ADR-0018: the emailed link is the client's durable Workspace (built by the page-link
+    # block), which renders the LIVE brief inline — the relationship grows, nothing resets.
+    # Sending still freezes a brief snapshot, but its role is the audit/PDF record (its Phase-3
+    # job), NOT how the client views the brief; legacy ?v= links still render it on the
+    # standalone route for backward compatibility.
     conn = db.connect()
     try:
         ci_view, met = _brief_ci_context(conn, row)
         overrides = db.get_doc_overrides(conn, opp_id)
-        token = db.ensure_share_token(conn, opp_id)
         qual, _scored = evaluate(opp)
         discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
         est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
@@ -2788,10 +2790,9 @@ def compose_send(opp_id: int):
             opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
             call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
             ci_view=ci_view, met=met)
-        sid = db.create_brief_snapshot(conn, opp_id, doc_to_json(doc))
+        db.create_brief_snapshot(conn, opp_id, doc_to_json(doc))
     finally:
         conn.close()
-    body = body.replace(f"/capabilities?k={token}", f"/capabilities?k={token}&v={sid}")
     base = _public_base()
     status = mailer.send_email(
         email, plan.email_subject, body, html=mailer.branded_html(base, body),

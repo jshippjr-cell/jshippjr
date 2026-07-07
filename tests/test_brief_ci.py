@@ -176,14 +176,17 @@ def test_send_freezes_snapshot_and_link_renders_it_verbatim(tmp_path, monkeypatc
         conn = app_mod.db.connect()
         snap = app_mod.db.latest_brief_snapshot(conn, opp_id)
         token = app_mod.db.ensure_share_token(conn, opp_id); conn.close()
+        # ADR-0018: the mailed link is the client's durable Workspace (live), NOT a snapshot
+        assert f"/workspace/{token}" in sent[0]
+        # sending still freezes a snapshot — its role is the audit/PDF record (Phase 3)
         assert snap is not None
-        assert f"capabilities?k={token}&v={snap['id']}" in sent[0]   # the mailed link
         # intelligence changes AFTER the send…
         conn = app_mod.db.connect()
         app_mod.campaign_intelligence.edit_or_create(
             conn, ci_id, "direction", "emotional_arc", "fact", "Something new entirely")
         conn.close()
-        # …the live brief moves, the snapshot does not
+        # …the live brief (what the workspace shows) moves; the frozen snapshot does not —
+        # the snapshot still renders verbatim on the standalone route (backward compatible)
         live = c.get(f"/opportunity/{opp_id}/capabilities?k={token}").text
         frozen = c.get(f"/opportunity/{opp_id}/capabilities?k={token}&v={snap['id']}").text
     assert "Something new entirely" in live
