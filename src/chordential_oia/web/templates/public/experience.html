@@ -642,22 +642,25 @@ window.CH=(function(){
       reduce?50:7*B16+BEAT+(auto?900:0));
   }
 
-  /* the turn: stems file themselves into THEIR folder */
+  /* the turn: stems file themselves into THEIR folder. The objects dive
+     first and dissolve mid-flight; the folder rises to receive them; each
+     receipt line ticks in only after its object is gone — nothing is ever
+     visible on top of the tree. */
   function runFiling(){
     document.getElementById('packcue').style.display='none';
-    folder.classList.add('show');
+    setTimeout(function(){folder.classList.add('show');},reduce?0:200);
     var rows=folder.querySelectorAll('.frow');
     rows.forEach(function(r,i){
       setTimeout(function(){
-        r.classList.add('in');
         function fileAway(el,extra){
-          el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 400ms ease';
+          el.style.transition='transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 320ms ease';
           el.style.transform='translate(-50%, 150px) '+(extra||'')+' scale(.22)';
           el.style.opacity='0';el.style.pointerEvents='none';}
         if(i===0){ stems.forEach(function(st,k){
           setTimeout(function(){fileAway(st);}, reduce?0:k*B16*0.6); }); }
         else if(i===1){ fileAway(docs[0],'rotate(-4deg)'); }
         else if(i===2){ fileAway(docs[1],'rotate(4deg)'); }
+        setTimeout(function(){r.classList.add('in');},reduce?0:430);
       }, reduce?0:i*BEAT*0.7);
     });
     setTimeout(function(){ stamp.classList.add('land');window.CH.stamp();
@@ -666,7 +669,7 @@ window.CH=(function(){
          If the user has scrolled on, the wheel is waiting when they return. */
       setTimeout(function(){document.getElementById('reelteaser').classList.add('show');
         window.rtStart();}, reduce?0:2200);}, reduce?0:BEAT);
-    }, reduce?50:rows.length*BEAT*0.7+BEAT);
+    }, reduce?50:rows.length*BEAT*0.7+BEAT+430);
   }
 
   /* the scroll gate: filing waits for one downward gesture */
@@ -738,28 +741,33 @@ window.CH=(function(){
     }
     window.addEventListener('scroll',onSc,{passive:true});
   })();
-  /* THE MORNING AFTER — the brief assembles calmly as you scroll. No machine,
-     no explanation: it simply arrives complete. The mystery is the brand. */
+  /* THE MORNING AFTER — the brief assembles under the visitor's thumb. The
+     scroll IS the scrubber: each line lands as the document travels up the
+     viewport, retreats if they back up, completes when it's fully in view.
+     No machine, no explanation: they write it in by scrolling. */
   (function(){
-    var wrap=document.getElementById('mawrap');
     var brief=document.getElementById('brief'), cap=document.getElementById('macap');
     var rows=[].slice.call(brief.querySelectorAll('.brow'));
     var bnext=brief.querySelector('.bnext'), pblock=brief.querySelector('.promiseblock');
-    function play(){
-      window.CH.brief();
-      brief.classList.add('in');
-      rows.forEach(function(r,i){setTimeout(function(){r.classList.add('in');},500+i*300);});
-      setTimeout(function(){bnext.classList.add('in');},500+rows.length*300+200);
-      setTimeout(function(){pblock.classList.add('in');},500+rows.length*300+600);
-      setTimeout(function(){cap.classList.add('in');},500+rows.length*300+1000);
-    }
-    if(reduce||!('IntersectionObserver' in window)){brief.classList.add('in');
+    if(reduce){brief.classList.add('in');
       rows.forEach(function(r){r.classList.add('in');});
       bnext.classList.add('in');pblock.classList.add('in');cap.classList.add('in');return;}
-    var seen=false;
-    var io=new IntersectionObserver(function(es){es.forEach(function(e){
-      if(e.isIntersecting&&!seen){seen=true;play();io.disconnect();}});},{threshold:.3});
-    io.observe(brief);
+    var tail=[bnext,pblock,cap], chimed=false, raf=null;
+    function scrub(){
+      raf=null;
+      var vh=window.innerHeight, top=brief.getBoundingClientRect().top;
+      /* 0 as the brief's head clears the fold; 1 by the time it sits high */
+      var p=Math.max(0,Math.min(1,(vh*0.92-top)/(vh*0.62)));
+      brief.classList.toggle('in',p>0.02);
+      if(p>0.06&&!chimed){chimed=true;window.CH.brief();}
+      var n=rows.length+tail.length;
+      rows.forEach(function(r,i){r.classList.toggle('in',p>=(i+1)/(n+1));});
+      tail.forEach(function(el,i){el.classList.toggle('in',p>=(rows.length+i+1)/(n+1));});
+    }
+    function onScrub(){if(raf==null)raf=requestAnimationFrame(scrub);}
+    window.addEventListener('scroll',onScrub,{passive:true});
+    window.addEventListener('resize',onScrub,{passive:true});
+    scrub();
   })();
 
   /* THE MATERIAL LIBRARY — ten artifacts, not ten buttons. Each demonstration
