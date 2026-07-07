@@ -2618,9 +2618,12 @@ def _compose_state(conn, opp_id: int):
     # Mint (or fetch) the unguessable share token so the page-link block carries the
     # real token-gated URL — the same token the first-touch route validates.
     share_token = db.ensure_share_token(conn, opp_id)
+    # ADR-0017: the email inherits from Campaign Intelligence, same as the Brief.
+    ci_view, met = _brief_ci_context(conn, row)
     blocks = build_compose_blocks(
         opp, None, plan, overrides=overrides, opp_id=opp_id,
         contact_name=row["contact_name"], share_token=share_token,
+        ci_view=ci_view, met=met,
     )
     selected = compose_selection(blocks, overrides)
     body = assemble_email(blocks, selected)

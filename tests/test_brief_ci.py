@@ -191,6 +191,25 @@ def test_send_freezes_snapshot_and_link_renders_it_verbatim(tmp_path, monkeypatc
     assert "Wonder building into confident joy" in frozen   # what was approved at send
 
 
+def test_email_this_composer_inherits_ci(tmp_path, monkeypatch):
+    """'Email this' → the composer; its understanding block must carry the SAME
+    intelligence the brief renders, never the stock restatement (ADR-0017)."""
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn)
+    _seed_ci(app_mod, conn, opp_id)
+    app_mod.db.create_meeting(conn, opp_id=opp_id, start_at="2026-07-01T14:00:00+00:00",
+                              status="ingested")
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}/compose").text
+    # the CI-derived understanding appears in the composed email…
+    assert "Deliverables as discussed" in page
+    assert ":60 anthem, :30/:15 cutdowns, full stems" in page
+    # …and the stock restatement does not
+    assert "shape its sound end-to-end" not in page
+
+
 def test_snapshot_survives_roundtrip(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     from chordential_oia import capabilities as cap

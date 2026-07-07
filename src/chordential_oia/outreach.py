@@ -233,7 +233,8 @@ def _first_brief_line(opp) -> str:
 
 
 def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
-                         contact_name=None, share_token=None):
+                         contact_name=None, share_token=None,
+                         ci_view=None, met=False):
     """Assemble the ordered list of composer blocks for one opportunity.
 
     Returns a list of ``{key, label, default_on, text}`` dicts. ``overrides`` is
@@ -242,12 +243,17 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     id used to build the soft page-link URL and ``share_token`` is the opp's
     unguessable token threaded into that URL (so the ``page_link`` block carries the
     real token-gated link); ``contact_name`` is the known recipient name for the
-    greeting."""
+    greeting.
+
+    ``ci_view`` (``campaign_intelligence.brief_view``) makes the email inherit from
+    Campaign Intelligence (ADR-0017): the understanding block is written FROM the
+    same intelligence the Campaign Brief renders, so "Email this" never carries
+    stale stock copy. ``met`` switches the phrasing to a post-discovery recap."""
     overrides = overrides or {}
     compose = overrides.get("compose") or {}
     text_over = compose.get("text") or {}
 
-    from .capabilities import build_understanding
+    from .capabilities import build_understanding, _understanding_from_ci
 
     name = (contact_name or "").strip() or "there"
 
@@ -256,7 +262,10 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     more = examples[1:]
 
     opener = f"Hi {name},\n\n{_first_brief_line(opp)}"
-    understanding = build_understanding(opp)
+    ci_fields = dict((ci_view or {}).get("fields") or {})
+    # ADR-0017: prefer the CI-derived understanding (what the brief shows); fall back to
+    # the conservative stock restatement only when there is no intelligence yet.
+    understanding = _understanding_from_ci(opp, ci_fields, met) or build_understanding(opp)
     if best:
         track = f"One piece I think speaks directly to your brief: {best}."
     else:

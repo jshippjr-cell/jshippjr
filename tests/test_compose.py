@@ -47,7 +47,10 @@ def test_default_body_includes_on_blocks_excludes_off(client):
     # The assembled preview body lives in #compose-body. Assert the default-ON
     # content is present and the default-OFF blocks are not.
     assert "Hi " in body                                  # opener greeting
-    assert "music partner to shape its sound" in body     # understanding synopsis
+    # Understanding now inherits from Campaign Intelligence (ADR-0017): opp 3 has a
+    # seeded business_objective, so the block is the CI-derived synopsis, not the
+    # generic stock restatement.
+    assert "current understanding of the campaign" in body  # CI-derived understanding
     assert "isn't always ideal" in body                   # call offer phrase
     assert "short page I put together for your brief" in body  # soft page link
     assert "— Jon Shipp · Chordential" in body            # sign-off
