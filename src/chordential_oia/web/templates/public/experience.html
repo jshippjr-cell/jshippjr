@@ -713,19 +713,23 @@ window.CH=(function(){
      out from behind the master and settle back. Curiosity does the rest. */
   function breathTell(){
     if(reduce||played)return;
-    [[2,'0px','-86px'],[4,'64px','12px']].forEach(function(p,k){
+    /* slivers only — an edge above, an edge to the right, never a whole card.
+       The master swells with them: one gesture, unmistakably intentional. */
+    master.style.transform='translate(-50%,-50%) scale(1.015)';
+    [[2,'0px','-71px',-1.5],[4,'49px','8px',2]].forEach(function(p,k){
       var st=stems[p[0]];
       setTimeout(function(){ if(played)return;
-        st.style.transition='transform .6s cubic-bezier(.19,1,.22,1), opacity .4s ease';
-        st.style.opacity='1';
-        st.style.transform='translate(calc(-50% + '+p[1]+'), calc(-50% + '+p[2]+')) scale(.92)';
+        st.style.transition='transform 1.1s cubic-bezier(.19,1,.22,1), opacity .55s ease';
+        st.style.opacity='.9';
+        st.style.transform='translate(calc(-50% + '+p[1]+'), calc(-50% + '+p[2]+')) rotate('+p[3]+'deg) scale(.94)';
         setTimeout(function(){ if(played)return;
-          st.style.transition='transform .5s cubic-bezier(.6,0,.4,1), opacity .35s ease';
+          st.style.transition='transform .7s cubic-bezier(.6,0,.4,1), opacity .5s ease';
           st.style.opacity='0';
           st.style.transform='translate(-50%,-50%) scale(.6)';
-          setTimeout(function(){st.style.transition='';},550);
-        },820);
-      },k*150);
+          if(k===0&&!played)master.style.transform='translate(-50%,-50%)';
+          setTimeout(function(){st.style.transition='';},750);
+        },1050);
+      },k*170);
     });
   }
   setTimeout(breathTell,2600);
