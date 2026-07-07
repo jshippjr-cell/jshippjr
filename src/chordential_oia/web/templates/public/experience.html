@@ -622,7 +622,7 @@ window.CH=(function(){
     var fs=Math.min(1,(Math.min(window.innerWidth,720)-56)/660);
     stems.forEach(function(s,i){
       setTimeout(function(){
-        s.style.transition='';   /* the breath may have left its own curve behind */
+        s.style.transition='';   /* the class curve, not any leftover inline one */
         s.style.opacity='1';s.style.pointerEvents='auto';
         s.style.transform='translate(calc(-50% + '+fan[i][0]*4*fs+'px), calc(-50% + '+fan[i][1]*2.2*fs+'px)) scale(1)';
       }, reduce?0:i*B16);
@@ -708,31 +708,6 @@ window.CH=(function(){
     master.style.pointerEvents='';
     touch.style.display='';
   }
-
-  /* THE BREATH — the box isn't quite closed. One tell, once: two stems peek
-     out from behind the master and settle back. Curiosity does the rest. */
-  function breathTell(){
-    if(reduce||played)return;
-    /* slivers only — an edge above, an edge to the right, never a whole card.
-       The master swells with them: one gesture, unmistakably intentional. */
-    master.style.transform='translate(-50%,-50%) scale(1.015)';
-    [[2,'0px','-71px',-1.5],[4,'49px','8px',2]].forEach(function(p,k){
-      var st=stems[p[0]];
-      setTimeout(function(){ if(played)return;
-        st.style.transition='transform 1.1s cubic-bezier(.19,1,.22,1), opacity .55s ease';
-        st.style.opacity='.9';
-        st.style.transform='translate(calc(-50% + '+p[1]+'), calc(-50% + '+p[2]+')) rotate('+p[3]+'deg) scale(.94)';
-        setTimeout(function(){ if(played)return;
-          st.style.transition='transform .7s cubic-bezier(.6,0,.4,1), opacity .5s ease';
-          st.style.opacity='0';
-          st.style.transform='translate(-50%,-50%) scale(.6)';
-          if(k===0&&!played)master.style.transform='translate(-50%,-50%)';
-          setTimeout(function(){st.style.transition='';},750);
-        },1050);
-      },k*170);
-    });
-  }
-  setTimeout(breathTell,2600);
 
   /* THE FILM PLAYS ITSELF FOR SCROLLERS — the touch path is the director's
      cut, but nobody leaves without seeing the delivery pack itself. Scroll
