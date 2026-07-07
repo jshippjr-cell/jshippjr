@@ -59,7 +59,7 @@ from ..strategic import assess_strategic_value
 from ..talent import Talent, normalize_url, profile_completeness
 from ..matching import match_talent
 from . import (
-    campaign_intake, campaign_intelligence, campaigns, db, decision_makers,
+    campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, meeting_scheduler, meetings_service,
     music_opportunity, opportunity_signals, outreach_engine, relationships, scheduler,
@@ -248,7 +248,7 @@ _MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
 # The Client Workspace (ADR-0018): /workspace/<token> — the durable client destination.
 # The unguessable workspace token IS the access control (validated in-route), so the path
 # bypasses the admin login gate, same exemption as first-touch and the delivery portal.
-_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+/?$")
+_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+(/approve)?/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
@@ -2388,9 +2388,13 @@ def _workspace_signals(conn, opp, project):
     # the Brief phase before any discovery (ADR-0018 — honest phase signals).
     brief_ready = met or db.latest_brief_snapshot(conn, opp_id) is not None
     delivered = bool(project) and (project["status"] or "").lower() in ("delivered", "complete")
+    # Commercial: released (operator opened the offer) → COMMERCIAL; approved → KICKOFF.
+    review = db.current_commercial_review(conn, opp_id)
     return {
         "has_project": project is not None,
         "delivered": delivered,
+        "commercial_approved": bool(review) and review["status"] == "approved",
+        "commercial_ready": bool(review) and review["status"] == "released",
         "brief_ready": brief_ready,
         "in_discovery": upcoming and not brief_ready,
     }
@@ -2417,10 +2421,22 @@ def client_workspace(request: Request, token: str):
         # Other phases still link to their existing surface until they're folded in turn
         # (intro/discovery → scheduling; production/delivery → the portal, folded in P5).
         brief_ctx = None
-        if phase in (workspace.BRIEF, workspace.COMMERCIAL):
+        review = None
+        approved_note = ""
+        if phase == workspace.BRIEF:
             brief_ctx = _live_brief_ctx(conn, opp["id"])
+        elif phase in (workspace.COMMERCIAL, workspace.KICKOFF):
+            # The frozen Commercial Review — the agreement the client approves (or approved).
+            cr = db.current_commercial_review(conn, opp["id"])
+            if cr is not None:
+                review = commercial.review_from_json(cr["doc_json"])
+                if cr["status"] == "approved":
+                    ap = db.approval_for_opp(conn, opp["id"])
+                    who = (ap["approver_name"] if ap and ap["approver_name"] else "you")
+                    approved_note = (f"Approved by {who}. We're preparing your kickoff — "
+                                     f"you'll hear from us shortly.")
         stage_url = ""
-        if brief_ctx is None:
+        if brief_ctx is None and review is None:
             stage_url = {
                 workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
                 workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
@@ -2429,10 +2445,114 @@ def client_workspace(request: Request, token: str):
                 stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
     finally:
         conn.close()
+    # The client can approve only a released (not-yet-approved) review.
+    approve_url = (f"/workspace/{token}/approve"
+                   if review is not None and not approved_note else "")
     return render(request, "workspace.html", nav="", token=token, opp=opp,
                   project=project, phase=phase, phase_label=workspace.PHASE_LABEL[phase],
                   phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
-                  stage_url=stage_url, **(brief_ctx or {}))
+                  stage_url=stage_url, review=review, approve_url=approve_url,
+                  approved_note=approved_note,
+                  back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
+                  **(brief_ctx or {}))
+
+
+# ── The Commercial Review (ADR-0018, Phase 1) — the formal agreement, from CI. ────────
+def _build_review_for_opp(conn, opp_id, version=1):
+    """Project a Commercial Review for an opportunity, live from Campaign Intelligence."""
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None, None
+    qual, _scored = ev
+    disc = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or disc.team_shape, disc)
+    ci_view, met = _brief_ci_context(conn, row)
+    review = commercial.build_commercial_review(opp, qual, est, ci_view, met=met,
+                                                version=version)
+    return row, review
+
+
+@app.get("/opportunity/{opp_id}/commercial", response_class=HTMLResponse)
+def commercial_preview(request: Request, opp_id: int):
+    """Operator preview of the Commercial Review, generated from CI — 'the machine prepares'.
+    Review it, then Release to the client ('the human commits')."""
+    conn = db.connect()
+    try:
+        version = db.next_commercial_version(conn, opp_id)
+        row, review = _build_review_for_opp(conn, opp_id, version)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        current = db.current_commercial_review(conn, opp_id)
+        token = db.ensure_share_token(conn, opp_id)
+    finally:
+        conn.close()
+    return render(request, "commercial_preview.html", nav="inbox", row=row, review=review,
+                  current=current, token=token, released_badge="Preview")
+
+
+@app.post("/opportunity/{opp_id}/commercial/release")
+def commercial_release(opp_id: int):
+    """Freeze + release the Commercial Review to the client (opens the Commercial stage in
+    their workspace). Once released it's a stable offer; re-release supersedes with a new
+    version. Records a CI timeline event."""
+    conn = db.connect()
+    try:
+        version = db.next_commercial_version(conn, opp_id)
+        row, review = _build_review_for_opp(conn, opp_id, version)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        db.release_commercial_review(conn, opp_id, review.version,
+                                     commercial.review_to_json(review))
+        if campaigns.workspace_enabled():
+            try:
+                ci = campaign_intelligence.ensure_for_opportunity(conn, row)
+                db.add_ci_event(conn, ci["id"], actor="operator", verb="commercial_released",
+                                facet="commercial", key="review", to_value=f"v{review.version}",
+                                source="commercial")
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/commercial", status_code=303)
+
+
+@app.post("/workspace/{token}/approve")
+def workspace_approve(request: Request, token: str, approver_name: str = Form(""),
+                      approver_email: str = Form(""), scope_ok: str = Form(""),
+                      pricing_ok: str = Form(""), terms_ok: str = Form("")):
+    """The client approves the released Commercial Review — the primary award trigger
+    (ADR-0018). Captures the electronic-approval audit record bound to the FROZEN version,
+    marks the review approved, and advances the workspace into Kickoff. Phase 3 enriches
+    the audit + adds the optional DocuSign path."""
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            proj = db.project_by_share_token(conn, token)
+            opp = db.get_opportunity(conn, proj["opp_id"]) if proj and proj["opp_id"] else None
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        review = db.current_commercial_review(conn, opp["id"])
+        if review is not None and review["status"] == "released":
+            db.create_commercial_approval(
+                conn, opp_id=opp["id"], review_id=review["id"],
+                approver_name=approver_name.strip(), approver_email=approver_email.strip(),
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                scope_ok=bool(scope_ok), pricing_ok=bool(pricing_ok), terms_ok=bool(terms_ok))
+            db.set_commercial_review_status(conn, review["id"], "approved")
+            if campaigns.workspace_enabled():
+                try:
+                    ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
+                    db.add_ci_event(conn, ci["id"], actor="client", verb="commercial_approved",
+                                    facet="commercial", key="review",
+                                    to_value=f"v{review['version']} · {approver_name.strip()}",
+                                    source="commercial")
+                except Exception:  # noqa: BLE001
+                    pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/workspace/{token}", status_code=303)
 
 
 @app.post("/opportunity/{opp_id}/request/{req_id}/decline")

@@ -36,6 +36,7 @@
     <div class="detail-cta">
       {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
       <a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
+      <a class="btn" href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
       <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     </div>
     <div class="big-num" data-fit-pct="{{ row['alignment']|round|int }}">{{ row['alignment']|pct }}</div>

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Commercial Review · {{ row['need'][:40] }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/brief.css?v={{ static_v }}">{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Commercial Review{% endblock %}
+{% block content %}
+<style>
+  .cr-op{max-width:760px}
+  .cr-status{background:#eaf5ea;color:#2f6a34;border:1px solid #cfe6cf;border-radius:9px;
+    padding:9px 13px;font-size:13px;font-weight:600;margin-bottom:14px}
+  .cr-status.approved{background:#eef1fb;color:#3a3f8a;border-color:#d6dbf3}
+  .cr-rel{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+</style>
+<div class="cr-op">
+  {% if current %}
+  <div class="cr-status {{ 'approved' if current['status'] == 'approved' }}">
+    {% if current['status'] == 'approved' %}✓ Approved by the client{% else %}Released v{{ current['version'] }} — awaiting the client's approval{% endif %}
+    · <a href="/workspace/{{ token }}">open the client workspace</a>
+  </div>
+  {% endif %}
+  <div class="cr-rel">
+    <form method="post" action="/opportunity/{{ row['id'] }}/commercial/release" style="margin:0">
+      <button class="btn-live" type="submit">{{ 'Re-release a new version' if current else 'Release to client' }} <span class="live-dot"></span></button>
+    </form>
+    <span class="muted small">Generated from Campaign Intelligence. Releasing <b>freezes</b> this version — the client approves exactly what's shown here.</span>
+  </div>
+  {% include "_commercial_document.html" %}
+</div>
+{% endblock %}

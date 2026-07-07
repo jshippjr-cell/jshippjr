@@ -1162,6 +1162,34 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    # Commercial Reviews (ADR-0018, Phase 1): the formal agreement, generated from Campaign
+    # Intelligence and FROZEN at release (doc_json), so the client approves a stable version
+    # and the approval binds to exactly what was shown. Re-release supersedes + bumps version.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS commercial_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            version INTEGER DEFAULT 1,
+            doc_json TEXT,                       -- the frozen Review (the agreement record)
+            status TEXT DEFAULT 'released',      -- released | superseded | approved | withdrawn
+            released_by TEXT, released_at TEXT,
+            created_at TEXT
+        )"""
+    )
+    # Commercial approvals (ADR-0018): the client's electronic approval of a specific frozen
+    # Review — the audit record and the primary award trigger. Phase 1 captures the essentials;
+    # Phase 3 enriches (itemized approved scope/pricing/terms, DocuSign seam).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS commercial_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            review_id INTEGER NOT NULL,
+            approver_name TEXT, approver_email TEXT,
+            ip TEXT, user_agent TEXT,
+            scope_ok INTEGER DEFAULT 0, pricing_ok INTEGER DEFAULT 0, terms_ok INTEGER DEFAULT 0,
+            approved_at TEXT, created_at TEXT
+        )"""
+    )
     # The objection library — the durable memory behind the Discovery Call Simulator.
     # Seeded from the five call simulations (docs/sales-simulations); GROWS from real
     # calls: objections harvested from transcripts land as status='proposed' with the
@@ -4327,6 +4355,69 @@ def get_brief_snapshot(conn: sqlite3.Connection, sid: int) -> Optional[sqlite3.R
 def latest_brief_snapshot(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM brief_snapshots WHERE opp_id = ? ORDER BY id DESC LIMIT 1",
+        (opp_id,)).fetchone()
+
+
+# --- Commercial Reviews (ADR-0018) — the frozen agreement + its approval audit record --- #
+def next_commercial_version(conn: sqlite3.Connection, opp_id: int) -> int:
+    row = conn.execute(
+        "SELECT MAX(version) m FROM commercial_reviews WHERE opp_id = ?", (opp_id,)).fetchone()
+    return int((row["m"] or 0)) + 1
+
+
+def release_commercial_review(conn: sqlite3.Connection, opp_id: int, version: int,
+                              doc_json: str, released_by: str = "operator") -> int:
+    """Freeze + release a Review. Any prior still-'released' review for this opp is superseded
+    (only one live offer at a time)."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE commercial_reviews SET status='superseded' "
+        "WHERE opp_id=? AND status='released'", (opp_id,))
+    cur = conn.execute(
+        """INSERT INTO commercial_reviews
+           (opp_id, version, doc_json, status, released_by, released_at, created_at)
+           VALUES (?,?,?,?,?,?,?)""",
+        (opp_id, version, doc_json, "released", released_by, now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_commercial_review(conn: sqlite3.Connection, rid: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM commercial_reviews WHERE id = ?", (rid,)).fetchone()
+
+
+def current_commercial_review(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    """The live agreement for this opp: the most recent released-or-approved Review."""
+    return conn.execute(
+        "SELECT * FROM commercial_reviews WHERE opp_id=? AND status IN ('released','approved') "
+        "ORDER BY version DESC, id DESC LIMIT 1", (opp_id,)).fetchone()
+
+
+def set_commercial_review_status(conn: sqlite3.Connection, rid: int, status: str) -> None:
+    conn.execute(
+        "UPDATE commercial_reviews SET status=? WHERE id=?", (status, rid))
+    conn.commit()
+
+
+def create_commercial_approval(conn: sqlite3.Connection, *, opp_id: int, review_id: int,
+                               approver_name: str = "", approver_email: str = "", ip: str = "",
+                               user_agent: str = "", scope_ok: bool = False,
+                               pricing_ok: bool = False, terms_ok: bool = False) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """INSERT INTO commercial_approvals
+           (opp_id, review_id, approver_name, approver_email, ip, user_agent,
+            scope_ok, pricing_ok, terms_ok, approved_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (opp_id, review_id, approver_name, approver_email, ip, user_agent,
+         int(scope_ok), int(pricing_ok), int(terms_ok), now, now))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def approval_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM commercial_approvals WHERE opp_id=? ORDER BY id DESC LIMIT 1",
         (opp_id,)).fetchone()
 
 

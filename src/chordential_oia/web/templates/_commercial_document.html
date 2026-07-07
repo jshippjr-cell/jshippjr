@@ -1,0 +1,123 @@
+{# The Commercial Review document (ADR-0018, Phase 1) — the formal agreement, generated
+   from Campaign Intelligence, rendered in the brief's visual vocabulary so it reads as the
+   natural continuation of the Brief. Shared by the operator preview and the client Workspace.
+   Context: review (CommercialReview), approve_url (client approval POST; omitted = read-only),
+   back_url (link to the Brief), released_badge. #}
+<div class="page">
+  <div class="letterhead">
+    <img src="/static/public/wordmark-dark.png" alt="Chordential">
+    <div class="doc-kicker">Commercial Review{% if review.version and review.version > 1 %} · v{{ review.version }}{% endif %}</div>
+    <div class="doc-title">{{ review.project }}</div>
+    <div class="doc-sub">Prepared for {{ review.client }}</div>
+    {% if released_badge %}<span class="stage-badge">{{ released_badge }}</span>{% endif %}
+  </div>
+
+  <div class="body">
+    <section class="block">
+      <p class="lead" style="font-style:italic">Here's what we're agreeing to, and how we'll
+        work together — everything below follows from what we discussed.{% if back_url %}
+        You can revisit <a href="{{ back_url }}">the Campaign Brief</a> anytime.{% endif %}</p>
+    </section>
+
+    <section class="block">
+      <h2 class="sec">Scope</h2>
+      <p class="lead">{{ review.scope_summary }}</p>
+    </section>
+
+    {% if review.deliverables %}
+    <section class="block">
+      <h2 class="sec">Deliverables</h2>
+      <table class="manifest">
+        <thead><tr><th>Asset</th><th>Format / spec</th></tr></thead>
+        <tbody>
+          {% set ns = namespace(group='') %}
+          {% for d in review.deliverables %}
+          {% if d.group != ns.group %}<tr class="grp"><td colspan="2">{{ d.group }}</td></tr>{% set ns.group = d.group %}{% endif %}
+          <tr><td>{{ d.asset }}</td><td>{{ d.spec }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section class="block">
+      <h2 class="sec">Timeline</h2>
+      {% if review.timeline %}<p class="lead">Final delivery: <b>{{ review.timeline }}</b>.</p>{% endif %}
+      <table class="manifest"><tbody>
+        {% for s in review.schedule %}
+        <tr><td style="width:172px"><b>{{ s.stage }}</b></td><td>{{ s.when }}</td></tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+
+    {% if review.fee_low %}
+    <section class="block">
+      <h2 class="sec">Investment</h2>
+      <div class="price">${{ '{:,}'.format(review.fee_low) }}–${{ '{:,}'.format(review.fee_high) }}
+        <small>project fee — original music, cleared and delivered</small></div>
+      {% if review.optional_services %}
+      <div class="capdoc-subhead">Optional services</div>
+      <ul class="terms">{% for o in review.optional_services %}<li>{{ o.name }}{% if o.note %} — {{ o.note }}{% endif %}</li>{% endfor %}</ul>
+      {% endif %}
+    </section>
+
+    <section class="block">
+      <h2 class="sec">Payment schedule</h2>
+      <table class="manifest"><tbody>
+        {% for p in review.payment_schedule %}
+        <tr><td style="width:172px"><b>{{ p.label }}</b></td>
+          <td>{{ p.when }}{% if p.amount %} · ${{ '{:,}'.format(p.amount) }}{% endif %}</td></tr>
+        {% endfor %}
+      </tbody></table>
+      <p class="muted small" style="margin-top:6px">A {{ '%.0f'|format(review.deposit_pct*100) }}% deposit confirms the booking; the balance is due on final delivery.</p>
+    </section>
+    {% endif %}
+
+    {% if review.terms %}
+    <section class="block">
+      <h2 class="sec">Terms</h2>
+      {% for t in review.terms %}
+      <div style="margin-bottom:12px">
+        <div style="font-weight:700;color:var(--wine,#44161E);font-size:13.5px">{{ t.title }}</div>
+        <p style="margin:3px 0 0;color:#403d3c;font-size:14px;line-height:1.5">{{ t.body }}</p>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if approve_url %}
+    {# The decision point. The frozen Review the client approves = the audit record (Phase 3
+       enriches with itemized approvals + an optional DocuSign path). #}
+    <section class="block" id="approve">
+      <h2 class="sec">Approval</h2>
+      <form method="post" action="{{ approve_url }}" class="cr-approve">
+        <label class="cr-check"><input type="checkbox" name="scope_ok" value="1" required> I approve the <b>scope &amp; deliverables</b></label>
+        <label class="cr-check"><input type="checkbox" name="pricing_ok" value="1" required> I approve the <b>pricing &amp; payment schedule</b></label>
+        <label class="cr-check"><input type="checkbox" name="terms_ok" value="1" required> I approve the <b>terms</b></label>
+        <div class="cr-who">
+          <input type="text" name="approver_name" placeholder="Your name" required>
+          <input type="email" name="approver_email" placeholder="Your email" required>
+        </div>
+        <button class="cr-btn" type="submit">Approve &amp; begin →</button>
+        <div class="cr-fine">Approving authorizes Chordential to begin scheduling production. Your name, email, and the time of approval are recorded with this agreement.</div>
+      </form>
+    </section>
+    {% elif approved_note %}
+    <section class="block" id="approve">
+      <h2 class="sec">Approved</h2>
+      <p class="lead">{{ approved_note }}</p>
+    </section>
+    {% endif %}
+  </div>
+</div>
+<style>
+  .cr-approve{display:flex;flex-direction:column;gap:10px;max-width:460px}
+  .cr-check{display:flex;gap:9px;align-items:flex-start;font-size:14px;color:#33302f}
+  .cr-check input{margin-top:3px;accent-color:var(--orange,#E4671F);width:16px;height:16px}
+  .cr-who{display:flex;gap:10px;margin-top:6px}
+  .cr-who input{flex:1;border:1px solid #E7DECE;border-radius:8px;padding:10px;font:inherit}
+  .cr-btn{margin-top:6px;background:var(--orange,#E4671F);color:#fff;border:0;border-radius:999px;
+    padding:12px 22px;font-weight:650;font-size:15px;cursor:pointer;align-self:flex-start}
+  .cr-btn:hover{background:#c8501a}
+  .cr-fine{font-size:11.5px;color:#9a917f;margin-top:2px;max-width:460px}
+</style>

@@ -62,11 +62,18 @@ that never changes), contents evolving by a computed **phase**
 (`intro → discovery → brief → commercial → kickoff → production → delivery → archive`).
 Client **commitment drives state** (approval of the Commercial Review is the primary
 award trigger; operator buttons are fallbacks). Building foundation-first:
-- **P0 (in progress):** durable workspace token (project inherits the opp token),
-  the phase engine (`web/workspace.py`), `/workspace/{token}` shell. No behavior removed.
-- **P1–P5 (planned):** Commercial Review (CI-generated) → producer-voiced Terms →
-  commitment + audit → Kickoff → adaptive procurement + delivery unification. See
-  `docs/client-workspace-principles.md` for the sequence; ADR-0018 for the decision.
+- **P0 (done):** durable workspace token (project inherits the opp token), the phase
+  engine (`web/workspace.py`), `/workspace/{token}` shell, and the **Campaign Brief folded
+  inline** via the stage-partial pattern (`_brief_document.html` + static `brief.css`). The
+  workspace is the canonical client link (emailed link → `/workspace/{token}`).
+- **P1 (done):** the **Commercial Review** (`web/commercial.py`) — the formal agreement,
+  projected entirely from CI + estimation/proposals, **frozen at operator release**
+  (`commercial_reviews`), rendered inline in the workspace as the brief's continuation, with
+  a client electronic approval (`commercial_approvals`) that advances the phase to Kickoff.
+  Operator decision: freeze-at-release + operator-released (see ADR-0018).
+- **P2–P5 (planned):** producer-voiced Terms engine (basic version shipped in P1) →
+  commitment/audit enrichment + DocuSign seam → Kickoff stage → adaptive procurement +
+  delivery unification. See `docs/client-workspace-principles.md`; ADR-0018 for decisions.
 - **Later:** CI → Relationship Intelligence (CI accumulates per client across campaigns).
 
 ## Recently completed (this working stretch)
