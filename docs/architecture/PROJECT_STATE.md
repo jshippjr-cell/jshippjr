@@ -53,6 +53,22 @@ Supply: `talent.py` · `matching.py` · projects/assignments + `delivery.py` +
 Web/OS surface: `web/app.py` (routes) · `web/public.py` (front-of-house) ·
 `web/scheduler.py` (background engines) · `web/db.py` (storage, backend-portable).
 
+## In flight — the Client Workspace + Commercial Commitment layer (ADR-0018)
+
+The product is being reframed (operator directive, the "ten principles" in
+`docs/client-workspace-principles.md`) as the OS for the **entire lifecycle of a
+commercial music engagement**: one durable **Client Workspace** (one token-gated URL
+that never changes), contents evolving by a computed **phase**
+(`intro → discovery → brief → commercial → kickoff → production → delivery → archive`).
+Client **commitment drives state** (approval of the Commercial Review is the primary
+award trigger; operator buttons are fallbacks). Building foundation-first:
+- **P0 (in progress):** durable workspace token (project inherits the opp token),
+  the phase engine (`web/workspace.py`), `/workspace/{token}` shell. No behavior removed.
+- **P1–P5 (planned):** Commercial Review (CI-generated) → producer-voiced Terms →
+  commitment + audit → Kickoff → adaptive procurement + delivery unification. See
+  `docs/client-workspace-principles.md` for the sequence; ADR-0018 for the decision.
+- **Later:** CI → Relationship Intelligence (CI accumulates per client across campaigns).
+
 ## Recently completed (this working stretch)
 
 - **Product efficiency audit** (`docs/product-efficiency-audit.md`): 43 verified

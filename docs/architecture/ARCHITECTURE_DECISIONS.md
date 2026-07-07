@@ -267,6 +267,52 @@ Scheduling writes a CI event (the Opportunity timeline) so meetings are part of 
 Client-facing times render in **America/New_York** (correct EST/EDT label via zoneinfo) — UTC is
 storage, never display.
 
+### ADR-0018 — The Client Workspace is the durable destination; commitment is a first-class lifecycle layer
+**Status:** Accepted (2026-07-07, operator directive — the "ten principles") · Source:
+`web/app.py` (opp `share_token` brief + project `share_token` delivery portal), `capabilities.py`,
+`docs/client-workspace-principles.md`
+**Decision.** A client relationship has exactly ONE durable, token-gated destination — the
+**Client Workspace** — and its URL never changes across the lifecycle. The workspace token is
+minted once and **inherited forward**: the opportunity mints it, the project it becomes inherits
+the same token, so `/workspace/{token}` resolves the same deal from first contact through archive.
+The workspace's *contents* change by **phase** — a single computed lifecycle state
+(`intro → discovery → brief → commercial → kickoff → production → delivery → archive`) — but the
+destination does not. A **Commercial Commitment layer** sits between the Campaign Brief and
+Production: a **Commercial Review** generated entirely from Campaign Intelligence (scope, pricing,
+deposit, payment schedule, producer-voiced terms, procurement checklist), whose **client approval
+is the primary award trigger** — the machine prepares, the human commits, and that commitment (not
+an operator button) advances the state. A **Kickoff** phase follows approval and precedes
+production ("here's how we'll work together": contacts, cadence, revision/delivery expectations,
+team, escalation). **Approval is captured electronically in the workspace by default** (name,
+email, timestamp, IP, user-agent, and the approved scope/pricing/terms snapshot = the audit
+record); DocuSign is an *optional* path only when a client's procurement requires it. **Procurement
+is adaptive capture, never integration** (ADR aligns with the seam philosophy): ChordOS discovers
+how each organization buys (PO / vendor portal / Coupa / Ariba / Oracle / W-9 / COI / ACH /
+procurement contact) as CI facts and **generates the artifacts**, rather than connecting to P2P
+suites. The **PDF is demoted to a downloadable artifact** rendered from the workspace; the
+workspace is the product.
+**Why.** The product is not proposal/CRM/PM/procurement software — it is the operating system for
+the entire lifecycle of a commercial music engagement, and the Constitution's promise that the
+business *compounds over time* only holds if the client has one home that grows rather than a
+series of systems they are handed off between. Two tokens and a URL that changes at award
+(opportunity brief → project portal) directly break "one link, forever." Operator-button state
+advance inverts the intended causality: the client's commitment should move the work forward.
+**Consequences.** New client-facing surfaces resolve under `/workspace/{token}` and route by the
+computed phase; the phase engine is the single answer to "where is this deal," and downstream
+features (commercial, kickoff, production, delivery) are *views* of the workspace, not separate
+destinations. The project **must** inherit the opportunity's `share_token` at creation (never mint
+a fresh one) so the URL survives award. Everything renders from Campaign Intelligence (ADR-0017);
+the commercial section currently embedded in the Brief migrates to the Commercial Review (the Brief
+answers "what are we making," the Review answers "what are we agreeing to"). Approval writes an
+immutable, snapshot-anchored audit record and a CI event, and transitions phase into Kickoff.
+**Campaign Intelligence accumulates into Relationship Intelligence**: CI must not die with a
+campaign — creative/communication/revision/budget/decision-maker/procurement/rights history rolls
+up to the client so future campaigns begin with accumulated knowledge. The durable token is
+per-deal today; its north star home is per-*client* (a relationship with many campaigns under one
+workspace), and the token-resolution layer is built so that promotion is a later ADR, not a
+rewrite. Manual operator controls remain as fallbacks everywhere, but the primary path is
+client-driven.
+
 ---
 
 ## Adding a new ADR
