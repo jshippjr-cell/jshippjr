@@ -1,0 +1,574 @@
+{# ---- reusable chip macros (insert rail + inserted tokens) ------------------ #}
+{% macro inserted_chips(section) %}
+  {% set items = doc.support_chips.get(section) if doc.support_chips else None %}
+  {% if items %}
+  <ul class="chip-lines">
+    {% for c in items %}
+    <li>
+      <span>{{ c.sentence or c.label }}</span>
+      {% if edit %}
+      <form class="chip-rm no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/chip" style="margin:0">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="label" value="{{ c.label }}">
+        <input type="hidden" name="sentence" value="{{ c.sentence }}">
+        <button class="capdoc-chip-x" type="submit" title="Remove">×</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro chip_rail(section) %}
+  {% if edit %}
+  <div class="capdoc-edit no-print">
+    <div class="capdoc-rail-label">Tap a descriptor to add it</div>
+    <div class="chip-rail">
+      {% for chip in chip_library.get(section, []) %}
+      <form method="post" action="/opportunity/{{ row['id'] }}/doc/chip" style="margin:0">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="add">
+        <input type="hidden" name="label" value="{{ chip.label }}">
+        <input type="hidden" name="sentence" value="{{ chip.sentence }}">
+        <button class="chip-token{{ ' is-custom' if chip.custom }}" type="submit"
+                title="{{ chip.sentence }}">+ {{ chip.label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+    <form class="capdoc-own" method="post" action="/opportunity/{{ row['id'] }}/doc/chip">
+      <input type="hidden" name="section" value="{{ section }}">
+      <input type="hidden" name="action" value="add">
+      <input type="text" name="label" placeholder="Short label" class="capdoc-in">
+      <input type="text" name="sentence" placeholder="Sentence the client reads…" class="capdoc-in capdoc-in-wide">
+      <button class="capdoc-add" type="submit">+ Write your own</button>
+    </form>
+    <form class="capdoc-own" method="post" action="/chips/custom">
+      <input type="hidden" name="family" value="{{ section_family.get(section, section) }}">
+      <input type="text" name="label" placeholder="Save to My chips — label" class="capdoc-in">
+      <input type="text" name="sentence" placeholder="…and the sentence" class="capdoc-in capdoc-in-wide">
+      <button class="capdoc-add" type="submit">Save to My chips</button>
+    </form>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# auto-generated pills (discipline, music need, team roles) — deletable per deal #}
+{% macro auto_pills(section, items) %}
+  {% set hidden = (overrides.get('hidden_pills', {}).get(section, [])) if overrides else [] %}
+  <ul class="pill-list">
+    {% for p in items %}
+    {% if p and p not in hidden %}
+    <li>{{ p }}{% if edit %}
+      <form class="pill-rm no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/pill">
+        <input type="hidden" name="section" value="{{ section }}">
+        <input type="hidden" name="action" value="hide">
+        <input type="hidden" name="label" value="{{ p }}">
+        <button class="capdoc-chip-x" type="submit" title="Remove">×</button>
+      </form>{% endif %}</li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% if edit and hidden %}
+  <div class="capdoc-restore no-print">
+    <span class="capdoc-rail-label">Removed — tap to restore</span>
+    {% for p in hidden %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/doc/pill" style="margin:0">
+      <input type="hidden" name="section" value="{{ section }}">
+      <input type="hidden" name="action" value="show">
+      <input type="hidden" name="label" value="{{ p }}">
+      <button class="chip-token" type="submit" title="Restore">+ {{ p }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# Threshold cover — client view only (ux-build-spec §2.10). The buyer's first
+   impression is attended-to, not "a web page loaded". Scroll is the consent;
+   never printed; the operator/edit view skips straight to the document. #}
+{% if public and not embedded %}
+<section class="brief-cover no-print" aria-label="Cover">
+  <div class="cover-kicker cover-in">Prepared for {{ doc.client }}</div>
+  <h1 class="cover-title cover-in">{{ doc.need }}</h1>
+  <div class="cover-stickers cover-in">
+    <span class="sticker rot-l">Chordential · Campaign Brief</span>
+    <span class="sticker rot-r">{{ doc.stage }} stage</span>
+  </div>
+  <div class="cover-hint">scroll ↓</div>
+</section>
+{% endif %}
+
+<div class="page">
+  <div class="letterhead">
+    <img src="/static/public/wordmark-dark.png" alt="Chordential">
+    <div class="doc-kicker">Campaign Brief</div>
+    <div class="doc-title">{{ doc.need }}</div>
+    <div class="doc-sub">Prepared for {{ doc.client }}</div>
+    {% if edit %}
+    <form class="capdoc-inline no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+      <input type="hidden" name="name" value="client">
+      <input type="text" name="value" value="{{ doc.client }}" class="capdoc-in" placeholder="Client name">
+      <button class="capdoc-add" type="submit">Save</button>
+      <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+    </form>
+    {% endif %}
+    <span class="stage-badge">{{ doc.stage }} stage</span>
+  </div>
+
+  <div class="body">
+    {# ADR-0017 — the brief opens as a meeting summary, never a marketing restart. #}
+    {% if doc.intro %}
+    <section class="block">
+      <p class="lead" style="font-style:italic">{{ doc.intro }}</p>
+    </section>
+    {% endif %}
+    {% if not doc.met %}
+    <section class="block">
+      <h2 class="sec">Who we are</h2>
+      <p class="lead">{{ doc.value_prop }}</p>
+    </section>
+    {% endif %}
+
+    <section class="block">
+      <h2 class="sec">{{ 'What we heard' if doc.met else 'What we understand you need' }}</h2>
+      <p class="lead">{{ doc.understanding }}</p>
+      {% if edit %}
+      <form class="capdoc-inline capdoc-block no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+        <input type="hidden" name="name" value="understanding">
+        <textarea name="value" class="capdoc-ta" rows="3" placeholder="What we understand you need…">{{ doc.understanding }}</textarea>
+        <div class="capdoc-inline">
+          <button class="capdoc-add" type="submit">Save</button>
+          <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+        </div>
+      </form>
+      {% endif %}
+      {{ auto_pills('understanding_pills', [doc.discipline_label, doc.music_requirement] + (doc.secondary or [])) }}
+
+      {# craft chips — what we'll make #}
+      {{ inserted_chips('understanding') }}
+      {{ chip_rail('understanding') }}
+
+      {# aesthetic sub-area — how it should feel #}
+      {% if edit or (doc.support_chips and doc.support_chips.get('aesthetic')) %}
+      <div class="capdoc-subhead">How it should feel</div>
+      {{ inserted_chips('aesthetic') }}
+      {{ chip_rail('aesthetic') }}
+      {% endif %}
+    </section>
+
+    {# ── The campaign, from Campaign Intelligence (ADR-0017): every row inherits from
+          the confirmed intelligence; editing a row writes CI back. Rows render only when
+          the intelligence holds them — nothing is invented. ── #}
+    {% set ci_rows = [
+        ('campaign_objective', 'Campaign objective'),
+        ('business_objective', 'Business objective'),
+        ('emotional_arc', 'Emotional arc'),
+        ('reference_playlist', 'Reference playlist'),
+        ('deliverables', 'Deliverables'),
+        ('deadline', 'Timeline'),
+        ('budget_band', 'Budget'),
+        ('decision_makers', 'Decision makers'),
+        ('brand_notes', 'Brand notes'),
+        ('agency_notes', 'Agency notes')] %}
+    {% set ci_ns = namespace(has=false) %}
+    {% for key, label in ci_rows %}{% if doc.ci and doc.ci.get(key) %}{% set ci_ns.has = true %}{% endif %}{% endfor %}
+    {% if ci_ns.has or edit %}
+    <section class="block">
+      <h2 class="sec">{{ 'From the discovery' if doc.met else 'The campaign so far' }}</h2>
+      <table class="manifest">
+        <tbody>
+          {% for key, label in ci_rows %}
+          {% set val = doc.ci.get(key) if doc.ci else None %}
+          {% if val or edit %}
+          <tr>
+            <td style="width:172px"><b>{{ label }}</b></td>
+            <td>{{ val or '' }}
+              {% if edit %}
+              <form class="capdoc-inline no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/ci-field">
+                <input type="hidden" name="name" value="{{ key }}">
+                <input type="text" name="value" value="{{ val or '' }}" class="capdoc-in" placeholder="{{ label }}…">
+                <button class="capdoc-add" type="submit">Save</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if edit %}<p class="muted small no-print" style="margin-top:6px">These rows ARE Campaign Intelligence — saving updates the single source of truth and every artifact that reads it.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if doc.risks %}
+    <section class="block">
+      <h2 class="sec">Risks we're tracking</h2>
+      <ul class="terms">{% for r in doc.risks %}<li>{{ r }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    {% if doc.open_questions %}
+    <section class="block">
+      <h2 class="sec">Open questions</h2>
+      <ul class="terms">{% for q in doc.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    <section class="block">
+      <h2 class="sec">The team we'd put on it</h2>
+      {{ auto_pills('team_pills', doc.team or ['Composer · Mixer']) }}
+
+      {# talent descriptors — click-to-insert tokens below the auto role pills #}
+      {{ inserted_chips('team') }}
+      {{ chip_rail('team') }}
+    </section>
+
+    {# Only render when there's real work to show — the brief no longer
+       auto-fills placeholder reels, so a client view with no curated tracks
+       hides this section entirely (edit mode still shows the upload UI). #}
+    {% if doc.show_examples and (edit or doc.relevant_uploads or doc.relevant_links or doc.examples) %}
+    <section class="block">
+      <h2 class="sec">Relevant work</h2>
+
+      {# founder-uploaded audio samples — hand-picked, outrank the generic reels #}
+      {% if doc.relevant_uploads %}
+      {% for up in doc.relevant_uploads %}
+      <div class="ex relevant-track">
+        <div class="ex-title">{{ up.label }}</div>
+        <div class="cap-audio no-print">
+          <button type="button" class="cap-audio-btn" aria-label="Play">▶</button>
+          <div class="cap-audio-body"><div class="cap-audio-bar"><div class="cap-audio-fill"></div></div></div>
+          <span class="cap-audio-time">0:00</span>
+          <audio preload="none" src="{{ up.url }}"></audio>
+        </div>
+        <div class="ex-meta"><a href="{{ up.url }}">⤓ {{ up.label }} (audio)</a></div>
+        {% if edit %}
+        <form class="no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/upload" style="margin:4px 0 0">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="filename" value="{{ up.filename }}">
+          <button class="capdoc-chip-x" type="submit" title="Remove">× remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if edit %}
+      <form class="capdoc-edit no-print" method="post" enctype="multipart/form-data"
+            action="/opportunity/{{ row['id'] }}/doc/upload">
+        <input type="hidden" name="action" value="add">
+        <div class="capdoc-rail-label">Upload an audio sample from your machine</div>
+        <div class="capdoc-inline">
+          <input type="text" name="label" placeholder="Track label" class="capdoc-in">
+          <input type="file" name="file" accept="audio/*" class="capdoc-in capdoc-in-wide">
+          <button class="capdoc-add" type="submit">+ Upload audio sample</button>
+        </div>
+      </form>
+      {% endif %}
+
+      {# hand-picked tracks for THIS lead outrank the generic reels (§5) #}
+      {% if doc.relevant_links %}
+      {% for link in doc.relevant_links %}
+      <div class="ex relevant-track">
+        <div class="ex-title">{{ link.label }}</div>
+        {% set u = link.url %}
+        {% if 'soundcloud.com' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="120" scrolling="no" frameborder="no"
+            src="https://w.soundcloud.com/player/?url={{ u | urlencode }}&color=%23E4671F&visual=false"></iframe>
+        </div>
+        {% elif 'youtube.com' in u or 'youtu.be' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="200" frameborder="0" allowfullscreen
+            src="{{ u | replace('watch?v=', 'embed/') | replace('youtu.be/', 'www.youtube.com/embed/') }}"></iframe>
+        </div>
+        {% elif 'spotify.com' in u %}
+        <div class="track-player no-print">
+          <iframe width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media"
+            src="{{ u | replace('/track/', '/embed/track/') | replace('open.spotify.com', 'open.spotify.com') }}"></iframe>
+        </div>
+        {% endif %}
+        <div class="ex-meta"><a href="{{ u }}">{{ u }}</a></div>
+        {% if edit %}
+        <form class="no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/link" style="margin:4px 0 0">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="url" value="{{ u }}">
+          <button class="capdoc-chip-x" type="submit" title="Remove">× remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if edit %}
+      <form class="capdoc-edit no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/link">
+        <input type="hidden" name="action" value="add">
+        <div class="capdoc-inline">
+          <input type="text" name="label" placeholder="Track label" class="capdoc-in">
+          <input type="text" name="url" placeholder="SoundCloud / YouTube / Spotify URL" class="capdoc-in capdoc-in-wide">
+          <button class="capdoc-add" type="submit">+ Add a relevant track</button>
+        </div>
+      </form>
+      {% endif %}
+
+      {# generated showcase reels — the fallback, below the hand-picked tracks #}
+      {% for ex in doc.examples %}
+      <div class="ex">
+        <div class="ex-title">{{ ex.title }}{% if ex.placeholder %} <span class="placeholder-note">— sample reel</span>{% endif %}</div>
+        <div class="ex-meta">{{ ex.client_type }}</div>
+        <div class="ex-blurb">{{ ex.blurb }}</div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if doc.show_delivery %}
+    <div class="delivery-head">
+      <div class="delivery-kicker">Delivery Package</div>
+      <div class="delivery-title">What your delivery package includes</div>
+      <div class="delivery-note">Personalized to {{ doc.client }} · {{ doc.campaign_label }} — the standard your package is built and delivered against.</div>
+    </div>
+
+    {# assumptions banner — mandatory, always rendered (§6) #}
+    {% if doc.delivery_assumptions %}
+    <div class="assume-banner">
+      <span class="assume-tag">Assumed engagement</span>
+      <span class="assume-text">{{ doc.delivery_assumptions }}</span>
+    </div>
+    {% endif %}
+    {% if edit %}
+    <div class="capdoc-edit no-print">
+      <form class="capdoc-inline" method="post" action="/opportunity/{{ row['id'] }}/doc/field" style="margin:0 0 6px">
+        <input type="hidden" name="name" value="delivery_template">
+        <label class="capdoc-rail-label" style="margin:0">Template
+          <select name="value" onchange="this.form.submit()" class="capdoc-select">
+            {% for key, label in delivery_templates.items() %}
+            <option value="{{ key }}" {{ 'selected' if key == doc.delivery_template }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      <form class="capdoc-inline capdoc-block" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
+        <input type="hidden" name="name" value="delivery_assumptions">
+        <textarea name="value" class="capdoc-ta" rows="2" placeholder="Assumptions line…">{{ doc.delivery_assumptions }}</textarea>
+        <div class="capdoc-inline">
+          <button class="capdoc-add" type="submit">Save</button>
+          <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if doc.deliverables %}
+    <section class="block">
+      <h2 class="sec">Deliverables manifest</h2>
+      <table class="manifest">
+        <thead><tr><th>Asset</th><th>Format / spec</th></tr></thead>
+        <tbody>
+          {% set ns = namespace(group='') %}
+          {% for d in doc.deliverables %}
+          {% if d.group != ns.group %}<tr class="grp"><td colspan="2">{{ d.group }}</td></tr>{% set ns.group = d.group %}{% endif %}
+          <tr><td>{{ d.asset }}</td><td>{{ d.spec }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {# deliverable chips — what you'll get (template-scoped) #}
+      {{ inserted_chips('deliverables') }}
+      {{ chip_rail('deliverables') }}
+    </section>
+    {% endif %}
+
+    {% if doc.rights_summary %}
+    <section class="block">
+      <h2 class="sec">Rights &amp; ownership</h2>
+      <div class="rights">
+        <ul>{% for r in doc.rights_summary %}<li>{{ r }}</li>{% endfor %}</ul>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if doc.rollout %}
+    <section class="block">
+      <h2 class="sec">Rollout map</h2>
+      <div class="rollout-row">
+        {% for item in doc.rollout %}
+        <div class="rcell ver">{{ item.version }}<small>{{ item.label }}</small></div>
+        <div class="rcell"><div class="chans">{% for c in item.channels %}<div class="chan">{{ c }}</div>{% endfor %}</div></div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# how we work — assurance chips near the close #}
+    {% if edit or (doc.support_chips and doc.support_chips.get('assurance')) %}
+    <section class="block">
+      <h2 class="sec">How we work</h2>
+      {{ inserted_chips('assurance') }}
+      {{ chip_rail('assurance') }}
+    </section>
+    {% endif %}
+    {% endif %}
+
+    {# ── The commercial close (ADR-0017) — part of the proposal, not a separate
+          document. Scope/timeline from Campaign Intelligence; price from the engine. ── #}
+    {% if doc.commercial %}
+    <section class="block">
+      <h2 class="sec">The commercial picture</h2>
+      <table class="manifest">
+        <tbody>
+          {% if doc.commercial.scope %}<tr><td style="width:172px"><b>Scope</b></td><td>{{ doc.commercial.scope }}</td></tr>{% endif %}
+          {% if doc.commercial.deliverable_count %}<tr><td><b>Deliverables</b></td><td>{{ doc.commercial.deliverable_count }} assets, itemized in the manifest above</td></tr>{% endif %}
+          {% if doc.commercial.timeline %}<tr><td><b>Timeline</b></td><td>{{ doc.commercial.timeline }}</td></tr>{% endif %}
+          {% if not doc.show_cost and doc.commercial.budget_band %}<tr><td><b>Working budget</b></td><td>{{ doc.commercial.budget_band }} — as discussed</td></tr>{% endif %}
+          <tr><td><b>Revisions</b></td><td>{{ doc.commercial.revisions }}</td></tr>
+          <tr><td><b>Deposit</b></td><td>{{ doc.commercial.deposit }}</td></tr>
+          <tr><td><b>Completion</b></td><td>{{ doc.commercial.completion }}</td></tr>
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    {# --- Price + terms + sign/pay ALWAYS LAST (§7): Investment → Terms →
+           (DocuSign / Pay deposit). Gated on their toggles; off in discovery. --- #}
+    {% if doc.show_cost and doc.price_low %}
+    <section class="block">
+      <h2 class="sec">Indicative investment</h2>
+      <div class="price">${{ '{:,}'.format(doc.price_low) }}–${{ '{:,}'.format(doc.price_high) }} <small>ballpark — firmed up after a scoping call</small></div>
+    </section>
+    {% endif %}
+
+    {% if doc.show_terms and doc.terms %}
+    <section class="block">
+      <h2 class="sec">Terms</h2>
+      <ul class="terms">{% for t in doc.terms %}<li>{{ t }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    {% if doc.show_docusign %}
+    <section class="block">
+      <h2 class="sec">Agreement</h2>
+      <div class="docusign">
+        On your go-ahead, we'll send a countersignable agreement (Terms &amp; Conditions
+        attached) for e-signature on signature — no printing or scanning needed.
+      </div>
+    </section>
+    {% endif %}
+
+    {% if doc.stage in ('proposal', 'contract') %}
+    <section class="block">
+      <h2 class="sec">Deposit</h2>
+      <div class="pay">
+        <div class="amt">${{ '{:,.0f}'.format(deposit_amount) }} <small>deposit to begin work</small></div>
+        {% if deposit_invoice_id %}
+        <form method="post" action="/invoice/{{ deposit_invoice_id }}/checkout" style="margin:0">
+          <button class="btn pay-btn" type="submit">Pay deposit →</button>
+        </form>
+        {% else %}
+        <span class="placeholder-note">Deposit invoice is generated when the project is spun up.</span>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# NEXT STEP — the discovery-call CTA closes the brief. The client REQUESTS a call
+       (ADR-0016); Jon reviews the request and schedules. No client calendar access. #}
+    {% if doc.show_call %}
+    <section class="block cta-block">
+      <div class="cta-kicker">Next step</div>
+      <h2 class="cta-title">Request a discovery call</h2>
+      <p class="cta-copy">Let's spend 20 minutes discussing your creative direction, timeline,
+        campaign goals, and production requirements. Tell us how to reach you and we'll follow up
+        with a time.</p>
+      <a class="cta-btn" href="{{ request_url }}">Request a Discovery Call <span class="cta-dot"></span></a>
+    </section>
+    {% endif %}
+
+    {# The Chordential Promise — the same commitment the public Experience shows;
+       the artifact a client receives matches the one the site promises. #}
+    <div class="block" style="margin-top:26px;padding-top:12px;border-top:1px solid #e4ddd8">
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#9a5a1a">The Chordential Promise</div>
+      <p style="margin:6px 0 0;font-style:italic;font-size:13px;color:#5a5550;line-height:1.55">
+        This brief is our understanding of your campaign. Anything inaccurate is
+        corrected before a single note is written — your confirmation starts the music.</p>
+    </div>
+    <div class="foot">Chordential · procurement-grade music · chordential.com</div>
+  </div>
+</div>
+
+<script>
+// Compact brand audio player: drive each .cap-audio off its hidden <audio>.
+(function () {
+  function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+  document.querySelectorAll('.cap-audio').forEach(function (p) {
+    var audio = p.querySelector('audio'), btn = p.querySelector('.cap-audio-btn'),
+        fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
+        time = p.querySelector('.cap-audio-time');
+    if (!audio) return;
+    btn.addEventListener('click', function () {
+      if (audio.paused) {
+        document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
+        audio.play();
+      } else { audio.pause(); }
+    });
+    audio.addEventListener('play',  function () { btn.textContent = '❚❚'; });
+    audio.addEventListener('pause', function () { btn.textContent = '▶'; });
+    audio.addEventListener('ended', function () { btn.textContent = '▶'; fill.style.width = '0'; });
+    audio.addEventListener('timeupdate', function () {
+      var d = audio.duration || 0;
+      fill.style.width = (d ? (audio.currentTime / d * 100) : 0) + '%';
+      time.textContent = fmt(audio.currentTime);
+    });
+    bar.addEventListener('click', function (e) {
+      var r = bar.getBoundingClientRect(), d = audio.duration || 0;
+      if (d) audio.currentTime = ((e.clientX - r.left) / r.width) * d;
+    });
+  });
+})();
+
+// Every chip/pill/field edit here is a plain form POST that redirects back
+// to this same page — a full page load, which resets scroll to the top.
+// On a long document that reads as "nothing happened." Record scroll
+// position right before any form submits, restore it right after the
+// reload (this page is standalone — it doesn't extend base.html, so it
+// needs its own copy of the same fix used there).
+(function () {
+  var KEY = 'chordential:scrollY:' + location.pathname;
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.tagName === 'FORM') {
+      sessionStorage.setItem(KEY, String(window.scrollY));
+    }
+  }, true);
+  var saved = sessionStorage.getItem(KEY);
+  if (saved !== null) {
+    sessionStorage.removeItem(KEY);
+    window.scrollTo(0, parseInt(saved, 10) || 0);
+  }
+})();
+</script>
+{% if public %}
+<script>
+// Client view: cover elements stagger in on load; sections arrive once on
+// scroll (screen only; reduced-motion collapses via CSS).
+(function () {
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var covers = document.querySelectorAll('.cover-in');
+  covers.forEach(function (el, i) {
+    setTimeout(function () { el.classList.add('in'); }, reduced ? 0 : 120 + i * 80);
+  });
+  var blocks = document.querySelectorAll('.page .block');
+  if (reduced || !('IntersectionObserver' in window)) return;
+  blocks.forEach(function (b) { b.classList.add('b-arrive'); });
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    });
+  }, { rootMargin: '0px 0px -8% 0px' });
+  blocks.forEach(function (b) { io.observe(b); });
+})();
+</script>
+{% endif %}
+<script src="/static/wave-live.js?v={{ static_v }}" defer></script>

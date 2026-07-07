@@ -5,48 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ opp['client'] }} · Chordential Workspace</title>
   <link rel="icon" href="/static/public/wordmark-dark.png">
+  {% if doc %}
+  {# The brief folds in inline (ADR-0018): its stylesheets travel with it. #}
+  <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+  <link rel="stylesheet" href="/static/brief.css?v={{ static_v }}">
+  {% endif %}
   <style>
     /* The Client Workspace is a client-facing surface (ADR-0018): a clean, self-contained
        page with NO operator chrome — the client's single durable home. */
     :root{
-      --bg:#F7F1EC; --surface:#ffffff; --ink:#211d1b; --wine:#44161E; --accent:#C8552B;
-      --line:#e7e1d8; --muted:#8a8580; --sand:#b3aca2;
+      --ws-bg:#F7F1EC; --ws-surface:#ffffff; --ws-ink:#211d1b; --ws-accent:#C8552B;
+      --ws-line:#e7e1d8; --ws-muted:#8a8580; --ws-sand:#b3aca2;
     }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);
+    body{margin:0;background:var(--ws-bg);color:var(--ws-ink);
       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
       -webkit-font-smoothing:antialiased}
-    .ws-top{display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid var(--line);
-      background:var(--surface)}
-    .ws-top img{height:20px}
+    .ws-top{display:flex;align-items:center;gap:10px;padding:16px 22px;border-bottom:1px solid var(--ws-line);
+      background:var(--ws-surface);position:sticky;top:0;z-index:5}
+    .ws-top img{height:19px}
+    .ws-top .ph{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+      color:var(--ws-accent);font-weight:700}
     .ws-wrap{max-width:720px;margin:34px auto 64px;padding:0 20px}
-    .ws-kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+    .ws-kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ws-accent);font-weight:700}
     .ws-wrap h1{font-size:26px;margin:4px 0 2px}
-    .ws-sub{color:var(--muted);margin:2px 0 26px;font-size:14.5px}
-    .ws-rail{margin:0 0 26px;border-left:2px solid var(--line);padding-left:0}
+    .ws-sub{color:var(--ws-muted);margin:2px 0 26px;font-size:14.5px}
+    .ws-rail{margin:0 0 26px;border-left:2px solid var(--ws-line);padding-left:0}
     .ws-step{padding:9px 0 9px 18px;position:relative}
     .ws-step::before{content:"";position:absolute;left:-8px;top:14px;width:12px;height:12px;border-radius:50%;
-      background:var(--surface);border:2px solid #d9d2c7}
+      background:var(--ws-surface);border:2px solid #d9d2c7}
     .ws-step.done::before{background:#c9c1b4;border-color:#c9c1b4}
-    .ws-step.current::before{background:var(--accent);border-color:var(--accent);
+    .ws-step.current::before{background:var(--ws-accent);border-color:var(--ws-accent);
       box-shadow:0 0 0 4px rgba(200,85,43,.15)}
     .ws-step .lab{font-weight:600;font-size:14px}
-    .ws-step.upcoming .lab{color:var(--sand)}
-    .ws-step.current .lab{color:var(--accent)}
-    .ws-step .bl{font-size:12.5px;color:var(--muted);margin-top:1px}
-    .ws-now{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+    .ws-step.upcoming .lab{color:var(--ws-sand)}
+    .ws-step.current .lab{color:var(--ws-accent)}
+    .ws-step .bl{font-size:12.5px;color:var(--ws-muted);margin-top:1px}
+    .ws-now{background:var(--ws-surface);border:1px solid var(--ws-line);border-radius:14px;padding:22px 24px;
       box-shadow:0 10px 30px rgba(68,22,30,.05)}
-    .ws-now .lab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}
+    .ws-now .lab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ws-accent);font-weight:700}
     .ws-now h2{font-size:20px;margin:6px 0 6px}
     .ws-now p{color:#6f6a64;margin:0 0 16px;font-size:14.5px;line-height:1.55}
-    .ws-cta{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;
+    .ws-cta{display:inline-flex;align-items:center;gap:8px;background:var(--ws-accent);color:#fff;
       text-decoration:none;font-weight:650;font-size:15px;padding:12px 22px;border-radius:999px}
     .ws-cta:hover{background:#b34a24}
-    .ws-foot{margin-top:22px;font-size:12px;color:var(--sand);text-align:center}
+    .ws-foot{margin-top:22px;font-size:12px;color:var(--ws-sand);text-align:center;max-width:720px;margin-left:auto;margin-right:auto;padding:0 20px 40px}
+    /* a slim horizontal phase strip above an embedded stage (brief) */
+    .ws-strip{display:flex;gap:6px;flex-wrap:wrap;max-width:900px;margin:18px auto 0;padding:0 20px}
+    .ws-chip{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+      padding:4px 11px;border-radius:999px;border:1px solid var(--ws-line);color:var(--ws-sand);background:var(--ws-surface)}
+    .ws-chip.done{color:#8a8073}
+    .ws-chip.current{color:#fff;background:var(--ws-accent);border-color:var(--ws-accent)}
   </style>
 </head>
 <body>
-  <div class="ws-top"><img src="/static/public/wordmark-dark.png" alt="Chordential"></div>
+  <div class="ws-top">
+    <img src="/static/public/wordmark-dark.png" alt="Chordential">
+    <span class="ph">{{ phase_label }}</span>
+  </div>
+
+  {% if doc %}
+  {# ── The Campaign Brief, rendered inline in the workspace (one URL, no jump). ── #}
+  <div class="ws-strip">
+    {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
+  </div>
+  {% include "_brief_document.html" %}
+  <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+
+  {% else %}
+  {# ── Non-brief phases: the lifecycle rail + the active stage card. ── #}
   <div class="ws-wrap">
     <div class="ws-kicker">Your campaign workspace</div>
     <h1>{{ opp['client'] }}</h1>
@@ -68,13 +94,12 @@
       {% if stage_url %}
       <a class="ws-cta" href="{{ stage_url }}">
         {% if phase == 'intro' or phase == 'discovery' %}Schedule your discovery call →
-        {% elif phase == 'brief' or phase == 'commercial' %}Open your Campaign Brief →
         {% else %}Open your project →{% endif %}
       </a>
       {% endif %}
     </div>
-
     <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
   </div>
+  {% endif %}
 </body>
 </html>

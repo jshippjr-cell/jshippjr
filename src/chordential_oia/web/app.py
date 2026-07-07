@@ -2413,21 +2413,26 @@ def client_workspace(request: Request, token: str):
             return HTMLResponse("Not found", status_code=404)
         project = db.project_for_opp(conn, opp["id"])
         phase = workspace.compute_phase(_workspace_signals(conn, opp, project))
-        # The active stage's continuation link (token-gated). Later phases render inline.
-        stage_url = {
-            workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
-            workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
-            workspace.BRIEF: f"/opportunity/{opp['id']}/capabilities?k={token}",
-            workspace.COMMERCIAL: f"/opportunity/{opp['id']}/capabilities?k={token}",
-        }.get(phase, "")
-        if not stage_url and project is not None:
-            stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
+        # The Campaign Brief folds INLINE into the workspace (ADR-0018) — one URL, no jump.
+        # Other phases still link to their existing surface until they're folded in turn
+        # (intro/discovery → scheduling; production/delivery → the portal, folded in P5).
+        brief_ctx = None
+        if phase in (workspace.BRIEF, workspace.COMMERCIAL):
+            brief_ctx = _live_brief_ctx(conn, opp["id"])
+        stage_url = ""
+        if brief_ctx is None:
+            stage_url = {
+                workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
+                workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
+            }.get(phase, "")
+            if not stage_url and project is not None:
+                stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
     finally:
         conn.close()
     return render(request, "workspace.html", nav="", token=token, opp=opp,
                   project=project, phase=phase, phase_label=workspace.PHASE_LABEL[phase],
                   phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
-                  stage_url=stage_url)
+                  stage_url=stage_url, **(brief_ctx or {}))
 
 
 @app.post("/opportunity/{opp_id}/request/{req_id}/decline")
@@ -3183,6 +3188,44 @@ def _brief_ci_context(conn, row):
             met = True
             break
     return ci_view, met
+
+
+def _live_brief_ctx(conn, opp_id):
+    """The Campaign Brief render context, live from Campaign Intelligence, ready to embed in
+    the Client Workspace (ADR-0018). Builds the SAME ``doc`` the standalone brief route builds
+    (single source), in read-only/public/embedded mode — the workspace is the frame, so the
+    brief's own threshold cover is suppressed and no operator edit affordances render."""
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None
+    qual, _scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    overrides = db.get_doc_overrides(conn, opp_id)
+    ci_view, met = _brief_ci_context(conn, row)
+    doc = build_capabilities_doc(
+        opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
+        call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
+        ci_view=ci_view, met=met)
+    project = db.project_for_opp(conn, opp_id)
+    deposit_amount = build_proposal(opp, qual, est).deposit_amount
+    deposit_invoice_id = None
+    if project is not None:
+        sp = db.proposal_for_project(conn, project["id"])
+        if sp is not None and sp["deposit_amount"]:
+            deposit_amount = sp["deposit_amount"]
+        for inv in db.list_invoices(conn, project["id"]):
+            if inv["kind"] == "Deposit":
+                deposit_invoice_id = inv["id"]
+                break
+    token = db.ensure_share_token(conn, opp_id)
+    return {
+        "row": row, "doc": doc, "overrides": overrides,
+        "request_url": f"/opportunity/{opp_id}/request?k={token}",
+        "deposit_amount": deposit_amount, "deposit_invoice_id": deposit_invoice_id,
+        "edit": False, "public": True, "embedded": True,
+        "chip_library": {}, "section_family": {}, "custom_chips": [], "delivery_templates": {},
+    }
 
 
 @app.get("/opportunity/{opp_id}/capabilities", response_class=HTMLResponse)

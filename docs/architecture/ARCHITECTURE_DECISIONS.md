@@ -313,6 +313,17 @@ workspace), and the token-resolution layer is built so that promotion is a later
 rewrite. Manual operator controls remain as fallbacks everywhere, but the primary path is
 client-driven.
 
+*Implementation note (P0 completion).* Stage surfaces fold into the workspace via the
+**stage-partial pattern**: one shared template partial holds the stage's markup (the brief lives
+in `_brief_document.html`, its CSS in static `brief.css`), rendered in two frames — the standalone
+route wraps it in its own `<html>` + operator toolbar (kept for backward compatibility, operator
+edit, and PDF); the workspace includes the *same* partial inline (`embedded=True` suppresses the
+standalone threshold cover). One source of markup, two frames — the pattern every later stage
+(Commercial Review, Kickoff) follows. Corollary on snapshots: the workspace always renders **live**
+CI (the relationship grows, nothing resets), so a send-time brief snapshot is no longer how a
+client *views* the brief — it is the **approval/audit record and the PDF source** (its real job in
+Phase 3). Legacy emailed `?v=snapshot` links keep rendering the frozen doc on the standalone route.
+
 ---
 
 ## Adding a new ADR

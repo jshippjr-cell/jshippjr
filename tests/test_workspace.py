@@ -100,8 +100,11 @@ def test_workspace_url_is_stable_and_phase_advances(tmp_path, monkeypatch):
                                   start_at="2026-07-01T14:00:00+00:00", status="ingested")
         conn.close()
         page2 = c.get(url)                            # URL unchanged
+        # the brief now renders INLINE in the workspace (one URL, no jump) — not a link-out
         assert "Campaign Brief" in page2.text
-        assert "Open your Campaign Brief" in page2.text
+        assert 'class="page"' in page2.text           # the brief document is embedded
+        assert "After meeting with your team" in page2.text   # meeting-summary brief, live from CI
+        assert "Open your Campaign Brief" not in page2.text    # no link-out
         # award → project; the SAME url now shows Production
         c.post(f"/opportunity/{opp_id}/project")
         page3 = c.get(url)                            # URL still unchanged
