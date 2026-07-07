@@ -1152,6 +1152,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT, updated_at TEXT
         )"""
     )
+    # Brief snapshots (ADR-0017): sending the Campaign Brief freezes the rendered doc —
+    # the client opens what the operator approved, never a later re-render.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS brief_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            doc_json TEXT,
+            created_at TEXT
+        )"""
+    )
     # The objection library — the durable memory behind the Discovery Call Simulator.
     # Seeded from the five call simulations (docs/sales-simulations); GROWS from real
     # calls: objections harvested from transcripts land as status='proposed' with the
@@ -4277,6 +4287,25 @@ def set_discovery_request_status(conn: sqlite3.Connection, req_id: int, status: 
 def pending_discovery_request_count(conn: sqlite3.Connection) -> int:
     return int(conn.execute(
         "SELECT COUNT(*) c FROM discovery_requests WHERE status = 'new'").fetchone()["c"])
+
+
+# --- Brief snapshots (ADR-0017) — the sent document, frozen at send time ---------------- #
+def create_brief_snapshot(conn: sqlite3.Connection, opp_id: int, doc_json: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO brief_snapshots (opp_id, doc_json, created_at) VALUES (?,?,?)",
+        (opp_id, doc_json, datetime.now(timezone.utc).isoformat()))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def get_brief_snapshot(conn: sqlite3.Connection, sid: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM brief_snapshots WHERE id = ?", (sid,)).fetchone()
+
+
+def latest_brief_snapshot(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM brief_snapshots WHERE opp_id = ? ORDER BY id DESC LIMIT 1",
+        (opp_id,)).fetchone()
 
 
 # --- Meeting Proposals — the operator's offer of times; the client's pick books it ------ #

@@ -325,13 +325,21 @@
   </div>
 
   <div class="body">
+    {# ADR-0017 — the brief opens as a meeting summary, never a marketing restart. #}
+    {% if doc.intro %}
+    <section class="block">
+      <p class="lead" style="font-style:italic">{{ doc.intro }}</p>
+    </section>
+    {% endif %}
+    {% if not doc.met %}
     <section class="block">
       <h2 class="sec">Who we are</h2>
       <p class="lead">{{ doc.value_prop }}</p>
     </section>
+    {% endif %}
 
     <section class="block">
-      <h2 class="sec">What we understand you need</h2>
+      <h2 class="sec">{{ 'What we heard' if doc.met else 'What we understand you need' }}</h2>
       <p class="lead">{{ doc.understanding }}</p>
       {% if edit %}
       <form class="capdoc-inline capdoc-block no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/field">
@@ -356,6 +364,63 @@
       {{ chip_rail('aesthetic') }}
       {% endif %}
     </section>
+
+    {# ── The campaign, from Campaign Intelligence (ADR-0017): every row inherits from
+          the confirmed intelligence; editing a row writes CI back. Rows render only when
+          the intelligence holds them — nothing is invented. ── #}
+    {% set ci_rows = [
+        ('campaign_objective', 'Campaign objective'),
+        ('business_objective', 'Business objective'),
+        ('emotional_arc', 'Emotional arc'),
+        ('reference_playlist', 'Reference playlist'),
+        ('deliverables', 'Deliverables'),
+        ('deadline', 'Timeline'),
+        ('budget_band', 'Budget'),
+        ('decision_makers', 'Decision makers'),
+        ('brand_notes', 'Brand notes'),
+        ('agency_notes', 'Agency notes')] %}
+    {% set ci_ns = namespace(has=false) %}
+    {% for key, label in ci_rows %}{% if doc.ci and doc.ci.get(key) %}{% set ci_ns.has = true %}{% endif %}{% endfor %}
+    {% if ci_ns.has or edit %}
+    <section class="block">
+      <h2 class="sec">{{ 'From the discovery' if doc.met else 'The campaign so far' }}</h2>
+      <table class="manifest">
+        <tbody>
+          {% for key, label in ci_rows %}
+          {% set val = doc.ci.get(key) if doc.ci else None %}
+          {% if val or edit %}
+          <tr>
+            <td style="width:172px"><b>{{ label }}</b></td>
+            <td>{{ val or '' }}
+              {% if edit %}
+              <form class="capdoc-inline no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/ci-field">
+                <input type="hidden" name="name" value="{{ key }}">
+                <input type="text" name="value" value="{{ val or '' }}" class="capdoc-in" placeholder="{{ label }}…">
+                <button class="capdoc-add" type="submit">Save</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if edit %}<p class="muted small no-print" style="margin-top:6px">These rows ARE Campaign Intelligence — saving updates the single source of truth and every artifact that reads it.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if doc.risks %}
+    <section class="block">
+      <h2 class="sec">Risks we're tracking</h2>
+      <ul class="terms">{% for r in doc.risks %}<li>{{ r }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    {% if doc.open_questions %}
+    <section class="block">
+      <h2 class="sec">Open questions</h2>
+      <ul class="terms">{% for q in doc.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
 
     <section class="block">
       <h2 class="sec">The team we'd put on it</h2>
@@ -551,6 +616,25 @@
       {{ chip_rail('assurance') }}
     </section>
     {% endif %}
+    {% endif %}
+
+    {# ── The commercial close (ADR-0017) — part of the proposal, not a separate
+          document. Scope/timeline from Campaign Intelligence; price from the engine. ── #}
+    {% if doc.commercial %}
+    <section class="block">
+      <h2 class="sec">The commercial picture</h2>
+      <table class="manifest">
+        <tbody>
+          {% if doc.commercial.scope %}<tr><td style="width:172px"><b>Scope</b></td><td>{{ doc.commercial.scope }}</td></tr>{% endif %}
+          {% if doc.commercial.deliverable_count %}<tr><td><b>Deliverables</b></td><td>{{ doc.commercial.deliverable_count }} assets, itemized in the manifest above</td></tr>{% endif %}
+          {% if doc.commercial.timeline %}<tr><td><b>Timeline</b></td><td>{{ doc.commercial.timeline }}</td></tr>{% endif %}
+          {% if not doc.show_cost and doc.commercial.budget_band %}<tr><td><b>Working budget</b></td><td>{{ doc.commercial.budget_band }} — as discussed</td></tr>{% endif %}
+          <tr><td><b>Revisions</b></td><td>{{ doc.commercial.revisions }}</td></tr>
+          <tr><td><b>Deposit</b></td><td>{{ doc.commercial.deposit }}</td></tr>
+          <tr><td><b>Completion</b></td><td>{{ doc.commercial.completion }}</td></tr>
+        </tbody>
+      </table>
+    </section>
     {% endif %}
 
     {# --- Price + terms + sign/pay ALWAYS LAST (§7): Investment → Terms →

@@ -397,6 +397,31 @@ def _col(r, name):
         return None
 
 
+def brief_view(conn, ci_id: int) -> dict:
+    """The Campaign Brief's read of the intelligence (ADR-0017): one flat dict of canonical
+    fact values by key (human/confirmed value wins by construction — edits overwrite the
+    field), plus risks, open questions, and acknowledged insights as lists. Every brief
+    section prefers this over any template."""
+    rows = db.list_ci_fields(conn, ci_id)
+    out = {"fields": {}, "risks": [], "open_questions": [], "insights": []}
+    for r in rows:
+        value = (r["value"] or "").strip()
+        if not value:
+            continue
+        if r["is_concern"] and value not in out["risks"]:
+            out["risks"].append(value)
+        if r["kind"] == "open_question":
+            if is_open(r["status"]):
+                out["open_questions"].append(value)
+            continue
+        if r["kind"] == "insight":
+            out["insights"].append(value)
+            continue
+        if r["kind"] == "fact" and r["key"] not in out["fields"]:
+            out["fields"][r["key"]] = value
+    return out
+
+
 def fields_view(conn, ci_id: int) -> dict:
     """The Campaign Intelligence view for the Opportunity page (and the workspace):
       • ``sections`` — canonical facts as labeled, always-editable slots (filled or empty),

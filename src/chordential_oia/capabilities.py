@@ -16,7 +16,7 @@ Any section can also be toggled by hand before exporting.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import List, Optional
 
 from .estimation import TARGET_MARGIN, Estimate
@@ -109,6 +109,40 @@ class CapabilitiesDoc:
     delivery_template: str = "campaign"        # the chosen engagement-template key
     delivery_template_label: str = ""          # human label for the chosen template
     delivery_assumptions: str = ""             # the mandatory assumptions banner text
+    # ADR-0017 — every section inherits from Campaign Intelligence when it exists.
+    ci: dict = field(default_factory=dict)     # canonical CI values by key (brief_view fields)
+    risks: List[str] = field(default_factory=list)
+    open_questions: List[str] = field(default_factory=list)
+    met: bool = False                          # a discovery meeting happened (tone switch)
+    intro: str = ""                            # the meeting-summary opening line
+    commercial: dict = field(default_factory=dict)  # the commercial close (see build)
+
+
+def doc_to_json(doc: CapabilitiesDoc) -> str:
+    """Serialize the rendered brief for a send-time snapshot (ADR-0017): what the operator
+    approved is what the client opens, forever."""
+    import dataclasses
+    import json as _json
+    return _json.dumps(dataclasses.asdict(doc))
+
+
+def doc_from_json(payload: str) -> Optional[CapabilitiesDoc]:
+    """Rehydrate a snapshot back into the doc the template renders. Unknown keys from
+    older/newer snapshots are dropped; nested rows regain their dataclass types."""
+    import json as _json
+    try:
+        data = dict(_json.loads(payload))
+    except (ValueError, TypeError):
+        return None
+    known = {f.name for f in fields(CapabilitiesDoc)}
+    data = {k: v for k, v in data.items() if k in known}
+    try:
+        data["examples"] = [WorkExample(**e) for e in data.get("examples") or []]
+        data["deliverables"] = [Deliverable(**d) for d in data.get("deliverables") or []]
+        data["rollout"] = [RolloutItem(**r) for r in data.get("rollout") or []]
+        return CapabilitiesDoc(**data)
+    except TypeError:
+        return None
 
 
 def _round100(value: float, up: bool) -> int:
@@ -469,18 +503,79 @@ def build_understanding(opp: Opportunity) -> str:
     )
 
 
+def _understanding_from_ci(opp: Opportunity, ci_fields: dict, met: bool) -> str:
+    """The Understanding section written FROM the intelligence (ADR-0017): a summary of
+    what was actually discussed, never a template restart. Uses only fields that exist —
+    invents nothing (Founder's Advocate)."""
+    objective = (ci_fields.get("campaign_objective")
+                 or ci_fields.get("business_objective") or "").strip()
+    arc = (ci_fields.get("emotional_arc") or "").strip()
+    dels = (ci_fields.get("deliverables") or "").strip()
+    deadline = (ci_fields.get("deadline") or "").strip()
+    if not (objective or arc or dels):
+        return ""
+    parts = []
+    if objective:
+        parts.append(f"{objective[0].upper()}{objective[1:]}" if objective else "")
+    if arc:
+        parts.append(f"The music carries {arc[0].lower()}{arc[1:]}"
+                     if arc[:1].isupper() and not arc.isupper() else f"The music carries {arc}")
+    if dels:
+        parts.append(f"Deliverables as discussed: {dels}")
+    if deadline:
+        parts.append(f"Timeline: {deadline}")
+    lead = ("This is what we heard, and how we propose approaching the work. "
+            if met else "This reflects our current understanding of the campaign. ")
+    return lead + ". ".join(p.rstrip(".") for p in parts if p) + "."
+
+
+def _intro_line(met: bool) -> str:
+    if met:
+        return ("After meeting with your team, we've summarized our understanding of the "
+                "campaign below — the creative direction, deliverables, timeline, and "
+                "commercial assumptions discussed during discovery. If anything reads wrong, "
+                "one reply fixes it.")
+    return ("The following reflects our current understanding of your campaign, assembled "
+            "from what you've shared so far. If anything reads wrong, one reply fixes it.")
+
+
+def _build_commercial(opp: Opportunity, estimate: Estimate, terms: List[str],
+                      ci_fields: dict, price_low, price_high,
+                      deliverables: List[Deliverable]) -> dict:
+    """The commercial close — the last section of the brief, not a separate document.
+    Pricing from the estimation engine (or the CI budget band), scope/timeline from CI."""
+    scope = (ci_fields.get("deliverables") or "").strip()
+    timeline = (ci_fields.get("deadline") or "").strip()
+    budget_band = (ci_fields.get("budget_band") or "").strip()
+    return {
+        "price_low": price_low, "price_high": price_high,
+        "budget_band": budget_band,
+        "scope": scope or (opp.need or ""),
+        "deliverable_count": len(deliverables),
+        "timeline": timeline,
+        "terms": list(terms),
+        "revisions": "Two structured revision rounds are included; more are scoped, never surprised.",
+        "deposit": "50% to begin, the balance on final approval — invoiced, never chased.",
+        "completion": (f"Working back from {timeline}." if timeline
+                       else "Estimated completion is set at kickoff, working back from your air date."),
+    }
+
+
 def build_capabilities_doc(
     opp: Opportunity, qual: QualificationResult, estimate: Estimate, *,
     toggles: dict, call_url: str = "", overrides: Optional[dict] = None,
+    ci_view: Optional[dict] = None, met: bool = False,
 ) -> CapabilitiesDoc:
     """Assemble the document for one opportunity under the given section toggles.
 
     ``overrides`` is the per-deal ``doc_overrides`` blob (``db.get_doc_overrides``):
-    Jon's hand edits applied *on top of* the generated defaults. An un-touched deal
-    (``overrides`` empty) renders exactly as before — just with the conservative
-    client-facing synopsis instead of the scoring jargon, and an auto-picked
-    delivery template instead of the always-campaign one."""
+    Jon's hand edits applied *on top of* the generated defaults — presentation concerns
+    only. ``ci_view`` is ``campaign_intelligence.brief_view(...)``: once Campaign
+    Intelligence exists, EVERY section prefers it (ADR-0017); templates fill only the
+    slots CI has not. ``met`` switches the document into meeting-summary tone."""
     overrides = overrides or {}
+    ci_view = ci_view or {}
+    ci_fields: dict = dict(ci_view.get("fields") or {})
     stage = toggles.get("stage", "discovery")
     show_cost = bool(toggles.get("cost"))
     show_terms = bool(toggles.get("terms"))
@@ -498,7 +593,12 @@ def build_capabilities_doc(
     # Client name + understanding — overridable; understanding is NEVER the scoring
     # summary anymore (§3) — a conservative client-facing restatement is the default.
     client = overrides.get("client") or opp.client
-    understanding = overrides.get("understanding") or build_understanding(opp)
+    # Understanding — override wins (a human wrote it); else CI-derived (what the meeting
+    # said); else the conservative template restatement. Blanking an override therefore
+    # reverts to intelligence, never to stock copy (ADR-0017).
+    understanding = (overrides.get("understanding")
+                     or _understanding_from_ci(opp, ci_fields, met)
+                     or build_understanding(opp))
 
     # Delivery template — auto-picked from the lead, override wins. The chosen
     # template supplies the deliverables/rollout/rights/assumptions.
@@ -533,6 +633,11 @@ def build_capabilities_doc(
     relevant_links = overrides.get("relevant_links") or []
     relevant_uploads = overrides.get("relevant_uploads") or []
 
+    commercial = {}
+    if show_cost or show_terms or ci_fields.get("budget_band"):
+        commercial = _build_commercial(opp, estimate, terms, ci_fields,
+                                       price_low, price_high, deliverables)
+
     return CapabilitiesDoc(
         client=client,
         need=opp.need,
@@ -564,4 +669,10 @@ def build_capabilities_doc(
         delivery_template=template_key,
         delivery_template_label=template["label"],
         delivery_assumptions=delivery_assumptions,
+        ci=ci_fields,
+        risks=list(ci_view.get("risks") or []),
+        open_questions=list(ci_view.get("open_questions") or []),
+        met=met,
+        intro=_intro_line(met),
+        commercial=commercial,
     )

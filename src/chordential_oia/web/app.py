@@ -44,7 +44,7 @@ from ..outreach import (
 )
 from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, build_understanding,
-    chips_for, default_toggles,
+    chips_for, default_toggles, doc_from_json, doc_to_json,
 )
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet,
@@ -2692,6 +2692,24 @@ def compose_send(opp_id: int):
     email = (row["contact_email"] or "").strip()
     if not email or not mailer.mail_configured():
         return RedirectResponse(f"/opportunity/{opp_id}/compose?sent=manual", status_code=303)
+    # ADR-0017: sending freezes the brief. The mailed link renders the snapshot verbatim —
+    # the client opens exactly the document the operator approved, never a later re-render.
+    conn = db.connect()
+    try:
+        ci_view, met = _brief_ci_context(conn, row)
+        overrides = db.get_doc_overrides(conn, opp_id)
+        token = db.ensure_share_token(conn, opp_id)
+        qual, _scored = evaluate(opp)
+        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+        est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+        doc = build_capabilities_doc(
+            opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
+            call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
+            ci_view=ci_view, met=met)
+        sid = db.create_brief_snapshot(conn, opp_id, doc_to_json(doc))
+    finally:
+        conn.close()
+    body = body.replace(f"/capabilities?k={token}", f"/capabilities?k={token}&v={sid}")
     base = _public_base()
     status = mailer.send_email(
         email, plan.email_subject, body, html=mailer.branded_html(base, body),
@@ -3069,8 +3087,29 @@ def opportunity_buyer(request: Request, opp_id: int):
     return render(request, "buyer.html", nav="inbox", opp_row=row, **ctx)
 
 
+def _brief_ci_context(conn, row):
+    """ADR-0017: the brief renders Campaign Intelligence first. Returns (ci_view, met) —
+    the canonical CI values + whether a discovery meeting has actually happened (tone)."""
+    from datetime import datetime, timezone
+    ci_view, met = {}, False
+    if campaigns.workspace_enabled():
+        try:
+            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+            ci_view = campaign_intelligence.brief_view(conn, ci_row["id"])
+        except Exception:  # noqa: BLE001 — the brief must render even if CI hiccups
+            ci_view = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for m in db.list_meetings(conn, row["id"]):
+        if m["status"] in ("ingested", "transcript_ready") or (
+                m["status"] not in ("canceled",) and (m["start_at"] or "") and
+                m["start_at"] <= now_iso):
+            met = True
+            break
+    return ci_view, met
+
+
 @app.get("/opportunity/{opp_id}/capabilities", response_class=HTMLResponse)
-def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
+def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str = ""):
     """The Campaign Brief — the branded, toggleable client-facing deliverable → preview,
     Save as PDF, and (with a valid ?k=<share_token>) the public client link the outreach
     email points to. One artifact: the emailed link opens this same brief.
@@ -3110,6 +3149,13 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
         # The Brief's "Request a Discovery Call" CTA → the token-gated request form (same
         # share token that opens the brief), so the client requests, Jon schedules (ADR-0016).
         brief_token = db.ensure_share_token(conn, opp_id)
+        # ADR-0017: Campaign Intelligence first; and a sent snapshot renders VERBATIM.
+        ci_view, met = _brief_ci_context(conn, row)
+        snapshot_doc = None
+        if (v or "").strip().isdigit():
+            snap = db.get_brief_snapshot(conn, int(v))
+            if snap is not None and snap["opp_id"] == opp_id:
+                snapshot_doc = doc_from_json(snap["doc_json"])
     finally:
         conn.close()
     request_url = f"/opportunity/{opp_id}/request?k={brief_token}"
@@ -3122,9 +3168,10 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = ""):
     if qp.get("submitted"):                       # toggle bar was applied
         for key in ("cost", "examples", "call", "terms", "delivery"):
             toggles[key] = qp.get(key) == "1"
-    doc = build_capabilities_doc(
+    doc = snapshot_doc or build_capabilities_doc(
         opp, qual, est, toggles=toggles, overrides=overrides,
         call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
+        ci_view=ci_view, met=met,
     )
 
     # Edit-mode payload the (later) editable-template UI consumes: the chip library
@@ -3187,6 +3234,41 @@ def doc_field(opp_id: int, name: str = Form(""), value: str = Form("")):
         conn = db.connect()
         try:
             db.update_doc_override(conn, opp_id, name, value)
+        finally:
+            conn.close()
+    return _doc_redirect(opp_id)
+
+
+# ADR-0017: brief fields that are Campaign Intelligence slots. Editing one in the brief
+# writes CI (the single source of truth); the brief then re-renders from the updated
+# intelligence — edits are never page-local and never revert to stock copy.
+_BRIEF_CI_FIELDS = {
+    "business_objective": ("engagement", "business_objective"),
+    "budget_band": ("engagement", "budget_band"),
+    "deadline": ("engagement", "deadline"),
+    "deliverables": ("engagement", "deliverables"),
+    "decision_makers": ("buyer", "decision_makers"),
+    "brand_notes": ("buyer", "brand_notes"),
+    "agency_notes": ("buyer", "agency_notes"),
+    "campaign_objective": ("direction", "campaign_objective"),
+    "emotional_arc": ("direction", "emotional_arc"),
+    "reference_playlist": ("direction", "reference_playlist"),
+}
+
+
+@app.post("/opportunity/{opp_id}/doc/ci-field")
+def doc_ci_field(opp_id: int, name: str = Form(""), value: str = Form("")):
+    """Apply a brief edit to Campaign Intelligence itself (ADR-0017)."""
+    if name in _BRIEF_CI_FIELDS and campaigns.workspace_enabled():
+        conn = db.connect()
+        try:
+            row = db.get_opportunity(conn, opp_id)
+            if row is None:
+                return HTMLResponse("Opportunity not found", status_code=404)
+            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+            facet, key = _BRIEF_CI_FIELDS[name]
+            campaign_intelligence.edit_or_create(
+                conn, ci_row["id"], facet, key, "fact", value, actor="operator")
         finally:
             conn.close()
     return _doc_redirect(opp_id)
