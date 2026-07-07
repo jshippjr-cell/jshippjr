@@ -242,6 +242,31 @@ no-op and the operator still gets a real Meeting record (manual link, "not conne
 optional availability engine (`meetings/availability.py`) is an operator-side conflict check, not
 a client-facing calendar.
 
+### ADR-0017 — Campaign Intelligence is the single source of truth for every artifact
+**Status:** Accepted (2026-07-07, operator directive) · Source: `capabilities.py`,
+`web/campaign_intelligence.py`, `web/app.py` (brief/compose routes)
+**Decision.** Once Campaign Intelligence exists for an Opportunity, no downstream artifact may
+regenerate its content from stock templates. Every artifact — Campaign Brief, email preview, PDF,
+proposal, and future production documents — renders **CI first**, engine/template content only as
+fallback for slots CI does not yet fill, with `doc_overrides` reserved for presentation-only
+concerns (chip visibility, links, uploads, template pick). Editing an artifact field that maps to
+a CI canonical slot writes **to CI** (`edit_or_create`), never to a parallel copy; the artifact
+then re-renders from the updated intelligence. Sending an artifact freezes a **snapshot** of the
+rendered content; the recipient sees the snapshot, not a live re-render.
+**Why.** The product's philosophy is an operating system where information flows forward from
+discovery. Duplicate copies (template regeneration, page-local edit blobs) made the brief read
+like marketing collateral that forgot the meeting, and made operator edits silently revert. One
+canonical store means the operator never re-enters information; every screen already knows what
+happened in the meeting.
+**Consequences.** The brief builder takes a `ci` view and prefers it slot-by-slot; blanking an
+override reverts to *CI-derived* content, never to stock copy. "Email This" persists a
+`brief_snapshots` row and mails a link that renders that snapshot verbatim. New artifact surfaces
+must consume `fields_view`/canonical CI rather than re-deriving from opportunity columns. When CI
+changes, downstream artifacts pick it up on next render because nothing caches template output.
+Scheduling writes a CI event (the Opportunity timeline) so meetings are part of the same record.
+Client-facing times render in **America/New_York** (correct EST/EDT label via zoneinfo) — UTC is
+storage, never display.
+
 ---
 
 ## Adding a new ADR
