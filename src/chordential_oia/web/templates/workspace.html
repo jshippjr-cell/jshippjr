@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ opp['client'] }} · Chordential Workspace</title>
+  <link rel="icon" href="/static/public/wordmark-dark.png">
+  <style>
+    /* The Client Workspace is a client-facing surface (ADR-0018): a clean, self-contained
+       page with NO operator chrome — the client's single durable home. */
+    :root{
+      --bg:#F7F1EC; --surface:#ffffff; --ink:#211d1b; --wine:#44161E; --accent:#C8552B;
+      --line:#e7e1d8; --muted:#8a8580; --sand:#b3aca2;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    .ws-top{display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid var(--line);
+      background:var(--surface)}
+    .ws-top img{height:20px}
+    .ws-wrap{max-width:720px;margin:34px auto 64px;padding:0 20px}
+    .ws-kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+    .ws-wrap h1{font-size:26px;margin:4px 0 2px}
+    .ws-sub{color:var(--muted);margin:2px 0 26px;font-size:14.5px}
+    .ws-rail{margin:0 0 26px;border-left:2px solid var(--line);padding-left:0}
+    .ws-step{padding:9px 0 9px 18px;position:relative}
+    .ws-step::before{content:"";position:absolute;left:-8px;top:14px;width:12px;height:12px;border-radius:50%;
+      background:var(--surface);border:2px solid #d9d2c7}
+    .ws-step.done::before{background:#c9c1b4;border-color:#c9c1b4}
+    .ws-step.current::before{background:var(--accent);border-color:var(--accent);
+      box-shadow:0 0 0 4px rgba(200,85,43,.15)}
+    .ws-step .lab{font-weight:600;font-size:14px}
+    .ws-step.upcoming .lab{color:var(--sand)}
+    .ws-step.current .lab{color:var(--accent)}
+    .ws-step .bl{font-size:12.5px;color:var(--muted);margin-top:1px}
+    .ws-now{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+      box-shadow:0 10px 30px rgba(68,22,30,.05)}
+    .ws-now .lab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}
+    .ws-now h2{font-size:20px;margin:6px 0 6px}
+    .ws-now p{color:#6f6a64;margin:0 0 16px;font-size:14.5px;line-height:1.55}
+    .ws-cta{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;
+      text-decoration:none;font-weight:650;font-size:15px;padding:12px 22px;border-radius:999px}
+    .ws-cta:hover{background:#b34a24}
+    .ws-foot{margin-top:22px;font-size:12px;color:var(--sand);text-align:center}
+  </style>
+</head>
+<body>
+  <div class="ws-top"><img src="/static/public/wordmark-dark.png" alt="Chordential"></div>
+  <div class="ws-wrap">
+    <div class="ws-kicker">Your campaign workspace</div>
+    <h1>{{ opp['client'] }}</h1>
+    <div class="ws-sub">{{ opp['need'] }}</div>
+
+    <div class="ws-rail">
+      {% for step in rail %}
+      <div class="ws-step {{ step.state }}">
+        <div class="lab">{{ step.label }}</div>
+        {% if step.state == 'current' %}<div class="bl">{{ step.blurb }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="ws-now">
+      <div class="lab">You're here</div>
+      <h2>{{ phase_label }}</h2>
+      <p>{{ phase_blurb }}</p>
+      {% if stage_url %}
+      <a class="ws-cta" href="{{ stage_url }}">
+        {% if phase == 'intro' or phase == 'discovery' %}Schedule your discovery call →
+        {% elif phase == 'brief' or phase == 'commercial' %}Open your Campaign Brief →
+        {% else %}Open your project →{% endif %}
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  </div>
+</body>
+</html>

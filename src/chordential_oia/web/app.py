@@ -63,7 +63,7 @@ from . import (
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, meeting_scheduler, meetings_service,
     music_opportunity, opportunity_signals, outreach_engine, relationships, scheduler,
-    seed, signals, simulator, sources, triage, webpush,
+    seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -245,10 +245,15 @@ _MANAGE_RE = re.compile(r"^/meeting/\d+/manage/?$")
 # The client slot-pick page: /meet/<proposal-token>[/pick] — the unguessable proposal
 # token IS the access control (validated in-route), so it bypasses the admin gate.
 _MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
+# The Client Workspace (ADR-0018): /workspace/<token> — the durable client destination.
+# The unguessable workspace token IS the access control (validated in-route), so the path
+# bypasses the admin login gate, same exemption as first-touch and the delivery portal.
+_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
-    return bool(_REQUEST_RE.match(path) or _MANAGE_RE.match(path) or _MEET_RE.match(path))
+    return bool(_REQUEST_RE.match(path) or _MANAGE_RE.match(path) or _MEET_RE.match(path)
+                or _WORKSPACE_RE.match(path))
 
 
 # The token-gated client delivery portal: /project/<id>/delivery-portal . Same
@@ -2356,6 +2361,75 @@ def meet_pick_submit(token: str, pick: int = Form(...)):
     return RedirectResponse(f"/meet/{token}", status_code=303)
 
 
+# ── The Client Workspace (ADR-0018) — the ONE durable client destination. ─────────────
+def _workspace_signals(conn, opp, project):
+    """Gather the phase signals for one deal (ADR-0018). Pure DB reads; the mapping to a
+    phase lives in ``workspace.compute_phase`` so it stays trivially testable. Signals for
+    phases not yet built (commercial/kickoff) are simply absent."""
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    opp_id = opp["id"]
+    met = False
+    upcoming = False
+    for m in db.list_meetings(conn, opp_id):
+        if m["status"] == "canceled":
+            continue
+        if m["status"] in ("ingested", "transcript_ready") or (
+                (m["start_at"] or "") and m["start_at"] <= now_iso):
+            met = True
+        elif (m["start_at"] or "") and m["start_at"] > now_iso:
+            upcoming = True
+    if any(p["status"] in ("draft", "sent")
+           for p in db.list_meeting_proposals(conn, opp_id)):
+        upcoming = True
+    # Brief-ready means a client-facing brief moment has actually occurred — discovery
+    # happened, or the brief was sent. NOT merely "CI has content": CI is auto-seeded
+    # from the opportunity's own fields at creation, so that would flip every new deal to
+    # the Brief phase before any discovery (ADR-0018 — honest phase signals).
+    brief_ready = met or db.latest_brief_snapshot(conn, opp_id) is not None
+    delivered = bool(project) and (project["status"] or "").lower() in ("delivered", "complete")
+    return {
+        "has_project": project is not None,
+        "delivered": delivered,
+        "brief_ready": brief_ready,
+        "in_discovery": upcoming and not brief_ready,
+    }
+
+
+@app.get("/workspace/{token}", response_class=HTMLResponse)
+def client_workspace(request: Request, token: str):
+    """The Client Workspace: one durable, token-gated URL that never changes; its contents
+    are the current lifecycle phase (ADR-0018). The token resolves the opportunity (its
+    project inherits the same token), we compute the phase, and render the shell with the
+    active stage's continuation. Existing token-gated surfaces (brief, delivery portal) are
+    linked from here today; later phases fold them inline under this same URL."""
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            proj = db.project_by_share_token(conn, token)
+            opp = db.get_opportunity(conn, proj["opp_id"]) if proj and proj["opp_id"] else None
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        project = db.project_for_opp(conn, opp["id"])
+        phase = workspace.compute_phase(_workspace_signals(conn, opp, project))
+        # The active stage's continuation link (token-gated). Later phases render inline.
+        stage_url = {
+            workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
+            workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
+            workspace.BRIEF: f"/opportunity/{opp['id']}/capabilities?k={token}",
+            workspace.COMMERCIAL: f"/opportunity/{opp['id']}/capabilities?k={token}",
+        }.get(phase, "")
+        if not stage_url and project is not None:
+            stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
+    finally:
+        conn.close()
+    return render(request, "workspace.html", nav="", token=token, opp=opp,
+                  project=project, phase=phase, phase_label=workspace.PHASE_LABEL[phase],
+                  phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
+                  stage_url=stage_url)
+
+
 @app.post("/opportunity/{opp_id}/request/{req_id}/decline")
 def discovery_request_decline(opp_id: int, req_id: int):
     conn = db.connect()
@@ -4015,9 +4089,12 @@ def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
     # can reach the agency's intelligence, not just a client name. Best-effort: an
     # exact name match or nothing (DISCOVERY_INTELLIGENCE_LINEAGE.md, step 1).
     agency_id = db.resolve_opportunity_agency(conn, row)
+    # ADR-0018: the project inherits the opportunity's workspace token so the client's
+    # single URL never changes across the award boundary.
+    workspace_token = db.ensure_share_token(conn, opp_id)
     pid = db.insert_project(
         conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles,
-        agency_id=agency_id,
+        agency_id=agency_id, share_token=workspace_token,
     )
     db.seed_default_milestones(conn, pid, roles)
     return pid

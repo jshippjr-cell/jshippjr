@@ -1447,6 +1447,24 @@ def ensure_share_token(conn: sqlite3.Connection, opp_id: int) -> Optional[str]:
     return token
 
 
+def opportunity_by_share_token(conn: sqlite3.Connection, token: str):
+    """Resolve the opportunity that owns a workspace/share token (ADR-0018). The token is
+    the durable Client Workspace key — minted on the opp, inherited by its project."""
+    if not (token or "").strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM opportunities WHERE share_token = ? LIMIT 1", (token,)).fetchone()
+
+
+def project_by_share_token(conn: sqlite3.Connection, token: str):
+    """Resolve a project by its share token. A project created from an opportunity inherits
+    the opp's token, so this and :func:`opportunity_by_share_token` resolve the same deal."""
+    if not (token or "").strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM projects WHERE share_token = ? LIMIT 1", (token,)).fetchone()
+
+
 def record_first_touch_view(conn: sqlite3.Connection, opp_id: int) -> None:
     """Increment the first-touch page view counter and stamp the last-viewed time.
 
@@ -3875,15 +3893,19 @@ def insert_project(
     deadline: Optional[str] = None,
     *,
     agency_id: Optional[int] = None,
+    share_token: Optional[str] = None,
 ) -> int:
+    # ADR-0018: the project INHERITS the opportunity's workspace token, so the client's
+    # one URL survives award (opportunity → project) unchanged.
     cur = conn.execute(
         """INSERT INTO projects
            (opp_id, client, need, budget_min, budget_max, deadline, status, roles,
-            created_at, agency_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            created_at, agency_id, share_token)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (
             opp_id, client, need, budget_min, budget_max, deadline, "Active",
             json.dumps(roles), datetime.now(timezone.utc).isoformat(), agency_id,
+            share_token,
         ),
     )
     conn.commit()
