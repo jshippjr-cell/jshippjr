@@ -85,8 +85,16 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   box-shadow:0 10px 26px rgba(228,103,31,.32), inset 0 1px 0 rgba(255,255,255,.35);
   transition:transform var(--b16) cubic-bezier(.19,1,.22,1)}
 .invite .btn:active{transform:scale(.97)}
+/* the quiet twin: the proof, not the ask */
+.invite .btn.btn-quiet{background:none;color:var(--sand);box-shadow:none;
+  border:1px solid rgba(216,205,182,.35);font-weight:500;font-size:13px;
+  margin-left:10px;padding:13px 22px}
+.invite .btn.btn-quiet:hover{border-color:var(--amber);color:var(--amber)}
 .invite .note{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--olive);
   text-transform:uppercase;margin-top:12px}
+@media (max-width:560px){
+  .invite .btn.btn-quiet{margin:10px 0 0;display:inline-flex}
+}
 
 /* THE MORNING AFTER — never show the machine; show what arrives. One warm
    reading lamp, one cream document, assembling itself calmly as you scroll.
@@ -358,8 +366,6 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   .stem{width:146px;height:40px}
   .doc{width:106px}
   .sndbtn{right:12px;bottom:12px;padding:6px 10px;font-size:8px}
-  /* small screens carry one action, not a menu */
-  .nav a[href="#delivery"]{display:none}
   /* the stage floor hides behind Safari's toolbar — the cue rises to just
      below the fanned papers, inside the visible viewport */
   .touch.packcue{bottom:170px}
@@ -385,8 +391,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
 </a>
 
 <nav class="nav" id="nav" aria-label="Program">
-  <a href="#delivery" style="transition-delay:.0s">The work</a>
-  <a href="/start" style="transition-delay:.15s">Begin a session</a>
+  <a href="/start" style="transition-delay:.0s">Begin a session</a>
 </nav>
 
 <section class="scene" id="delivery" aria-label="This is a delivery">
@@ -497,6 +502,7 @@ h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.02em;margin:0}
   </div>
   <div class="invite">
     <a class="btn" href="/start">Begin a session</a>
+    <a class="btn btn-quiet" href="/delivery-sample">See exactly what lands in your inbox</a>
     <div class="note">Tell us about the campaign · we reply with an approach and a price range</div>
   </div>
 </section>
@@ -668,7 +674,7 @@ window.CH=(function(){
       /* let the headline breathe — the reel arrives after it's been read.
          If the user has scrolled on, the wheel is waiting when they return. */
       setTimeout(function(){document.getElementById('reelteaser').classList.add('show');
-        window.rtStart();}, reduce?0:2200);}, reduce?0:BEAT);
+        window.rtStart();}, reduce?0:1200);}, reduce?0:BEAT);
     }, reduce?50:rows.length*BEAT*0.7+BEAT+430);
   }
 
