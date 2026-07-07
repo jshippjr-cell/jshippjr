@@ -37,6 +37,11 @@
       {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
       <a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
       <a class="btn" href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
+      {% if kickoff_pending %}
+      <form method="post" action="/opportunity/{{ row['id'] }}/start-production" style="margin:0">
+        <button class="btn-live" type="submit" title="The client approved — the workspace is in Kickoff. Confirm the handoff to begin Production.">🚀 Start production <span class="live-dot"></span></button>
+      </form>
+      {% endif %}
       <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
     </div>
     <div class="big-num" data-fit-pct="{{ row['alignment']|round|int }}">{{ row['alignment']|pct }}</div>

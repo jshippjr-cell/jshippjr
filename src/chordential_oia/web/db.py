@@ -341,6 +341,11 @@ _PROJECT_COLUMNS = {
     "share_token": "TEXT",
     # Buyer link threaded from the opportunity (see DISCOVERY_INTELLIGENCE_LINEAGE.md).
     "agency_id": "INTEGER",
+    # ADR-0018 Phase 4: the Kickoff→Production gate. A project created by a client's
+    # Commercial approval sits in KICKOFF until the operator confirms "Start production"
+    # (this stamp). Existing/legacy projects have no approved review, so they skip Kickoff
+    # entirely and read as Production — this column staying null never regresses them.
+    "kickoff_completed_at": "TEXT",
 }
 
 # Buyer link migrated onto older opportunities / campaigns the same idempotent way.

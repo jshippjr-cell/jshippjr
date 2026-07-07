@@ -71,9 +71,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   (`commercial_reviews`), rendered inline in the workspace as the brief's continuation, with
   a client electronic approval (`commercial_approvals`) that advances the phase to Kickoff.
   Operator decision: freeze-at-release + operator-released (see ADR-0018).
-- **P2–P5 (planned):** producer-voiced Terms engine (basic version shipped in P1) →
-  commitment/audit enrichment + DocuSign seam → Kickoff stage → adaptive procurement +
-  delivery unification. See `docs/client-workspace-principles.md`; ADR-0018 for decisions.
+- **P4 (done):** **Kickoff — the Production Readiness Workspace** (`web/kickoff.py`). The
+  client's Commercial approval is the **award trigger**: it creates the project and the
+  workspace enters KICKOFF (gated from PRODUCTION by `projects.kickoff_completed_at`, which the
+  operator stamps via "Start production"). A concierge handoff, not a form — campaign summary,
+  production checklist, team, communication, milestones, and a "everything is ready" state,
+  all projected from CI + the approved Review + the project. Legacy won projects (no approved
+  review) skip Kickoff → Production, unchanged.
+- **P2, P3, P5 (planned):** producer-voiced Terms engine (basic shipped in P1) →
+  commitment/audit enrichment + DocuSign seam → adaptive procurement + delivery unification.
+  See `docs/client-workspace-principles.md`; ADR-0018 for decisions.
 - **Later:** CI → Relationship Intelligence (CI accumulates per client across campaigns).
 
 ## Recently completed (this working stretch)

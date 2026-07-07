@@ -72,10 +72,18 @@ def compute_phase(signals: dict) -> str:
     so this function is already shaped for them without special-casing today."""
     if signals.get("archived"):
         return ARCHIVE
-    if signals.get("has_project"):
-        return DELIVERY if signals.get("delivered") else PRODUCTION
-    if signals.get("commercial_approved"):
+    if signals.get("has_project") and signals.get("delivered"):
+        return DELIVERY
+    # A project created by the client's Commercial approval sits in KICKOFF (the
+    # Sales→Production handoff) until the operator confirms Start Production. A legacy/
+    # manually-created project (no approved review) skips Kickoff and reads as Production.
+    if (signals.get("has_project") and signals.get("commercial_approved")
+            and not signals.get("kickoff_complete")):
         return KICKOFF
+    if signals.get("has_project"):
+        return PRODUCTION
+    if signals.get("commercial_approved"):
+        return KICKOFF          # approved but the project isn't created yet (safety)
     if signals.get("commercial_ready"):
         return COMMERCIAL
     if signals.get("brief_ready"):

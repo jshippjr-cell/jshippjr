@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ opp['client'] }} · Chordential Workspace</title>
   <link rel="icon" href="/static/public/wordmark-dark.png">
-  {% if doc or review %}
-  {# The brief / commercial review fold in inline (ADR-0018): their styles travel with them. #}
+  {% if doc or review or k %}
+  {# Brief / commercial review / kickoff fold in inline (ADR-0018): their styles travel with them. #}
   <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
   <link rel="stylesheet" href="/static/brief.css?v={{ static_v }}">
   {% endif %}
@@ -77,6 +77,14 @@
     {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
   </div>
   {% include "_commercial_document.html" %}
+  <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+
+  {% elif k %}
+  {# ── Kickoff: the Production Readiness Workspace — the concierge handoff (same URL). ── #}
+  <div class="ws-strip">
+    {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
+  </div>
+  {% include "_kickoff_document.html" %}
   <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
 
   {% else %}

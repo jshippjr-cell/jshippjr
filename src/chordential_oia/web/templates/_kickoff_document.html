@@ -1,0 +1,113 @@
+{# The Production Readiness Workspace (ADR-0018, Phase 4) — Kickoff as a concierge handoff.
+   Answers one question: "Is everything we need to begin creating?" Context: k (the readiness
+   dict from kickoff.build_readiness), review_client, review_project. Reuses brief.css. #}
+<div class="page kickoff">
+  <div class="letterhead">
+    <img src="/static/public/wordmark-dark.png" alt="Chordential">
+    <div class="doc-kicker">Production Readiness</div>
+    <div class="doc-title">{{ k.summary.campaign }}</div>
+    <div class="doc-sub">Your production team is taking it from here.</div>
+  </div>
+
+  <div class="body">
+    {% if k.all_ready %}
+    {# The emotional payoff — nothing left for the client to manage. #}
+    <section class="ko-ready">
+      <div class="ko-ready-check">✓</div>
+      <h2>Everything is ready.</h2>
+      <p>Your production team has everything it needs to begin. You'll hear from us the moment
+        your first creative milestone is ready — there's nothing you need to manage until then.</p>
+    </section>
+    {% else %}
+    <section class="block ko-actions">
+      <h2 class="sec">A couple of things from you</h2>
+      <ul class="ko-todo">
+        {% for a in k.client_actions %}<li>{{ a.label }}</li>{% endfor %}
+      </ul>
+      <p class="muted small">Once these are in, your team begins — and there's nothing further to manage.</p>
+    </section>
+    {% endif %}
+
+    <section class="block">
+      <h2 class="sec">Campaign summary</h2>
+      <table class="manifest"><tbody>
+        <tr><td style="width:172px"><b>Campaign</b></td><td>{{ k.summary.campaign }}</td></tr>
+        <tr><td><b>Producer</b></td><td>{{ k.summary.producer }}</td></tr>
+        <tr><td><b>Target delivery</b></td><td>{{ k.summary.delivery_date }}</td></tr>
+        {% if k.summary.scope %}<tr><td><b>Approved scope</b></td><td>{{ k.summary.scope }}</td></tr>{% endif %}
+        {% if k.summary.budget %}<tr><td><b>Budget</b></td><td>{{ k.summary.budget }}</td></tr>{% endif %}
+        <tr><td><b>Rights</b></td><td>{{ k.summary.rights }}</td></tr>
+      </tbody></table>
+    </section>
+
+    <section class="block">
+      <h2 class="sec">Production checklist</h2>
+      <ul class="ko-check">
+        {% for item in k.checklist %}
+        <li class="s-{{ item.state }}">
+          <span class="ko-mark">{{ '✓' if item.state == 'done' else ('•' if item.state == 'pending' else '—') }}</span>
+          <span class="ko-lab">{{ item.label }}{% if item.na_note and item.state == 'na' %} <span class="muted">· {{ item.na_note }}</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="block">
+      <h2 class="sec">Meet your team</h2>
+      <div class="ko-team">
+        {% for m in k.team %}
+        <div class="ko-member">
+          <div class="ko-role">{{ m.role }}</div>
+          <div class="ko-name">{{ m.name }}</div>
+          {% if m.email %}<a class="ko-email" href="mailto:{{ m.email }}">{{ m.email }}</a>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="sec">How we'll work together</h2>
+      <table class="manifest"><tbody>
+        <tr><td style="width:172px"><b>Primary contact</b></td><td>{{ k.communication.primary_contact }}</td></tr>
+        <tr><td><b>Review cadence</b></td><td>{{ k.communication.review_cadence }}</td></tr>
+        <tr><td><b>Turnaround</b></td><td>{{ k.communication.turnaround }}</td></tr>
+        <tr><td><b>Revisions</b></td><td>{{ k.communication.revision_policy }}</td></tr>
+      </tbody></table>
+    </section>
+
+    {% if k.upcoming %}
+    <section class="block">
+      <h2 class="sec">Upcoming milestones</h2>
+      <table class="manifest"><tbody>
+        {% for m in k.upcoming %}
+        <tr><td style="width:220px"><b>{{ m.stage }}</b></td><td>{{ m.when }}</td></tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+  </div>
+</div>
+<style>
+  .kickoff .ko-ready{background:linear-gradient(165deg,#f6efe6,#efe6d8);border:1px solid #e4d9c6;
+    border-radius:14px;padding:30px 28px;text-align:center;margin:0 0 26px}
+  .kickoff .ko-ready-check{width:52px;height:52px;border-radius:50%;background:#2f6a34;color:#fff;
+    font-size:26px;line-height:52px;margin:0 auto 12px}
+  .kickoff .ko-ready h2{font-size:24px;color:var(--wine,#44161E);margin:0 0 8px}
+  .kickoff .ko-ready p{color:#5a5550;font-size:15px;line-height:1.6;max-width:52ch;margin:0 auto}
+  .kickoff .ko-todo{margin:6px 0 0;padding-left:18px;color:#7a3a12;font-weight:600}
+  .kickoff .ko-check{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px}
+  .kickoff .ko-check li{display:flex;gap:11px;align-items:baseline;font-size:14.5px}
+  .kickoff .ko-mark{width:18px;text-align:center;font-weight:700}
+  .kickoff .s-done .ko-mark{color:#2f6a34}
+  .kickoff .s-done .ko-lab{color:#33302f}
+  .kickoff .s-pending .ko-mark{color:#c8862b}
+  .kickoff .s-pending .ko-lab{color:#7a746c}
+  .kickoff .s-na .ko-mark,.kickoff .s-na .ko-lab{color:#a49c92}
+  .kickoff .ko-team{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .kickoff .ko-member{border:1px solid #E7DECE;border-radius:10px;padding:13px 15px}
+  .kickoff .ko-role{font-family:var(--mono,monospace);font-size:9.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:#9a5a1a;font-weight:700}
+  .kickoff .ko-name{font-weight:650;font-size:15px;margin-top:2px;color:#211d1b}
+  .kickoff .ko-email{font-size:12.5px;color:#546671;text-decoration:none}
+  .kickoff .ko-email:hover{text-decoration:underline}
+</style>

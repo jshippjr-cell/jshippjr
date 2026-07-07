@@ -61,7 +61,7 @@ from ..matching import match_talent
 from . import (
     campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
-    enrichment, intake_lanes, intelligence, meeting_scheduler, meetings_service,
+    enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
     music_opportunity, opportunity_signals, outreach_engine, relationships, scheduler,
     seed, signals, simulator, sources, triage, webpush, workspace,
 )
@@ -1883,6 +1883,14 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting = db.meeting_for_opp(conn, opp_id)
         # Pending client Discovery Requests to review + schedule (ADR-0016).
         discovery_requests = db.list_discovery_requests(conn, opp_id, status="new")
+        # Kickoff → Production gate: a project created by client approval sits in Kickoff
+        # until the operator confirms Start Production (ADR-0018, Phase 4).
+        kickoff_pending = (
+            project is not None
+            and (project["kickoff_completed_at"] if "kickoff_completed_at" in project.keys()
+                 else None) is None
+            and db.current_commercial_review(conn, opp_id) is not None
+            and db.current_commercial_review(conn, opp_id)["status"] == "approved")
         # Open Meeting Proposals — times offered, awaiting the client's pick (or unsent drafts).
         open_proposals = [p for p in db.list_meeting_proposals(conn, opp_id)
                           if p["status"] in ("draft", "sent")]
@@ -1914,6 +1922,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
+        kickoff_pending=kickoff_pending,
     )
 
 
@@ -2390,9 +2399,12 @@ def _workspace_signals(conn, opp, project):
     delivered = bool(project) and (project["status"] or "").lower() in ("delivered", "complete")
     # Commercial: released (operator opened the offer) → COMMERCIAL; approved → KICKOFF.
     review = db.current_commercial_review(conn, opp_id)
+    kickoff_complete = bool(project) and bool(
+        project["kickoff_completed_at"] if "kickoff_completed_at" in project.keys() else None)
     return {
         "has_project": project is not None,
         "delivered": delivered,
+        "kickoff_complete": kickoff_complete,
         "commercial_approved": bool(review) and review["status"] == "approved",
         "commercial_ready": bool(review) and review["status"] == "released",
         "brief_ready": brief_ready,
@@ -2422,21 +2434,22 @@ def client_workspace(request: Request, token: str):
         # (intro/discovery → scheduling; production/delivery → the portal, folded in P5).
         brief_ctx = None
         review = None
+        readiness = None
         approved_note = ""
         if phase == workspace.BRIEF:
             brief_ctx = _live_brief_ctx(conn, opp["id"])
-        elif phase in (workspace.COMMERCIAL, workspace.KICKOFF):
-            # The frozen Commercial Review — the agreement the client approves (or approved).
+        elif phase == workspace.COMMERCIAL:
+            # The frozen Commercial Review — the agreement the client approves.
             cr = db.current_commercial_review(conn, opp["id"])
             if cr is not None:
                 review = commercial.review_from_json(cr["doc_json"])
-                if cr["status"] == "approved":
-                    ap = db.approval_for_opp(conn, opp["id"])
-                    who = (ap["approver_name"] if ap and ap["approver_name"] else "you")
-                    approved_note = (f"Approved by {who}. We're preparing your kickoff — "
-                                     f"you'll hear from us shortly.")
+        elif phase == workspace.KICKOFF:
+            # The Production Readiness Workspace — the concierge handoff.
+            cr = db.current_commercial_review(conn, opp["id"])
+            ci_view, _met = _brief_ci_context(conn, opp)
+            readiness = kickoff.build_readiness(conn, db, opp, project, cr, ci_view=ci_view)
         stage_url = ""
-        if brief_ctx is None and review is None:
+        if brief_ctx is None and review is None and readiness is None:
             stage_url = {
                 workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
                 workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
@@ -2452,7 +2465,7 @@ def client_workspace(request: Request, token: str):
                   project=project, phase=phase, phase_label=workspace.PHASE_LABEL[phase],
                   phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
                   stage_url=stage_url, review=review, approve_url=approve_url,
-                  approved_note=approved_note,
+                  approved_note=approved_note, k=readiness,
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
                   **(brief_ctx or {}))
 
@@ -2516,6 +2529,33 @@ def commercial_release(opp_id: int):
     return RedirectResponse(f"/opportunity/{opp_id}/commercial", status_code=303)
 
 
+@app.post("/opportunity/{opp_id}/start-production")
+def start_production(opp_id: int):
+    """The operator confirms the Sales→Production handoff is complete (ADR-0018, Phase 4):
+    stamps the project's kickoff gate, advancing the workspace from Kickoff into Production.
+    'The machine prepared readiness; the human commits to starting.'"""
+    from datetime import datetime, timezone
+    conn = db.connect()
+    try:
+        project = db.project_for_opp(conn, opp_id)
+        if project is None:
+            return HTMLResponse("No project yet", status_code=404)
+        conn.execute("UPDATE projects SET kickoff_completed_at = ? WHERE id = ?",
+                     (datetime.now(timezone.utc).isoformat(), project["id"]))
+        conn.commit()
+        if campaigns.workspace_enabled():
+            try:
+                opp = db.get_opportunity(conn, opp_id)
+                ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
+                db.add_ci_event(conn, ci["id"], actor="operator", verb="production_started",
+                                facet="commercial", key="kickoff", source="kickoff")
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
+
+
 @app.post("/workspace/{token}/approve")
 def workspace_approve(request: Request, token: str, approver_name: str = Form(""),
                       approver_email: str = Form(""), scope_ok: str = Form(""),
@@ -2541,6 +2581,11 @@ def workspace_approve(request: Request, token: str, approver_name: str = Form(""
                 user_agent=request.headers.get("user-agent", ""),
                 scope_ok=bool(scope_ok), pricing_ok=bool(pricing_ok), terms_ok=bool(terms_ok))
             db.set_commercial_review_status(conn, review["id"], "approved")
+            # ADR-0018: the client's approval is the primary AWARD TRIGGER — it creates the
+            # project (in Kickoff), so the Sales→Production handoff has something real to
+            # organize (team, milestones, invoices). The machine prepares; the client
+            # committed; the operator confirms Start Production to enter Production.
+            _ensure_project_for_opp(conn, opp["id"])
             if campaigns.workspace_enabled():
                 try:
                     ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
