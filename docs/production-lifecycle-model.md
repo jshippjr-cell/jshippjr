@@ -342,6 +342,73 @@ every gate's timestamp.
 
 ---
 
+## 9. Ratified production principles (operator, 2026-07-08)
+
+1. **ChordOS is not project management software.** It removes uncertainty for agencies; it
+   does not manage tasks. Every screen must answer: *"what uncertainty did we remove?"* The
+   client feels things simply becoming true.
+2. **Production revolves around Versions, not tasks.** The Version is the atomic unit;
+   Presentation, Feedback, Decision, Round, Approval, Conform, and Creative Lock all attach
+   to it. The system keeps the history of creative thinking, not a task list.
+3. **Direction is a first-class object** above the Version chain: a campaign explores
+   Directions; each carries its own versions and its own fate — and a rejected Direction
+   records *why* (rejection reasons feed the feedback dictionary).
+4. **Relationship Intelligence explains the client; Campaign Intelligence explains the
+   project.** Rounds-to-lock norms, the real approver, the feedback dictionary, composer
+   chemistry, delivery/payment/procurement/renewal history — every new engagement begins
+   already knowing how this client likes to work.
+5. **The client never thinks about software.** They progress through a relationship, not an
+   application. Every page reads "someone already thought of this," never "complete step 4."
+
+## 10. Second pass — what still lived only in the EP's head
+
+*The audit of 2026-07-08: tacit knowledge identified for the model, in three families.*
+
+**A. The state the EP always knows (uncertainty machinery)**
+1. **Whose court is the ball in** — every engagement, at every instant, is exactly one of
+   *we-owe-them / they-owe-us / nothing-until-a-scheduled-date*, each with an AGE. The EP's
+   entire mental dashboard; the operational form of "what uncertainty did we remove."
+2. **The two calendars** — the published (client-facing, padded) schedule vs. the real
+   (internal, buffered) one. Buffer burn-down — not milestone status — is schedule health.
+3. **The chase protocol** — client silence is a STATE with an age and an escalation ladder,
+   tone-calibrated per client. Silence-watching is machine work currently done by anxiety.
+
+**B. The judgment calls (decision points the first pass missed)**
+4. **Defend or comply** — feedback triage is three-way: take literally / interpret / push
+   back ("protecting the work"). The pushback is a decision point with relationship stakes;
+   its outcome is high-grade RI.
+5. **The reconciliation demand** — conflicting stakeholder notes do not start a round; the
+   round clock starts at CONSOLIDATED notes. Near-contractual; belongs in Terms language.
+6. **Fidelity calibration** — how finished a version should SOUND for this client at this
+   stage (too polished invites premature mix notes; too rough invites misjudgment). Per-
+   client RI dial.
+7. **Presentation strategy** — play order as persuasion; the deliberate contrast direction;
+   play-it-twice; and the per-client fact of decides-in-the-room vs. listens-alone
+   (present-live vs. send-ahead).
+8. **Start-before-paper** — the per-client trust posture that gates beginning work before
+   the PO/deposit clears. Quantifiable from payment history + relationship depth.
+
+**C. The memory that compounds (RI gaps)**
+9. **People move** — RI must anchor to PEOPLE, with employer as a mutable attribute. The CD
+   who champions the house will change shops; that migration is the warmest lead in the
+   business. (Amendment to the agency-anchored buyer graph.)
+10. **The free-extra ledger** — what was given away free last time (extra cutdown, mercy
+    round) is priced-in intelligence for the next Commercial Review. Production feeds
+    Commercial.
+11. **The hero element** — the one musical element that IS the idea, named at Direction
+    selection ("the thesis of this track is X"), defended through rounds, preserved through
+    conforms.
+12. **Aftercare & the usage watch** — post-delivery watch conditions: the aircheck, usage-
+    vs-license compliance, award windows, and reactivation triggers (new campaign, award
+    win, the CD moves). The renewal calendar is one member of this family, not the whole.
+
+**Ranking (load-bearing first):** the ball-in-court state (#1), person-anchored RI (#9), and
+the round-clock rule (#5) are structural; several others (two calendars, fidelity
+calibration) live as single CI/RI fields long before they deserve machinery. Resist building
+all twelve at once.
+
+---
+
 *Next step (after agreement): design the Production OS around this model — phases as the
 workspace's production-era content, the version chain as the spine, the round ledger and
 Creative Lock as first-class state, the business track as a parallel lane, and the RI capture
