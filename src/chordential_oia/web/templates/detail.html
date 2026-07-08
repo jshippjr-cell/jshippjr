@@ -4,12 +4,11 @@
 {% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
 {% block content %}
 
-<div class="detail-head card">
-  <div>
+<div class="opp-hero" data-arrive>
+  <div class="opp-hero-main">
     <div class="pill-row">
-      {{ action_pill(row['action']) }} {{ tier_pill(row['tier']) }} {{ status_pill(row['status']) }}
-      {{ strat_pill(sv.tier, sv.score) }}
-      <span class="pill ghost">{{ row['confidence'] }} confidence</span>
+      {{ tier_pill(row['tier']) }}
+      <a class="fit-chip" href="/opportunity/{{ row['id'] }}/qualification" title="Qualification fit — full rationale">{{ row['alignment']|pct }} fit</a>
     </div>
     <h1 class="detail-title">{{ row['need'] }}
       <a class="link tiny muted" href="#" onclick="document.getElementById('identity-edit').open=true;return false" title="Edit title / buyer">✎</a>
@@ -18,8 +17,18 @@
       <a href="/buyer/{{ row['client']|urlencode }}">{{ row['client'] }}</a>
       <span class="muted">· {{ row['buyer_type'].replace('_',' ')|title }}{% if row['location'] %} · {{ row['location'] }}{% endif %}</span>
     </div>
-    {# Editable identity — the automated title/buyer can be wrong; the human correction
-       is authoritative and re-evaluates the opportunity (ADR-0013). #}
+    {% set has_contact = row['contact_name'] or row['contact_email'] or row['contact_phone'] or row['contact_linkedin'] or row['contact_role'] %}
+    <div class="contact-line">
+      {% if has_contact %}
+      <strong>{{ row['contact_name'] or 'Contact' }}</strong>{% if row['contact_role'] %} · {{ row['contact_role'] }}{% endif %}
+      {% if row['contact_phone'] %} · <a class="link" href="tel:{{ row['contact_phone'] }}">{{ row['contact_phone'] }}</a>{% endif %}
+      {% if row['contact_email'] %} · <a class="link" href="mailto:{{ row['contact_email'] }}">{{ row['contact_email'] }}</a>{% endif %}
+      {% if row['contact_linkedin'] %} · <a class="link" href="{{ row['contact_linkedin'] }}" target="_blank" rel="noopener">LinkedIn ↗</a>{% endif %}
+      · <a class="link muted" href="/opportunity/{{ row['id'] }}/outreach">✎ Edit</a>
+      {% else %}
+      <span class="muted">No contact yet — <a class="link" href="/opportunity/{{ row['id'] }}/outreach">add one</a>.</span>
+      {% endif %}
+    </div>
     <details id="identity-edit" class="identity-edit">
       <summary class="muted small">✎ Correct the title or buyer</summary>
       <form method="post" action="/opportunity/{{ row['id'] }}/identity" class="identity-form">
@@ -29,99 +38,29 @@
       </form>
     </details>
   </div>
-  <div class="detail-fit">
-    {# The Campaign Brief is the primary artifact generated from Opportunity + Campaign
-       Intelligence — the deliverable we send to agencies. Primary CTA, upper-right;
-       Schedule Discovery rides next to it (opens in the drawer) when no call exists. #}
-    <div class="detail-cta">
-      {% if row['url'] %}<a class="btn ghost" href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
-      <a class="btn" href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
-      <a class="btn" href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
-      {% if row['share_token'] %}<a class="btn ghost" href="/workspace/{{ row['share_token'] }}" title="The client's one durable link — what they see right now">🌐 Client workspace</a>{% endif %}
-      {% if kickoff_pending %}
-      <form method="post" action="/opportunity/{{ row['id'] }}/start-production" style="margin:0">
-        <button class="btn-live" type="submit" title="The client approved — the workspace is in Kickoff. Confirm the handoff to begin Production.">🚀 Start production <span class="live-dot"></span></button>
-      </form>
-      {% endif %}
-      <a class="btn-live" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief <span class="live-dot"></span></a>
-    </div>
-    <div class="big-num" data-fit-pct="{{ row['alignment']|round|int }}">{{ row['alignment']|pct }}</div>
-    <div class="muted">qualification fit</div>
+  <div class="opp-hero-side">
+    {% if row['share_token'] %}<a class="btn" href="/workspace/{{ row['share_token'] }}" title="The client's one durable link — what they see right now">🌐 Client workspace</a>{% endif %}
+    <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief</a>
+    <details class="acts-more">
+      <summary class="btn ghost">⋯ Actions</summary>
+      <div class="acts-menu">
+        <a href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
+        <a href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
+        {% if row['url'] %}<a href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
+        {% if project_id %}<a href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
+        {% if kickoff_pending %}
+        <form method="post" action="/opportunity/{{ row['id'] }}/start-production" style="margin:0">
+          <button type="submit" title="The client approved — confirm the handoff to begin Production.">🚀 Start production</button>
+        </form>
+        {% endif %}
+      </div>
+    </details>
   </div>
 </div>
 
-{# ── Contact-first: tap-to-act links pulled to the top (ruling #7) ───────── #}
-{% set has_contact = row['contact_name'] or row['contact_email'] or row['contact_phone'] or row['contact_linkedin'] or row['contact_role'] %}
-<div class="card contact-card">
-  {% if has_contact %}
-  <div class="contact-row">
-    <div class="contact-id">
-      <span class="contact-ico">👤</span>
-      <strong>{{ row['contact_name'] or 'Contact' }}</strong>
-      {% if row['contact_role'] %}<span class="muted">· {{ row['contact_role'] }}</span>{% endif %}
-    </div>
-    <div class="contact-acts">
-      {% if row['contact_phone'] %}<a class="btn primary tiny" href="tel:{{ row['contact_phone'] }}">📞 {{ row['contact_phone'] }}</a>{% endif %}
-      {% if row['contact_email'] %}<a class="btn tiny" href="mailto:{{ row['contact_email'] }}">✉ {{ row['contact_email'] }}</a>{% endif %}
-      {% if row['contact_linkedin'] %}<a class="btn ghost tiny" href="{{ row['contact_linkedin'] }}" target="_blank" rel="noopener">in LinkedIn ↗</a>{% endif %}
-      <a class="btn ghost tiny" href="/opportunity/{{ row['id'] }}/outreach">✎ Edit</a>
-    </div>
-  </div>
-  {% else %}
-  <p class="muted">No contact captured yet —
-    <a class="link" href="/opportunity/{{ row['id'] }}/outreach">add it on the outreach tab</a>.</p>
-  {% endif %}
-</div>
-
-{# ── Guided-not-gated stepper + Delivery-doc milestone (ruling #7) ───────── #}
-<div class="card stepper-card">
-  <ol class="stage-stepper">
-    {% for s in stepper_stages %}
-    <li class="stage-step{% if row['status']==s %} is-current{% endif %}{% if row['status'] in ['Lost','Passed'] %} is-muted{% endif %}">
-      <span class="stage-dot"></span>{{ stage_label(s) }}
-    </li>
-    {% endfor %}
-    {% if row['status'] in ['Lost','Passed'] %}
-    <li class="stage-step is-current is-closed"><span class="stage-dot"></span>Closed</li>
-    {% endif %}
-  </ol>
-  <div class="stepper-acts">
-    {% if stepper_next %}
-    <form method="post" action="/opportunity/{{ row['id'] }}/status" class="inline">
-      <input type="hidden" name="status" value="{{ stepper_next }}">
-      <button class="btn primary" type="submit">→ Mark {{ stage_label(stepper_next) }}</button>
-    </form>
-    {% endif %}
-    {% if row['delivery_doc_sent_at'] %}
-    <span class="milestone done">✓ Delivery doc sent · {{ row['delivery_doc_sent_at'][:10] }}</span>
-    {% else %}
-    <form method="post" action="/opportunity/{{ row['id'] }}/delivery-sent" class="inline">
-      <button class="btn ghost tiny" type="submit">Mark delivery doc sent</button>
-    </form>
-    {% endif %}
-  </div>
-</div>
-
-<style>
-.disc-panel{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:center}
-.disc-panel .disc-field{display:flex;flex-direction:column;gap:2px}
-.disc-panel .disc-k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#8a8580)}
-.disc-panel .disc-v{font-weight:600}
-.disc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
-.disc-badge.on{background:#eaf5ea;color:#2f6a34}
-.disc-badge.off{background:#f2ece3;color:#8a7f6e}
-.disc-badge.pending{background:#fdf1e3;color:#9a5a1a}
-.disc-acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
-.dr-item{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;padding:11px 0;border-top:1px solid var(--line,#efe9e0)}
-.dr-item:first-of-type{border-top:0}
-.dr-item .dr-who{font-weight:600}
-.dr-item .dr-acts{margin-left:auto;display:flex;gap:8px}
-.dr-pref{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fdf1e3;color:#9a5a1a}
-</style>
-
-{# ── NEXT (ADR-0020 §6): the deal's one obvious move — decision, not navigation. ── #}
+{# ── NEXT (ADR-0020 §6): the page's ONE accented element — the deal's one obvious move. ── #}
 {% if next_act %}
-<section class="card" id="next" style="border-left:4px solid {{ '#C8552B' if next_act.court == 'you' else '#2F6A34' if next_act.court in ('client','team') else '#8a8580' }}">
+<section class="card next-hero" id="next" style="border-left:4px solid {{ '#C8552B' if next_act.court == 'you' else '#2F6A34' if next_act.court in ('client','team') else '#8a8580' }}">
   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
     <span class="pill {{ 'live' if next_act.court == 'you' }}" style="flex:none">
       {{ 'YOUR MOVE' if next_act.court == 'you' else 'THEIR MOVE' if next_act.court == 'client' else 'IN THE STUDIO' if next_act.court == 'team' else 'ON THE CALENDAR' if next_act.court == 'scheduled' else 'DONE' }}
@@ -143,6 +82,36 @@
 </section>
 {% endif %}
 
+{# ── The state rail — one stage machine, one rendering (unboxed). ── #}
+<div class="stage-rail" data-arrive>
+  <ol class="stage-stepper">
+    {% for s in stepper_stages %}
+    <li class="stage-step{% if row['status']==s %} is-current{% endif %}{% if row['status'] in ['Lost','Passed'] %} is-muted{% endif %}">
+      <span class="stage-dot"></span>{{ stage_label(s) }}
+    </li>
+    {% endfor %}
+    {% if row['status'] in ['Lost','Passed'] %}
+    <li class="stage-step is-current is-closed"><span class="stage-dot"></span>Closed</li>
+    {% endif %}
+  </ol>
+  <div class="stepper-acts">
+    {% if stepper_next %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/status" class="inline">
+      <input type="hidden" name="status" value="{{ stepper_next }}">
+      <button class="btn ghost tiny" type="submit">→ Mark {{ stage_label(stepper_next) }}</button>
+    </form>
+    {% endif %}
+    {% if row['delivery_doc_sent_at'] %}
+    <span class="milestone done">✓ Delivery doc sent · {{ row['delivery_doc_sent_at'][:10] }}</span>
+    {% elif row['status'] in ('Submitted', 'Won') %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/delivery-sent" class="inline">
+      <button class="btn ghost tiny" type="submit">Mark delivery doc sent</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="disc-cluster">
 {# ── Discovery Requests — a client asked for a call (ADR-0016); the operator schedules. ── #}
 {% if discovery_requests %}
 <section class="card" id="discovery-requests">
@@ -229,7 +198,6 @@
 
 {# Opportunity tabs (Overview / Outreach / …) sit above Campaign Intelligence
    so navigation is reachable before the long living record. #}
-{{ opp_subnav(row, 'overview') }}
 
 {# ── Campaign Intake — "Update Intelligence" (ADR-0013): born on and anchored to the
    opportunity, above the Opportunity section + tabs. The living source of truth. ── #}
@@ -291,7 +259,9 @@
      page shows a call only CONTEXTUALLY — the "Upcoming Discovery" panel below, when one
      exists. Intelligence still ingests any transcript/notes through the lanes here. #}
 
-  {# Update Intelligence — one panel, every manual lane, two stances. #}
+  {# Update Intelligence — collapsed to a prompt; opens on demand (auto when empty). #}
+  <details class="ci-intake" {% if ci_view and ci_view.counts.total < 6 %}open{% endif %}>
+  <summary class="ci-intake-summary">✨ Paste a transcript, notes, or an RFP — update intelligence</summary>
   {# data-think: live.js runs the honest thinking veil for exactly the duration
      of the real analyze request; the path tokens name the REAL modules the
      capture propagates through (council ruling — no theater). No JS: plain post. #}
@@ -316,6 +286,7 @@
       <button class="btn primary" type="submit">✨ Analyze &amp; update</button>
     </div>
   </form>
+  </details>
 
   {# Conflicts first — a machine value that disagrees with a human one, never silently applied. #}
   {% for it in ci_view.conflicts %}
@@ -398,13 +369,7 @@
 </section>
 {% endif %}
 
-{# Stage advance lives in the stepper above (single source); the action bar
-   only carries the project shortcut now. #}
-{% if project_id %}
-<div class="action-bar">
-  <a class="btn" href="/project/{{ project_id }}">⚙ Open project</a>
-</div>
-{% endif %}
+{{ opp_subnav(row, 'overview') }}
 
 {% if sv.callout and row['qualified'] %}
 <div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>
@@ -452,12 +417,13 @@
       {% endif %}
     {% endif %}
     <form class="stack" method="post" action="/opportunity/{{ row['id'] }}/status">
-      <label>…or jump to another stage</label>
+      <details class="correct-record"><summary class="muted small">Correct the record — jump to another stage</summary>
       <div class="status-buttons">
         {% for s in PIPELINE_STATES %}
         <button class="btn pill-btn st-{{ status_class(s) }} {{ 'is-current' if row['status']==s }}" name="status" value="{{ s }}">{{ stage_label(s) }}{% if s == 'Lost' %} (lost){% elif s == 'Passed' %} (passed){% endif %}</button>
         {% endfor %}
       </div>
+      </details>
       <label for="ov">Outcome value (for Won deals)</label>
       <input id="ov" type="number" name="outcome_value" step="100" placeholder="e.g. 9000"
              value="{{ row['outcome_value'] or '' }}">
@@ -480,6 +446,7 @@
       <div class="strat-row"><span>Relationship value</span>{{ align_bar((sv.relationship_value*100)|round|int) }}</div>
       <p class="muted small">{{ sv.rationale }}{% if sv.inferred %} <em>(inferred — confirm below)</em>{% endif %}</p>
     </div>
+    <details class="strat-tune"><summary class="muted small">Tune the inputs</summary>
     <form class="strat-form" method="post" action="/opportunity/{{ row['id'] }}/strategic">
       <label>Buyer relationship value</label>
       <select name="buyer_value">
@@ -490,6 +457,7 @@
       <label class="check"><input type="checkbox" name="marquee" {{ 'checked' if sv.marquee }}> Marquee / door-opener buyer</label>
       <button class="btn primary" type="submit">Recompute strategic value</button>
     </form>
+    </details>
   </div>
 </section>
 {% endblock %}

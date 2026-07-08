@@ -949,3 +949,44 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .sr-ev-approval{border-color:#cfe6cf;background:#f4faf4}
 .sr-ev .sr-at{font-size:10.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){.sr-dot{animation:none}}
+
+/* ── Opportunity Workspace redesign (overnight sprint, docs/opportunity-redesign-review.md) ──
+   One accented element (NEXT), unboxed hero + rail, quiet footer, 120ms disclosures. */
+.opp-hero{display:flex;gap:26px;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;padding:6px 4px 18px;border-bottom:1px solid var(--border,#e7e1d8);margin-bottom:16px}
+.opp-hero .detail-title{font-size:27px;letter-spacing:-.3px;margin:8px 0 2px}
+.opp-hero .contact-line{margin-top:8px;font-size:13px;color:var(--ink,#3a3531)}
+.opp-hero .contact-line strong{font-weight:650}
+.fit-chip{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
+  background:var(--surface-2,#f2ece3);color:#6e625b;text-decoration:none}
+.fit-chip:hover{background:#e9e1d4}
+.opp-hero-side{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.acts-more{position:relative}
+.acts-more summary{list-style:none;cursor:pointer;user-select:none}
+.acts-more summary::-webkit-details-marker{display:none}
+.acts-more[open] .acts-menu{animation:acts-in .12s ease}
+@keyframes acts-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.acts-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:230px;
+  background:var(--card,#fff);border:1px solid var(--border,#e7e1d8);border-radius:11px;
+  box-shadow:0 14px 34px rgba(40,25,20,.12);padding:6px;display:flex;flex-direction:column}
+.acts-menu a,.acts-menu button{display:block;width:100%;text-align:left;padding:9px 12px;
+  border:0;background:none;font:inherit;font-size:13.5px;border-radius:8px;color:inherit;
+  text-decoration:none;cursor:pointer}
+.acts-menu a:hover,.acts-menu button:hover{background:var(--surface-2,#f6f0e9)}
+.next-hero{margin-bottom:16px}
+.stage-rail{display:flex;gap:14px;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;padding:2px 4px 14px;margin-bottom:8px}
+.stage-rail .stage-stepper{margin:0}
+.disc-cluster .card{box-shadow:none}
+.correct-record>summary,.strat-tune>summary,.ci-intake>summary{cursor:pointer}
+.ci-intake>summary.ci-intake-summary{font-weight:600;font-size:13.5px;color:var(--accent,#c8552b);
+  padding:10px 0;list-style:none}
+.ci-intake>summary::-webkit-details-marker{display:none}
+details.ci-intake[open]>summary{opacity:.55}
+.correct-record{margin:6px 0}
+@media (prefers-reduced-motion: reduce){.acts-more[open] .acts-menu{animation:none}}
+/* Critique loop 2: ONE ember on the deal page — the NEXT action. Everything else quiets. */
+.ci-panel .btn.primary, .ci-update .btn.primary{background:transparent;color:var(--accent,#c8552b);
+  border:1px solid var(--accent,#c8552b);box-shadow:none}
+.ci-panel .btn.primary:hover, .ci-update .btn.primary:hover{background:rgba(200,85,43,.08)}
+.ci-intake[open]>.ci-intake-summary{opacity:.45;font-size:12px}
