@@ -46,6 +46,7 @@
       <div class="acts-menu">
         <a href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
         <a href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
+        <a href="/opportunity/{{ row['id'] }}/procurement">📑 Procurement</a>
         {% if row['url'] %}<a href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
         {% if project_id %}<a href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
         {% if kickoff_pending %}

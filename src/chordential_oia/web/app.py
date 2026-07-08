@@ -62,8 +62,8 @@ from . import (
     campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
-    music_opportunity, next_action, opportunity_signals, outreach_engine, producer_learning,
-    production, relationships,
+    music_opportunity, next_action, opportunity_signals, outreach_engine, procurement,
+    producer_learning, production, relationships,
     scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
@@ -105,6 +105,31 @@ templates.env.globals["machine_on"] = scheduler.autonomous_engines_on
 # on Render once the persistent disk is removed for the zero-downtime (blue-green)
 # cutover — durable storage needs object storage (S3/R2). Acceptable for now.
 UPLOAD_DIR = os.environ.get("CHORDENTIAL_UPLOAD_DIR") or os.path.join(_HERE, "uploads")
+
+# The Company Profile (ADR-0022) — entered once, the source for every procurement document.
+_COMPANY_PROFILE_FIELDS = [
+    {"key": "legal_name", "label": "Legal company name", "group": "Identity"},
+    {"key": "dba", "label": "DBA", "group": "Identity"},
+    {"key": "website", "label": "Website", "group": "Identity"},
+    {"key": "business_address", "label": "Business address", "group": "Identity"},
+    {"key": "mailing_address", "label": "Mailing address", "group": "Identity"},
+    {"key": "ein", "label": "Tax ID / EIN", "group": "Tax"},
+    {"key": "tax_class", "label": "Tax classification", "group": "Tax"},
+    {"key": "bank_name", "label": "Bank name", "group": "Banking"},
+    {"key": "routing", "label": "Routing number", "group": "Banking"},
+    {"key": "account", "label": "Account number", "group": "Banking"},
+    {"key": "account_type", "label": "Account type", "group": "Banking"},
+    {"key": "remittance_address", "label": "Remittance address", "group": "Banking"},
+    {"key": "insurance_carrier", "label": "Insurance carrier", "group": "Insurance"},
+    {"key": "insurance_limits", "label": "Insurance limits", "group": "Insurance"},
+    {"key": "primary_contact", "label": "Primary contact", "group": "Contacts"},
+    {"key": "finance_contact", "label": "Finance / AP contact", "group": "Contacts"},
+    {"key": "procurement_contact", "label": "Procurement contact", "group": "Contacts"},
+    {"key": "capabilities", "label": "Capabilities statement", "group": "Profile"},
+    {"key": "naics", "label": "NAICS codes (optional)", "group": "Profile"},
+    {"key": "uei_sam", "label": "UEI / SAM (optional)", "group": "Profile"},
+    {"key": "duns", "label": "DUNS (legacy, optional)", "group": "Profile"},
+]
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Audio uploads we accept for relevant-work samples.
@@ -2107,6 +2132,156 @@ def opp_intelligence_conflict(opp_id: int, field_id: str = Form(...),
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Procurement Intelligence (ADR-0022) — capture → adapt → generate → onboard → learn.
+# ChordOS prepares clients for procurement; it never integrates with their systems.
+# --------------------------------------------------------------------------- #
+@app.get("/opportunity/{opp_id}/procurement", response_class=HTMLResponse)
+def procurement_workspace(request: Request, opp_id: int):
+    """The Procurement Workspace: an adaptive checklist assembled from what THIS client
+    actually requires (discovered from Campaign Intelligence), the document generation engine,
+    readiness, the portal-onboarding action, and the audit timeline."""
+    if not campaigns.workspace_enabled():
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        # Discover on load (idempotent) + pre-load from this client's history the first time.
+        procurement.seed_from_history(conn, opp_id)
+        procurement.discover_from_ci(conn, opp_id)
+        view = {
+            "row": row, "opp_id": opp_id,
+            "readiness": procurement.readiness(conn, opp_id),
+            "checklist": procurement.checklist(conn, opp_id),
+            "portal": procurement.portal_action(conn, opp_id),
+            "timeline": procurement.timeline(conn, opp_id),
+            "profile": db.get_company_profile(conn),
+            "profile_complete": bool((db.get_company_profile(conn) or {}).get("legal_name")),
+            "vocab": procurement.VOCAB, "statuses": procurement.STATUSES,
+            "status_label": procurement.STATUS_LABEL,
+        }
+    finally:
+        conn.close()
+    return render(request, "procurement.html", nav="pipeline", **view)
+
+
+@app.post("/opportunity/{opp_id}/procurement/add")
+def procurement_add(opp_id: int, req_key: str = Form(...)):
+    """Add a requirement the machine didn't discover — from the known vocabulary."""
+    conn = db.connect()
+    try:
+        if req_key in procurement.VOCAB:
+            procurement.upsert_requirement(conn, opp_id, req_key, source="Operator",
+                                           evidence="Added by the operator")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/procurement", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/procurement/{rid}/generate")
+def procurement_generate(opp_id: int, rid: int):
+    """Generate the artifact from the Company Profile (or a professional placeholder)."""
+    conn = db.connect()
+    try:
+        r = db.get_procurement_requirement_by_id(conn, rid)
+        if r is not None and r["opp_id"] == opp_id:
+            procurement.generate_document(conn, opp_id, r["req_key"])
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/procurement", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/procurement/{rid}/status")
+def procurement_status(opp_id: int, rid: int, status: str = Form(...)):
+    """Advance a requirement — Mark Complete / uploaded / not-required, tracked in the audit."""
+    conn = db.connect()
+    try:
+        r = db.get_procurement_requirement_by_id(conn, rid)
+        if r is not None and r["opp_id"] == opp_id and status in procurement.STATUSES:
+            db.update_procurement_requirement(conn, rid, status=status)
+            procurement.add_event(conn, opp_id, status,
+                                  f"{r['label']} → {procurement.STATUS_LABEL.get(status, status)}")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/procurement", status_code=303)
+
+
+@app.post("/opportunity/{opp_id}/procurement/{rid}/upload")
+async def procurement_upload(opp_id: int, rid: int, file: UploadFile = File(...)):
+    """Upload a client-supplied or externally-signed document against a requirement."""
+    conn = db.connect()
+    try:
+        r = db.get_procurement_requirement_by_id(conn, rid)
+        if r is not None and r["opp_id"] == opp_id and (file.filename or "").strip():
+            ext = os.path.splitext(file.filename)[1].lower()
+            safe = f"procurement_{opp_id}_{r['req_key']}{ext}"
+            try:
+                data = await file.read()
+                os.makedirs(UPLOAD_DIR, exist_ok=True)
+                with open(os.path.join(UPLOAD_DIR, safe), "wb") as fh:
+                    fh.write(data)
+                db.update_procurement_requirement(conn, rid, artifact_ref=f"upload/{safe}",
+                                                  status="uploaded")
+                procurement.add_event(conn, opp_id, "uploaded", f"Uploaded {r['label']}")
+            except OSError:
+                pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/procurement", status_code=303)
+
+
+@app.get("/opportunity/{opp_id}/procurement/{rid}/view", response_class=PlainTextResponse)
+def procurement_view(opp_id: int, rid: int):
+    """View the generated artifact text (a Download, not a page — the PDF is a rendering)."""
+    conn = db.connect()
+    try:
+        r = db.get_procurement_requirement_by_id(conn, rid)
+        text = (r["artifact_text"] if r is not None and r["opp_id"] == opp_id else "") or ""
+    finally:
+        conn.close()
+    if not text:
+        return PlainTextResponse("Not generated yet.", status_code=404)
+    return PlainTextResponse(text)
+
+
+@app.post("/opportunity/{opp_id}/procurement/complete")
+def procurement_complete(opp_id: int):
+    """Mark the whole procurement process complete — and LEARN from it for this client."""
+    conn = db.connect()
+    try:
+        procurement.complete_and_learn(conn, opp_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/procurement", status_code=303)
+
+
+@app.get("/settings/company-profile", response_class=HTMLResponse)
+def company_profile_page(request: Request):
+    """The Company Profile — entered ONCE, the source for every generated procurement
+    document (ADR-0022)."""
+    conn = db.connect()
+    try:
+        profile = db.get_company_profile(conn)
+    finally:
+        conn.close()
+    return render(request, "company_profile.html", nav="pipeline", profile=profile,
+                  fields=_COMPANY_PROFILE_FIELDS)
+
+
+@app.post("/settings/company-profile")
+async def company_profile_save(request: Request):
+    form = await request.form()
+    data = {f["key"]: (form.get(f["key"], "") or "").strip() for f in _COMPANY_PROFILE_FIELDS}
+    conn = db.connect()
+    try:
+        db.save_company_profile(conn, data)
+    finally:
+        conn.close()
+    return RedirectResponse("/settings/company-profile?saved=1", status_code=303)
 
 
 @app.get("/opportunity/{opp_id}/evidence", response_class=HTMLResponse)

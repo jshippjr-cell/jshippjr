@@ -417,6 +417,42 @@ span is still capture-level only (deferred — would need columns threaded from
 `TranscriptSegment`). The deterministic no-LLM fallback is unchanged (still ≤5 fields); EP-
 completeness is an LLM-path gain.
 
+### ADR-0022 — Procurement Intelligence: ChordOS prepares clients for procurement (it never integrates)
+**Status:** Accepted (2026-07-08, operator directive) · Phase 5 of ADR-0018 · Builds on ADR-0013/0021
+**Decision.** The governing principle: **ChordOS does NOT integrate with procurement systems —
+it prepares clients for procurement, as an intelligent coordinator.** Never build for Ariba/
+Coupa/Oracle/SAP/Jaggaer. Five parts, all provider-agnostic (`web/procurement.py`):
+(1) **Discovery, never hardcoded.** Requirements are DISCOVERED from Campaign Intelligence (the
+EP extractor's `procurement_requirements` fact + any procurement signal in captures) and
+normalized against a known VOCABULARY (~23 types: W-9, ACH, COI, NDA, MSA, PO, Net-30/60,
+vendor portal/code/registration, security questionnaire, diversity, banking, tax docs,
+compliance, procurement/AP/legal contacts, company overview). Two clients get two different
+checklists because they said two different things; a client who mentioned nothing gets none.
+(2) **The Company Profile** (`company_profile`, one row) — legal name/DBA/addresses/EIN/bank/
+remittance/insurance/contacts/website/capabilities/NAICS/UEI/DUNS — entered ONCE, the source
+for every generated document.
+(3) **The Document Generation Engine** — deterministic artifacts from the profile (W-9, ACH
+auth, remittance, banking, vendor profile, company overview, cover letter, vendor info,
+contact sheet). When ChordOS can't legally auto-produce a document (COI, MSA, NDA, security
+questionnaire), it generates a **professional placeholder requesting the missing info** —
+never a fake official form.
+(4) **The Procurement Workspace** — an adaptive checklist grouped by category, per-requirement
+Generate/Upload/Replace/View/Mark-complete/Waive, a readiness ring, and — when a vendor portal
+is required — a guided **"upload these to the client's portal"** action (docs, missing, order,
+ETA), never an integration. Every action lands in a `procurement_event` audit timeline.
+(5) **Learning.** On completion the requirement set is snapshotted to `client_procurement_history`;
+a future campaign for the SAME client pre-loads it (`seed_from_history`) — onboarding compounds.
+The Kickoff checklist and Commercial Review consume this real state, replacing their hardcoded
+"Nothing required" placeholders.
+**Why.** Procurement was a stub ("Phase 5 captures + fills this"). It's first-class studio
+work — and the scalable version is capture → adapt → generate, not enterprise P2P integration
+(which would kill a boutique studio's OS). A specific connector only ever slots behind a seam
+if a real customer's money forces it (payments/calendar/Recall pattern).
+**Consequences.** Additive schema (4 tables). Requirements discovered on workspace/Kickoff
+load (idempotent). e-signature (DocuSign) stays deferred behind its seam. Per-fact provenance
+is capture-level. The Company Profile stores sensitive fields (EIN/bank) for the studio's own
+document generation only.
+
 ---
 
 ## Adding a new ADR

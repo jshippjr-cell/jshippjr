@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from . import commercial
+from . import commercial, procurement
 
 
 def _operator_producer() -> dict:
@@ -34,6 +34,26 @@ def _deposit_state(invoices) -> str:
                 "paid_at" in inv.keys() and inv["paid_at"])
             return "received" if paid else "awaiting"
     return "none"
+
+
+def _procurement_line(conn, db, opp) -> dict:
+    """The procurement checklist line — REAL state from Procurement Intelligence (ADR-0022),
+    not a placeholder. Discovers requirements on read, then reports honestly: nothing surfaced
+    → 'Nothing required'; some done → progress; all done → done; a portal → the onboarding
+    prompt. The checklist adapts to what THIS client actually asked for."""
+    try:
+        procurement.discover_from_ci(conn, opp["id"])
+        r = procurement.readiness(conn, opp["id"])
+    except Exception:  # noqa: BLE001 — the checklist must render even if procurement hiccups
+        return {"label": "Procurement complete", "state": "na", "na_note": "Nothing required"}
+    if r["total"] == 0:
+        return {"label": "Procurement complete", "state": "na", "na_note": "Nothing required"}
+    if r["all_done"]:
+        return {"label": "Procurement complete", "state": "done"}
+    note = f"{r['complete']}/{r['total']} ready"
+    if r["has_portal"]:
+        note += " · portal onboarding"
+    return {"label": "Procurement", "state": "pending", "na_note": note}
 
 
 def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] = None) -> dict:
@@ -77,8 +97,7 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         {"label": "Deposit received",
          "state": {"received": "done", "awaiting": "pending", "none": "na"}[deposit],
          "na_note": "No deposit required" if deposit == "none" else ""},
-        {"label": "Procurement complete", "state": "na",
-         "na_note": "Nothing required"},          # Phase 5 captures + fills this
+        _procurement_line(conn, db, opp),
         {"label": "Team assigned", "state": "done" if team_assigned else "pending"},
         {"label": "Timeline confirmed", "state": "done" if timeline else "pending"},
         {"label": "Kickoff complete", "state": "done" if kickoff_done else "pending"},

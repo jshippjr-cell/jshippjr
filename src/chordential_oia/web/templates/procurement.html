@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ row['client'] }} · Procurement{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ opp_id }}">{{ row['need'][:40] }}</a> / Procurement{% endblock %}
+{% block head %}
+<style>
+  .pr-hero{display:flex;gap:22px;align-items:center;flex-wrap:wrap;padding:6px 4px 18px;border-bottom:1px solid var(--border,#e7e1d8);margin-bottom:18px}
+  .pr-ring{--pct:0;width:78px;height:78px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+    background:conic-gradient(var(--accent,#c8552b) calc(var(--pct)*1%), var(--surface-2,#efe8df) 0)}
+  .pr-ring b{width:60px;height:60px;border-radius:50%;background:var(--card,#fff);display:grid;place-items:center;font-size:18px;font-weight:800}
+  .pr-hero .lead{flex:1;min-width:220px}
+  .pr-hero .lead h1{font-size:22px;margin:0 0 3px}
+  .pr-hero .lead .muted{font-size:13px}
+  .pr-grp{margin:0 0 18px}
+  .pr-grp h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#8a8580);margin:16px 0 6px}
+  .pr-row{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line,#efe9e0);flex-wrap:wrap}
+  .pr-row:first-of-type{border-top:0}
+  .pr-main{flex:1;min-width:240px}
+  .pr-main .lbl{font-weight:650}
+  .pr-ev{font-size:12.5px;color:var(--muted,#7a746d);margin-top:2px;font-style:italic}
+  .pr-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center}
+  .pr-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .pr-badge{font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .b-needed{background:#fbeede;color:#9a5a1a}.b-requested{background:#e6f0fa;color:#2a5b86}
+  .b-generated{background:#eef7ee;color:#2f6a34}.b-uploaded{background:#e7f2e8;color:#2f6a34}
+  .b-complete{background:#2f6a34;color:#fff}.b-na{background:#eee;color:#888}
+  .own{font-size:11px;color:var(--muted,#8a8580)}
+  .pr-portal{background:#fbf6ef;border:1px solid #e7d3ba;border-radius:12px;padding:16px 18px;margin:0 0 18px}
+  .pr-portal h3{margin:0 0 8px;color:var(--wine,#44161E)}
+  .pr-portal ol{margin:6px 0 0 18px;padding:0}
+  .pr-tl{list-style:none;margin:0;padding:0}
+  .pr-tl li{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line,#efe9e0);font-size:12.5px}
+  .pr-tl li:first-child{border-top:0}
+  .pr-tl .v{font-weight:700;color:var(--wine,#44161E);min-width:88px;text-transform:capitalize}
+  .pr-tl .w{color:var(--muted,#8a8580);margin-left:auto;font-variant-numeric:tabular-nums}
+  .add-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .warn{background:#fdf3ec;border:1px solid #f0cdb5;border-radius:10px;padding:10px 13px;font-size:13px;margin-bottom:16px}
+</style>
+{% endblock %}
+{% block content %}
+
+{% if not profile_complete %}
+<div class="warn">⚙ Your <a href="/settings/company-profile">Company Profile</a> isn't set up yet — enter it once and every document below generates from it.</div>
+{% endif %}
+
+<div class="pr-hero" data-arrive>
+  <div class="pr-ring" style="--pct:{{ readiness.pct }}"><b>{{ readiness.pct }}%</b></div>
+  <div class="lead">
+    <h1>Procurement readiness</h1>
+    <div class="muted">
+      {{ readiness.complete }} of {{ readiness.total }} requirement{{ 's' if readiness.total != 1 }} complete ·
+      {{ readiness.awaiting_chordential|length }} on us · {{ readiness.awaiting_client|length }} on the client.
+      {% if not readiness.total %}Nothing has surfaced yet — requirements appear here the moment they're mentioned on a call, email, or RFP.{% endif %}
+    </div>
+  </div>
+  <div class="pr-acts">
+    <a class="btn ghost" href="/settings/company-profile">Company profile</a>
+    {% if readiness.all_done %}
+    <form method="post" action="/opportunity/{{ opp_id }}/procurement/complete" style="margin:0">
+      <button class="btn-live" type="submit">Mark procurement complete <span class="live-dot"></span></button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if portal %}
+<div class="pr-portal">
+  <h3>📤 Upload to the client's procurement portal</h3>
+  <p class="muted small" style="margin:0 0 4px">ChordOS doesn't connect to portals — here's the guided onboarding pack. {{ portal.progress_pct }}% ready · ~{{ portal.eta_minutes }} min.</p>
+  {% if portal.ready_docs %}<b>Ready to upload, in order:</b><ol>{% for d in portal.recommended_order %}<li>{{ d }}</li>{% endfor %}</ol>{% endif %}
+  {% if portal.missing_docs %}<div class="muted small" style="margin-top:8px">Still to generate: {{ portal.missing_docs|join(', ') }}.</div>{% endif %}
+</div>
+{% endif %}
+
+{% for grp in checklist %}
+<section class="pr-grp">
+  <h3>{{ grp.category }}</h3>
+  {% for it in grp['items'] %}
+  <div class="pr-row">
+    <div class="pr-main">
+      <div class="lbl">{{ it.label }}
+        <span class="pr-badge b-{{ it.status }}">{{ it.status_label }}</span>
+        {% if it.confidence %}<span class="own">· {{ it.confidence }}% conf</span>{% endif %}
+      </div>
+      {% if it.evidence %}<div class="pr-ev">“{{ it.evidence }}”{% if it.source %} — {{ it.source }}{% endif %}</div>{% endif %}
+      <div class="own">Owner: {{ it.owner|capitalize }}{% if not it.generatable %} · needs external input{% endif %}</div>
+    </div>
+    <div class="pr-acts">
+      {% if it.can_generate %}
+      <form method="post" action="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/generate" style="margin:0"><button class="btn tiny primary" type="submit">Generate</button></form>
+      {% elif it.can_regenerate %}
+      <a class="btn tiny" href="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/view" target="_blank">View</a>
+      <form method="post" action="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/generate" style="margin:0"><button class="btn tiny ghost" type="submit">Regenerate</button></form>
+      {% elif it.artifact_ref %}
+      <a class="btn tiny" href="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/view" target="_blank">View</a>
+      {% endif %}
+      <form method="post" action="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/upload" enctype="multipart/form-data" style="margin:0;display:inline-flex;gap:4px;align-items:center">
+        <label class="btn tiny ghost" style="cursor:pointer">Upload<input type="file" name="file" style="display:none" onchange="this.form.submit()"></label>
+      </form>
+      {% if it.status != 'complete' %}
+      <form method="post" action="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/status" style="margin:0"><input type="hidden" name="status" value="complete"><button class="btn tiny" type="submit">✓ Mark complete</button></form>
+      {% endif %}
+      <form method="post" action="/opportunity/{{ opp_id }}/procurement/{{ it.id }}/status" style="margin:0"><input type="hidden" name="status" value="na"><button class="btn tiny ghost" type="submit" title="Not required for this client">Waive</button></form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+<section class="pr-grp">
+  <h3>Add a requirement</h3>
+  <form class="add-row" method="post" action="/opportunity/{{ opp_id }}/procurement/add">
+    <select name="req_key" style="border:1px solid var(--border,#e7e1d8);border-radius:8px;padding:8px">
+      {% for k, spec in vocab.items() %}<option value="{{ k }}">{{ spec.label }}</option>{% endfor %}
+    </select>
+    <button class="btn tiny" type="submit">+ Add</button>
+    <span class="muted small">Most requirements surface themselves from conversations — add here only if one was missed.</span>
+  </form>
+</section>
+
+{% if timeline %}
+<section class="pr-grp">
+  <h3>Audit timeline</h3>
+  <ul class="pr-tl">
+    {% for e in timeline %}
+    <li><span class="v">{{ e['verb'] }}</span><span>{{ e['detail'] }}</span><span class="w">{{ e['created_at'][:10] }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

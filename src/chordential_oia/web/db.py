@@ -1061,6 +1061,43 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    # Procurement Intelligence (ADR-0022): ChordOS prepares clients for procurement — it does
+    # NOT integrate with procurement systems. Requirements are DISCOVERED from conversation
+    # (never hardcoded per client); the Company Profile is entered once and feeds every
+    # generated document; client history makes onboarding compound across campaigns.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS company_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            data TEXT DEFAULT '{}', updated_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS procurement_requirement (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL,
+            req_key TEXT NOT NULL,           -- canonical vocabulary key (w9, coi, vendor_portal…)
+            label TEXT, category TEXT,
+            owner TEXT DEFAULT 'chordential',-- chordential|client|shared
+            status TEXT DEFAULT 'needed',    -- needed|requested|generated|uploaded|complete|na
+            confidence INTEGER, source TEXT, evidence TEXT,
+            owner_note TEXT, due_date TEXT, notes TEXT,
+            generatable INTEGER DEFAULT 0,
+            artifact_ref TEXT, artifact_text TEXT,
+            created_at TEXT, updated_at TEXT,
+            UNIQUE(opp_id, req_key)
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS procurement_event (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opp_id INTEGER NOT NULL, verb TEXT, detail TEXT, created_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS client_procurement_history (
+            client TEXT PRIMARY KEY, data TEXT DEFAULT '{}', updated_at TEXT
+        )"""
+    )
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -4288,6 +4325,136 @@ def fields_by_capture(conn: sqlite3.Connection, capture_id: int) -> List[sqlite3
     return conn.execute(
         "SELECT * FROM campaign_intelligence_field WHERE capture_id = ? "
         "ORDER BY facet, key, kind", (capture_id,)).fetchall()
+
+
+def list_captures_for_opp(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM captures WHERE opp_id = ? ORDER BY created_at DESC, id DESC",
+        (opp_id,)).fetchall()
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# --------------------------------------------------------------------------- #
+# Procurement Intelligence (ADR-0022) — Company Profile, requirements, audit, history.
+# --------------------------------------------------------------------------- #
+def get_company_profile(conn: sqlite3.Connection) -> dict:
+    row = conn.execute("SELECT data FROM company_profile WHERE id = 1").fetchone()
+    if row is None or not row["data"]:
+        return {}
+    try:
+        return json.loads(row["data"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_company_profile(conn: sqlite3.Connection, data: dict) -> None:
+    now = _now()
+    conn.execute(
+        "INSERT INTO company_profile (id, data, updated_at) VALUES (1, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        (json.dumps(data), now))
+    conn.commit()
+
+
+def list_procurement_requirements(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM procurement_requirement WHERE opp_id = ? ORDER BY category, id",
+        (opp_id,)).fetchall()
+
+
+def get_procurement_requirement(conn, opp_id: int, req_key: str) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM procurement_requirement WHERE opp_id = ? AND req_key = ?",
+        (opp_id, req_key)).fetchone()
+
+
+def get_procurement_requirement_by_id(conn, rid: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM procurement_requirement WHERE id = ?", (rid,)).fetchone()
+
+
+def add_procurement_requirement(conn, *, opp_id, req_key, label="", category="", owner="chordential",
+                                status="needed", source="", evidence="", confidence=None,
+                                generatable=0) -> int:
+    now = _now()
+    cur = conn.execute(
+        """INSERT INTO procurement_requirement
+           (opp_id, req_key, label, category, owner, status, source, evidence, confidence,
+            generatable, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(opp_id, req_key) DO NOTHING""",
+        (opp_id, req_key, label, category, owner, status, source, evidence, confidence,
+         generatable, now, now))
+    conn.commit()
+    r = get_procurement_requirement(conn, opp_id, req_key)
+    return r["id"] if r else cur.lastrowid
+
+
+def update_procurement_requirement(conn, rid: int, **fields) -> None:
+    allowed = {"status", "owner", "confidence", "source", "evidence", "due_date", "notes",
+               "owner_note", "artifact_ref", "artifact_text", "label", "category", "generatable"}
+    sets, vals = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k} = ?"); vals.append(v)
+    if not sets:
+        return
+    sets.append("updated_at = ?"); vals.append(_now()); vals.append(rid)
+    conn.execute(f"UPDATE procurement_requirement SET {', '.join(sets)} WHERE id = ?", vals)
+    conn.commit()
+
+
+def save_procurement_artifact(conn, opp_id: int, req_key: str, text: str, *, artifact_ref: str):
+    r = get_procurement_requirement(conn, opp_id, req_key)
+    if r is not None:
+        update_procurement_requirement(conn, r["id"], artifact_text=text, artifact_ref=artifact_ref)
+
+
+def delete_procurement_requirement(conn, rid: int) -> None:
+    conn.execute("DELETE FROM procurement_requirement WHERE id = ?", (rid,))
+    conn.commit()
+
+
+def add_procurement_event(conn, opp_id: int, verb: str, detail: str) -> None:
+    conn.execute(
+        "INSERT INTO procurement_event (opp_id, verb, detail, created_at) VALUES (?,?,?,?)",
+        (opp_id, verb, detail, _now()))
+    conn.commit()
+
+
+def list_procurement_events(conn, opp_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM procurement_event WHERE opp_id = ? ORDER BY id DESC", (opp_id,)).fetchall()
+
+
+def first_procurement_event_at(conn, opp_id: int) -> str:
+    row = conn.execute(
+        "SELECT created_at FROM procurement_event WHERE opp_id = ? ORDER BY id ASC LIMIT 1",
+        (opp_id,)).fetchone()
+    return row["created_at"] if row else ""
+
+
+def save_client_procurement_history(conn, client: str, data: dict) -> None:
+    now = _now()
+    conn.execute(
+        "INSERT INTO client_procurement_history (client, data, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(client) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        (client, json.dumps(data), now))
+    conn.commit()
+
+
+def get_client_procurement_history(conn, client: str) -> dict:
+    row = conn.execute(
+        "SELECT data FROM client_procurement_history WHERE client = ?", (client,)).fetchone()
+    if row is None or not row["data"]:
+        return {}
+    try:
+        return json.loads(row["data"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
 
 
 # --- Discovery meetings (ADR-0014 §4.2) — tied to the opportunity before they begin ---- #
