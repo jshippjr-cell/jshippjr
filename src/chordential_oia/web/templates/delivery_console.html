@@ -354,30 +354,10 @@
     {% if d.thesis %}<span class="muted small">thesis: {{ d.thesis }}</span>{% endif %}
     <span class="pill {{ 'live' if d.status == 'selected' else ('ghost' if d.status == 'exploring') }}">{{ d.status }}</span>
     {% if d.status == 'rejected' and d.reason %}<span class="muted small">“{{ d.reason }}”</span>{% endif %}
-    {% if d.status == 'exploring' %}
-    <form method="post" action="/project/{{ project['id'] }}/direction" style="margin:0;display:inline-flex;gap:6px">
-      <input type="hidden" name="action" value="decide">
-      <input type="hidden" name="direction_id" value="{{ d.id }}">
-      <button class="btn tiny primary" name="status" value="selected" type="submit">Select</button>
-      <input type="text" name="reason" placeholder="why not (RI learns from this)" style="border:1px solid var(--line,#e7e1d8);border-radius:6px;padding:4px 8px;font-size:12px">
-      <button class="btn tiny ghost" name="status" value="rejected" type="submit">Reject</button>
-    </form>
-    {% endif %}
   </div>
   {% endfor %}
-  <form method="post" action="/project/{{ project['id'] }}/direction" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-    <input type="hidden" name="action" value="add">
-    <input type="text" name="name" placeholder="Direction name (e.g. Warm / Human)" required style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px;flex:1;min-width:170px">
-    <input type="text" name="thesis" placeholder="Thesis — the one thing this track IS" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px;flex:2;min-width:220px">
-    <button class="btn tiny primary" type="submit">+ Direction</button>
-  </form>
-  <form method="post" action="/project/{{ project['id'] }}/creative-lock" style="margin-top:10px">
-    {% if creative_lock %}
-    <button class="btn tiny ghost" name="action" value="clear" type="submit" title="Reopens the revision economy — use only if the client relitigates">Clear creative lock</button>
-    {% else %}
-    <button class="btn tiny" name="action" value="set" type="submit" title="Melody/structure/arrangement approved — future changes are scope conversations; production spend authorized">🔒 Mark creative lock (current version)</button>
-    {% endif %}
-  </form>
+  {% if not prod_directions %}<p class="muted small">Directions arrive from Discovery — Campaign Intelligence seeds the approved creative territory when the deal is won.</p>{% endif %}
+  <p class="muted small" style="margin-top:8px">Creative Lock records itself when the client approves a version{% if creative_lock %} — locked at v{{ creative_lock.version_n }}{% endif %}.</p>
 </section>
 
 <!-- CREATIVE BRIEF -->

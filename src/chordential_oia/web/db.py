@@ -1192,9 +1192,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             approver_name TEXT, approver_email TEXT,
             ip TEXT, user_agent TEXT,
             scope_ok INTEGER DEFAULT 0, pricing_ok INTEGER DEFAULT 0, terms_ok INTEGER DEFAULT 0,
+            timeline_ok INTEGER DEFAULT 0,
             approved_at TEXT, created_at TEXT
         )"""
     )
+    ca_cols = {r["name"] for r in conn.execute("PRAGMA table_info(commercial_approvals)")}
+    if "timeline_ok" not in ca_cols:
+        conn.execute("ALTER TABLE commercial_approvals ADD COLUMN timeline_ok INTEGER DEFAULT 0")
     # The objection library — the durable memory behind the Discovery Call Simulator.
     # Seeded from the five call simulations (docs/sales-simulations); GROWS from real
     # calls: objections harvested from transcripts land as status='proposed' with the
@@ -4407,15 +4411,16 @@ def set_commercial_review_status(conn: sqlite3.Connection, rid: int, status: str
 def create_commercial_approval(conn: sqlite3.Connection, *, opp_id: int, review_id: int,
                                approver_name: str = "", approver_email: str = "", ip: str = "",
                                user_agent: str = "", scope_ok: bool = False,
-                               pricing_ok: bool = False, terms_ok: bool = False) -> int:
+                               pricing_ok: bool = False, terms_ok: bool = False,
+                               timeline_ok: bool = False) -> int:
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO commercial_approvals
            (opp_id, review_id, approver_name, approver_email, ip, user_agent,
-            scope_ok, pricing_ok, terms_ok, approved_at, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            scope_ok, pricing_ok, terms_ok, timeline_ok, approved_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (opp_id, review_id, approver_name, approver_email, ip, user_agent,
-         int(scope_ok), int(pricing_ok), int(terms_ok), now, now))
+         int(scope_ok), int(pricing_ok), int(terms_ok), int(timeline_ok), now, now))
     conn.commit()
     return int(cur.lastrowid)
 

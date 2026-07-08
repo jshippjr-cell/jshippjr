@@ -52,7 +52,7 @@ def test_default_body_includes_on_blocks_excludes_off(client):
     # generic stock restatement.
     assert "current understanding of the campaign" in body  # CI-derived understanding
     assert "isn't always ideal" in body                   # call offer phrase
-    assert "short page I put together for your brief" in body  # soft page link
+    assert "Here's our understanding of your campaign" in body  # summary link (ADR-0020)
     assert "— Jon Shipp · Chordential" in body            # sign-off
     # Default-OFF blocks must NOT appear in the default preview body.
     assert "original and cleared, with a fixed scope" not in body   # credibility

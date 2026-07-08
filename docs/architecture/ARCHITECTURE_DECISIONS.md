@@ -354,6 +354,34 @@ record, not a string. The client-facing production experience must always answer
 question first. Deferred deliberately (not lost — see the model doc): the reconciliation
 round-clock rule, the two calendars, fidelity calibration, person-anchored RI migration.
 
+### ADR-0020 — One commercial approval; the invisible Executive Producer
+**Status:** Accepted (2026-07-08, operator directive) · Source: the end-to-end walkthrough audit
+**Decision.** The sales flow has exactly ONE commercial commitment. Sequence: discovery call →
+CI generated (no client interaction) → **Discovery Summary** ("what we heard" — the client's
+FIRST touch, introducing their permanent Workspace URL; no pricing, no terms, no deposit; one
+action: *"Yes, this reflects our project"* + comments) → confirmation advances the workspace
+and notifies the operator → operator reviews and **releases the proposal** (the Commercial
+Review) → the client's single approval (scope · pricing · timeline · terms) is the award →
+Kickoff, automatically, with nothing further from anyone. Supporting rules: (1) **operator
+actions collapse** — Assign Composer is one decision that automatically mints the portal,
+sends the email with brief/deliverables/timeline, logs, and notifies; (2) **Directions are
+born in Discovery** — CI seeds them; production inherits; no one creates or renames them
+later; (3) **Creative Lock is a state, not a button** — recorded automatically when the
+client approves a version; (4) **email is the notification layer, the Workspace is the
+truth** — every lifecycle event notifies the right person and points them to their permanent
+URL; (5) **one obvious Next Action per deal** for the operator (decision-oriented, not
+page-oriented); (6) hide the operating system: portal generation, workspace creation,
+notification dispatch, lifecycle transitions are ChordOS's job, never the human's. Benchmark:
+Apple/Linear/Superhuman/Frame.io — one thoughtful decision, twenty quiet operations.
+**Why.** The walkthrough exposed two approval moments where the business has one, and an
+operator forced to navigate eight rooms and remember system logistics. The client already got
+the court-state courtesy; the operator and the flow itself must get it too.
+**Consequences.** The brief stage is renamed Discovery Summary and carries a scope-confirm
+gate (per-opp state + CI event); the commercial phase opens on confirmation (with a
+"preparing your proposal" state until release); the approval records timeline consent; the
+directions add/rename UI and the lock button are removed; releases/approvals/confirmations
+send workspace-pointing emails. Test seams may keep internal routes; UI never shows them.
+
 ---
 
 ## Adding a new ADR

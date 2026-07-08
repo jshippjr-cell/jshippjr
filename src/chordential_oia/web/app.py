@@ -248,7 +248,7 @@ _MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
 # The Client Workspace (ADR-0018): /workspace/<token> — the durable client destination.
 # The unguessable workspace token IS the access control (validated in-route), so the path
 # bypasses the admin login gate, same exemption as first-touch and the delivery portal.
-_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+(/approve)?/?$")
+_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+(/approve|/confirm-scope)?/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
@@ -2401,12 +2401,17 @@ def _workspace_signals(conn, opp, project):
     review = db.current_commercial_review(conn, opp_id)
     kickoff_complete = bool(project) and bool(
         project["kickoff_completed_at"] if "kickoff_completed_at" in project.keys() else None)
+    # ADR-0020: the client's scope confirmation ("yes, this reflects our project") advances
+    # the workspace into the commercial phase — shown as "preparing your proposal" until the
+    # operator releases it.
+    scope_confirmed = bool(db.get_doc_overrides(conn, opp_id).get("scope_confirmed"))
     return {
         "has_project": project is not None,
         "delivered": delivered,
         "kickoff_complete": kickoff_complete,
         "commercial_approved": bool(review) and review["status"] == "approved",
-        "commercial_ready": bool(review) and review["status"] == "released",
+        "commercial_ready": (bool(review) and review["status"] == "released")
+                            or scope_confirmed,
         "brief_ready": brief_ready,
         "in_discovery": upcoming and not brief_ready,
     }
@@ -2436,13 +2441,21 @@ def client_workspace(request: Request, token: str):
         review = None
         readiness = None
         approved_note = ""
+        preparing = False
+        scope_confirm_url = ""
         if phase == workspace.BRIEF:
             brief_ctx = _live_brief_ctx(conn, opp["id"])
+            # ADR-0020: the Summary's one action — "yes, this reflects our project".
+            if not db.get_doc_overrides(conn, opp["id"]).get("scope_confirmed"):
+                scope_confirm_url = f"/workspace/{token}/confirm-scope"
         elif phase == workspace.COMMERCIAL:
-            # The frozen Commercial Review — the agreement the client approves.
+            # The frozen Commercial Review — the agreement the client approves; before the
+            # operator releases it, the phase reads "we're preparing your proposal".
             cr = db.current_commercial_review(conn, opp["id"])
-            if cr is not None:
+            if cr is not None and cr["status"] in ("released", "approved"):
                 review = commercial.review_from_json(cr["doc_json"])
+            else:
+                preparing = True
         elif phase == workspace.KICKOFF:
             # The Production Readiness Workspace — the concierge handoff.
             cr = db.current_commercial_review(conn, opp["id"])
@@ -2459,7 +2472,8 @@ def client_workspace(request: Request, token: str):
                 "portal_url": f"/project/{project['id']}/delivery-portal?k={token}",
             }
         stage_url = ""
-        if brief_ctx is None and review is None and readiness is None and prod is None:
+        if (brief_ctx is None and review is None and readiness is None and prod is None
+                and not preparing):
             stage_url = {
                 workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
                 workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
@@ -2476,6 +2490,7 @@ def client_workspace(request: Request, token: str):
                   phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
                   stage_url=stage_url, review=review, approve_url=approve_url,
                   approved_note=approved_note, k=readiness, prod=prod,
+                  preparing=preparing, scope_confirm_url=scope_confirm_url,
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
                   **(brief_ctx or {}))
 
@@ -2526,6 +2541,18 @@ def commercial_release(opp_id: int):
             return HTMLResponse("Opportunity not found", status_code=404)
         db.release_commercial_review(conn, opp_id, review.version,
                                      commercial.review_to_json(review))
+        # Email is the notification layer (ADR-0020): the proposal is in their workspace.
+        token = db.ensure_share_token(conn, opp_id)
+        if (row["contact_email"] or "").strip():
+            try:
+                mailer.send_email(
+                    row["contact_email"].strip(),
+                    f"Your proposal is ready — {row['client']}",
+                    f"Your proposal for {row['need']} is ready in your workspace — scope, "
+                    f"timeline, investment and terms, with one approval at the end.\n\n"
+                    f"{_public_base()}/workspace/{token}")
+            except Exception:  # noqa: BLE001
+                pass
         if campaigns.workspace_enabled():
             try:
                 ci = campaign_intelligence.ensure_for_opportunity(conn, row)
@@ -2566,10 +2593,52 @@ def start_production(opp_id: int):
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
 
 
+@app.post("/workspace/{token}/confirm-scope")
+def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Form(""),
+                            comment: str = Form("")):
+    """ADR-0020: the Discovery Summary's one action — "yes, this reflects our project."
+    Alignment, not commitment: no pricing was shown, nothing is owed. Confirmation advances
+    the workspace to "preparing your proposal" and notifies the operator to release it."""
+    from datetime import datetime, timezone
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.get_doc_overrides(conn, opp["id"]).get("scope_confirmed"):
+            db.update_doc_override(conn, opp["id"], "scope_confirmed", {
+                "at": datetime.now(timezone.utc).isoformat(),
+                "by": confirmed_by.strip(), "comment": comment.strip()[:500]})
+            if campaigns.workspace_enabled():
+                try:
+                    ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
+                    db.add_ci_event(conn, ci["id"], actor="client", verb="scope_confirmed",
+                                    facet="engagement", key="discovery_summary",
+                                    to_value=(comment.strip()[:200] or "confirmed"),
+                                    source="workspace")
+                except Exception:  # noqa: BLE001
+                    pass
+            op_mail = meeting_scheduler._operator_email()
+            if op_mail:
+                try:
+                    mailer.send_email(
+                        op_mail, f"✓ Scope confirmed — {opp['client']}",
+                        f"The client confirmed the Discovery Summary for {opp['need']}."
+                        + (f"\nTheir note: \u201c{comment.strip()}\u201d" if comment.strip() else "")
+                        + f"\n\nNext: review and release the proposal.\n"
+                          f"{_public_base()}/opportunity/{opp['id']}/commercial")
+                except Exception:  # noqa: BLE001
+                    pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/workspace/{token}", status_code=303)
+
+
 @app.post("/workspace/{token}/approve")
 def workspace_approve(request: Request, token: str, approver_name: str = Form(""),
                       approver_email: str = Form(""), scope_ok: str = Form(""),
-                      pricing_ok: str = Form(""), terms_ok: str = Form("")):
+                      pricing_ok: str = Form(""), terms_ok: str = Form(""),
+                      timeline_ok: str = Form("")):
     """The client approves the released Commercial Review — the primary award trigger
     (ADR-0018). Captures the electronic-approval audit record bound to the FROZEN version,
     marks the review approved, and advances the workspace into Kickoff. Phase 3 enriches
@@ -2589,7 +2658,19 @@ def workspace_approve(request: Request, token: str, approver_name: str = Form(""
                 approver_name=approver_name.strip(), approver_email=approver_email.strip(),
                 ip=(request.client.host if request.client else ""),
                 user_agent=request.headers.get("user-agent", ""),
-                scope_ok=bool(scope_ok), pricing_ok=bool(pricing_ok), terms_ok=bool(terms_ok))
+                scope_ok=bool(scope_ok), pricing_ok=bool(pricing_ok), terms_ok=bool(terms_ok),
+                timeline_ok=bool(timeline_ok))
+            # Email is the notification layer (ADR-0020): tell the operator the award landed.
+            op_mail = meeting_scheduler._operator_email()
+            if op_mail:
+                try:
+                    mailer.send_email(
+                        op_mail, f"✓ Proposal approved — {opp['client']}",
+                        f"{approver_name.strip() or 'The client'} approved the proposal for "
+                        f"{opp['need']}. The workspace has advanced to Kickoff.\n"
+                        f"{_public_base()}/opportunity/{opp['id']}")
+                except Exception:  # noqa: BLE001
+                    pass
             db.set_commercial_review_status(conn, review["id"], "approved")
             # ADR-0018: the client's approval is the primary AWARD TRIGGER — it creates the
             # project (in Kickoff), so the Sales→Production handoff has something real to
@@ -3379,8 +3460,12 @@ def _live_brief_ctx(conn, opp_id):
     est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
     overrides = db.get_doc_overrides(conn, opp_id)
     ci_view, met = _brief_ci_context(conn, row)
+    toggles = default_toggles(row["status"])
+    # ADR-0020: the Discovery Summary exists only to confirm we heard them — never pricing,
+    # never terms, never a deposit. The commercial conversation happens at the proposal.
+    toggles.update({"cost": False, "terms": False})
     doc = build_capabilities_doc(
-        opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
+        opp, qual, est, toggles=toggles, overrides=overrides,
         call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
         ci_view=ci_view, met=met)
     project = db.project_for_opp(conn, opp_id)
@@ -4316,6 +4401,22 @@ def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
         agency_id=agency_id, share_token=workspace_token,
     )
     db.seed_default_milestones(conn, pid, roles)
+    # ADR-0020: Direction is born in Discovery — production inherits it. Seed the approved
+    # creative territory from Campaign Intelligence; nobody creates directions later.
+    if campaigns.workspace_enabled():
+        try:
+            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+            fields = campaign_intelligence.brief_view(conn, ci_row["id"]).get("fields") or {}
+            name_ = (fields.get("campaign_objective") or "").strip()
+            thesis = (fields.get("emotional_arc") or "").strip()
+            if name_ or thesis:
+                d = production.add_direction(conn, db, pid,
+                                             name=(name_ or "The approved direction")[:80],
+                                             thesis=thesis[:160])
+                if d:
+                    production.decide_direction(conn, db, pid, d["id"], status="selected")
+        except Exception:  # noqa: BLE001 — seeding never blocks the award
+            pass
     return pid
 
 
@@ -4406,6 +4507,20 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
             "assignment",
         )
         project = db.get_project(conn, project_id)
+        # ADR-0020: one decision, many quiet operations — the portal exists the moment the
+        # composer does. Mint their portal token now so the scope email carries their one
+        # link (brief, feedback, uploads); no separate "issue portal link" step.
+        portal_token = db.ensure_talent_portal_token(conn, talent_id) if hasattr(
+            db, "ensure_talent_portal_token") else None
+        if portal_token is None:
+            trow = db.get_talent(conn, talent_id)
+            portal_token = trow["portal_token"] if trow is not None and "portal_token" in trow.keys() else None
+            if not portal_token:
+                import secrets as _sec
+                portal_token = _sec.token_urlsafe(12)
+                conn.execute("UPDATE talent SET portal_token=? WHERE id=?",
+                             (portal_token, talent_id))
+                conn.commit()
     finally:
         conn.close()
     if t is not None and t.email and mailer.mail_configured() and project is not None:
@@ -4415,9 +4530,13 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
             budget_low=project["budget_min"], budget_high=project["budget_max"],
             deadline=project["deadline"] or "",
         )
+        body = scope["body"]
+        if portal_token:
+            body += (f"\n\nYour portal — the brief, deliverables, timeline, client feedback "
+                     f"and your uploads all live here:\n{base}/creator/{portal_token}")
         mailer.send_email(
-            t.email, scope["subject"], scope["body"],
-            html=mailer.branded_html(base, scope["body"]),
+            t.email, scope["subject"], body,
+            html=mailer.branded_html(base, body),
         )
     # Broadcast the new assignment to the rest of the project crew (the new hire
     # already got the tailored scope email above, so they're excluded here).
@@ -6074,6 +6193,11 @@ def review_approve(
             body=f"Approved v{approved_n} for delivery.",
             kind="approval", verified=True,
         )
+        # ADR-0020: Creative Lock is a STATE, not a button — the client approving a version
+        # approves melody/structure/arrangement; ChordOS records the lock automatically.
+        if not production.creative_lock(delivery):
+            production.set_creative_lock(conn, db, project_id,
+                                         version_n=int(approved_n or 0), by=name)
         # Approve locks the FINAL version: stamp the current version's label and
         # the version_state to FINAL so the agency sees the version is final.
         versions = versions_list(delivery)

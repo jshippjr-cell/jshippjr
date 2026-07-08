@@ -69,7 +69,39 @@
     {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
   </div>
   {% include "_brief_document.html" %}
+  {% if scope_confirm_url %}
+  {# ADR-0020: the Summary's one action — alignment, not commitment. #}
+  <div class="ws-wrap" style="margin-top:10px">
+    <div class="ws-now" id="confirm">
+      <div class="lab">One question</div>
+      <h2>Did we get this right?</h2>
+      <p>Read the summary above. If anything is off, tell us below — one note fixes it.
+        If it reflects your project, confirm and we'll prepare your proposal.</p>
+      <form method="post" action="{{ scope_confirm_url }}" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
+        <input type="text" name="confirmed_by" placeholder="Your name" required style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit">
+        <textarea name="comment" rows="2" placeholder="Anything we should correct? (optional)" style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit"></textarea>
+        <button class="ws-cta" type="submit" style="border:0;cursor:pointer;align-self:flex-start">Yes, this reflects our project ✓</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
   <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+
+  {% elif preparing %}
+  {# ADR-0020: confirmed — the proposal is being prepared; nothing needed from the client. #}
+  <div class="ws-strip">
+    {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
+  </div>
+  <div class="ws-wrap">
+    <div class="ws-now">
+      <div class="lab">All set</div>
+      <h2>Thanks — we're preparing your proposal</h2>
+      <p>You confirmed our understanding, and we're putting the proposal together now —
+        scope, timeline, investment and terms. You'll get one email when it's ready,
+        right here at this same link. Nothing is needed from you until then.</p>
+    </div>
+    <div class="ws-foot" style="padding:22px 0 0">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  </div>
 
   {% elif review %}
   {# ── The Commercial Review, inline — the continuation of the brief (same URL). ── #}

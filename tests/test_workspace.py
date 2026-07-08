@@ -135,3 +135,34 @@ def test_workspace_bypasses_admin_gate(tmp_path, monkeypatch):
                      follow_redirects=False).status_code in (302, 303, 307)
         # …but the workspace opens on its token alone
         assert c.get(f"/workspace/{token}").status_code == 200
+
+
+def test_scope_confirmation_advances_to_preparing(tmp_path, monkeypatch):
+    """ADR-0020: the Discovery Summary's one action advances the workspace — no pricing was
+    shown, and the commercial phase reads 'preparing your proposal' until the release."""
+    app_mod = _app(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn)
+    app_mod.db.create_meeting(conn, opp_id=opp_id, start_at="2026-07-01T14:00:00+00:00",
+                              status="ingested")
+    token = app_mod.db.ensure_share_token(conn, opp_id)
+    conn.close()
+    url = f"/workspace/{token}"
+    with TestClient(app_mod.app) as c:
+        page = c.get(url).text
+        # the Summary carries the confirm ask and NO commercial content
+        assert "Did we get this right?" in page
+        assert "Yes, this reflects our project" in page
+        assert "Indicative investment" not in page and "Payment schedule" not in page
+        r = c.post(f"{url}/confirm-scope",
+                   data={"confirmed_by": "Sarah Chen", "comment": "Timeline is actually Nov 3"},
+                   follow_redirects=False)
+        assert r.status_code == 303
+        after = c.get(url).text
+        assert "preparing your proposal" in after
+        assert "Did we get this right?" not in after
+    conn = app_mod.db.connect()
+    sc = app_mod.db.get_doc_overrides(conn, opp_id).get("scope_confirmed")
+    conn.close()
+    assert sc and sc["by"] == "Sarah Chen" and "Nov 3" in sc["comment"]

@@ -284,7 +284,9 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     # line is what mail clients (Gmail / Apple Mail / Outlook) reliably auto-link
     # into a clickable hyperlink — inline-after-a-colon often isn't detected.
     page_link = (
-        "If useful, here's a short page I put together for your brief:\n"
+        "Thank you for meeting with us. Here's our understanding of your campaign — review "
+        "it, leave a note if anything reads wrong, and if it reflects your project, confirm "
+        "it right on the page:\n"
         f"{page_url}"
     )
     signoff = "— Jon Shipp · Chordential"

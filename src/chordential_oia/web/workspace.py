@@ -30,7 +30,7 @@ PHASES = [INTRO, DISCOVERY, BRIEF, COMMERCIAL, KICKOFF, PRODUCTION, DELIVERY, AR
 PHASE_LABEL = {
     INTRO: "Welcome",
     DISCOVERY: "Discovery",
-    BRIEF: "Campaign Brief",
+    BRIEF: "Discovery Summary",
     COMMERCIAL: "Commercial Review",
     KICKOFF: "Kickoff",
     PRODUCTION: "Production",
@@ -40,8 +40,8 @@ PHASE_LABEL = {
 PHASE_BLURB = {
     INTRO: "Say hello and book your discovery call.",
     DISCOVERY: "A short call about your campaign — creative direction, timeline, needs.",
-    BRIEF: "Our understanding of what we're making, from the conversation.",
-    COMMERCIAL: "Scope, pricing, timeline and terms — everything you're agreeing to.",
+    BRIEF: "What we heard — confirm we understood your campaign correctly.",
+    COMMERCIAL: "Your proposal — scope, pricing, timeline and terms, one approval.",
     KICKOFF: "How we'll work together: contacts, cadence, expectations.",
     PRODUCTION: "The work in motion — versions, comments, reviews.",
     DELIVERY: "Final masters, stems, cue sheet, rights — your delivery package.",
