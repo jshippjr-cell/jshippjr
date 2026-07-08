@@ -134,67 +134,62 @@
 </section>
 {% endif %}
 
-{# ── Meeting Proposals — times offered, awaiting the client's pick. ── #}
+{# ── Meeting Proposals — times offered, awaiting the client's pick (meeting-card language). ── #}
 {% if open_proposals %}
-<section class="card" id="proposals">
-  <div class="card-head"><h2>🕑 Times offered</h2><span class="muted small">The client picks one; everything books itself.</span></div>
-  {% for p in open_proposals %}
-  <div class="dr-item">
-    <div>
-      <div class="dr-who">{{ p['client_name'] or 'Client' }}
-        <span class="dr-pref">{{ p['meeting_type'] }}</span>
-        {% if p['status'] == 'draft' %}<span class="pill">draft — not sent</span>
-        {% else %}<span class="pill live">sent · awaiting pick</span>{% endif %}
-      </div>
-      <div class="muted small">{{ p['client_email'] }}</div>
-      <div class="muted small" style="margin-top:3px">{{ proposal_slots_et[p['id']]|join(' · ') }}</div>
-    </div>
-    <div class="dr-acts">
-      <a class="btn tiny {{ 'primary' if p['status'] == 'draft' else '' }}"
-         href="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}">{{ 'Review & send →' if p['status'] == 'draft' else 'View / resend' }}</a>
-      <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}/cancel" style="margin:0">
-        <button class="btn tiny ghost" type="submit">Withdraw</button>
-      </form>
-    </div>
+{% for p in open_proposals %}
+<section class="mtg" id="proposals" data-arrive>
+  <div class="mtg-tile soft">🕑</div>
+  <div class="mtg-body">
+    <div class="mtg-kicker">Times offered{% if p['status'] == 'draft' %} · <span class="mtg-chip off" style="text-transform:none">draft — not sent</span>{% else %} · <span class="mtg-chip pend" style="text-transform:none">sent · awaiting their pick</span>{% endif %}</div>
+    <div class="mtg-when">{{ proposal_slots_et[p['id']][0] if proposal_slots_et[p['id']] else 'Three times proposed' }}</div>
+    {% if proposal_slots_et[p['id']]|length > 1 %}<div class="mtg-sub">also: {{ proposal_slots_et[p['id']][1:]|join(' · ') }}</div>{% endif %}
+    <div class="mtg-sub">{{ p['meeting_type']|title }} · {{ p['client_name'] or 'Client' }}{% if p['client_email'] %} · {{ p['client_email'] }}{% endif %}</div>
   </div>
-  {% endfor %}
+  <div class="mtg-acts">
+    <a class="btn {{ 'primary' if p['status'] == 'draft' else 'ghost' }}"
+       href="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}">{{ 'Review & send →' if p['status'] == 'draft' else 'View / resend' }}</a>
+    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ p['id'] }}/cancel" style="margin:0">
+      <button class="btn ghost tiny" type="submit">Withdraw</button>
+    </form>
+  </div>
 </section>
+{% endfor %}
 {% endif %}
 
-{# ── Upcoming Discovery — contextual, shown ONLY when a meeting exists. ── #}
+{# ── Upcoming Discovery — the meeting card (contextual; shown only when a meeting exists). ── #}
 {% if meeting %}
-<section class="card" id="discovery">
-  <div class="card-head"><h2>{{ '📞' if meeting['meeting_type'] == 'phone' else '🎥' }} Upcoming Discovery</h2></div>
-  <div class="disc-panel">
-    <div class="disc-field"><span class="disc-k">Date</span><span class="disc-v">{% if meeting['start_at'] %}<time data-utc-date="{{ meeting['start_at'] }}">{{ meeting['start_at'][:10] }}</time>{% else %}— set a date{% endif %}</span></div>
-    <div class="disc-field"><span class="disc-k">Time</span><span class="disc-v">{% if meeting['start_at'] and meeting['start_at']|length > 11 %}<time data-utc-time="{{ meeting['start_at'] }}">{{ meeting['start_at'][11:16] }}</time>{% else %}—{% endif %}</span></div>
-    <div class="disc-field"><span class="disc-k">Type</span><span class="disc-v">{{ meeting['meeting_type']|title }}</span></div>
-    {% if meeting['client_name'] %}<div class="disc-field"><span class="disc-k">With</span><span class="disc-v">{{ meeting['client_name'] }}</span></div>{% endif %}
-    {% if meeting['meeting_type'] != 'phone' %}
-    <div class="disc-field"><span class="disc-k">Notetaker</span>
-      {% if meeting['notetaker_provider'] %}<span class="disc-badge on">Recall connected</span>
-      {% else %}<span class="disc-badge off">Not connected</span>{% endif %}</div>
-    <div class="disc-field"><span class="disc-k">Transcript</span>
-      {% if meeting['transcript_capture_id'] %}<span class="disc-badge on">Complete</span>
-      {% elif meeting['notetaker_provider'] %}<span class="disc-badge pending">Pending</span>
-      {% else %}<span class="disc-badge off">Paste when ready</span>{% endif %}</div>
-    {% endif %}
-    <div class="disc-acts">
-      {% if meeting['join_url'] %}<a class="btn tiny primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join meeting →</a>{% endif %}
-      <details style="display:inline"><summary class="btn tiny" style="cursor:pointer">Reschedule</summary>
-        <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <input type="hidden" name="tz_offset" value="">
-          <input type="datetime-local" name="start_at">
-          <button class="btn tiny primary" type="submit">Save</button>
-        </form>
-      </details>
-      <form method="post" action="/opportunity/{{ row['id'] }}/discovery/{{ meeting['id'] }}/cancel" style="margin:0">
-        <button class="btn tiny ghost" type="submit">Cancel</button>
-      </form>
+<section class="mtg" id="discovery" data-arrive>
+  <div class="mtg-tile">{{ '📞' if meeting['meeting_type'] == 'phone' else '🎥' }}</div>
+  <div class="mtg-body">
+    <div class="mtg-kicker">Upcoming discovery</div>
+    <div class="mtg-when">
+      {% if meeting['start_at'] %}<time data-utc-date="{{ meeting['start_at'] }}">{{ meeting['start_at'][:10] }}</time>{% else %}<span class="muted">Set a date</span>{% endif %}
+      {% if meeting['start_at'] and meeting['start_at']|length > 11 %}<span class="mtg-at">at</span> <time data-utc-time="{{ meeting['start_at'] }}">{{ meeting['start_at'][11:16] }}</time>{% endif %}
     </div>
+    <div class="mtg-sub">{{ meeting['meeting_type']|title }}{% if meeting['client_name'] %} · with {{ meeting['client_name'] }}{% endif %}</div>
+    {% if meeting['meeting_type'] != 'phone' %}
+    <div class="mtg-chips">
+      {% if meeting['notetaker_provider'] %}<span class="mtg-chip ok">● Notetaker connected</span>{% else %}<span class="mtg-chip off">○ Notetaker off</span>{% endif %}
+      {% if meeting['transcript_capture_id'] %}<span class="mtg-chip ok">● Transcript ready</span>
+      {% elif meeting['notetaker_provider'] %}<span class="mtg-chip pend">◐ Transcript pending</span>
+      {% else %}<span class="mtg-chip off">○ Transcript — paste when ready</span>{% endif %}
+    </div>
+    {% endif %}
+    <details class="mtg-reschedule"><summary>Reschedule</summary>
+      <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule">
+        <input type="hidden" name="tz_offset" value="">
+        <input type="datetime-local" name="start_at">
+        <button class="btn tiny primary" type="submit">Save new time</button>
+      </form>
+    </details>
   </div>
-</section>
-{% endif %}
+  <div class="mtg-acts">
+    {% if meeting['join_url'] %}<a class="btn primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join →</a>{% endif %}
+    <form method="post" action="/opportunity/{{ row['id'] }}/discovery/{{ meeting['id'] }}/cancel" style="margin:0">
+      <button class="btn ghost tiny" type="submit">Cancel</button>
+    </form>
+  </div>
+</section>{% endif %}
 
 {# Opportunity tabs (Overview / Outreach / …) sit above Campaign Intelligence
    so navigation is reachable before the long living record. #}

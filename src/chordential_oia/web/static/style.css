@@ -990,3 +990,40 @@ details.ci-intake[open]>summary{opacity:.55}
   border:1px solid var(--accent,#c8552b);box-shadow:none}
 .ci-panel .btn.primary:hover, .ci-update .btn.primary:hover{background:rgba(200,85,43,.08)}
 .ci-intake[open]>.ci-intake-summary{opacity:.45;font-size:12px}
+
+/* ── The meeting card (.mtg) — discovery + proposals, redesigned from the disc-panel dump.
+   One alive object per meeting: an icon tile, the time as hero, status as calm chips. ── */
+.mtg{display:flex;gap:16px;align-items:flex-start;background:var(--card,#fff);
+  border:1px solid var(--border,#e7e1d8);border-radius:16px;padding:16px 18px;margin:0 0 14px;
+  box-shadow:0 1px 2px rgba(40,25,20,.04);transition:box-shadow .18s ease,transform .18s ease}
+.mtg:hover{box-shadow:0 8px 24px rgba(68,22,30,.08)}
+.mtg-tile{flex:0 0 auto;width:52px;height:52px;border-radius:13px;display:grid;place-items:center;
+  font-size:24px;background:linear-gradient(150deg,#5a1e28,#44161e);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.mtg-tile.soft{background:linear-gradient(150deg,#f3e6de,#ecdcd0)}
+.mtg-body{flex:1 1 auto;min-width:0}
+.mtg-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent,#c8552b);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.mtg-when{font-size:20px;font-weight:700;letter-spacing:-.2px;margin:3px 0 1px;color:var(--ink,#2a2220)}
+.mtg-when .mtg-at{font-size:14px;font-weight:500;color:var(--muted,#8a8580);margin:0 2px}
+.mtg-when time{font-variant-numeric:tabular-nums}
+.mtg-sub{font-size:13px;color:var(--muted,#7a746d);margin-top:1px}
+.mtg-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.mtg-chip{font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;
+  background:var(--surface-2,#f4efe8);color:var(--muted,#7a746d)}
+.mtg-chip.ok{background:#e7f2e8;color:#2f6a34}
+.mtg-chip.pend{background:#fbeede;color:#9a5a1a}
+.mtg-chip.off{background:#f1ece4;color:#8a8078}
+.mtg-reschedule{margin-top:10px}
+.mtg-reschedule>summary{cursor:pointer;font-size:12.5px;color:var(--muted,#8a8580);
+  list-style:none;display:inline-block}
+.mtg-reschedule>summary::-webkit-details-marker{display:none}
+.mtg-reschedule>summary::before{content:"↻ "}
+.mtg-reschedule[open]>summary{color:var(--accent,#c8552b)}
+.mtg-reschedule form{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:center}
+.mtg-reschedule input[type=datetime-local]{border:1px solid var(--border,#e7e1d8);border-radius:8px;
+  padding:7px 9px;font:inherit}
+.mtg-acts{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+@media (max-width:640px){
+  .mtg{flex-wrap:wrap}
+  .mtg-acts{flex-direction:row;width:100%;justify-content:flex-start;margin-top:4px}
+}
