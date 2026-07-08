@@ -382,6 +382,41 @@ gate (per-opp state + CI event); the commercial phase opens on confirmation (wit
 directions add/rename UI and the lock button are removed; releases/approvals/confirmations
 send workspace-pointing emails. Test seams may keep internal routes; UI never shows them.
 
+### ADR-0021 — The Producer Learning System: EP-completeness extraction, Observed Facts, and the learning ledger
+**Status:** Accepted (2026-07-08, operator directive) · Builds on ADR-0013/0014 (Campaign Intelligence + captures)
+**Decision.** Three changes to how a discovery transcript becomes Campaign Intelligence, so
+ChordOS gets better at discovery after every campaign — not by fine-tuning, not by vector
+memory, but by learning what an Executive Producer consistently values.
+(1) **EP-completeness extraction.** The extraction prompt (`_build_extraction_prompt`) now
+reads the transcript as an experienced EP — "if I walked out and had to brief my team, what
+would I write down?" — optimizing for COMPLETENESS over minimality, enumerating every relevant
+field across all facets, merging multiple statements into richer values, and — when confidence
+is medium/high — PROPOSING the fact, but when low, emitting a follow-up `open_question` rather
+than staying silent. `max_tokens` 1600→4000; the coerce cap 50→150.
+(2) **Observed Facts scratchpad.** A new open facet `observed` — the EP's working memory —
+holds every meaningful observation that has no dedicated slot yet (facet added to `FACETS`/
+`FACET_LABEL`, peeled into an `observed` bucket in `fields_view`, rendered as its own block on
+the CI panel). Ambition is no longer gated by the schema; facts can graduate into first-class
+slots later without losing the original observation.
+(3) **The Producer Learning ledger** (`web/producer_learning.py`, `producer_learning_event`
+table). Every operator disposition of a proposed field — confirm / edit / reject / add — is
+recorded with the AI's original value, the final value, edit distance, confidence, and the
+capture citation. Those events roll up into a transparent, count-based per-field **prior**
+(`field_prior` → stance trusted|expand|contested|learn) that `priors_summary` renders into the
+next extraction prompt: fields the producer always confirms are proposed confidently; fields
+they consistently expand get the fuller read; fields the AI keeps missing (added-from-nothing)
+get actively watched; fields they keep rejecting are demoted. Priors are global (the producer's
+consistent taste across campaigns), advisory, and never block capture.
+**Why.** The extractor was too conservative — only the easy entities. A producer listens for
+everything that changes how a campaign is planned, staffed, priced, scheduled, delivered, or
+approved. And the governing law made literal: the machine proposes, Jon disposes, and the
+machine learns from the disposition — auditable, reversible, not a black box.
+**Consequences.** No destructive schema change (one new facet, one new table, both additive).
+The four CI disposition routes now log learning events. Per-fact speaker/timestamp/verbatim-
+span is still capture-level only (deferred — would need columns threaded from
+`TranscriptSegment`). The deterministic no-LLM fallback is unchanged (still ≤5 fields); EP-
+completeness is an LLM-path gain.
+
 ---
 
 ## Adding a new ADR

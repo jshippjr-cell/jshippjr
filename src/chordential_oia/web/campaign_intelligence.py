@@ -18,7 +18,8 @@ from typing import List, Optional
 
 from . import db
 
-FACETS = ["engagement", "buyer", "direction", "commercial", "relationship", "outcome"]
+FACETS = ["engagement", "buyer", "direction", "commercial", "relationship", "outcome",
+          "observed"]
 KINDS = ["fact", "insight", "recommendation", "open_question"]
 
 # The disposition lifecycle is KIND-AWARE, but there is always ONE gate: a human moves
@@ -47,6 +48,7 @@ FACET_LABEL = {
     "engagement": "The engagement", "buyer": "The buyer",
     "direction": "Creative direction", "commercial": "Commercial",
     "relationship": "Relationship", "outcome": "Outcome",
+    "observed": "Observed facts",
 }
 
 # The canonical, always-editable fields the Opportunity page shows as labeled slots —
@@ -437,7 +439,7 @@ def fields_view(conn, ci_id: int) -> dict:
     by_id = {it["key"] + "|" + it["facet"] + "|" + it["kind"]: it for it in items}
     grouped: dict = {f: [] for f in FACETS}
     counts = {"total": 0, "open": 0}
-    producer_read, conflicts, gaps = [], [], []
+    producer_read, conflicts, gaps, observed = [], [], [], []
     for it in items:
         grouped.setdefault(it["facet"], []).append(it)
         counts["total"] += 1
@@ -445,7 +447,11 @@ def fields_view(conn, ci_id: int) -> dict:
             counts["open"] += 1
         if it["has_conflict"]:
             conflicts.append(it)
-        if it["is_gap"]:
+        if it["facet"] == "observed":
+            # The EP's working-memory scratchpad (ADR-0021): every meaningful observation
+            # the extractor caught that has no dedicated slot yet. Its own bucket.
+            observed.append(it)
+        elif it["is_gap"]:
             gaps.append(it)
         elif it["kind"] in ("insight", "recommendation", "open_question"):
             producer_read.append(it)
@@ -479,6 +485,6 @@ def fields_view(conn, ci_id: int) -> dict:
                          "items": slots})
 
     return {"sections": sections, "producer_read": producer_read,
-            "conflicts": conflicts, "gaps": gaps,
+            "conflicts": conflicts, "gaps": gaps, "observed": observed,
             "by_facet": grouped, "counts": counts,
             "facets_present": [f for f in FACETS if grouped.get(f)]}

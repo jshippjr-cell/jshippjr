@@ -328,6 +328,35 @@
   </div>
   {% endfor %}
 
+  {# Observed Facts — the EP's working-memory scratchpad (ADR-0021): every meaningful
+     observation the extractor caught that has no dedicated slot yet. Confirm to keep,
+     edit to sharpen — every disposition trains the producer's learned priors. #}
+  {% if ci_view.observed %}
+  <div class="ci-section ci-observed">
+    <h3>Observed facts <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">— the producer's working memory</span></h3>
+    <ul class="obs-list">
+      {% for it in ci_view.observed %}
+      <li class="obs-item">
+        <span class="obs-mark">{{ '✓' if not it.open else '◍' }}</span>
+        <span class="obs-body">
+          <span class="obs-val">{{ it.value }}</span>
+          <span class="obs-meta">
+            {% for s in it.sources %}<span class="pill pv-machine">machine · {{ s.replace('_',' ') }}</span>{% endfor %}
+            {% if it.confidence is not none %}<span class="muted small">{{ it.confidence }}% conf</span>{% endif %}
+          </span>
+        </span>
+        {% if it.id and it.open %}
+        <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="margin:0">
+          <input type="hidden" name="field_id" value="{{ it.id }}">
+          <button class="btn tiny primary" type="submit">Confirm</button>
+        </form>
+        {% elif it.id %}<span class="pill pv-done">✓ kept</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   {# The Producer's read — interpretation, kept distinct from fact. #}
   {% if ci_view.producer_read %}
   <div class="ci-section">

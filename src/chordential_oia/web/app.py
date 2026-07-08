@@ -62,8 +62,8 @@ from . import (
     campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
-    music_opportunity, next_action, opportunity_signals, outreach_engine, production,
-    relationships,
+    music_opportunity, next_action, opportunity_signals, outreach_engine, producer_learning,
+    production, relationships,
     scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
@@ -2008,10 +2008,23 @@ def opp_intelligence_field(opp_id: int, value: str = Form(""), field_id: str = F
         if not value:
             pass
         elif str(field_id).strip().isdigit():
+            old = db.get_ci_field(conn, int(field_id))
             campaign_intelligence.edit_field(conn, int(field_id), value, actor="operator")
+            if old is not None:
+                # ADR-0021: the operator edited a proposed value — training data. A
+                # consistent enrichment in a facet teaches the extractor to propose richer.
+                producer_learning.record_event(
+                    conn, ci_id=ci_row["id"], opp_id=opp_id, facet=old["facet"],
+                    key=old["key"], kind=old["kind"], action="edited",
+                    ai_value=old["value"] or "", final_value=value,
+                    confidence_before=old["confidence"], capture_id=old["capture_id"])
         elif facet and key:
             campaign_intelligence.edit_or_create(conn, ci_row["id"], facet, key,
                                                  kind or "fact", value, actor="operator")
+            # The operator supplied a field the AI never proposed — the missed-concept signal.
+            producer_learning.record_event(
+                conn, ci_id=ci_row["id"], opp_id=opp_id, facet=facet, key=key,
+                kind=kind or "fact", action="added", ai_value="", final_value=value)
         campaign_intake.sync_ci_to_opportunity(conn, ci_row["id"], opp_id)
     finally:
         conn.close()
@@ -2030,6 +2043,14 @@ def opp_intelligence_answer(opp_id: int, field_id: str = Form(...), answer: str 
             fld = db.get_ci_field(conn, int(field_id))
             if fld is not None:
                 campaign_intake.answer_gap(conn, fld, answer, created_by="operator")
+                # Answering a follow-up fills a field the AI flagged as unknown — the operator
+                # supplying the value is an "added" event on the target field (ADR-0021).
+                target_key = (fld["key"] or "")[4:] if (fld["key"] or "").startswith("ask_") \
+                    else (fld["key"] or "")
+                producer_learning.record_event(
+                    conn, ci_id=fld["ci_id"], opp_id=opp_id, facet=fld["facet"],
+                    key=target_key, action="added", ai_value="", final_value=answer,
+                    capture_id=fld["capture_id"])
                 campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
     finally:
         conn.close()
@@ -2047,6 +2068,12 @@ def opp_intelligence_dispose(opp_id: int, field_id: str = Form(...)):
             fld = db.get_ci_field(conn, int(field_id))
             if fld is not None:
                 campaign_intelligence.dispose(conn, fld, actor="operator")
+                # ADR-0021: confirming a proposal verbatim is the strongest "trust" signal.
+                producer_learning.record_event(
+                    conn, ci_id=fld["ci_id"], opp_id=opp_id, facet=fld["facet"],
+                    key=fld["key"], kind=fld["kind"], action="confirmed",
+                    ai_value=fld["value"] or "", final_value=fld["value"] or "",
+                    confidence_before=fld["confidence"], capture_id=fld["capture_id"])
                 campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
     finally:
         conn.close()
@@ -2064,8 +2091,18 @@ def opp_intelligence_conflict(opp_id: int, field_id: str = Form(...),
         if str(field_id).strip().isdigit():
             fld = db.get_ci_field(conn, int(field_id))
             if fld is not None:
+                accept = (decision == "accept")
                 campaign_intelligence.resolve_conflict(
-                    conn, int(field_id), accept=(decision == "accept"), actor="operator")
+                    conn, int(field_id), accept=accept, actor="operator")
+                # ADR-0021: accepting the machine's disputed value = confirmed; keeping your
+                # own = the machine value was rejected. Both train the prior.
+                producer_learning.record_event(
+                    conn, ci_id=fld["ci_id"], opp_id=opp_id, facet=fld["facet"],
+                    key=fld["key"], kind=fld["kind"],
+                    action=("confirmed" if accept else "rejected"),
+                    ai_value=fld["proposed_value"] or "",
+                    final_value=(fld["proposed_value"] or "") if accept else (fld["value"] or ""),
+                    confidence_before=fld["confidence"], capture_id=fld["capture_id"])
                 campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
     finally:
         conn.close()

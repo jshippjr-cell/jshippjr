@@ -144,35 +144,63 @@ def _extract_debrief(text: str) -> List[Dict]:
 _CANON_KEYS = [k for _f, k, _kind, _l, _p, _o in ci.CANONICAL_FIELDS]
 
 
-def _build_extraction_prompt(text: str, stance: str) -> str:
+def _build_extraction_prompt(text: str, stance: str, *, priors: str = "") -> str:
     objective = stance != DEBRIEF
     stance_rule = (
-        "STANCE = objective ('what happened'): extract what was OBJECTIVELY stated as kind "
-        "'fact' (budget, timeline, deliverables, decision-makers, brand/agency notes, "
-        "objectives). You may ALSO add clearly-supported 'insight' / 'recommendation' / "
+        "STANCE = objective ('what happened'): extract everything OBJECTIVELY stated as kind "
+        "'fact'. You may ALSO add clearly-supported 'insight' / 'recommendation' / "
         "'open_question', and flag risks."
         if objective else
         "STANCE = debrief ('the producer's read'): this is subjective interpretation — emit "
         "ONLY 'insight' / 'recommendation' / 'open_question'. NEVER emit kind 'fact' (an "
         "inference must not be laundered into objective fact)."
     )
+    prior_block = (priors.strip() + "\n\n") if priors and priors.strip() else ""
     return (
-        "You are the intelligence analyst for Chordential, a procurement-grade studio that "
-        "sells clearance-certified, human-composed campaign music. Read the capture below and "
-        "extract structured Campaign Intelligence as a JSON array. Each element:\n"
-        '{"facet": one of [engagement, buyer, direction, commercial, relationship, outcome], '
-        '"key": snake_case — PREFER these when they fit: ' + ", ".join(_CANON_KEYS) + "; else a "
-        'short snake_case key, "kind": one of [fact, insight, recommendation, open_question], '
-        '"value": concise faithful content, "confidence": 0-100, "is_concern": true for a '
-        "risk/red-flag}.\n\n"
+        "You are an experienced EXECUTIVE PRODUCER at Chordential, a procurement-grade studio "
+        "that sells clearance-certified, human-composed campaign music. You are listening to a "
+        "discovery call the way a producer actually listens: as you read, ask yourself — \"If I "
+        "walked out of this meeting and had to brief my production team, what would I "
+        "immediately write down?\" Capture EVERYTHING that changes how this campaign will be "
+        "planned, staffed, priced, scheduled, delivered, approved, or creatively directed. "
+        "Optimize for COMPLETENESS, not minimality: silence is more harmful than proposing a "
+        "field for review. Err on the side of OVER-capturing. Return a JSON array; each element:\n"
+        '{"facet": one of [engagement, buyer, direction, commercial, relationship, outcome, '
+        'observed], "key": snake_case, "kind": one of [fact, insight, recommendation, '
+        'open_question], "value": faithful content — merge multiple supporting statements into '
+        'ONE richer value rather than discarding detail, "confidence": 0-100, "is_concern": '
+        "true for a risk/red-flag}.\n\n"
+        + prior_block +
+        "WHAT TO EXTRACT — attempt EVERY relevant field, not just the easy ones:\n"
+        "- engagement: business_objective, campaign_type (feature film / national spot / "
+        "social…), budget_band, deadline, critical_deadline, deliverables (list every asset: "
+        "score, stems, alt mixes, cutdowns :15/:30/:60, verticals, instrumental, VO/commercial "
+        "mix, strings, brass…), distribution (festival / broadcast / streaming), "
+        "production_complexity, mix_requirements, asset_package, revision_expectations.\n"
+        "- buyer: decision_makers (who signs off), brand_notes, agency_notes, "
+        "procurement_requirements, communication_style, success_criteria, client_expectations.\n"
+        "- direction: campaign_objective, emotional_arc, reference_playlist, instrumentation, "
+        "tone. When the operator's world expands terse language, propose the FULLER read "
+        "('warm, cinematic' + 'some brass' -> 'warm, cinematic, with restrained brass').\n"
+        "- commercial: rights, term, territory, exclusivity, pricing_signal.\n"
+        "- relationship / outcome: anything about the ongoing relationship or success measure.\n"
+        "- observed: ANY meaningful fact that doesn't fit a field above yet — a scratchpad of "
+        "the producer's working memory (e.g. 'plans a festival premiere', 'wants daily edit "
+        "deliveries', 'brass requested', 'budget verbally confirmed'). Use facet 'observed' "
+        "with a short snake_case key. Never drop a real observation just because it has no slot.\n\n"
         "RULES:\n"
         f"- {stance_rule}\n"
-        "- Extract ONLY what the text supports — never invent. Normalize naturally: 'about "
-        "twenty thousand dollars' -> budget_band '$20,000'; 'by the fall' -> deadline 'Fall'; "
-        "'a minute-long anthem plus cutdowns' -> deliverables ':60 anthem + cutdowns'.\n"
-        "- Keep fact (stated) vs insight (your inference) vs recommendation (what we should do) "
-        "vs open_question (unknown/unresolved) distinct. Set is_concern=true on risks.\n"
-        "- Be thorough but faithful; one element per distinct point. Return ONLY the JSON array.\n\n"
+        "- Extract ONLY what the text supports — never invent. Normalize naturally ('about "
+        "twenty thousand dollars' -> '$20,000'; 'by the fall' -> 'Fall'; 'daily video "
+        "deliverables' -> a deliverables item).\n"
+        "- CONFIDENCE DRIVES ACTION: for anything you can support at MEDIUM or HIGH confidence "
+        "(>=50), PROPOSE the fact. For anything genuinely uncertain or merely implied "
+        "(<50), do NOT stay silent — instead emit an 'open_question' naming the follow-up to "
+        "ask (e.g. 'confirm final mix formats needed'). Every gap becomes a question.\n"
+        "- Keep fact (stated) vs insight (inference) vs recommendation (what we should do) vs "
+        "open_question (unknown) distinct. Set is_concern=true on risks.\n"
+        "- One element per distinct point; merge duplicates into richer values. Return ONLY "
+        "the JSON array.\n\n"
         "CAPTURE:\n" + text.strip())
 
 
@@ -196,7 +224,7 @@ def _coerce_candidates(data, stance: str) -> List[Dict]:
     if not isinstance(data, list):
         return []
     out: List[Dict] = []
-    for item in data[:50]:
+    for item in data[:150]:
         if not isinstance(item, dict):
             continue
         facet = str(item.get("facet", "")).strip().lower()
@@ -218,10 +246,11 @@ def _coerce_candidates(data, stance: str) -> List[Dict]:
     return out
 
 
-def _default_llm(text: str, stance: str) -> Optional[List[Dict]]:  # pragma: no cover - networked
-    """The LLM extractor (ADR-0005 seam): reads a capture and returns rich CI candidates —
-    understanding natural conversation ('about twenty grand' -> budget, an inferred emotional
-    arc, risks, recommendations), not just keywords. Off unless ANTHROPIC_API_KEY is set (and
+def _default_llm(text: str, stance: str, priors: str = "") -> Optional[List[Dict]]:  # pragma: no cover - networked
+    """The LLM extractor (ADR-0005 seam): reads a capture as an Executive Producer and returns
+    rich, complete CI candidates — every field a producer would write down, plus an Observed-
+    Facts scratchpad and follow-up questions for what's uncertain (ADR-0021). ``priors`` is the
+    learned "what this producer values" brief. Off unless ANTHROPIC_API_KEY is set (and
     CHORDENTIAL_INTAKE_LLM not disabled); returns None to fall back to the deterministic pass."""
     if os.environ.get("CHORDENTIAL_INTAKE_LLM", "1").strip().lower() in (
             "0", "false", "off", "no", ""):
@@ -233,21 +262,27 @@ def _default_llm(text: str, stance: str) -> Optional[List[Dict]]:  # pragma: no 
         client = anthropic.Anthropic()
         model = os.environ.get("CHORDENTIAL_INTAKE_MODEL") or "claude-sonnet-5"
         resp = client.messages.create(
-            model=model, max_tokens=1600,
-            messages=[{"role": "user", "content": _build_extraction_prompt(text, stance)}])
+            model=model, max_tokens=4000,
+            messages=[{"role": "user",
+                       "content": _build_extraction_prompt(text, stance, priors=priors)}])
         raw = next((b.text for b in resp.content if b.type == "text"), "")
         return _coerce_candidates(_loads_array(raw), stance) or None
     except Exception:  # noqa: BLE001 — never let the model break capture; fall back
         return None
 
 
-def extract(text: str, stance: str, *, llm: Optional[LLM] = None) -> List[Dict]:
-    """Extract CI-field candidates from a capture. Uses the LLM seam when configured (rich
-    understanding of natural conversation); falls back to the deterministic heuristic (always
-    available, offline + free). The LLM proposes — a human still disposes downstream."""
+def extract(text: str, stance: str, *, llm: Optional[LLM] = None, priors: str = "") -> List[Dict]:
+    """Extract CI-field candidates from a capture. Uses the LLM seam when configured (an EP's
+    complete read of natural conversation, calibrated by learned ``priors``); falls back to the
+    deterministic heuristic (always available, offline + free). The LLM proposes — a human
+    still disposes downstream, and that disposition trains the priors (ADR-0021)."""
     fn = llm if llm is not None else _default_llm
     try:
-        got = fn(text, stance)
+        # The injected test/seam llm may accept (text, stance) only; try priors first.
+        try:
+            got = fn(text, stance, priors)
+        except TypeError:
+            got = fn(text, stance)
         if got:
             return got
     except Exception:  # noqa: BLE001 — never let the model break capture; fall back
@@ -300,7 +335,14 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
     become follow-up open_questions."""
     stance = lane.stance
     source = lane.provenance_source
-    candidates = extract(text, stance, llm=llm)
+    # ADR-0021: the extractor is calibrated by what this producer has consistently valued
+    # across past campaigns (the learned priors), so it gets better after every deal.
+    try:
+        from . import producer_learning
+        priors = producer_learning.priors_summary(conn)
+    except Exception:  # noqa: BLE001 — learning is advisory; never block capture
+        priors = ""
+    candidates = extract(text, stance, llm=llm, priors=priors)
     cap_id = db.insert_capture(
         conn, ci_id=ci_id, campaign_id=campaign_id, opp_id=opp_id, lane=lane.key,
         stance=stance, modality=lane.modality, provenance_source=source, raw_text=text,

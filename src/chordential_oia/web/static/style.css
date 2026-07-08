@@ -1027,3 +1027,12 @@ details.ci-intake[open]>summary{opacity:.55}
   .mtg{flex-wrap:wrap}
   .mtg-acts{flex-direction:row;width:100%;justify-content:flex-start;margin-top:4px}
 }
+
+/* Observed Facts scratchpad (ADR-0021) — the EP's working memory on the CI panel. */
+.ci-observed .obs-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.obs-item{display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line,#efe9e0)}
+.obs-item:first-child{border-top:0}
+.obs-mark{flex:0 0 auto;color:#2f6a34;font-weight:800;width:15px;text-align:center}
+.obs-item .obs-body{flex:1 1 auto;min-width:0}
+.obs-val{font-size:13.5px}
+.obs-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px}

@@ -1042,6 +1042,25 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         "PRAGMA table_info(campaign_intelligence_event)")}
     if "capture_id" not in evt_cols:
         conn.execute("ALTER TABLE campaign_intelligence_event ADD COLUMN capture_id INTEGER")
+    # Producer Learning ledger (ADR-0021): every operator disposition of a proposed field is
+    # training data. "The machine proposes, Jon disposes, and the machine learns from the
+    # disposition." Rolls up into per-field priors that tune the next extraction — not
+    # fine-tuning, not vector memory: an auditable, count-based learning record.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS producer_learning_event (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ci_id INTEGER, opp_id INTEGER,
+            facet TEXT, key TEXT, kind TEXT DEFAULT 'fact',
+            action TEXT,                    -- confirmed|rejected|edited|added
+            ai_value TEXT,                  -- the machine's original proposal ('' when added-from-nothing)
+            final_value TEXT,               -- the operator's confirmed/edited value
+            edit_distance REAL DEFAULT 0,   -- 0 = accepted verbatim, 1 = rejected/wholesale change
+            confidence_before INTEGER,      -- the AI's confidence on the proposal
+            transcript_fragment TEXT,       -- the raw-evidence citation, when known
+            capture_id INTEGER,
+            created_at TEXT
+        )"""
+    )
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
