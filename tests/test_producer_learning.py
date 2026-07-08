@@ -139,3 +139,48 @@ def test_observed_facts_bucket_and_render(tmp_path, monkeypatch):
     with TestClient(app_mod.app) as c:
         page = c.get(f"/opportunity/{oid}").text
     assert "Observed facts" in page and "Plans a film-festival premiere" in page
+
+
+# --------------------------------------------------------------------------- #
+# Discovery Summary email — rendered FROM Campaign Intelligence, introduces the Workspace.
+# --------------------------------------------------------------------------- #
+def test_discovery_summary_renders_from_ci_and_introduces_workspace(tmp_path, monkeypatch):
+    from chordential_oia import outreach
+    from chordential_oia.models import Opportunity, BuyerType, MusicRequirement
+    opp = Opportunity(
+        client="Aurora Films", need="Indie feature score", description="Feature film.",
+        buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL,
+        budget_min=0, budget_max=0)
+    ci_view = {"fields": {
+        "business_objective": "Original score for an indie feature film",
+        "campaign_type": "Feature film", "distribution": "Film festival debut",
+        "deliverables": "Original score, stems, alt mixes, :15 and :30 cutdowns",
+        "critical_deadline": "Festival delivery"}}
+
+    # POST-DISCOVERY (met=True): the Discovery Summary introduces the Workspace, from CI.
+    blocks = outreach.build_compose_blocks(
+        opp, None, None, opp_id=7, contact_name="Sarah", share_token="TOK123",
+        ci_view=ci_view, met=True)
+    by = {b["key"]: b for b in blocks}
+    on = {b["key"] for b in blocks if b["default_on"]}
+    # the understanding is rendered FROM CI — not the template default
+    assert "indie feature film" in by["understanding"]["text"].lower()
+    assert "Film festival debut" in by["understanding"]["text"]        # distribution, from CI
+    assert ":15 and :30 cutdowns" in by["understanding"]["text"]       # deliverables, from CI
+    assert "Festival delivery" in by["understanding"]["text"]          # timeline, from CI
+    # the workspace-introduction copy + the durable workspace link
+    assert "private Chordential Workspace" in by["page_link"]["text"]
+    assert "correct anything we've misunderstood" in by["page_link"]["text"]
+    assert "/workspace/TOK123" in by["page_link"]["text"]
+    assert by["opener"]["text"].startswith("Hi Sarah")
+    assert "Thank you again for your time today" in by["opener"]["text"]
+    # cold-prospecting blocks are OFF post-discovery
+    assert "track" not in on and "call_offer" not in on
+    assert on == {"opener", "understanding", "page_link", "signoff"}
+
+    # PRE-DISCOVERY (met=False): still the prospecting email, understanding still from CI.
+    cold = {b["key"]: b for b in outreach.build_compose_blocks(
+        opp, None, None, opp_id=7, contact_name="Sarah", share_token="TOK123",
+        ci_view=ci_view, met=False)}
+    assert "indie feature film" in cold["understanding"]["text"].lower()  # CI, not template
+    assert "private Chordential Workspace" not in cold["page_link"]["text"]

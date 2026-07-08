@@ -504,28 +504,50 @@ def build_understanding(opp: Opportunity) -> str:
 
 
 def _understanding_from_ci(opp: Opportunity, ci_fields: dict, met: bool) -> str:
-    """The Understanding section written FROM the intelligence (ADR-0017): a summary of
-    what was actually discussed, never a template restart. Uses only fields that exist —
-    invents nothing (Founder's Advocate)."""
-    objective = (ci_fields.get("campaign_objective")
-                 or ci_fields.get("business_objective") or "").strip()
-    arc = (ci_fields.get("emotional_arc") or "").strip()
-    dels = (ci_fields.get("deliverables") or "").strip()
-    deadline = (ci_fields.get("deadline") or "").strip()
-    if not (objective or arc or dels):
+    """The Understanding section written FROM Campaign Intelligence (ADR-0017 / ADR-0021):
+    a summary of what was actually discussed — the source of truth, never a template restart.
+    Consumes whatever CI currently knows across the EP-completeness field set; uses only fields
+    that exist and invents nothing (Founder's Advocate). Empty only when CI is truly bare."""
+    def g(*keys):
+        for k in keys:
+            v = (ci_fields.get(k) or "").strip()
+            if v:
+                return v
+        return ""
+    objective = g("campaign_objective", "business_objective")
+    ctype = g("campaign_type")
+    distribution = g("distribution")
+    arc = g("emotional_arc", "tone")
+    instrumentation = g("instrumentation")
+    dels = g("deliverables")
+    deadline = g("critical_deadline", "deadline")
+    budget = g("budget_band")
+    dm = g("decision_makers")
+    if not (objective or ctype or arc or dels):
         return ""
     parts = []
-    if objective:
-        parts.append(f"{objective[0].upper()}{objective[1:]}" if objective else "")
+    head = objective or (f"An original {ctype.lower()}" if ctype else "")
+    if head:
+        parts.append(head[0].upper() + head[1:])
+    if ctype and ctype.lower() not in head.lower():
+        parts.append(f"Campaign: {ctype}")
+    if distribution:
+        parts.append(f"Distribution: {distribution}")
     if arc:
         parts.append(f"The music carries {arc[0].lower()}{arc[1:]}"
                      if arc[:1].isupper() and not arc.isupper() else f"The music carries {arc}")
+    if instrumentation:
+        parts.append(f"Instrumentation: {instrumentation}")
     if dels:
         parts.append(f"Deliverables as discussed: {dels}")
     if deadline:
         parts.append(f"Timeline: {deadline}")
-    lead = ("This is what we heard, and how we propose approaching the work. "
-            if met else "This reflects our current understanding of the campaign. ")
+    if budget:
+        parts.append(f"Budget: {budget}")
+    if dm:
+        parts.append(f"Approvals: {dm}")
+    lead = ("Here's what we heard. " if met
+            else "This reflects our current understanding of the campaign. ")
     return lead + ". ".join(p.rstrip(".") for p in parts if p) + "."
 
 

@@ -265,10 +265,14 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     best = examples[0] if examples else ""
     more = examples[1:]
 
-    opener = f"Hi {name},\n\n{_first_brief_line(opp)}"
+    # ADR-0020: after a discovery call this email IS the Discovery Summary — a warm,
+    # post-meeting note that introduces the Workspace, not cold prospecting copy.
+    opener = (f"Hi {name},\n\nThank you again for your time today." if met
+              else f"Hi {name},\n\n{_first_brief_line(opp)}")
     ci_fields = dict((ci_view or {}).get("fields") or {})
-    # ADR-0017: prefer the CI-derived understanding (what the brief shows); fall back to
-    # the conservative stock restatement only when there is no intelligence yet.
+    # ADR-0017/0021: the understanding is rendered FROM Campaign Intelligence (the source of
+    # truth), never the static template. Fall back to the stock restatement only when CI is
+    # genuinely bare (pre-discovery, nothing captured yet).
     understanding = _understanding_from_ci(opp, ci_fields, met) or build_understanding(opp)
     if best:
         track = f"One piece I think speaks directly to your brief: {best}."
@@ -280,15 +284,23 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
         "through them on a short call."
     )
     page_url = _page_url(opp_id, share_token)
-    # Put the URL on its OWN line: a bare, fully-qualified https URL alone on a
-    # line is what mail clients (Gmail / Apple Mail / Outlook) reliably auto-link
-    # into a clickable hyperlink — inline-after-a-colon often isn't detected.
-    page_link = (
-        "Thank you for meeting with us. Here's our understanding of your campaign — review "
-        "it, leave a note if anything reads wrong, and if it reflects your project, confirm "
-        "it right on the page:\n"
-        f"{page_url}"
-    )
+    # Put the URL on its OWN line: a bare, fully-qualified https URL alone on a line is what
+    # mail clients reliably auto-link. The Workspace is the destination for the relationship;
+    # the email simply introduces it (ADR-0020) — post-discovery copy vs. pre-discovery.
+    if met:
+        page_link = (
+            "We've summarized our understanding of the campaign inside your private "
+            "Chordential Workspace. You can review our understanding, leave comments, correct "
+            "anything we've misunderstood, and continue the conversation from there.\n\n"
+            "Open your workspace:\n"
+            f"{page_url}"
+        )
+    else:
+        page_link = (
+            "Here's our understanding of your campaign — review it, leave a note if anything "
+            "reads wrong, and if it reflects your project, confirm it right on the page:\n"
+            f"{page_url}"
+        )
     signoff = "— Jon Shipp · Chordential"
     if more:
         example_more = "A couple more, if helpful:\n" + "\n".join(f"• {e}" for e in more)
@@ -313,16 +325,22 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     }
     labels = {
         "opener": "Warm opener",
-        "understanding": "What we understand you need",
+        "understanding": "What we understand you need" if not met else "What we heard",
         "track": "One relevant track",
         "call_offer": "The call offer",
-        "page_link": "Soft tailored-page link",
+        "page_link": "Soft tailored-page link" if not met else "Open Your Workspace",
         "signoff": "Personal sign-off",
         "example_more": "A second / third example",
         "credibility": "Credibility line",
         "ps": "P.S.",
     }
-    default_on = {"opener", "understanding", "track", "call_offer", "page_link", "signoff"}
+    # ADR-0020: post-discovery, the email is the Workspace-introduction Discovery Summary —
+    # drop the cold-prospecting blocks (track pitch / stranger-call / credibility). It's just
+    # a warm note that hands them the Workspace.
+    if met:
+        default_on = {"opener", "understanding", "page_link", "signoff"}
+    else:
+        default_on = {"opener", "understanding", "track", "call_offer", "page_link", "signoff"}
 
     blocks = []
     for key in COMPOSE_BLOCK_KEYS:
