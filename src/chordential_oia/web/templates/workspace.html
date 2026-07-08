@@ -87,6 +87,51 @@
   {% include "_kickoff_document.html" %}
   <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
 
+  {% elif prod %}
+  {# ── Production: the court question first, then the creative journey (ADR-0019). ── #}
+  <div class="ws-strip">
+    {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
+  </div>
+  <div class="ws-wrap">
+    <div class="ws-now" style="margin-bottom:22px">
+      <div class="lab">{{ 'Your move' if prod.court.court == 'client' else 'In the studio' if prod.court.court == 'studio' else 'All set' }}</div>
+      <h2>{{ 'A new version is waiting for you' if prod.court.what == 'version_ready'
+             else 'Nothing is needed from you' if prod.court.court != 'client'
+             else phase_label }}</h2>
+      <p>{{ prod.court.line }}</p>
+      {% if prod.court.what == 'version_ready' %}
+      <a class="ws-cta" href="{{ prod.portal_url }}">Listen &amp; share your thoughts →</a>
+      {% elif prod.journey.versions %}
+      <a class="ws-cta" style="background:none;color:var(--ws-accent);border:1.5px solid var(--ws-accent)" href="{{ prod.portal_url }}">Open the listening room →</a>
+      {% endif %}
+    </div>
+
+    {# The creative journey — the history of creative thinking, not a task list. #}
+    {% if prod.journey.directions or prod.journey.versions %}
+    <div class="ws-now">
+      <div class="lab">The creative journey</div>
+      {% for d in prod.journey.directions %}
+      <div style="padding:10px 0;border-bottom:1px solid var(--ws-line)">
+        <b>{{ d.name }}</b>
+        {% if d.thesis %}<span style="color:var(--ws-muted)"> — {{ d.thesis }}</span>{% endif %}
+        <span class="ws-chip {{ 'current' if d.status == 'selected' else 'done' }}" style="float:right">{{ d.status }}</span>
+        {% if d.status == 'rejected' and d.reason %}<div style="font-size:12.5px;color:var(--ws-sand);margin-top:2px">“{{ d.reason }}”</div>{% endif %}
+      </div>
+      {% endfor %}
+      {% for v in prod.journey.versions %}
+      <div style="padding:10px 0;border-bottom:1px solid var(--ws-line);display:flex;justify-content:space-between;gap:10px">
+        <span><b>{{ v.label }}</b>{% if v.name %} <span style="color:var(--ws-muted)">· {{ v.name }}</span>{% endif %}</span>
+        {% if prod.journey.lock and prod.journey.lock.version_n == v.n %}<span class="ws-chip current">creative lock</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% if prod.journey.rounds_used %}
+      <div style="font-size:12.5px;color:var(--ws-muted);margin-top:10px">{{ prod.journey.rounds_used }} revision round{{ 's' if prod.journey.rounds_used != 1 }} so far</div>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="ws-foot" style="padding:22px 0 0">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  </div>
+
   {% else %}
   {# ── Non-brief phases: the lifecycle rail + the active stage card. ── #}
   <div class="ws-wrap">

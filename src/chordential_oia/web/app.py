@@ -62,8 +62,8 @@ from . import (
     campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
-    music_opportunity, opportunity_signals, outreach_engine, relationships, scheduler,
-    seed, signals, simulator, sources, triage, webpush, workspace,
+    music_opportunity, opportunity_signals, outreach_engine, production, relationships,
+    scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
 from .estimate import build_estimate
@@ -2448,8 +2448,18 @@ def client_workspace(request: Request, token: str):
             cr = db.current_commercial_review(conn, opp["id"])
             ci_view, _met = _brief_ci_context(conn, opp)
             readiness = kickoff.build_readiness(conn, db, opp, project, cr, ci_view=ci_view)
+        prod = None
+        if phase in (workspace.PRODUCTION, workspace.DELIVERY) and project is not None:
+            # ADR-0019: production answers the court question first — whose move is it —
+            # then shows the creative journey. The portal stays the listening room.
+            delivery_blob = db.get_delivery(conn, project["id"])
+            prod = {
+                "court": production.court_state(project, delivery_blob),
+                "journey": production.creative_journey(delivery_blob),
+                "portal_url": f"/project/{project['id']}/delivery-portal?k={token}",
+            }
         stage_url = ""
-        if brief_ctx is None and review is None and readiness is None:
+        if brief_ctx is None and review is None and readiness is None and prod is None:
             stage_url = {
                 workspace.INTRO: f"/opportunity/{opp['id']}/request?k={token}",
                 workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
@@ -2465,7 +2475,7 @@ def client_workspace(request: Request, token: str):
                   project=project, phase=phase, phase_label=workspace.PHASE_LABEL[phase],
                   phase_blurb=workspace.PHASE_BLURB[phase], rail=workspace.rail(phase),
                   stage_url=stage_url, review=review, approve_url=approve_url,
-                  approved_note=approved_note, k=readiness,
+                  approved_note=approved_note, k=readiness, prod=prod,
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
                   **(brief_ctx or {}))
 
@@ -4696,6 +4706,9 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         "project": row,
         "assignments": assignments,
         "delivery": delivery,
+        # ADR-0019: the production spine on the console — directions + the lock.
+        "prod_directions": production.directions(delivery),
+        "creative_lock": production.creative_lock(delivery),
         "download_unlocked": download_unlocked,
         "invoice_balance": balance,
         "state": delivery.get("state") or DELIVERY_STATES[0],
@@ -5233,6 +5246,48 @@ def delivery_revision(
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+# ── Production spine (ADR-0019): Directions + Creative Lock (operator actions). ───────
+@app.post("/project/{project_id}/direction")
+def project_direction(project_id: int, action: str = Form("add"), name: str = Form(""),
+                      thesis: str = Form(""), direction_id: str = Form(""),
+                      status: str = Form(""), reason: str = Form("")):
+    """Directions — the creative territories. Add one (name + thesis: the hero element), or
+    decide its fate (selected / rejected — a rejection carries its WHY, which is what
+    Relationship Intelligence learns from)."""
+    conn = db.connect()
+    try:
+        if db.get_project(conn, project_id) is None:
+            return HTMLResponse("Project not found", status_code=404)
+        if action == "add":
+            production.add_direction(conn, db, project_id, name=name, thesis=thesis)
+        elif action == "decide":
+            production.decide_direction(conn, db, project_id, direction_id,
+                                        status=status, reason=reason)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#directions", status_code=303)
+
+
+@app.post("/project/{project_id}/creative-lock")
+def project_creative_lock(project_id: int, action: str = Form("set")):
+    """Creative Lock — the hinge of the lifecycle (ADR-0019). Ends the revision economy:
+    changes after lock are scope/conform conversations; production spend is authorized."""
+    conn = db.connect()
+    try:
+        if db.get_project(conn, project_id) is None:
+            return HTMLResponse("Project not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        if action == "clear":
+            production.clear_creative_lock(conn, db, project_id)
+        else:
+            cur = current_version(delivery) or {}
+            production.set_creative_lock(conn, db, project_id,
+                                         version_n=cur.get("n") or 0)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#directions", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/asset")
@@ -6135,6 +6190,10 @@ def review_changes(
         )
         db.update_delivery(conn, project_id, "revisions_used",
                            int(delivery.get("revisions_used") or 0) + 1)
+        # ADR-0019: the round LEDGER behind the counter — which version, who, what they said
+        # (post-lock rounds are stamped so scope conversations have a record to stand on).
+        production.log_round(conn, db, project_id,
+                             version=_current_version_tag(delivery), by=name, note=note_text)
         db.update_delivery(conn, project_id, "state", "In production")
         _notify_operator_review(
             project_id, project,

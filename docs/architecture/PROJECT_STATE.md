@@ -78,6 +78,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   production checklist, team, communication, milestones, and a "everything is ready" state,
   all projected from CI + the approved Review + the project. Legacy won projects (no approved
   review) skip Kickoff → Production, unchanged.
+- **Production OS increment 1 (done, ADR-0019):** the Direction→Version spine on the
+  EXISTING delivery machinery (`web/production.py`, no new tables): `directions` (territories
+  with thesis + fate + rejection reasons), `round_log` (the ledger behind `revisions_used`,
+  fed by review/changes, post-lock rounds stamped), `creative_lock` (a record, not a label),
+  and the computed **court-state** (client|studio|scheduled + age). The Workspace PRODUCTION
+  phase now answers the court question in concierge voice + shows the creative journey; the
+  delivery portal remains the listening room. Operator: Directions card + lock on the
+  delivery console. Business model: `docs/production-lifecycle-model.md` (agreed, both
+  passes).
 - **P2, P3, P5 (planned):** producer-voiced Terms engine (basic shipped in P1) →
   commitment/audit enrichment + DocuSign seam → adaptive procurement + delivery unification.
   See `docs/client-workspace-principles.md`; ADR-0018 for decisions.

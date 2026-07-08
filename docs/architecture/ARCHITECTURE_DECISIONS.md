@@ -324,6 +324,36 @@ CI (the relationship grows, nothing resets), so a send-time brief snapshot is no
 client *views* the brief — it is the **approval/audit record and the PDF source** (its real job in
 Phase 3). Legacy emailed `?v=snapshot` links keep rendering the frozen doc on the standalone route.
 
+### ADR-0019 — The Production OS: the Direction→Version spine, the court-state, and the round ledger
+**Status:** Accepted (2026-07-08) · Source: `docs/production-lifecycle-model.md` (the agreed
+business model), existing machinery in `delivery.py` / `delivery_json` / `review_comments`
+**Decision.** Production is built on the EXISTING version machinery, not a parallel one: the
+`delivery_json['versions']` ladder remains the Version chain; `review_comments` remains the
+feedback tape; the creator publish gate remains the taste gate's seam. On top of it, three
+first-class pieces of state land in the same per-project blob (house JSON pattern, no new
+tables): **`directions`** (the creative territories — name, thesis/hero element, status
+exploring|selected|rejected with a rejection *reason*; versions stamp a direction id),
+**`round_log`** (one entry per change-request round: when, by whom, the note, against which
+version — the ledger behind the flat `revisions_used` counter, which stays as the total), and
+**`creative_lock`** (`{version_n, at, by}` — the gate that ends the revision economy; changes
+after lock are scope/conform conversations). The **court-state** is *computed, never stored*:
+every project is always in exactly one of `client` / `studio` / `scheduled` (derived from
+pending_version, delivery state, and lock), each with an age — and the Workspace's PRODUCTION
+phase renders it in the concierge voice ("Version 2 is ready for you" / "We're composing —
+nothing needed from you"). The delivery portal remains the listening/feedback room; the
+workspace is the calm layer above it.
+**Why.** The agreed model (production-lifecycle-model.md): the Version is the atomic unit of
+production; Direction preserves the creative journey for Relationship Intelligence; the round
+has contractual meaning; and the ball-in-whose-court state is the operational form of "what
+uncertainty did we remove." Philosophy is stable — implementation over abstraction; each of
+these three earns its place by replacing something implicit and load-bearing (labels, a bare
+counter, inference) with something honest.
+**Consequences.** No new SQL tables; `revision_status()` and the review/changes route feed the
+round_log; "Direction-lock"/"FINAL" version *labels* stay for display but the lock is a
+record, not a string. The client-facing production experience must always answer the court
+question first. Deferred deliberately (not lost — see the model doc): the reconciliation
+round-clock rule, the two calendars, fidelity calibration, person-anchored RI migration.
+
 ---
 
 ## Adding a new ADR
