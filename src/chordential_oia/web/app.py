@@ -1444,6 +1444,22 @@ def inbound_delete(lead_id: int):
     return RedirectResponse("/leads?status=Dismissed", status_code=303)
 
 
+@app.post("/opportunity/{opp_id}/delete")
+def opportunity_delete(opp_id: int, return_to: str = Form("/inbox")):
+    """Permanently delete an opportunity and everything anchored to it — the whole account
+    (CI, meetings, procurement, project + delivery, commercial, learning). Built for clearing
+    demo accounts. Irreversible; the UI double-confirms before POSTing here."""
+    conn = db.connect()
+    try:
+        summary = db.delete_opportunity(conn, opp_id)
+    finally:
+        conn.close()
+    dest = return_to if (return_to or "").startswith("/") else "/inbox"
+    if summary.get("deleted"):
+        dest += ("&" if "?" in dest else "?") + "deleted=" + quote(summary.get("client", ""))
+    return RedirectResponse(dest, status_code=303)
+
+
 @app.post("/leads/{lead_id}/promote")
 def inbound_promote(lead_id: int):
     """Promote a reviewed lead into the pipeline — the human qualify-gate.

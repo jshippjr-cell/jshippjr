@@ -4,6 +4,12 @@
 {% block heading %}Opportunity Inbox{% endblock %}
 {% block content %}
 
+{% if request.query_params.get('deleted') %}
+<div class="callout" style="background:#eef7ee;border:1px solid #cfe6cf;color:#2f6a34;border-radius:10px;padding:10px 14px;margin-bottom:14px">
+  ✓ Deleted <b>{{ request.query_params.get('deleted') }}</b> and everything attached to it.
+</div>
+{% endif %}
+
 {% set params = {'q':active.q,'action':active.action,'tier':active.tier,'discipline':active.discipline,'buyer_type':active.buyer_type,'status':active.status,'min_alignment':active.min_alignment} %}
 {% macro sort_header(col, label, width='') %}
   {% set qp = [] %}
@@ -71,7 +77,7 @@
       <td>{% if r['strategic_tier'] %}{{ strat_pill(r['strategic_tier'], r['strategic_value']) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ action_pill(r['action']) }}</td>
       <td>{{ status_pill(r['status']) }}</td>
-      <td class="row-action">
+      <td class="row-action" style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
         {% set nxt = 'Pursuing' if r['status']=='New' else ('Submitted' if r['status']=='Pursuing' else '') %}
         {% if nxt %}
         <form method="post" action="/opportunity/{{ r['id'] }}/status">
@@ -80,6 +86,11 @@
           <button class="btn tiny" type="submit" title="Advance to {{ stage_label(nxt) }}">→ {{ stage_label(nxt) }}</button>
         </form>
         {% endif %}
+        <form method="post" action="/opportunity/{{ r['id'] }}/delete"
+              onsubmit="return confirm('Delete “{{ r['need']|e }}” ({{ r['client']|e }})?\n\nThis permanently removes the deal and everything attached to it — intelligence, meetings, the project, and its workspace. This cannot be undone.');">
+          <input type="hidden" name="return_to" value="/inbox{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          <button class="btn tiny ghost danger" type="submit" title="Delete this deal permanently">🗑</button>
+        </form>
       </td>
     </tr>
     {% else %}

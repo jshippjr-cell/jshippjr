@@ -4457,6 +4457,52 @@ def get_client_procurement_history(conn, client: str) -> dict:
         return {}
 
 
+def delete_opportunity(conn: sqlite3.Connection, opp_id: int) -> dict:
+    """Permanently delete an opportunity and EVERYTHING anchored to it — the whole account:
+    its projects (+ assignments, milestones, review comments, updates, invoices, payouts,
+    project events, proposals), its Campaign Intelligence (+ fields, events, captures,
+    learning events), meetings + discovery requests + proposals, procurement, brief snapshots,
+    commercial reviews/approvals, and the opportunity row itself. Built for clearing demo
+    accounts; irreversible. Returns a small summary of what was removed.
+
+    Client-scoped tables (companies, client_procurement_history) are NOT touched — a client
+    name can span several opportunities, so deleting one deal must not wipe the buyer."""
+    row = conn.execute("SELECT client, need FROM opportunities WHERE id = ?", (opp_id,)).fetchone()
+    if row is None:
+        return {"deleted": False}
+    project_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM projects WHERE opp_id = ?", (opp_id,)).fetchall()]
+    ci_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM campaign_intelligence WHERE opp_id = ?", (opp_id,)).fetchall()]
+
+    def _del(sql, params):
+        try:
+            conn.execute(sql, params)
+        except sqlite3.OperationalError:
+            pass  # a table that doesn't exist in an older DB — skip, best-effort
+
+    # Project-scoped children first.
+    for pid in project_ids:
+        for t in ("assignments", "milestones", "review_comments", "project_updates",
+                  "invoices", "talent_payouts", "project_events"):
+            _del(f"DELETE FROM {t} WHERE project_id = ?", (pid,))
+    # CI-scoped children.
+    for cid in ci_ids:
+        for t in ("campaign_intelligence_field", "campaign_intelligence_event"):
+            _del(f"DELETE FROM {t} WHERE ci_id = ?", (cid,))
+    # Opp-scoped rows (proposals is opp_id-scoped; projects covers the rest).
+    for t in ("outreach_events", "brief_progress", "proposals", "campaigns",
+              "campaign_intelligence", "producer_learning_event", "procurement_requirement",
+              "procurement_event", "captures", "meetings", "discovery_requests",
+              "meeting_proposals", "brief_snapshots", "commercial_reviews",
+              "commercial_approvals", "projects"):
+        _del(f"DELETE FROM {t} WHERE opp_id = ?", (opp_id,))
+    conn.execute("DELETE FROM opportunities WHERE id = ?", (opp_id,))
+    conn.commit()
+    return {"deleted": True, "client": row["client"], "need": row["need"],
+            "projects": len(project_ids)}
+
+
 # --- Discovery meetings (ADR-0014 §4.2) — tied to the opportunity before they begin ---- #
 _MEETING_OPEN_STATUSES = ("scheduled", "bot_invited", "in_progress",
                           "transcript_ready", "ingested")

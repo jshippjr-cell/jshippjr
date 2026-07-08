@@ -54,6 +54,11 @@
           <button type="submit" title="The client approved — confirm the handoff to begin Production.">🚀 Start production</button>
         </form>
         {% endif %}
+        <form method="post" action="/opportunity/{{ row['id'] }}/delete" style="margin:0"
+              onsubmit="return confirm('Delete “{{ row['need']|e }}” ({{ row['client']|e }})?\n\nThis permanently removes the deal and everything attached to it — intelligence, meetings, the project, and its workspace. This cannot be undone.');">
+          <input type="hidden" name="return_to" value="/inbox">
+          <button type="submit" class="danger" title="Delete this deal permanently">🗑 Delete deal</button>
+        </form>
       </div>
     </details>
   </div>

@@ -1036,3 +1036,9 @@ details.ci-intake[open]>summary{opacity:.55}
 .obs-item .obs-body{flex:1 1 auto;min-width:0}
 .obs-val{font-size:13.5px}
 .obs-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px}
+
+/* Destructive action — the delete-deal button (demo-account cleanup). */
+.btn.danger, button.danger{color:#a3341f;border-color:#e6c4bb}
+.btn.danger:hover, button.danger:hover{background:#f7e9e6;border-color:#d98b78;color:#8a2a19}
+.acts-menu button.danger{color:#a3341f}
+.acts-menu button.danger:hover{background:#f7e9e6}
