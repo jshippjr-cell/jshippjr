@@ -55,6 +55,9 @@
       padding:4px 11px;border-radius:999px;border:1px solid var(--ws-line);color:var(--ws-sand);background:var(--ws-surface)}
     .ws-chip.done{color:#8a8073}
     .ws-chip.current{color:#fff;background:var(--ws-accent);border-color:var(--ws-accent)}
+    .ws-approve>summary{cursor:pointer;font-size:13px;color:var(--ws-muted);list-style:none}
+    .ws-approve>summary::-webkit-details-marker{display:none}
+    .ws-approve[open]>summary{color:var(--ws-accent);font-weight:600}
   </style>
 </head>
 <body>
@@ -132,7 +135,18 @@
              else phase_label }}</h2>
       <p>{{ prod.court.line }}</p>
       {% if prod.court.what == 'version_ready' %}
-      <a class="ws-cta" href="{{ prod.portal_url }}">Listen &amp; share your thoughts →</a>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <a class="ws-cta" href="{{ prod.portal_url }}">Listen &amp; share your thoughts →</a>
+        <details class="ws-approve">
+          <summary>It's perfect — approve with no changes</summary>
+          <form method="post" action="{{ prod.approve_url }}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="text" name="approver_name" placeholder="Your name" required
+                   style="border:1px solid var(--ws-line);border-radius:8px;padding:9px 11px;font:inherit">
+            <button class="ws-cta" type="submit" style="border:0;cursor:pointer">Approve this version ✓</button>
+          </form>
+          <div style="font-size:12px;color:var(--ws-sand);margin-top:6px">This approves the current version as final — your name and the time are recorded.</div>
+        </details>
+      </div>
       {% elif prod.journey.versions %}
       <a class="ws-cta" style="background:none;color:var(--ws-accent);border:1.5px solid var(--ws-accent)" href="{{ prod.portal_url }}">Open the listening room →</a>
       {% endif %}
@@ -194,5 +208,29 @@
     <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
   </div>
   {% endif %}
+
+  <script>
+  /* Quiet live-refresh (ADR-0019): poll the deal's state signature; reload only when it
+     actually changes, so a version landing or an approval surfaces without a manual refresh.
+     No flicker when nothing moved. Paused while the client is mid-form (typing/approving). */
+  (function () {
+    var url = window.location.pathname.replace(/\/$/, "") + "/court.json";
+    var current = null, busy = false;
+    document.addEventListener("focusin", function (e) {
+      if (e.target.matches("input, textarea")) busy = true;
+    });
+    async function tick() {
+      if (busy) return;
+      try {
+        var r = await fetch(url, { headers: { "Accept": "application/json" } });
+        if (!r.ok) return;
+        var j = await r.json();
+        if (current === null) { current = j.sig; return; }
+        if (j.sig !== current) window.location.reload();
+      } catch (e) { /* offline / transient — try again next tick */ }
+    }
+    setInterval(tick, 15000);
+  })();
+  </script>
 </body>
 </html>

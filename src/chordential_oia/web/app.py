@@ -274,7 +274,8 @@ _MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
 # The Client Workspace (ADR-0018): /workspace/<token> — the durable client destination.
 # The unguessable workspace token IS the access control (validated in-route), so the path
 # bypasses the admin login gate, same exemption as first-touch and the delivery portal.
-_WORKSPACE_RE = re.compile(r"^/workspace/[A-Za-z0-9_-]+(/approve|/confirm-scope)?/?$")
+_WORKSPACE_RE = re.compile(
+    r"^/workspace/[A-Za-z0-9_-]+(/approve|/confirm-scope|/approve-version|/court\.json)?/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
@@ -1309,9 +1310,25 @@ def dashboard(request: Request):
         dr_new = conn.execute(
             "SELECT COUNT(*) AS n FROM discovery_requests WHERE status='new'"
         ).fetchone()["n"]
-        waiting_count = len(followups) + incoming_total + dr_new
+        # Composer submissions waiting at the taste gate — a creator has uploaded a version
+        # and it's on Jon to review + publish (or send back) before the client sees it.
+        pending_reviews = []
+        for prow in db.list_projects(conn) if hasattr(db, "list_projects") else []:
+            d = db.get_delivery(conn, prow["id"])
+            pv = d.get("pending_version")
+            if pv:
+                pending_reviews.append({
+                    "project_id": prow["id"], "campaign": prow["need"],
+                    "client": prow["client"], "by": (pv.get("by") or "a composer"),
+                    "at": pv.get("at") or ""})
+        waiting_count = len(followups) + incoming_total + dr_new + len(pending_reviews)
         featured = None
-        if followups:
+        if pending_reviews:
+            pr0 = pending_reviews[0]
+            featured = {"kind": "New version to review", "title": pr0["campaign"],
+                        "sub": f"{pr0['by']} submitted — review &amp; publish to {pr0['client']}",
+                        "href": f"/project/{pr0['project_id']}/delivery", "cta": "Review →"}
+        elif followups:
             f = followups[0]
             featured = {"kind": "Follow-up due", "title": f["need"],
                         "sub": f"{f['client']} · {f['next_action'] or 'follow up'}",
@@ -1355,6 +1372,7 @@ def dashboard(request: Request):
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,
         waiting_count=waiting_count, featured=featured, machine_feed=machine_feed,
+        pending_reviews=pending_reviews,
     )
 
 
@@ -2685,6 +2703,7 @@ def client_workspace(request: Request, token: str):
                 "court": production.court_state(project, delivery_blob),
                 "journey": production.creative_journey(delivery_blob),
                 "portal_url": f"/project/{project['id']}/delivery-portal?k={token}",
+                "approve_url": f"/workspace/{token}/approve-version",
             }
         stage_url = ""
         if (brief_ctx is None and review is None and readiness is None and prod is None
@@ -2844,6 +2863,58 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
                           f"{_public_base()}/opportunity/{opp['id']}/commercial")
                 except Exception:  # noqa: BLE001
                     pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/workspace/{token}", status_code=303)
+
+
+@app.get("/workspace/{token}/court.json")
+def workspace_court_signature(token: str):
+    """A cheap signature of the deal's current state so the client's Workspace can quietly
+    refresh itself the moment something changes (a version lands, an approval fires) — no more
+    manual reload. Motion communicates state; nothing reloads unless the state actually moved."""
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        project = db.project_for_opp(conn, opp["id"])
+        # A cheap signature: award state + delivery state + version count + pending flag +
+        # scope-confirm + review status. Any client-visible transition changes it.
+        parts = [opp["status"] or "", "proj" if project else "noproj"]
+        review = db.current_commercial_review(conn, opp["id"])
+        parts.append((review["status"] if review else "") or "")
+        parts.append("sc" if db.get_doc_overrides(conn, opp["id"]).get("scope_confirmed") else "")
+        if project is not None:
+            d = db.get_delivery(conn, project["id"])
+            parts += [d.get("state", "") or "", str(len(d.get("versions") or [])),
+                      "p" if d.get("pending_version") else ""]
+        sig = ":".join(parts)
+    finally:
+        conn.close()
+    return {"sig": sig}
+
+
+@app.post("/workspace/{token}/approve-version")
+def workspace_approve_version(request: Request, token: str, approver_name: str = Form("")):
+    """The client approves the current version straight from their Workspace — the "it's
+    perfect, no changes" path (operator feedback). The durable workspace token IS the client's
+    identity + access; a typed name captures intent (ESIGN/UETA-sufficient). Records the
+    sign-off, locks the creative, and drives delivery — the same core the reviewer route uses."""
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        project = db.project_for_opp(conn, opp["id"])
+        if project is None:
+            return RedirectResponse(f"/workspace/{token}", status_code=303)
+        delivery = db.get_delivery(conn, project["id"])
+        # Only meaningful when a version is actually waiting on the client.
+        if delivery.get("state") == "In review" and production.court_state(project, delivery)["court"] == "client":
+            name = (approver_name.strip() or opp["contact_name"] or "The client").strip()
+            mail = (opp["contact_email"] or "").strip()
+            _approve_version_core(conn, project["id"], name, mail)
     finally:
         conn.close()
     return RedirectResponse(f"/workspace/{token}", status_code=303)
@@ -5788,8 +5859,9 @@ def _publish_pending_submission(conn, project_id: int):
     db.update_delivery(conn, project_id, "versions", versions)
     db.update_delivery(conn, project_id, "version_state", label)
     db.update_delivery(conn, project_id, "pending_version", "")   # consumed
-    if (delivery.get("state") or "") in ("Approved", "Delivered"):
-        db.update_delivery(conn, project_id, "state", "In review")
+    # Publishing a version ALWAYS moves the ball to the client — the court is theirs now,
+    # whatever it was before (fresh v1 from "In production", or a re-open after approval).
+    db.update_delivery(conn, project_id, "state", "In review")
     return label, campaign
 
 
@@ -6104,13 +6176,33 @@ def _notify_assigned_creators(project_id: int, project, *, subject: str,
     seen = set()
     if exclude_email:
         seen.add(exclude_email.strip().lower())
+    # Look up each creator's portal token so the email can carry their one link (courtesy:
+    # the composer opens straight into their portal to see the notes / submit the next take).
+    portal_by_talent = {}
+    conn2 = db.connect()
+    try:
+        for a in assignments:
+            tid = a["talent_id"] if "talent_id" in a.keys() else None
+            if tid is not None:
+                trow = db.get_talent(conn2, tid)
+                tok = (trow["portal_token"] if trow is not None and "portal_token" in trow.keys()
+                       else "") or ""
+                if tok:
+                    portal_by_talent[tid] = tok
+    finally:
+        conn2.close()
     for a in assignments:
         email = (a["talent_email"] or "").strip() if "talent_email" in a.keys() else ""
         if not email or email.lower() in seen:
             continue
         seen.add(email.lower())
         name = (a["talent_name"] or "there").strip() if "talent_name" in a.keys() else "there"
-        text = f"Hi {name},\n\n{body_text}\n\n— Chordential"
+        tid = a["talent_id"] if "talent_id" in a.keys() else None
+        text = f"Hi {name},\n\n{body_text}"
+        tok = portal_by_talent.get(tid)
+        if tok:
+            text += f"\n\nOpen your portal — the feedback and your upload box are here:\n{base}/creator/{tok}"
+        text += "\n\n— Chordential"
         try:
             mailer.send_email(email, subject, text, html=mailer.branded_html(base, text))
         except Exception:  # noqa: BLE001 — best-effort; one creator's failure never stops the rest
@@ -6325,6 +6417,46 @@ def review_resolve(
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
+def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
+    """Record the client's approval of the current version and drive delivery — shared by the
+    verified-reviewer route AND the workspace "approve, no changes" path (ADR-0020). Logs the
+    sign-off, records Creative Lock, stamps FINAL, builds the package (or marks Approved if a
+    packaging hiccup), fires the room event + operator/creator notifications. Returns the
+    approved version tag."""
+    delivery = db.get_delivery(conn, project_id)
+    project = db.get_project(conn, project_id)
+    approved_n = _current_version_tag(delivery)
+    db.add_review_comment(
+        conn, project_id, version=approved_n, author=name, email=mail,
+        body=f"Approved v{approved_n} for delivery.", kind="approval", verified=True)
+    # ADR-0020: Creative Lock is a STATE — the client approving a version approves
+    # melody/structure/arrangement; ChordOS records the lock automatically.
+    if not production.creative_lock(delivery):
+        production.set_creative_lock(conn, db, project_id, version_n=int(approved_n or 0), by=name)
+    versions = versions_list(delivery)
+    if versions:
+        versions[-1] = dict(versions[-1])
+        versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
+        db.update_delivery(conn, project_id, "versions", versions)
+        db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
+    try:
+        _build_delivery_package(conn, project_id)
+        db.update_delivery(conn, project_id, "state", "Delivered")
+    except Exception:  # noqa: BLE001 — never let packaging block recording the approval
+        db.update_delivery(conn, project_id, "state", "Approved")
+    db.add_project_event(conn, project_id, "approval", actor_role="client", actor_name=name,
+                         body=f"Approved v{approved_n} for delivery.")
+    _notify_operator_review(
+        project_id, project, title=f"{_campaign_label(project)} — approved by {name}",
+        body=f"v{approved_n} approved — delivery package building.")
+    campaign = _campaign_label(project)
+    signals.fire_and_forget(
+        _notify_assigned_creators, project_id, project, subject=f"Approved — {campaign}",
+        body_text=(f"Good news — the client approved your work on {campaign}. Thank you. "
+                   "We'll follow up on delivery and anything else needed."))
+    return approved_n
+
+
 def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     """Delivery automation (Phase 3): assemble the delivery ZIP for a project and
     store its descriptor + checklist on ``delivery_json``. Returns the descriptor
@@ -6401,53 +6533,9 @@ def review_approve(
         completeness = delivery_completeness(project, delivery)
         if not completeness["complete"] and str(deliver_partial).strip() not in ("1", "true", "on", "yes"):
             return _review_redirect(project_id, k, r=r, flag="incomplete")
-        approved_n = _current_version_tag(delivery)
-        db.add_review_comment(
-            conn, project_id, version=approved_n,
-            author=name, email=mail,
-            body=f"Approved v{approved_n} for delivery.",
-            kind="approval", verified=True,
-        )
-        # ADR-0020: Creative Lock is a STATE, not a button — the client approving a version
-        # approves melody/structure/arrangement; ChordOS records the lock automatically.
-        if not production.creative_lock(delivery):
-            production.set_creative_lock(conn, db, project_id,
-                                         version_n=int(approved_n or 0), by=name)
-        # Approve locks the FINAL version: stamp the current version's label and
-        # the version_state to FINAL so the agency sees the version is final.
-        versions = versions_list(delivery)
-        if versions:
-            versions[-1] = dict(versions[-1])
-            versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
-            db.update_delivery(conn, project_id, "versions", versions)
-            db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-        # Auto-assemble the delivery package the instant APPROVE is pressed — the
-        # payoff moment. Never let a packaging hiccup block recording the approval.
-        try:
-            _build_delivery_package(conn, project_id)
-            db.update_delivery(conn, project_id, "state", "Delivered")
-        except Exception:
-            db.update_delivery(conn, project_id, "state", "Approved")
-        # Session Room bus: the approval is the room's biggest moment — everyone
-        # present sees it arrive live.
-        db.add_project_event(
-            conn, project_id, "approval", actor_role="client", actor_name=name,
-            body=f"Approved v{approved_n} for delivery.",
-        )
-        _notify_operator_review(
-            project_id, project,
-            title=f"{_campaign_label(project)} — approved by {name}",
-            body=f"v{approved_n} approved — delivery package building.",
-        )
+        _approve_version_core(conn, project_id, name, mail)   # notifies creators + operator
     finally:
         conn.close()
-    # Tell the assigned creator(s) their work was approved, off the request thread.
-    campaign = _campaign_label(project)
-    signals.fire_and_forget(
-        _notify_assigned_creators, project_id, project,
-        subject=f"Approved — {campaign}",
-        body_text=(f"Good news — the client approved your work on {campaign}. "
-                   "Thank you. We'll follow up on delivery and anything else needed."))
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
@@ -6488,6 +6576,14 @@ def delivery_publish(project_id: int, action: str = Form("publish")):
             if result is not None:
                 db.add_update(conn, project_id, f"Published {result[0]} to the client.")
                 reviewers = db.list_delivery_reviewers(conn, project_id)
+                # The client's own workspace contact — the person the version is FOR — is
+                # notified with their durable link, not just the reviewer roster.
+                client_email = client_name = client_token = ""
+                opp = db.get_opportunity(conn, project["opp_id"]) if project["opp_id"] else None
+                if opp is not None:
+                    client_email = (opp["contact_email"] or "").strip()
+                    client_name = (opp["contact_name"] or "").strip()
+                    client_token = db.ensure_share_token(conn, opp["id"])
     finally:
         conn.close()
     # Client-direction notification only on a real publish — off the request thread.
@@ -6495,7 +6591,28 @@ def delivery_publish(project_id: int, action: str = Form("publish")):
         label, campaign = result
         signals.fire_and_forget(
             _notify_reviewers_new_version, project_id, campaign, label, reviewers)
+        if client_email:
+            signals.fire_and_forget(
+                _notify_client_new_version, client_email, client_name, campaign, label,
+                client_token)
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+
+
+def _notify_client_new_version(email: str, name: str, campaign: str, label: str, token: str):
+    """Email the client's workspace contact that a new version is waiting — pointing at their
+    durable Workspace link (the destination), not an attachment."""
+    if not (mailer.mail_configured() and email):
+        return
+    base = _public_base()
+    who = (name or "there").strip()
+    text = (f"Hi {who},\n\n{label} of {campaign} is ready for you to hear. Open your workspace "
+            f"to listen and share your thoughts — everything lives at this one link:\n\n"
+            f"{base}/workspace/{token}\n\n— Chordential")
+    try:
+        mailer.send_email(email, f"A new version is ready — {campaign}", text,
+                          html=mailer.branded_html(base, text))
+    except Exception:  # noqa: BLE001 — best-effort
+        pass
 
 
 @app.post("/project/{project_id}/review/changes")

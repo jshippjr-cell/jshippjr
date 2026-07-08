@@ -32,6 +32,25 @@
 {# Always render this section so the "follow-ups due" KPI anchor never jumps into
    the void — when nothing is due it shows a clear all-clear state instead of
    feeling like a dead link. #}
+{% if pending_reviews %}
+<section class="card urgent" id="pending-reviews">
+  <div class="card-head"><h2>🎧 Versions to review <span class="muted">— a composer submitted; publish or send back before the client sees it</span></h2></div>
+  <table class="table compact">
+    <thead><tr><th>Campaign</th><th>Client</th><th>Submitted by</th><th></th></tr></thead>
+    <tbody>
+      {% for p in pending_reviews %}
+      <tr>
+        <td><a class="strong" href="/project/{{ p.project_id }}/delivery">{{ p.campaign }}</a></td>
+        <td class="muted">{{ p.client }}</td>
+        <td class="muted">{{ p.by }}</td>
+        <td><a class="btn tiny primary" href="/project/{{ p.project_id }}/delivery#versions">Review &amp; publish →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if followups %}
 <section class="card urgent" id="followups">
   <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
