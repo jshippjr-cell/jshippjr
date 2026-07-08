@@ -91,6 +91,81 @@
   </div>
 </div>
 
+<!-- VERSIONS & REVIEW — the operator review surface, first (operator feedback) -->
+<div class="cols-2">
+  <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
+  <section class="card" id="versions">
+    <div class="card-head"><h2>Versions &amp; review activity</h2></div>
+    {% if pending_version %}
+    <div class="pending" style="border:1px solid var(--orange,#E4671F);border-radius:10px;
+         padding:14px 16px;margin:0 0 14px;background:rgba(228,103,31,.06)">
+      <div style="font-weight:700;color:var(--orange,#E4671F);margin-bottom:6px">
+        New submission from {{ pending_version.by }} — awaiting your review
+      </div>
+      <div class="muted small" style="margin-bottom:10px">
+        The client can't see this yet. Listen, then publish it to the client (which
+        notifies the reviewers) or discard it.
+      </div>
+      <audio controls preload="none" src="{{ pending_version.url }}" style="max-width:100%;margin-bottom:10px"></audio>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0">
+          <input type="hidden" name="action" value="publish">
+          <button class="btn" type="submit">Publish to client</button>
+        </form>
+        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0"
+              onsubmit="return confirm('Discard this submission? The creator will need to resubmit.')">
+          <input type="hidden" name="action" value="discard">
+          <button class="btn ghost" type="submit">Discard</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+    {% if versions %}
+    <div class="vrail" aria-label="Version history">
+      {% for v in versions %}
+      <span class="vchip{% if loop.last %} cur{% endif %}">{{ v.label }}{% if loop.last %} · current{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted small">No versions logged yet — upload the first master below.</p>
+    {% endif %}
+
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
+    <ul class="rc-feed">
+      {% for c in comments %}
+      <li class="rc-ev">
+        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
+        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
+        <span class="rc-a">{{ c['author'] }}</span>
+        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
+      </li>
+      {% else %}
+      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <!-- CAMPAIGN TIMELINE -->
+  <section class="card">
+    <div class="card-head"><h2>Campaign timeline</h2></div>
+    <ul class="timeline">
+      {% for e in timeline %}
+      <li class="tl-row">
+        <span class="tl-ico">{{ e.icon }}</span>
+        <div class="tl-body">
+          <div class="tl-label">{{ e.label }}</div>
+          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
+        </div>
+        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
+      </li>
+      {% else %}
+      <li class="muted small">The timeline fills in as the campaign progresses.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+
 <!-- FIVE-AGENT STATUS ROW -->
 <section class="card">
   <div class="card-head"><h2>The five agents <span class="muted">— live state</span></h2></div>
@@ -270,78 +345,6 @@
   </form>
 </section>
 
-<div class="cols-2">
-  <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
-  <section class="card" id="versions">
-    <div class="card-head"><h2>Versions &amp; review activity</h2></div>
-    {% if pending_version %}
-    <div class="pending" style="border:1px solid var(--orange,#E4671F);border-radius:10px;
-         padding:14px 16px;margin:0 0 14px;background:rgba(228,103,31,.06)">
-      <div style="font-weight:700;color:var(--orange,#E4671F);margin-bottom:6px">
-        New submission from {{ pending_version.by }} — awaiting your review
-      </div>
-      <div class="muted small" style="margin-bottom:10px">
-        The client can't see this yet. Listen, then publish it to the client (which
-        notifies the reviewers) or discard it.
-      </div>
-      <audio controls preload="none" src="{{ pending_version.url }}" style="max-width:100%;margin-bottom:10px"></audio>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0">
-          <input type="hidden" name="action" value="publish">
-          <button class="btn" type="submit">Publish to client</button>
-        </form>
-        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0"
-              onsubmit="return confirm('Discard this submission? The creator will need to resubmit.')">
-          <input type="hidden" name="action" value="discard">
-          <button class="btn ghost" type="submit">Discard</button>
-        </form>
-      </div>
-    </div>
-    {% endif %}
-    {% if versions %}
-    <div class="vrail" aria-label="Version history">
-      {% for v in versions %}
-      <span class="vchip{% if loop.last %} cur{% endif %}">{{ v.label }}{% if loop.last %} · current{% endif %}</span>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted small">No versions logged yet — upload the first master below.</p>
-    {% endif %}
-
-    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
-    <ul class="rc-feed">
-      {% for c in comments %}
-      <li class="rc-ev">
-        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
-        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
-        <span class="rc-a">{{ c['author'] }}</span>
-        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
-      </li>
-      {% else %}
-      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <!-- CAMPAIGN TIMELINE -->
-  <section class="card">
-    <div class="card-head"><h2>Campaign timeline</h2></div>
-    <ul class="timeline">
-      {% for e in timeline %}
-      <li class="tl-row">
-        <span class="tl-ico">{{ e.icon }}</span>
-        <div class="tl-body">
-          <div class="tl-label">{{ e.label }}</div>
-          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
-        </div>
-        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
-      </li>
-      {% else %}
-      <li class="muted small">The timeline fills in as the campaign progresses.</li>
-      {% endfor %}
-    </ul>
-  </section>
-</div>
 
 <!-- DIRECTIONS + CREATIVE LOCK (ADR-0019: the Direction→Version spine) -->
 <section class="card" id="directions">

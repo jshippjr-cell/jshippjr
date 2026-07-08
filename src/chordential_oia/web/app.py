@@ -1313,6 +1313,11 @@ def dashboard(request: Request):
         # Composer submissions waiting at the taste gate — a creator has uploaded a version
         # and it's on Jon to review + publish (or send back) before the client sees it.
         pending_reviews = []
+        # ADR-0020 §6: every ACTIVE deal whose next move is the operator's ("assign the
+        # composer", "start production", "send the final invoice", "release the proposal") —
+        # surfaced so nothing waits unseen. The client's court-state, pointed inward.
+        operator_moves = []
+        _seen_opps = set()
         for prow in db.list_projects(conn) if hasattr(db, "list_projects") else []:
             d = db.get_delivery(conn, prow["id"])
             pv = d.get("pending_version")
@@ -1321,13 +1326,41 @@ def dashboard(request: Request):
                     "project_id": prow["id"], "campaign": prow["need"],
                     "client": prow["client"], "by": (pv.get("by") or "a composer"),
                     "at": pv.get("at") or ""})
-        waiting_count = len(followups) + incoming_total + dr_new + len(pending_reviews)
+            opprow = db.get_opportunity(conn, prow["opp_id"]) if prow["opp_id"] else None
+            if opprow is not None and opprow["id"] not in _seen_opps:
+                _seen_opps.add(opprow["id"])
+                na = next_action.compute(conn, db, opprow, prow)
+                if na["court"] == "you" and na.get("url") and not pv:
+                    operator_moves.append({"campaign": opprow["need"], "client": opprow["client"],
+                                           "label": na["label"], "detail": na.get("detail", ""),
+                                           "url": na["url"]})
+        # deals still in sales (a released proposal awaiting your move to assign, etc.)
+        for r in tentative:
+            if r["id"] in _seen_opps:
+                continue
+            _seen_opps.add(r["id"])
+            na = next_action.compute(conn, db, db.get_opportunity(conn, r["id"]), None)
+            if na["court"] == "you" and na.get("url"):
+                operator_moves.append({"campaign": r["need"], "client": r["client"],
+                                       "label": na["label"], "detail": na.get("detail", ""),
+                                       "url": na["url"]})
+        waiting_count = (len(followups) + incoming_total + dr_new
+                         + len(pending_reviews) + len(operator_moves))
+        if operator_moves and not pending_reviews:
+            m0 = operator_moves[0]
+            _featured_move = {"kind": "Your move", "title": f"{m0['label']} — {m0['campaign']}",
+                              "sub": m0["detail"] or m0["client"], "href": m0["url"],
+                              "cta": "Go →"}
+        else:
+            _featured_move = None
         featured = None
         if pending_reviews:
             pr0 = pending_reviews[0]
             featured = {"kind": "New version to review", "title": pr0["campaign"],
                         "sub": f"{pr0['by']} submitted — review &amp; publish to {pr0['client']}",
                         "href": f"/project/{pr0['project_id']}/delivery", "cta": "Review →"}
+        elif _featured_move:
+            featured = _featured_move
         elif followups:
             f = followups[0]
             featured = {"kind": "Follow-up due", "title": f["need"],
@@ -1372,7 +1405,7 @@ def dashboard(request: Request):
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,
         waiting_count=waiting_count, featured=featured, machine_feed=machine_feed,
-        pending_reviews=pending_reviews,
+        pending_reviews=pending_reviews, operator_moves=operator_moves,
     )
 
 
@@ -1944,6 +1977,9 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         # Pending client Discovery Requests to review + schedule (ADR-0016).
         discovery_requests = db.list_discovery_requests(conn, opp_id, status="new")
         # ADR-0020 §6: the ONE obvious next move for this deal.
+        # Keep the pipeline stage honest with reality before we read it (self-heal).
+        _reconcile_opp_status(conn, opp_id, project)
+        row = db.get_opportunity(conn, opp_id)
         next_act = next_action.compute(conn, db, row, project)
         # Kickoff → Production gate: a project created by client approval sits in Kickoff
         # until the operator confirms Start Production (ADR-0018, Phase 4).
@@ -2746,8 +2782,41 @@ def client_workspace(request: Request, token: str):
 
 
 # ── The Commercial Review (ADR-0018, Phase 1) — the formal agreement, from CI. ────────
+def _reconcile_opp_status(conn, opp_id, project=None) -> None:
+    """Keep the pipeline stage honest with where the deal actually is (ADR-0020 §6): the
+    New → Reaching out → Proposal out → Won buttons follow the lifecycle automatically.
+    FORWARD-only — a manual override or a later stage is never rolled back; a closed deal
+    (Won/Lost/Passed) is left alone. Called at each transition and as a self-heal on view."""
+    row = db.get_opportunity(conn, opp_id)
+    if row is None:
+        return
+    cur = row["status"]
+    if cur in ("Won", "Lost", "Passed"):
+        return
+    order = _KANBAN_STAGES                       # New, Pursuing, Submitted, Won
+    review = db.current_commercial_review(conn, opp_id)
+    proj = project if project is not None else db.project_for_opp(conn, opp_id)
+    approved = bool(review) and review["status"] == "approved"
+    if approved or proj is not None:
+        implied = "Won"
+    elif review is not None and review["status"] == "released":
+        implied = "Submitted"                    # "Proposal out"
+    else:
+        met = any((m["status"] in ("ingested", "transcript_ready"))
+                  for m in db.list_meetings(conn, opp_id))
+        confirmed = bool(db.get_doc_overrides(conn, opp_id).get("scope_confirmed"))
+        snap = db.latest_brief_snapshot(conn, opp_id) if hasattr(db, "latest_brief_snapshot") else None
+        implied = "Pursuing" if (met or confirmed or snap) else "New"   # "Reaching out"
+    if cur in order and implied in order and order.index(implied) > order.index(cur):
+        try:
+            db.update_status(conn, opp_id, implied, row["outcome_value"])
+        except Exception:  # noqa: BLE001 — status honesty never blocks the request
+            pass
+
+
 def _build_review_for_opp(conn, opp_id, version=1):
-    """Project a Commercial Review for an opportunity, live from Campaign Intelligence."""
+    """Project a Commercial Review for an opportunity, live from Campaign Intelligence.
+    Operator edits (price/deposit) live in the ``commercial`` doc-override blob and win."""
     row, opp, ev = _load(conn, opp_id)
     if row is None:
         return None, None
@@ -2755,9 +2824,33 @@ def _build_review_for_opp(conn, opp_id, version=1):
     disc = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
     est = build_estimate(opp, qual.team_shape or disc.team_shape, disc)
     ci_view, met = _brief_ci_context(conn, row)
+    overrides = db.get_doc_overrides(conn, opp_id).get("commercial") or {}
     review = commercial.build_commercial_review(opp, qual, est, ci_view, met=met,
-                                                version=version)
+                                                version=version, overrides=overrides)
     return row, review
+
+
+@app.post("/opportunity/{opp_id}/commercial/edit")
+def commercial_edit(opp_id: int, fee_low: str = Form(""), fee_high: str = Form(""),
+                    deposit_pct: str = Form("")):
+    """Operator edits the Commercial Review before releasing it — the price band and deposit
+    %. Stored in the ``commercial`` override blob and consumed on every render, so the number
+    on the page is the number the client approves. Cleared with empty fields."""
+    conn = db.connect()
+    try:
+        ov = dict(db.get_doc_overrides(conn, opp_id).get("commercial") or {})
+        lo, hi = _parse_rate(fee_low), _parse_rate(fee_high)
+        if lo and hi:
+            ov["fee_low"], ov["fee_high"] = int(min(lo, hi)), int(max(lo, hi))
+        elif not fee_low and not fee_high:
+            ov.pop("fee_low", None); ov.pop("fee_high", None)
+        pct = _parse_rate(deposit_pct)
+        if pct is not None:
+            ov["deposit_pct"] = max(0.0, min(100.0, pct)) / 100.0
+        db.update_doc_override(conn, opp_id, "commercial", ov)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/commercial", status_code=303)
 
 
 @app.get("/opportunity/{opp_id}/commercial", response_class=HTMLResponse)
@@ -2791,6 +2884,7 @@ def commercial_release(opp_id: int):
             return HTMLResponse("Opportunity not found", status_code=404)
         db.release_commercial_review(conn, opp_id, review.version,
                                      commercial.review_to_json(review))
+        _reconcile_opp_status(conn, opp_id)      # → Proposal out
         # Email is the notification layer (ADR-0020): the proposal is in their workspace.
         token = db.ensure_share_token(conn, opp_id)
         if (row["contact_email"] or "").strip():
@@ -2859,6 +2953,7 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
             db.update_doc_override(conn, opp["id"], "scope_confirmed", {
                 "at": datetime.now(timezone.utc).isoformat(),
                 "by": confirmed_by.strip(), "comment": comment.strip()[:500]})
+            _reconcile_opp_status(conn, opp["id"])   # → Reaching out
             if campaigns.workspace_enabled():
                 try:
                     ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
@@ -2979,6 +3074,7 @@ def workspace_approve(request: Request, token: str, approver_name: str = Form(""
             # organize (team, milestones, invoices). The machine prepares; the client
             # committed; the operator confirms Start Production to enter Production.
             _ensure_project_for_opp(conn, opp["id"])
+            _reconcile_opp_status(conn, opp["id"])   # → Won (approval is the award)
             if campaigns.workspace_enabled():
                 try:
                     ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
@@ -6608,22 +6704,26 @@ def delivery_publish(project_id: int, action: str = Form("publish")):
         signals.fire_and_forget(
             _notify_reviewers_new_version, project_id, campaign, label, reviewers)
         if client_email:
+            portal_url = f"{_public_base()}/project/{project_id}/delivery-portal?k={client_token}"
             signals.fire_and_forget(
                 _notify_client_new_version, client_email, client_name, campaign, label,
-                client_token)
+                client_token, portal_url)
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
-def _notify_client_new_version(email: str, name: str, campaign: str, label: str, token: str):
-    """Email the client's workspace contact that a new version is waiting — pointing at their
-    durable Workspace link (the destination), not an attachment."""
+def _notify_client_new_version(email: str, name: str, campaign: str, label: str, token: str,
+                               portal_url: str = ""):
+    """Email the client that a new version is waiting — pointing straight at the listening
+    room (the delivery portal) where they play it, comment, and approve. The review IS the
+    action, so the link goes to the review surface, not the workspace shell."""
     if not (mailer.mail_configured() and email):
         return
     base = _public_base()
     who = (name or "there").strip()
-    text = (f"Hi {who},\n\n{label} of {campaign} is ready for you to hear. Open your workspace "
-            f"to listen and share your thoughts — everything lives at this one link:\n\n"
-            f"{base}/workspace/{token}\n\n— Chordential")
+    link = portal_url or f"{base}/workspace/{token}"
+    text = (f"Hi {who},\n\n{label} of {campaign} is ready for you to hear. Open the listening "
+            f"room to play it, leave timecoded notes, or approve it:\n\n"
+            f"{link}\n\n— Chordential")
     try:
         mailer.send_email(email, f"A new version is ready — {campaign}", text,
                           html=mailer.branded_html(base, text))

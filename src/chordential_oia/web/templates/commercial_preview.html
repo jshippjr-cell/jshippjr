@@ -27,8 +27,26 @@
     <form method="post" action="/opportunity/{{ row['id'] }}/commercial/release" style="margin:0">
       <button class="btn-live" type="submit">{{ 'Re-release a new version' if current else 'Release to client' }} <span class="live-dot"></span></button>
     </form>
-    <span class="muted small">Generated from Campaign Intelligence. Releasing <b>freezes</b> this version — the client approves exactly what's shown here.</span>
+    <span class="muted small">Generated from Campaign Intelligence — pricing follows the discovered budget. Releasing <b>freezes</b> this version — the client approves exactly what's shown here.</span>
   </div>
+
+  {# Operator edit before release — the price band + deposit. Everything else regenerates
+     from Campaign Intelligence; edit the source there and it flows here (ADR-0020). #}
+  <details class="cr-edit" style="margin:0 0 18px">
+    <summary style="cursor:pointer;font-weight:600;color:var(--accent,#c8552b);font-size:13.5px">✎ Adjust the investment before releasing</summary>
+    <form method="post" action="/opportunity/{{ row['id'] }}/commercial/edit"
+          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — low
+        <input type="text" name="fee_low" value="{{ review.fee_low or '' }}" placeholder="e.g. 28000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — high
+        <input type="text" name="fee_high" value="{{ review.fee_high or '' }}" placeholder="e.g. 32000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Deposit %
+        <input type="text" name="deposit_pct" value="{{ (review.deposit_pct * 100)|round|int }}" style="width:90px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+      <button class="btn tiny primary" type="submit">Save</button>
+      <span class="muted small">Leave the fees blank to snap back to the discovered budget.</span>
+    </form>
+  </details>
+
   {% include "_commercial_document.html" %}
 </div>
 {% endblock %}

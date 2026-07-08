@@ -32,6 +32,25 @@
 {# Always render this section so the "follow-ups due" KPI anchor never jumps into
    the void — when nothing is due it shows a clear all-clear state instead of
    feeling like a dead link. #}
+{% if operator_moves %}
+<section class="card urgent" id="operator-moves">
+  <div class="card-head"><h2>▶ Your move <span class="muted">— deals waiting on a decision from you</span></h2></div>
+  <table class="table compact">
+    <thead><tr><th>Next action</th><th>Campaign</th><th>Client</th><th></th></tr></thead>
+    <tbody>
+      {% for m in operator_moves %}
+      <tr>
+        <td class="strong">{{ m.label }}</td>
+        <td>{{ m.campaign }}</td>
+        <td class="muted">{{ m.client }}</td>
+        <td><a class="btn tiny primary" href="{{ m.url }}">Go →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if pending_reviews %}
 <section class="card urgent" id="pending-reviews">
   <div class="card-head"><h2>🎧 Versions to review <span class="muted">— a composer submitted; publish or send back before the client sees it</span></h2></div>

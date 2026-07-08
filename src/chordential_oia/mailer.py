@@ -113,7 +113,20 @@ def branded_html(base_url: str, body_text: str, *, footer: str = "Chordential â€
     Every recruiting/outreach/capabilities-doc email shares this ONE shell
     so they read as the same studio, not three different tools bolted
     together."""
-    escaped = _html.escape(body_text or "").replace("\n", "<br>")
+    # Linkify bare URLs into real <a> tags BEFORE escaping the rest â€” many mobile HTML mail
+    # clients do NOT auto-detect plain-text URLs inside HTML, so an un-tagged link simply
+    # won't open. Split on URLs, escape the non-URL parts, wrap the URLs.
+    import re as _re
+    parts = _re.split(r"(https?://[^\s<>\"]+)", body_text or "")
+    out = []
+    for i, seg in enumerate(parts):
+        if i % 2 == 1:   # a URL
+            safe = _html.escape(seg, quote=True)
+            out.append(f'<a href="{safe}" style="color:#C8552B;font-weight:bold" '
+                       f'target="_blank" rel="noopener">{safe}</a>')
+        else:
+            out.append(_html.escape(seg).replace("\n", "<br>"))
+    escaped = "".join(out)
     logo = f"{base_url.rstrip('/')}/static/public/wordmark-dark.png"
     return f"""<!DOCTYPE html>
 <html>
