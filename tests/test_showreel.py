@@ -52,9 +52,12 @@ def test_showreel_uses_hero_video_background(client):
 def test_public_css_cachebuster_comes_from_one_source(client):
     """The site.css ?v= buster is a single template global (asset_v), not hardcoded
     per template — a bump used to require editing 4 files, and once didn't, serving
-    stale CSS. Every public page must render the resolved value, never the literal."""
+    stale CSS. Every public page that uses site.css must render the resolved value.
+
+    The homepage (``/`` → experience.html) is a self-contained immersive page with its
+    own inline styles and deliberately does NOT link site.css, so it's excluded here."""
     from chordential_oia.web.public import ASSET_VERSION
-    for path in ("/", "/reel", "/showreel", "/stills"):
+    for path in ("/reel", "/showreel", "/stills"):
         t = client.get(path).text
         assert f"site.css?v={ASSET_VERSION}" in t
         assert "{{ asset_v }}" not in t     # the global actually resolved

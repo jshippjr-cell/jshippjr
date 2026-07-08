@@ -1194,6 +1194,32 @@ window.CH=(function(){
   master.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();explode();}});
   replay.addEventListener('click',reset);
 })();
+
+/* Deep-link: "See the work" / the Work nav land straight on the reel wheel (the spinning
+   demonstration on the hero), rather than the standalone /reel spiral. Additive + defensive —
+   it never touches the scene choreography; it just brings the wheel forward once we've
+   entered. Triggered by /#reel or /?reel=1. */
+(function () {
+  var wantsReel = location.hash === '#reel' ||
+                  /[?&]reel=1(?:&|$)/.test(location.search);
+  if (!wantsReel) return;
+  var done = false;
+  function revealWheel() {
+    if (done) return;
+    var rt = document.getElementById('reelteaser');
+    if (!rt) return;
+    done = true;
+    rt.classList.add('show');
+    try { if (window.rtStart) window.rtStart(); } catch (e) {}
+    try { rt.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+  }
+  // Once the visitor enters (intro gate dismissed), jump to the wheel.
+  document.addEventListener('chordential:entered', function () {
+    setTimeout(revealWheel, 600);
+  });
+  // Fallback for reduced-motion / already-entered / no-gate paths.
+  window.addEventListener('load', function () { setTimeout(revealWheel, 1600); });
+})();
 </script>
 </body>
 </html>
