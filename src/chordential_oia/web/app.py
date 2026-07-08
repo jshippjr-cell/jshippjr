@@ -62,7 +62,8 @@ from . import (
     campaign_intake, campaign_intelligence, campaigns, commercial, db, decision_makers,
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
-    music_opportunity, opportunity_signals, outreach_engine, production, relationships,
+    music_opportunity, next_action, opportunity_signals, outreach_engine, production,
+    relationships,
     scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
@@ -1883,6 +1884,8 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting = db.meeting_for_opp(conn, opp_id)
         # Pending client Discovery Requests to review + schedule (ADR-0016).
         discovery_requests = db.list_discovery_requests(conn, opp_id, status="new")
+        # ADR-0020 §6: the ONE obvious next move for this deal.
+        next_act = next_action.compute(conn, db, row, project)
         # Kickoff → Production gate: a project created by client approval sits in Kickoff
         # until the operator confirms Start Production (ADR-0018, Phase 4).
         kickoff_pending = (
@@ -1922,7 +1925,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
-        kickoff_pending=kickoff_pending,
+        kickoff_pending=kickoff_pending, next_act=next_act,
     )
 
 

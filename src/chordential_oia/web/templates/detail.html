@@ -119,6 +119,30 @@
 .dr-pref{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fdf1e3;color:#9a5a1a}
 </style>
 
+{# ── NEXT (ADR-0020 §6): the deal's one obvious move — decision, not navigation. ── #}
+{% if next_act %}
+<section class="card" id="next" style="border-left:4px solid {{ '#C8552B' if next_act.court == 'you' else '#2F6A34' if next_act.court in ('client','team') else '#8a8580' }}">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <span class="pill {{ 'live' if next_act.court == 'you' }}" style="flex:none">
+      {{ 'YOUR MOVE' if next_act.court == 'you' else 'THEIR MOVE' if next_act.court == 'client' else 'IN THE STUDIO' if next_act.court == 'team' else 'ON THE CALENDAR' if next_act.court == 'scheduled' else 'DONE' }}
+    </span>
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:750;font-size:16px">{{ next_act.label }}</div>
+      <div class="muted small">{{ next_act.detail }}{% if next_act.since %} · since {{ next_act.since[:10] }}{% endif %}</div>
+    </div>
+    {% if next_act.url and next_act.post %}
+    <form method="post" action="{{ next_act.url }}" style="margin:0">
+      <button class="btn-live" type="submit">{{ next_act.label }} <span class="live-dot"></span></button>
+    </form>
+    {% elif next_act.url and next_act.court == 'you' %}
+    <a class="btn-live" href="{{ next_act.url }}">Go → <span class="live-dot"></span></a>
+    {% elif next_act.url %}
+    <a class="btn ghost" href="{{ next_act.url }}">View</a>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {# ── Discovery Requests — a client asked for a call (ADR-0016); the operator schedules. ── #}
 {% if discovery_requests %}
 <section class="card" id="discovery-requests">
