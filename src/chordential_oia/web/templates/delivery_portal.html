@@ -398,6 +398,11 @@
         {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Uploaded · Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">✓ Uploaded · ↻ Changes requested{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% else %}<span class="aa-badge aa-pending">✓ Uploaded · awaiting sign-off</span>{% endif %}
+        {# Audition the uploaded deliverable before signing off — streams via /uploads
+           (streaming is never payment-gated; only the final downloads are). #}
+        {% if d.url and d.kind == "audio" %}
+        <audio controls preload="none" src="{{ d.url }}" style="flex:1 1 100%;height:36px;margin:6px 0 2px"></audio>
+        {% endif %}
         {% if (verified or (reviewer and reviewer.known)) and d.asset_key %}
         <span class="aa-acts">
           {# Once a deliverable is approved, drop its Approve button so it can't be
