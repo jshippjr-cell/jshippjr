@@ -713,6 +713,23 @@ def _deliverable_uploaded(deliverable: Deliverable, asset_labels: List[str]) -> 
     return ""
 
 
+def _is_primary_master(deliverable: Deliverable) -> bool:
+    """True for the PRIMARY master deliverable (``Final master`` / ``Produced master``) —
+    the piece the client actually reviews and approves in the version player. NOT the
+    derivative masters (``Instrumental / TV mix``, ``TV track``), which are separate
+    human-produced files. The review version IS this deliverable, so it counts uploaded
+    the moment there's a version to play, and approved the moment the creative is locked."""
+    asset = (deliverable.asset or "").lower()
+    if "master" not in asset:
+        return False
+    return "instrumental" not in asset and "tv" not in asset
+
+
+def _has_version(delivery: dict) -> bool:
+    """True when the project has at least one uploaded review version (the master)."""
+    return bool((delivery or {}).get("versions"))
+
+
 def delivery_completeness(project, delivery: Optional[dict] = None) -> dict:
     """Is the delivery package actually complete? ``{expected, uploaded, missing,
     complete, text}``.
@@ -736,10 +753,14 @@ def delivery_completeness(project, delivery: Optional[dict] = None) -> dict:
     ]
     asset_labels = [l for l in asset_labels if l]
 
+    has_version = _has_version(delivery)
     uploaded: List[str] = []
     missing: List[str] = []
     for d in expected:
-        if _deliverable_uploaded(d, asset_labels):
+        # The primary master IS the review version — it counts uploaded the moment
+        # there's a version to play (the client is literally streaming it), even
+        # before any separate asset file is attached.
+        if _deliverable_uploaded(d, asset_labels) or (has_version and _is_primary_master(d)):
             uploaded.append(d.asset)
         else:
             missing.append(d.asset)
@@ -774,15 +795,24 @@ def scoped_deliverables(project, delivery: Optional[dict] = None) -> List[dict]:
         for a in (delivery.get("assets") or [])
     ]
     asset_labels = [l for l in asset_labels if l]
+    has_version = _has_version(delivery)
     out: List[dict] = []
     for d in expected:
         match = _deliverable_uploaded(d, asset_labels)
+        is_master = _is_primary_master(d)
+        # The primary master is satisfied by the review version itself (see
+        # delivery_completeness) — approved via the main "Approve the master" button,
+        # not a per-row control. Its approval status follows the creative lock, which
+        # the caller layers on (is_master + no asset match → look at creative_lock).
+        master_from_version = is_master and has_version and not match
         out.append({
             "group": d.group,
             "asset": d.asset,
             "spec": d.spec,
-            "uploaded": bool(match),
+            "uploaded": bool(match) or master_from_version,
             "match": match,
+            "is_master": is_master,
+            "from_version": master_from_version,
         })
     return out
 

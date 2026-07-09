@@ -293,7 +293,7 @@ _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
 # list so the exemption can't drift from the actual routes (it did once: resolve + asset
 # were added without updating the matcher, bouncing clients to the admin login). When
 # you add a review action, add it here — and it MUST token-validate in-route.
-_REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset")
+_REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset", "reopen")
 _REVIEW_ACTION_RE = re.compile(
     r"^/project/\d+/review/(?:" + "|".join(_REVIEW_ACTIONS) + r")/?$")
 # Payment-gated deliverable download — opened from the token-gated portal; the route
@@ -5177,6 +5177,7 @@ def _delivery_view(conn, project_id: int, selected_v=None):
         lbl = (a.get("label") or a.get("filename") or "").strip()
         if lbl and lbl not in _by_label:
             _by_label[lbl] = a
+    _clock = production.creative_lock(delivery)
     scoped_list = []
     n_scoped_approved = 0
     for d in scoped_deliverables(row, delivery):
@@ -5189,6 +5190,17 @@ def _delivery_view(conn, project_id: int, selected_v=None):
             item["kind"] = match_asset.get("kind")
             if (match_asset.get("approval") or {}).get("status") == "Approved":
                 n_scoped_approved += 1
+        elif d.get("from_version"):
+            # The primary master is the review version itself — it has no per-row
+            # Approve control; the main "Approve the master" button IS its sign-off,
+            # so its status simply mirrors the creative lock.
+            if _clock:
+                item["approval"] = {"status": "Approved", "by": (_clock.get("by") or ""),
+                                    "email": "", "date": "", "version": str(_clock.get("version_n") or "")}
+                n_scoped_approved += 1
+            else:
+                item["approval"] = {"status": "Pending", "by": "", "email": "", "date": "", "version": ""}
+            item["asset_key"] = ""              # approved via the main button, not a row button
         else:
             item["asset_key"] = ""
             item["approval"] = None
@@ -6560,12 +6572,19 @@ def review_resolve(
 
 
 def _ready_to_deliver(delivery: dict, project) -> bool:
-    """The gate to the full download: the creative is approved AND every scoped deliverable is
-    UPLOADED. An incomplete package never ships (operator feedback: no downloading a partial
-    package). Per-deliverable sign-off is available to the client on top of this, but the hard
-    gate is upload-completeness — so approving the master version alone can't unlock a
-    download when deliverables are still missing."""
-    return bool(delivery_completeness(project, delivery)["complete"])
+    """The gate to the full download (Option 1 model): the master is approved (Creative Lock),
+    every scoped deliverable is UPLOADED, AND every uploaded derivative is SIGNED OFF by the
+    client. The primary master IS the review version — approving it (the main creative approval)
+    delivers + approves it; the derivatives (instrumental, cutdowns, verticals, stems) are the
+    composer's uploads, each signed off one at a time. Only when all of that is true does the
+    full package assemble and the download unlock — so a client can never download an
+    incomplete or unapproved delivery."""
+    if not production.creative_lock(delivery):            # master approved?
+        return False
+    if not delivery_completeness(project, delivery)["complete"]:   # everything uploaded?
+        return False
+    roll = db.asset_approval_rollup(delivery)             # every derivative signed off?
+    return roll["total"] == 0 or roll["approved"] == roll["total"]
 
 
 def _maybe_finalize_delivery(conn, project_id: int) -> bool:

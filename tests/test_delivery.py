@@ -1866,12 +1866,29 @@ def test_console_renders_scope_reconciliation(client):
 from chordential_oia.delivery import delivery_completeness, scoped_deliverables  # noqa: E402
 
 
-def _seed_full_deliverables(client, pid):
+def _seed_full_deliverables(client, pid, signed=True):
     """Upload assets that satisfy every scoped, upload-required deliverable so the
-    completeness gate reports the package COMPLETE (no missing deliverables)."""
+    completeness gate reports the package COMPLETE (no missing deliverables).
+
+    Under the approve-before-download model, a package ships only when every derivative
+    is also SIGNED OFF — so by default this marks each uploaded asset Approved (the
+    natural 'full, ready-to-ship' set). Pass ``signed=False`` for an uploaded-but-not-yet
+    -signed-off set."""
     for label in ("Final master", "Instrumental TV mix", ":30 cutdown",
                   "9:16 vertical", "Mix-ready stem package"):
         _seed_asset(client, pid, name=f"{label.replace(' ', '_')}.mp3", label=label)
+    if signed:
+        from chordential_oia.web import db as db_mod
+        conn = db_mod.connect()
+        try:
+            d = db_mod.get_delivery(conn, pid)
+            for a in (d.get("assets") or []):
+                key = db_mod.asset_key(a)
+                if key:
+                    db_mod.set_asset_approval(conn, pid, key, status="Approved",
+                                              by="Dana", email="dana@agency.com")
+        finally:
+            conn.close()
 
 
 def test_delivery_completeness_missing_list_and_counts():
@@ -1985,11 +2002,14 @@ def test_portal_shows_scoped_deliverables_with_status_and_rollup(client):
     # The whole scoped list is shown — the uploaded one is ✓, the missing ones ⧗.
     assert "Final master" in page
     assert "Mix-ready stem package" in page          # a not-yet-uploaded deliverable
-    assert "Not uploaded yet" in page                # the ⧗ waiting-on-Chordential state
+    # The ⧗ state now frames missing derivatives as "produced after you approve the master"
+    # (the two-phase model) rather than an alarming "waiting on Chordential".
+    assert "Produced after you approve the master" in page
     # The "N of M deliverables approved / uploaded" rollup line.
-    assert "of 5 deliverable" in page
-    # The incomplete-package warning naming the missing deliverables.
-    assert "Incomplete package" in page
+    assert "of 5 uploaded" in page
+    # Before the master is approved, the portal explains the two-phase flow instead of
+    # scaring the client with an "incomplete package / partial delivery" warning.
+    assert "How delivery works" in page
 
 
 def test_console_shows_missing_deliverables_warning_when_incomplete(client):

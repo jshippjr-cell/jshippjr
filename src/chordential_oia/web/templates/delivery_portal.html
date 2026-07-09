@@ -222,18 +222,16 @@
     </h2>
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
 
-    {# Delivery-completeness gate: an Approve with an incomplete package and NO
-       opt-in does not deliver — we land back here with ?gate=incomplete to explain. #}
-    {% if request.query_params.get('gate') == 'incomplete' %}
-    <p class="gate-notice" style="margin:-2px 0 12px;padding:10px 12px;border:1px solid var(--wine);border-radius:6px;color:var(--wine);background:#fff5f5">
-      <b>Some deliverables aren't uploaded yet</b> — ask Chordential before approving, or use the confirm prompt to deliver a partial package on purpose.
+    {# Two-phase model (Option 1): first you approve the MASTER (the piece in the player)
+       — that's the creative decision. THEN Chordential produces the derivatives and you
+       sign off each. So before the master is approved we don't warn about "missing"
+       derivatives — they aren't made yet. We just explain what happens next. #}
+    {% if not creative_lock %}
+    <p class="muted-note" style="margin:-2px 0 12px;padding:10px 12px;border:1px solid var(--line,#e7e1d8);border-radius:6px;background:#faf7f2">
+      <b>How delivery works:</b> approve the master below — that's the piece you're listening to.
+      Once you approve it, Chordential produces your {{ completeness.missing|join(', ') if completeness and completeness.missing else 'remaining deliverables' }}
+      and you sign off each one. Your full package downloads when every deliverable is approved.
     </p>
-    {% endif %}
-    {% if completeness and not completeness.complete %}
-    <div class="gate-warn" style="margin:0 0 14px;padding:10px 12px;border:1px solid #c08a2e;border-radius:6px;background:#fff9ee">
-      <p style="margin:0;font-weight:600;color:#8a5a00">Incomplete package — {{ completeness.text }}</p>
-      <p class="muted-note" style="margin:4px 0 0">Not uploaded yet: {{ completeness.missing|join(', ') }}. Approving now ships a <b>partial</b> package.</p>
-    </div>
     {% endif %}
 
     {# Verified-identity approval: a reviewer who arrived on their PERSONAL invite
@@ -385,15 +383,22 @@
       <p class="aa-roll"><b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> deliverable{{ 's' if scoped_rollup.total != 1 }} approved · {{ scoped_rollup.uploaded }} of {{ scoped_rollup.total }} uploaded.</p>
       {% for d in scoped_deliverables %}
       <div class="aa-row{% if not d.uploaded %} aa-waiting{% endif %}"{% if not d.uploaded %} style="opacity:.55"{% endif %}>
-        <span class="aa-nm">{{ d.asset }} <span class="muted-note" style="font-weight:400">· {{ d.group }}</span></span>
+        <span class="aa-nm">{{ d.asset }}
+          <span class="muted-note" style="font-weight:400">· {% if d.is_master %}the piece in your player{% else %}{{ d.group }}{% endif %}</span></span>
         {% if not d.uploaded %}
-        <span class="aa-badge aa-pending" title="Not uploaded yet">⧗ Not uploaded yet — waiting on Chordential</span>
+        <span class="aa-badge aa-pending" title="Produced after you approve the master">⧗ Produced after you approve the master</span>
+        {% elif d.is_master %}
+        {# The master IS the review version — approved by the main "Approve the master"
+           button, not a per-row control. Its status simply mirrors the creative lock. #}
+        {% set st = d.approval.status if d.approval else "Pending" %}
+        {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+        {% else %}<span class="aa-badge aa-pending">Approve it with the button below ↓</span>{% endif %}
         {% else %}
         {% set st = d.approval.status if d.approval else "Pending" %}
         {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Uploaded · Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">✓ Uploaded · ↻ Changes requested{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% else %}<span class="aa-badge aa-pending">✓ Uploaded · awaiting sign-off</span>{% endif %}
-        {% if verified or (reviewer and reviewer.known) %}
+        {% if (verified or (reviewer and reviewer.known)) and d.asset_key %}
         <span class="aa-acts">
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
@@ -430,18 +435,23 @@
          ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
          sees a disabled control + a note — they can view + comment, not approve. #}
       {% if verified or (reviewer and reviewer.known) %}
-      {% set all_signed = completeness and completeness.complete and asset_rollup.total and asset_rollup.approved == asset_rollup.total %}
-      {# Approving the master version APPROVES THE CREATIVE (locks it). It does NOT ship a
-         package — the full download unlocks only once every deliverable is uploaded and
-         signed off below. So there's no "partial delivery" here; it's a clean creative yes. #}
+      {# Option 1 model: this button approves the MASTER — the piece in the player — which
+         delivers + approves it and locks the direction. The derivatives (instrumental,
+         cutdowns, verticals, stems) are signed off one at a time above as Chordential
+         uploads them; the full package downloads only when every deliverable is approved. #}
+      {% if not creative_lock %}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
-            onsubmit="return confirm('Approve the creative for v{{ current_n }}? This locks the creative direction.{% if not all_signed %} Your full delivery downloads once every deliverable is uploaded and approved.{% endif %}');">
+            onsubmit="return confirm('Approve the master (v{{ current_n }})? This is the piece you just heard — approving delivers it and locks the creative direction. Chordential then produces your other deliverables for sign-off.');">
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
-        <button type="submit" class="rc-approve">✓ Approve the creative{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} deliverables signed off)</span>{% endif %}</button>
+        <button type="submit" class="rc-approve">✓ Approve the master</button>
       </form>
+      {% else %}
+      <p class="sub" style="margin:0 0 10px"><b style="color:#1d6b43">✓ Master approved.</b>
+        {% if scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> — sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
+      {% endif %}
       {% if creative_lock %}
       <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="review-act" style="display:inline"
             onsubmit="return confirm('Reopen for changes? This unlocks the creative and returns to review.');">

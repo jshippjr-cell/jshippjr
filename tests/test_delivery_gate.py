@@ -116,6 +116,59 @@ def test_partial_package_offers_client_no_download(tmp_path, monkeypatch):
     assert "⤓ Download" not in html                        # no download link at all while partial
 
 
+def test_master_counts_uploaded_from_the_version(tmp_path, monkeypatch):
+    """Option 1: the primary master is the review version itself — it reads as uploaded the
+    moment there's a version to play, so the portal never says 'Final master: not uploaded'
+    while the client is streaming it."""
+    from chordential_oia.delivery import delivery_completeness, scoped_deliverables
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    oid, pid, ptok = _proj(app_mod, conn)
+    proj = app_mod.db.get_project(conn, pid)
+    # A version exists (the master), but no separate deliverable assets are uploaded.
+    delivery = {"versions": [{"n": 2, "label": "v2", "url": "/u/x.mp3", "filename": "x.mp3"}]}
+    conn.close()
+    comp = delivery_completeness(proj, delivery)
+    assert "Final master" not in comp["missing"]          # the version satisfies the master
+    assert not comp["complete"]                            # the 4 derivatives are still missing
+    master = next(d for d in scoped_deliverables(proj, delivery) if d["is_master"])
+    assert master["uploaded"] and master["from_version"]
+
+
+def test_download_waits_for_every_derivative_signoff(tmp_path, monkeypatch):
+    """The full package ships only when the master is approved AND every derivative is
+    uploaded AND signed off — approve-before-download, exactly as specified."""
+    app_mod = _app(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    oid, pid, ptok = _proj(app_mod, conn)
+    app_mod.db.update_delivery(conn, pid, "versions",
+        [{"n": 1, "label": "v1", "url": "/u/x.mp3", "filename": "x.mp3",
+          "name": "a", "created_at": "2026-07-08T00:00:00"}])
+    # every derivative uploaded, but NOT yet signed off
+    app_mod.db.update_delivery(conn, pid, "assets", [
+        {"label": "Instrumental TV mix", "filename": "i.mp3", "url": "/u/i.mp3", "kind": "audio"},
+        {"label": ":30 cutdown", "filename": "c.mp3", "url": "/u/c.mp3", "kind": "audio"},
+        {"label": "9:16 vertical", "filename": "v.mp3", "url": "/u/v.mp3", "kind": "audio"},
+        {"label": "Mix-ready stem package", "filename": "s.zip", "url": "/u/s.zip", "kind": "file"}])
+    app_mod.db.update_delivery(conn, pid, "state", "In review")
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        # approve the master — creative locks, but derivatives aren't signed off → NOT delivered
+        c.post(f"/project/{pid}/review/approve",
+               data={"k": ptok, "author": "Sarah", "email": "s@x.com"})
+        conn = app_mod.db.connect(); d = app_mod.db.get_delivery(conn, pid); conn.close()
+        assert d.get("creative_lock") and d.get("state") == "Approved"   # master approved, held
+        # client signs off each derivative; the last one triggers finalize
+        for fn in ("i.mp3", "c.mp3", "v.mp3", "s.zip"):
+            c.post(f"/project/{pid}/review/asset",
+                   data={"k": ptok, "filename": fn, "action": "approve",
+                         "author": "Sarah", "email": "s@x.com"})
+    conn = app_mod.db.connect(); d = app_mod.db.get_delivery(conn, pid); conn.close()
+    assert d.get("state") == "Delivered"                 # all signed off → package ships
+    assert d.get("delivery_zip")
+
+
 def test_operator_can_reopen_delivered_project_from_console(tmp_path, monkeypatch):
     """The operator must be able to un-deliver a stuck Delivered project (tokenless reopen),
     since the portal's client review block is hidden once state is Delivered."""
