@@ -382,13 +382,15 @@
         {% if st == "Approved" %}<span class="aa-badge aa-approved">✓ Uploaded · Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% elif st == "Changes requested" %}<span class="aa-badge aa-changes">✓ Uploaded · ↻ Changes requested{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
         {% else %}<span class="aa-badge aa-pending">✓ Uploaded · awaiting sign-off</span>{% endif %}
-        {% if verified %}
+        {% if verified or (reviewer and reviewer.known) %}
         <span class="aa-acts">
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
             <input type="hidden" name="r" value="{{ reviewer_token }}">
             <input type="hidden" name="filename" value="{{ d.asset_key }}">
             <input type="hidden" name="action" value="approve">
+            <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+            <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
             <button type="submit" class="rc-mini aa-approve">Approve</button>
           </form>
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
@@ -396,6 +398,8 @@
             <input type="hidden" name="r" value="{{ reviewer_token }}">
             <input type="hidden" name="filename" value="{{ d.asset_key }}">
             <input type="hidden" name="action" value="changes">
+            <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
+            <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
             <input type="text" name="note" placeholder="What needs to change?" class="rc-in aa-note">
             <button type="submit" class="rc-mini aa-changes-btn">Request changes</button>
           </form>
@@ -404,8 +408,8 @@
         {% endif %}
       </div>
       {% endfor %}
-      {% if not verified %}
-      <p class="muted-note" style="margin:6px 0 0">Per-deliverable sign-off requires your personal review link — ask Chordential to send you one.</p>
+      {% if not (verified or (reviewer and reviewer.known)) %}
+      <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) to approve each deliverable — no separate link needed.</p>
       {% endif %}
     </div>
     {% endif %}
@@ -415,22 +419,26 @@
          ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
          sees a disabled control + a note — they can view + comment, not approve. #}
       {% if verified or (reviewer and reviewer.known) %}
-      {% set unapproved = asset_rollup.total - asset_rollup.approved %}
-      {% set incomplete = completeness and not completeness.complete %}
-      {# Delivery-completeness gate (the strongest gate): when scoped deliverables
-         aren't uploaded, the confirm() NAMES them and the form posts
-         deliver_partial=1 so the server is allowed to ship a PARTIAL package — the
-         only way past the server-side no-op. When complete, the prior per-asset-
-         approval / plain confirm copy is kept. #}
+      {% set all_signed = completeness and completeness.complete and asset_rollup.total and asset_rollup.approved == asset_rollup.total %}
+      {# Approving the master version APPROVES THE CREATIVE (locks it). It does NOT ship a
+         package — the full download unlocks only once every deliverable is uploaded and
+         signed off below. So there's no "partial delivery" here; it's a clean creative yes. #}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
-            {% if incomplete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'isn\'t' if completeness.missing|length == 1 else 'aren\'t' }} uploaded yet — approve and deliver a PARTIAL package anyway? This locks v{{ current_n }} as FINAL and ships only what\'s uploaded.');"{% elif unapproved > 0 %}onsubmit="return confirm('{{ unapproved }} of {{ asset_rollup.total }} deliverable{{ 's' if asset_rollup.total != 1 }} aren\'t approved yet — approve the campaign anyway? This locks v{{ current_n }} as FINAL and assembles your delivery package.');"{% else %}onsubmit="return confirm('Approve v{{ current_n }} for delivery? This locks it as FINAL and assembles your delivery package.');"{% endif %}>
+            onsubmit="return confirm('Approve the creative for v{{ current_n }}? This locks the creative direction.{% if not all_signed %} Your full delivery downloads once every deliverable is uploaded and approved.{% endif %}');">
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
-        {% if incomplete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
         <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
-        <button type="submit" class="rc-approve">{% if incomplete %}✓ Approve &amp; deliver partial{% else %}✓ Approve &amp; deliver{% endif %}{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} signed off)</span>{% endif %}</button>
+        <button type="submit" class="rc-approve">✓ Approve the creative{% if asset_rollup.total %} <span class="muted-note" style="font-weight:400">({{ asset_rollup.approved }}/{{ asset_rollup.total }} deliverables signed off)</span>{% endif %}</button>
       </form>
+      {% if creative_lock %}
+      <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="review-act" style="display:inline"
+            onsubmit="return confirm('Reopen for changes? This unlocks the creative and returns to review.');">
+        <input type="hidden" name="k" value="{{ share_token }}">
+        <input type="hidden" name="r" value="{{ reviewer_token }}">
+        <button type="submit" class="rc-mini" style="background:none;border:1px solid var(--line,#e7e1d8)">↩ Reopen for changes</button>
+      </form>
+      {% endif %}
       {% else %}
       <div style="flex:1 1 240px">
         <button type="button" class="rc-approve" disabled onclick="var w=document.getElementById('whois'); if(w){w.hidden=false; var i=w.querySelector('input'); if(i)i.focus();}"

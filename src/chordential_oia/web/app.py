@@ -6559,20 +6559,50 @@ def review_resolve(
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
+def _ready_to_deliver(delivery: dict, project) -> bool:
+    """The gate to the full download: the creative is approved AND every scoped deliverable is
+    UPLOADED. An incomplete package never ships (operator feedback: no downloading a partial
+    package). Per-deliverable sign-off is available to the client on top of this, but the hard
+    gate is upload-completeness — so approving the master version alone can't unlock a
+    download when deliverables are still missing."""
+    return bool(delivery_completeness(project, delivery)["complete"])
+
+
+def _maybe_finalize_delivery(conn, project_id: int) -> bool:
+    """Ship the delivery package + mark Delivered ONLY when the creative is approved (Creative
+    Lock) AND every deliverable is uploaded + signed off. This is the SINGLE door to the full
+    download; approving the master version alone never opens it. Returns True if it finalized."""
+    delivery = db.get_delivery(conn, project_id)
+    project = db.get_project(conn, project_id)
+    if project is None or not production.creative_lock(delivery):
+        return False
+    if (delivery.get("state") or "") in ("Delivered", "Released"):
+        return True
+    if not _ready_to_deliver(delivery, project):
+        return False
+    try:
+        _build_delivery_package(conn, project_id)
+        db.update_delivery(conn, project_id, "state", "Delivered")
+        db.add_project_event(conn, project_id, "delivered", actor_role="operator",
+                             actor_name="ChordOS",
+                             body="All deliverables approved — delivery package assembled.")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
-    """Record the client's approval of the current version and drive delivery — shared by the
-    verified-reviewer route AND the workspace "approve, no changes" path (ADR-0020). Logs the
-    sign-off, records Creative Lock, stamps FINAL, builds the package (or marks Approved if a
-    packaging hiccup), fires the room event + operator/creator notifications. Returns the
-    approved version tag."""
+    """Record the client's approval of the current master version — this is the CREATIVE
+    approval (Creative Lock), NOT final delivery. The full package ships only once every
+    deliverable is also uploaded + signed off (``_maybe_finalize_delivery``), so a client can
+    never download an incomplete package by approving the master alone. Reversible via
+    /review/reopen. Returns the approved version tag."""
     delivery = db.get_delivery(conn, project_id)
     project = db.get_project(conn, project_id)
     approved_n = _current_version_tag(delivery)
     db.add_review_comment(
         conn, project_id, version=approved_n, author=name, email=mail,
-        body=f"Approved v{approved_n} for delivery.", kind="approval", verified=True)
-    # ADR-0020: Creative Lock is a STATE — the client approving a version approves
-    # melody/structure/arrangement; ChordOS records the lock automatically.
+        body=f"Approved v{approved_n} — creative locked.", kind="approval", verified=True)
     if not production.creative_lock(delivery):
         production.set_creative_lock(conn, db, project_id, version_n=int(approved_n or 0), by=name)
     versions = versions_list(delivery)
@@ -6581,21 +6611,20 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
         versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
         db.update_delivery(conn, project_id, "versions", versions)
         db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-    try:
-        _build_delivery_package(conn, project_id)
-        db.update_delivery(conn, project_id, "state", "Delivered")
-    except Exception:  # noqa: BLE001 — never let packaging block recording the approval
-        db.update_delivery(conn, project_id, "state", "Approved")
+    # Creative approved — but delivery stays LOCKED until every deliverable is signed off.
+    db.update_delivery(conn, project_id, "state", "Approved")
+    finalized = _maybe_finalize_delivery(conn, project_id)   # ships iff complete + all approved
     db.add_project_event(conn, project_id, "approval", actor_role="client", actor_name=name,
-                         body=f"Approved v{approved_n} for delivery.")
+                         body=f"Approved v{approved_n} — creative locked.")
+    remaining = "" if finalized else " Delivery unlocks once every deliverable is uploaded and signed off."
     _notify_operator_review(
-        project_id, project, title=f"{_campaign_label(project)} — approved by {name}",
-        body=f"v{approved_n} approved — delivery package building.")
+        project_id, project, title=f"{_campaign_label(project)} — creative approved by {name}",
+        body=f"v{approved_n} creative approved.{remaining}")
     campaign = _campaign_label(project)
     signals.fire_and_forget(
-        _notify_assigned_creators, project_id, project, subject=f"Approved — {campaign}",
-        body_text=(f"Good news — the client approved your work on {campaign}. Thank you. "
-                   "We'll follow up on delivery and anything else needed."))
+        _notify_assigned_creators, project_id, project, subject=f"Creative approved — {campaign}",
+        body_text=(f"Good news — the client approved the creative on {campaign}. Thank you. "
+                   "We'll finish preparing the deliverables for sign-off."))
     return approved_n
 
 
@@ -6665,21 +6694,47 @@ def review_approve(
             name, mail = _reviewer_identity(request, author, email)
         if not (name and mail):
             return _review_redirect(project_id, k, r=r, flag="identify")
-        delivery = db.get_delivery(conn, project_id)
-        project = db.get_project(conn, project_id)
-        # Delivery-completeness gate: do NOT silently ship an incomplete package as
-        # "everything". If scoped deliverables (cutdowns/stems/verticals) were never
-        # uploaded, refuse to deliver UNLESS the client explicitly opted into a
-        # PARTIAL delivery (deliver_partial=1 — set by the Approve form's confirm()).
-        # Without the opt-in this is a no-op: nothing is locked, no approval logged,
-        # state unchanged — we bounce back with a flag so the portal explains why.
-        completeness = delivery_completeness(project, delivery)
-        if not completeness["complete"] and str(deliver_partial).strip() not in ("1", "true", "on", "yes"):
-            return _review_redirect(project_id, k, r=r, flag="incomplete")
+        # Approving the master version records the CREATIVE approval (Creative Lock). It no
+        # longer ships an incomplete package — the full download unlocks only when every
+        # deliverable is uploaded + signed off (_maybe_finalize_delivery). So there's no
+        # partial-opt-in to gate here; the client can always approve the creative.
         _approve_version_core(conn, project_id, name, mail)   # notifies creators + operator
     finally:
         conn.close()
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
+
+
+@app.post("/project/{project_id}/review/reopen")
+def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str = Form("")):
+    """Un-approve / reopen — approval is NOT a one-way door (operator feedback). Clears the
+    Creative Lock, drops the FINAL label back to its round label, and returns the project to
+    'In review'. Available to the operator (console, no token) or the client (their link)."""
+    conn = db.connect()
+    try:
+        if k or r:                                    # a client action — validate the token
+            ok, _rev = _access_ok(conn, project_id, k, r)
+            if not ok:
+                return HTMLResponse("Not found", status_code=404)
+        row = db.get_project(conn, project_id)
+        if row is None:
+            return HTMLResponse("Project not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        production.clear_creative_lock(conn, db, project_id)
+        versions = versions_list(delivery)
+        if versions:
+            versions[-1] = dict(versions[-1])
+            versions[-1]["label"] = version_label(versions[-1]["n"], final=False)
+            db.update_delivery(conn, project_id, "versions", versions)
+            db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
+        db.update_delivery(conn, project_id, "state", "In review")
+        db.update_delivery(conn, project_id, "download_unlocked", False)
+        db.add_project_event(conn, project_id, "reopened", actor_role="operator",
+                             actor_name="Studio", body="Approval reopened — back in review.")
+    finally:
+        conn.close()
+    if k or r:
+        return _review_redirect(project_id, k, r=r)
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/build")
@@ -6821,7 +6876,7 @@ def review_changes(
 def review_asset(
     request: Request, project_id: int, k: str = Form(""),
     filename: str = Form(""), action: str = Form(""), note: str = Form(""),
-    r: str = Form(""),
+    r: str = Form(""), author: str = Form(""), email: str = Form(""),
 ):
     """Per-asset approval: a VERIFIED reviewer signs off (or requests changes on) a
     single deliverable — the :60 master Approved while the :30 cutdown still awaits.
@@ -6841,12 +6896,15 @@ def review_asset(
         ok, reviewer = _access_ok(conn, project_id, k, r)
         if not ok:
             return HTMLResponse("Not found", status_code=404)
-        # Per-asset sign-off is gated like the whole-version Approve: a verified
-        # reviewer is required. A guest (?k= only) is a no-op — no state change.
-        if reviewer is None:
-            return _review_redirect(project_id, k, r=r)
-        name = (reviewer.get("name") or "").strip()
-        mail = (reviewer.get("email") or "").strip()
+        # Per-deliverable sign-off is open to the identified client on their own share link
+        # (operator feedback: the client approves each itemized deliverable before the full
+        # download unlocks) — same captured-intent rule as the whole-version Approve. A
+        # verified reviewer keeps their locked roster identity.
+        if reviewer is not None:
+            name = (reviewer.get("name") or "").strip()
+            mail = (reviewer.get("email") or "").strip()
+        else:
+            name, mail = _reviewer_identity(request, author, email)
         key = (filename or "").strip()
         if not name or not key:
             return _review_redirect(project_id, k, r=r)
@@ -6881,6 +6939,13 @@ def review_asset(
                 title=f"{_campaign_label(project)} — {label} {status.lower()}",
                 body=f"{name} {verb} {label}.",
             )
+            db.add_project_event(conn, project_id, kind.replace("asset_", "asset-"),
+                                 actor_role="client", actor_name=name, body=body[:200])
+            # When this sign-off was the LAST one needed (creative locked + every deliverable
+            # uploaded + approved), the full package assembles + download unlocks. Approving
+            # one deliverable never ships early — only the last approval opens the door.
+            if action != "changes":
+                _maybe_finalize_delivery(conn, project_id)
     finally:
         conn.close()
     return _review_redirect(project_id, k, name=name, email=mail, r=r)

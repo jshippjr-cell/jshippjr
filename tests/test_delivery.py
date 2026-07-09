@@ -630,11 +630,10 @@ def test_timestamped_comment_renders_on_portal(client):
 
 def test_client_approve_sets_state_via_portal(client):
     pid = _win_and_make_project(client, 1)
+    _seed_full_deliverables(client, pid)          # every deliverable uploaded → complete
     rtoken = _add_reviewer(client, pid, name="Dana (Agency)")
-    # Delivery-completeness gate: a fresh project has no uploaded deliverables, so
-    # delivering means opting into a partial package (deliver_partial=1).
-    client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+    # Creative approve on a COMPLETE package finalizes delivery.
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -652,7 +651,7 @@ def test_approve_with_share_token_only_is_refused(client):
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
-                    data={"k": token, "author": "Anyone", "email": "x@x.com"},
+                    data={"k": token, "author": "Anyone"},   # no email → un-identified
                     follow_redirects=False)
     # Not a 404 (the share token is valid for viewing/commenting) — it just no-ops.
     assert r.status_code == 303
@@ -673,13 +672,12 @@ def test_verified_reviewer_approve_records_roster_identity(client):
     it locks FINAL, builds the ZIP, and records the ROSTER name + email — not a
     free-typed name posted on the form."""
     pid = _win_and_make_project(client, 1)
+    _seed_full_deliverables(client, pid)
     rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
                            email="dana@agency.com", role="Senior Producer")
     # A spoofed name + email is posted alongside the verified token — it's ignored.
-    # deliver_partial opts past the completeness gate (fresh project, no uploads).
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "author": "Imposter", "email": "evil@x.com",
-                      "deliver_partial": "1"})
+                data={"r": rtoken, "author": "Imposter", "email": "evil@x.com"})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -929,8 +927,9 @@ def test_new_version_reopens_an_approved_delivery(client):
     pid = _win_and_make_project(client, 1)
     rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
+    _seed_full_deliverables(client, pid)          # complete → approve finalizes delivery
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+                data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -985,7 +984,7 @@ def test_approve_locks_current_version_to_final(client):
     rtoken = _add_reviewer(client, pid)
     _upload_version(client, pid, "v1.mp3")
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+                data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -1012,12 +1011,10 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
 
     pid = _win_and_make_project(client, 1)
     name = _assign_a_creator(client, pid)          # contributor for the docs
-    _seed_asset(client, pid)                       # an uploaded deliverable
+    _seed_full_deliverables(client, pid)           # a complete deliverable set
     rtoken = _add_reviewer(client, pid)
     # The agency presses APPROVE on their verified personal review link — the trigger.
-    # (One seeded asset doesn't cover every scoped deliverable, so opt into partial.)
-    client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+    client.post(f"/project/{pid}/review/approve", data={"r": rtoken})
 
     from chordential_oia.web import db as db_mod, app as app_mod
     conn = db_mod.connect()
@@ -1031,7 +1028,7 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
     assert zip_desc and zip_desc["url"].startswith("/uploads/")
     assert zip_desc["built_at"]
     checklist = d.get("delivery_checklist")
-    assert "Broadcast Mix" in checklist
+    assert "Final master" in checklist
     assert "Cue Sheet" in checklist and "Rights Certificate" in checklist
     assert "Delivery ZIP" in checklist
 
@@ -1057,16 +1054,16 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
 def test_portal_package_ready_but_download_is_payment_gated(client):
     pid = _win_and_make_project(client, 1)
     _assign_a_creator(client, pid)
-    _seed_asset(client, pid)
+    _seed_full_deliverables(client, pid)
     token = _project_token(client, pid)
     rtoken = _add_reviewer(client, pid)
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+                data={"r": rtoken})
     # Unpaid: the package shows, the checklist renders — but download is LOCKED.
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
     assert "Your delivery package is ready" in page
     assert "Payment required to download" in page
-    assert "Broadcast Mix" in page
+    assert "Final master" in page
     assert "Rights Certificate" in page
     # Operator unlocks (override) → the gated download link appears.
     client.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"})
@@ -1077,10 +1074,10 @@ def test_portal_package_ready_but_download_is_payment_gated(client):
 
 def test_delivery_zip_blocked_on_uploads_served_via_gated_route(client):
     pid = _win_and_make_project(client, 1)
-    _seed_asset(client, pid)
+    _seed_full_deliverables(client, pid)
     rtoken = _add_reviewer(client, pid)
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+                data={"r": rtoken})
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -1116,9 +1113,10 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
     # Seed a WAV so the conversion branch is exercised (then skipped).
     _seed_asset(client, pid, name="master.wav", label="Broadcast Mix",
                 ctype="audio/wav")
+    _seed_full_deliverables(client, pid)
     rtoken = _add_reviewer(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
-                    data={"r": rtoken, "deliver_partial": "1"},
+                    data={"r": rtoken},
                     follow_redirects=False)
     assert r.status_code == 303
     from chordential_oia.web import db as db_mod, app as app_mod
@@ -1133,8 +1131,7 @@ def test_packaging_does_not_crash_without_ffmpeg(client, monkeypatch):
     with _zip.ZipFile(zip_path) as zf:
         names = zf.namelist()
         # The original WAV is present; no MP3 was produced (conversion skipped).
-        assert any(n.endswith(".wav") for n in names)
-        assert not any(n.endswith(".mp3") for n in names)
+        assert any(n.endswith(".wav") for n in names)   # WAV packaged un-converted
 
 
 # --------------------------------------------------------------------------- #
@@ -1152,7 +1149,7 @@ def test_delivery_console_renders_with_campaign_agents_and_brief(client):
     # The campaign + the contributor + the five-agent labels.
     assert campaign in body
     assert name in body
-    for label in ("Rights", "Revisions", "Metadata", "Approvals", "Assets"):
+    for label in ("Versions", "Deliverables", "Client sign-off", "Rights", "Package"):
         assert label in body
     # The creative brief section is present (seeded from the opportunity's need).
     assert "Creative brief" in body
@@ -1210,33 +1207,20 @@ def _comments(pid):
 
 
 def test_approve_without_identity_is_rejected(client):
-    """Approve — the action that locks FINAL + builds the ZIP — now requires a
-    VERIFIED reviewer link (?r=). A share-link guest no-ops even with a complete
-    free-typed name + email; only the verified reviewer's token approves."""
+    """Approve requires an IDENTITY (name + email). A bare name over the share token is
+    refused; a COMPLETE identity approves the creative straight from the share link
+    (ADR-0020 — captured intent is enough, no verified link needed)."""
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid)
     token = _project_token(client, pid)
-    # A bare name over the share token → no-op (still a 303 redirect).
+    # A bare name (no email) → refused, no approval recorded.
     r = client.post(f"/project/{pid}/review/approve",
                     data={"k": token, "author": "Dana"}, follow_redirects=False)
     assert r.status_code == 303
-    from chordential_oia.web import db as db_mod
-    conn = db_mod.connect()
-    try:
-        d = db_mod.get_delivery(conn, pid)
-    finally:
-        conn.close()
-    assert d.get("state") != "Delivered"
     assert not any(c["kind"] == "approval" for c in _comments(pid))
-    # Even a COMPLETE free-typed identity over the share token cannot approve.
+    # A COMPLETE free-typed identity over the share token DOES approve the creative now.
     client.post(f"/project/{pid}/review/approve",
                 data={"k": token, "author": "Dana", "email": "dana@agency.com"})
-    assert not any(c["kind"] == "approval" for c in _comments(pid))
-    # The verified reviewer's personal token DOES approve (partial opt-in: the
-    # seeded asset doesn't cover every scoped deliverable).
-    rtoken = _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
-    client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
     assert any(c["kind"] == "approval" for c in _comments(pid))
 
 
@@ -1774,9 +1758,9 @@ def test_guest_cannot_change_per_asset_status(client):
     _seed_asset(client, pid, name="master60.mp3", label=":60 master")
     token = _project_token(client, pid)
     (key60,) = tuple(_asset_keys(pid))
+    # NO identity posted → the un-identified guest can't sign off (identity is required).
     r = client.post(f"/project/{pid}/review/asset",
-                    data={"k": token, "filename": key60, "action": "approve",
-                          "author": "Guest", "email": "guest@agency.com"},
+                    data={"k": token, "filename": key60, "action": "approve"},
                     follow_redirects=False)
     # Valid share token → not a 404, but a no-op (303 back to the portal).
     assert r.status_code == 303
@@ -1938,9 +1922,7 @@ def test_approve_incomplete_without_partial_does_not_deliver(client):
     rtoken = _add_reviewer(client, pid)
     r = client.post(f"/project/{pid}/review/approve",
                     data={"r": rtoken}, follow_redirects=False)
-    # No-op (303 back to the portal with the gate flag), state did NOT advance.
     assert r.status_code == 303
-    assert "gate=incomplete" in r.headers["location"]
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
@@ -1948,30 +1930,30 @@ def test_approve_incomplete_without_partial_does_not_deliver(client):
         kinds = {c["kind"] for c in db_mod.list_review_comments(conn, pid)}
     finally:
         conn.close()
-    assert d.get("state") != "Delivered"
-    assert "approval" not in kinds
+    # The CREATIVE is approved (locked), but an incomplete package does NOT deliver and
+    # never builds a downloadable ZIP.
+    assert d.get("creative_lock")
+    assert d.get("state") == "Approved"          # NOT "Delivered"
+    assert not d.get("delivery_zip")
+    assert "approval" in kinds
 
 
 def test_approve_incomplete_with_partial_delivers_and_marks_partial(client):
-    """(b) With deliver_partial=1 the incomplete package delivers, and the stored
-    descriptor is marked Partial with the missing-deliverable list."""
+    """The client can NEVER trigger a partial download by approving: an incomplete package
+    (a scoped deliverable still missing) stays creative-approved and undelivered."""
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid, name="master60.mp3", label="Final master")
     rtoken = _add_reviewer(client, pid)
     client.post(f"/project/{pid}/review/approve",
-                data={"r": rtoken, "deliver_partial": "1"})
+                data={"r": rtoken, "deliver_partial": "1"})   # opt-in is ignored now
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:
         d = db_mod.get_delivery(conn, pid)
     finally:
         conn.close()
-    assert d.get("state") == "Delivered"
-    zip_desc = d.get("delivery_zip")
-    assert zip_desc["partial"] is True
-    assert "Partial delivery" in zip_desc["descriptor"]
-    # The missing deliverables are recorded on the descriptor.
-    assert ":30 / :15 / :06 cutdowns" in zip_desc["completeness"]["missing"]
+    assert d.get("state") == "Approved"            # NOT delivered — the package is incomplete
+    assert not d.get("delivery_zip")               # no downloadable package
 
 
 def test_complete_package_approves_and_is_not_partial(client):

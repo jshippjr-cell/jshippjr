@@ -166,50 +166,51 @@
 </div>
 
 
-<!-- FIVE-AGENT STATUS ROW -->
+<!-- DELIVERY STATUS — live progress toward a complete, approved, delivered package -->
 <section class="card">
-  <div class="card-head"><h2>The five agents <span class="muted">— live state</span></h2></div>
+  <div class="card-head"><h2>Delivery status <span class="muted">— the five gates to a complete delivery</span></h2></div>
   <div class="agent-row">
+    <div class="agent">
+      <div class="ah"><span class="ico">🎧</span> Versions &amp; rounds</div>
+      <div class="lines">
+        Current: <b>v{{ current_n or '—' }}</b> · {{ version_state }}<br>
+        Round {{ revisions.used }} of {{ revisions.scoped }} <span class="k">({{ revisions.remaining }} left)</span><br>
+        {% if pending_version %}<span class="pend">1 submission awaiting your review ↑</span>{% else %}Versions logged: {{ versions|length }}{% endif %}
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">📦</span> Deliverables</div>
+      <div class="lines">
+        {% if completeness and completeness.total %}
+        Uploaded: <b>{{ completeness.uploaded|length }} of {{ completeness.total }}</b><br>
+        {% if not completeness.complete %}<span class="pend">Missing: {{ completeness.missing|join(', ') }}</span>{% else %}<span class="ok">All deliverables uploaded ✓</span>{% endif %}
+        {% else %}
+        Uploaded: <b>{{ assets|length }}</b> file{{ 's' if assets|length != 1 }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="agent">
+      <div class="ah"><span class="ico">✍</span> Client sign-off</div>
+      <div class="lines">
+        Creative: {% if creative_lock %}<span class="ok">approved ✓</span>{% else %}<span class="pend">awaiting approval</span>{% endif %}<br>
+        Deliverables: <b>{{ asset_rollup.approved }} of {{ asset_rollup.total }}</b> approved<br>
+        {% if asset_rollup.changes %}<span class="pend">{{ asset_rollup.changes }} with changes requested</span>{% endif %}
+      </div>
+    </div>
     <div class="agent">
       <div class="ah"><span class="ico">⚖</span> Rights</div>
       <div class="lines">
-        License: {% if license_confirmed %}<span class="ok">confirmed ✓</span>{% elif delivery.get('license') %}<span class="pend">draft — confirm to certify</span>{% else %}<span class="pend">draft — standard terms</span>{% endif %}<br>
-        Content-ID: <span class="k">{{ cert.content_id }}</span><br>
-        Signatory: <span class="k">{{ signatory.signer }}{% if signatory.title %}, {{ signatory.title }}{% endif %}</span><br>
-        Contributors: {{ cert.contributors|length }}{% if cert.contributors %} <span class="k">— {{ cert.contributors|map(attribute='name')|join(', ') }}</span>{% endif %}
+        License: {% if license_confirmed %}<span class="ok">confirmed ✓</span>{% else %}<span class="pend">draft — confirm to certify</span>{% endif %}<br>
+        Contributors: {{ cert.contributors|length }}{% if cert.contributors %} <span class="k">— {{ cert.contributors|map(attribute='name')|join(', ') }}</span>{% endif %}<br>
+        Content-ID: <span class="k">{{ cert.content_id }}</span>
       </div>
     </div>
     <div class="agent">
-      <div class="ah"><span class="ico">↻</span> Revisions</div>
+      <div class="ah"><span class="ico">🚚</span> Package</div>
       <div class="lines">
-        Round {{ revisions.used }} of {{ revisions.scoped }} <span class="k">({{ revisions.remaining }} left)</span><br>
-        State: {{ version_state }}<br>
-        Versions logged: {{ versions|length }}
-      </div>
-    </div>
-    <div class="agent">
-      <div class="ah"><span class="ico">🗂</span> Metadata</div>
-      <div class="lines">
-        Cue sheet <span class="ok">✓</span> · Manifest <span class="ok">✓</span><br>
-        Stems: {{ assets|selectattr('label','defined')|list|length }} file{{ 's' if assets|length != 1 }}<br>
-        Naming: <span class="ok">deterministic ✓</span>
-      </div>
-    </div>
-    <div class="agent">
-      <div class="ah"><span class="ico">✓</span> Approvals</div>
-      <div class="lines">
-        {% set last_approval = none %}
-        {% for c in comments %}{% if c['kind'] == 'approval' %}{% set last_approval = c %}{% endif %}{% endfor %}
-        {% if last_approval %}<span class="ok">Approved</span> by {{ last_approval['author'] }}<br>{% else %}<span class="pend">Awaiting sign-off</span><br>{% endif %}
-        Sign-offs: {{ approvals|length }}<br>
-        {% if released_at %}<span class="ok">Released {{ released_at }}</span>{% else %}<span class="k">Not released</span>{% endif %}
-      </div>
-    </div>
-    <div class="agent">
-      <div class="ah"><span class="ico">🎧</span> Assets</div>
-      <div class="lines">
-        {{ assets|length }} file{{ 's' if assets|length != 1 }} · v{{ current_n or '—' }}<br>
-        {% if share_token %}<a class="link" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">Open client portal ↗</a>{% else %}<span class="k">No portal token</span>{% endif %}
+        {% if state in ('Delivered','Released') %}<span class="ok">Assembled ✓</span>{% else %}<span class="k">Not assembled — unlocks when all sign-offs are in</span>{% endif %}<br>
+        Download: {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">locked{% if state in ('Delivered','Released') %} — awaiting payment{% endif %}</span>{% endif %}<br>
+        {% if share_token %}<a class="link" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">Open client portal ↗</a>{% endif %}
       </div>
     </div>
   </div>
