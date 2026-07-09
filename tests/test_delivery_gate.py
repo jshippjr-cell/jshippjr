@@ -170,8 +170,9 @@ def test_download_waits_for_every_derivative_signoff(tmp_path, monkeypatch):
 
 
 def test_operator_can_reopen_delivered_project_from_console(tmp_path, monkeypatch):
-    """The operator must be able to un-deliver a stuck Delivered project (tokenless reopen),
-    since the portal's client review block is hidden once state is Delivered."""
+    """Reopening a SHIPPED delivery un-ships it back to the deliverable sign-off stage:
+    state → Approved, the master stays approved (creative lock kept), prior sign-offs are
+    preserved, and only the package + client download are undone."""
     app_mod = _app(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
@@ -188,6 +189,7 @@ def test_operator_can_reopen_delivered_project_from_console(tmp_path, monkeypatc
         r = c.post(f"/project/{pid}/review/reopen", data={}, follow_redirects=False)
         assert r.status_code == 303
     conn = app_mod.db.connect(); d = app_mod.db.get_delivery(conn, pid); conn.close()
-    assert not d.get("creative_lock")
-    assert d.get("state") == "In review"
-    assert not d.get("download_unlocked")
+    assert d.get("creative_lock")                    # master stays approved (un-ship, not un-approve)
+    assert d.get("state") == "Approved"              # back at the deliverable sign-off stage
+    assert not d.get("download_unlocked")            # download re-locked
+    assert not d.get("delivery_zip")                 # shipped package dropped

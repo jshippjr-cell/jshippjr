@@ -6818,17 +6818,31 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
         if row is None:
             return HTMLResponse("Project not found", status_code=404)
         delivery = db.get_delivery(conn, project_id)
-        production.clear_creative_lock(conn, db, project_id)
-        versions = versions_list(delivery)
-        if versions:
-            versions[-1] = dict(versions[-1])
-            versions[-1]["label"] = version_label(versions[-1]["n"], final=False)
-            db.update_delivery(conn, project_id, "versions", versions)
-            db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-        db.update_delivery(conn, project_id, "state", "In review")
-        db.update_delivery(conn, project_id, "download_unlocked", False)
-        db.add_project_event(conn, project_id, "reopened", actor_role="operator",
-                             actor_name="Studio", body="Approval reopened — back in review.")
+        state = (delivery.get("state") or "").strip()
+        if state in ("Delivered", "Released"):
+            # UN-SHIP: the package went out, but pull it back to the DELIVERABLE SIGN-OFF
+            # stage — the master stays approved and every prior per-deliverable sign-off is
+            # preserved; only the shipped package + the client download are undone. So the
+            # operator (or client) can revisit a single deliverable without redoing the master.
+            db.update_delivery(conn, project_id, "state", "Approved")
+            db.update_delivery(conn, project_id, "download_unlocked", False)
+            db.update_delivery(conn, project_id, "delivery_zip", None)
+            db.add_project_event(conn, project_id, "reopened", actor_role="operator",
+                                 actor_name="Studio",
+                                 body="Delivery reopened — back to deliverable sign-off.")
+        else:
+            # Reopen the CREATIVE (master): back to review, master un-approved.
+            production.clear_creative_lock(conn, db, project_id)
+            versions = versions_list(delivery)
+            if versions:
+                versions[-1] = dict(versions[-1])
+                versions[-1]["label"] = version_label(versions[-1]["n"], final=False)
+                db.update_delivery(conn, project_id, "versions", versions)
+                db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
+            db.update_delivery(conn, project_id, "state", "In review")
+            db.update_delivery(conn, project_id, "download_unlocked", False)
+            db.add_project_event(conn, project_id, "reopened", actor_role="operator",
+                                 actor_name="Studio", body="Approval reopened — back in review.")
     finally:
         conn.close()
     if k or r:
