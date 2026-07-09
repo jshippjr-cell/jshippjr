@@ -4300,9 +4300,34 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
     finally:
         conn.close()
     path = _safe_upload_path(name)
-    if path is None:
-        return PlainTextResponse("not found", status_code=404)
-    return FileResponse(path, filename=os.path.basename(path))
+    if path is not None:
+        return FileResponse(path, filename=os.path.basename(path))
+    # Ephemeral disk wiped: rehydrate from the durable DB mirror (ZIPs are mirrored at build,
+    # assets via _persist_upload). A ZIP built BEFORE the mirror existed isn't stored — rebuild
+    # it from the durable source media (which _build_delivery_package rehydrates first).
+    base = os.path.basename(name or "")
+    if base and base == name:
+        conn2 = db.connect()
+        try:
+            blob = db.get_media_blob(conn2, base)
+            if blob is None and base.lower().endswith(".zip"):
+                pkg = _build_delivery_package(conn2, project_id)
+                blob = db.get_media_blob(conn2, base)
+                if blob is None and pkg is not None:
+                    blob = db.get_media_blob(conn2, os.path.basename(pkg["filename"]))
+        finally:
+            conn2.close()
+        if blob is not None:
+            data, ctype = blob
+            try:
+                os.makedirs(UPLOAD_DIR, exist_ok=True)
+                with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
+                    fh.write(data)
+            except OSError:
+                pass
+            return Response(content=data, media_type=ctype or "application/zip",
+                            headers={"Content-Disposition": f'attachment; filename="{base}"'})
+    return PlainTextResponse("not found", status_code=404)
 
 
 @app.post("/project/{project_id}/delivery/unlock")
@@ -6784,11 +6809,47 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
     return approved_n
 
 
+def _rehydrate_delivery_media(conn, project_id: int) -> int:
+    """Restore a project's delivery media (asset + version files) from the durable DB blob
+    mirror back to disk when the ephemeral disk was wiped — so a package (re)build actually
+    contains the audio instead of README placeholders. Returns the count restored."""
+    delivery = db.get_delivery(conn, project_id)
+    names = set()
+    for a in (delivery.get("assets") or []):
+        if a.get("filename"):
+            names.add(os.path.basename(a["filename"]))
+    for v in (delivery.get("versions") or []):
+        if v.get("filename"):
+            names.add(os.path.basename(v["filename"]))
+    pv = delivery.get("pending_version") or {}
+    if pv.get("filename"):
+        names.add(os.path.basename(pv["filename"]))
+    restored = 0
+    for base in names:
+        if not base or os.path.exists(os.path.join(UPLOAD_DIR, base)):
+            continue
+        blob = db.get_media_blob(conn, base)
+        if blob is None:
+            continue
+        try:
+            os.makedirs(UPLOAD_DIR, exist_ok=True)
+            with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
+                fh.write(blob[0])
+            restored += 1
+        except OSError:
+            pass
+    return restored
+
+
 def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     """Delivery automation (Phase 3): assemble the delivery ZIP for a project and
     store its descriptor + checklist on ``delivery_json``. Returns the descriptor
     (or None if the project is gone). Deterministic + best-effort: the stdlib ZIP +
     docs always build; audio conversion is attempted only if ffmpeg is available.
+
+    Durable across ephemeral-disk wipes: rehydrates the source media from the DB mirror
+    before zipping, and mirrors the built ZIP itself into the blob store so the download
+    survives a redeploy.
 
     Stored shape::
 
@@ -6798,9 +6859,16 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     row = db.get_project(conn, project_id)
     if row is None:
         return None
+    _rehydrate_delivery_media(conn, project_id)      # source audio back on disk before zipping
     assignments = db.list_assignments(conn, project_id)
     delivery = db.get_delivery(conn, project_id)
     pkg = build_delivery_zip(row, assignments, delivery, UPLOAD_DIR)
+    # Mirror the built ZIP for durability (the same DB blob store uploads use).
+    try:
+        with open(os.path.join(UPLOAD_DIR, os.path.basename(pkg["filename"])), "rb") as fh:
+            db.save_media_blob(conn, os.path.basename(pkg["filename"]), fh.read(), "application/zip")
+    except (OSError, KeyError):
+        pass
     db.update_delivery(conn, project_id, "delivery_zip", {
         "filename": pkg["filename"], "url": pkg["url"], "built_at": pkg["built_at"],
         # Honest partial labelling: the portal card + ZIP descriptor read "Partial
