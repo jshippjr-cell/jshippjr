@@ -6221,6 +6221,22 @@ def delivery_release(project_id: int):
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
+@app.post("/project/{project_id}/delivery/ship")
+def delivery_ship(project_id: int):
+    """Operator action: finalize + ship the delivery when it's READY (master approved,
+    every deliverable uploaded + signed off) but hasn't shipped — e.g. after a reopen/
+    un-ship, where nothing re-triggers the automatic finalize. Assembles the package and
+    flips to Delivered (idempotent; ships only if genuinely ready)."""
+    conn = db.connect()
+    shipped = False
+    try:
+        shipped = _maybe_finalize_delivery(conn, project_id)
+    finally:
+        conn.close()
+    flag = "" if shipped else "?ship=not_ready"
+    return RedirectResponse(f"/project/{project_id}/delivery{flag}#delivery", status_code=303)
+
+
 @app.get("/project/{project_id}/delivery-portal", response_class=HTMLResponse)
 def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
                     r: str = ""):

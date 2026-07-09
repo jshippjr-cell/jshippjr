@@ -460,7 +460,7 @@
       </form>
       {% else %}
       <p class="sub" style="margin:0 0 10px"><b style="color:#1d6b43">✓ Master approved.</b>
-        {% if scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> — sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
+        {% if scoped_rollup and scoped_rollup.total and scoped_rollup.approved == scoped_rollup.total %}All <b>{{ scoped_rollup.total }}</b> deliverables approved — Chordential is finalizing your package for release.{% elif scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> — sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
       {% endif %}
       {% if creative_lock %}
       <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="review-act" style="display:inline"

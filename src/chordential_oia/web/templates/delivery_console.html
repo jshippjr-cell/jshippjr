@@ -236,6 +236,15 @@
     <a class="btn" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">↗ Open client review link</a>
     {% endif %}
     <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
+    {# Ship: the master is approved and EVERY deliverable is uploaded + signed off, but the
+       package hasn't shipped (e.g. after a reopen/un-ship, where nothing re-triggers the
+       automatic finalize). This is the one-click completion. #}
+    {% set _ready_ship = creative_lock and completeness and completeness.complete and asset_rollup and asset_rollup.total and asset_rollup.approved == asset_rollup.total and state not in ('Delivered', 'Released') %}
+    {% if _ready_ship %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/ship" class="inline">
+      <button class="btn primary" type="submit">🚀 Ship the delivery — all {{ asset_rollup.total }} signed off</button>
+    </form>
+    {% endif %}
     <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline"
           {% if completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Build a PARTIAL delivery package anyway? It ships only what\'s uploaded.')"{% endif %}>
       {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
