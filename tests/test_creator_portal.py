@@ -259,6 +259,47 @@ def test_upload_blocked_when_not_assigned(ctx):
     assert r.status_code == 403
 
 
+def test_composer_delivers_derivatives_after_master_approved(ctx):
+    """Once the master is approved (creative lock), the portal stops asking for a new
+    master and asks the composer for the remaining scoped deliverables — and uploading
+    one lands it as an asset for the client to sign off."""
+    client, db_mod, app_mod = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    db_mod.update_delivery(conn, pid, "versions",
+        [{"n": 1, "label": "v1", "url": "/uploads/m.mp3", "filename": "m.mp3",
+          "name": "master", "created_at": "2026-07-08T00:00:00"}])
+    app_mod.production.set_creative_lock(conn, db_mod, pid, version_n=1, by="Client")
+    conn.close()
+    # the portal now asks for derivatives, not a new master
+    page = client.get(f"/creator/{tok}").text
+    assert "now deliver the remaining assets" in page
+    assert "Instrumental" in page                     # a scoped derivative deliverable
+    # composer uploads one → it lands as an asset for client sign-off
+    r = client.post(f"/creator/{tok}/project/{pid}/deliverable",
+                    data={"label": "Instrumental / TV mix"},
+                    files={"file": ("inst.mp3", b"ID3fakeaudio", "audio/mpeg")},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert "Instrumental / TV mix" in [a.get("label") for a in (d.get("assets") or [])]
+
+
+def test_deliverable_upload_blocked_when_not_assigned(ctx):
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    other = db_mod.insert_project(conn, None, "X", "Other", 0, 0, ["Composer"], None)
+    conn.close()
+    r = client.post(f"/creator/{tok}/project/{other}/deliverable",
+                    data={"label": "Stems"},
+                    files={"file": ("s.wav", b"x", "audio/wav")}, follow_redirects=False)
+    assert r.status_code == 403
+
+
 def test_bogus_token_404(ctx):
     client, _, _ = ctx
     assert client.get("/creator/not-a-real-token").status_code == 404

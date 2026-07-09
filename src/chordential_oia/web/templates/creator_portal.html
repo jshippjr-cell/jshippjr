@@ -124,6 +124,38 @@
       </div>
       {% endif %}
 
+      {% if a.creative_lock %}
+      {# Master approved — the composer's job shifts to producing the derivative
+         deliverables. Ask for each one; the master stays the version ladder below. #}
+      <div class="uploader" style="margin-bottom:12px">
+        <label style="color:#1d6b43">✓ Master approved — now deliver the remaining assets</label>
+        <p class="muted-note" style="margin:2px 0 10px">Upload each below. Each goes to the client for sign-off, and the studio is notified.</p>
+        {% for d in a.deliverables %}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--sand)">
+          <span style="flex:1 1 180px;font-size:13px"><b>{{ d.asset }}</b>{% if d.spec %} <span class="sub" style="margin:0">· {{ d.spec }}</span>{% endif %}</span>
+          {% if d.uploaded %}
+          <span style="font-size:11px;font-weight:700;color:#1d6b43">✓ Delivered</span>
+          {% else %}
+          <form method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
+            <input type="hidden" name="label" value="{{ d.asset }}">
+            <input type="file" name="file" required style="font-size:12px;max-width:170px">
+            <button class="btn tiny" type="submit">Upload</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% if not a.deliverables %}<p class="muted-note" style="margin:0">No additional deliverables scoped — the master completes this delivery.</p>{% endif %}
+      </div>
+      <details style="margin-top:4px">
+        <summary class="muted-note" style="cursor:pointer">Need to revise the master? Submit a new version</summary>
+        <form class="uploader" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data" style="margin-top:8px">
+          <label>New master version (mp3/wav)</label>
+          <input type="file" name="file" accept="audio/*" required>
+          <button class="btn" type="submit">Submit for review</button>
+          <p class="muted-note">Submitting a new master reopens review and notifies the team.</p>
+        </form>
+      </details>
+      {% else %}
       <form class="uploader" method="post"
             action="/creator/{{ token }}/project/{{ a.project_id }}/version"
             enctype="multipart/form-data">
@@ -133,6 +165,7 @@
         <p class="muted-note">Submitting a new version reopens review and notifies the team.
           A human always presses the approve button — we never auto-decide.</p>
       </form>
+      {% endif %}
     </div>
     {% endfor %}
 

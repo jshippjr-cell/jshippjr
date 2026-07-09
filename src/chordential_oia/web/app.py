@@ -4703,6 +4703,19 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
     out = []
     for a in db.list_talent_assignments(conn, talent_id):
         delivery = db.get_delivery(conn, a["project_id"])
+        prow = db.get_project(conn, a["project_id"])
+        # Once the client approves the master (creative lock), the composer's job shifts
+        # from iterating the master to producing the DERIVATIVE deliverables (instrumental,
+        # cutdowns, verticals, stems). Surface those so the portal can ask for them —
+        # the master is the version ladder, so it's excluded here.
+        locked = bool(production.creative_lock(delivery))
+        deliverables = []
+        if locked and prow is not None:
+            for d in scoped_deliverables(prow, delivery):
+                if d.get("is_master"):
+                    continue
+                deliverables.append({"asset": d["asset"], "group": d["group"],
+                                     "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded"))})
         out.append({
             "project_id": a["project_id"],
             "role": a["role"],
@@ -4714,6 +4727,8 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             "version_state": (delivery.get("version_state") or ""),
             "versions": versions_list(delivery),
             "feedback": _creator_feedback(conn, a["project_id"], delivery),
+            "creative_lock": locked,
+            "deliverables": deliverables,
         })
     return out
 
@@ -4773,6 +4788,56 @@ async def creator_submit_version(
         _notify_operator_review,
         project_id, None, f"New work submitted — {campaign}",
         f"{who} submitted a new version. Review and publish it in the delivery console.")
+    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+
+
+@app.post("/creator/{token}/project/{project_id}/deliverable")
+async def creator_submit_deliverable(
+    token: str, project_id: int, label: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """A creator uploads a scoped DELIVERABLE (instrumental / TV mix, cutdowns, verticals,
+    stems) AFTER the master is approved. Lands in ``delivery_json['assets']`` under its
+    label so the client can sign it off, and pings the operator. Mirrors the operator
+    Assets-agent storage; guarded by a valid portal token AND an assignment to the project."""
+    conn = db.connect()
+    campaign = "Campaign"
+    who = ""
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.talent_is_assigned(conn, row["id"], project_id):
+            return HTMLResponse("Not assigned to this project", status_code=403)
+        if file is None or not (file.filename or "").strip():
+            return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+        who = row["name"]
+        ext = os.path.splitext(file.filename)[1].lower()
+        ctype = (file.content_type or "").lower()
+        kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
+        data = await file.read()
+        existing = {a.get("filename") for a in (db.get_delivery(conn, project_id).get("assets") or [])}
+        safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
+        n = 1
+        while f"proj{project_id}-{n}{safe_ext}" in existing or os.path.exists(
+                os.path.join(UPLOAD_DIR, f"proj{project_id}-{n}{safe_ext}")):
+            n += 1
+        safe_name = f"proj{project_id}-{n}{safe_ext}"
+        _persist_upload(conn, safe_name, data)
+        delivery = db.get_delivery(conn, project_id)
+        assets = list(delivery.get("assets") or [])
+        deliverable = (label.strip() or file.filename)
+        assets.append({"label": deliverable, "url": f"/uploads/{safe_name}",
+                       "filename": safe_name, "kind": kind})
+        db.update_delivery(conn, project_id, "assets", assets)
+        prow = db.get_project(conn, project_id)
+        campaign = (prow["need"] if prow is not None else "") or "Campaign"
+        db.add_update(conn, project_id, f"{who} delivered '{deliverable}' — ready for client sign-off.")
+    finally:
+        conn.close()
+    await run_in_threadpool(
+        _notify_operator_review, project_id, None, f"Deliverable uploaded — {campaign}",
+        f"{who} uploaded a deliverable. Review it in the delivery console.")
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
