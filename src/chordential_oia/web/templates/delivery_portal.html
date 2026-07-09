@@ -208,6 +208,16 @@
         <b>${{ '%.2f'|format(invoice_balance.outstanding) }}</b> is{% else %}your invoice is{% endif %}
         due. You can keep streaming and reviewing the work above — downloads unlock the
         moment it's paid in full.</p>
+      {% if request.query_params.get('pay') == 'unavailable' %}
+      <p class="paywall-sub" style="margin-top:10px;color:#ffd9c2">Online card payment isn't switched on yet — Chordential will send you a secure payment link.</p>
+      {% else %}
+      <form method="post" action="/project/{{ project['id'] }}/pay" style="margin-top:12px">
+        <input type="hidden" name="k" value="{{ share_token }}">
+        <input type="hidden" name="r" value="{{ reviewer_token }}">
+        <input type="hidden" name="kind" value="final">
+        <button type="submit" class="dl-all" style="border:0;cursor:pointer">Pay{% if invoice_balance and invoice_balance.outstanding %} ${{ '%.2f'|format(invoice_balance.outstanding) }}{% endif %} to unlock your files →</button>
+      </form>
+      {% endif %}
     </div>
     {% endif %}
     <p class="honest">Organised, documented, converted, and packaged by Chordential — the music is your composer's original work.{% if is_partial %} The missing deliverables will be added once Chordential uploads them.{% endif %}</p>

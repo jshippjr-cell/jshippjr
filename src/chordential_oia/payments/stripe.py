@@ -62,7 +62,7 @@ class StripePaymentProvider:
 
         session = stripe.checkout.Session.create(
             mode="payment",
-            success_url=f"{domain}/?paid={inv_id}",
+            success_url=f"{domain}/pay/return?invoice={inv_id}",
             cancel_url=f"{domain}/?canceled={inv_id}",
             client_reference_id=str(inv_id),
             metadata={"invoice_id": str(inv_id), "kind": str(kind)},

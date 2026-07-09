@@ -2781,6 +2781,20 @@ def client_workspace(request: Request, token: str):
             }.get(phase, "")
             if not stage_url and project is not None:
                 stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
+        # Client-facing DEPOSIT payment: once there's a project (awarded), surface the
+        # deposit due + a Pay button until it's paid. Uses the project share token so the
+        # token-gated /pay route authorizes it.
+        deposit_pay = None
+        if project is not None:
+            prop = db.proposal_for_project(conn, project["id"])
+            dep = next((i for i in db.list_invoices(conn, project["id"])
+                        if (i["kind"] or "") == "Deposit"), None)
+            dep_paid = dep is not None and (dep["status"] or "").lower() in ("paid", "settled")
+            dep_amount = (dep["amount"] if dep is not None
+                          else (prop["deposit_amount"] if prop is not None else 0)) or 0
+            if prop is not None and dep_amount and not dep_paid:
+                deposit_pay = {"amount": dep_amount, "pid": project["id"],
+                               "ptok": db.ensure_project_share_token(conn, project["id"])}
     finally:
         conn.close()
     # The client can approve only a released (not-yet-approved) review.
@@ -2793,6 +2807,7 @@ def client_workspace(request: Request, token: str):
                   approved_note=approved_note, k=readiness, prod=prod,
                   preparing=preparing, scope_confirm_url=scope_confirm_url,
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
+                  deposit_pay=deposit_pay,
                   **(brief_ctx or {}))
 
 
@@ -7287,6 +7302,88 @@ def invoice_checkout(invoice_id: int):
     finally:
         conn.close()
     return RedirectResponse("/projects", status_code=303)
+
+
+def _client_portal_url(project_id: int, k: str, extra: str = "") -> str:
+    q = f"?k={k}" if k else ""
+    if extra:
+        q = (q + "&" if q else "?") + extra
+    return f"/project/{project_id}/delivery-portal{q}"
+
+
+@app.post("/project/{project_id}/pay")
+def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str = Form("final")):
+    """Client-facing, token-gated: begin payment for the deposit or final invoice. Ensures the
+    invoice exists, opens a provider checkout, and — with Stripe configured — redirects the
+    client to the HOSTED checkout page. With the unconfigured Null provider it bounces back
+    with an honest 'online payment isn't enabled yet' note (the studio can still collect and
+    mark it paid). No admin gate: access is by the client's own share token."""
+    conn = db.connect()
+    kind = "Deposit" if kind.lower().startswith("dep") else "Final"
+    # Where to bounce back on the honest null-provider fallback / errors: the deposit is
+    # paid from the workspace, the final from the delivery portal.
+    def _back(flag):
+        if kind == "Deposit":
+            prow0 = db.get_project(conn, project_id)
+            if prow0 is not None and prow0["opp_id"]:
+                return f"/workspace/{db.ensure_share_token(conn, prow0['opp_id'])}?{flag}"
+        return _client_portal_url(project_id, k, flag)
+    try:
+        ok, _rev = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return HTMLResponse("Not found", status_code=404)
+        prow = db.get_project(conn, project_id)
+        prop = db.proposal_for_project(conn, project_id)
+        if prow is None or prop is None:
+            return RedirectResponse(_back("pay=error"), status_code=303)
+        if not db.has_invoice(conn, project_id, kind):
+            db.insert_invoice(conn, project_id, prop["id"], _invoice_from_proposal_row(prow, prop, kind))
+        invoice = next((i for i in db.list_invoices(conn, project_id)
+                        if (i["kind"] or "") == kind), None)
+        if invoice is None:
+            return RedirectResponse(_back("pay=error"), status_code=303)
+        if (invoice["status"] or "").lower() in ("paid", "settled"):
+            return RedirectResponse(_back("pay=already"), status_code=303)
+        try:
+            ref = get_payment_provider().create_checkout(invoice) or ""
+        except Exception:  # noqa: BLE001 — never 500 the payer
+            ref = ""
+        if ref.startswith("http"):                     # Stripe hosted checkout
+            db.update_invoice_status(conn, invoice["id"], "Issued", external_ref=ref)
+            db.add_update(conn, project_id, f"{kind} checkout opened by the client.", "invoice")
+            return RedirectResponse(ref, status_code=303)
+        # Null / unconfigured provider — be honest, don't fake a charge.
+        return RedirectResponse(_back("pay=unavailable"), status_code=303)
+    finally:
+        conn.close()
+
+
+@app.get("/pay/return", response_class=HTMLResponse)
+def pay_return(request: Request, invoice: int = 0):
+    """Stripe ``success_url`` target — the payer lands here after a COMPLETED checkout. Marks
+    the invoice Paid, unlocks the client's downloads (final), and queues crew payouts —
+    mirroring the operator status route. (Stripe only redirects here on success; the
+    signature-verified webhook is the belt-and-suspenders confirmation, a fast follow.)"""
+    conn = db.connect()
+    dest = "/"
+    try:
+        inv = db.get_invoice(conn, invoice) if invoice else None
+        if inv is not None and inv["project_id"]:
+            pid = inv["project_id"]
+            if (inv["status"] or "").lower() not in ("paid", "settled"):
+                db.update_invoice_status(conn, inv["id"], "Paid")
+                if (inv["kind"] or "") == "Final":
+                    db.update_delivery(conn, pid, "download_unlocked", True)
+                db.ensure_project_payouts(conn, pid)
+                db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
+            prow = db.get_project(conn, pid)
+            if inv["kind"] == "Final":
+                dest = _client_portal_url(pid, db.ensure_project_share_token(conn, pid) or "", "paid=1")
+            elif prow is not None and prow["opp_id"]:
+                dest = f"/workspace/{db.ensure_share_token(conn, prow['opp_id'])}?paid=1"
+    finally:
+        conn.close()
+    return RedirectResponse(dest, status_code=303)
 
 
 @app.post("/invoice/{invoice_id}/status")
