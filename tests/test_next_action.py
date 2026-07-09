@@ -129,6 +129,20 @@ def test_next_action_walks_the_whole_ladder(tmp_path, monkeypatch):
         assert a["court"] == "team" and "remaining deliverables" in a["label"]
         assert "final invoice" not in a["label"]        # the bug: it used to say this
 
+        # 9.6 — composer UPLOADED every deliverable, but the client hasn't signed each off
+        # yet → waiting on client sign-off, still NOT invoicing (the 2nd bug the walkthrough
+        # caught: 'uploaded' was wrongly treated as 'done').
+        conn = app_mod.db.connect()
+        app_mod.db.update_delivery(conn, pid, "assets", [
+            {"label": "Instrumental TV mix", "filename": "i.mp3", "url": "/u/i.mp3", "kind": "audio"},
+            {"label": ":30 cutdown", "filename": "c.mp3", "url": "/u/c.mp3", "kind": "audio"},
+            {"label": "9:16 vertical", "filename": "v.mp3", "url": "/u/v.mp3", "kind": "audio"},
+            {"label": "Mix-ready stem package", "filename": "s.zip", "url": "/u/s.zip", "kind": "file"}])
+        conn.close()
+        a = _next(app_mod, oid)
+        assert a["court"] == "client" and "signing off" in a["label"]
+        assert "final invoice" not in a["label"]
+
         # 10 — every deliverable signed off / package shipped → send the final invoice
         conn = app_mod.db.connect()
         app_mod.db.update_delivery(conn, pid, "state", "Delivered"); conn.close()

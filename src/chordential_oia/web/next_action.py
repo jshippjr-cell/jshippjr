@@ -109,11 +109,13 @@ def compute(conn, db, opp, project) -> dict:
     court = production.court_state(project, delivery)
     state = (delivery.get("state") or "").strip()
     comp = delivery_completeness(project, delivery)
-    # Invoice only when the delivery is truly finished: the package has shipped
-    # (Delivered/Released) OR every scoped deliverable is signed off. A master-only
-    # "Approved" (creative locked, derivatives still in production) must NOT jump to
-    # invoicing — see the "remaining deliverables" branch below.
-    if state in ("Delivered", "Released") or (state == "Approved" and comp["complete"]):
+    roll = db.asset_approval_rollup(delivery)
+    # Invoice ONLY once the package has actually shipped. Delivery auto-finalizes to
+    # "Delivered" only after every deliverable is uploaded AND signed off by the client
+    # (_maybe_finalize_delivery), so "Delivered"/"Released" is the one true "done" signal.
+    # A master-only "Approved" — even with every derivative UPLOADED — is not done until
+    # the client has signed each one off (see the two branches below).
+    if state in ("Delivered", "Released"):
         prop = db.proposal_for_project(conn, pid)
         invoices = db.list_invoices(conn, pid)
         final = next((i for i in invoices if (i["kind"] or "") == "Final"), None)
@@ -142,6 +144,14 @@ def compute(conn, db, opp, project) -> dict:
         return {"court": "team",
                 "label": "Waiting: the remaining deliverables",
                 "detail": f"Master approved — {comp['text']}. They publish through your taste gate.",
+                "url": f"/project/{pid}/delivery", "post": False, "since": ""}
+    # Master approved, every deliverable UPLOADED, but the client hasn't signed each off
+    # yet — once they all are, delivery auto-finalizes to Delivered and we invoice above.
+    if production.creative_lock(delivery) and comp["complete"]:
+        signed = f"{roll['approved']} of {roll['total']}" if roll.get("total") else "0"
+        return {"court": "client",
+                "label": "Waiting: client signing off the deliverables",
+                "detail": f"All deliverables uploaded — {signed} signed off. The invoice unlocks when the last one is approved.",
                 "url": f"/project/{pid}/delivery", "post": False, "since": ""}
     if court["court"] == "client":
         return {"court": "client", "label": "Waiting: client listening to the version",
