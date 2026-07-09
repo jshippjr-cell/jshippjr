@@ -120,7 +120,16 @@ def test_next_action_walks_the_whole_ladder(tmp_path, monkeypatch):
         a = _next(app_mod, oid)
         assert a["court"] == "client" and "listening" in a["label"]
 
-        # 10 — approved/delivered → send the final invoice
+        # 9.5 — client approved the MASTER (creative locked) but the derivative
+        # deliverables aren't uploaded yet → the move is FINISHING delivery, NOT invoicing.
+        conn = app_mod.db.connect()
+        app_mod.production.set_creative_lock(conn, app_mod.db, pid, version_n=1, by="Sarah")
+        app_mod.db.update_delivery(conn, pid, "state", "Approved"); conn.close()
+        a = _next(app_mod, oid)
+        assert a["court"] == "team" and "remaining deliverables" in a["label"]
+        assert "final invoice" not in a["label"]        # the bug: it used to say this
+
+        # 10 — every deliverable signed off / package shipped → send the final invoice
         conn = app_mod.db.connect()
         app_mod.db.update_delivery(conn, pid, "state", "Delivered"); conn.close()
         a = _next(app_mod, oid)

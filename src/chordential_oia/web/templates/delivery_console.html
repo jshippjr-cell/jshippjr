@@ -511,7 +511,8 @@
       <input type="hidden" name="cue" value="{{ q.cue }}">
       <div class="small"><b>{{ q.cue }}</b></div>
       <label>Duration</label>
-      <input type="text" name="duration" value="{{ q.duration }}" placeholder="e.g. 0:60">
+      <input type="text" name="duration" value="{{ q.duration }}" placeholder="e.g. 0:60"
+             {% if loop.first %}data-cue-master="1"{% endif %}>
       <label>ISRC</label>
       <input type="text" name="isrc" value="{{ q.isrc }}" placeholder="e.g. US-ABC-26-00001">
       <label>ISWC</label>
@@ -519,6 +520,26 @@
       <button class="btn tiny" type="submit" style="margin-top:6px">Save cue</button>
     </form>
     {% endfor %}
+    {% if current_version and current_version.url %}
+    {# Auto-fill the PRIMARY cue's duration from the master audio the browser can read —
+       the operator shouldn't hand-time the spot. Client-side (ffprobe isn't available
+       server-side); only prefills when the field is blank, and stays fully editable. #}
+    <audio id="cue-master-audio" preload="metadata" src="{{ current_version.url }}" style="display:none"></audio>
+    <script>
+    (function(){
+      var a=document.getElementById('cue-master-audio');
+      var inp=document.querySelector('input[name="duration"][data-cue-master]');
+      if(!a||!inp||inp.value.trim())return;
+      a.addEventListener('loadedmetadata',function(){
+        var d=a.duration; if(!isFinite(d)||d<=0)return;
+        var m=Math.floor(d/60), s=Math.round(d%60);
+        if(s===60){m+=1;s=0;}
+        inp.value=m+':'+(s<10?'0':'')+s;
+        inp.setAttribute('title','Auto-filled from the master audio — edit if needed');
+      });
+    })();
+    </script>
+    {% endif %}
     {% if approvals %}
     <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Sign-offs</h3>
     <table class="table compact">

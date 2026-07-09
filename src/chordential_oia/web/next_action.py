@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from . import production
+from ..delivery import delivery_completeness
 
 
 def _now_iso() -> str:
@@ -107,7 +108,12 @@ def compute(conn, db, opp, project) -> dict:
     delivery = db.get_delivery(conn, pid)
     court = production.court_state(project, delivery)
     state = (delivery.get("state") or "").strip()
-    if state in ("Delivered", "Approved", "Released"):
+    comp = delivery_completeness(project, delivery)
+    # Invoice only when the delivery is truly finished: the package has shipped
+    # (Delivered/Released) OR every scoped deliverable is signed off. A master-only
+    # "Approved" (creative locked, derivatives still in production) must NOT jump to
+    # invoicing — see the "remaining deliverables" branch below.
+    if state in ("Delivered", "Released") or (state == "Approved" and comp["complete"]):
         prop = db.proposal_for_project(conn, pid)
         invoices = db.list_invoices(conn, pid)
         final = next((i for i in invoices if (i["kind"] or "") == "Final"), None)
@@ -130,6 +136,13 @@ def compute(conn, db, opp, project) -> dict:
                 "detail": "A submission is waiting at your taste gate.",
                 "url": f"/project/{pid}/delivery", "post": False,
                 "since": (delivery["pending_version"] or {}).get("at", "")}
+    # Master approved (creative locked), but the remaining scoped deliverables are still
+    # being produced/uploaded — the next move is FINISHING delivery, not invoicing.
+    if production.creative_lock(delivery) and not comp["complete"]:
+        return {"court": "team",
+                "label": "Waiting: the remaining deliverables",
+                "detail": f"Master approved — {comp['text']}. They publish through your taste gate.",
+                "url": f"/project/{pid}/delivery", "post": False, "since": ""}
     if court["court"] == "client":
         return {"court": "client", "label": "Waiting: client listening to the version",
                 "detail": "They comment or approve in their workspace.",
