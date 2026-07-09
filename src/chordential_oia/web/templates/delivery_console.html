@@ -174,7 +174,7 @@
       <div class="ah"><span class="ico">🎧</span> Versions &amp; rounds</div>
       <div class="lines">
         Current: <b>v{{ current_n or '—' }}</b> · {{ version_state }}<br>
-        Round {{ revisions.used }} of {{ revisions.scoped }} <span class="k">({{ revisions.remaining }} left)</span><br>
+        Revision rounds: <b>{{ revisions.used }}</b> of {{ revisions.scoped }} used <span class="k">({{ revisions.remaining }} left)</span><br>
         {% if pending_version %}<span class="pend">1 submission awaiting your review ↑</span>{% else %}Versions logged: {{ versions|length }}{% endif %}
       </div>
     </div>
