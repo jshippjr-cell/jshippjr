@@ -287,8 +287,9 @@
     </table>
 
     <div class="panel" style="text-align:center;padding:26px 22px;margin-top:24px;border-color:var(--orange)">
+      {% set _seal = 'RELEASED' if state == 'Released' else ('DELIVERED' if state == 'Delivered' else 'IN PROGRESS') %}
       <div class="seal" style="margin:0 auto 14px;width:100px;height:100px">
-        <span>Chordential</span><b>{{ 'RELEASED' if state == 'Released' else 'IN PROGRESS' }}</b><span>{{ 'for release' if state == 'Released' else state }}</span></div>
+        <span>Chordential</span><b>{{ _seal }}</b><span>{{ 'for release' if state == 'Released' else ('cleared' if state == 'Delivered' else state) }}</span></div>
       <p style="font-family:var(--serif);font-size:20px;color:var(--wine);margin:0 0 4px">{{ cert.campaign }}</p>
       <p style="color:var(--muted);font-size:12px;margin:0">{{ cert.client }}</p>
       {% if released_at %}<p style="margin:12px 0 0;font-size:12.5px">Released <b>{{ released_at }}</b> · Locked <b>{{ version_state }}</b></p>{% endif %}

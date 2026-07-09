@@ -1746,47 +1746,41 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
     deliverables that were never uploaded — so the ZIP itself is honest that it
     isn't "everything"."""
     campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
+    client = (_val(project, "client") or "").strip()
     lines: List[str] = []
-    lines.append("CHORDENTIAL — DELIVERY PACKAGE README")
-    lines.append("=" * 52)
+    lines.append("CHORDENTIAL")
+    lines.append(f"Your delivery — {campaign}" + (f" · {client}" if client else ""))
     lines.append("")
-    lines.append(f"Campaign: {campaign}")
-    lines.append(f"Assembled: {built_at}")
-    if completeness is not None:
-        if completeness.get("complete"):
-            lines.append(f"Completeness: {completeness.get('text', '')} — complete.")
-        else:
-            lines.append(f"Completeness: {completeness.get('text', '')} — PARTIAL.")
+    lines.append("▶  START HERE")
+    lines.append("   Open  Docs/Delivery-Package.html  in any web browser.")
+    lines.append("   That's your complete delivery, beautifully: every track (playable),")
+    lines.append("   the clearance certificate, cue sheet, rights, and credits — one clean page.")
+    lines.append("")
+    lines.append("WHAT'S IN THIS PACKAGE")
+    lines.append("-" * 52)
+    lines.append("   Masters/ · Cutdowns/ · Social/ · Stems/    your audio, sorted into folders")
+    lines.append("   Docs/Delivery-Package.html                 your delivery (start here)")
+    lines.append("   Docs/Clearance-Certificate.html            original-work warranty + chain of title")
+    lines.append("   Docs/cue_sheet.csv · metadata.json         data your coordinator files with the PROs")
     lines.append("")
     if completeness is not None and not completeness.get("complete"):
-        lines.append("PARTIAL DELIVERY — NOT EVERYTHING IS HERE")
+        lines.append("PLEASE NOTE — PARTIAL DELIVERY")
         lines.append("-" * 52)
-        lines.append(
-            "These scoped deliverables were NOT uploaded and are NOT in this ZIP:")
+        lines.append(f"   {completeness.get('text', '')}. These aren't in this ZIP yet:")
         for label in completeness.get("missing") or []:
-            lines.append(f"  • {label}")
+            lines.append(f"     • {label}")
+        lines.append("   We'll send them as soon as they're ready.")
         lines.append("")
-    lines.append("BUNDLED IN THIS PACKAGE")
-    lines.append("-" * 52)
-    if bundled:
-        for label in bundled:
-            lines.append(f"  • {label}")
-    else:
-        lines.append("  (No local deliverable files were bundled — see below.)")
-    lines.append("")
     if referenced:
-        lines.append("REFERENCED, NOT BUNDLED")
+        lines.append("REFERENCED, NOT BUNDLED — available by link")
         lines.append("-" * 52)
-        lines.append(
-            "These assets are referenced by link and are NOT inside this ZIP "
-            "(no local file was available to bundle):")
         for a in referenced:
             label = (a.get("label") or a.get("filename") or "Asset").strip()
             url = (a.get("url") or "").strip()
-            lines.append(f"  • {label}" + (f" — {url}" if url else ""))
+            lines.append(f"     • {label}" + (f" — {url}" if url else ""))
         lines.append("")
-    lines.append("The Docs/ folder holds the cue sheet, metadata, the clearance")
-    lines.append("certificate, and the deliverables manifest.")
+    lines.append("Organised, documented, and cleared by Chordential.")
+    lines.append("The music is your composer's original work.")
     lines.append("")
     return "\n".join(lines)
 
