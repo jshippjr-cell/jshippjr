@@ -166,7 +166,7 @@ def test_delivered_certificate_uses_honest_content_id(tmp_path, monkeypatch):
     delivery = json.loads(northwind["delivery_json"])
     zip_path = upload_dir / delivery["delivery_zip"]["filename"]
     with zipfile.ZipFile(str(zip_path)) as zf:
-        cert_text = zf.read("Docs/rights_certificate.txt").decode("utf-8")
+        cert_text = zf.read("Docs/For-filing/rights_certificate.txt").decode("utf-8")
     assert "Content-ID-safe" not in cert_text
     assert "registrable with Content ID" in cert_text
 

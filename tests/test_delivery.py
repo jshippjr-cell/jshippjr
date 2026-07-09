@@ -1038,14 +1038,14 @@ def test_approving_via_portal_builds_a_delivery_zip(client):
     assert os.path.isfile(zip_path)
     with _zip.ZipFile(zip_path) as zf:
         names = zf.namelist()
-        assert "Docs/cue_sheet.csv" in names
-        assert "Docs/rights_certificate.txt" in names
-        assert "Docs/metadata.json" in names
+        assert "Docs/For-filing/cue_sheet.csv" in names
+        assert "Docs/For-filing/rights_certificate.txt" in names
+        assert "Docs/For-filing/metadata.json" in names
         # At least one uploaded asset is packaged into a named folder.
         assert any(n.startswith(("Masters/", "Cutdowns/", "Social/", "Stems/", "Assets/"))
                    and not n.startswith("Docs/") for n in names)
         # The rights cert text inside the ZIP carries the contributor, no indemnif.
-        cert_txt = zf.read("Docs/rights_certificate.txt").decode("utf-8")
+        cert_txt = zf.read("Docs/For-filing/rights_certificate.txt").decode("utf-8")
         assert name in cert_txt
         assert "indemnif" not in cert_txt.lower().replace(
             "indemnification available on request.", "")
@@ -2099,8 +2099,8 @@ def test_zip_contains_branded_html_docs_with_playable_audio(client):
         # The actual audio file is bundled under a folder, matching the src.
         assert any(n.endswith(stored) for n in names), names
         # (d) The machine-fileable docs are still present.
-        assert "Docs/cue_sheet.csv" in names
-        assert "Docs/metadata.json" in names
+        assert "Docs/For-filing/cue_sheet.csv" in names
+        assert "Docs/For-filing/metadata.json" in names
         # (e) No headless browser in the test env → the PDF is simply absent.
         assert "Docs/Delivery-Package.pdf" not in names
 

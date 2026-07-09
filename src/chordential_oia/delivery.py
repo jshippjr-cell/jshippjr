@@ -1761,7 +1761,7 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
     lines.append("   Masters/ · Cutdowns/ · Social/ · Stems/    your audio, sorted into folders")
     lines.append("   Docs/Delivery-Package.html                 your delivery (start here)")
     lines.append("   Docs/Clearance-Certificate.html            original-work warranty + chain of title")
-    lines.append("   Docs/cue_sheet.csv · metadata.json         data your coordinator files with the PROs")
+    lines.append("   Docs/For-filing/                           cue sheet + metadata your coordinator files with the PROs")
     lines.append("")
     if completeness is not None and not completeness.get("complete"):
         lines.append("PLEASE NOTE — PARTIAL DELIVERY")
@@ -1903,12 +1903,15 @@ def build_delivery_zip(
     docs = {
         "Docs/Delivery-Package.html": package_html,
         "Docs/Clearance-Certificate.html": cert_html,
-        "Docs/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
-        "Docs/metadata.json": metadata_json(
+        # Machine-readable / plain-text data an agency's music coordinator files with the
+        # PROs — tucked into a subfolder so the client's Docs/ view shows only the two clean,
+        # branded HTML documents (the raw files aren't the deliverable, the HTML is).
+        "Docs/For-filing/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
+        "Docs/For-filing/metadata.json": metadata_json(
             project, assignments, license=license, versions=versions,
             generated_at=built_at),
-        "Docs/rights_certificate.txt": rights_certificate_text(cert),
-        "Docs/manifest.txt": manifest_text(
+        "Docs/For-filing/rights_certificate.txt": rights_certificate_text(cert),
+        "Docs/For-filing/manifest.txt": manifest_text(
             manifest, asset_approvals=delivery.get("asset_approvals"),
             brief_items=brief_items),
     }
