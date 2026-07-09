@@ -136,7 +136,7 @@
           {% if d.uploaded %}
           <span style="font-size:11px;font-weight:700;color:#1d6b43">✓ Delivered</span>
           {% else %}
-          <form method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
+          <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
             <input type="hidden" name="label" value="{{ d.asset }}">
             <input type="file" name="file" required style="font-size:12px;max-width:170px">
             <button class="btn tiny" type="submit">Upload</button>
@@ -170,5 +170,28 @@
     {% endfor %}
 
   </div>
+  <script>
+  /* Deliverable rows upload independently, WITHOUT a full page reload — so selecting
+     files on several rows and sending them one by one never wipes the others' picks.
+     Progressive enhancement: with JS off, each form still posts normally. */
+  document.querySelectorAll('form.deliv-form').forEach(function(f){
+    f.addEventListener('submit', function(e){
+      var input=f.querySelector('input[type=file]');
+      if(!input || !input.files.length) return;      // let `required` handle the empty case
+      e.preventDefault();
+      var btn=f.querySelector('button'); var orig=btn.textContent;
+      btn.disabled=true; btn.textContent='Uploading…';
+      fetch(f.action,{method:'POST',body:new FormData(f)}).then(function(r){
+        if(r.ok){
+          var row=f.parentNode; f.remove();
+          var ok=document.createElement('span');
+          ok.style.cssText='font-size:11px;font-weight:700;color:#1d6b43';
+          ok.textContent='✓ Delivered';
+          row.appendChild(ok);
+        } else { btn.disabled=false; btn.textContent=orig; alert('Upload failed — please try again.'); }
+      }).catch(function(){ btn.disabled=false; btn.textContent=orig; alert('Upload failed — check your connection and try again.'); });
+    });
+  });
+  </script>
 </body>
 </html>
