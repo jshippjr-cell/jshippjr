@@ -302,11 +302,15 @@ _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
 # The composer portal — a qualified creator's token-gated home (view assignments,
 # submit work versions). The per-creator portal token IS the access control, so it
 # bypasses the admin login gate (same exemption as the client delivery portal).
-_CREATOR_PORTAL_RE = re.compile(r"^/creator/[A-Za-z0-9_-]+(/project/\d+/version)?/?$")
+_CREATOR_PORTAL_RE = re.compile(r"^/creator/[A-Za-z0-9_-]+(/project/\d+/(version|deliverable))?/?$")
 # Session Room (Living OS P5): the live-room poll + presence ping are hit from the
 # token-gated client portal too — each route token-validates in-route (a bad token
 # gets the operator-only view refused / 404), so the paths bypass the login gate.
 _SESSION_ROOM_RE = re.compile(r"^/project/\d+/(session\.json|presence)/?$")
+# Client-facing payment — the buyer starts checkout from their token-gated workspace/
+# portal; the route validates the share token in-route. The Stripe success-return is a
+# public redirect target. Both bypass the admin login gate.
+_CLIENT_PAY_RE = re.compile(r"^/project/\d+/pay/?$")
 
 
 def _is_delivery_portal_path(path: str) -> bool:
@@ -316,6 +320,8 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _DELIVERY_DL_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
         or _SESSION_ROOM_RE.match(path)
+        or _CLIENT_PAY_RE.match(path)
+        or path == "/pay/return"
     )
 
 
@@ -7358,24 +7364,36 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str 
         conn.close()
 
 
+def _apply_invoice_payment(conn, invoice_id: int, external_ref: str = "") -> bool:
+    """Mark an invoice Paid and apply its side effects — unlock the client's downloads
+    (Final) + queue crew payouts — exactly once. Idempotent: a no-op if already paid, so the
+    Stripe success-return and the webhook can BOTH fire without double-applying."""
+    inv = db.get_invoice(conn, invoice_id)
+    if inv is None or not inv["project_id"]:
+        return False
+    if (inv["status"] or "").lower() in ("paid", "settled"):
+        return False
+    pid = inv["project_id"]
+    db.update_invoice_status(conn, inv["id"], "Paid", external_ref=external_ref or None)
+    if (inv["kind"] or "") == "Final":
+        db.update_delivery(conn, pid, "download_unlocked", True)
+    db.ensure_project_payouts(conn, pid)
+    db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
+    return True
+
+
 @app.get("/pay/return", response_class=HTMLResponse)
 def pay_return(request: Request, invoice: int = 0):
-    """Stripe ``success_url`` target — the payer lands here after a COMPLETED checkout. Marks
-    the invoice Paid, unlocks the client's downloads (final), and queues crew payouts —
-    mirroring the operator status route. (Stripe only redirects here on success; the
-    signature-verified webhook is the belt-and-suspenders confirmation, a fast follow.)"""
+    """Stripe ``success_url`` target — the payer lands here after a COMPLETED checkout. Applies
+    the payment (idempotent — the signature-verified webhook may have beaten the browser here)
+    and returns to the workspace/portal with a thank-you."""
     conn = db.connect()
     dest = "/"
     try:
         inv = db.get_invoice(conn, invoice) if invoice else None
         if inv is not None and inv["project_id"]:
+            _apply_invoice_payment(conn, invoice)
             pid = inv["project_id"]
-            if (inv["status"] or "").lower() not in ("paid", "settled"):
-                db.update_invoice_status(conn, inv["id"], "Paid")
-                if (inv["kind"] or "") == "Final":
-                    db.update_delivery(conn, pid, "download_unlocked", True)
-                db.ensure_project_payouts(conn, pid)
-                db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
             prow = db.get_project(conn, pid)
             if inv["kind"] == "Final":
                 dest = _client_portal_url(pid, db.ensure_project_share_token(conn, pid) or "", "paid=1")
@@ -7384,6 +7402,31 @@ def pay_return(request: Request, invoice: int = 0):
     finally:
         conn.close()
     return RedirectResponse(dest, status_code=303)
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe payment webhook — the AUTHORITATIVE, signature-verified confirmation of a
+    completed payment, independent of whether the payer's browser ever returns. Verifies the
+    ``Stripe-Signature`` via the provider (``STRIPE_WEBHOOK_SECRET``), and on a captured
+    payment marks the invoice Paid + unlocks downloads + queues payouts, idempotently.
+    Bypasses the admin gate (Stripe posts server-to-server) — the signature IS the auth."""
+    body = await request.body()
+    sig = (request.headers.get("stripe-signature")
+           or request.headers.get("Stripe-Signature") or "")
+    try:
+        event = get_payment_provider().handle_webhook({"body": body, "signature": sig}) or {}
+    except Exception:  # noqa: BLE001 — bad signature / malformed body → 400, never 500
+        return JSONResponse({"ok": False, "error": "invalid"}, status_code=400)
+    inv_id = event.get("invoice_id")
+    applied = False
+    if inv_id and (event.get("status") or "").lower() == "paid":
+        conn = db.connect()
+        try:
+            applied = _apply_invoice_payment(conn, int(inv_id), event.get("external_ref") or "")
+        finally:
+            conn.close()
+    return JSONResponse({"ok": True, "applied": applied})
 
 
 @app.post("/invoice/{invoice_id}/status")
