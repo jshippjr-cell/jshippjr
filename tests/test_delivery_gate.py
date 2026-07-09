@@ -91,3 +91,50 @@ def test_client_can_approve_each_deliverable(tmp_path, monkeypatch):
     roll = app_mod.db.asset_approval_rollup(d)
     conn.close()
     assert roll["approved"] == 1                          # the client's per-deliverable sign-off landed
+
+
+def test_partial_package_offers_client_no_download(tmp_path, monkeypatch):
+    """The bug the screenshot caught: a Delivered project with a PARTIAL package (0/5
+    deliverables) was still rendering a '⤓ Download what's ready' link. A client must never
+    be able to download an incomplete package — the portal shows 'still being assembled'."""
+    app_mod = _app(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    oid, pid, ptok = _proj(app_mod, conn)
+    # a project stuck Delivered under the old rule: partial package + download unlocked
+    app_mod.db.update_delivery(conn, pid, "state", "Delivered")
+    app_mod.db.update_delivery(conn, pid, "download_unlocked", True)
+    app_mod.db.update_delivery(conn, pid, "delivery_zip", {
+        "filename": "pkg.zip", "url": "/x/pkg.zip", "built_at": "2026-07-08T00:00:00",
+        "partial": True, "descriptor": "Partial delivery — 0 of 5 deliverables",
+        "completeness": {"missing": ["Final master", "TV mix", "Cutdowns", "Verticals", "Stems"]}})
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        html = c.get(f"/project/{pid}/delivery-portal?k={ptok}").text
+    assert "Still being assembled" in html
+    assert "Download what" not in html                    # no partial download offered
+    assert "⤓ Download" not in html                        # no download link at all while partial
+
+
+def test_operator_can_reopen_delivered_project_from_console(tmp_path, monkeypatch):
+    """The operator must be able to un-deliver a stuck Delivered project (tokenless reopen),
+    since the portal's client review block is hidden once state is Delivered."""
+    app_mod = _app(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    oid, pid, ptok = _proj(app_mod, conn)
+    app_mod.db.update_delivery(conn, pid, "versions",
+        [{"n": 2, "label": "v2 FINAL", "url": "/uploads/x.mp3", "filename": "x.mp3",
+          "name": "a", "created_at": "2026-07-08T00:00:00"}])
+    app_mod.db.update_delivery(conn, pid, "state", "Delivered")
+    app_mod.db.update_delivery(conn, pid, "download_unlocked", True)
+    app_mod.production.set_creative_lock(conn, app_mod.db, pid, version_n=2, by="Sarah")
+    conn.close()
+    with TestClient(app_mod.app) as c:
+        # tokenless operator reopen (the console button posts with no k/r)
+        r = c.post(f"/project/{pid}/review/reopen", data={}, follow_redirects=False)
+        assert r.status_code == 303
+    conn = app_mod.db.connect(); d = app_mod.db.get_delivery(conn, pid); conn.close()
+    assert not d.get("creative_lock")
+    assert d.get("state") == "In review"
+    assert not d.get("download_unlocked")

@@ -252,6 +252,15 @@
       {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
       <button class="btn primary" type="submit"{% if not license_confirmed %} title="Confirm the license terms before releasing"{% endif %}>🚀 Mark released</button>
     </form>
+    {% if creative_lock or state in ("Approved", "Delivered", "Released") %}
+    {# Reopen / un-deliver — approval is not a one-way door. Clears the Creative Lock, drops
+       FINAL back to a round label, re-locks the download, returns to In review. Tokenless
+       operator path on /review/reopen. #}
+    <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="inline"
+          onsubmit="return confirm('Reopen this delivery for changes? Clears the creative approval, drops FINAL, and re-locks the client download until it is approved again.')">
+      <button class="btn" type="submit">↩ Reopen for changes</button>
+    </form>
+    {% endif %}
   </div>
   {% if release_flag == 'needs_license' %}
   <p class="small" style="margin-top:10px;color:var(--wine)"><b>Release refused</b> — confirm the license terms first (no silent buyout-by-default). Press <b>Confirm license terms</b> above.</p>

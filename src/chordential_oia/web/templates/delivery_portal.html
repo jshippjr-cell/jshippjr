@@ -187,8 +187,19 @@
       {% for item in delivery_checklist %}<li><b>✓</b> {{ item }}</li>{% endfor %}
     </ul>
     {% endif %}
-    {% if download_unlocked %}
-    <a class="dl-all" href="{{ delivery_zip.dl_url or delivery_zip.url }}">⤓ Download {% if is_partial %}what's ready{% else %}everything{% endif %}</a>
+    {% if is_partial %}
+    {# HARD GATE: the client is never offered an incomplete download. A partial package
+       shows as "still being assembled" — the download link only appears once every scoped
+       deliverable is uploaded and the package is complete. #}
+    <div class="paywall">
+      <p class="paywall-head">⧗ Still being assembled</p>
+      <p class="paywall-sub">Your final files aren't ready to download yet — Chordential is still
+        preparing {{ delivery_zip.completeness.missing|length if delivery_zip.completeness and delivery_zip.completeness.missing else 'the remaining' }}
+        deliverable{{ 's' if not delivery_zip.completeness or not delivery_zip.completeness.missing or delivery_zip.completeness.missing|length != 1 else '' }}.
+        You can stream and review everything above now; the full download unlocks the moment the package is complete.</p>
+    </div>
+    {% elif download_unlocked %}
+    <a class="dl-all" href="{{ delivery_zip.dl_url or delivery_zip.url }}">⤓ Download everything</a>
     {% else %}
     <div class="paywall">
       <p class="paywall-head">🔒 Payment required to download</p>
