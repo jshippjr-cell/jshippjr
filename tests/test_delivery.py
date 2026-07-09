@@ -554,12 +554,14 @@ def test_console_brief_card_below_versions_and_timeline(client):
 def test_console_version_rail_has_no_doubled_v_prefix(client):
     """FIX 3: version chips render as the label only (no "v1 v1" doubling)."""
     pid = _win_and_make_project(client, 1)
-    # Log two versions of the master so the rail has multiple chips.
+    # Log two versions of the master so the rail has multiple chips (upload → publish).
     for _ in range(2):
         client.post(f"/project/{pid}/delivery/version",
                     data={"action": "add"},
                     files={"file": ("master.mp3", b"ID3fakeaudio", "audio/mpeg")},
                     follow_redirects=True)
+        client.post(f"/project/{pid}/delivery/publish",
+                    data={"action": "publish"}, follow_redirects=True)
     html = client.get(f"/project/{pid}/delivery").text
     assert "v1 v1" not in html
     assert "v2 v2" not in html
@@ -713,23 +715,26 @@ def test_guest_can_still_comment_with_share_token(client):
 
 
 def test_portal_guest_vs_verified_identity(client):
-    """(d) Guest mode shows the "approval requires your personal link" note and a
-    free-entry identity block; reviewer mode locks the identity (no free-entry name
-    field) and enables Approve."""
+    """(d) Guest mode shows a free-entry identity block and — once identified — can approve
+    from the share link (ADR-0020: captured intent is enough, no separate link required).
+    Reviewer mode locks the identity (no free-entry name field) and enables Approve."""
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     rtoken = _add_reviewer(client, pid, name="Dana Whitfield",
                            email="dana@agency.com", role="Senior Producer")
-    # Guest (share link): the approval-requires-personal-link note + free-entry.
+    # Guest (share link): free-entry identity + the new "approve right here" copy, NOT a
+    # "personal review link" wall.
     guest = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
-    assert "Approval requires your personal review link" in guest
     assert 'id="who-name"' in guest                # free-entry name field is shown
+    # An un-identified guest sees the helpful "add your name and approve here" prompt —
+    # NOT a "personal review link" wall. Once they enter a name the working Approve appears
+    # (proven end-to-end in test_client_can_approve_from_share_link).
+    assert "no separate link needed" in guest
     # Verified (personal link): identity is locked, no free-entry name field.
     rev = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken}).text
     assert "Verified reviewer" in rev
     assert "Dana Whitfield" in rev
     assert 'id="who-name"' not in rev              # no free-entry name field
-    assert "Approval requires your personal review link" not in rev
 
 
 def test_console_renders_reviewer_roster_and_link(client):
@@ -779,8 +784,13 @@ def test_request_changes_logs_and_bumps_revisions(client):
 # --------------------------------------------------------------------------- #
 def _upload_version(client, pid, name="cue.mp3"):
     files = {"file": (name, b"ID3fakeaudio-version", "audio/mpeg")}
-    return client.post(f"/project/{pid}/delivery/version",
-                       data={"action": "add"}, files=files, follow_redirects=True)
+    r = client.post(f"/project/{pid}/delivery/version",
+                    data={"action": "add"}, files=files, follow_redirects=True)
+    # ADR-0019 (universal taste gate): every upload lands pending; publish shows it to
+    # the client. The helper does both so tests see the client-visible version.
+    client.post(f"/project/{pid}/delivery/publish",
+                data={"action": "publish"}, follow_redirects=True)
+    return r
 
 
 def test_new_version_emails_each_reviewer_with_email(client, monkeypatch):
@@ -827,7 +837,11 @@ def test_new_version_upload_unaffected_when_mailer_raises(client, monkeypatch):
     r = client.post(f"/project/{pid}/delivery/version",
                     data={"action": "add"}, files=files, follow_redirects=False)
     assert r.status_code == 303
-    # The version was still logged despite the mail failure.
+    # Publish is where reviewers are emailed — even if the mailer raises, publish succeeds
+    # and the version is logged to the client-visible ladder.
+    r2 = client.post(f"/project/{pid}/delivery/publish",
+                     data={"action": "publish"}, follow_redirects=False)
+    assert r2.status_code == 303
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:

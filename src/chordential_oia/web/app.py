@@ -6051,19 +6051,14 @@ async def delivery_version(
             return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
         data = await file.read()
-        label, campaign = _append_version_from_bytes(conn, project_id, data, file.filename)
-        # Agency-direction notification (the documented TODO): email each named
-        # reviewer their personal review link so coordination stops leaking to
-        # manual messaging. Best-effort, per reviewer — never blocks the upload.
-        reviewers = db.list_delivery_reviewers(conn, project_id)
+        # The taste gate is UNIVERSAL (operator feedback): every upload — even the operator's
+        # own — lands as a pending submission FIRST, so nothing reaches the client until an
+        # explicit "Publish to client" press. The operator reviews it on the console, then
+        # publishes. "The machine proposes, Jon disposes" — for every version, no exceptions.
+        _store_pending_submission(conn, project_id, data, file.filename, "Studio")
     finally:
         conn.close()
-    # Offloaded to a thread: this is an async handler and the per-reviewer email loop
-    # does blocking SMTP — inline it would stall uvicorn's single event loop (the whole
-    # site, including health probes) for up to N reviewers × the socket timeout.
-    await run_in_threadpool(
-        _notify_reviewers_new_version, project_id, campaign, label, reviewers)
-    return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/approve")
@@ -6659,16 +6654,17 @@ def review_approve(
         ok, reviewer = _access_ok(conn, project_id, k, r)
         if not ok:
             return HTMLResponse("Not found", status_code=404)
-        # The verified-identity gate: approve REQUIRES a valid verified reviewer
-        # token. A share-link guest (no/invalid ?r=) is refused — no-op, no state
-        # change — even if a name + email are posted.
-        if reviewer is None:
-            return _review_redirect(project_id, k, r=r)
-        # The sign-off is recorded with the VERIFIED roster identity, not free text.
-        name = (reviewer.get("name") or "").strip()
-        mail = (reviewer.get("email") or "").strip()
-        if not name:
-            return _review_redirect(project_id, k, r=r)
+        # Identity gate (ADR-0020): the client can approve from their OWN share link —
+        # a captured name + email is intent enough (ESIGN/UETA-sufficient), and it's their
+        # durable token. A verified reviewer link is the STRONGER path (locked roster
+        # identity), not the only one. Either way the sign-off records who + when.
+        if reviewer is not None:
+            name = (reviewer.get("name") or "").strip()
+            mail = (reviewer.get("email") or "").strip()
+        else:
+            name, mail = _reviewer_identity(request, author, email)
+        if not (name and mail):
+            return _review_redirect(project_id, k, r=r, flag="identify")
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
         # Delivery-completeness gate: do NOT silently ship an incomplete package as

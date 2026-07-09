@@ -414,7 +414,7 @@
       {# Verified-identity approval: APPROVE locks FINAL + auto-builds the delivery
          ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
          sees a disabled control + a note — they can view + comment, not approve. #}
-      {% if verified %}
+      {% if verified or (reviewer and reviewer.known) %}
       {% set unapproved = asset_rollup.total - asset_rollup.approved %}
       {% set incomplete = completeness and not completeness.complete %}
       {# Delivery-completeness gate (the strongest gate): when scoped deliverables
@@ -433,9 +433,9 @@
       </form>
       {% else %}
       <div style="flex:1 1 240px">
-        <button type="button" class="rc-approve" disabled
-                style="opacity:.5;cursor:not-allowed" title="Approval requires your personal review link">✓ Approve</button>
-        <p class="muted-note" style="margin:6px 0 0">Approval requires your personal review link — ask Chordential to send you one.</p>
+        <button type="button" class="rc-approve" disabled onclick="var w=document.getElementById('whois'); if(w){w.hidden=false; var i=w.querySelector('input'); if(i)i.focus();}"
+                style="opacity:.6;cursor:pointer" title="Add your name to approve">✓ Approve</button>
+        <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) and you can approve right here — no separate link needed.</p>
       </div>
       {% endif %}
       <form method="post" action="/project/{{ project['id'] }}/review/changes" class="review-act" data-need-id="1">
