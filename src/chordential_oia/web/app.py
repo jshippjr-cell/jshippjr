@@ -4180,9 +4180,47 @@ def serve_upload(name: str):
     if (name or "").lower().endswith(".zip"):
         return PlainTextResponse("not found", status_code=404)
     path = _safe_upload_path(name)
-    if path is None:
-        return PlainTextResponse("not found", status_code=404)
-    return FileResponse(path)
+    if path is not None:
+        return FileResponse(path)
+    # Disk copy gone (ephemeral storage wiped on redeploy) — rehydrate from the durable DB
+    # mirror so a published version's audio keeps playing across deploys.
+    base = os.path.basename(name or "")
+    if base and base == name:
+        conn = db.connect()
+        try:
+            blob = db.get_media_blob(conn, base)
+        finally:
+            conn.close()
+        if blob is not None:
+            data, ctype = blob
+            if not ctype:
+                import mimetypes
+                ctype = mimetypes.guess_type(base)[0] or "application/octet-stream"
+            # Best-effort: restore the file to disk so future reads hit the fast path + so
+            # range/seek requests are served natively; then serve the bytes now.
+            try:
+                os.makedirs(UPLOAD_DIR, exist_ok=True)
+                with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
+                    fh.write(data)
+            except OSError:
+                pass
+            return Response(content=data, media_type=ctype)
+    return PlainTextResponse("not found", status_code=404)
+
+
+def _persist_upload(conn, name: str, data: bytes, content_type: str = "") -> None:
+    """Write an uploaded file to disk AND mirror it into the durable DB (ADR: uploads survive
+    redeploys). The single place that persists media, so every write site is durable."""
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        with open(os.path.join(UPLOAD_DIR, os.path.basename(name)), "wb") as fh:
+            fh.write(data)
+    except OSError:
+        pass
+    if not content_type:
+        import mimetypes
+        content_type = mimetypes.guess_type(name)[0] or ""
+    db.save_media_blob(conn, os.path.basename(name), data, content_type)
 
 
 @app.get("/project/{project_id}/dl/{name}")
@@ -5855,8 +5893,7 @@ async def delivery_asset(
         ):
             n += 1
         safe_name = f"proj{project_id}-{n}{safe_ext}"
-        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
-            fh.write(data)
+        _persist_upload(conn, safe_name, data)
 
         delivery = db.get_delivery(conn, project_id)
         assets = list(delivery.get("assets") or [])
@@ -5904,8 +5941,7 @@ def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename:
     while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
         safe_name = f"proj{project_id}-v{n}-{bump}{safe_ext}"
         bump += 1
-    with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
-        fh.write(data)
+    _persist_upload(conn, safe_name, data)
     versions.append({
         "n": n,
         "label": label,
@@ -5936,8 +5972,7 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
         safe_name = f"proj{project_id}-pending-{bump}{safe_ext}"
         bump += 1
-    with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
-        fh.write(data)
+    _persist_upload(conn, safe_name, data)
     db.update_delivery(conn, project_id, "pending_version", {
         "url": f"/uploads/{safe_name}",
         "filename": safe_name,

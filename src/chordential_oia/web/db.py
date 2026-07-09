@@ -1098,6 +1098,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             client TEXT PRIMARY KEY, data TEXT DEFAULT '{}', updated_at TEXT
         )"""
     )
+    # Durable media storage: uploaded audio/files live on LOCAL disk (UPLOAD_DIR), which is
+    # ephemeral on most deploys (every redeploy wipes it) — so a published version's file
+    # vanished while its metadata survived, and the review player 404'd. Mirror every upload's
+    # bytes into the DB (which IS durable — Postgres or the persistent SQLite), and serve from
+    # here when the disk copy is gone. The real object-store cutover (S3/R2) can replace this
+    # later behind the same seam; until then the DB is the durable backstop.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS media_blob (
+            name TEXT PRIMARY KEY, content BLOB, content_type TEXT, size INTEGER,
+            created_at TEXT
+        )"""
+    )
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -4455,6 +4467,37 @@ def get_client_procurement_history(conn, client: str) -> dict:
         return json.loads(row["data"])
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> None:
+    """Mirror an uploaded file's bytes into the DB (durable across redeploys). Keyed by the
+    same basename the /uploads route serves; best-effort (never blocks the upload)."""
+    try:
+        conn.execute(
+            "INSERT INTO media_blob (name, content, content_type, size, created_at) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET content=excluded.content, "
+            "content_type=excluded.content_type, size=excluded.size",
+            (name, sqlite3.Binary(content), content_type, len(content), _now()))
+        conn.commit()
+    except sqlite3.Error:
+        pass
+
+
+def get_media_blob(conn, name: str):
+    """Return (content_bytes, content_type) for a stored upload, or None."""
+    row = conn.execute(
+        "SELECT content, content_type FROM media_blob WHERE name = ?", (name,)).fetchone()
+    if row is None or row["content"] is None:
+        return None
+    return bytes(row["content"]), (row["content_type"] or "")
+
+
+def delete_media_blob(conn, name: str) -> None:
+    try:
+        conn.execute("DELETE FROM media_blob WHERE name = ?", (name,))
+        conn.commit()
+    except sqlite3.Error:
+        pass
 
 
 def delete_opportunity(conn: sqlite3.Connection, opp_id: int) -> dict:
