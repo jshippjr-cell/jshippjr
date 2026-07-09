@@ -338,3 +338,27 @@ def test_portal_bypasses_admin_gate(ctx, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "secret")
     r = client.get(f"/creator/{tok}", follow_redirects=False)
     assert r.status_code == 200  # not redirected to /admin/login
+
+
+def test_successive_versions_get_distinct_files(ctx):
+    """Each published master version must be its own file — the old 'proj{id}-pending'
+    naming reused one filename, so across a redeploy v2's bytes overwrote v1's blob and
+    both versions pointed at one file."""
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect(); tok = db_mod.ensure_talent_portal_token(conn, tid); conn.close()
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v1.mp3", b"AUDIO-ONE", "audio/mpeg")})
+    _publish(client, pid)
+    client.post(f"/creator/{tok}/project/{pid}/version",
+                files={"file": ("v2.mp3", b"AUDIO-TWO-different", "audio/mpeg")})
+    _publish(client, pid)
+    conn = db_mod.connect()
+    d = db_mod.get_delivery(conn, pid)
+    files = [v["filename"] for v in d["versions"]]
+    b0 = db_mod.get_media_blob(conn, files[0])[0]
+    b1 = db_mod.get_media_blob(conn, files[1])[0]
+    conn.close()
+    assert len(files) == 2 and len(set(files)) == 2      # distinct filenames
+    assert b0 != b1                                       # and distinct content (no overwrite)

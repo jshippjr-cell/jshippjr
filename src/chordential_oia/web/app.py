@@ -6125,11 +6125,11 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     from datetime import datetime as _dt, timezone as _tz
     ext = os.path.splitext(src_filename or "")[1].lower()
     safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
-    safe_name = f"proj{project_id}-pending{safe_ext}"
-    bump = 1
-    while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
-        safe_name = f"proj{project_id}-pending-{bump}{safe_ext}"
-        bump += 1
+    # Unique, PERMANENT per-submission name (random suffix). The old "proj{id}-pending"
+    # scheme reused one filename and — because the disk-existence check misses files that
+    # live only in the durable DB mirror after a redeploy — a new submission overwrote the
+    # previous version's blob under the same key, so v1/v2 ended up pointing at one file.
+    safe_name = f"proj{project_id}-v{os.urandom(5).hex()}{safe_ext}"
     _persist_upload(conn, safe_name, data)
     db.update_delivery(conn, project_id, "pending_version", {
         "url": f"/uploads/{safe_name}",
