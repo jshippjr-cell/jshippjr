@@ -111,6 +111,10 @@
       <div class="mc-title">{{ featured.title }}</div>
       <div class="mc-fsub">{{ featured.sub }}</div>
       <a class="btn-live" href="{{ featured.href }}">{{ featured.cta }} <span class="live-dot"></span></a>
+      {% elif in_flight %}
+      <div class="mc-kind">In flight</div>
+      <div class="mc-title">Nothing needs you — {{ in_flight|length }} campaign{{ 's' if in_flight|length != 1 }} moving.</div>
+      <div class="mc-fsub">{{ in_flight[0].label }} — {{ in_flight[0].campaign }}. Full status below.</div>
       {% else %}
       <div class="mc-kind">All clear</div>
       <div class="mc-title">Nothing is waiting on you.</div>
@@ -123,6 +127,21 @@
     </div>
   </div>
 </section>
+
+{# ── In flight — deals moving now that don't need the operator: pure situational
+   awareness so "0 waiting on you" never reads as "nothing is happening". ── #}
+{% if in_flight %}
+<section class="card" data-arrive>
+  <div class="card-head"><h2>✈ In flight</h2>
+    <span class="muted small">moving now — no action needed from you</span></div>
+  <ul class="machine-feed">
+    {% for f in in_flight %}
+    <li><span class="mf-ico">{% if f.court == 'client' %}⏳{% elif f.court == 'scheduled' %}📅{% else %}🎧{% endif %}</span>
+      <span class="mf-tx"><a class="link" href="{{ f.url }}"><b>{{ f.campaign }}</b></a> — {{ f.label }}{% if f.detail %} · <span class="muted">{{ f.detail }}</span>{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 {# ── Machine running — only real recorded events, real timestamps (council). ── #}
 <section class="card" data-arrive>

@@ -400,6 +400,10 @@
         {% else %}<span class="aa-badge aa-pending">✓ Uploaded · awaiting sign-off</span>{% endif %}
         {% if (verified or (reviewer and reviewer.known)) and d.asset_key %}
         <span class="aa-acts">
+          {# Once a deliverable is approved, drop its Approve button so it can't be
+             re-clicked — the sign-off already stands. Request-changes stays, so the
+             client can still reverse if they spot something. #}
+          {% if st != "Approved" %}
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
             <input type="hidden" name="r" value="{{ reviewer_token }}">
@@ -409,6 +413,7 @@
             <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
             <button type="submit" class="rc-mini aa-approve">Approve</button>
           </form>
+          {% endif %}
           <form method="post" action="/project/{{ project['id'] }}/review/asset" class="review-act inline" data-need-id="1" style="display:inline">
             <input type="hidden" name="k" value="{{ share_token }}">
             <input type="hidden" name="r" value="{{ reviewer_token }}">

@@ -1317,6 +1317,10 @@ def dashboard(request: Request):
         # composer", "start production", "send the final invoice", "release the proposal") —
         # surfaced so nothing waits unseen. The client's court-state, pointed inward.
         operator_moves = []
+        # Deals that are MOVING but don't need the operator right now (ball in the
+        # client's / studio's court). Surfaced read-only so Jon always knows the stage,
+        # even when "waiting on you" is zero — no action, just situational awareness.
+        in_flight = []
         _seen_opps = set()
         for prow in db.list_projects(conn) if hasattr(db, "list_projects") else []:
             d = db.get_delivery(conn, prow["id"])
@@ -1334,6 +1338,11 @@ def dashboard(request: Request):
                     operator_moves.append({"campaign": opprow["need"], "client": opprow["client"],
                                            "label": na["label"], "detail": na.get("detail", ""),
                                            "url": na["url"]})
+                elif na["court"] in ("client", "team", "scheduled"):
+                    in_flight.append({"campaign": opprow["need"], "client": opprow["client"],
+                                      "label": na["label"], "detail": na.get("detail", ""),
+                                      "court": na["court"],
+                                      "url": na.get("url") or f"/opportunity/{opprow['id']}"})
         # deals still in sales (a released proposal awaiting your move to assign, etc.)
         for r in tentative:
             if r["id"] in _seen_opps:
@@ -1344,6 +1353,11 @@ def dashboard(request: Request):
                 operator_moves.append({"campaign": r["need"], "client": r["client"],
                                        "label": na["label"], "detail": na.get("detail", ""),
                                        "url": na["url"]})
+            elif na["court"] in ("client", "team", "scheduled"):
+                in_flight.append({"campaign": r["need"], "client": r["client"],
+                                  "label": na["label"], "detail": na.get("detail", ""),
+                                  "court": na["court"],
+                                  "url": na.get("url") or f"/opportunity/{r['id']}"})
         waiting_count = (len(followups) + incoming_total + dr_new
                          + len(pending_reviews) + len(operator_moves))
         if operator_moves and not pending_reviews:
@@ -1406,6 +1420,7 @@ def dashboard(request: Request):
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,
         waiting_count=waiting_count, featured=featured, machine_feed=machine_feed,
         pending_reviews=pending_reviews, operator_moves=operator_moves,
+        in_flight=in_flight,
     )
 
 
