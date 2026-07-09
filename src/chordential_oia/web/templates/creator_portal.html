@@ -171,27 +171,41 @@
 
   </div>
   <script>
-  /* Deliverable rows upload independently, WITHOUT a full page reload — so selecting
-     files on several rows and sending them one by one never wipes the others' picks.
-     Progressive enhancement: with JS off, each form still posts normally. */
-  document.querySelectorAll('form.deliv-form').forEach(function(f){
-    f.addEventListener('submit', function(e){
-      var input=f.querySelector('input[type=file]');
-      if(!input || !input.files.length) return;      // let `required` handle the empty case
-      e.preventDefault();
-      var btn=f.querySelector('button'); var orig=btn.textContent;
-      btn.disabled=true; btn.textContent='Uploading…';
-      fetch(f.action,{method:'POST',body:new FormData(f)}).then(function(r){
-        if(r.ok){
-          var row=f.parentNode; f.remove();
-          var ok=document.createElement('span');
-          ok.style.cssText='font-size:11px;font-weight:700;color:#1d6b43';
-          ok.textContent='✓ Delivered';
-          row.appendChild(ok);
-        } else { btn.disabled=false; btn.textContent=orig; alert('Upload failed — please try again.'); }
-      }).catch(function(){ btn.disabled=false; btn.textContent=orig; alert('Upload failed — check your connection and try again.'); });
+  /* Deliverable rows upload independently, WITHOUT a full page reload — so selecting files
+     on several rows and sending them never wipes the others' picks. Uploads are SERIALIZED
+     (one in flight at a time) and a row only flips to "✓ Delivered" when the SERVER confirms
+     the asset actually persisted (JSON {ok:true}) — never on a bare redirect. Progressive
+     enhancement: with JS off, each form still posts normally. */
+  (function(){
+    var chain = Promise.resolve();               // serialize: one upload at a time
+    document.querySelectorAll('form.deliv-form').forEach(function(f){
+      f.addEventListener('submit', function(e){
+        var input=f.querySelector('input[type=file]');
+        if(!input || !input.files.length) return;   // let `required` handle the empty case
+        e.preventDefault();
+        var btn=f.querySelector('button'); var orig=btn.textContent;
+        btn.disabled=true; btn.textContent='Queued…';
+        chain = chain.then(function(){
+          btn.textContent='Uploading…';
+          return fetch(f.action,{method:'POST',headers:{'X-Requested-With':'fetch'},body:new FormData(f)})
+            .then(function(r){ return r.json().catch(function(){return {ok:r.ok};}); })
+            .then(function(data){
+              if(data && data.ok){
+                var row=f.parentNode; f.remove();
+                var ok=document.createElement('span');
+                ok.style.cssText='font-size:11px;font-weight:700;color:#1d6b43';
+                ok.textContent='✓ Delivered';
+                row.appendChild(ok);
+              } else {
+                btn.disabled=false; btn.textContent=orig;
+                alert('Upload failed'+(data&&data.error?': '+data.error:'')+' — please re-select the file and try again.');
+              }
+            })
+            .catch(function(){ btn.disabled=false; btn.textContent=orig; alert('Upload failed — check your connection and try again.'); });
+        });
+      });
     });
-  });
+  })();
   </script>
 </body>
 </html>

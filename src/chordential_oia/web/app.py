@@ -4808,36 +4808,48 @@ async def creator_submit_version(
 
 @app.post("/creator/{token}/project/{project_id}/deliverable")
 async def creator_submit_deliverable(
-    token: str, project_id: int, label: str = Form(""),
+    request: Request, token: str, project_id: int, label: str = Form(""),
     file: Optional[UploadFile] = File(None),
 ):
     """A creator uploads a scoped DELIVERABLE (instrumental / TV mix, cutdowns, verticals,
     stems) AFTER the master is approved. Lands in ``delivery_json['assets']`` under its
     label so the client can sign it off, and pings the operator. Mirrors the operator
-    Assets-agent storage; guarded by a valid portal token AND an assignment to the project."""
+    Assets-agent storage; guarded by a valid portal token AND an assignment to the project.
+
+    Returns an HONEST result: for an AJAX upload (``X-Requested-With`` header) it returns
+    JSON ``{ok, count}`` reflecting what actually persisted, so the portal only marks a row
+    "Delivered" when the asset truly landed (never on a redirect that stored nothing)."""
+    xhr = (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest")
+    def _fail(msg, code=400):
+        if xhr:
+            return JSONResponse({"ok": False, "error": msg}, status_code=code)
+        # No-JS form post: a soft "no file" bounces back to the portal; hard errors
+        # (auth, save failure) return their real status code.
+        if code == 400:
+            return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+        return HTMLResponse(msg, status_code=code)
     conn = db.connect()
     campaign = "Campaign"
     who = ""
     try:
         row = db.get_talent_by_portal_token(conn, token)
         if row is None:
-            return HTMLResponse("Not found", status_code=404)
+            return _fail("not found", 404)
         if not db.talent_is_assigned(conn, row["id"], project_id):
-            return HTMLResponse("Not assigned to this project", status_code=403)
+            return _fail("not assigned", 403)
         if file is None or not (file.filename or "").strip():
-            return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+            return _fail("no file", 400)
         who = row["name"]
         ext = os.path.splitext(file.filename)[1].lower()
         ctype = (file.content_type or "").lower()
         kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
         data = await file.read()
-        existing = {a.get("filename") for a in (db.get_delivery(conn, project_id).get("assets") or [])}
+        if not data:
+            return _fail("empty file", 400)
+        # Collision-proof on-disk name (random suffix) so nothing can overwrite another
+        # upload's file — no counter to race on.
         safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
-        n = 1
-        while f"proj{project_id}-{n}{safe_ext}" in existing or os.path.exists(
-                os.path.join(UPLOAD_DIR, f"proj{project_id}-{n}{safe_ext}")):
-            n += 1
-        safe_name = f"proj{project_id}-{n}{safe_ext}"
+        safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
         _persist_upload(conn, safe_name, data)
         delivery = db.get_delivery(conn, project_id)
         assets = list(delivery.get("assets") or [])
@@ -4845,14 +4857,22 @@ async def creator_submit_deliverable(
         assets.append({"label": deliverable, "url": f"/uploads/{safe_name}",
                        "filename": safe_name, "kind": kind})
         db.update_delivery(conn, project_id, "assets", assets)
+        # CONFIRM it actually persisted before telling the client "Delivered".
+        stored = db.get_delivery(conn, project_id).get("assets") or []
+        landed = any(a.get("filename") == safe_name for a in stored)
+        count = len(stored)
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
         db.add_update(conn, project_id, f"{who} delivered '{deliverable}' — ready for client sign-off.")
     finally:
         conn.close()
+    if not landed:
+        return _fail("not saved — please try again", 500)
     await run_in_threadpool(
         _notify_operator_review, project_id, None, f"Deliverable uploaded — {campaign}",
         f"{who} uploaded a deliverable. Review it in the delivery console.")
+    if xhr:
+        return JSONResponse({"ok": True, "label": deliverable, "count": count})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
