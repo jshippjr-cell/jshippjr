@@ -2995,16 +2995,46 @@ def start_production(opp_id: int):
 
 @app.post("/workspace/{token}/confirm-scope")
 def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Form(""),
-                            comment: str = Form("")):
-    """ADR-0020: the Discovery Summary's one action — "yes, this reflects our project."
-    Alignment, not commitment: no pricing was shown, nothing is owed. Confirmation advances
-    the workspace to "preparing your proposal" and notifies the operator to release it."""
+                            comment: str = Form(""), decision: str = Form("yes")):
+    """ADR-0020: the Discovery Summary has two answers — "yes, this reflects our project"
+    (alignment, not commitment: advances to "preparing your proposal" and notifies the
+    operator to release it) or "no, something's off" (captures the client's corrections,
+    notifies the operator, and does NOT advance — the operator edits the summary and
+    re-shares). Reported live: the box only offered "Yes"."""
     from datetime import datetime, timezone
     conn = db.connect()
     try:
         opp = db.opportunity_by_share_token(conn, token)
         if opp is None:
             return HTMLResponse("Not found", status_code=404)
+        if decision.strip().lower() == "no":
+            # Something's off — record the correction, ping the operator, don't advance.
+            note = comment.strip()[:500]
+            db.update_doc_override(conn, opp["id"], "scope_correction", {
+                "at": datetime.now(timezone.utc).isoformat(),
+                "by": confirmed_by.strip(), "comment": note, "resolved": False})
+            if campaigns.workspace_enabled():
+                try:
+                    ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
+                    db.add_ci_event(conn, ci["id"], actor="client", verb="scope_correction",
+                                    facet="engagement", key="discovery_summary",
+                                    to_value=(note[:200] or "flagged for correction"),
+                                    source="workspace")
+                except Exception:  # noqa: BLE001
+                    pass
+            op_mail = meeting_scheduler._operator_email()
+            if op_mail:
+                try:
+                    mailer.send_email(
+                        op_mail, f"⚠ Client flagged the summary — {opp['client']}",
+                        f"{confirmed_by.strip() or 'The client'} says the Discovery Summary "
+                        f"for {opp['need']} needs a fix."
+                        + (f"\nTheir note: “{note}”" if note else "")
+                        + f"\n\nEdit the summary, then re-share:\n"
+                          f"{_public_base()}/opportunity/{opp['id']}/capabilities?edit=1")
+                except Exception:  # noqa: BLE001
+                    pass
+            return RedirectResponse(f"/workspace/{token}?flag=corrections", status_code=303)
         if not db.get_doc_overrides(conn, opp["id"]).get("scope_confirmed"):
             db.update_doc_override(conn, opp["id"], "scope_confirmed", {
                 "at": datetime.now(timezone.utc).isoformat(),
@@ -3433,9 +3463,10 @@ def compose_page(request: Request, opp_id: int, sent: str = ""):
         conn.close()
     subject = plan.email_subject
     mailto = _mailto(row["contact_email"] or "", subject, body)
-    # The client link the email carries IS the Campaign Brief (the one artifact the operator
-    # edits), token-gated so it's shareable but not enumerable — never a divergent page.
-    page_url = f"/opportunity/{opp_id}/capabilities?k={token}"
+    # The client link the email carries IS the client Workspace — its Discovery Summary is
+    # the single brief the client reads (consolidation, ADR-0018). Token-gated so it's
+    # shareable but not enumerable, and "Preview the brief" opens exactly what they'll see.
+    page_url = f"/workspace/{token}"
     return render(
         request, "compose.html", nav="inbox", row=row, opp=opp, plan=plan,
         blocks=blocks, selected=selected, body=body, subject=subject, mailto=mailto,
@@ -3918,10 +3949,14 @@ def _live_brief_ctx(conn, opp_id):
     # ADR-0020: the Discovery Summary exists only to confirm we heard them — never pricing,
     # never terms, never a deposit. The commercial conversation happens at the proposal.
     toggles.update({"cost": False, "terms": False})
+    # The "book a discovery call" CTA belongs BEFORE discovery. Once it's happened (met),
+    # this IS the summary of that call — re-inviting them to book one is contradictory.
+    # Reported live: "it's still auto attaching the discovery call CTA when that already
+    # happened." Suppress the CTA post-discovery; the summary's only action is the confirm box.
+    call_url = "" if met else os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip()
     doc = build_capabilities_doc(
         opp, qual, est, toggles=toggles, overrides=overrides,
-        call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
-        ci_view=ci_view, met=met)
+        call_url=call_url, ci_view=ci_view, met=met)
     project = db.project_for_opp(conn, opp_id)
     deposit_amount = build_proposal(opp, qual, est).deposit_amount
     deposit_invoice_id = None
@@ -3965,6 +4000,12 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
             token = row["share_token"] if "share_token" in row.keys() else None
             if not token or not hmac.compare_digest(str(k), str(token)):
                 return HTMLResponse("Not found", status_code=404)
+            # Consolidation (ADR-0018): the client's single brief IS the workspace Discovery
+            # Summary. The live standalone client link now redirects into the workspace so
+            # there's ONE durable client destination — no divergent second page. Reported
+            # live: "uploading audio + Preview takes you to a totally different page." A
+            # frozen ?v=<snapshot> send still renders verbatim here (historical record); the
+            # operator edit view (no ?k, behind the login gate) still renders here too.
             public = True
         # The deal's project + its Deposit invoice (if either exists yet) — used to
         # surface the Stripe "Pay deposit" button, exactly as the detail page looks

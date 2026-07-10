@@ -94,18 +94,25 @@
     {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
   </div>
   {% include "_brief_document.html" %}
+  {% if request.query_params.get('flag') == 'corrections' %}
+  <div class="ws-wrap" style="margin-top:10px"><div style="padding:12px 16px;border-radius:12px;background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;font-weight:600">✓ Thanks — we've got your notes and we'll fix the summary and send it back to you.</div></div>
+  {% endif %}
   {% if scope_confirm_url %}
-  {# ADR-0020: the Summary's one action — alignment, not commitment. #}
+  {# ADR-0020: the Summary's one action — alignment, not commitment. Two answers: it's
+     right (confirm → we prepare the proposal), or something's off (send corrections back). #}
   <div class="ws-wrap" style="margin-top:10px">
     <div class="ws-now" id="confirm">
       <div class="lab">One question</div>
       <h2>Did we get this right?</h2>
-      <p>Read the summary above. If anything is off, tell us below — one note fixes it.
-        If it reflects your project, confirm and we'll prepare your proposal.</p>
+      <p>Read the summary above. If it reflects your project, confirm and we'll prepare your
+        proposal. If anything's off, tell us what to fix — we'll correct it and send it back.</p>
       <form method="post" action="{{ scope_confirm_url }}" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
         <input type="text" name="confirmed_by" placeholder="Your name" required style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit">
-        <textarea name="comment" rows="2" placeholder="Anything we should correct? (optional)" style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit"></textarea>
-        <button class="ws-cta" type="submit" style="border:0;cursor:pointer;align-self:flex-start">Yes, this reflects our project ✓</button>
+        <textarea name="comment" rows="2" placeholder="Anything we should correct? (needed if something's off)" style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit"></textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="ws-cta" type="submit" name="decision" value="yes" style="border:0;cursor:pointer">Yes, this reflects our project ✓</button>
+          <button type="submit" name="decision" value="no" style="background:transparent;border:1px solid var(--ws-line);color:var(--ws-ink);border-radius:10px;padding:11px 18px;font-weight:600;font:inherit;cursor:pointer">No — something's off</button>
+        </div>
       </form>
     </div>
   </div>
