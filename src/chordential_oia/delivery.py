@@ -1187,6 +1187,76 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None,
     return "\n".join(lines)
 
 
+def manifest_html(project, manifest, *, asset_approvals: Optional[dict] = None,
+                  brief_items=None, pkgid: str = "") -> str:
+    """The deliverables manifest as a BRANDED, self-contained HTML document (Chordential
+    wordmark + palette) — the client-facing equivalent of :func:`manifest_text`, so the
+    package's documents read as Chordential documents, not raw ``.txt``. Stdlib-only."""
+    if not pkgid:
+        pid = _val(project, "id")
+        pkgid = f"CHD-PROJ-{int(pid):04d}" if pid is not None else "CHD-PROJ"
+    logo = _wordmark_data_uri("ko")
+    client = _esc(_val(project, "client") or "")
+    campaign = _esc(_val(project, "need") or "the campaign")
+
+    def _mark(done):
+        return ('<span style="color:#1d6b43;font-weight:800">✓</span>' if done
+                else '<span style="color:#b98a5e">○</span>')
+
+    rows, group = [], None
+    for r in manifest:
+        if r.group != group:
+            group = r.group
+            rows.append('<tr><td colspan="3" style="padding:14px 0 4px;font-weight:800;'
+                        'font-size:11px;letter-spacing:.08em;text-transform:uppercase;'
+                        f'color:#8a4b1d">{_esc(r.group)}</td></tr>')
+        done = r.status == "Delivered"
+        rows.append(
+            f'<tr><td style="padding:6px 10px 6px 0">{_mark(done)} {_esc(r.asset)}</td>'
+            f'<td style="padding:6px 10px;color:#7a756d;font-size:12px">{_esc(r.spec)}</td>'
+            f'<td style="padding:6px 0;color:#7a756d;font-size:12px">{_esc(r.status)}</td></tr>')
+    body = ('<table style="width:100%;border-collapse:collapse;font-size:13.5px">'
+            f'<tbody>{"".join(rows)}</tbody></table>')
+
+    items = list(brief_items or [])
+    if items:
+        roll = brief_rollup(items)
+        brows = []
+        for it in items:
+            done = it.get("status") == "Delivered"
+            matched = (it.get("matched") or "").strip()
+            tail = f' <span style="color:#7a756d">→ {_esc(matched)}</span>' if matched else ""
+            brows.append(
+                f'<tr><td style="padding:5px 0">{_mark(done)} {_esc(it.get("item", ""))}{tail}</td>'
+                f'<td style="padding:5px 0;color:#7a756d;font-size:12px">{_esc(it.get("status", ""))}</td></tr>')
+        body += ('<h2 style="margin:26px 0 4px;font-size:15px">Against the brief</h2>'
+                 f'<p class="legend" style="margin:0 0 8px">{_esc(roll["text"])}.</p>'
+                 '<table style="width:100%;border-collapse:collapse;font-size:13.5px">'
+                 f'<tbody>{"".join(brows)}</tbody></table>')
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chordential — Deliverables Manifest · {client}</title>
+<style>{_BRANDED_CSS}</style>
+</head>
+<body>
+<section class="page">
+  <div class="content">
+    <div class="lh"><img class="logo" src="{logo}" alt="Chordential"><div class="lh-meta">Deliverables Manifest · {_esc(pkgid)}</div></div>
+    <p class="doc-kicker">Manifest</p>
+    <h1 class="doc">Deliverables Manifest</h1>
+    <p class="doc-sub">Everything scoped and delivered for {client} — {campaign}.</p>
+    <div class="accent-bar"></div>
+    {body}
+  </div>
+  <div class="foot"><span>{_esc(pkgid)} · {campaign}</span><span>Prepared by Chordential</span></div>
+</section>
+</body>
+</html>"""
+
+
 # --------------------------------------------------------------------------- #
 # Best-effort WAV → MP3 conversion (OPTIONAL — never a hard dependency)
 # --------------------------------------------------------------------------- #
@@ -1954,10 +2024,16 @@ def build_delivery_zip(
     # The generated documents (stdlib-only — the guaranteed core). The branded HTML
     # is the primary, pretty deliverable; the CSV + JSON stay machine-fileable.
     docs = {
+        # The client's Docs/ folder is ALL branded, self-contained HTML documents — the
+        # deliverable is the document, not a raw .txt (reported live: the generated docs
+        # were still plain text).
         "Docs/Delivery-Package.html": package_html,
         "Docs/Clearance-Certificate.html": cert_html,
+        "Docs/Deliverables-Manifest.html": manifest_html(
+            project, manifest, asset_approvals=delivery.get("asset_approvals"),
+            brief_items=brief_items),
         # Machine-readable / plain-text data an agency's music coordinator files with the
-        # PROs — tucked into a subfolder so the client's Docs/ view shows only the two clean,
+        # PROs — tucked into a subfolder so the client's Docs/ view shows only the clean,
         # branded HTML documents (the raw files aren't the deliverable, the HTML is).
         "Docs/For-filing/cue_sheet.csv": cue_sheet_csv(project, assignments, delivery=delivery),
         "Docs/For-filing/metadata.json": metadata_json(
@@ -2008,9 +2084,10 @@ def build_delivery_zip(
         if pdf_bytes:
             zf.writestr("Docs/Delivery-Package.pdf", pdf_bytes)
             pdf_written = True
-        # 4) A Docs/README.txt — what's bundled, plus any assets that are
-        # referenced-by-URL only (not local files) so nothing is silently dropped.
-        zf.writestr("Docs/README.txt", _readme_text(
+        # 4) The plain-text README (what's bundled + any referenced-by-URL-only assets, so
+        # nothing is silently dropped) lives in For-filing/ with the other raw records — the
+        # client's top-level Docs/ folder shows only the branded HTML documents.
+        zf.writestr("Docs/For-filing/README.txt", _readme_text(
             project, items, referenced, built_at, completeness=completeness))
 
     with open(zip_path, "wb") as fh:
