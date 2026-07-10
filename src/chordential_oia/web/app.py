@@ -2766,6 +2766,12 @@ def client_workspace(request: Request, token: str):
         if opp is None:
             return HTMLResponse("Not found", status_code=404)
         project = db.project_for_opp(conn, opp["id"])
+        # Self-heal: an awarded deal with no stored proposal (approved before the deposit
+        # was wired, or via a path that skipped it) gets one now from the approved review,
+        # so the deposit reliably surfaces — Pay button + Kickoff readiness.
+        if project is not None and db.proposal_for_project(conn, project["id"]) is None:
+            _ensure_proposal_from_review(
+                conn, opp, project["id"], db.current_commercial_review(conn, opp["id"]))
         phase = workspace.compute_phase(_workspace_signals(conn, opp, project))
         # Deposit status, computed once up front. The deposit is due the moment the client
         # approves the Commercial Review (that's when the project + its Deposit invoice exist),
@@ -3194,7 +3200,14 @@ def workspace_approve(request: Request, token: str, approver_name: str = Form(""
             # project (in Kickoff), so the Sales→Production handoff has something real to
             # organize (team, milestones, invoices). The machine prepares; the client
             # committed; the operator confirms Start Production to enter Production.
-            _ensure_project_for_opp(conn, opp["id"])
+            pid = _ensure_project_for_opp(conn, opp["id"])
+            # Persist a proposal carrying the APPROVED deposit/balance so the deposit is real
+            # everywhere downstream — the workspace Pay button, the /pay invoice, and the
+            # Kickoff readiness (reported live: Kickoff showed "Everything is ready" with no
+            # way to pay the deposit, because no proposal → no deposit amount existed).
+            if pid is not None:
+                _ensure_proposal_from_review(
+                    conn, opp, pid, db.current_commercial_review(conn, opp["id"]))
             _reconcile_opp_status(conn, opp["id"])   # → Won (approval is the award)
             if campaigns.workspace_enabled():
                 try:
@@ -5051,6 +5064,36 @@ def projects_directory(request: Request, status: Optional[str] = None):
         request, "projects.html", nav="projects", projects=projects,
         counts=counts, active_status=(status or ""),
     )
+
+
+def _ensure_proposal_from_review(conn, opp_row, project_id, review_row) -> None:
+    """After the client approves the Commercial Review, persist a Proposal for the project
+    carrying the APPROVED money (deposit, balance, total — operator edits included) so the
+    deposit is real everywhere downstream: the workspace Pay button, the /pay invoice, and
+    the Kickoff readiness. Idempotent — a no-op if the project already has a proposal."""
+    if review_row is None or db.proposal_for_project(conn, project_id) is not None:
+        return
+    review = commercial.review_from_json(review_row["doc_json"])
+    if review is None:
+        return
+    row, opp, ev = _load(conn, opp_row["id"])
+    if row is None:
+        return
+    qual, _scored = ev
+    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
+    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    proposal = build_proposal(opp, qual, est)
+    # Override the estimator's numbers with exactly what the client approved.
+    total_mid = int(round(((review.fee_low or 0) + (review.fee_high or 0)) / 2))
+    if review.deposit_pct:
+        proposal.deposit_pct = review.deposit_pct
+    if review.deposit_amount:
+        proposal.deposit_amount = review.deposit_amount
+    if total_mid:
+        proposal.total_price = total_mid
+    proposal.balance_due = (review.balance_amount
+                            or max(0, (total_mid or proposal.total_price) - proposal.deposit_amount))
+    db.insert_proposal(conn, project_id, opp_row["id"], proposal)
 
 
 def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:

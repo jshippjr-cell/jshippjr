@@ -26,14 +26,16 @@ def _operator_producer() -> dict:
     return {"role": "Producer", "name": name, "email": email, "assigned": True}
 
 
-def _deposit_state(invoices) -> str:
-    """'received' | 'awaiting' | 'none' — from the project's Deposit invoice, if any."""
+def _deposit_state(invoices, owed: int = 0) -> str:
+    """'received' | 'awaiting' | 'none' — from the project's Deposit invoice if one exists;
+    otherwise 'awaiting' when a deposit is owed (approved but not yet invoiced) and 'none'
+    only when genuinely nothing is due."""
     for inv in invoices:
         if (inv["kind"] or "") == "Deposit":
             paid = (inv["status"] or "").lower() in ("paid", "settled") or (
                 "paid_at" in inv.keys() and inv["paid_at"])
             return "received" if paid else "awaiting"
-    return "none"
+    return "awaiting" if owed else "none"
 
 
 def _procurement_line(conn, db, opp) -> dict:
@@ -87,7 +89,13 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         assigned_by_role.get(r) and assigned_by_role[r]["talent_name"] for r in roles)
 
     # ── Production checklist ─────────────────────────────────────────────
-    deposit = _deposit_state(invoices)
+    # A deposit is OWED as soon as the approved proposal carries one — even before the client
+    # has opened the invoice (it's created lazily at Pay). So "awaiting" keys off the owed
+    # amount, not just an existing invoice; otherwise Kickoff reads "Everything is ready"
+    # with an unpaid deposit and no way to pay it (reported live).
+    _prop = db.proposal_for_project(conn, project["id"]) if project else None
+    owed = int(_prop["deposit_amount"] or 0) if _prop is not None else 0
+    deposit = _deposit_state(invoices, owed)
     timeline = (ci_fields.get("deadline") or (review.timeline if review else "") or "").strip()
     kickoff_done = bool(project and (project["kickoff_completed_at"]
                                      if "kickoff_completed_at" in project.keys() else None))

@@ -122,8 +122,15 @@ def test_readiness_all_ready_when_no_client_actions(tmp_path, monkeypatch):
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
         token = _to_approved(app_mod, c, app_mod.db.connect, opp_id)
+        # The deposit is the one client action after approval — settle it, then the
+        # readiness reaches its genuine all-clear state.
+        conn = app_mod.db.connect()
+        proj = app_mod.db.project_for_opp(conn, opp_id)
+        conn.execute("INSERT INTO invoices (project_id, kind, status, created_at) "
+                     "VALUES (?,?,?,?)", (proj["id"], "Deposit", "paid", "x"))
+        conn.commit(); conn.close()
         page = c.get(f"/workspace/{token}").text
-    # no deposit invoice exists → no client action outstanding → the reassuring message
+    # deposit in, nothing else outstanding → the reassuring message
     assert "Everything is ready." in page
     assert "nothing you need to manage" in page
     # campaign summary is projected from CI + the approved review
