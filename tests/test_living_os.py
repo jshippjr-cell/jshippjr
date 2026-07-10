@@ -47,12 +47,12 @@ def test_living_grammar_present_in_stylesheet(client):
 
 def test_update_intelligence_carries_the_honest_thinking_hooks(client):
     """Phase 2: the CI analyze form is marked for the thinking veil, its path
-    names the real modules, the fit%% is machine-readable for the count-up —
-    and the no-JS path (a plain form post) stays fully intact."""
+    names the real modules — and the no-JS path (a plain form post) stays fully
+    intact. (The big-number fit% count-up was retired when the Opportunity
+    Workspace was redesigned; the fit% now lives in the header fit-chip.)"""
     page = client.get("/opportunity/1").text
     assert "data-think" in page
     assert "Campaign Intelligence|Qualification|Buyer Profile" in page
-    assert 'data-fit-pct="' in page
     # the plain form action is unchanged — progressive enhancement only
     assert 'action="/opportunity/1/intelligence/analyze"' in page
     # the real POST still works without any JS
