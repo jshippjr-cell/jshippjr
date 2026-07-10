@@ -1435,7 +1435,13 @@ def dashboard(request: Request):
                     "📥", lambda r: f"Lead received — {r['company'] or r['contact_name']}")
             + _feed("SELECT name, created_at AS at FROM discovery_requests "
                     "ORDER BY created_at DESC LIMIT 2",
-                    "🎥", lambda r: f"Discovery call requested — {r['name'] or 'a client'}"),
+                    "🎥", lambda r: f"Discovery call requested — {r['name'] or 'a client'}")
+            + _feed("SELECT i.kind, i.amount, i.paid_at AS at, p.client AS client "
+                    "FROM invoices i JOIN projects p ON p.id = i.project_id "
+                    "WHERE i.status = 'Paid' AND i.paid_at IS NOT NULL "
+                    "ORDER BY i.paid_at DESC LIMIT 4",
+                    "💰", lambda r: f"{r['kind'] or 'Payment'} paid — {r['client'] or 'a client'}"
+                    + (f" (${r['amount']:,.0f})" if r['amount'] else "")),
             key=lambda e: e["at"], reverse=True)[:8]
     finally:
         conn.close()
@@ -7624,10 +7630,71 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str 
         conn.close()
 
 
+def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
+                           contact_name: str, workspace_url: str, paid_at: str) -> dict:
+    """A clean, branded receipt for the client when their payment settles."""
+    first = (contact_name or "").strip().split()[0] if contact_name.strip() else ""
+    greeting = f"Hi {first}," if first else "Hi there,"
+    amt = f"${amount:,.0f}" if amount else "your payment"
+    label = (kind or "Payment").strip()
+    date = (paid_at or "")[:10]
+    tail = ("Your deposit is in and we're getting production underway — you'll hear from us "
+            "at your first creative milestone."
+            if label.lower().startswith("dep") else
+            "Your balance is settled and your final files are unlocked in your workspace.")
+    body = (
+        f"{greeting}\n\n"
+        f"Thank you — we've received your {label.lower()} payment. This is your receipt.\n\n"
+        f"  Payment:  {label}\n"
+        f"  Amount:   {amt}\n"
+        f"  Project:  {need or 'your campaign'}\n"
+        + (f"  Date:     {date}\n" if date else "")
+        + f"\n{tail}\n\n"
+        + (f"Everything for your campaign lives in your workspace:\n{workspace_url}\n\n"
+           if workspace_url else "")
+        + "— Jon, Chordential"
+    )
+    subject = f"Receipt — {label} payment received ({amt})"
+    return {"subject": subject, "body": body}
+
+
+def _notify_payment_settled(conn, inv, pid: int) -> None:
+    """Best-effort notifications when a payment settles: a receipt to the client and a phone
+    alert to the operator. Never raises — a notification failure must not undo the payment."""
+    try:
+        project = db.get_project(conn, pid)
+        opp = (db.get_opportunity(conn, project["opp_id"])
+               if project is not None and project["opp_id"] else None)
+        kind = inv["kind"] or "Payment"
+        amount = inv["amount"] or 0
+        client = (project["client"] if project is not None else "") or (
+            opp["client"] if opp is not None else "a client")
+        need = project["need"] if project is not None else ""
+        # Operator phone push — the immediate "you got paid" alert.
+        signals.fire_and_forget(signals.notify_payment_received, client, kind,
+                                f"${amount:,.0f}" if amount else "")
+        # Client receipt email.
+        contact_email = (opp["contact_email"] if opp is not None
+                         and "contact_email" in opp.keys() else "") or ""
+        if contact_email and mailer.mail_configured():
+            base = _public_base()
+            token = db.ensure_share_token(conn, opp["id"]) if opp is not None else ""
+            contact_name = (opp["contact_name"] if opp is not None
+                            and "contact_name" in opp.keys() else "") or ""
+            receipt = _payment_receipt_email(
+                kind, amount, client, need, contact_name,
+                f"{base}/workspace/{token}" if token else "", inv["paid_at"] or "")
+            mailer.send_email(contact_email, receipt["subject"], receipt["body"],
+                              html=mailer.branded_html(base, receipt["body"]))
+    except Exception:  # noqa: BLE001 — notifications are best-effort
+        pass
+
+
 def _apply_invoice_payment(conn, invoice_id: int, external_ref: str = "") -> bool:
     """Mark an invoice Paid and apply its side effects — unlock the client's downloads
-    (Final) + queue crew payouts — exactly once. Idempotent: a no-op if already paid, so the
-    Stripe success-return and the webhook can BOTH fire without double-applying."""
+    (Final) + queue crew payouts + notify (client receipt, operator alert) — exactly once.
+    Idempotent: a no-op if already paid, so the Stripe success-return and the webhook can
+    BOTH fire without double-applying."""
     inv = db.get_invoice(conn, invoice_id)
     if inv is None or not inv["project_id"]:
         return False
@@ -7639,6 +7706,8 @@ def _apply_invoice_payment(conn, invoice_id: int, external_ref: str = "") -> boo
         db.update_delivery(conn, pid, "download_unlocked", True)
     db.ensure_project_payouts(conn, pid)
     db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
+    # Re-read so the receipt carries the stamped paid_at.
+    _notify_payment_settled(conn, db.get_invoice(conn, inv["id"]) or inv, pid)
     return True
 
 

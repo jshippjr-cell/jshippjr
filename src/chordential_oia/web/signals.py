@@ -377,6 +377,21 @@ def notify_new_talent_application(name: str) -> None:
               click_url="https://chordential.com/talent")
 
 
+def notify_payment_received(client: str, kind: str, amount: str = "") -> None:
+    """Push a phone alert the moment a client payment settles (deposit or final).
+    Reported live: "I ran a payment and there was no alert." Native Web Push to
+    the installed PWA (opens the dashboard) with ntfy.sh as a fallback. Best-effort."""
+    label = (kind or "Payment").strip()
+    msg = f"{label} paid — {client}".strip() + (f" · {amount}" if amount else "")
+    try:
+        from . import webpush
+        webpush.send_web_push("💰 Payment received", body=msg, url="/dashboard")
+    except Exception:
+        pass
+    send_push("Payment received on Chordential", body=msg,
+              click_url="https://chordential.com/dashboard")
+
+
 def ingest_alert(conn, raw: str, source: str = "email") -> int:
     """Parse a forwarded saved-search / F5Bot alert email into signals."""
     n = 0
