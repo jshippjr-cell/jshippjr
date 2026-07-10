@@ -776,6 +776,40 @@ def delivery_completeness(project, delivery: Optional[dict] = None) -> dict:
     }
 
 
+def _match_deliverables_to_assets(expected: List, asset_labels: List[str]) -> dict:
+    """Assign each uploaded asset label to AT MOST ONE scoped deliverable (injective).
+
+    Two passes so the strongest evidence wins before a weak token overlap can steal an
+    asset: (1) exact / substring matches, (2) token overlap. Each label is consumed once,
+    so two deliverables can never resolve to the same asset — which is what made approving
+    one deliverable approve another, and left the client's file list disagreeing with the
+    sign-off list. Returns ``{deliverable_index: matched_label}``. Deterministic."""
+    used: set = set()
+    result: dict = {}
+
+    def _claim(indices, predicate):
+        for i in indices:
+            if i in result:
+                continue
+            d = expected[i]
+            text_lower = f"{d.group} {d.asset}".lower()
+            want = _deliverable_tokens(f"{d.group} {d.asset}")
+            for label in asset_labels:
+                if label in used:
+                    continue
+                if predicate(label, label.lower(), text_lower, want):
+                    result[i] = label
+                    used.add(label)
+                    break
+
+    idxs = list(range(len(expected)))
+    # Pass 1 — exact / substring either way (the composer's own deliverable label).
+    _claim(idxs, lambda label, ll, tl, want: ll == tl or ll in tl or tl in ll)
+    # Pass 2 — synonym-expanded token overlap for whatever's still unmatched.
+    _claim(idxs, lambda label, ll, tl, want: bool(want & _deliverable_tokens(label)))
+    return result
+
+
 def scoped_deliverables(project, delivery: Optional[dict] = None) -> List[dict]:
     """The FULL scoped deliverable list paired with its matching uploaded asset.
 
@@ -783,10 +817,10 @@ def scoped_deliverables(project, delivery: Optional[dict] = None) -> List[dict]:
     upload-required deliverable (the completeness ``expected`` set) is returned as
     ``{group, asset, spec, uploaded, match}`` where ``uploaded`` is True when an
     uploaded asset plausibly satisfies it and ``match`` is that asset's label (or
-    ``""``). The caller joins ``match`` back to the asset's per-asset-approval row
-    so the portal can show ✓ uploaded (with Approve / Request-changes controls) vs
-    ⧗ not uploaded yet ("waiting on Chordential") for the WHOLE scoped list — not
-    just the handful of assets that happen to be uploaded. Deterministic."""
+    ``""``). Matching is INJECTIVE — each asset satisfies one deliverable only. The
+    caller joins ``match`` back to the asset's per-asset-approval row so the portal can
+    show ✓ uploaded (with Approve / Request-changes controls) vs ⧗ not uploaded yet
+    ("waiting on Chordential") for the WHOLE scoped list. Deterministic."""
     delivery = delivery or {}
     std = _standard_deliverables(project)
     expected = [d for d in std if (d.group or "").strip().lower() not in _AUTO_DOC_GROUPS]
@@ -796,9 +830,10 @@ def scoped_deliverables(project, delivery: Optional[dict] = None) -> List[dict]:
     ]
     asset_labels = [l for l in asset_labels if l]
     has_version = _has_version(delivery)
+    matches = _match_deliverables_to_assets(expected, asset_labels)
     out: List[dict] = []
-    for d in expected:
-        match = _deliverable_uploaded(d, asset_labels)
+    for i, d in enumerate(expected):
+        match = matches.get(i, "")
         is_master = _is_primary_master(d)
         # The primary master is satisfied by the review version itself (see
         # delivery_completeness) — approved via the main "Approve the master" button,
