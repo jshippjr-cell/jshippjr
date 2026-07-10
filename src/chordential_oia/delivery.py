@@ -184,6 +184,19 @@ def slug_campaign(campaign) -> str:
     return words[0].upper()
 
 
+def deliverable_filename(campaign, label: str, ext: str) -> str:
+    """A clean, self-describing name for a delivered ASSET file — ``CAMPAIGN_<Label>.<ext>``
+    (e.g. ``LOOKING_Instrumental_TV_mix.mp3``, ``LOOKING_9x16_vertical_cuts.mp3``) so the
+    files in the package speak to what they are instead of ``proj12-eca999d83b.mp3``.
+    Deterministic; keeps the original extension. A ``9:16``-style ratio becomes ``9x16``."""
+    stem = re.sub(r"(?<=\d):(?=\d)", "x", str(label or ""))        # 9:16 → 9x16
+    stem = re.sub(r"[^0-9A-Za-z]+", "_", stem).strip("_")
+    ext = ext if ext.startswith(".") else ("." + ext if ext else "")
+    if not stem:
+        return f"{slug_campaign(campaign)}_deliverable{ext}"
+    return f"{slug_campaign(campaign)}_{stem}{ext}"
+
+
 def version_name(campaign, cue, length, role, n, state) -> str:
     """The deterministic delivery filename stem ``CAMPAIGN_CUE_LEN_ROLE_vN_STATE``.
 
@@ -1912,7 +1925,12 @@ def build_delivery_zip(
             referenced.append(asset)
             continue
         folder = asset_folder(asset)
-        arc = _unique(f"{folder}/{fname}")
+        # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
+        # the package is self-describing. Falls back to the original name when unlabeled.
+        nice = (deliverable_filename(_val(project, "need"), asset.get("label") or "",
+                                     os.path.splitext(fname)[1])
+                if (asset.get("label") or "").strip() else fname)
+        arc = _unique(f"{folder}/{nice}")
         asset_arcs.append((asset, src, arc))
         items.append(asset.get("label") or fname)
         if (asset.get("kind") or "") == "audio":

@@ -1562,8 +1562,10 @@ def test_uploaded_local_audio_is_in_the_zip(client):
     zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
     with _zip.ZipFile(zip_path) as zf:
         names = zf.namelist()
-        # The actual uploaded audio file is bundled under a folder.
-        assert any(n.endswith(stored) for n in names), names
+        # The actual uploaded audio is bundled under a folder, renamed to the clean,
+        # self-describing convention (CAMPAIGN_<Label>.ext) — not its random upload id.
+        assert stored not in names
+        assert any(n.endswith("Anthem_60_master.wav") for n in names), names
 
 
 def test_referenced_only_asset_listed_in_zip_readme(client):
@@ -1633,7 +1635,8 @@ def test_operator_assigned_folder_places_asset_in_that_folder(client):
     zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
     with _zip.ZipFile(zip_path) as zf:
         names = zf.namelist()
-    assert f"Stems/{stored}" in names, names
+    # Filed in the operator-assigned Stems/ folder, under the clean convention name.
+    assert any(n.startswith("Stems/") and n.endswith("Track_One.wav") for n in names), names
 
 
 def test_cue_sheet_csv_has_isrc_iswc_duration_columns_fillable(client):
@@ -2090,14 +2093,16 @@ def test_zip_contains_branded_html_docs_with_playable_audio(client):
         # The standalone certificate is branded + sealed too.
         assert "data:image/png;base64," in cert or "44161E" in cert.upper()
         assert "CLEARED" in cert
-        # (c) The bundled audio has an <audio> element pointing at the bundled file.
+        # (c) The bundled audio has an <audio> element pointing at the bundled file —
+        # under the clean convention name (CAMPAIGN_<Label>.ext), not its random upload id.
+        nice = "Anthem_60_master.wav"
         assert "<audio" in pkg
-        assert stored in pkg                       # src references the bundled file
+        assert nice in pkg                         # src references the bundled file
         assert "../" in pkg                        # relative in-ZIP path
         m = _re.search(r'<audio[^>]*src="([^"]+)"', pkg)
-        assert m and stored in m.group(1)
+        assert m and nice in m.group(1)
         # The actual audio file is bundled under a folder, matching the src.
-        assert any(n.endswith(stored) for n in names), names
+        assert any(n.endswith(nice) for n in names), names
         # (d) The machine-fileable docs are still present.
         assert "Docs/For-filing/cue_sheet.csv" in names
         assert "Docs/For-filing/metadata.json" in names
