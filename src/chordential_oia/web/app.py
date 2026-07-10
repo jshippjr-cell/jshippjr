@@ -5640,6 +5640,11 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     # to review before paying). Deliverables unlock when the client is paid in full
     # OR Jon has manually unlocked this delivery. Streaming src stays on /uploads;
     # only the ZIP + per-asset DOWNLOAD links route through the gated _can-download_ path.
+    # Self-heal: once delivered, the balance must be a real Issued invoice so the download
+    # stays gated behind it — otherwise a paid DEPOSIT reads as "paid in full" (nothing else
+    # outstanding) and the files unlock without the balance (reported live).
+    if (delivery.get("state") or "") in ("Delivered", "Released"):
+        _ensure_final_invoice_issued(conn, project_id)
     balance = db.invoice_balance(conn, project_id)
     download_unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
     # Build gated download URLs (carry the share token so the route can authorize).
@@ -6989,6 +6994,29 @@ def _ready_to_deliver(delivery: dict, project) -> bool:
     return roll["total"] == 0 or roll["approved"] == roll["total"]
 
 
+def _ensure_final_invoice_issued(conn, project_id: int) -> None:
+    """When the package is finalized, raise the balance (Final) invoice as *Issued* so it is a
+    real outstanding amount. Without this, the download gate treats a paid DEPOSIT as
+    "paid in full" (the balance invoice is created lazily, so nothing shows outstanding) and
+    the files unlock without the balance ever being paid — reported live. Idempotent; needs a
+    stored proposal and a non-zero balance."""
+    prow = db.get_project(conn, project_id)
+    prop = db.proposal_for_project(conn, project_id)
+    if prow is None or prop is None:
+        return
+    inv = next((i for i in db.list_invoices(conn, project_id)
+                if (i["kind"] or "") == "Final"), None)
+    if inv is None:
+        new_id = db.insert_invoice(
+            conn, project_id, prop["id"], _invoice_from_proposal_row(prow, prop, "Final"))
+        inv = db.get_invoice(conn, new_id)
+    if inv is None:
+        return
+    status = (inv["status"] or "").lower()
+    if (inv["amount"] or 0) and status in ("", "draft"):
+        db.update_invoice_status(conn, inv["id"], "Issued")
+
+
 def _maybe_finalize_delivery(conn, project_id: int) -> bool:
     """Ship the delivery package + mark Delivered ONLY when the creative is approved (Creative
     Lock) AND every deliverable is uploaded + signed off. This is the SINGLE door to the full
@@ -6998,12 +7026,15 @@ def _maybe_finalize_delivery(conn, project_id: int) -> bool:
     if project is None or not production.creative_lock(delivery):
         return False
     if (delivery.get("state") or "") in ("Delivered", "Released"):
+        _ensure_final_invoice_issued(conn, project_id)   # self-heal older Delivered deals
         return True
     if not _ready_to_deliver(delivery, project):
         return False
     try:
         _build_delivery_package(conn, project_id)
         db.update_delivery(conn, project_id, "state", "Delivered")
+        # The balance is now owed — raise it so the download stays gated behind it.
+        _ensure_final_invoice_issued(conn, project_id)
         db.add_project_event(conn, project_id, "delivered", actor_role="operator",
                              actor_name="ChordOS",
                              body="All deliverables approved — delivery package assembled.")
