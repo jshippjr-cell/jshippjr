@@ -160,37 +160,14 @@ def public_experience(request: Request):
     return render(request, "public/experience.html", active="")
 
 
-@router.get("/reel", response_class=HTMLResponse)
-def public_reel(request: Request):
-    """The gallery index: a spiral stream of capability tracks — a helix of
-    cards flowing through depth (scroll = travel, focus card crisp, the rest
-    depth-blurred — translated from the pacomepertant.com teardown, see
-    docs/design/ux-teardown-pacomepertant.md). Audio only — no case studies —
-    in Chordential's palette. Does NOT replace the converting homepage (/).
-    Case studies used to sit in this same carousel as non-audio cards, but
-    several of them share a brand name with an actual track (e.g. a track
-    "Financial Services — Brand Theme" alongside a case study "Financial
-    services — sonic identity"), which read as a bug: clicking the
-    lookalike case card silently didn't play anything. Cases now live only
-    on /capabilities, linked from this page's footer. Clicking a track card
-    pops it forward, highlights it, and plays that track inline via a
-    docked player. Falls back to a static list automatically on
-    reduced-motion / narrow screens via CSS."""
-    show = get_showcase()
-    tracks = [d for d in show.demos if (d.audio_url or "").strip()]
-    cards = []
-    for i, t in enumerate(tracks):
-        cards.append({
-            "title": t.title, "label": t.discipline_label,
-            "href": f"/showreel?t={i}", "kind": "Track", "audio_url": t.audio_url,
-        })
-    # Deterministic per-card seed (index-based, not random) so the layout is stable
-    # across requests/deploys — same spirit as the rest of the codebase's "no
-    # randomness in rendered output" discipline.
-    for i, c in enumerate(cards):
-        c["seed"] = i
-        c["gradient"] = _GALLERY_GRADIENTS[i % len(_GALLERY_GRADIENTS)]
-    return render(request, "public/reel.html", active="", cards=cards)
+@router.get("/reel")
+def public_reel():
+    """Retired: the standalone reel spiral is gone — 'See the work' lives on the hero as the
+    spinning reel wheel. Any old link/bookmark to /reel lands there via the /#reel deep-link."""
+    from fastapi.responses import RedirectResponse
+    # ?reel=1 (not #reel) — URL fragments can be dropped across a redirect; the query form
+    # survives, and the homepage deep-link handler accepts both.
+    return RedirectResponse("/?reel=1", status_code=307)
 
 
 @router.get("/stills", response_class=HTMLResponse)

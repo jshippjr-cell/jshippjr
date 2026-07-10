@@ -57,7 +57,7 @@ def test_public_css_cachebuster_comes_from_one_source(client):
     The homepage (``/`` → experience.html) is a self-contained immersive page with its
     own inline styles and deliberately does NOT link site.css, so it's excluded here."""
     from chordential_oia.web.public import ASSET_VERSION
-    for path in ("/reel", "/showreel", "/stills"):
+    for path in ("/showreel", "/stills"):
         t = client.get(path).text
         assert f"site.css?v={ASSET_VERSION}" in t
         assert "{{ asset_v }}" not in t     # the global actually resolved

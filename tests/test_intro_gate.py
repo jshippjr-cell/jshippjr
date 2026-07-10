@@ -1,5 +1,5 @@
 """Intro gate — "Welcome" crossfades into the Chordential mark, then a sound
-choice, shown on EVERY visit to /reel and /showreel (no session-skip, per the
+choice, shown on EVERY visit to /showreel (no session-skip, per the
 founder's call). The chosen button is the user gesture that unlocks audio.
 """
 
@@ -23,7 +23,7 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-@pytest.mark.parametrize("path", ["/reel", "/showreel"])
+@pytest.mark.parametrize("path", ["/showreel"])
 def test_intro_gate_present_on_every_load(client, path):
     # No session-skip mechanism — every GET renders the gate fresh.
     for _ in range(3):
@@ -34,7 +34,7 @@ def test_intro_gate_present_on_every_load(client, path):
 
 
 def test_intro_gate_uses_the_cropped_mark_icon(client):
-    t = client.get("/reel").text
+    t = client.get("/showreel").text
     assert "mark-icon.png" in t
     r = client.get("/static/public/mark-icon.png")
     assert r.status_code == 200
@@ -53,7 +53,7 @@ def test_intro_gate_dismisses_on_backdrop_click_and_escape(client):
     # small buttons can read as "broken" if the visitor taps elsewhere. The whole
     # gate element now carries its own click listener (defaulting to muted), plus
     # an Escape-key fallback.
-    t = client.get("/reel").text
+    t = client.get("/showreel").text
     assert "gate.addEventListener('click'" in t
     assert "e.key === 'Escape'" in t
 

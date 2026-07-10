@@ -17,7 +17,6 @@ TEMPLATES = Path(__file__).resolve().parents[1] / "src/chordential_oia/web/templ
 # Standalone pages that don't extend public_base.html but still load site.css
 # directly — each of these must carry the SAME version as public_base.html.
 STANDALONE_PUBLIC_PAGES = [
-    TEMPLATES / "public" / "reel.html",
     TEMPLATES / "public" / "showreel.html",
 ]
 
