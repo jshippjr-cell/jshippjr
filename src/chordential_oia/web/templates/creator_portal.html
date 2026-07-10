@@ -80,11 +80,18 @@
     <div class="card" id="p{{ a.project_id }}">
       <h2>{{ a.need }}</h2>
       <p class="sub">{{ a.client }}</p>
+      {% set disp_state = 'In review' if (a.pending and not a.versions) else a.delivery_state %}
       <div class="row">
         <span><b>Your role:</b> {{ a.role }}</span>
         {% if a.deadline %}<span><b>Deadline:</b> {{ a.deadline }}</span>{% endif %}
-        <span class="pill {{ 'live' if a.delivery_state in ('In review','Approved') }}">{{ a.delivery_state }}</span>
+        <span class="pill {{ 'live' if disp_state in ('In review','Approved') }}">{{ disp_state }}</span>
       </div>
+
+      {% if request.query_params.get('submitted') == a.project_id|string %}
+      <div style="margin:8px 0 12px;padding:11px 14px;border-radius:10px;background:#e6f3ec;border:1px solid #bcdcc7;color:#1d6b43;font-weight:600">
+        ✓ Version received — thank you. The studio has been notified and is reviewing it; the client's notes (if any) will appear here once it's published.
+      </div>
+      {% endif %}
 
       {% if a.versions %}
       <ul class="versions">
@@ -96,7 +103,14 @@
         </li>
         {% endfor %}
       </ul>
-      {% else %}
+      {% endif %}
+      {% if a.pending %}
+      <div style="margin:6px 0 14px;padding:11px 13px;border:1px dashed var(--line);border-radius:10px;font-size:13px;background:var(--sand)">
+        <b>✓ Your latest version is in — under review.</b>
+        <div class="sub" style="margin:4px 0 0">{{ a.pending.orig or a.pending.filename }}{% if a.pending.at %} · submitted {{ a.pending.at[:10] }}{% endif %}</div>
+        {% if a.pending.url %}<audio controls preload="none" src="{{ a.pending.url }}" style="margin-top:8px;width:100%"></audio>{% endif %}
+      </div>
+      {% elif not a.versions %}
       <p class="empty" style="margin:6px 0 14px">No versions submitted yet — upload your first below.</p>
       {% endif %}
 
@@ -153,6 +167,20 @@
           <input type="file" name="file" accept="audio/*" required>
           <button class="btn" type="submit">Submit for review</button>
           <p class="muted-note">Submitting a new master reopens review and notifies the team.</p>
+        </form>
+      </details>
+      {% elif a.pending %}
+      {# A version is already in and under review — keep resubmission available but quiet,
+         so the composer isn't left wondering whether their submission went through. #}
+      <details style="margin-top:4px">
+        <summary class="muted-note" style="cursor:pointer">Need to revise? Submit an updated version</summary>
+        <form class="uploader" method="post"
+              action="/creator/{{ token }}/project/{{ a.project_id }}/version"
+              enctype="multipart/form-data" style="margin-top:8px">
+          <label>Updated master version (mp3/wav)</label>
+          <input type="file" name="file" accept="audio/*" required>
+          <button class="btn" type="submit">Submit for review</button>
+          <p class="muted-note">This replaces the version under review and re-notifies the team.</p>
         </form>
       </details>
       {% else %}

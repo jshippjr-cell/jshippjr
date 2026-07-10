@@ -4902,6 +4902,10 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             "delivery_state": (delivery.get("state") or "Not started"),
             "version_state": (delivery.get("version_state") or ""),
             "versions": versions_list(delivery),
+            # The creator's OWN latest submission, even while it's still pending Jon's
+            # review — so they can see it landed instead of the empty "upload your first"
+            # state (reported live: after submitting, the portal looked like nothing happened).
+            "pending": delivery.get("pending_version") or None,
             "feedback": _creator_feedback(conn, a["project_id"], delivery),
             "creative_lock": locked,
             "deliverables": deliverables,
@@ -4954,6 +4958,7 @@ async def creator_submit_version(
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
         db.add_update(conn, project_id, f"{who} submitted a new version — pending your review.")
+        _sync_role_milestones(conn, project_id)   # Composer deliverable → In progress
     finally:
         conn.close()
     # Composer-direction notification: ping Jon (the operator) that new work landed
@@ -4964,7 +4969,8 @@ async def creator_submit_version(
         _notify_operator_review,
         project_id, None, f"New work submitted — {campaign}",
         f"{who} submitted a new version. Review and publish it in the delivery console.")
-    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+    return RedirectResponse(f"/creator/{token}?submitted={project_id}#p{project_id}",
+                            status_code=303)
 
 
 @app.post("/creator/{token}/project/{project_id}/deliverable")
@@ -5175,11 +5181,47 @@ _ROLE_DISCIPLINE = {
 }
 
 
+def _sync_role_milestones(conn, project_id: int) -> None:
+    """Keep the per-role Delivery-progress milestones honest with the actual delivery
+    lifecycle (reported live: the Composer milestone stayed 'Pending' after a V1 was
+    submitted). Forward-only, and only touches role-tagged (auto-seeded) milestones —
+    operator-added milestones stay fully manual. The lead role (first scoped role) owns the
+    master; derivative roles begin once the master is locked; everything is Done on ship."""
+    prow = db.get_project(conn, project_id)
+    if prow is None:
+        return
+    try:
+        roles = list(json.loads(prow["roles"] or "[]"))
+    except Exception:  # noqa: BLE001
+        roles = []
+    lead = roles[0] if roles else None
+    delivery = db.get_delivery(conn, project_id)
+    has_version = bool(delivery.get("pending_version")) or bool(versions_list(delivery))
+    locked = bool(production.creative_lock(delivery))
+    shipped = (delivery.get("state") or "") in ("Delivered", "Released")
+    rank = {"Pending": 0, "In progress": 1, "Done": 2}
+    for m in db.list_milestones(conn, project_id):
+        role = (m["role"] or "").strip()
+        if not role:
+            continue                         # operator-added milestones stay manual
+        if shipped:
+            target = "Done"
+        elif locked:
+            target = "Done" if role == lead else "In progress"
+        elif has_version and role == lead:
+            target = "In progress"
+        else:
+            target = m["status"]
+        if rank.get(target, 0) > rank.get(m["status"], 0):
+            db.update_milestone_status(conn, m["id"], target)
+
+
 def _project_view(conn, project_id: int):
     """Assemble a project with its roles, current assignments, and ranked candidates."""
     row = db.get_project(conn, project_id)
     if row is None:
         return None
+    _sync_role_milestones(conn, project_id)  # reflect delivery reality before we read them
     roles = json.loads(row["roles"]) if row["roles"] else []
     assignments = db.list_assignments(conn, project_id)
     by_role = {role: [] for role in roles}
