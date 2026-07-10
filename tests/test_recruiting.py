@@ -226,21 +226,35 @@ def test_talent_review_route_never_crashes_without_email_or_mail(ctx):
 # Project-scope email on signing — reported live: "when I sign the talent,
 # email blasts should go out... giving them a scope of what the project is."
 # --------------------------------------------------------------------------- #
-def test_compose_project_assignment_includes_client_role_budget_and_rate():
+def test_compose_project_assignment_includes_client_role_and_rate_not_budget():
     t = Talent(name="Ada Lin", disciplines=[MusicDiscipline.COMPOSITION],
                rate=1500, rate_unit="project")
     scope = recruiting.compose_project_assignment(
         t, role="Composer", client="Acme Corp", need="A 30s brand anthem",
-        budget_low=4000, budget_high=6000, deadline="2026-08-01",
+        deadline="2026-08-01",
     )
     body = scope["body"]
     assert "Acme Corp" in body
     assert "Composer" in body
     assert "A 30s brand anthem" in body
-    assert "$4,000" in body and "$6,000" in body
-    assert "2026-08-01" in body
+    # the creator sees THEIR rate, never the client's project budget (not tactful)
     assert "$1,500/project" in body
+    assert "Budget" not in body
+    assert "2026-08-01" in body
     assert "Acme Corp" in scope["subject"]
+
+
+def test_compose_client_assignment_update_is_warm_and_hides_the_rate():
+    scope = recruiting.compose_client_assignment_update(
+        role="Composer", creator_name="Ada Lin", need="A 30s brand anthem",
+        contact_name="Sam Rivera", workspace_url="https://chordential.com/workspace/tok",
+    )
+    body = scope["body"]
+    assert "Sam" in body                      # greets the client contact by first name
+    assert "Ada" in body and "Composer" in body
+    assert "A 30s brand anthem" in body
+    assert "/workspace/tok" in body           # points them at their workspace
+    assert "rate" not in body.lower() and "$" not in body   # never leaks cost
 
 
 def test_project_assign_route_emails_the_signed_creator(ctx, monkeypatch):

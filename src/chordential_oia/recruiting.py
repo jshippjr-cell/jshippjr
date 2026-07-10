@@ -131,21 +131,16 @@ def compose_review_decision(
 
 def compose_project_assignment(
     t, *, role: str, client: str, need: str,
-    budget_low: Optional[float] = None, budget_high: Optional[float] = None,
     deadline: str = "", from_name: str = "Jon",
 ) -> dict:
     """Sent the moment a creator is signed onto a project (the ONLY assign
     path — Jon's explicit decision), so they hear the scope from us before
     anything else. Rate reference comes from the creator's own standing
     rate; a fixed-scope/clean-rights terms line matches the recruiting
-    invite's promise."""
+    invite's promise. The project's BUDGET is never shown — a creator is
+    paid their own rate, and the client's budget isn't theirs to see."""
     name = _first_name(t.name)
     brief = (need or "this project").strip()
-    budget_line = ""
-    if budget_low or budget_high:
-        low, high = _money(budget_low), _money(budget_high)
-        band = f"{low}–{high}" if (low and high and low != high) else (low or high)
-        budget_line = f"\nBudget: {band}"
     deadline_line = f"\nDeadline: {deadline}" if deadline else ""
     rate_line = ""
     if t.rate:
@@ -157,10 +152,33 @@ def compose_project_assignment(
         f"Client: {client or 'Chordential'}\n"
         f"Role: {role}\n"
         f"Brief: {brief}"
-        f"{budget_line}{deadline_line}{rate_line}\n\n"
+        f"{deadline_line}{rate_line}\n\n"
         f"Original, cleared work, fixed scope, clean rights — same terms as always. "
         f"I'll follow up with anything else you need to get started.\n\n"
         f"— {from_name}, Chordential"
     )
     subject = f"You're signed on: {client or 'a new project'} ({role})"
+    return {"subject": subject, "body": body}
+
+
+def compose_client_assignment_update(
+    *, role: str, creator_name: str, need: str,
+    contact_name: str = "", workspace_url: str = "", from_name: str = "Jon",
+) -> dict:
+    """Client-facing update sent when a creator is signed onto their project — so the
+    buyer hears their team is coming together, from us, the moment it happens. Never
+    mentions the creator's rate or the internal cost; it's a warm status note, not a
+    back-office leak."""
+    greeting = f"Hi {_first_name(contact_name)}," if contact_name.strip() else "Hi there,"
+    brief = (need or "your project").strip()
+    creator = _first_name(creator_name) or "a specialist"
+    body = (
+        f"{greeting}\n\n"
+        f"Good news — {creator} is on board as the {role} for {brief}. Your team is "
+        f"coming together and the work is moving.\n\n"
+        f"You'll see everything — the brief, new versions as they land, and where to weigh "
+        f"in — in your workspace" + (f":\n{workspace_url}" if workspace_url else ".") + "\n\n"
+        f"— {from_name}, Chordential"
+    )
+    subject = f"Your {role} is on board — {brief}"
     return {"subject": subject, "body": body}

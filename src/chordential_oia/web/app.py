@@ -5234,7 +5234,6 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
         base = _public_base()
         scope = recruiting.compose_project_assignment(
             t, role=role, client=project["client"], need=project["need"],
-            budget_low=project["budget_min"], budget_high=project["budget_max"],
             deadline=project["deadline"] or "",
         )
         body = scope["body"]
@@ -5245,6 +5244,31 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
             t.email, scope["subject"], body,
             html=mailer.branded_html(base, body),
         )
+    # Update the CLIENT too — their team is coming together (reported live: assigning a
+    # creator should alert the client). Warm status note via the opportunity's contact;
+    # never the creator's rate. Best-effort, off the assign decision.
+    if project is not None and mailer.mail_configured() and project["opp_id"]:
+        conn2 = db.connect()
+        try:
+            opp = db.get_opportunity(conn2, project["opp_id"])
+            contact_email = (opp["contact_email"] if opp is not None
+                             and "contact_email" in opp.keys() else "") or ""
+            token = db.ensure_share_token(conn2, project["opp_id"]) if opp is not None else ""
+        finally:
+            conn2.close()
+        if contact_email:
+            base = _public_base()
+            upd = recruiting.compose_client_assignment_update(
+                role=role, creator_name=name, need=project["need"],
+                contact_name=(opp["contact_name"] if opp is not None
+                              and "contact_name" in opp.keys() else "") or "",
+                workspace_url=f"{base}/workspace/{token}" if token else "",
+            )
+            try:
+                mailer.send_email(contact_email, upd["subject"], upd["body"],
+                                  html=mailer.branded_html(base, upd["body"]))
+            except Exception:  # noqa: BLE001 — a client update never blocks the assign
+                pass
     # Broadcast the new assignment to the rest of the project crew (the new hire
     # already got the tailored scope email above, so they're excluded here).
     if project is not None:
