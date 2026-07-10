@@ -167,7 +167,7 @@
 <section class="mtg" id="discovery" data-arrive>
   <div class="mtg-tile">{{ '📞' if meeting['meeting_type'] == 'phone' else '🎥' }}</div>
   <div class="mtg-body">
-    <div class="mtg-kicker">Upcoming discovery</div>
+    <div class="mtg-kicker">Upcoming Discovery</div>
     <div class="mtg-when">
       {% if meeting['start_at'] %}<time data-utc-date="{{ meeting['start_at'] }}">{{ meeting['start_at'][:10] }}</time>{% else %}<span class="muted">Set a date</span>{% endif %}
       {% if meeting['start_at'] and meeting['start_at']|length > 11 %}<span class="mtg-at">at</span> <time data-utc-time="{{ meeting['start_at'] }}">{{ meeting['start_at'][11:16] }}</time>{% endif %}

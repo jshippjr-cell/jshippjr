@@ -88,7 +88,7 @@ def test_operator_schedule_creates_a_meeting_and_panel_appears_then_cancels(tmp_
                      "time": "14:00", "duration_min": "30", "client_email": "s@x.com"})
         page = c.get(f"/opportunity/{opp_id}").text
         assert "Upcoming Discovery" in page and "2026-07-10" in page
-        assert "Not connected" in page                    # honest notetaker state (no Recall)
+        assert "Notetaker off" in page                    # honest notetaker state (no Recall)
         conn = app_mod.db.connect()
         mid = app_mod.db.meeting_for_opp(conn, opp_id)["id"]; conn.close()
         c.post(f"/opportunity/{opp_id}/discovery/{mid}/cancel")
