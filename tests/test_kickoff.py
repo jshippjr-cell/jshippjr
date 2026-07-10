@@ -94,7 +94,15 @@ def test_approval_awards_project_and_enters_kickoff(tmp_path, monkeypatch):
         assert "Meet your team" in page.text
         assert "Creative direction approved" in page.text
         assert "Commercial terms approved" in page.text
-        # operator confirms Start Production → the workspace advances to Production
+        # the deposit gates production — until it's in, Start Production is a no-op
+        conn = app_mod.db.connect()
+        proj = app_mod.db.project_for_opp(conn, opp_id)
+        c.post(f"/opportunity/{opp_id}/start-production")
+        assert app_mod.db.project_for_opp(conn, opp_id)["kickoff_completed_at"] is None
+        # settle the deposit → Start Production now advances the workspace to Production
+        conn.execute("INSERT INTO invoices (project_id, kind, status, created_at) "
+                     "VALUES (?,?,?,?)", (proj["id"], "Deposit", "paid", "x"))
+        conn.commit(); conn.close()
         c.post(f"/opportunity/{opp_id}/start-production")
         after = c.get(f"/workspace/{token}")
         assert "Production" in after.text and "Production checklist" not in after.text

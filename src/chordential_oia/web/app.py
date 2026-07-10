@@ -2030,6 +2030,13 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
                  else None) is None
             and db.current_commercial_review(conn, opp_id) is not None
             and db.current_commercial_review(conn, opp_id)["status"] == "approved")
+        # The deposit gates Start Production — surfaced so the button reads honestly
+        # (offer it only once the deposit has cleared).
+        deposit_paid = False
+        if project is not None:
+            _d = next((i for i in db.list_invoices(conn, project["id"])
+                       if (i["kind"] or "") == "Deposit"), None)
+            deposit_paid = _d is not None and (_d["status"] or "").lower() in ("paid", "settled")
         # Open Meeting Proposals — times offered, awaiting the client's pick (or unsent drafts).
         open_proposals = [p for p in db.list_meeting_proposals(conn, opp_id)
                           if p["status"] in ("draft", "sent")]
@@ -2061,7 +2068,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
-        kickoff_pending=kickoff_pending, next_act=next_act,
+        kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
     )
 
 
@@ -2760,6 +2767,17 @@ def client_workspace(request: Request, token: str):
             return HTMLResponse("Not found", status_code=404)
         project = db.project_for_opp(conn, opp["id"])
         phase = workspace.compute_phase(_workspace_signals(conn, opp, project))
+        # Deposit status, computed once up front. The deposit is due the moment the client
+        # approves the Commercial Review (that's when the project + its Deposit invoice exist),
+        # and it GATES Kickoff: production readiness stays locked until the deposit is in
+        # (reported live: "as they approve, that should be the time to pay the deposit … the
+        # deposit needs to be completed to initiate kickoff").
+        _dep_prop = db.proposal_for_project(conn, project["id"]) if project is not None else None
+        _dep_inv = (next((i for i in db.list_invoices(conn, project["id"])
+                          if (i["kind"] or "") == "Deposit"), None)
+                    if project is not None else None)
+        deposit_paid = (_dep_inv is not None
+                        and (_dep_inv["status"] or "").lower() in ("paid", "settled"))
         # The Campaign Brief folds INLINE into the workspace (ADR-0018) — one URL, no jump.
         # Other phases still link to their existing surface until they're folded in turn
         # (intro/discovery → scheduling; production/delivery → the portal, folded in P5).
@@ -2783,7 +2801,9 @@ def client_workspace(request: Request, token: str):
             else:
                 preparing = True
         elif phase == workspace.KICKOFF:
-            # The Production Readiness Workspace — the concierge handoff.
+            # The Production Readiness Workspace — the concierge handoff. The deposit is the
+            # first readiness gate here ("Send your deposit"); production doesn't start until
+            # it's in (enforced on the operator's Start Production action).
             cr = db.current_commercial_review(conn, opp["id"])
             ci_view, _met = _brief_ci_context(conn, opp)
             readiness = kickoff.build_readiness(conn, db, opp, project, cr, ci_view=ci_view)
@@ -2812,13 +2832,9 @@ def client_workspace(request: Request, token: str):
         # token-gated /pay route authorizes it.
         deposit_pay = None
         if project is not None:
-            prop = db.proposal_for_project(conn, project["id"])
-            dep = next((i for i in db.list_invoices(conn, project["id"])
-                        if (i["kind"] or "") == "Deposit"), None)
-            dep_paid = dep is not None and (dep["status"] or "").lower() in ("paid", "settled")
-            dep_amount = (dep["amount"] if dep is not None
-                          else (prop["deposit_amount"] if prop is not None else 0)) or 0
-            if prop is not None and dep_amount and not dep_paid:
+            dep_amount = (_dep_inv["amount"] if _dep_inv is not None
+                          else (_dep_prop["deposit_amount"] if _dep_prop is not None else 0)) or 0
+            if _dep_prop is not None and dep_amount and not deposit_paid:
                 deposit_pay = {"amount": dep_amount, "pid": project["id"],
                                "ptok": db.ensure_project_share_token(conn, project["id"])}
     finally:
@@ -2888,10 +2904,13 @@ def _build_review_for_opp(conn, opp_id, version=1):
 
 @app.post("/opportunity/{opp_id}/commercial/edit")
 def commercial_edit(opp_id: int, fee_low: str = Form(""), fee_high: str = Form(""),
-                    deposit_pct: str = Form("")):
-    """Operator edits the Commercial Review before releasing it — the price band and deposit
-    %. Stored in the ``commercial`` override blob and consumed on every render, so the number
-    on the page is the number the client approves. Cleared with empty fields."""
+                    deposit_pct: str = Form(""), scope_summary: str = Form(""),
+                    timeline: str = Form(""), revision_rounds: str = Form("")):
+    """Operator edits the Commercial Review before releasing it — the whole agreement, not
+    just the price: scope summary, delivery deadline (timeline), revision rounds, the price
+    band and the deposit %. Stored in the ``commercial`` override blob and consumed on every
+    render, so what's on the page is exactly what the client approves. An empty field snaps
+    that value back to the Campaign-Intelligence-derived default."""
     conn = db.connect()
     try:
         ov = dict(db.get_doc_overrides(conn, opp_id).get("commercial") or {})
@@ -2903,6 +2922,13 @@ def commercial_edit(opp_id: int, fee_low: str = Form(""), fee_high: str = Form("
         pct = _parse_rate(deposit_pct)
         if pct is not None:
             ov["deposit_pct"] = max(0.0, min(100.0, pct)) / 100.0
+        # Free-text agreement fields: set when provided, cleared (→ CI default) when blank.
+        for key, val in (("scope_summary", scope_summary), ("timeline", timeline),
+                         ("revision_rounds", revision_rounds)):
+            if val.strip():
+                ov[key] = val.strip()
+            else:
+                ov.pop(key, None)
         db.update_doc_override(conn, opp_id, "commercial", ov)
     finally:
         conn.close()
@@ -2921,10 +2947,12 @@ def commercial_preview(request: Request, opp_id: int):
             return HTMLResponse("Opportunity not found", status_code=404)
         current = db.current_commercial_review(conn, opp_id)
         token = db.ensure_share_token(conn, opp_id)
+        rev_ov = (db.get_doc_overrides(conn, opp_id).get("commercial") or {}).get("revision_rounds")
     finally:
         conn.close()
     return render(request, "commercial_preview.html", nav="inbox", row=row, review=review,
-                  current=current, token=token, released_badge="Preview")
+                  current=current, token=token, released_badge="Preview",
+                  revision_rounds=(rev_ov or ""))
 
 
 @app.post("/opportunity/{opp_id}/commercial/release")
@@ -2977,6 +3005,13 @@ def start_production(opp_id: int):
         project = db.project_for_opp(conn, opp_id)
         if project is None:
             return HTMLResponse("No project yet", status_code=404)
+        # Deposit gates production start (reported live: "the deposit needs to be completed
+        # to initiate kickoff"). Until the deposit invoice is paid, we don't stamp the gate —
+        # the operator is bounced back with a reason so nothing kicks off unpaid.
+        dep = next((i for i in db.list_invoices(conn, project["id"])
+                    if (i["kind"] or "") == "Deposit"), None)
+        if dep is None or (dep["status"] or "").lower() not in ("paid", "settled"):
+            return RedirectResponse(f"/opportunity/{opp_id}?err=deposit_unpaid", status_code=303)
         conn.execute("UPDATE projects SET kickoff_completed_at = ? WHERE id = ?",
                      (datetime.now(timezone.utc).isoformat(), project["id"]))
         conn.commit()

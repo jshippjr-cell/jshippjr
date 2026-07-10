@@ -30,20 +30,29 @@
     <span class="muted small">Generated from Campaign Intelligence — pricing follows the discovered budget. Releasing <b>freezes</b> this version — the client approves exactly what's shown here.</span>
   </div>
 
-  {# Operator edit before release — the price band + deposit. Everything else regenerates
-     from Campaign Intelligence; edit the source there and it flows here (ADR-0020). #}
+  {# Operator edit before release — the whole agreement, not just price. Deliverables come
+     from the brief (edit them there); scope, deadline, revisions, price + deposit are here.
+     A blank field snaps back to the Campaign-Intelligence default (ADR-0020). #}
   <details class="cr-edit" style="margin:0 0 18px">
-    <summary style="cursor:pointer;font-weight:600;color:var(--accent,#c8552b);font-size:13.5px">✎ Adjust the investment before releasing</summary>
+    <summary style="cursor:pointer;font-weight:600;color:var(--accent,#c8552b);font-size:13.5px">✎ Edit this agreement before releasing</summary>
     <form method="post" action="/opportunity/{{ row['id'] }}/commercial/edit"
-          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px">
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — low
-        <input type="text" name="fee_low" value="{{ review.fee_low or '' }}" placeholder="e.g. 28000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — high
-        <input type="text" name="fee_high" value="{{ review.fee_high or '' }}" placeholder="e.g. 32000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Deposit %
-        <input type="text" name="deposit_pct" value="{{ (review.deposit_pct * 100)|round|int }}" style="width:90px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
-      <button class="btn tiny primary" type="submit">Save</button>
-      <span class="muted small">Leave the fees blank to snap back to the discovered budget.</span>
+          style="margin-top:12px;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580);margin-bottom:3px">Scope summary
+        <textarea name="scope_summary" rows="2" placeholder="What we're delivering and why — in your words" style="display:block;width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;margin-top:3px">{{ review.scope_summary or '' }}</textarea></label>
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580);margin:12px 0 3px">Delivery deadline / timeline
+        <input type="text" name="timeline" value="{{ review.timeline or '' }}" placeholder="e.g. Final delivery by Nov 14, 2026" style="display:block;width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;margin-top:3px"></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — low
+          <input type="text" name="fee_low" value="{{ review.fee_low or '' }}" placeholder="e.g. 28000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — high
+          <input type="text" name="fee_high" value="{{ review.fee_high or '' }}" placeholder="e.g. 32000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Deposit %
+          <input type="text" name="deposit_pct" value="{{ (review.deposit_pct * 100)|round|int }}" style="width:78px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Revision rounds
+          <input type="text" name="revision_rounds" value="{{ revision_rounds or '' }}" placeholder="2" style="width:78px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
+        <button class="btn tiny primary" type="submit">Save</button>
+      </div>
+      <span class="muted small" style="display:block;margin-top:8px">Any field left blank snaps back to what discovery captured. Deliverables live in the <a class="link" href="/opportunity/{{ row['id'] }}/capabilities?edit=1">brief</a>.</span>
     </form>
   </details>
 

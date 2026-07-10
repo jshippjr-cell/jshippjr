@@ -148,6 +148,14 @@ def build_commercial_review(
     ci_fields = dict(ci_view.get("fields") or {})
     overrides = overrides or {}
 
+    # Operator edits before release win over the CI-derived values — the client approves
+    # exactly what's on the page. An edited delivery deadline flows into the schedule + the
+    # timeline term (reported live: "there's no actual deadline in the commercial review").
+    if (overrides.get("timeline") or "").strip():
+        ci_fields["deadline"] = overrides["timeline"].strip()
+    if (overrides.get("revision_rounds") or "").strip():
+        ci_fields["revision_rounds"] = overrides["revision_rounds"].strip()
+
     # Deliverables + the commercial close come from the SAME brief builder the client already
     # saw — single source, so the Review never disagrees with the Brief.
     toggles = default_toggles(getattr(opp, "status", "") or "Submitted")
@@ -170,7 +178,8 @@ def build_commercial_review(
     total_mid = int(round((fee_low + fee_high) / 2)) if (fee_low and fee_high) else 0
     balance_amount = max(0, total_mid - deposit_amount) if total_mid else 0
 
-    scope_summary = (ci_fields.get("campaign_objective")
+    scope_summary = ((overrides.get("scope_summary") or "").strip()
+                     or ci_fields.get("campaign_objective")
                      or ci_fields.get("business_objective")
                      or doc.understanding or (opp.need or ""))
     rounds = _revision_rounds(ci_fields)

@@ -4,6 +4,13 @@
 {% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
 {% block content %}
 
+{% if request.query_params.get('err') == 'deposit_unpaid' %}
+<div class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;margin-bottom:14px">
+  <span class="callout-ico">⏳</span> Production can't start yet — the client's <strong>deposit hasn't cleared</strong>.
+  They can pay it from their workspace; the moment it lands, Start production unlocks.
+</div>
+{% endif %}
+
 <div class="opp-hero" data-arrive>
   <div class="opp-hero-main">
     <div class="pill-row">
@@ -50,9 +57,13 @@
         {% if row['url'] %}<a href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}
         {% if project_id %}<a href="/project/{{ project_id }}">⚙ Open project</a>{% endif %}
         {% if kickoff_pending %}
+        {% if deposit_paid %}
         <form method="post" action="/opportunity/{{ row['id'] }}/start-production" style="margin:0">
-          <button type="submit" title="The client approved — confirm the handoff to begin Production.">🚀 Start production</button>
+          <button type="submit" title="Deposit's in and the client approved — confirm the handoff to begin Production.">🚀 Start production</button>
         </form>
+        {% else %}
+        <span title="Production starts once the client's deposit clears" style="opacity:.55;cursor:not-allowed;padding:8px 12px;display:block">⏳ Start production — awaiting deposit</span>
+        {% endif %}
         {% endif %}
         <form method="post" action="/opportunity/{{ row['id'] }}/delete" style="margin:0"
               onsubmit="return confirm('Delete “{{ row['need']|e }}” ({{ row['client']|e }})?\n\nThis permanently removes the deal and everything attached to it — intelligence, meetings, the project, and its workspace. This cannot be undone.');">

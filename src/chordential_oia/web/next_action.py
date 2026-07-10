@@ -101,8 +101,17 @@ def compute(conn, db, opp, project) -> dict:
                     "detail": "One decision — the portal, the scope email and the brief all "
                               "send themselves.",
                     "url": f"/project/{pid}", "post": False, "since": ""}
+        # The deposit gates production start — before it lands, the move is the client's
+        # (pay the deposit), not the operator's. Once it's in, Start Production unlocks.
+        dep = next((i for i in db.list_invoices(conn, pid)
+                    if (i["kind"] or "") == "Deposit"), None)
+        dep_paid = dep is not None and (dep["status"] or "").lower() in ("paid", "settled")
+        if not dep_paid:
+            return {"court": "client", "label": "Waiting: client's deposit to start",
+                    "detail": "Team's assigned — production begins the moment the deposit clears.",
+                    "url": f"/opportunity/{opp_id}", "post": False, "since": ""}
         return {"court": "you", "label": "Start production",
-                "detail": "Team's assigned and the client is in Kickoff — open the studio.",
+                "detail": "Deposit's in and the team's assigned — open the studio.",
                 "url": f"/opportunity/{opp_id}/start-production", "post": True, "since": ""}
 
     delivery = db.get_delivery(conn, pid)

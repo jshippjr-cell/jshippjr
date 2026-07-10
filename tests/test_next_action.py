@@ -102,6 +102,14 @@ def test_next_action_walks_the_whole_ladder(tmp_path, monkeypatch):
         for r_ in roles[1:]:
             app_mod.db.add_assignment(conn, pid, r_, tid["id"])
         conn.close()
+        # team assigned, but the deposit gates production → the ball is in the client's court
+        a = _next(app_mod, oid)
+        assert a["court"] == "client" and "deposit" in a["label"].lower()
+        # settle the deposit → now it's the operator's move to Start production
+        conn = app_mod.db.connect()
+        conn.execute("INSERT INTO invoices (project_id, kind, status, created_at) "
+                     "VALUES (?,?,?,?)", (pid, "Deposit", "paid", "x"))
+        conn.commit(); conn.close()
         a = _next(app_mod, oid)
         assert a["court"] == "you" and a["label"] == "Start production" and a["post"]
 
