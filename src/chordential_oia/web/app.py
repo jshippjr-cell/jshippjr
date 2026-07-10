@@ -1316,6 +1316,20 @@ def dashboard(request: Request):
         dr_new = conn.execute(
             "SELECT COUNT(*) AS n FROM discovery_requests WHERE status='new'"
         ).fetchone()["n"]
+        # New creators who came in through the public funnel (applied or were referred)
+        # and are still waiting at the reel-review gate — a decision only Jon can make
+        # (approve → they become matchable). Reported live: "I get no notification when
+        # a composer applies — not on the dashboard nor on my phone." The phone push
+        # fires from /apply; this is the durable in-app surface that needs no push setup.
+        new_applicants = [
+            {"id": r["id"], "name": r["name"], "source": r["source"] or "applicant",
+             "at": r["created_at"] or ""}
+            for r in conn.execute(
+                "SELECT id, name, source, created_at FROM talent "
+                "WHERE review_status = 'Pending' AND source IN ('applicant', 'referral') "
+                "ORDER BY created_at DESC, id DESC LIMIT 50"
+            ).fetchall()
+        ]
         # Composer submissions waiting at the taste gate — a creator has uploaded a version
         # and it's on Jon to review + publish (or send back) before the client sees it.
         pending_reviews = []
@@ -1365,7 +1379,8 @@ def dashboard(request: Request):
                                   "court": na["court"],
                                   "url": na.get("url") or f"/opportunity/{r['id']}"})
         waiting_count = (len(followups) + incoming_total + dr_new
-                         + len(pending_reviews) + len(operator_moves))
+                         + len(pending_reviews) + len(operator_moves)
+                         + len(new_applicants))
         if operator_moves and not pending_reviews:
             m0 = operator_moves[0]
             _featured_move = {"kind": "Your move", "title": f"{m0['label']} — {m0['campaign']}",
@@ -1394,6 +1409,11 @@ def dashboard(request: Request):
         elif dr_new:
             featured = {"kind": "Discovery requested", "title": "A client asked for a call",
                         "sub": "pick a time", "href": "/inbox", "cta": "Schedule →"}
+        elif new_applicants:
+            a0 = new_applicants[0]
+            featured = {"kind": "New creator applied", "title": a0["name"],
+                        "sub": "review their reel — approve to make them matchable",
+                        "href": f"/talent/{a0['id']}", "cta": "Review →"}
         # "Machine running" — ONLY real recorded events with real timestamps
         # (council ruling: no invented feed lines).
         def _feed(sql, icon, fmt):
@@ -1426,7 +1446,7 @@ def dashboard(request: Request):
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,
         waiting_count=waiting_count, featured=featured, machine_feed=machine_feed,
         pending_reviews=pending_reviews, operator_moves=operator_moves,
-        in_flight=in_flight,
+        in_flight=in_flight, new_applicants=new_applicants,
     )
 
 
@@ -5014,6 +5034,22 @@ def create_project(opp_id: int):
     return RedirectResponse(f"/project/{pid}", status_code=303)
 
 
+# Scoped role name → the craft (MusicDiscipline) that qualifies a creator for it.
+# Drives per-role candidate lists so the Composer slot lists composers, the Mixer
+# slot lists mixers, etc. — instead of one opp-discipline list shown under every role.
+_ROLE_DISCIPLINE = {
+    "composer": MusicDiscipline.COMPOSITION,
+    "music editor": MusicDiscipline.COMPOSITION,
+    "arranger": MusicDiscipline.ARRANGEMENT,
+    "orchestrator": MusicDiscipline.ARRANGEMENT,
+    "sound designer": MusicDiscipline.SOUND_DESIGN,
+    "mixer": MusicDiscipline.MIXING,
+    "mix engineer": MusicDiscipline.MIXING,
+    "mastering": MusicDiscipline.MIXING,
+    "music supervisor": MusicDiscipline.SUPERVISION,
+}
+
+
 def _project_view(conn, project_id: int):
     """Assemble a project with its roles, current assignments, and ranked candidates."""
     row = db.get_project(conn, project_id)
@@ -5026,20 +5062,33 @@ def _project_view(conn, project_id: int):
         by_role.setdefault(a["role"], []).append(a)
 
     # Ranked candidates come from the linked opportunity's discipline (the matcher).
+    talent_pool = db.load_talent(conn)
     matches = []
+    need_text = ""
     if row["opp_id"] is not None:
         opp_row = db.get_opportunity(conn, row["opp_id"])
         if opp_row is not None:
             opp = db.opportunity_from_row(opp_row)
             qual, scored = evaluate(opp)
+            need_text = f"{opp.need} {opp.description}"
             matches = match_talent(
-                qual.discipline, qual.secondary_disciplines,
-                f"{opp.need} {opp.description}", db.load_talent(conn),
+                qual.discipline, qual.secondary_disciplines, need_text, talent_pool,
             )
+    # Per-role candidates: each scoped role lists the approved creators whose craft fits
+    # THAT role (Composer→composition, Mixer→mixing, …), ranked by fit — not the single
+    # opp-discipline list shown identically under every role. Reported live: "I'm not
+    # getting a full list of matchable composers to match to a project."
+    matches_by_role = {}
+    for role in roles:
+        disc = _ROLE_DISCIPLINE.get((role or "").strip().lower())
+        matches_by_role[role] = (
+            match_talent(disc, [], need_text, talent_pool) if disc is not None else matches
+        )
     milestones = db.list_milestones(conn, project_id)
     progress = db.milestone_progress(conn, project_id)
     return {
         "row": row, "roles": roles, "by_role": by_role, "matches": matches,
+        "matches_by_role": matches_by_role,
         "milestones": milestones, "progress": progress,
         "updates": db.list_updates(conn, project_id),
         "crew": db.project_crew(conn, project_id),

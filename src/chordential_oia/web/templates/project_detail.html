@@ -77,19 +77,20 @@
           </form>
         </div>
         {% endfor %}
-        {% if matches %}
+        {% set role_matches = matches_by_role.get(role, matches) %}
+        {% if role_matches %}
         <form method="post" action="/project/{{ row['id'] }}/assign" class="assign-form">
           <input type="hidden" name="role" value="{{ role }}">
           <select name="talent_id" required>
             <option value="" disabled selected>Choose a matched creator…</option>
-            {% for m in matches %}
+            {% for m in role_matches %}
             <option value="{{ m.talent.id }}">{{ m.talent.name }} — fit {{ m.score }}</option>
             {% endfor %}
           </select>
           <button class="btn primary" type="submit">Assign</button>
         </form>
         {% else %}
-        <p class="muted small">No matchable creators yet — approve reels on the <a class="link" href="/talent">Talent Roster</a>.</p>
+        <p class="muted small">No matchable {{ role|lower }} yet — approve reels on the <a class="link" href="/talent">Talent Roster</a>.</p>
         {% endif %}
       </div>
       {% endfor %}

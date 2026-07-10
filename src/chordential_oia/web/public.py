@@ -440,4 +440,8 @@ def public_refer_submit(
         db.insert_talent(conn, t)
     finally:
         conn.close()
+    # Best-effort phone push (mirrors /apply) — a referral enters the same review gate.
+    from . import signals
+    label = f"{t.name} (referred{f' by {by}' if by else ''})"
+    signals.fire_and_forget(signals.notify_new_talent_application, label)
     return RedirectResponse("/thanks?kind=refer", status_code=303)

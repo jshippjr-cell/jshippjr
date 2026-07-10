@@ -70,6 +70,24 @@
 </section>
 {% endif %}
 
+{% if new_applicants %}
+<section class="card urgent" id="new-applicants">
+  <div class="card-head"><h2>🎤 New creators to review <span class="muted">— they applied through the site; approve the reel to make them matchable</span></h2></div>
+  <table class="table compact">
+    <thead><tr><th>Creator</th><th>Came in via</th><th></th></tr></thead>
+    <tbody>
+      {% for a in new_applicants %}
+      <tr>
+        <td><a class="strong" href="/talent/{{ a.id }}">{{ a.name }}</a></td>
+        <td class="muted">{{ 'Referral' if a.source == 'referral' else 'Applied' }}</td>
+        <td><a class="btn tiny primary" href="/talent/{{ a.id }}">Review reel →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if followups %}
 <section class="card urgent" id="followups">
   <div class="card-head"><h2>⏰ Follow-ups due <span class="muted">— outreach the pipeline is waiting on</span></h2></div>
