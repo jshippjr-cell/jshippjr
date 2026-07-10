@@ -1357,7 +1357,7 @@ def dashboard(request: Request):
                 if na["court"] == "you" and na.get("url") and not pv:
                     operator_moves.append({"campaign": opprow["need"], "client": opprow["client"],
                                            "label": na["label"], "detail": na.get("detail", ""),
-                                           "url": na["url"]})
+                                           "url": na["url"], "post": na.get("post", False)})
                 elif na["court"] in ("client", "team", "scheduled"):
                     in_flight.append({"campaign": opprow["need"], "client": opprow["client"],
                                       "label": na["label"], "detail": na.get("detail", ""),
@@ -1372,7 +1372,7 @@ def dashboard(request: Request):
             if na["court"] == "you" and na.get("url"):
                 operator_moves.append({"campaign": r["need"], "client": r["client"],
                                        "label": na["label"], "detail": na.get("detail", ""),
-                                       "url": na["url"]})
+                                       "url": na["url"], "post": na.get("post", False)})
             elif na["court"] in ("client", "team", "scheduled"):
                 in_flight.append({"campaign": r["need"], "client": r["client"],
                                   "label": na["label"], "detail": na.get("detail", ""),
@@ -1385,7 +1385,7 @@ def dashboard(request: Request):
             m0 = operator_moves[0]
             _featured_move = {"kind": "Your move", "title": f"{m0['label']} — {m0['campaign']}",
                               "sub": m0["detail"] or m0["client"], "href": m0["url"],
-                              "cta": "Go →"}
+                              "cta": "Go →", "post": m0.get("post", False)}
         else:
             _featured_move = None
         featured = None

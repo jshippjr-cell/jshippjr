@@ -43,7 +43,7 @@
         <td class="strong">{{ m.label }}</td>
         <td>{{ m.campaign }}</td>
         <td class="muted">{{ m.client }}</td>
-        <td><a class="btn tiny primary" href="{{ m.url }}">Go →</a></td>
+        <td>{% if m.post %}<form method="post" action="{{ m.url }}" style="margin:0"><button class="btn tiny primary" type="submit">Go →</button></form>{% else %}<a class="btn tiny primary" href="{{ m.url }}">Go →</a>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -128,7 +128,13 @@
       <div class="mc-kind">{{ featured.kind }}</div>
       <div class="mc-title">{{ featured.title }}</div>
       <div class="mc-fsub">{{ featured.sub }}</div>
+      {% if featured.post %}
+      <form method="post" action="{{ featured.href }}" style="margin:0">
+        <button class="btn-live" type="submit">{{ featured.cta }} <span class="live-dot"></span></button>
+      </form>
+      {% else %}
       <a class="btn-live" href="{{ featured.href }}">{{ featured.cta }} <span class="live-dot"></span></a>
+      {% endif %}
       {% elif in_flight %}
       <div class="mc-kind">In flight</div>
       <div class="mc-title">Nothing needs you — {{ in_flight|length }} campaign{{ 's' if in_flight|length != 1 }} moving.</div>
