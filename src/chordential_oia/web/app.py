@@ -2075,7 +2075,18 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
         kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
+        engine_enabled=_extraction_engine_enabled(),
     )
+
+
+def _extraction_engine_enabled() -> bool:
+    """Whether an Analyze runs the paid AI engine (vs the free deterministic baseline) —
+    surfaced on the button so the operator always knows when a click spends API credit."""
+    try:
+        from ..extraction import providers as _ep
+        return _ep.is_enabled()
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # --------------------------------------------------------------------------- #

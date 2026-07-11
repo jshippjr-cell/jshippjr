@@ -297,6 +297,17 @@
       <span class="ci-file">Or attach a file (voice memo, .txt transcript, RFP) — <input type="file" name="file"></span>
       <button class="btn primary" type="submit">✨ Analyze &amp; update</button>
     </div>
+    {# Honest cost signal: an Analyze that runs the AI engine spends Anthropic API credit
+       (~$0.30–0.50 per conversation). No key/credit → it's the free deterministic pass. #}
+    <p class="ci-cost muted small" style="margin:6px 0 0">
+      {% if engine_enabled %}
+      💳 Runs the 10-agent AI engine — <b>uses Anthropic API credit</b> (~$0.30–0.50 per
+      conversation). One pass per new source is plenty; re-analyzing charges again.
+      {% else %}
+      Free deterministic pass (keyword extraction). The AI engine is off — turn it on with
+      Anthropic API credit for the full read.
+      {% endif %}
+    </p>
   </form>
   </details>
 
