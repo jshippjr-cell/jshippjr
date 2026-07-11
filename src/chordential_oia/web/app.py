@@ -2448,8 +2448,11 @@ def _extraction_error_remedy(err: str) -> str:
     if not low:
         return ""
     if "credit" in low or "billing" in low or "quota" in low or "insufficient" in low:
-        return ("Your Anthropic account is out of credit — add credits or set up billing in "
-                "the Anthropic Console (Plans & Billing). No redeploy needed; just re-analyze.")
+        return ("The Anthropic API key has no API credit. Note: a Claude Max/Pro plan "
+                "(claude.ai) is SEPARATE from API billing and does NOT fund the API — buy "
+                "prepaid API credits at console.anthropic.com → Billing (a few dollars is "
+                "plenty; each extraction costs cents), and confirm the key belongs to that "
+                "same workspace and its spend limit isn't $0. No redeploy — just re-analyze.")
     if "not_found" in low or "not found" in low or "model" in low and "404" in low:
         return ("That model id isn't available to your key — set "
                 "CHORDENTIAL_EXTRACTION_MODEL to one it can call, then re-analyze.")

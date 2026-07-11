@@ -342,8 +342,10 @@ def test_model_failure_surfaces_the_reason_not_a_silent_fallback(webctx, monkeyp
     with TestClient(app_mod.app) as c:
         page = c.get(f"/opportunity/{opp_id}/evidence").text
     assert "engine error" in page and "credit balance is too low" in page
-    # the REMEDY is the precise one for THIS error — billing, not the model knob
-    assert "out of credit" in page and "Plans &amp; Billing" in page
+    # the REMEDY is the precise one for THIS error — API billing, and it names the
+    # Max/Pro-vs-API distinction (the actual confusion), not the model knob
+    assert "console.anthropic.com" in page
+    assert "SEPARATE from API billing" in page
     assert "CHORDENTIAL_EXTRACTION_MODEL" not in page      # would mislead for a billing error
 
 
