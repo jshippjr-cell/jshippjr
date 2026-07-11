@@ -342,7 +342,25 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
         priors = producer_learning.priors_summary(conn)
     except Exception:  # noqa: BLE001 — learning is advisory; never block capture
         priors = ""
+    # ADR-0023: when the orchestrated extraction engine is enabled, it becomes the seam —
+    # ten specialists + validation + recall over EVERY available artifact. An explicitly
+    # injected llm (tests/callers) still wins; with the engine off this is None and the
+    # single-prompt seam / deterministic heuristics run exactly as before.
+    if llm is None:
+        try:
+            from . import extraction_bridge
+            llm = extraction_bridge.for_capture(
+                conn, ci_id=ci_id, opp_id=opp_id, campaign_id=campaign_id,
+                lane=lane, metadata=metadata)
+        except Exception:  # noqa: BLE001 — the engine is an upgrade, never a gate
+            llm = None
     candidates = extract(text, stance, llm=llm, priors=priors)
+    # Preserve the engine's structured run report on the capture envelope (evidence of
+    # HOW the extraction ran: workers, timings, recall rounds, conflicts).
+    run_report = getattr(llm, "report", None)
+    if run_report:
+        metadata = dict(metadata or {})
+        metadata["extraction_run"] = run_report
     cap_id = db.insert_capture(
         conn, ci_id=ci_id, campaign_id=campaign_id, opp_id=opp_id, lane=lane.key,
         stance=stance, modality=lane.modality, provenance_source=source, raw_text=text,
@@ -352,7 +370,7 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
         ci.contribute(conn, ci_id, c["facet"], c["key"], c["value"],
                       kind=c["kind"], source=source, contributed_by=created_by,
                       confidence=c.get("confidence"), is_concern=c.get("is_concern", False),
-                      capture_id=cap_id)
+                      value_json=c.get("value_json"), capture_id=cap_id)
     added_questions = []
     for facet, key, question in gaps(conn, ci_id):
         ci.contribute(conn, ci_id, facet, f"ask_{key}", question,

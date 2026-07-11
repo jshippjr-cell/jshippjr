@@ -77,6 +77,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   + `CHORDENTIAL_SMTP_*` (HOST/FROM required). Both no-op until set.
 - Others: `CHORDENTIAL_UPLOAD_DIR`, `CHORDENTIAL_ENABLE_SCRAPE`, `CHORDENTIAL_VAPID_*`,
   `CHORDENTIAL_NTFY_TOPIC`, `CHORDENTIAL_DISCOVERY_CALL_URL`.
+- **Extraction engine (ADR-0023):** with `ANTHROPIC_API_KEY` set, intake captures run the
+  orchestrated 10-worker extraction (`src/chordential_oia/extraction/`) — kill switch
+  `CHORDENTIAL_EXTRACTION_ENGINE=0`; dials `CHORDENTIAL_EXTRACTION_MODEL`,
+  `CHORDENTIAL_EXTRACTION_RECALL_ROUNDS`, `CHORDENTIAL_EXTRACTION_WORKERS`. No key →
+  deterministic heuristics, unchanged.
 
 ## Patterns to reuse (don't reinvent)
 - **Per-record JSON state blobs:** `opportunities.doc_overrides` and `projects.delivery_json`

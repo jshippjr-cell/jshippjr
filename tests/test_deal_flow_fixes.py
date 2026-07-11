@@ -49,7 +49,9 @@ def test_commercial_price_is_editable(tmp_path, monkeypatch):
     oid = _opp(app_mod, conn, "$30,000"); conn.close()
     with TestClient(app_mod.app) as c:
         page = c.get(f"/opportunity/{oid}/commercial").text
-        assert "Adjust the investment before releasing" in page
+        # The edit affordance grew from price-only to the whole agreement (walkthrough:
+        # "everything needs to be editable before release, not just the price").
+        assert "Edit this agreement before releasing" in page
         c.post(f"/opportunity/{oid}/commercial/edit",
                data={"fee_low": "40000", "fee_high": "48000", "deposit_pct": "40"})
     conn = app_mod.db.connect()

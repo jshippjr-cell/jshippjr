@@ -455,6 +455,45 @@ document generation only.
 
 ---
 
+### ADR-0023 — The Campaign Intelligence Extraction Engine: an orchestrated specialist crew, not one prompt
+**Status:** Accepted (2026-07-11, operator directive) · Source: `src/chordential_oia/extraction/`, `web/extraction_bridge.py`, docs/architecture/EXTRACTION_ENGINE.md · Builds on ADR-0013/0014/0021
+**Decision.** Extraction into Campaign Intelligence is an ORCHESTRATED SYSTEM, not one
+prompt: ten independent domain specialists (budget, timeline, deliverables, stakeholders,
+creative, campaign, rights, technical, opportunity, risk) each read EVERY available
+artifact (transcript, notes, metadata, RFP, brief, opportunity + relationship intel,
+prior captures) and extract only their domain, in parallel; a deterministic validation
+pass dedupes, surfaces conflicts as flagged `confirm_*` open_questions (ambiguity
+preserved as `value_json.alternates`, never guessed away), and drops impossible values; a
+Recall Auditor re-reads the artifacts against the full inventory ("what was missed?") in
+a bounded loop until dry; a deterministic merge folds everything — evidence, speakers,
+timestamps, source artifacts, corroboration — into the EXACT candidate shape intake
+already writes. The board is never redesigned: every fact enters through
+`campaign_intelligence.contribute` via the capture envelope, steered onto the existing
+canonical keys, landing OPEN for the human gate; per-fact evidence rides in `value_json`;
+the structured run report is preserved on the capture (`metadata.extraction_run`). The
+engine package is PURE (no DB/web imports); `web/extraction_bridge.py` is the impure
+edge; `campaign_intake._apply_capture`'s existing LLM seam is the single integration
+point. Null provider → the engine steps aside entirely (single-prompt seam, then
+deterministic heuristics — regression-pinned). The Producer Debrief lane is excluded by
+design: it is subjective, kinds-only (§2bis); fact-hunters would launder interpretation
+into fact. The engine never writes downstream documents.
+**Why.** Every downstream module (brief, proposal, estimate, cue sheet, rights, timeline,
+CRM) reads only the board, so extraction RECALL is the ceiling on the whole OS — a missed
+budget/rights/deadline fact costs more than the ~10× token multiple of specialist
+fan-out. One generalist prompt plateaus; specialists with a domain fence, an adversarial
+recall pass, and deterministic (testable, free, honest) validation/merge maximize what
+reaches the board while the human disposition gate keeps it safe.
+**Consequences.** New domains = append one `WorkerSpec`; new artifact sources = one block
+in the bridge. Validation/merge stay deterministic — any future LLM adjudicator must be
+proposal-only. Env: `CHORDENTIAL_EXTRACTION_ENGINE` (kill switch),
+`CHORDENTIAL_EXTRACTION_MODEL`, `CHORDENTIAL_EXTRACTION_RECALL_ROUNDS`,
+`CHORDENTIAL_EXTRACTION_WORKERS`; honors `CHORDENTIAL_INTAKE_LLM=0` and requires
+`ANTHROPIC_API_KEY`. Cost guards: bounded artifact bundle, bounded recall, pool-capped
+parallelism. Never block a capture: provider/worker/recall failures degrade to the
+existing extractors and are recorded in the run report.
+
+---
+
 ## Adding a new ADR
 
 Copy the template. Keep it short — the decision, the why, and the consequences a

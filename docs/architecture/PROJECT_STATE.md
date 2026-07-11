@@ -94,6 +94,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
+  an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain
+  specialists over every artifact → deterministic validation (dedupe / flagged conflicts
+  / impossible values) → a bounded recall loop ("what was missed?") → a merge that
+  preserves evidence + alternates in `value_json`. Plugs into `campaign_intake`'s
+  existing LLM seam; everything still writes through `contribute()` with capture stamps;
+  null provider → deterministic heuristics unchanged. Design:
+  `docs/architecture/EXTRACTION_ENGINE.md`.
 - **Product efficiency audit** (`docs/product-efficiency-audit.md`): 43 verified
   findings, ranked P0–P3.
 - **P0:** admin-gate/portal-route drift fixed; event-loop-blocking sends offloaded;
