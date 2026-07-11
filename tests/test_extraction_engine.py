@@ -314,6 +314,36 @@ def test_evidence_page_shows_engine_state_and_per_capture_method(webctx, monkeyp
     assert "AI extraction crew is OFF" not in page          # crew is on now
 
 
+def test_model_failure_surfaces_the_reason_not_a_silent_fallback(webctx, monkeypatch):
+    """A key IS set but the model call fails (bad model id / auth) → the run report carries
+    the real error and the Evidence page shows it, so 'no improvement' is diagnosable — not
+    a silent fall-back to the keyword baseline."""
+    from fastapi.testclient import TestClient
+
+    class BadModel:
+        name, model, available = "anthropic", "claude-sonnet-5", True
+        def __init__(self): self.last_error = ""
+        def complete(self, prompt, *, max_tokens=4000):
+            self.last_error = "NotFoundError: model: claude-sonnet-5"
+            return None
+
+    mods, conn, opp_id = webctx
+    intake, dbm = mods["campaign_intake"], mods["db"]
+    monkeypatch.setattr("chordential_oia.extraction.providers.get_provider", BadModel)
+    monkeypatch.setattr("chordential_oia.extraction.providers.is_enabled", lambda: True)
+    summary = intake.ingest_opportunity(conn, dbm.get_opportunity(conn, opp_id),
+                                        intake.OBJECTIVE, "Budget is $18,000 - $24,000.")
+    # the capture still lands (heuristic fallback), AND the failure reason is recorded
+    cap = dbm.get_capture(conn, summary["capture_id"])
+    run = json.loads(cap["metadata_json"])["extraction_run"]
+    assert run["provider_error"] == "NotFoundError: model: claude-sonnet-5"
+    app_mod = __import__("chordential_oia.web.app", fromlist=["app"])
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}/evidence").text
+    assert "engine error" in page and "NotFoundError" in page
+    assert "CHORDENTIAL_EXTRACTION_MODEL" in page          # the exact knob to turn
+
+
 def test_debrief_stance_keeps_its_dedicated_subjective_path(webctx, monkeypatch):
     mods, conn, opp_id = webctx
     intake, dbm = mods["campaign_intake"], mods["db"]

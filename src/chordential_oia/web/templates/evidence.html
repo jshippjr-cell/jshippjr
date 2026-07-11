@@ -56,13 +56,21 @@
   </div>
   {# How this capture was mined — the crew's run report, or the baseline honesty flag. #}
   <div class="ev-engine">
-    {% if it.run %}
+    {% if it.run and it.run.get('provider_error') %}
+    <span class="ev-badge off">⚠ engine error</span>
+    <span>The model call failed, so this used the keyword baseline instead —
+      <code>{{ it.run.model }}</code>: <b>{{ it.run.provider_error }}</b>.
+      Set <code>CHORDENTIAL_EXTRACTION_MODEL</code> to a model your key can call, then re-analyze.</span>
+    {% elif it.run and it.run.facts %}
     <span class="ev-badge on">🤖 10-agent engine</span>
     <span>{{ it.run.workers|length }} specialists · {{ it.run.facts }} facts kept
       {%- if it.run.recall_added %} · +{{ it.run.recall_added }} on recall{% endif %}
       {%- if it.run.conflicts %} · {{ it.run.conflicts }} conflict{{ 's' if it.run.conflicts != 1 }} flagged{% endif %}
       {%- if it.run.duplicates_removed %} · {{ it.run.duplicates_removed }} deduped{% endif %}
       {%- if it.run.model %} · {{ it.run.model }}{% endif %}</span>
+    {% elif it.run %}
+    <span class="ev-badge off">engine · no facts</span>
+    <span>The crew ran (<code>{{ it.run.model }}</code>) but extracted nothing from this capture.</span>
     {% else %}
     <span class="ev-badge off">baseline</span>
     <span>keyword pass — the AI crew wasn't running for this capture.</span>

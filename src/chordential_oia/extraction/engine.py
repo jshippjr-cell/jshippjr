@@ -115,9 +115,15 @@ def run(artifacts: List[Dict], *, priors: str = "", provider=None,
 
     # ── Merge: board-shaped candidates, evidence + alternates preserved ──
     candidates = merge_mod.merge(facts) + merge_mod.merge(questions)
+    # If every worker came back empty AND the provider recorded a failure, the model call
+    # itself failed — surface the real reason (e.g. a bad model id, an auth error) so a
+    # silent fall-back-to-baseline is DIAGNOSABLE on the Evidence page, not a mystery.
+    provider_error = ""
+    if not facts and all(w["error"] for w in worker_reports):
+        provider_error = getattr(provider, "last_error", "") or "no output from the model"
     run_report = {
         "engine": "extraction-v1", "provider": getattr(provider, "name", "?"),
-        "model": getattr(provider, "model", ""),
+        "model": getattr(provider, "model", ""), "provider_error": provider_error,
         "workers": sorted(worker_reports, key=lambda r: r["name"]),
         "facts": len(facts), "candidates": len(candidates),
         "duplicates_removed": report.duplicates_removed,
