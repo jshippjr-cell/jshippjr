@@ -2430,10 +2430,13 @@ def opportunity_evidence(request: Request, opp_id: int):
                 extraction = json.loads(c["extraction_json"] or "[]")
             except (json.JSONDecodeError, TypeError):
                 extraction = []
-            items.append({"c": c, "meta": meta, "extraction": extraction})
+            items.append({"c": c, "meta": meta, "extraction": extraction,
+                          "run": meta.get("extraction_run")})
     finally:
         conn.close()
-    return render(request, "evidence.html", nav="inbox", row=row, items=items)
+    from ..extraction import providers as _ext_providers
+    return render(request, "evidence.html", nav="inbox", row=row, items=items,
+                  engine_enabled=_ext_providers.is_enabled())
 
 
 @app.post("/opportunity/{opp_id}/identity")

@@ -14,11 +14,31 @@
 .ev-ex li{list-style:none;padding:7px 0;border-top:1px solid var(--line,#efe9e0);font-size:13px}
 .ev-ex .kind{font-size:10px;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:#eee;margin-right:6px}
 .ev-empty{color:var(--muted,#8a8580);font-style:italic}
+.ev-engine{font-size:12px;color:var(--muted,#8a8580);margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ev-badge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px}
+.ev-badge.on{background:#e6f3ec;color:#1d6b43}
+.ev-badge.off{background:#fbeee6;color:#8a4b1d}
+.ev-banner{border-radius:11px;padding:13px 16px;margin:0 0 16px;font-size:13.5px;line-height:1.55}
+.ev-banner.off{background:#fbeee6;border:1px solid #e6c8b0;color:#7a4a24}
+.ev-banner code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:12px}
 </style>
 
 <p class="ev-note">The raw material behind Campaign Intelligence — permanent and unedited. Compare
   the <b>captured text</b> (left) with <b>what was extracted</b> (right): if a fact is in the text
   but not extracted, it's an import gap; if it's not in the text either, it's a capture/transcript gap.</p>
+
+{% if not engine_enabled %}
+<div class="ev-banner off">
+  <b>⚠ The AI extraction crew is OFF — you're seeing the deterministic baseline.</b>
+  The 10-agent engine (ADR-0023) only runs when a model key is configured, so right now
+  captures fall back to a lightweight keyword pass (it finds an obvious budget and a
+  deliverable or two, and little else). To turn the crew on, set <code>ANTHROPIC_API_KEY</code>
+  in the Render environment (and leave <code>CHORDENTIAL_EXTRACTION_ENGINE</code> unset or
+  <code>1</code>), then re-analyze — the same transcript will yield far more. Captures below
+  marked <span class="ev-badge off">baseline</span> were extracted without the crew; re-run
+  them once it's on.
+</div>
+{% endif %}
 
 {% if not items %}
 <section class="card"><p class="ev-empty">No captures yet — schedule a discovery call, or paste notes on the opportunity.</p></section>
@@ -33,6 +53,20 @@
     {% if it.meta.get('speakers') %}· speakers: {{ it.meta['speakers']|join(', ') }}{% endif %}
     {% if it.meta.get('duration_s') %}· {{ (it.meta['duration_s']//60) }} min{% endif %}
     · status {{ it.c['status'] }}
+  </div>
+  {# How this capture was mined — the crew's run report, or the baseline honesty flag. #}
+  <div class="ev-engine">
+    {% if it.run %}
+    <span class="ev-badge on">🤖 10-agent engine</span>
+    <span>{{ it.run.workers|length }} specialists · {{ it.run.facts }} facts kept
+      {%- if it.run.recall_added %} · +{{ it.run.recall_added }} on recall{% endif %}
+      {%- if it.run.conflicts %} · {{ it.run.conflicts }} conflict{{ 's' if it.run.conflicts != 1 }} flagged{% endif %}
+      {%- if it.run.duplicates_removed %} · {{ it.run.duplicates_removed }} deduped{% endif %}
+      {%- if it.run.model %} · {{ it.run.model }}{% endif %}</span>
+    {% else %}
+    <span class="ev-badge off">baseline</span>
+    <span>keyword pass — the AI crew wasn't running for this capture.</span>
+    {% endif %}
   </div>
   <div class="ev-cols">
     <div>

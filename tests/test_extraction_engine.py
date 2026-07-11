@@ -285,6 +285,35 @@ def test_provider_meltdown_never_blocks_the_capture(webctx, monkeypatch):
     assert ("engagement", "budget_band") in rows          # heuristic fallback extracted
 
 
+def test_evidence_page_shows_engine_state_and_per_capture_method(webctx, monkeypatch):
+    """The Evidence page must make the extraction METHOD visible — so "the update made no
+    improvement" is answerable at a glance: engine off → an honest baseline banner + how to
+    enable; engine on → the run report (specialists, recall, conflicts) per capture."""
+    from fastapi.testclient import TestClient
+    mods, conn, opp_id = webctx
+    intake, dbm, app_mod = mods["campaign_intake"], mods["db"], __import__(
+        "chordential_oia.web.app", fromlist=["app"])
+    # 1) Engine OFF (no key): the baseline banner + per-capture 'baseline' badge show.
+    intake.ingest_opportunity(conn, dbm.get_opportunity(conn, opp_id), intake.OBJECTIVE,
+                              "Budget is $20,000.", modality="notes")
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}/evidence").text
+    assert "AI extraction crew is OFF" in page and "ANTHROPIC_API_KEY" in page
+    assert "baseline" in page
+
+    # 2) Engine ON: the same page shows the run report instead.
+    fake = FakeProvider(outputs={
+        "budget": [{"key": "budget_band", "value": "$20,000", "confidence": 90}]})
+    monkeypatch.setattr("chordential_oia.extraction.providers.get_provider", lambda: fake)
+    monkeypatch.setattr("chordential_oia.extraction.providers.is_enabled", lambda: True)
+    intake.ingest_opportunity(conn, dbm.get_opportunity(conn, opp_id), intake.OBJECTIVE,
+                              "The budget is twenty thousand dollars.", modality="transcript")
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}/evidence").text
+    assert "10-agent engine" in page and "specialists" in page
+    assert "AI extraction crew is OFF" not in page          # crew is on now
+
+
 def test_debrief_stance_keeps_its_dedicated_subjective_path(webctx, monkeypatch):
     mods, conn, opp_id = webctx
     intake, dbm = mods["campaign_intake"], mods["db"]
