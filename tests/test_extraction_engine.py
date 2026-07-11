@@ -324,7 +324,8 @@ def test_model_failure_surfaces_the_reason_not_a_silent_fallback(webctx, monkeyp
         name, model, available = "anthropic", "claude-sonnet-5", True
         def __init__(self): self.last_error = ""
         def complete(self, prompt, *, max_tokens=4000):
-            self.last_error = "NotFoundError: model: claude-sonnet-5"
+            self.last_error = ("BadRequestError: 400 - Your credit balance is too low to "
+                               "access the Anthropic API. Please go to Plans & Billing.")
             return None
 
     mods, conn, opp_id = webctx
@@ -336,12 +337,14 @@ def test_model_failure_surfaces_the_reason_not_a_silent_fallback(webctx, monkeyp
     # the capture still lands (heuristic fallback), AND the failure reason is recorded
     cap = dbm.get_capture(conn, summary["capture_id"])
     run = json.loads(cap["metadata_json"])["extraction_run"]
-    assert run["provider_error"] == "NotFoundError: model: claude-sonnet-5"
+    assert "credit balance is too low" in run["provider_error"]
     app_mod = __import__("chordential_oia.web.app", fromlist=["app"])
     with TestClient(app_mod.app) as c:
         page = c.get(f"/opportunity/{opp_id}/evidence").text
-    assert "engine error" in page and "NotFoundError" in page
-    assert "CHORDENTIAL_EXTRACTION_MODEL" in page          # the exact knob to turn
+    assert "engine error" in page and "credit balance is too low" in page
+    # the REMEDY is the precise one for THIS error — billing, not the model knob
+    assert "out of credit" in page and "Plans &amp; Billing" in page
+    assert "CHORDENTIAL_EXTRACTION_MODEL" not in page      # would mislead for a billing error
 
 
 def test_debrief_stance_keeps_its_dedicated_subjective_path(webctx, monkeypatch):

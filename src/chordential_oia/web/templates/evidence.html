@@ -60,7 +60,7 @@
     <span class="ev-badge off">⚠ engine error</span>
     <span>The model call failed, so this used the keyword baseline instead —
       <code>{{ it.run.model }}</code>: <b>{{ it.run.provider_error }}</b>.
-      Set <code>CHORDENTIAL_EXTRACTION_MODEL</code> to a model your key can call, then re-analyze.</span>
+      {% if it.remedy %}<br><b>Fix:</b> {{ it.remedy }}{% endif %}</span>
     {% elif it.run and it.run.facts %}
     <span class="ev-badge on">🤖 10-agent engine</span>
     <span>{{ it.run.workers|length }} specialists · {{ it.run.facts }} facts kept

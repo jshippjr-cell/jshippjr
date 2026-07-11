@@ -2430,13 +2430,35 @@ def opportunity_evidence(request: Request, opp_id: int):
                 extraction = json.loads(c["extraction_json"] or "[]")
             except (json.JSONDecodeError, TypeError):
                 extraction = []
-            items.append({"c": c, "meta": meta, "extraction": extraction,
-                          "run": meta.get("extraction_run")})
+            run = meta.get("extraction_run")
+            items.append({"c": c, "meta": meta, "extraction": extraction, "run": run,
+                          "remedy": _extraction_error_remedy(
+                              (run or {}).get("provider_error", ""))})
     finally:
         conn.close()
     from ..extraction import providers as _ext_providers
     return render(request, "evidence.html", nav="inbox", row=row, items=items,
                   engine_enabled=_ext_providers.is_enabled())
+
+
+def _extraction_error_remedy(err: str) -> str:
+    """Map a model-call error to the precise, actionable remedy so the operator isn't sent
+    chasing the wrong knob (a billing error is not a model error)."""
+    low = (err or "").lower()
+    if not low:
+        return ""
+    if "credit" in low or "billing" in low or "quota" in low or "insufficient" in low:
+        return ("Your Anthropic account is out of credit — add credits or set up billing in "
+                "the Anthropic Console (Plans & Billing). No redeploy needed; just re-analyze.")
+    if "not_found" in low or "not found" in low or "model" in low and "404" in low:
+        return ("That model id isn't available to your key — set "
+                "CHORDENTIAL_EXTRACTION_MODEL to one it can call, then re-analyze.")
+    if "authentication" in low or "401" in low or "api key" in low or "unauthorized" in low:
+        return ("The API key was rejected — check ANTHROPIC_API_KEY in the environment, "
+                "then re-analyze.")
+    if "rate" in low or "429" in low or "overloaded" in low or "529" in low:
+        return "The API was rate-limited/overloaded — transient; just re-analyze in a moment."
+    return "Re-analyze once the model call above can succeed."
 
 
 @app.post("/opportunity/{opp_id}/identity")
