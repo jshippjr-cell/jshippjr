@@ -37,6 +37,9 @@ class AnthropicProvider:
         # The last failure reason, so a silent decline can still be DIAGNOSED (surfaced on
         # the run report → the Evidence page). Best-effort must not mean invisible.
         self.last_error = ""
+        # Real token usage, accumulated across every call this run — the basis for the
+        # honest cost estimate + the durable monthly spend cap.
+        self.usage = {"in": 0, "out": 0, "calls": 0}
 
     def complete(self, prompt: str, *, max_tokens: int = 4000) -> Optional[str]:  # pragma: no cover - networked
         try:
@@ -50,6 +53,11 @@ class AnthropicProvider:
                 resp = client.messages.create(
                     model=self.model, max_tokens=max_tokens,
                     messages=[{"role": "user", "content": prompt}])
+                u = getattr(resp, "usage", None)
+                if u is not None:
+                    self.usage["in"] += int(getattr(u, "input_tokens", 0) or 0)
+                    self.usage["out"] += int(getattr(u, "output_tokens", 0) or 0)
+                    self.usage["calls"] += 1
                 self.last_error = ""
                 return next((b.text for b in resp.content if b.type == "text"), "")
             except Exception as exc:  # noqa: BLE001 — transient or terminal → retry then decline
@@ -75,3 +83,31 @@ def is_enabled() -> bool:
 def get_provider():
     """The env-selected provider: Anthropic when enabled, Null otherwise."""
     return AnthropicProvider() if is_enabled() else NullProvider()
+
+
+# Per-million-token published rates (USD), keyed by a coarse model family. Used only for
+# the ESTIMATE that drives the operator's spend meter + the cap — the real bill is
+# Anthropic's; this errs slightly high so the cap is conservative.
+_RATES = {
+    "opus": (15.0, 75.0), "sonnet": (3.0, 15.0), "haiku": (0.80, 4.0),
+}
+
+
+def estimate_cost(model: str, in_tokens: int, out_tokens: int) -> float:
+    """A conservative USD estimate for a run's token usage (input, output)."""
+    m = (model or "").lower()
+    rate_in, rate_out = _RATES["sonnet"]
+    for fam, rates in _RATES.items():
+        if fam in m:
+            rate_in, rate_out = rates
+            break
+    return round((in_tokens / 1_000_000) * rate_in + (out_tokens / 1_000_000) * rate_out, 4)
+
+
+def monthly_cap_usd() -> float:
+    """The operator's hard monthly ceiling on AI spend (USD). Default $10 — a deliberate,
+    low, safe default so the tool can never quietly run up a bill; 0 = no cap."""
+    try:
+        return max(0.0, float(os.environ.get("CHORDENTIAL_EXTRACTION_MONTHLY_CAP", "10")))
+    except (TypeError, ValueError):
+        return 10.0

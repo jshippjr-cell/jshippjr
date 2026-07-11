@@ -2075,18 +2075,23 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
         kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
-        engine_enabled=_extraction_engine_enabled(),
+        ai_spend=_ai_spend_status(),
     )
 
 
-def _extraction_engine_enabled() -> bool:
-    """Whether an Analyze runs the paid AI engine (vs the free deterministic baseline) —
-    surfaced on the button so the operator always knows when a click spends API credit."""
+def _ai_spend_status() -> dict:
+    """The AI spend meter for the Analyze panel: whether a click spends API credit, this
+    month's estimated spend, the cap, and whether the cap has bitten. Surfaced so cost is
+    never a surprise (reported live: a silent per-analyze charge drained the operator)."""
     try:
-        from ..extraction import providers as _ep
-        return _ep.is_enabled()
+        from . import extraction_bridge
+        conn = db.connect()
+        try:
+            return extraction_bridge.spend_status(conn)
+        finally:
+            conn.close()
     except Exception:  # noqa: BLE001
-        return False
+        return {"spent": 0.0, "cap": 0.0, "calls": 0, "over": False, "enabled": False}
 
 
 # --------------------------------------------------------------------------- #

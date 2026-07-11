@@ -109,9 +109,54 @@ class EngineSeam:
 def for_capture(conn, *, ci_id: Optional[int] = None, opp_id: Optional[int] = None,
                 campaign_id: Optional[int] = None, lane=None,
                 metadata: Optional[dict] = None) -> Optional[EngineSeam]:
-    """The intake pipeline's hook: an EngineSeam when the orchestrated engine is enabled,
-    else None (intake falls back to its existing extractors, byte-for-byte unchanged)."""
+    """The intake pipeline's hook: an EngineSeam when the orchestrated engine is enabled
+    AND this month's estimated AI spend is under the operator's cap; else None (intake falls
+    back to its free extractors, byte-for-byte unchanged). The cap is the hard promise that
+    the tool can never quietly run up an API bill — reported live, this exists because a
+    silent per-analyze cost drained an operator's credit."""
     del campaign_id  # anchor is the CI; campaign context arrives through it
     if not providers.is_enabled():
         return None
+    if spend_over_cap(conn):                 # hard monthly ceiling → fall back to free
+        return None
     return EngineSeam(conn, ci_id=ci_id, opp_id=opp_id, lane=lane, metadata=metadata)
+
+
+def _month() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def spend_over_cap(conn) -> bool:
+    """True when this month's estimated AI spend has hit the operator's monthly cap."""
+    cap = providers.monthly_cap_usd()
+    if cap <= 0:
+        return False
+    try:
+        return db.ai_spend_month(conn, _month())["est_cost"] >= cap
+    except Exception:  # noqa: BLE001 — a ledger hiccup must not silently unlock spend
+        return False
+
+
+def record_spend(conn, run_report: Optional[dict]) -> None:
+    """Add a completed engine run's estimated cost to this month's ledger (best-effort)."""
+    if not run_report:
+        return
+    try:
+        cost = float(run_report.get("est_cost_usd") or 0)
+        if cost <= 0 and not run_report.get("api_calls"):
+            return
+        db.add_ai_spend(conn, _month(), cost,
+                        calls=int(run_report.get("api_calls") or 0),
+                        in_tokens=int(run_report.get("input_tokens") or 0),
+                        out_tokens=int(run_report.get("output_tokens") or 0))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def spend_status(conn) -> dict:
+    """This month's spend + cap for the operator's meter."""
+    cap = providers.monthly_cap_usd()
+    row = db.ai_spend_month(conn, _month())
+    return {"spent": round(row["est_cost"], 2), "cap": cap, "calls": row["calls"],
+            "over": (cap > 0 and row["est_cost"] >= cap), "enabled": providers.is_enabled()}

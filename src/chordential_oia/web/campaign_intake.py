@@ -361,6 +361,13 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
     if run_report:
         metadata = dict(metadata or {})
         metadata["extraction_run"] = run_report
+        # Charge this run's estimated cost to the durable monthly ledger, so the app's
+        # hard spend cap (extraction_bridge.spend_over_cap) actually bites next time.
+        try:
+            from . import extraction_bridge
+            extraction_bridge.record_spend(conn, run_report)
+        except Exception:  # noqa: BLE001 — accounting never blocks a capture
+            pass
     cap_id = db.insert_capture(
         conn, ci_id=ci_id, campaign_id=campaign_id, opp_id=opp_id, lane=lane.key,
         stance=stance, modality=lane.modality, provenance_source=source, raw_text=text,

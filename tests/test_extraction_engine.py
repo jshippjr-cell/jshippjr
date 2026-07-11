@@ -349,6 +349,41 @@ def test_model_failure_surfaces_the_reason_not_a_silent_fallback(webctx, monkeyp
     assert "CHORDENTIAL_EXTRACTION_MODEL" not in page      # would mislead for a billing error
 
 
+def test_monthly_spend_cap_hard_stops_the_engine(webctx, monkeypatch):
+    """The app enforces its OWN monthly $ cap: once this month's estimated spend hits it,
+    the engine falls back to the free baseline — the tool can never silently run up a bill
+    (reported live: a silent per-analyze charge drained the operator's credit)."""
+    mods, conn, opp_id = webctx
+    bridge, dbm = mods["extraction_bridge"], mods["db"]
+    monkeypatch.setattr("chordential_oia.extraction.providers.is_enabled", lambda: True)
+    monkeypatch.setenv("CHORDENTIAL_EXTRACTION_MONTHLY_CAP", "5")
+    # under cap → the engine seam is offered
+    assert bridge.for_capture(conn, opp_id=opp_id,
+                              lane=mods["intake_lanes"].LANES_BY_KEY["meeting_notes"]) is not None
+    # record spend past the cap → the seam is withheld (free baseline runs instead)
+    bridge.record_spend(conn, {"est_cost_usd": 5.5, "api_calls": 12,
+                               "input_tokens": 100000, "output_tokens": 8000})
+    assert bridge.spend_over_cap(conn) is True
+    assert bridge.for_capture(conn, opp_id=opp_id,
+                              lane=mods["intake_lanes"].LANES_BY_KEY["meeting_notes"]) is None
+    status = bridge.spend_status(conn)
+    assert status["spent"] == 5.5 and status["over"] is True
+
+
+def test_analyze_button_shows_cost_and_confirms_before_spending(webctx, monkeypatch):
+    """The Analyze panel must state the per-analyze cost + this month's running total, and
+    an engine-on Analyze must confirm before it spends — so a click is never a surprise."""
+    from fastapi.testclient import TestClient
+    mods, conn, opp_id = webctx
+    monkeypatch.setattr("chordential_oia.extraction.providers.is_enabled", lambda: True)
+    app_mod = __import__("chordential_oia.web.app", fromlist=["app"])
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp_id}").text
+    assert "uses Anthropic API credit" in page          # the cost is stated up front
+    assert "This month:" in page                         # the running spend meter
+    assert "confirm(" in page                            # a paid click is confirmed first
+
+
 def test_debrief_stance_keeps_its_dedicated_subjective_path(webctx, monkeypatch):
     mods, conn, opp_id = webctx
     intake, dbm = mods["campaign_intake"], mods["db"]

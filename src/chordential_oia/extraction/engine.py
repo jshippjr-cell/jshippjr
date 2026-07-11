@@ -121,10 +121,15 @@ def run(artifacts: List[Dict], *, priors: str = "", provider=None,
     provider_error = ""
     if not facts and all(w["error"] for w in worker_reports):
         provider_error = getattr(provider, "last_error", "") or "no output from the model"
+    usage = getattr(provider, "usage", {"in": 0, "out": 0, "calls": 0})
+    est_cost = providers.estimate_cost(getattr(provider, "model", ""),
+                                       usage.get("in", 0), usage.get("out", 0))
     run_report = {
         "engine": "extraction-v1", "provider": getattr(provider, "name", "?"),
         "model": getattr(provider, "model", ""), "provider_error": provider_error,
         "workers": sorted(worker_reports, key=lambda r: r["name"]),
+        "input_tokens": usage.get("in", 0), "output_tokens": usage.get("out", 0),
+        "api_calls": usage.get("calls", 0), "est_cost_usd": est_cost,
         "facts": len(facts), "candidates": len(candidates),
         "duplicates_removed": report.duplicates_removed,
         "conflicts": report.conflicts,

@@ -798,6 +798,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             notes TEXT DEFAULT '', updated_at TEXT
         )"""
     )
+    # AI spend ledger (ADR-0023): estimated Anthropic API cost per month, so the app can
+    # ENFORCE a hard monthly cap itself (never silently drain the operator's credit).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS ai_spend (
+            month TEXT PRIMARY KEY, est_cost REAL DEFAULT 0, calls INTEGER DEFAULT 0,
+            in_tokens INTEGER DEFAULT 0, out_tokens INTEGER DEFAULT 0, updated_at TEXT
+        )"""
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS proposals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, opp_id INTEGER,
@@ -5580,3 +5588,32 @@ def list_project_events(conn: sqlite3.Connection, project_id: int, *, role: str,
         " AND (',' || audience || ',') LIKE ? ORDER BY id ASC LIMIT ?",
         (project_id, after_id, f"%,{role},%", limit),
     ).fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# AI spend ledger (ADR-0023) — durable monthly estimate so the app can cap spend.
+# --------------------------------------------------------------------------- #
+def add_ai_spend(conn: sqlite3.Connection, month: str, est_cost: float,
+                 *, calls: int = 0, in_tokens: int = 0, out_tokens: int = 0) -> None:
+    """Accumulate this month's estimated Anthropic API spend (idempotent upsert)."""
+    conn.execute(
+        """INSERT INTO ai_spend (month, est_cost, calls, in_tokens, out_tokens, updated_at)
+           VALUES (?,?,?,?,?,?)
+           ON CONFLICT(month) DO UPDATE SET
+             est_cost = est_cost + excluded.est_cost,
+             calls = calls + excluded.calls,
+             in_tokens = in_tokens + excluded.in_tokens,
+             out_tokens = out_tokens + excluded.out_tokens,
+             updated_at = excluded.updated_at""",
+        (month, est_cost or 0, calls or 0, in_tokens or 0, out_tokens or 0,
+         datetime.now(timezone.utc).isoformat()))
+    conn.commit()
+
+
+def ai_spend_month(conn: sqlite3.Connection, month: str) -> dict:
+    """This month's ledger row as a plain dict (zeros when the month has no spend yet)."""
+    row = conn.execute("SELECT * FROM ai_spend WHERE month = ?", (month,)).fetchone()
+    if row is None:
+        return {"month": month, "est_cost": 0.0, "calls": 0, "in_tokens": 0, "out_tokens": 0}
+    return {"month": month, "est_cost": row["est_cost"] or 0.0, "calls": row["calls"] or 0,
+            "in_tokens": row["in_tokens"] or 0, "out_tokens": row["out_tokens"] or 0}

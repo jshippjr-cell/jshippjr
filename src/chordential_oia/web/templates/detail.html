@@ -280,6 +280,7 @@
   <form class="ci-update" method="post" enctype="multipart/form-data"
         data-progress="✨ Analyzing…" data-think
         data-think-path="Source|Campaign Intelligence|Qualification|Buyer Profile|Campaign Brief"
+        {% if ai_spend and ai_spend.enabled and not ai_spend.over %}onsubmit="return this.stance.value=='debrief' || confirm('This runs the 10-agent AI engine and uses Anthropic API credit — about \$0.30–0.50 for this analyze. Continue?');"{% endif %}
         action="/opportunity/{{ row['id'] }}/intelligence/analyze">
     <div class="ci-controls">
       <div class="ci-stance">
@@ -297,15 +298,20 @@
       <span class="ci-file">Or attach a file (voice memo, .txt transcript, RFP) — <input type="file" name="file"></span>
       <button class="btn primary" type="submit">✨ Analyze &amp; update</button>
     </div>
-    {# Honest cost signal: an Analyze that runs the AI engine spends Anthropic API credit
-       (~$0.30–0.50 per conversation). No key/credit → it's the free deterministic pass. #}
+    {# Honest cost signal + a live spend meter, so a paid Analyze is never a surprise and
+       the app's own monthly cap is visible (reported live: a silent charge drained credit). #}
     <p class="ci-cost muted small" style="margin:6px 0 0">
-      {% if engine_enabled %}
+      {% if ai_spend and ai_spend.over %}
+      🛑 <b>Monthly AI cap reached</b> (${{ '%.2f'|format(ai_spend.spent) }} of ${{ '%.0f'|format(ai_spend.cap) }}).
+      Analyze now uses the <b>free</b> keyword pass until next month — raise the cap with
+      <code>CHORDENTIAL_EXTRACTION_MONTHLY_CAP</code> if you want more.
+      {% elif ai_spend and ai_spend.enabled %}
       💳 Runs the 10-agent AI engine — <b>uses Anthropic API credit</b> (~$0.30–0.50 per
-      conversation). One pass per new source is plenty; re-analyzing charges again.
+      analyze). One pass per new source is plenty; re-analyzing charges again.
+      <b>This month: ${{ '%.2f'|format(ai_spend.spent) }}{% if ai_spend.cap %} of ${{ '%.0f'|format(ai_spend.cap) }} cap{% endif %}.</b>
       {% else %}
-      Free deterministic pass (keyword extraction). The AI engine is off — turn it on with
-      Anthropic API credit for the full read.
+      Free deterministic pass (keyword extraction). The AI engine is off — add Anthropic API
+      credit for the full read.
       {% endif %}
     </p>
   </form>
