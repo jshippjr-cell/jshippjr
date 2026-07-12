@@ -7077,8 +7077,17 @@ def _maybe_finalize_delivery(conn, project_id: int) -> bool:
     try:
         _build_delivery_package(conn, project_id)
         db.update_delivery(conn, project_id, "state", "Delivered")
-        # The balance is now owed — raise it so the download stays gated behind it.
+        # The balance is now owed — raise it so the download stays gated behind it, and EMAIL
+        # the client their pay link automatically (reported live: the final invoice just sat
+        # in the operator's queue). Sent once, here, on the delivery transition.
         _ensure_final_invoice_issued(conn, project_id)
+        _fin = next((i for i in db.list_invoices(conn, project_id)
+                     if (i["kind"] or "") == "Final"), None)
+        if _fin is not None and (_fin["status"] or "").lower() not in ("paid", "settled"):
+            try:
+                _send_invoice_pay_link(conn, _fin["id"])
+            except Exception:  # noqa: BLE001 — the auto-send never blocks delivery
+                pass
         db.add_project_event(conn, project_id, "delivered", actor_role="operator",
                              actor_name="ChordOS",
                              body="All deliverables approved — delivery package assembled.")
@@ -7691,6 +7700,88 @@ def invoice_checkout(invoice_id: int):
     finally:
         conn.close()
     return RedirectResponse("/projects", status_code=303)
+
+
+def _payment_request_email(kind: str, amount: float, client: str, need: str,
+                           contact_name: str, pay_url: str) -> dict:
+    """A branded 'here's your invoice — pay securely' email for the client."""
+    first = (contact_name or "").strip().split()[0] if contact_name.strip() else ""
+    greeting = f"Hi {first}," if first else "Hi there,"
+    amt = f"${amount:,.0f}" if amount else "your balance"
+    label = (kind or "Payment").strip()
+    is_final = label.lower().startswith("fin")
+    lead = ("Your project is delivered and the final balance is due to release your files."
+            if is_final else
+            "Here's your deposit invoice to get production underway.")
+    tail = ("The moment it's in, your full delivery package unlocks for download."
+            if is_final else "Your deposit reserves the team and starts the work.")
+    body = (
+        f"{greeting}\n\n"
+        f"{lead}\n\n"
+        f"  {label} due:  {amt}\n"
+        f"  Project:      {need or 'your campaign'}\n\n"
+        f"Pay securely here:\n{pay_url}\n\n"
+        f"{tail}\n\n"
+        "— Jon, Chordential")
+    subject = f"{label} due ({amt}) — {need or 'your campaign'}"
+    return {"subject": subject, "body": body}
+
+
+def _send_invoice_pay_link(conn, invoice_id: int) -> str:
+    """Email the CLIENT a secure pay link for one invoice. Issues the invoice if it's still a
+    draft, then sends a branded payment request to the opportunity's contact with a link to
+    their token-gated portal (where the Pay button opens a fresh checkout — a hosted-checkout
+    URL can expire, the portal never does). Returns a status: 'sent' | 'no_email' | 'no_mail'
+    | 'error'. Shared by the operator button AND the automatic send on delivery."""
+    inv = db.get_invoice(conn, invoice_id)
+    if inv is None or not inv["project_id"]:
+        return "error"
+    pid = inv["project_id"]
+    if (inv["status"] or "").lower() in ("", "draft"):
+        ref = get_payment_provider().create_checkout(inv)
+        db.update_invoice_status(conn, invoice_id, "Issued", external_ref=ref)
+        inv = db.get_invoice(conn, invoice_id)
+    prow = db.get_project(conn, pid)
+    opp = db.get_opportunity(conn, prow["opp_id"]) if prow and prow["opp_id"] else None
+    contact_email = (opp["contact_email"] if opp is not None
+                     and "contact_email" in opp.keys() else "") or ""
+    if not contact_email:
+        return "no_email"
+    if not mailer.mail_configured():
+        return "no_mail"
+    base = _public_base()
+    token = db.ensure_project_share_token(conn, pid)
+    pay_url = f"{base}{_client_portal_url(pid, token)}"
+    contact_name = (opp["contact_name"] if opp is not None
+                    and "contact_name" in opp.keys() else "") or ""
+    msg = _payment_request_email(inv["kind"], inv["amount"] or 0,
+                                 (prow["client"] if prow else "") or "",
+                                 (prow["need"] if prow else "") or "", contact_name, pay_url)
+    try:
+        mailer.send_email(contact_email, msg["subject"], msg["body"],
+                          html=mailer.branded_html(base, msg["body"]))
+        db.add_update(conn, pid, f"{inv['kind']} pay link emailed to {contact_email}.",
+                      "invoice")
+        return "sent"
+    except Exception:  # noqa: BLE001
+        return "error"
+
+
+@app.post("/invoice/{invoice_id}/send-pay-link")
+def invoice_send_pay_link(invoice_id: int):
+    """Operator action: email the client a secure pay link for this invoice — so the balance
+    actually reaches them instead of sitting in the queue (reported live). Best-effort;
+    bounces back with a flash on the proposal page."""
+    conn = db.connect()
+    try:
+        inv = db.get_invoice(conn, invoice_id)
+        if inv is None or not inv["project_id"]:
+            return RedirectResponse("/projects", status_code=303)
+        pid = inv["project_id"]
+        flag = _send_invoice_pay_link(conn, invoice_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{pid}/proposal?pay={flag}", status_code=303)
 
 
 def _client_portal_url(project_id: int, k: str, extra: str = "") -> str:

@@ -7,6 +7,17 @@
   <a class="link" href="/project/{{ project['id'] }}">← Back to project</a>
 </p>
 
+{% set _pay = request.query_params.get('pay') %}
+{% if _pay == 'sent' %}
+<div class="callout" style="background:#e6f3ec;border:1px solid #bcdcc7;color:#1d6b43;margin-bottom:14px"><span class="callout-ico">✓</span> Pay link emailed to the client.</div>
+{% elif _pay == 'no_email' %}
+<div class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;margin-bottom:14px"><span class="callout-ico">⚠</span> No client email on file — add a contact on the opportunity, then send the pay link.</div>
+{% elif _pay == 'no_mail' %}
+<div class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;margin-bottom:14px"><span class="callout-ico">⚠</span> Email isn't configured — set CHORDENTIAL_MAIL_PROVIDER + SMTP to send the pay link (the client can still pay from their portal link).</div>
+{% elif _pay == 'error' %}
+<div class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;margin-bottom:14px"><span class="callout-ico">⚠</span> Couldn't send the pay link — try again.</div>
+{% endif %}
+
 {% if not proposal %}
 <div class="card">
   <p class="muted">No proposal generated yet.</p>
@@ -118,6 +129,11 @@
             {% endif %}
             {% if inv['external_ref'] and inv['external_ref'].startswith('http') and inv['status'] != 'Paid' %}
             <a class="btn tiny primary" href="{{ inv['external_ref'] }}" target="_blank" rel="noopener">Open payment page ↗</a>
+            {% endif %}
+            {% if inv['status'] != 'Paid' %}
+            <form method="post" action="/invoice/{{ inv['id'] }}/send-pay-link">
+              <button class="btn tiny" type="submit" title="Email the client a secure link to pay this invoice">📧 Email pay link to client</button>
+            </form>
             {% endif %}
             {% for s in invoice_states %}
               {% if s != inv['status'] %}
