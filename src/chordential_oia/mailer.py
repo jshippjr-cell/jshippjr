@@ -57,8 +57,12 @@ def mail_configured() -> bool:
 
 
 def _build_message(to: str, subject: str, text: str, html: Optional[str],
-                   sender: str) -> EmailMessage:
-    """Assemble a proper EmailMessage (text, with an optional html alternative)."""
+                   sender: str, ics: Optional[str] = None) -> EmailMessage:
+    """Assemble a proper EmailMessage (text, an optional html alternative, and an
+    optional iCalendar invite). When ``ics`` is present it is attached as
+    ``text/calendar; method=REQUEST`` — the MIME type Gmail/Apple/Outlook read to
+    show an "Add to calendar" card and drop the event on the recipient's calendar,
+    so a calendar block appears with no Google-API connection required."""
     msg = EmailMessage()
     msg["From"] = sender
     msg["To"] = to
@@ -66,10 +70,17 @@ def _build_message(to: str, subject: str, text: str, html: Optional[str],
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
+    if ics:
+        # Attach as a real .ics part. method=REQUEST makes clients treat it as an
+        # invitation (RSVP/add-to-calendar) rather than an opaque file.
+        msg.add_attachment(
+            ics.encode("utf-8"), maintype="text", subtype="calendar",
+            filename="invite.ics", params={"method": "REQUEST", "charset": "UTF-8"})
     return msg
 
 
-def _send_smtp(to: str, subject: str, text: str, html: Optional[str]) -> str:
+def _send_smtp(to: str, subject: str, text: str, html: Optional[str],
+               ics: Optional[str] = None) -> str:
     """Hand a message to the configured SMTP server (stdlib smtplib + STARTTLS).
 
     Best-effort: any failure is swallowed and reported as ``"error"`` — the lazy
@@ -88,7 +99,7 @@ def _send_smtp(to: str, subject: str, text: str, html: Optional[str]) -> str:
     password = os.environ.get("CHORDENTIAL_SMTP_PASS") or None
     starttls = (os.environ.get("CHORDENTIAL_SMTP_STARTTLS", "1") or "1").strip() != "0"
 
-    msg = _build_message(to, subject, text, html, sender)
+    msg = _build_message(to, subject, text, html, sender, ics)
     try:
         with smtplib.SMTP(host, port, timeout=15) as server:
             if starttls:
@@ -145,7 +156,8 @@ def branded_html(base_url: str, body_text: str, *, footer: str = "Chordential �
 </html>"""
 
 
-def send_email(to: str, subject: str, text: str, html: Optional[str] = None) -> str:
+def send_email(to: str, subject: str, text: str, html: Optional[str] = None,
+               ics: Optional[str] = None) -> str:
     """Send one email, best-effort. NEVER raises.
 
     Returns ``"sent"`` (handed to SMTP), ``"logged"`` (null/unconfigured — recorded
@@ -159,7 +171,7 @@ def send_email(to: str, subject: str, text: str, html: Optional[str] = None) -> 
         # switch: a half-set env (e.g. provider=smtp but no host yet) must be a
         # clean no-op, never a blind connection attempt that could hang.
         if mail_configured():
-            return _send_smtp(to, subject, text, html)
+            return _send_smtp(to, subject, text, html, ics)
         # Null / unconfigured provider (default): log the intent, send nothing.
         logger.info("mailer(null): would send to=%s subject=%r", to, subject)
         return "logged"

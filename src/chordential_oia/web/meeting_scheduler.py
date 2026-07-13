@@ -191,10 +191,19 @@ def cancel(conn, meeting) -> dict:
     if meeting["request_id"]:
         db.set_discovery_request_status(conn, meeting["request_id"], "new")  # reopen the ask
     opp = db.get_opportunity(conn, meeting["opp_id"])
-    if opp is not None and (meeting["client_email"] or ""):
-        _safe_mail(meeting["client_email"],
-                   f"Discovery call canceled — {opp['client']}",
-                   f"Your discovery call has been canceled. Reply and we'll find another time.")
+    if opp is not None:
+        # A CANCEL invite (same UID, method=CANCEL) removes the block from both calendars.
+        ics = build_invite_ics(meeting, opp, sequence=2, cancel=True)
+        if meeting["client_email"]:
+            _safe_mail(meeting["client_email"],
+                       f"Discovery call canceled — {opp['client']}",
+                       "Your discovery call has been canceled. Reply and we'll find another time.",
+                       ics=ics)
+        op = _operator_email()
+        if op:
+            _safe_mail(op, f"Discovery call canceled — {opp['client']}",
+                       f"The discovery call with {meeting['client_name'] or opp['client']} "
+                       f"was canceled.", ics=ics)
     return {"ok": True}
 
 
@@ -292,6 +301,81 @@ def book_from_proposal(conn, proposal, pick_index: int) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+def _ical_dt(iso: str) -> str:
+    """An ISO instant → iCalendar UTC stamp (``YYYYMMDDTHHMMSSZ``)."""
+    dt = M.parse_iso(iso)
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _ical_escape(text: str) -> str:
+    """Escape a value for an iCalendar text field (RFC 5545 §3.3.11)."""
+    return (str(text or "").replace("\\", "\\\\").replace(";", "\\;")
+            .replace(",", "\\,").replace("\n", "\\n"))
+
+
+def build_invite_ics(meeting, opp, *, sequence: int = 0, cancel: bool = False) -> Optional[str]:
+    """A calendar invite (VCALENDAR/VEVENT) for this meeting, or ``None`` if we don't
+    have a real start time to invite to.
+
+    This is the provider-independent path to a calendar block: attached to the
+    confirmation email as ``text/calendar; method=REQUEST``, Gmail/Apple/Outlook add
+    the event to the recipient's calendar with no Google-API connection required — so
+    a block lands on BOTH calendars whether or not the Google seam is configured.
+
+    A stable ``UID`` (per meeting) plus an increasing ``SEQUENCE`` means a reschedule
+    updates the same event in-place; ``cancel=True`` (METHOD:CANCEL) removes it.
+    """
+    start = _ical_dt(meeting["start_at"])
+    if not start:
+        return None
+    end = _ical_dt(
+        (M.parse_iso(meeting["start_at"]) + timedelta(
+            minutes=meeting["duration_min"] or 30)).isoformat())
+    uid = f"chord-meeting-{meeting['id']}@chordential.com"
+    is_zoom = meeting["meeting_type"] == ZOOM
+    title = f"Discovery call — Chordential × {meeting['client_name'] or opp['client']}"
+    join = meeting["join_url"] or ""
+    if is_zoom and join:
+        desc = f"Discovery call about {opp['need'] or 'your campaign'}.\nJoin here: {join}"
+        location = join
+    elif is_zoom:
+        desc = f"Discovery call about {opp['need'] or 'your campaign'}. A meeting link will follow."
+        location = "Online"
+    else:
+        desc = f"Discovery call about {opp['need'] or 'your campaign'}. We'll call you at the number on file."
+        location = "Phone"
+    organizer = _operator_email() or "hello@chordential.com"
+    method = "CANCEL" if cancel else "REQUEST"
+    status = "CANCELLED" if cancel else "CONFIRMED"
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0",
+        "PRODID:-//Chordential//Meeting Scheduler//EN",
+        f"METHOD:{method}", "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        f"SEQUENCE:{max(0, int(sequence))}",
+        f"DTSTAMP:{_ical_dt(datetime.now(timezone.utc).isoformat())}",
+        f"DTSTART:{start}", f"DTEND:{end}",
+        f"SUMMARY:{_ical_escape(title)}",
+        f"DESCRIPTION:{_ical_escape(desc)}",
+        f"LOCATION:{_ical_escape(location)}",
+        f"STATUS:{status}",
+        f"ORGANIZER;CN=Chordential:mailto:{organizer}",
+    ]
+    for addr, cn in ((meeting["client_email"], meeting["client_name"] or opp["client"]),
+                     (_operator_email(), "Chordential")):
+        if addr:
+            lines.append(
+                f"ATTENDEE;CN={_ical_escape(cn)};RSVP=TRUE;"
+                f"PARTSTAT=NEEDS-ACTION:mailto:{addr}")
+    lines += ["END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(lines) + "\r\n"
+
+
 def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
     when = _fmt(meeting["start_at"])
     verb = "rescheduled to" if rescheduled else "confirmed for"
@@ -302,22 +386,33 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
         how = f"Join here: {meeting['join_url']}"
     else:
         how = "A meeting link will follow."
+    # A reschedule bumps SEQUENCE so the same calendar event updates in place.
+    ics = build_invite_ics(meeting, opp, sequence=1 if rescheduled else 0)
     if meeting["client_email"]:
         _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",
             f"Your discovery call with Chordential is {verb} {when}.\n{how}\n\n"
-            f"Need to change it? {manage}")
+            f"The calendar invite is attached — accept it to add the call to your calendar.\n\n"
+            f"Need to change it? {manage}",
+            ics=ics)
     op = _operator_email()
     if op:
-        _safe_mail(op, f"Discovery call {verb} {when} — {opp['client']}",
-                   f"{meeting['meeting_type'].title()} call {verb} {when} with "
-                   f"{meeting['client_name'] or opp['client']} "
-                   f"({meeting['client_email'] or 'no email'}).")
+        # The operator gets the SAME join link + the .ics so the call lands on their
+        # calendar too — the earlier operator email carried neither (reported live).
+        _safe_mail(
+            op, f"Discovery call {verb} {when} — {opp['client']}",
+            f"{meeting['meeting_type'].title()} call {verb} {when} with "
+            f"{meeting['client_name'] or opp['client']} "
+            f"({meeting['client_email'] or 'no email'}).\n\n"
+            f"{how}\n\n"
+            f"The calendar invite is attached.\n"
+            f"Manage / reschedule: {manage}",
+            ics=ics)
 
 
-def _safe_mail(to: str, subject: str, text: str) -> None:
+def _safe_mail(to: str, subject: str, text: str, ics: Optional[str] = None) -> None:
     try:
-        mailer.send_email(to, subject, text)
+        mailer.send_email(to, subject, text, ics=ics)
     except Exception:  # noqa: BLE001 — email is best-effort; a failure never blocks scheduling
         pass
 

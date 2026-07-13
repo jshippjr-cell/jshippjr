@@ -101,7 +101,7 @@ def test_send_marks_sent_and_emails_the_options(tmp_path, monkeypatch):
     opp_id = _opp(app_mod.db, conn); conn.close()
     sent = []
     monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
-                        lambda to, sub, body, html=None: sent.append((to, sub, body)))
+                        lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
     with TestClient(app_mod.app) as c:
         loc = _propose(c, opp_id).headers["location"]
         pid = int(loc.rstrip("/").split("/")[-1])
@@ -236,7 +236,7 @@ def test_confirmation_emails_speak_eastern_not_utc(tmp_path, monkeypatch):
     opp = app_mod.db.get_opportunity(conn, opp_id)
     sent = []
     monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
-                        lambda to, sub, body, html=None: sent.append((to, sub, body)))
+                        lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
     app_mod.meeting_scheduler.schedule(
         conn, opp, start_at="2026-07-14T14:00:00+00:00",
         client_email="sarah@halcyon.com", client_name="Sarah Chen")
