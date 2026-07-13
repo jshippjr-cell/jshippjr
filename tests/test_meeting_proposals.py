@@ -245,3 +245,75 @@ def test_confirmation_emails_speak_eastern_not_utc(tmp_path, monkeypatch):
     for to, sub, body in sent:
         assert "UTC" not in sub and "UTC" not in body
     assert any("10:00 AM EDT" in s[1] for s in sent)
+
+
+# --------------------------------------------------------------------------- #
+# "Review before it sends" is literal: the operator can edit the exact email.
+# --------------------------------------------------------------------------- #
+def _pid(c, opp_id):
+    loc = _propose(c, opp_id).headers["location"]
+    return int(loc.rstrip("/").split("/")[-1])
+
+
+def test_preview_offers_an_editable_subject_and_body(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    with TestClient(app_mod.app) as c:
+        pid = _pid(c, opp_id)
+        page = c.get(f"/opportunity/{opp_id}/proposal/{pid}").text
+    # real form fields, not a read-only <pre>
+    assert 'name="subject"' in page and 'name="body"' in page
+    assert "<textarea" in page and "Save draft" in page
+
+
+def test_edited_body_is_persisted_and_sent_verbatim(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    sent = []
+    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+                        lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
+    custom = "Hi Ena,\n\nHand-written note about Kid audiobooks.\nOption 1 — pick here: link"
+    with TestClient(app_mod.app) as c:
+        pid = _pid(c, opp_id)
+        # Save draft (no send) persists the edit and it survives a reload
+        c.post(f"/opportunity/{opp_id}/proposal/{pid}/edit",
+               data={"subject": "Custom subject line", "body": custom})
+        page = c.get(f"/opportunity/{opp_id}/proposal/{pid}").text
+        assert "Custom subject line" in page and "Hand-written note about Kid audiobooks" in page
+        # Send delivers exactly what was saved
+        c.post(f"/opportunity/{opp_id}/proposal/{pid}/send", follow_redirects=False)
+    assert sent and sent[0][1] == "Custom subject line"
+    assert sent[0][2] == custom
+
+
+def test_send_uses_the_current_box_even_without_a_separate_save(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    sent = []
+    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+                        lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
+    with TestClient(app_mod.app) as c:
+        pid = _pid(c, opp_id)
+        # Post straight to /send carrying edited fields — no prior /edit call
+        c.post(f"/opportunity/{opp_id}/proposal/{pid}/send",
+               data={"subject": "Edited on send", "body": "Body edited on send"},
+               follow_redirects=False)
+    assert sent and sent[0][1] == "Edited on send" and sent[0][2] == "Body edited on send"
+
+
+def test_reset_restores_the_generated_draft(tmp_path, monkeypatch):
+    app_mod = _app(tmp_path, monkeypatch)
+    conn = app_mod.db.connect(); app_mod.db.init_db(conn)
+    opp_id = _opp(app_mod.db, conn); conn.close()
+    with TestClient(app_mod.app) as c:
+        pid = _pid(c, opp_id)
+        c.post(f"/opportunity/{opp_id}/proposal/{pid}/edit",
+               data={"subject": "Temp", "body": "Temp body"})
+        c.post(f"/opportunity/{opp_id}/proposal/{pid}/edit", data={"reset": "1"})
+        page = c.get(f"/opportunity/{opp_id}/proposal/{pid}").text
+    # back to the generated copy, not the operator's temp text
+    assert "Temp body" not in page
+    assert "Let&#39;s find a time" in page or "Let's find a time" in page

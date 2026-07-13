@@ -256,9 +256,30 @@ def proposal_email(opp, proposal) -> dict:
             "to": proposal["client_email"] or "", "body": body}
 
 
+def _prop_field(proposal, key: str) -> str:
+    """Read a possibly-absent proposal column (sqlite3.Row raises on unknown keys)."""
+    try:
+        return (proposal[key] or "")
+    except (KeyError, IndexError):
+        return ""
+
+
+def resolved_proposal_email(opp, proposal) -> dict:
+    """The EXACT email that will be sent: the operator's edited subject/body when they
+    reviewed-and-edited the draft, otherwise the generated one. The preview renders this
+    and ``send_proposal`` delivers it, so "Review before it sends" is literal — what you
+    see (and can edit) is what goes out."""
+    gen = proposal_email(opp, proposal)
+    subj = _prop_field(proposal, "subject_override").strip()
+    body = _prop_field(proposal, "body_override").strip()
+    return {"subject": subj or gen["subject"], "to": gen["to"],
+            "body": body or gen["body"], "edited": bool(subj or body),
+            "suggested_subject": gen["subject"], "suggested_body": gen["body"]}
+
+
 def send_proposal(conn, opp, proposal) -> dict:
     """Operator pressed Send: mail the options to the client, mark the proposal sent."""
-    email = proposal_email(opp, proposal)
+    email = resolved_proposal_email(opp, proposal)
     if not email["to"]:
         return {"ok": False, "error": "No client email on the proposal."}
     try:

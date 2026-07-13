@@ -12,6 +12,10 @@
 .mp-email{background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px 16px;margin-bottom:16px}
 .mp-email .sub{font-weight:700;margin-bottom:8px}
 .mp-email pre{white-space:pre-wrap;font:inherit;font-size:13px;margin:0;line-height:1.55}
+.mp-email label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8378);margin:0 0 5px}
+.mp-email input.mp-subj{width:100%;font:inherit;font-size:14px;font-weight:700;padding:9px 11px;border:1px solid var(--line,#e7e1d8);border-radius:8px;background:#fff;margin-bottom:12px}
+.mp-email textarea.mp-body{width:100%;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.55;padding:11px 12px;border:1px solid var(--line,#e7e1d8);border-radius:8px;background:#fff;min-height:280px;resize:vertical}
+.mp-hint{font-size:12px;color:var(--muted,#8a8378);margin:8px 2px 0}
 .mp-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 </style>
 <section class="card mp-card">
@@ -27,24 +31,50 @@
     <div class="mp-slot"><span class="num">OPTION {{ loop.index }}</span>{{ s }}</div>
     {% endfor %}
   </div>
+  {% if request.query_params.get('saved') == '1' %}
+  <div class="callout" style="background:#e6f3ec;border:1px solid #bcdcc7;color:#1d6b43;margin-bottom:12px"><span class="callout-ico">✓</span> Draft saved — this exact text is what will send.</div>
+  {% elif request.query_params.get('reset') == '1' %}
+  <div class="callout" style="background:#eef1f6;border:1px solid #c9d3e6;color:#3a4a68;margin-bottom:12px"><span class="callout-ico">↺</span> Reset to the suggested draft.</div>
+  {% endif %}
+
+  {% if prop['status'] in ('draft', 'sent') %}
+  <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/send" style="margin:0">
+    <div class="mp-email">
+      <label for="mp-subj">Subject</label>
+      <input id="mp-subj" class="mp-subj" type="text" name="subject" value="{{ email.subject }}">
+      <label for="mp-body">Message to the client</label>
+      <textarea id="mp-body" class="mp-body" name="body" spellcheck="true">{{ email.body }}</textarea>
+      <p class="mp-hint">Edit anything above — it sends exactly as written. The option links
+        ({{ pick_url }}?pick=0 …) are how the client picks a time; keep them in or the client
+        can't book from the email.{% if email.edited %} <em>You've edited this draft.</em>{% endif %}</p>
+    </div>
+    <div class="mp-acts">
+      <button class="btn-live" type="submit">{{ 'Send to the client' if prop['status'] == 'draft' else 'Resend' }} <span class="live-dot"></span></button>
+      <button class="btn" type="submit" formaction="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/edit">Save draft</button>
+    </div>
+  </form>
+  <div class="mp-acts" style="margin-top:10px">
+    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/edit" style="margin:0">
+      <input type="hidden" name="reset" value="1">
+      <button class="btn ghost" type="submit" title="Discard your edits and restore the generated draft">Reset to suggested</button>
+    </form>
+    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/cancel" style="margin:0">
+      <button class="btn ghost" type="submit">Withdraw</button>
+    </form>
+    <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Back</a>
+  </div>
+  {% else %}
   <div class="mp-email">
     <div class="sub">{{ email.subject }}</div>
     <pre>{{ email.body }}</pre>
   </div>
   <div class="mp-acts">
-    {% if prop['status'] in ('draft', 'sent') %}
-    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/send" style="margin:0">
-      <button class="btn-live" type="submit">{{ 'Send to the client' if prop['status'] == 'draft' else 'Resend' }} <span class="live-dot"></span></button>
-    </form>
-    <form method="post" action="/opportunity/{{ row['id'] }}/proposal/{{ prop['id'] }}/cancel" style="margin:0">
-      <button class="btn ghost" type="submit">Withdraw</button>
-    </form>
-    {% endif %}
     <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Back</a>
-    <span class="muted small">Client link: <a href="{{ pick_url }}">{{ pick_url }}</a></span>
   </div>
+  {% endif %}
+  <p class="muted small" style="margin-top:10px">Client link: <a href="{{ pick_url }}">{{ pick_url }}</a></p>
   {% if request.query_params.get('err') == 'send' %}
-  <p class="muted small" style="margin-top:10px">⚠ The email could not be sent — check the mail provider configuration (or copy the client link above and send it yourself).</p>
+  <p class="muted small" style="margin-top:6px">⚠ The email could not be sent — check the mail provider configuration (or copy the client link above and send it yourself).</p>
   {% endif %}
 </section>
 {% endblock %}

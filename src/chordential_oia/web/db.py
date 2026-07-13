@@ -1230,9 +1230,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             status TEXT DEFAULT 'draft',         -- draft | sent | booked | expired | canceled
             chosen_slot TEXT,                    -- the ISO-UTC slot the client picked
             meeting_id INTEGER,                  -- the Meeting created by the pick
+            subject_override TEXT DEFAULT '',    -- operator-edited subject ('' = use generated)
+            body_override TEXT DEFAULT '',       -- operator-edited body   ('' = use generated)
             created_at TEXT, updated_at TEXT
         )"""
     )
+    # "Review before it sends" means it's editable: the operator can rewrite the exact subject +
+    # body the client will receive. Migrate existing proposal rows to carry the two override cols.
+    mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(meeting_proposals)")}
+    for name, decl in {"subject_override": "TEXT DEFAULT ''",
+                       "body_override": "TEXT DEFAULT ''"}.items():
+        if name not in mp_cols:
+            conn.execute(f"ALTER TABLE meeting_proposals ADD COLUMN {name} {decl}")
     # Brief snapshots (ADR-0017): sending the Campaign Brief freezes the rendered doc —
     # the client opens what the operator approved, never a later re-render.
     conn.execute(
@@ -4754,7 +4763,8 @@ def list_meeting_proposals(conn: sqlite3.Connection, opp_id: int,
 
 def update_meeting_proposal(conn: sqlite3.Connection, pid: int, **fields) -> None:
     allowed = {"status", "chosen_slot", "meeting_id", "slots_json", "client_name",
-               "client_email", "message", "join_url", "meeting_type", "duration_min"}
+               "client_email", "message", "join_url", "meeting_type", "duration_min",
+               "subject_override", "body_override"}
     sets, args = [], []
     for k, v in fields.items():
         if k in allowed:

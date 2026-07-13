@@ -2674,7 +2674,7 @@ def meeting_proposal_preview(request: Request, opp_id: int, pid: int):
         prop = db.get_meeting_proposal(conn, pid)
         if row is None or prop is None or prop["opp_id"] != opp_id:
             return HTMLResponse("Not found", status_code=404)
-        email = meeting_scheduler.proposal_email(row, prop)
+        email = meeting_scheduler.resolved_proposal_email(row, prop)
         slots = [meeting_scheduler.fmt_et(s, long=True)
                  for s in meeting_scheduler.proposal_slots(prop)]
     finally:
@@ -2684,14 +2684,55 @@ def meeting_proposal_preview(request: Request, opp_id: int, pid: int):
                   pick_url=f"{_public_base()}/meet/{prop['token']}")
 
 
+def _save_proposal_edits(conn, pid: int, subject: Optional[str], body: Optional[str],
+                         reset: bool) -> None:
+    """Persist the operator's edits to the exact client email (or reset to the generated
+    draft). Stored as overrides — blank means "use the generated text"."""
+    if reset:
+        db.update_meeting_proposal(conn, pid, subject_override="", body_override="")
+        return
+    # Only persist NON-empty edits: a blank field means "not submitted / leave as-is"
+    # (Form defaults to "" so we can't see None), never "wipe the saved draft" — that's
+    # what Reset is for. In the real UI the box is always prefilled, so Send always
+    # carries the full text and this WYSIWYG guarantee holds.
+    fields = {}
+    if (subject or "").strip():
+        fields["subject_override"] = subject.strip()
+    if (body or "").strip():
+        fields["body_override"] = body.strip()
+    if fields:
+        db.update_meeting_proposal(conn, pid, **fields)
+
+
+@app.post("/opportunity/{opp_id}/proposal/{pid}/edit")
+def meeting_proposal_edit(opp_id: int, pid: int, subject: str = Form(""),
+                          body: str = Form(""), reset: str = Form("")):
+    """Save the operator's edits to the times email without sending (Save draft / Reset)."""
+    conn = db.connect()
+    try:
+        prop = db.get_meeting_proposal(conn, pid)
+        if prop is None or prop["opp_id"] != opp_id:
+            return HTMLResponse("Not found", status_code=404)
+        _save_proposal_edits(conn, pid, subject, body, reset == "1")
+    finally:
+        conn.close()
+    saved = "reset" if reset == "1" else "saved"
+    return RedirectResponse(
+        f"/opportunity/{opp_id}/proposal/{pid}?{saved}=1", status_code=303)
+
+
 @app.post("/opportunity/{opp_id}/proposal/{pid}/send")
-def meeting_proposal_send(opp_id: int, pid: int):
+def meeting_proposal_send(opp_id: int, pid: int, subject: str = Form(""),
+                          body: str = Form("")):
     conn = db.connect()
     try:
         row = db.get_opportunity(conn, opp_id)
         prop = db.get_meeting_proposal(conn, pid)
         if row is None or prop is None or prop["opp_id"] != opp_id:
             return HTMLResponse("Not found", status_code=404)
+        # Persist whatever is in the review box FIRST, so we send exactly what's shown.
+        _save_proposal_edits(conn, pid, subject, body, reset=False)
+        prop = db.get_meeting_proposal(conn, pid)
         res = meeting_scheduler.send_proposal(conn, row, prop)
         if not res.get("ok"):
             return RedirectResponse(
