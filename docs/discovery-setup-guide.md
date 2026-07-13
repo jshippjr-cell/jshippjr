@@ -114,13 +114,54 @@ meeting** link. If it stays blank, see Troubleshooting.
 
 ---
 
-## 3. Google Calendar — invites on both calendars
+## 3. Google Calendar — the call lands on your calendar automatically
 
-Optional but nice: puts the call on your calendar and the client's, and sends the invite email.
-Booking works without it (you'd just not get a calendar event).
+Puts the call on your calendar the instant the client picks a time. Booking works without it
+(you'd just not get a calendar block).
 
-> Consumer `@gmail` works. The trickiest part is the one-time OAuth to mint a **refresh token**;
-> follow carefully.
+> **Two ways to connect — pick 3-SA (recommended) OR 3-OAuth, not both.**
+>
+> | | **3-SA · Service account** (recommended) | **3-OAuth · Refresh token** (legacy) |
+> |---|---|---|
+> | Expires? | **Never.** | **Every 7 days** while the app is in "Testing" mode. |
+> | Puts block on *your* calendar | ✅ automatically | ✅ automatically |
+> | Google natively invites the *client* | ❌ (client gets our own email + `.ics` instead) | ✅ |
+> | Setup | share a calendar with a robot email, paste one key | mint a token in OAuth Playground |
+>
+> If "auto-booking keeps dying after a few days" is your problem, that's the 7-day token expiry —
+> use **3-SA**. It's the durable fix. Do §3-SA and skip §3a/§3b.
+
+### 3-SA. Service account (never expires — recommended)
+1. **https://console.cloud.google.com/** → your project → **APIs & Services → Library** → enable
+   **Google Calendar API** (if not already).
+2. **APIs & Services → Credentials → Create credentials → Service account** → name it
+   `chordential-calendar` → **Done**. (Or reuse an existing service account.)
+3. Open the service account → **Keys → Add key → Create new key → JSON** → a `.json` file
+   downloads. Copy the **service-account email** too (looks like
+   `chordential-calendar@…iam.gserviceaccount.com`).
+4. **Share your calendar with that robot email.** In **Google Calendar** (calendar.google.com) →
+   hover your calendar → ⋮ → **Settings and sharing** → **Share with specific people** → **Add
+   people** → paste the service-account email → permission **“Make changes to events”** → **Send**.
+5. Set the env vars (§3c) — note `CHORDENTIAL_GOOGLE_CALENDAR_ID` must be **your email**, not
+   `primary` (a service account's own "primary" is an empty robot calendar).
+6. Because Render env values are single-line, base64 the key file first, then paste the result:
+   `base64 -w0 chordential-calendar-*.json` (macOS: `base64 -i chordential-calendar-*.json`).
+
+```
+CHORDENTIAL_CALENDAR_PROVIDER            = google
+CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON  = <the base64 blob from step 6>
+CHORDENTIAL_GOOGLE_CALENDAR_ID           = you@gmail.com      # the calendar you shared
+```
+Verify: schedule a call → the block appears on your calendar automatically; the client gets the
+confirmation email with the `.ics` invite. Done — and it won't expire.
+
+---
+
+### 3-OAuth (legacy). Refresh-token flow — natively invites the client, but expires in 7 days
+> Consumer `@gmail` works. The trickiest part is the one-time OAuth to mint a **refresh token**.
+> ⚠️ A token minted while the app is in **Testing** publishing status **stops working after 7
+> days** — you'll be back here re-minting it. Prefer **3-SA** above unless you specifically need
+> Google to send the *client* a native invite.
 
 ### 3a. Create the Google Cloud project + OAuth client
 > Google renamed "OAuth consent screen" to the **Google Auth Platform** (tabs: Overview /
@@ -241,7 +282,7 @@ Phone calls: choose **Phone** — a meeting record + confirmation email, no bot,
 | Bot never joins the call | Meeting started before the bot was invited (schedule a few min ahead), or the join URL wasn't created (see the row above). Recall dashboard → **Logs** shows the bot's status. |
 | **Transcript never completes** | The bot joined but transcription is off — confirm `meeting_captions` are available, or set `CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER` to a Recall transcription provider. Recall **Logs** shows the transcript status. |
 | Transcript ingests but facts look wrong/empty | The transcript shape differed from the parser's expectation — send the raw Recall transcript JSON; the fix is one edit in `meetings/recall.py` only. |
-| No calendar invite | `CHORDENTIAL_CALENDAR_PROVIDER=google` missing, or the refresh token expired/was revoked (re-mint via §3b), or the consent screen is still restricting access (add yourself as a Test user). |
+| No calendar invite | `CHORDENTIAL_CALENDAR_PROVIDER=google` missing; **or the OAuth refresh token expired** (Testing-mode tokens die after 7 days — this is the usual cause of "it worked for a few days then stopped": switch to the service account, §3-SA, which never expires); or a service account isn't shared on the calendar / `CHORDENTIAL_GOOGLE_CALENDAR_ID` isn't your email; or the consent screen still restricts access (add yourself as a Test user). |
 | No confirmation emails | `CHORDENTIAL_MAIL_PROVIDER=smtp` + `CHORDENTIAL_SMTP_*` not set (they only log otherwise). |
 | Request notifications not arriving | Set `CHORDENTIAL_OPERATOR_EMAIL` (email) and/or `CHORDENTIAL_NTFY_TOPIC` (push). |
 | Everything 401/403 to a provider | A credential is wrong or the provider proxy is blocking — check the exact key, and the provider's own dashboard logs. |

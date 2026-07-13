@@ -81,6 +81,18 @@ services:
         sync: false
       - key: CHORDENTIAL_SMTP_FROM       # verified sender, e.g. hello@chordential.com
         sync: false
+      # ── Google Calendar (auto-book the discovery call) ──────────────────────
+      # RECOMMENDED: a service account — it NEVER expires (an OAuth "Testing"-mode
+      # refresh token silently dies after 7 days, which is why auto-booking kept
+      # stopping). Share your calendar with the service-account email ("Make changes
+      # to events"), base64 the key JSON, and set the three vars below. Full steps:
+      # docs/discovery-setup-guide.md §3-SA. All dashboard-managed (never in git).
+      - key: CHORDENTIAL_CALENDAR_PROVIDER          # "google" to turn calendar on
+        sync: false
+      - key: CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON # base64 of the SA key JSON
+        sync: false
+      - key: CHORDENTIAL_GOOGLE_CALENDAR_ID          # your @gmail (the shared calendar)
+        sync: false
     # ⚠️ ZERO-DOWNTIME CUTOVER: this disk is what blocks zero-downtime deploys
     # (single-attach). At cutover, REMOVE this disk block and the CHORDENTIAL_DB
     # value above, add a Render Postgres `databases:` block + a fromDatabase env,
