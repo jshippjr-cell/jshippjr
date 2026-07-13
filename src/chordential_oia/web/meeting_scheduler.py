@@ -192,8 +192,12 @@ def cancel(conn, meeting) -> dict:
         db.set_discovery_request_status(conn, meeting["request_id"], "new")  # reopen the ask
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:
-        # A CANCEL invite (same UID, method=CANCEL) removes the block from both calendars.
-        ics = build_invite_ics(meeting, opp, sequence=2, cancel=True)
+        # A CANCEL invite (same UID, method=CANCEL) removes the block from both calendars —
+        # but only when WE placed it via .ics. If the provider made a native event we already
+        # delete_event'd it above; a CANCEL .ics for a UID the client never had would be noise.
+        native_event = bool((meeting["calendar_event_id"] or "").strip())
+        ics = (None if native_event
+               else build_invite_ics(meeting, opp, sequence=2, cancel=True))
         if meeting["client_email"]:
             _safe_mail(meeting["client_email"],
                        f"Discovery call canceled — {opp['client']}",
@@ -407,8 +411,13 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
         how = f"Join here: {meeting['join_url']}"
     else:
         how = "A meeting link will follow."
-    # A reschedule bumps SEQUENCE so the same calendar event updates in place.
-    ics = build_invite_ics(meeting, opp, sequence=1 if rescheduled else 0)
+    # Only attach our .ics when the calendar provider did NOT already create a native event
+    # (calendar_event_id is set): with Google connected it invites both parties itself, so a
+    # second .ics with a different UID would show up as a DUPLICATE calendar entry. When no
+    # provider is connected, the .ics is the only way a block reaches either calendar.
+    native_event = bool((meeting["calendar_event_id"] or "").strip())
+    ics = (None if native_event
+           else build_invite_ics(meeting, opp, sequence=1 if rescheduled else 0))
     if meeting["client_email"]:
         _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",

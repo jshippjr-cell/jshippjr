@@ -84,6 +84,20 @@ def test_confirmations_attach_ics_to_both_and_give_operator_the_join_link(tmp_pa
     assert "/meeting/" in op_text and "k=tok123" in op_text
 
 
+def test_no_ics_when_a_native_calendar_event_already_exists(tmp_path, monkeypatch):
+    # With Google connected, the provider creates a native event (calendar_event_id set) and
+    # invites both parties itself — a second .ics would double-book the calendar. Suppress it.
+    dbm, ms, conn = _mods(tmp_path, monkeypatch)
+    opp = _opp(dbm, conn)
+    m = _meeting(dbm, conn, opp, calendar_event_id="google-evt-abc")
+    sent = []
+    monkeypatch.setattr(ms.mailer, "send_email",
+                        lambda to, subject, text, html=None, ics=None:
+                        sent.append(dict(to=to, ics=ics)) or "sent")
+    ms._send_confirmations(opp, m)
+    assert sent and all(s["ics"] is None for s in sent)   # no duplicate calendar attachment
+
+
 def test_reschedule_bumps_sequence_so_the_same_event_updates(tmp_path, monkeypatch):
     dbm, ms, conn = _mods(tmp_path, monkeypatch)
     opp = _opp(dbm, conn)
