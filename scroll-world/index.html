@@ -32,8 +32,8 @@
   .scene img{width:min(92vw,1100px);height:auto;max-height:82vh;object-fit:contain;filter:drop-shadow(0 30px 60px rgba(68,22,30,.14));will-change:transform}
 
   /* ---- Copy ---- */
-  .copylayer{position:absolute;left:0;right:0;bottom:0;padding:clamp(1.4rem,5vw,4rem);pointer-events:none}
-  .copylayer::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent,rgba(244,236,223,.0) 8%,rgba(244,236,223,.72) 55%,var(--cream));z-index:-1}
+  .copylayer{position:absolute;inset:0;padding:clamp(1.4rem,5vw,4rem);pointer-events:none}
+  .copylayer::before{content:"";position:absolute;left:0;right:0;bottom:0;height:62%;background:linear-gradient(transparent,rgba(244,236,223,.72) 62%,var(--cream));z-index:-1}
   .copy{position:absolute;left:clamp(1.4rem,5vw,4rem);right:clamp(1.4rem,5vw,4rem);bottom:clamp(1.6rem,6vw,4.2rem);max-width:40ch;opacity:0;transform:translateY(14px);will-change:opacity,transform}
   .copy .eyebrow{font-size:.78rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange);font-weight:600;margin-bottom:.7rem}
   .copy h2{font-family:var(--font);font-weight:400;font-size:clamp(1.8rem,4.4vw,3.2rem);line-height:1.08;letter-spacing:-.01em;color:var(--ink)}
@@ -49,8 +49,17 @@
   .wordmark{position:fixed;top:clamp(1rem,3vw,1.8rem);left:clamp(1.2rem,4vw,2.4rem);font-family:var(--font);font-size:1.15rem;letter-spacing:.02em;z-index:10;color:var(--ink)}
   .wordmark b{color:var(--orange);font-weight:400}
 
+  /* ---- Finale (last scene, text-forward) ---- */
+  .copy.finale{left:50%;right:auto;bottom:auto;top:50%;width:min(90vw,760px);max-width:none;text-align:center}
+  .copy.finale .eyebrow{color:var(--olive)}
+  .copy.finale h2{font-size:clamp(1.8rem,3.9vw,3rem);line-height:1.12;color:var(--ink)}
+  .copy.finale .accent{color:var(--orange);display:block;margin-top:.15em}
+  .copy.finale p{margin:.9rem auto 0;max-width:38ch}
+  .copy.finale .cta{margin-top:1.6rem}
+
   @media (max-width:700px){
     .copy{max-width:none}
+    .copy.finale{max-width:none}
     .rail{display:none}
   }
   @media (prefers-reduced-motion:reduce){
@@ -99,9 +108,9 @@ const SCENES = [
     title:"Everything arrives organized, cleared, and ready.",
     body:"Stems, versions, cue sheets, rights — packaged and delivered. The quiet machine that makes it all feel effortless.",
     tags:["Cleared","Organized","Delivered"] },
-  { still:"stills/scene6.png", eyebrow:"",
-    title:"The music, living where it belongs.",
-    body:"The campaign. The film. The audience. Original music for campaigns — composed, cleared, delivered.",
+  { still:"stills/scene6.png", eyebrow:"Where it belongs",
+    title:"Original music for campaigns.<span class=\"accent\">Composed. Cleared. Delivered.</span>",
+    body:"The campaign. The film. The audience. The music, living exactly where it belongs.",
     tags:[], cta:"Start a project" },
 ];
 const DWELL = 1.15; // viewport-heights of scroll per scene
@@ -117,7 +126,7 @@ SCENES.forEach((s,i)=>{
   img.onerror=()=>{ img.style.display='none'; fig.classList.add('noimg'); }; // graceful if a still is missing
   fig.appendChild(img); scenesEl.appendChild(fig);
 
-  const c=document.createElement('div'); c.className='copy'; c.dataset.i=i;
+  const c=document.createElement('div'); c.className='copy'+(i===SCENES.length-1?' finale':''); c.dataset.i=i;
   c.innerHTML = (s.eyebrow?`<div class="eyebrow">${s.eyebrow}</div>`:'')
     + `<h2>${s.title}</h2><p>${s.body}</p>`
     + (s.tags&&s.tags.length?`<div class="tags">${s.tags.map(t=>`<span>${t}</span>`).join('')}</div>`:'')
@@ -157,7 +166,10 @@ function update(){
   copies.forEach((c,i)=>{
     const op=zone(Math.abs(fpos-i));
     c.style.opacity=op.toFixed(3);
-    c.style.transform=`translateY(${(1-op)*14}px)`;
+    const dy=(1-op)*14;
+    c.style.transform = c.classList.contains('finale')
+      ? `translate(-50%, calc(-50% + ${dy}px))`
+      : `translateY(${dy}px)`;
   });
   dots.forEach((b,i)=>b.setAttribute('aria-current', i===active?'true':'false'));
 }
