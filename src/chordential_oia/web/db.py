@@ -407,6 +407,13 @@ _TALENT_COLUMNS = {
     # W-9 status for the payout ledger: collected before a first payout can be
     # marked Paid. Stored as an ISO date (when received) — null = not on file.
     "w9_received_at": "TEXT",
+    # Standing Composer Agreement (ADR-0024, the supply-side floor): the executed
+    # work-assignment + rights-conveyance instrument this creator works under.
+    # ISO date when executed — null = not on file. Together with a rate, this
+    # gates assignment: the rights chain the client-facing certificate warrants
+    # begins here, so no agreement + rate → no assignment (machine-enforced).
+    "agreement_executed_at": "TEXT",
+    "agreement_ref": "TEXT",              # where the signed instrument lives (file/DocuSign ref)
 }
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
@@ -3971,6 +3978,38 @@ def set_talent_w9(conn: sqlite3.Connection, talent_id: int, received_at: Optiona
         "UPDATE talent SET w9_received_at = ? WHERE id = ?", (received_at, talent_id)
     )
     conn.commit()
+
+
+def set_talent_agreement(conn: sqlite3.Connection, talent_id: int,
+                         executed_at: Optional[str], ref: str = "") -> None:
+    """Record (or clear) the standing Composer Agreement (ADR-0024). ``executed_at``
+    is the ISO date the instrument was signed; ``ref`` says where it lives. Clearing
+    (None) also clears the ref — a dangling reference to a voided agreement is worse
+    than none."""
+    conn.execute(
+        "UPDATE talent SET agreement_executed_at = ?, agreement_ref = ? WHERE id = ?",
+        (executed_at, (ref or "").strip() if executed_at else "", talent_id),
+    )
+    conn.commit()
+
+
+def talent_assignment_blockers(row) -> List[str]:
+    """The A-3 gate (ADR-0024), computed: what stops this creator from being
+    assigned. Returns [] when clear, else a list among {'agreement', 'rate'}.
+    Pure read of a talent row — the assign routes refuse on a non-empty answer,
+    mirroring how the payment gate refuses release. Enforced by the flow, not
+    by convention (Constitution §10)."""
+    blockers: List[str] = []
+    if row is None:
+        return ["agreement", "rate"]
+    keys = row.keys()
+    if not ((row["agreement_executed_at"] or "").strip()
+            if "agreement_executed_at" in keys else ""):
+        blockers.append("agreement")
+    rate = row["rate"] if "rate" in keys else None
+    if rate is None or float(rate or 0) <= 0:
+        blockers.append("rate")
+    return blockers
 
 
 def list_talent_assignments(conn: sqlite3.Connection, talent_id: int) -> List[sqlite3.Row]:

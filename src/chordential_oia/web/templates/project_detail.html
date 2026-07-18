@@ -3,6 +3,14 @@
 {% block heading %}<a class="crumb" href="/projects">Projects</a> / {{ row['need'][:40] }}{% endblock %}
 {% block content %}
 
+{% if gate_banner %}
+<div class="callout" style="border-color:#c0392b">
+  <span class="callout-ico">⚠</span>
+  <strong>Assignment blocked</strong> — {{ gate_banner.name }} needs {{ gate_banner.missing }} on file before they can be assigned (the rights chain starts there).
+  <a class="link" href="/talent/{{ gate_banner.talent_id }}#access">Fix it on their talent page →</a>
+</div>
+{% endif %}
+
 <div class="detail-head card">
   <div>
     <div class="pill-row">

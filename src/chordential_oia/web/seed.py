@@ -33,6 +33,7 @@ _TALENT_SEED = [
         credits="Composer on 2 national auto spots; orchestral arranger for a Netflix doc.",
         location="Los Angeles, CA", demo_reel_url="https://example.com/reels/maya-okafor",
         review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.JOINED,
+        rate=95.0, rate_unit="hourly",
     ),
     Talent(
         name="Devin Park", email="devin@parkaudio.io",
@@ -40,6 +41,7 @@ _TALENT_SEED = [
         credits="Sound designer for indie games; hybrid score for a brand campaign.",
         location="Brooklyn, NY", demo_reel_url="https://example.com/reels/devin-park",
         review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.INVITED,
+        rate=80.0, rate_unit="hourly",
     ),
     Talent(
         name="Sofia Marin", email="sofia@marinmusic.com",
@@ -87,12 +89,19 @@ def seed(conn: sqlite3.Connection) -> int:
 
 
 def seed_talent(conn: sqlite3.Connection) -> int:
-    """Populate the starter talent roster if it's empty. Returns the number added."""
+    """Populate the starter talent roster if it's empty. Returns the number added.
+
+    Approved members model the ADR-0024 compliant state (executed agreement +
+    rate) so the demo shows what "assignable" looks like; pending prospects stay
+    unsigned — the assignment gate refusing them is part of the demo's honesty."""
     db.init_db(conn)
     if db.talent_count(conn) > 0:
         return 0
     for t in _TALENT_SEED:
-        db.insert_talent(conn, t)
+        tid = db.insert_talent(conn, t)
+        if t.review_status == ReviewStatus.APPROVED:
+            db.set_talent_agreement(
+                conn, tid, date.today().isoformat(), "Standing Composer Agreement (demo)")
     return len(_TALENT_SEED)
 
 
@@ -242,11 +251,16 @@ def _demo_talent_id(conn: sqlite3.Connection, name: str, email: str,
     ).fetchone()
     if row is not None:
         return int(row[0])
-    return db.insert_talent(conn, Talent(
+    tid = db.insert_talent(conn, Talent(
         name=name, email=email, disciplines=disciplines, credits=credits,
         review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.JOINED,
-        source="demo_delivery",
+        source="demo_delivery", rate=90.0, rate_unit="hourly",
     ))
+    # Demo creators get assigned to demo projects — they must clear the ADR-0024
+    # assignment gate the same way a real creator would.
+    db.set_talent_agreement(
+        conn, tid, date.today().isoformat(), "Standing Composer Agreement (demo)")
+    return tid
 
 
 def _iso(days_ago: int, *, hour: int = 12, minute: int = 0) -> str:

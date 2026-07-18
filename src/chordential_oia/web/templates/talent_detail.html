@@ -67,6 +67,25 @@
         {% endif %}
       </form>
     </div>
+    <div style="margin-top:12px">
+      <form method="post" action="/talent/{{ t.id }}/agreement">
+        {% if agreement_executed_at %}
+        <span class="pill sv-door">✓ Composer Agreement executed ({{ agreement_executed_at }}{% if agreement_ref %} — {{ agreement_ref }}{% endif %})</span>
+        <input type="hidden" name="executed" value="0">
+        <button class="btn tiny" type="submit">Clear</button>
+        {% else %}
+        <span class="muted small">Composer Agreement + rate required before assignment — the rights chain starts here.</span>
+        <input type="hidden" name="executed" value="1">
+        <input type="text" name="ref" placeholder="Where the signed copy lives (optional)" style="max-width:220px">
+        <button class="btn tiny" type="submit">Mark agreement executed</button>
+        {% endif %}
+      </form>
+      {% if assignment_blockers %}
+      <p class="muted small" style="margin-top:6px">⚠ Not assignable yet — missing:
+        {% for b in assignment_blockers %}<strong>{{ 'executed agreement' if b == 'agreement' else 'rate' }}</strong>{{ ' + ' if not loop.last }}{% endfor %}.
+        {% if 'rate' in assignment_blockers %}Set the rate in the profile above.{% endif %}</p>
+      {% endif %}
+    </div>
 
     <div class="card-head" style="margin-top:18px"><h2>Recruiting funnel</h2></div>
     <form class="stack" method="post" action="/talent/{{ t.id }}/invite">

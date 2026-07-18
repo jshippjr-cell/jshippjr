@@ -3767,8 +3767,30 @@ def talent_match_page(request: Request, opp_id: int):
 # --------------------------------------------------------------------------- #
 # Match Board — opportunities (left) × qualified talent (right), drag/tap assign
 # --------------------------------------------------------------------------- #
+def _gate_banner(err: str, t: Optional[int]) -> Optional[dict]:
+    """The A-3 refusal banner (ADR-0024): who was blocked and what's missing, so
+    the operator's next click is the fix, not a mystery. Pure lookup — returns
+    None unless this request is the redirect from a refused assign."""
+    if err != "agreement" or not t:
+        return None
+    conn = db.connect()
+    try:
+        row = db.get_talent(conn, int(t))
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    blockers = db.talent_assignment_blockers(row)
+    missing = " + ".join(
+        {"agreement": "an executed Composer Agreement",
+         "rate": "a rate"}[b] for b in blockers) or "nothing"
+    name = (row["name"] or "This creator") if "name" in row.keys() else "This creator"
+    return {"talent_id": row["id"], "name": name, "missing": missing}
+
+
 @app.get("/matchboard", response_class=HTMLResponse)
-def matchboard(request: Request, opp: Optional[int] = None):
+def matchboard(request: Request, opp: Optional[int] = None,
+               err: str = "", t: Optional[int] = None):
     conn = db.connect()
     try:
         opp_rows = db.staffable_opportunities(conn)
@@ -3814,6 +3836,7 @@ def matchboard(request: Request, opp: Optional[int] = None):
     return render(
         request, "matchboard.html", nav="matchboard", opps=opps, bubbles=bubbles,
         focus_id=focus_id, focus_label=focus_label,
+        gate_banner=_gate_banner(err, t),
     )
 
 
@@ -3824,9 +3847,18 @@ def matchboard_assign(opp_id: int = Form(...), talent_id: int = Form(...)):
     to the whole crew so the team knows who they're working with."""
     conn = db.connect()
     try:
-        pid = _ensure_project_for_opp(conn, opp_id)
         t = db.get_talent(conn, talent_id)
-        if pid is None or t is None:
+        if t is None:
+            return RedirectResponse("/matchboard", status_code=303)
+        # ADR-0024 (the A-3 floor): no assignment without an executed agreement +
+        # rate. Server-side refusal — the rights chain the certificate warrants
+        # starts here. Checked BEFORE ensure-project so a blocked assign has no
+        # side effects.
+        if db.talent_assignment_blockers(t):
+            return RedirectResponse(
+                f"/matchboard?err=agreement&t={talent_id}", status_code=303)
+        pid = _ensure_project_for_opp(conn, opp_id)
+        if pid is None:
             return RedirectResponse("/matchboard", status_code=303)
         tt = db.talent_from_row(t)
         role = tt.discipline_labels[0] if tt.discipline_labels else "Crew"
@@ -4774,6 +4806,11 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
         t = db.talent_from_row(row)
         portal_token = row["portal_token"] if "portal_token" in row.keys() else None
         w9_at = row["w9_received_at"] if "w9_received_at" in row.keys() else None
+        agreement_at = (row["agreement_executed_at"]
+                        if "agreement_executed_at" in row.keys() else None)
+        agreement_ref = (row["agreement_ref"]
+                         if "agreement_ref" in row.keys() else "") or ""
+        assignment_blockers = db.talent_assignment_blockers(row)
     finally:
         conn.close()
     portal_url = f"{_public_base()}/creator/{portal_token}" if portal_token else None
@@ -4787,6 +4824,8 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
         completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
         review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
         portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
+        agreement_executed_at=agreement_at, agreement_ref=agreement_ref,
+        assignment_blockers=assignment_blockers,
         invite=invite, mail_configured=mailer.mail_configured(),
         invite_result=invite_result,
     )
@@ -4921,6 +4960,22 @@ def talent_set_w9(talent_id: int, received: str = Form("")):
     try:
         db.set_talent_w9(conn, talent_id,
                          _date.today().isoformat() if received == "1" else None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+
+
+@app.post("/talent/{talent_id}/agreement")
+def talent_set_agreement(talent_id: int, executed: str = Form(""), ref: str = Form("")):
+    """Record/clear the standing Composer Agreement (ADR-0024) — the assignment
+    gate's other half alongside the rate. Recording stamps today; clearing wipes
+    both date and ref."""
+    from datetime import date as _date
+    conn = db.connect()
+    try:
+        db.set_talent_agreement(
+            conn, talent_id,
+            _date.today().isoformat() if executed == "1" else None, ref)
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
@@ -5353,7 +5408,8 @@ def _project_view(conn, project_id: int):
 
 
 @app.get("/project/{project_id}", response_class=HTMLResponse)
-def project_detail(request: Request, project_id: int):
+def project_detail(request: Request, project_id: int,
+                   err: str = "", t: Optional[int] = None):
     conn = db.connect()
     try:
         view = _project_view(conn, project_id)
@@ -5363,7 +5419,8 @@ def project_detail(request: Request, project_id: int):
         conn.close()
     return render(
         request, "project_detail.html", nav="projects",
-        project_states=db.PROJECT_STATES, milestone_states=db.MILESTONE_STATES, **view,
+        project_states=db.PROJECT_STATES, milestone_states=db.MILESTONE_STATES,
+        gate_banner=_gate_banner(err, t), **view,
     )
 
 
@@ -5375,8 +5432,15 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
     place the email fires from."""
     conn = db.connect()
     try:
-        db.add_assignment(conn, project_id, role, talent_id)
         row = db.get_talent(conn, talent_id)
+        # ADR-0024 (the A-3 floor): no assignment without an executed agreement +
+        # rate — refused server-side before any side effect, mirroring the
+        # payment gate on release.
+        if db.talent_assignment_blockers(row):
+            return RedirectResponse(
+                f"/project/{project_id}?err=agreement&t={talent_id}",
+                status_code=303)
+        db.add_assignment(conn, project_id, role, talent_id)
         t = db.talent_from_row(row) if row is not None else None
         name = t.name if t else "a creator"
         # The assignment IS the broadcast — post a roster line to the crew feed
