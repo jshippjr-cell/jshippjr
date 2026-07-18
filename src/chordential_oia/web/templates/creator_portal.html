@@ -3,237 +3,716 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your work — {{ t.name }} · Chordential</title>
+<title>Session Room — {{ t.name }} · Chordential</title>
 <style>
+  /* ── The Scoring Stage (docs/design/chordos-studio-experience.md, Phase 1) ──
+     One room per engagement. The picture position is the hero (poster until the
+     client's cut arrives — Phase 2); the Spine beneath carries notes + music on
+     one playhead; Brief/Notes/Versions are summoned layers (B/N/V, Esc). */
   :root{
-    --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
-    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
-    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --ink:#191817; --panel:#211F1D; --panel2:#282523; --panel3:#2F2B28;
+    --hair:rgba(216,205,182,.16); --hair2:rgba(216,205,182,.30);
+    --text:rgba(252,247,248,.92); --dim:rgba(214,207,196,.62); --dim2:rgba(214,207,196,.40);
+    --orange:#F0772C; --orange-soft:rgba(240,119,44,.16);
+    --wine:#9A3A4A; --wine-soft:rgba(154,58,74,.20);
+    --slate:#8BA0AE;
+    --ok:#7FB08A;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --ease:cubic-bezier(.19,1,.22,1);
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--cream);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
-  .wrap{max-width:780px;margin:0 auto;padding:0 20px 64px}
-  .hero{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
-    padding:46px 0 40px;margin-bottom:30px}
-  .hero .wrap{padding-top:0}
-  .kick{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 8px}
-  h1{font-family:var(--serif);font-weight:600;font-size:36px;line-height:1.08;margin:0 0 8px}
-  .hero .tag{color:var(--sand);font-size:15px;max-width:92%;margin:0}
-  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
-  h2{font-family:var(--serif);font-size:21px;color:var(--wine);margin:0 0 4px;font-weight:600}
-  .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
-  .row{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;margin:0 0 12px}
-  .row b{color:var(--slate);font-weight:600}
-  .pill{display:inline-block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;
-    padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--slate)}
-  .pill.live{border-color:var(--orange);color:var(--orange)}
-  ul.versions{list-style:none;margin:8px 0 14px;padding:0;font-size:13px}
-  ul.versions li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
-  ul.versions li:last-child{border-bottom:0}
-  ul.versions .vlabel{font-weight:700;color:var(--wine)}
-  audio{height:30px;vertical-align:middle}
-  .feedback{margin:4px 0 16px;padding:12px 14px;background:var(--cream);
-    border:1px solid var(--line);border-radius:10px}
-  .fb-head{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
-    color:var(--wine);display:flex;gap:10px;align-items:center;margin-bottom:8px}
-  .fb-count{font-weight:600;color:var(--orange);letter-spacing:0;text-transform:none}
-  .fb-rev{margin-left:auto;font-weight:600;color:var(--slate);letter-spacing:0;text-transform:none}
-  ul.fb-list{list-style:none;margin:0;padding:0;font-size:13px}
-  .fb-item{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line)}
-  .fb-item:last-child{border-bottom:0}
-  .fb-item.done{opacity:.55}
-  .fb-item.done .fb-b{text-decoration:line-through}
-  .fb-t{flex:0 0 auto;color:var(--orange);font-weight:800;font-variant-numeric:tabular-nums;min-width:38px}
-  .fb-tag{flex:0 0 auto;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
-    color:var(--wine);background:rgba(68,22,30,.08);border-radius:999px;padding:2px 7px}
-  .fb-a{flex:0 0 auto;font-weight:700;color:var(--wine)}
-  .fb-b{flex:1 1 auto;color:var(--ink)}
-  .uploader{border:1px dashed var(--sand);border-radius:10px;padding:14px 16px;background:var(--cream)}
-  .uploader label{font-size:12px;color:var(--slate);display:block;margin-bottom:8px;font-weight:600}
-  .btn{display:inline-block;background:var(--orange);color:#fff;border:0;border-radius:8px;padding:10px 18px;
-    font-weight:700;font-size:14px;cursor:pointer;text-decoration:none}
-  .muted-note{font-size:11px;color:var(--muted);font-style:italic;margin-top:10px}
-  .empty{color:var(--muted);font-size:14px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--ink);color:var(--text);font:13.5px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--orange-soft)}
+  :focus-visible{outline:2px solid var(--orange);outline-offset:2px;border-radius:4px}
+
+  .room{max-width:1180px;margin:0 auto;padding:0 clamp(14px,3vw,40px) 64px;
+    opacity:0;transform:translateY(8px);animation:housefade .9s var(--ease) .1s forwards}
+  @keyframes housefade{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.room{animation-duration:.01ms}}
+
+  /* ── doorline ── */
+  .doorline{display:flex;align-items:center;gap:14px;padding:14px 0 18px;flex-wrap:wrap}
+  .wordmark{font-family:var(--serif);font-size:15px;white-space:nowrap}
+  .wordmark b{color:var(--orange);font-weight:400}
+  .kicker{font:700 9.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--dim2)}
+  .door-title{font-size:13px;color:var(--dim)}
+  .door-title b{color:var(--text);font-weight:600}
+  .doorline .spacer{flex:1}
+  .door-chip{font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--hair);border-radius:999px;
+    padding:5px 11px;white-space:nowrap}
+  .door-chip b{color:var(--orange);font-weight:700}
+  .door-chip.state{color:var(--text)}
+  .door-chip.state.live{border-color:rgba(240,119,44,.5);color:var(--orange)}
+
+  /* ── the stage ── */
+  .stage{position:relative;background:#0D0C0B;border:1px solid var(--hair);border-radius:12px 12px 0 0;
+    overflow:hidden;aspect-ratio:16/6.8;min-height:200px}
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  .poster-title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;pointer-events:none;text-align:center;padding:0 20px}
+  .poster-title .pt-kick{font:700 9px var(--mono);letter-spacing:.22em;color:rgba(252,247,248,.45)}
+  .poster-title h1{font-family:var(--serif);font-weight:500;font-size:clamp(22px,3.4vw,34px);color:rgba(252,247,248,.9)}
+  .poster-title .pt-sub{font-size:12.5px;color:rgba(214,207,196,.55)}
+  .tc{position:absolute;top:12px;right:14px;font:600 12px var(--mono);letter-spacing:.05em;
+    color:rgba(252,247,248,.85);background:rgba(13,12,11,.55);border:1px solid rgba(216,205,182,.2);
+    border-radius:5px;padding:4px 8px}
+  .picture-note{position:absolute;left:14px;top:12px;font:600 9px var(--mono);letter-spacing:.14em;
+    color:rgba(214,207,196,.5);background:rgba(13,12,11,.45);border-radius:4px;padding:4px 8px}
+  .bigplay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .bigplay button{width:60px;height:60px;border-radius:50%;background:rgba(240,119,44,.94);color:#1B120B;
+    font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 44px rgba(0,0,0,.55);
+    transition:transform .18s var(--ease)}
+  .bigplay button:hover{transform:scale(1.07)}
+  .stage.playing .bigplay,.stage.noaudio .bigplay{display:none}
+  .whisper{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;font-family:var(--serif);font-size:14px;
+    color:rgba(252,247,248,.8);background:linear-gradient(0deg,rgba(13,12,11,.85),transparent);
+    display:flex;gap:8px;align-items:baseline}
+  .whisper .w-dot{width:6px;height:6px;border-radius:50%;background:var(--orange);flex:0 0 auto;transform:translateY(-2px)}
+
+  /* ── the spine ── */
+  .spine{position:relative;border:1px solid var(--hair);border-top:0;border-radius:0 0 12px 12px;
+    background:var(--panel);user-select:none}
+  .lane{position:relative;height:34px;border-top:1px solid var(--hair);cursor:crosshair}
+  .lane:first-child{border-top:0}
+  .lane.music{height:54px}
+  .lane-label{position:absolute;left:9px;top:50%;transform:translateY(-50%);font:700 8.5px var(--sans);
+    letter-spacing:.16em;text-transform:uppercase;color:var(--dim2);pointer-events:none;z-index:3}
+  .lane.music canvas{position:absolute;inset:0;width:100%;height:100%}
+  .pin{position:absolute;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;
+    border:2px solid var(--ink);z-index:2;pointer-events:none;background:var(--wine)}
+  .pin.resolved{opacity:.28}
+  .ember{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
+    font:600 10.5px var(--mono);letter-spacing:.1em;color:var(--dim2)}
+  .ember i{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:breath 2.2s ease-in-out infinite}
+  @keyframes breath{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){.ember i{animation:none}}
+  .playhead{position:absolute;top:0;bottom:0;width:1.5px;background:var(--orange);z-index:4;pointer-events:none;
+    box-shadow:0 0 8px rgba(240,119,44,.5)}
+  .playhead::after{content:"";position:absolute;top:-1px;left:-3.5px;border:4px solid transparent;border-top-color:var(--orange)}
+
+  /* ── transport ── */
+  .transport{display:flex;align-items:center;gap:12px;padding:12px 2px 0;flex-wrap:wrap}
+  .t-btn{width:34px;height:34px;border-radius:8px;border:1px solid var(--hair);display:flex;align-items:center;
+    justify-content:center;font-size:13px;transition:border-color .15s}
+  .t-btn:hover{border-color:var(--hair2)}
+  .t-btn.play{background:var(--orange);border-color:var(--orange);color:#1B120B;font-weight:700}
+  .take-chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .take-chip{font:600 11px var(--mono);padding:5px 11px;border:1px solid var(--hair);border-radius:999px;color:var(--dim);
+    transition:border-color .15s,color .15s}
+  .take-chip:hover{border-color:var(--hair2)}
+  .take-chip.on{border-color:rgba(240,119,44,.6);color:var(--orange);background:var(--orange-soft)}
+  .take-chip.pending{border-style:dashed}
+  .t-keys{font:10.5px var(--mono);color:var(--dim2)}
+  .transport .spacer{flex:1}
+  .layer-keys{display:flex;gap:6px}
+  .lk{font-size:11.5px;font-weight:600;color:var(--dim);border:1px solid var(--hair);border-radius:8px;
+    padding:7px 13px;transition:border-color .15s,color .15s}
+  .lk:hover{border-color:var(--hair2);color:var(--text)}
+  .lk b{font:700 10px var(--mono);color:var(--dim2);margin-right:6px}
+  .lk .n-open{color:var(--orange);font-weight:700}
+  .upload-cta{display:inline-flex;align-items:center;gap:8px;background:var(--orange);color:#1B120B;font-weight:700;
+    font-size:12.5px;border-radius:8px;padding:9px 16px;transition:transform .15s var(--ease)}
+  .upload-cta:hover{transform:translateY(-1px)}
+
+  /* ── summoned layers ── */
+  .veil{position:fixed;inset:0;background:rgba(13,12,11,.62);backdrop-filter:blur(3px);z-index:30;
+    opacity:0;pointer-events:none;transition:opacity .25s ease}
+  .veil.on{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:50%;bottom:0;transform:translate(-50%,102%);width:min(96vw,780px);max-height:72vh;
+    overflow-y:auto;background:var(--panel2);border:1px solid var(--hair2);border-bottom:0;border-radius:14px 14px 0 0;
+    padding:28px clamp(18px,4vw,40px) 40px;z-index:40;transition:transform .4s var(--ease)}
+  .sheet.on{transform:translate(-50%,0)}
+  .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
+  .sheet-head h2{font-family:var(--serif);font-weight:500;font-size:21px}
+  .sheet-head .esc{margin-left:auto;font:600 10px var(--mono);color:var(--dim2);border:1px solid var(--hair);
+    border-radius:5px;padding:4px 8px;cursor:pointer}
+  .sheet h3{font:700 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--dim2);margin:20px 0 8px}
+
+  /* brief sheet */
+  .brief-lede{font-family:var(--serif);font-size:17px;line-height:1.55;max-width:65ch}
+  .brief-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .chip{font-size:10.5px;font-weight:600;border:1px solid var(--hair2);border-radius:999px;padding:4px 10px;color:var(--dim)}
+  .spec-row{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+  .spec-row:first-of-type{border-top:0}
+  .spec-row .k{font:600 10.5px var(--mono);color:var(--dim2);min-width:88px}
+  .spec-row .spec{font:10.5px var(--mono);color:var(--dim2)}
+
+  /* notes sheet */
+  .fb-top{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim);flex-wrap:wrap}
+  .fb-top .open-ct{color:var(--orange);font-weight:700}
+  .note-card{border:1px solid var(--hair);border-radius:9px;background:var(--panel);padding:10px 12px;margin-top:8px;
+    cursor:pointer;transition:border-color .15s}
+  .note-card:hover{border-color:var(--hair2)}
+  .note-card.hot{border-color:rgba(240,119,44,.6)}
+  .note-card.done{opacity:.42}
+  .nc-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+  .nc-dot{width:8px;height:8px;border-radius:50%;background:var(--wine)}
+  .nc-who{font-size:11px;font-weight:700}
+  .nc-tag{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#c98a96;
+    background:var(--wine-soft);border-radius:3px;padding:2px 6px}
+  .nc-tc{font:600 10.5px var(--mono);color:var(--orange);margin-left:auto;background:var(--orange-soft);
+    border-radius:4px;padding:2px 6px}
+  .nc-body{font-size:12.5px;line-height:1.45}
+
+  /* versions sheet */
+  .take-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair);flex-wrap:wrap}
+  .take-row:first-of-type{border-top:0}
+  .take-row .vlabel{font:700 11.5px var(--mono);color:var(--orange);min-width:34px}
+  .take-row audio{height:30px;flex:1 1 220px;min-width:180px}
+  .take-row .fname{font:11px var(--mono);color:var(--dim2)}
+  .pend-badge{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+    border:1px dashed var(--hair2);border-radius:4px;padding:3px 7px}
+  .uploader{border:1.5px dashed var(--hair2);border-radius:10px;padding:16px;margin-top:14px;background:var(--panel)}
+  .uploader label{display:block;font-size:12px;font-weight:600;color:var(--dim);margin-bottom:10px}
+  .uploader input[type=file]{font-size:12px;color:var(--dim);margin-bottom:10px;display:block}
+  .btn{display:inline-block;background:var(--orange);color:#1B120B;border-radius:8px;padding:9px 16px;
+    font-weight:700;font-size:12.5px;border:0;cursor:pointer}
+  .btn.tiny{padding:6px 12px;font-size:11.5px}
+  .fineprint{font-size:11px;color:var(--dim2);margin-top:9px}
+  .ok-line{color:var(--ok);font-weight:700;font-size:11px}
+  .deliv-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--hair)}
+  .deliv-row span.what{flex:1 1 180px;font-size:12.5px}
+  .deliv-row .spec{font:10.5px var(--mono);color:var(--dim2)}
+
+  /* drop veil */
+  .dropveil{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    background:rgba(13,12,11,.82)}
+  .dropveil.on{display:flex}
+  .drop-box{border:2px dashed rgba(240,119,44,.6);border-radius:16px;padding:46px 60px;text-align:center}
+  .drop-box .d1{font-family:var(--serif);font-size:21px;margin-bottom:6px}
+  .drop-box .d2{font:600 10.5px var(--mono);letter-spacing:.1em;color:var(--dim)}
+
+  /* toast whisper */
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(90px);background:var(--panel3);
+    border:1px solid var(--hair2);border-radius:9px;padding:10px 16px;font-size:12.5px;transition:transform .3s var(--ease);z-index:70}
+  .toast.show{transform:translateX(-50%)}
+
+  .foot{max-width:1180px;margin:0 auto;padding:16px clamp(14px,3vw,40px) 30px;font:10.5px var(--mono);color:var(--dim2)}
+  .roomnav{display:flex;gap:6px;margin:0 0 4px;flex-wrap:wrap}
+  .roomnav a{font-size:11px;font-weight:600;color:var(--dim);border:1px solid var(--hair);border-radius:999px;padding:4px 11px}
+  .roomnav a:hover{color:var(--text);border-color:var(--hair2)}
+
+  @media (max-width:760px){
+    .stage{aspect-ratio:16/9}
+    .doorline{gap:8px}
+    .t-keys{display:none}
+  }
 </style>
 </head>
 <body>
-  <div class="hero">
-    <div class="wrap">
-      <p class="kick">Creator workspace</p>
+
+{% if not assignments %}
+<div class="room">
+  <div class="doorline">
+    <span class="wordmark">Chord<b>ential</b></span>
+    <span class="kicker">Creator workspace</span>
+  </div>
+  <div class="stage noaudio" style="aspect-ratio:16/6">
+    <div class="poster-title">
+      <span class="pt-kick">SESSION ROOM</span>
       <h1>Welcome, {{ t.name.split(' ')[0] }}.</h1>
-      <p class="tag">Your assigned briefs, your work versions, and where each one stands —
-        all in one place. The music is always yours; we organize, document, and deliver it.</p>
+      <p class="pt-sub">When you're staffed on a project, your room will be dressed and waiting here —
+        the brief, the picture, the notes. We'll be in touch.</p>
     </div>
   </div>
-  <div class="wrap">
+</div>
+{% endif %}
 
-    {% if not assignments %}
-    <div class="card">
-      <h2>No active assignments yet</h2>
-      <p class="empty">When you're staffed onto a project, the brief and your upload space
-        will appear here. We'll be in touch.</p>
+{% if assignments|length > 1 %}
+<div class="room" style="animation:none;opacity:1;transform:none;padding-bottom:0">
+  <div class="roomnav">
+    {% for a in assignments %}<a href="#p{{ a.project_id }}">{{ a.need[:34] }}</a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% for a in assignments %}
+{% set disp_state = 'In review' if (a.pending and not a.versions) else a.delivery_state %}
+{% set open_ct = a.feedback.open_count if (a.feedback and a.feedback.notes) else 0 %}
+<div class="room sr-room" id="p{{ a.project_id }}">
+
+  <!-- doorline -->
+  <div class="doorline">
+    <span class="wordmark">Chord<b>ential</b></span>
+    <span class="kicker">Creator workspace</span>
+    <span class="door-title"><b>{{ a.need }}</b> · {{ a.client }}</span>
+    <span class="spacer"></span>
+    {% if a.deadline %}<span class="door-chip">due {{ a.deadline }}</span>{% endif %}
+    {% if a.feedback and a.feedback.revisions_included %}
+    <span class="door-chip">revision <b>{{ a.feedback.revisions_used }}</b> / {{ a.feedback.revisions_included }}</span>
+    {% endif %}
+    <span class="door-chip state {{ 'live' if disp_state in ('In review','Approved') }}">{{ disp_state }}</span>
+  </div>
+
+  <!-- the stage: the poster holds the picture position until the client's cut (Phase 2) -->
+  <div class="stage sr-stage">
+    <canvas class="sr-poster"></canvas>
+    <div class="poster-title">
+      <span class="pt-kick">{{ a.client|upper }}</span>
+      <h1>{{ a.need }}</h1>
+      <span class="pt-sub">Your role: {{ a.role }}</span>
+    </div>
+    <span class="picture-note">PICTURE ARRIVES WITH THE CLIENT'S CUT</span>
+    <span class="tc sr-tc">00:00:00:00</span>
+    <div class="bigplay"><button class="sr-bigplay" aria-label="Play">▶</button></div>
+    <div class="whisper">
+      <span class="w-dot"></span>
+      <span>
+        {% if request.query_params.get('submitted') == a.project_id|string %}
+          Version received — the studio has been notified and is reviewing it. The client's notes will appear here once it's published.
+        {% elif a.creative_lock %}
+          Master approved. The room is in delivery — {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
+        {% elif a.pending and not a.versions %}
+          Your first take is with the studio. Nothing to do but breathe.
+        {% elif open_ct %}
+          {{ open_ct }} client note{{ 's' if open_ct != 1 }} waiting on the timeline. Press N.
+        {% elif not a.versions and not a.pending %}
+          Everything is ready. This room is waiting for your music.
+        {% else %}
+          The room is current. Write.
+        {% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- the spine -->
+  <div class="spine sr-spine">
+    <div class="lane sr-lane-notes"><span class="lane-label">Notes</span></div>
+    <div class="lane music">
+      <span class="lane-label">Music</span>
+      <canvas class="sr-wave"></canvas>
+      {% if not a.versions and not a.pending %}
+      <div class="ember"><i></i> WAITING FOR YOUR MUSIC</div>
+      {% endif %}
+    </div>
+    <div class="playhead sr-playhead" style="left:0"></div>
+  </div>
+
+  <!-- transport -->
+  <div class="transport">
+    <button class="t-btn play sr-play" aria-label="Play/Pause">▶</button>
+    <button class="t-btn sr-nudge" data-d="-5" aria-label="Back 5 seconds">↺</button>
+    <button class="t-btn sr-nudge" data-d="5" aria-label="Forward 5 seconds">↻</button>
+    <div class="take-chips">
+      {% for v in a.versions %}
+      <button class="take-chip sr-take {{ 'on' if loop.last and not a.pending }}"
+              data-src="{{ v.url or '' }}">{{ v.label }}</button>
+      {% endfor %}
+      {% if a.pending %}
+      <button class="take-chip pending sr-take on" data-src="{{ a.pending.url or '' }}">with the studio</button>
+      {% endif %}
+    </div>
+    <span class="t-keys">space · ←/→ · B brief · N notes · V versions</span>
+    <span class="spacer"></span>
+    <div class="layer-keys">
+      <button class="lk sr-open" data-sheet="brief"><b>B</b>Brief</button>
+      <button class="lk sr-open" data-sheet="notes"><b>N</b>Notes
+        {% if open_ct %}<span class="n-open">· {{ open_ct }}</span>{% endif %}</button>
+      <button class="lk sr-open" data-sheet="takes"><b>V</b>Versions</button>
+    </div>
+    <button class="upload-cta sr-upload-cta">⇪ {{ 'Upload your first take' if (not a.versions and not a.pending) else 'Upload a new take' }}</button>
+  </div>
+
+  <!-- ── LAYER: Brief ── -->
+  <div class="sheet sr-sheet" data-sheet="brief">
+    <div class="sheet-head"><h2>The brief</h2><button class="esc sr-close">ESC</button></div>
+    <p class="brief-lede">{{ a.need }} — for {{ a.client }}.</p>
+    <div class="brief-meta">
+      <span class="chip">Your role: {{ a.role }}</span>
+      {% if a.deadline %}<span class="chip">Due {{ a.deadline }}</span>{% endif %}
+      {% if a.feedback and a.feedback.revisions_included %}
+      <span class="chip">Revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
+      {% endif %}
+      <span class="chip">{{ disp_state }}</span>
+    </div>
+    <h3>What this engagement delivers</h3>
+    {% if a.deliverables %}
+      {% for d in a.deliverables %}
+      <div class="spec-row"><span class="k">{{ 'DELIVERED' if d.uploaded else 'OWED' }}</span>
+        <span>{{ d.asset }}{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span></div>
+      {% endfor %}
+    {% else %}
+      <div class="spec-row"><span class="k">MASTER</span><span>The approved master completes this delivery.</span></div>
+    {% endif %}
+    <p class="fineprint">The music is always yours to write — this room organizes, documents, and delivers it.
+      A human presses every approve button; nothing here auto-decides.</p>
+  </div>
+
+  <!-- ── LAYER: Notes ── -->
+  <div class="sheet sr-sheet" data-sheet="notes">
+    <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
+    {% if a.feedback and a.feedback.notes %}
+    <div class="fb-top">
+      <span class="open-ct">{{ a.feedback.open_count }} open</span>
+      {% if a.feedback.revisions_included %}
+      <span>· revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
+      {% endif %}
+      <span>· click a note to jump the room to its moment</span>
+    </div>
+    {% for n in a.feedback.notes %}
+    <div class="note-card sr-note {{ 'done' if n.resolved }}" {% if n.t is not none %}data-t="{{ n.t }}"{% endif %}>
+      <div class="nc-top">
+        <span class="nc-dot"></span>
+        <span class="nc-who">{{ n.author }}</span>
+        {% if n.kind == 'change_request' %}<span class="nc-tag">changes</span>{% endif %}
+        {% if n.t is not none %}<span class="nc-tc">{{ '%d:%02d'|format((n.t/60)|int, (n.t%60)|int) }}</span>{% endif %}
+      </div>
+      <div class="nc-body">{{ n.body }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--dim)">No notes yet. When the client reviews a published take, their timecoded notes
+      land here — and as pins on the timeline.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── LAYER: Versions + upload ── -->
+  <div class="sheet sr-sheet" data-sheet="takes">
+    <div class="sheet-head"><h2>Your takes</h2><button class="esc sr-close">ESC</button></div>
+
+    {% if a.pending %}
+    <div class="take-row">
+      <span class="vlabel">→</span>
+      <span class="pend-badge">With the studio — under review</span>
+      <span class="fname">{{ a.pending.orig or a.pending.filename }}{% if a.pending.at %} · {{ a.pending.at[:10] }}{% endif %}</span>
+      {% if a.pending.url %}<audio controls preload="none" src="{{ a.pending.url }}"></audio>{% endif %}
     </div>
     {% endif %}
+    {% for v in a.versions|reverse %}
+    <div class="take-row">
+      <span class="vlabel">{{ v.label }}</span>
+      {% if v.url %}<audio controls preload="none" src="{{ v.url }}"></audio>{% endif %}
+      <span class="fname">{{ v.name or '' }}</span>
+    </div>
+    {% endfor %}
+    {% if not a.versions and not a.pending %}
+    <p style="color:var(--dim)">No takes yet — this room is waiting for your first one.</p>
+    {% endif %}
 
-    {% for a in assignments %}
-    <div class="card" id="p{{ a.project_id }}">
-      <h2>{{ a.need }}</h2>
-      <p class="sub">{{ a.client }}</p>
-      {% set disp_state = 'In review' if (a.pending and not a.versions) else a.delivery_state %}
-      <div class="row">
-        <span><b>Your role:</b> {{ a.role }}</span>
-        {% if a.deadline %}<span><b>Deadline:</b> {{ a.deadline }}</span>{% endif %}
-        <span class="pill {{ 'live' if disp_state in ('In review','Approved') }}">{{ disp_state }}</span>
-      </div>
-
-      {% if request.query_params.get('submitted') == a.project_id|string %}
-      <div style="margin:8px 0 12px;padding:11px 14px;border-radius:10px;background:#e6f3ec;border:1px solid #bcdcc7;color:#1d6b43;font-weight:600">
-        ✓ Version received — thank you. The studio has been notified and is reviewing it; the client's notes (if any) will appear here once it's published.
-      </div>
-      {% endif %}
-
-      {% if a.versions %}
-      <ul class="versions">
-        {% for v in a.versions %}
-        <li>
-          <span class="vlabel">{{ v.label }}</span>
-          {% if v.url %}<audio controls preload="none" src="{{ v.url }}"></audio>{% endif %}
-          <span class="sub" style="margin:0">{{ v.name or '' }}</span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-      {% if a.pending %}
-      <div style="margin:6px 0 14px;padding:11px 13px;border:1px dashed var(--line);border-radius:10px;font-size:13px;background:var(--sand)">
-        <b>✓ Your latest version is in — under review.</b>
-        <div class="sub" style="margin:4px 0 0">{{ a.pending.orig or a.pending.filename }}{% if a.pending.at %} · submitted {{ a.pending.at[:10] }}{% endif %}</div>
-        {% if a.pending.url %}<audio controls preload="none" src="{{ a.pending.url }}" style="margin-top:8px;width:100%"></audio>{% endif %}
-      </div>
-      {% elif not a.versions %}
-      <p class="empty" style="margin:6px 0 14px">No versions submitted yet — upload your first below.</p>
-      {% endif %}
-
-      {# The client's review feedback on the current version — so the composer acts
-         on the notes directly instead of waiting for them to be relayed by hand. #}
-      {% if a.feedback and a.feedback.notes %}
-      <div class="feedback">
-        <div class="fb-head">
-          Client feedback
-          <span class="fb-count">{{ a.feedback.open_count }} open</span>
-          {% if a.feedback.revisions_included %}
-          <span class="fb-rev">revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
-          {% endif %}
-        </div>
-        <ul class="fb-list">
-          {% for n in a.feedback.notes %}
-          <li class="fb-item {{ 'done' if n.resolved }}">
-            {% if n.t is not none %}<span class="fb-t">{{ '%d:%02d'|format((n.t/60)|int, (n.t%60)|int) }}</span>{% endif %}
-            {% if n.kind == 'change_request' %}<span class="fb-tag">changes</span>{% endif %}
-            <span class="fb-a">{{ n.author }}</span>
-            <span class="fb-b">{{ n.body }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% endif %}
-
-      {% if a.creative_lock %}
-      {# Master approved — the composer's job shifts to producing the derivative
-         deliverables. Ask for each one; the master stays the version ladder below. #}
-      <div class="uploader" style="margin-bottom:12px">
-        <label style="color:#1d6b43">✓ Master approved — now deliver the remaining assets</label>
-        <p class="muted-note" style="margin:2px 0 10px">Upload each below. Each goes to the client for sign-off, and the studio is notified.</p>
-        {% for d in a.deliverables %}
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--sand)">
-          <span style="flex:1 1 180px;font-size:13px"><b>{{ d.asset }}</b>{% if d.spec %} <span class="sub" style="margin:0">· {{ d.spec }}</span>{% endif %}</span>
-          {% if d.uploaded %}
-          <span style="font-size:11px;font-weight:700;color:#1d6b43">✓ Delivered</span>
-          {% else %}
-          <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
-            <input type="hidden" name="label" value="{{ d.asset }}">
-            <input type="file" name="file" required style="font-size:12px;max-width:170px">
-            <button class="btn tiny" type="submit">Upload</button>
-          </form>
-          {% endif %}
-        </div>
-        {% endfor %}
-        {% if not a.deliverables %}<p class="muted-note" style="margin:0">No additional deliverables scoped — the master completes this delivery.</p>{% endif %}
-      </div>
-      <details style="margin-top:4px">
-        <summary class="muted-note" style="cursor:pointer">Need to revise the master? Submit a new version</summary>
-        <form class="uploader" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data" style="margin-top:8px">
-          <label>New master version (mp3/wav)</label>
-          <input type="file" name="file" accept="audio/*" required>
-          <button class="btn" type="submit">Submit for review</button>
-          <p class="muted-note">Submitting a new master reopens review and notifies the team.</p>
-        </form>
-      </details>
-      {% elif a.pending %}
-      {# A version is already in and under review — keep resubmission available but quiet,
-         so the composer isn't left wondering whether their submission went through. #}
-      <details style="margin-top:4px">
-        <summary class="muted-note" style="cursor:pointer">Need to revise? Submit an updated version</summary>
-        <form class="uploader" method="post"
-              action="/creator/{{ token }}/project/{{ a.project_id }}/version"
-              enctype="multipart/form-data" style="margin-top:8px">
-          <label>Updated master version (mp3/wav)</label>
-          <input type="file" name="file" accept="audio/*" required>
-          <button class="btn" type="submit">Submit for review</button>
-          <p class="muted-note">This replaces the version under review and re-notifies the team.</p>
-        </form>
-      </details>
+    {% if a.creative_lock %}
+    <h3 style="color:var(--ok)">✓ Master approved — now deliver the remaining assets</h3>
+    <p class="fineprint" style="margin:0 0 6px">Upload each below. Each goes to the client for sign-off, and the studio is notified.</p>
+    {% for d in a.deliverables %}
+    <div class="deliv-row">
+      <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
+      {% if d.uploaded %}
+      <span class="ok-line">✓ Delivered</span>
       {% else %}
-      <form class="uploader" method="post"
-            action="/creator/{{ token }}/project/{{ a.project_id }}/version"
-            enctype="multipart/form-data">
-        <label>Submit a new version of your master (mp3/wav)</label>
-        <input type="file" name="file" accept="audio/*" required>
-        <button class="btn" type="submit">Submit for review</button>
-        <p class="muted-note">Submitting a new version reopens review and notifies the team.
-          A human always presses the approve button — we never auto-decide.</p>
+      <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable"
+            enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+        <input type="hidden" name="label" value="{{ d.asset }}">
+        <input type="file" name="file" required style="font-size:11.5px;max-width:180px">
+        <button class="btn tiny" type="submit">Upload</button>
       </form>
       {% endif %}
     </div>
     {% endfor %}
-
+    {% if not a.deliverables %}<p class="fineprint">No additional deliverables scoped — the master completes this delivery.</p>{% endif %}
+    <details style="margin-top:14px">
+      <summary class="fineprint" style="cursor:pointer">Need to revise the master? Submit a new version</summary>
+      <form class="uploader" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data">
+        <label>New master version (mp3/wav)</label>
+        <input type="file" name="file" accept="audio/*" required>
+        <button class="btn" type="submit">Submit for review</button>
+        <p class="fineprint">Submitting a new master reopens review and notifies the team.</p>
+      </form>
+    </details>
+    {% else %}
+    <form class="uploader sr-upload-form" method="post"
+          action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data">
+      <label>{{ 'Submit an updated version — this replaces the one under review and re-notifies the team.'
+               if a.pending else 'Submit a new version of your master (mp3/wav)' }}</label>
+      <input type="file" name="file" accept="audio/*" required>
+      <button class="btn" type="submit">Submit for review</button>
+      <p class="fineprint">Your take lands with the studio first — the client never hears unvetted work.
+        A human always presses the approve button; we never auto-decide.</p>
+    </form>
+    {% endif %}
   </div>
-  <script>
-  /* Deliverable rows upload independently, WITHOUT a full page reload — so selecting files
-     on several rows and sending them never wipes the others' picks. Uploads are SERIALIZED
-     (one in flight at a time) and a row only flips to "✓ Delivered" when the SERVER confirms
-     the asset actually persisted (JSON {ok:true}) — never on a bare redirect. Progressive
-     enhancement: with JS off, each form still posts normally. */
-  (function(){
-    var chain = Promise.resolve();               // serialize: one upload at a time
-    document.querySelectorAll('form.deliv-form').forEach(function(f){
-      f.addEventListener('submit', function(e){
-        var input=f.querySelector('input[type=file]');
-        if(!input || !input.files.length) return;   // let `required` handle the empty case
-        e.preventDefault();
-        var btn=f.querySelector('button'); var orig=btn.textContent;
-        btn.disabled=true; btn.textContent='Queued…';
-        chain = chain.then(function(){
-          btn.textContent='Uploading…';
-          return fetch(f.action,{method:'POST',headers:{'X-Requested-With':'fetch'},body:new FormData(f)})
-            .then(function(r){ return r.json().catch(function(){return {ok:r.ok};}); })
-            .then(function(data){
-              if(data && data.ok){
-                var row=f.parentNode; f.remove();
-                var ok=document.createElement('span');
-                ok.style.cssText='font-size:11px;font-weight:700;color:#1d6b43';
-                ok.textContent='✓ Delivered';
-                row.appendChild(ok);
-              } else {
-                btn.disabled=false; btn.textContent=orig;
-                alert('Upload failed'+(data&&data.error?': '+data.error:'')+' — please re-select the file and try again.');
+
+  <script type="application/json" class="sr-notes-data">
+    [{% if a.feedback and a.feedback.notes %}{% for n in a.feedback.notes %}
+      {"t": {{ n.t if n.t is not none else 'null' }}, "resolved": {{ 'true' if n.resolved else 'false' }}}{{ "," if not loop.last }}
+    {% endfor %}{% endif %}]
+  </script>
+</div>
+{% endfor %}
+
+<div class="veil" id="veil"></div>
+<div class="dropveil" id="dropveil">
+  <div class="drop-box">
+    <div class="d1">Drop your take</div>
+    <div class="d2">WAV / AIFF / MP3 — LANDS WITH THE STUDIO FIRST</div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="foot">Session Room · the picture position opens when the client's cut arrives ·
+  space plays · Esc always returns to the room</div>
+
+<script>
+(function(){
+  "use strict";
+  var veil = document.getElementById("veil");
+  var toastEl = document.getElementById("toast"), toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg; toastEl.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2800);
+  }
+
+  // ── each room is its own instrument ──
+  var rooms = [];
+  document.querySelectorAll(".sr-room").forEach(function(root){
+    var stage = root.querySelector(".sr-stage"),
+        poster = root.querySelector(".sr-poster"),
+        tcEl = root.querySelector(".sr-tc"),
+        playBtn = root.querySelector(".sr-play"),
+        bigPlay = root.querySelector(".sr-bigplay"),
+        spine = root.querySelector(".sr-spine"),
+        playhead = root.querySelector(".sr-playhead"),
+        noteLane = root.querySelector(".sr-lane-notes"),
+        waveCv = root.querySelector(".sr-wave"),
+        chips = root.querySelectorAll(".sr-take");
+
+    var notes = [];
+    try { notes = JSON.parse(root.querySelector(".sr-notes-data").textContent) || []; } catch(e){}
+
+    var audio = new Audio(), dur = 0, peaks = null, hasAudio = false;
+    audio.preload = "metadata";
+
+    function loadTake(chip){
+      chips.forEach(function(c){ c.classList.remove("on"); });
+      if (!chip){ stage.classList.add("noaudio"); hasAudio = false; return; }
+      chip.classList.add("on");
+      var src = chip.dataset.src;
+      if (!src){ stage.classList.add("noaudio"); hasAudio = false; return; }
+      hasAudio = true; stage.classList.remove("noaudio");
+      audio.src = src; peaks = null; drawWave();
+      decodePeaks(src);
+    }
+
+    // waveform: decode best-effort; fail-soft to a plain progress line
+    function decodePeaks(src){
+      try {
+        fetch(src).then(function(r){ return r.arrayBuffer(); }).then(function(buf){
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          var ctx = new AC();
+          return ctx.decodeAudioData(buf).then(function(ab){
+            var ch = ab.getChannelData(0), n = 220, out = new Array(n),
+                step = Math.max(1, Math.floor(ch.length / n));
+            for (var i = 0; i < n; i++){
+              var max = 0;
+              for (var j = i * step; j < (i + 1) * step; j += 50){
+                var v = Math.abs(ch[j] || 0); if (v > max) max = v;
               }
-            })
-            .catch(function(){ btn.disabled=false; btn.textContent=orig; alert('Upload failed — check your connection and try again.'); });
-        });
+              out[i] = max;
+            }
+            peaks = out; drawWave(); ctx.close();
+          });
+        }).catch(function(){});
+      } catch(e){}
+    }
+
+    function drawWave(){
+      var w = waveCv.width = waveCv.clientWidth * devicePixelRatio,
+          h = waveCv.height = waveCv.clientHeight * devicePixelRatio,
+          g = waveCv.getContext("2d");
+      g.clearRect(0, 0, w, h);
+      if (!hasAudio) return;
+      var prog = dur ? (audio.currentTime || 0) / dur : 0;
+      if (peaks){
+        var n = peaks.length;
+        for (var i = 0; i < n; i++){
+          var bh = Math.max(2, peaks[i] * h * 0.88), x = i / n * w;
+          g.fillStyle = (i / n <= prog) ? "rgba(240,119,44,.9)" : "rgba(240,119,44,.28)";
+          g.fillRect(x, (h - bh) / 2, Math.max(1, w / n - 1.5), bh);
+        }
+      } else {
+        g.fillStyle = "rgba(240,119,44,.25)"; g.fillRect(0, h/2 - 1, w, 2);
+        g.fillStyle = "rgba(240,119,44,.9)"; g.fillRect(0, h/2 - 1, w * prog, 2);
+      }
+    }
+
+    // poster: quiet dusk gradient — the held picture position
+    function drawPoster(){
+      var w = poster.width = poster.clientWidth * devicePixelRatio,
+          h = poster.height = poster.clientHeight * devicePixelRatio,
+          g = poster.getContext("2d");
+      var grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "#16151C"); grad.addColorStop(.7, "#221B1E"); grad.addColorStop(1, "#2A1D19");
+      g.fillStyle = grad; g.fillRect(0, 0, w, h);
+      var gl = g.createRadialGradient(w*.5, h*.95, 0, w*.5, h*.95, w*.45);
+      gl.addColorStop(0, "rgba(240,119,44,.14)"); gl.addColorStop(1, "rgba(240,119,44,0)");
+      g.fillStyle = gl; g.fillRect(0, 0, w, h);
+    }
+
+    function tcFmt(x){
+      var m = Math.floor(x/60), s = Math.floor(x%60), f = Math.floor((x%1)*24);
+      return "00:" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0") + ":" + String(f).padStart(2,"0");
+    }
+    function renderPins(){
+      noteLane.querySelectorAll(".pin").forEach(function(p){ p.remove(); });
+      if (!dur) return;
+      notes.forEach(function(n){
+        if (n.t === null || n.t === undefined) return;
+        var pin = document.createElement("div");
+        pin.className = "pin" + (n.resolved ? " resolved" : "");
+        pin.style.left = Math.min(100, n.t / dur * 100) + "%";
+        noteLane.appendChild(pin);
+      });
+    }
+    function update(){
+      var t = audio.currentTime || 0;
+      playhead.style.left = (dur ? Math.min(100, t / dur * 100) : 0) + "%";
+      tcEl.textContent = tcFmt(t);
+      drawWave();
+    }
+    audio.addEventListener("loadedmetadata", function(){ dur = audio.duration || 0; renderPins(); update(); });
+    audio.addEventListener("timeupdate", update);
+    audio.addEventListener("play", function(){ stage.classList.add("playing"); playBtn.textContent = "❚❚"; loop(); });
+    audio.addEventListener("pause", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
+    audio.addEventListener("ended", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
+    function loop(){
+      if (audio.paused) return;
+      update(); requestAnimationFrame(loop);
+    }
+
+    function toggle(){
+      if (!hasAudio){ toast("No take loaded yet — upload your music and it plays here."); return; }
+      audio.paused ? audio.play() : audio.pause();
+    }
+    function seek(t){
+      if (!hasAudio || !dur) return;
+      audio.currentTime = Math.max(0, Math.min(dur, t)); update();
+    }
+
+    playBtn.addEventListener("click", toggle);
+    if (bigPlay) bigPlay.addEventListener("click", toggle);
+    root.querySelectorAll(".sr-nudge").forEach(function(b){
+      b.addEventListener("click", function(){ seek((audio.currentTime || 0) + (+b.dataset.d)); });
+    });
+    chips.forEach(function(c){
+      c.addEventListener("click", function(){ var was = !audio.paused; loadTake(c); if (was) audio.play(); });
+    });
+    spine.addEventListener("click", function(e){
+      var r = spine.getBoundingClientRect();
+      seek((e.clientX - r.left) / r.width * (dur || 0));
+    });
+    root.querySelectorAll(".sr-note").forEach(function(card){
+      card.addEventListener("click", function(){
+        root.querySelectorAll(".sr-note").forEach(function(x){ x.classList.remove("hot"); });
+        card.classList.add("hot");
+        if (card.dataset.t !== undefined){
+          seek(+card.dataset.t); closeSheets();
+          var tcChip = card.querySelector(".nc-tc");
+          toast("Jumped to " + (tcChip ? tcChip.textContent : "the note") + " — press space to hear it.");
+        }
       });
     });
-  })();
-  </script>
+
+    // ── layers ──
+    function closeSheets(){
+      root.querySelectorAll(".sr-sheet").forEach(function(s){ s.classList.remove("on"); });
+      veil.classList.remove("on");
+    }
+    function openSheet(name){
+      closeSheets();
+      var s = root.querySelector('.sr-sheet[data-sheet="' + name + '"]');
+      if (s){ s.classList.add("on"); veil.classList.add("on"); }
+    }
+    root.querySelectorAll(".sr-open").forEach(function(b){
+      b.addEventListener("click", function(){ openSheet(b.dataset.sheet); });
+    });
+    root.querySelectorAll(".sr-close").forEach(function(b){ b.addEventListener("click", closeSheets); });
+    var uploadCta = root.querySelector(".sr-upload-cta");
+    if (uploadCta) uploadCta.addEventListener("click", function(){ openSheet("takes"); });
+
+    // ── drag-anywhere → the version form ──
+    var upForm = root.querySelector(".sr-upload-form");
+    if (upForm){
+      root.addEventListener("dragover", function(e){ e.preventDefault(); document.getElementById("dropveil").classList.add("on"); });
+      root.addEventListener("drop", function(e){
+        e.preventDefault(); document.getElementById("dropveil").classList.remove("on");
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || !files.length) return;
+        var input = upForm.querySelector('input[type=file]');
+        try { input.files = files; } catch(err){ openSheet("takes"); return; }
+        openSheet("takes");
+        toast("Take loaded — press Submit for review. It lands with the studio first.");
+      });
+    }
+
+    // init
+    drawPoster();
+    loadTake(root.querySelector(".sr-take.on") || null);
+    addEventListener("resize", function(){ drawPoster(); drawWave(); });
+
+    rooms.push({ root: root, toggle: toggle, seek: seek, audio: audio,
+                 openSheet: openSheet, closeSheets: closeSheets });
+  });
+
+  var dv = document.getElementById("dropveil");
+  dv.addEventListener("dragleave", function(e){ if (e.target === dv) dv.classList.remove("on"); });
+  dv.addEventListener("drop", function(e){ e.preventDefault(); dv.classList.remove("on"); });
+  veil.addEventListener("click", function(){ rooms.forEach(function(r){ r.closeSheets(); }); });
+
+  // ── keyboard: the room's grammar (the room nearest the viewport owns the keys) ──
+  function activeRoom(){
+    var best = rooms[0], bestD = Infinity;
+    rooms.forEach(function(r){
+      var d = Math.abs(r.root.getBoundingClientRect().top);
+      if (d < bestD){ bestD = d; best = r; }
+    });
+    return best;
+  }
+  addEventListener("keydown", function(e){
+    if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    var r = activeRoom(); if (!r) return;
+    if (e.code === "Space"){ e.preventDefault(); r.toggle(); }
+    else if (e.key === "Escape") r.closeSheets();
+    else if (e.key === "ArrowLeft") r.seek((r.audio.currentTime || 0) - 2);
+    else if (e.key === "ArrowRight") r.seek((r.audio.currentTime || 0) + 2);
+    else if (e.key === "b" || e.key === "B") r.openSheet("brief");
+    else if (e.key === "n" || e.key === "N") r.openSheet("notes");
+    else if (e.key === "v" || e.key === "V") r.openSheet("takes");
+  });
+
+  /* Deliverable rows upload independently, WITHOUT a full page reload; serialized;
+     a row only flips to Delivered when the SERVER confirms persistence (behavior
+     preserved from the prior portal — verified by tests). */
+  var chain = Promise.resolve();
+  document.querySelectorAll("form.deliv-form").forEach(function(f){
+    f.addEventListener("submit", function(e){
+      var input = f.querySelector("input[type=file]");
+      if (!input || !input.files.length) return;
+      e.preventDefault();
+      var btn = f.querySelector("button"), orig = btn.textContent;
+      btn.disabled = true; btn.textContent = "Queued…";
+      chain = chain.then(function(){
+        btn.textContent = "Uploading…";
+        return fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
+          .then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
+          .then(function(data){
+            if (data && data.ok){
+              var row = f.parentNode; f.remove();
+              var ok = document.createElement("span");
+              ok.className = "ok-line"; ok.textContent = "✓ Delivered";
+              row.appendChild(ok);
+            } else {
+              btn.disabled = false; btn.textContent = orig;
+              alert("Upload failed" + (data && data.error ? ": " + data.error : "") + " — please re-select the file and try again.");
+            }
+          })
+          .catch(function(){ btn.disabled = false; btn.textContent = orig; alert("Upload failed — check your connection and try again."); });
+      });
+    });
+  });
+})();
+</script>
 </body>
 </html>
