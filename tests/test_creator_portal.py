@@ -66,7 +66,7 @@ def test_issue_token_and_open_portal(ctx):
     assert tok
     r = client.get(f"/creator/{tok}")
     assert r.status_code == 200
-    assert "Creator workspace" in r.text
+    assert "Session Room" in r.text
 
 
 def test_portal_shows_assigned_brief(ctx):
@@ -261,8 +261,9 @@ def test_upload_blocked_when_not_assigned(ctx):
 
 def test_composer_delivers_derivatives_after_master_approved(ctx):
     """Once the master is approved (creative lock), the portal stops asking for a new
-    master and asks the composer for the remaining scoped deliverables — and uploading
-    one lands it as an asset for the client to sign off."""
+    master and asks the composer for the remaining scoped deliverables — and an upload
+    lands PENDING with the studio (uniform publish gate, EP P0-3): the client sees
+    nothing until the operator publishes it."""
     client, db_mod, app_mod = ctx
     tid = _approved_composer(db_mod)
     pid = _project_with(db_mod, tid)
@@ -284,7 +285,75 @@ def test_composer_delivers_derivatives_after_master_approved(ctx):
                     follow_redirects=False)
     assert r.status_code == 303
     conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    # the upload is PENDING — with the studio, invisible to the client
+    pend = d.get("pending_assets") or []
+    assert "Instrumental / TV mix" in [a.get("label") for a in pend]
+    assert "Instrumental / TV mix" not in [a.get("label") for a in (d.get("assets") or [])]
+    # the operator publishes it → NOW it's a client-visible asset
+    fname = pend[0]["filename"]
+    client.post(f"/project/{pid}/delivery/asset/publish",
+                data={"filename": fname, "action": "publish"}, follow_redirects=False)
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
     assert "Instrumental / TV mix" in [a.get("label") for a in (d.get("assets") or [])]
+    assert not (d.get("pending_assets") or [])
+
+
+def test_composer_addressed_never_touches_client_resolved(ctx):
+    """EP P0-1: the composer's 'mark addressed' is composer-side state — the
+    client's resolved flag (and portal open-count) must not move."""
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    db_mod.update_delivery(conn, pid, "versions",
+        [{"n": 1, "label": "v1", "url": "", "filename": "", "name": "m",
+          "created_at": "2026-07-08T00:00:00"}])
+    cid = db_mod.add_review_comment(
+        conn, pid, version="1", t_seconds=12.0, author="Dana (Client)",
+        body="Bring the brass in later", kind="change_request")
+    conn.close()
+    r = client.post(f"/creator/{tok}/project/{pid}/note/{cid}/address",
+                    follow_redirects=False)
+    assert r.status_code == 303
+    conn = db_mod.connect()
+    row = conn.execute("SELECT resolved, composer_addressed FROM review_comments "
+                       "WHERE id=?", (cid,)).fetchone()
+    conn.close()
+    assert row["composer_addressed"] == 1     # composer's working state flipped
+    assert (row["resolved"] or 0) == 0        # the client's flag NEVER moved
+
+
+def test_composer_reply_is_internal_and_invisible_to_client(ctx):
+    """The talk-back channel: a composer reply threads under the note for the
+    studio, and never renders in the client-portal comment stream."""
+    client, db_mod, _ = ctx
+    tid = _approved_composer(db_mod)
+    pid = _project_with(db_mod, tid)
+    conn = db_mod.connect()
+    tok = db_mod.ensure_talent_portal_token(conn, tid)
+    db_mod.update_delivery(conn, pid, "versions",
+        [{"n": 1, "label": "v1", "url": "", "filename": "", "name": "m",
+          "created_at": "2026-07-08T00:00:00"}])
+    db_mod.update_delivery(conn, pid, "share_ready", True)
+    cid = db_mod.add_review_comment(
+        conn, pid, version="1", t_seconds=8.0, author="Dana (Client)",
+        body="Pull the drums back under the VO", kind="change_request")
+    conn.close()
+    r = client.post(f"/creator/{tok}/project/{pid}/note/{cid}/reply",
+                    data={"body": "The drums ARE the spot — can we discuss?"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    # threads under the note in the composer room
+    page = client.get(f"/creator/{tok}").text
+    assert "The drums ARE the spot" in page
+    # …and is stored internal: the client-view comment list excludes it
+    conn = db_mod.connect()
+    client_rows = db_mod.list_review_comments(conn, pid, include_internal=False)
+    all_rows = db_mod.list_review_comments(conn, pid)
+    conn.close()
+    assert not any("drums ARE the spot" in (c["body"] or "") for c in client_rows)
+    assert any("drums ARE the spot" in (c["body"] or "") for c in all_rows)
 
 
 def test_deliverable_upload_blocked_when_not_assigned(ctx):

@@ -180,6 +180,13 @@
   .nc-jump:hover{color:var(--text)}
   .nc-addr{font-size:10.5px;font-weight:600;color:var(--dim2)}
   .nc-addr:hover{color:var(--text)}
+  .reply-line{margin-top:7px;padding:6px 9px;border-left:2px solid var(--hair2);font-size:11.5px;color:var(--dim)}
+  .reply-line b{color:var(--text)}
+  .reply-int{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--slate)}
+  .ask-form{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .ask-form input{flex:1;background:var(--panel3);border:1px solid var(--hair);border-radius:7px;
+    padding:8px 10px;font:12px var(--sans);color:var(--text)}
+  .ask-form input::placeholder{color:var(--dim2)}
 
   /* takes sheet */
   .take-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair);flex-wrap:wrap}
@@ -249,7 +256,7 @@
 <div class="room">
   <div class="doorline">
     <span class="wordmark">Chord<b>ential</b></span>
-    <span class="kicker">Creator workspace</span>
+    <span class="kicker">Session Room</span>
   </div>
   <div class="stage noaudio" style="aspect-ratio:16/6">
     <div class="poster-title" style="inset:0">
@@ -271,20 +278,22 @@
 {% endif %}
 
 {% for a in assignments %}
-{% set disp_state = 'In review' if (a.pending and not a.versions) else
-                    ('Writing' if a.delivery_state == 'Not started' else a.delivery_state) %}
+{% set closed = a.delivery_state in ('Released', 'Delivered') %}
+{% set disp_state = 'Delivered' if closed else ('In review' if (a.pending and not a.versions) else
+                    ('Writing' if a.delivery_state == 'Not started' else a.delivery_state)) %}
 {% set open_ct = a.feedback.open_count if (a.feedback and a.feedback.notes) else 0 %}
-<div class="room sr-room" id="p{{ a.project_id }}">
+<div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}>
 
   <!-- doorline -->
   <div class="doorline">
     <span class="wordmark">Chord<b>ential</b></span>
-    <span class="kicker">Creator workspace</span>
+    <span class="kicker">Session Room</span>
     <span class="door-title"><b>{{ a.need }}</b> · {{ a.client }}</span>
     <span class="spacer"></span>
-    {% if a.deadline_rel %}<span class="door-chip">{{ a.deadline_rel }}</span>{% endif %}
-    {% if a.feedback and a.feedback.revisions_included %}
-    <span class="door-chip">revision <b>{{ a.feedback.revisions_used }}</b> / {{ a.feedback.revisions_included }}</span>
+    {# a delivered room owes nothing — no past-due nag on finished work #}
+    {% if a.deadline_rel and not closed %}<span class="door-chip">{{ a.deadline_rel }}</span>{% endif %}
+    {% if a.feedback and a.feedback.round_phrase and not closed %}
+    <span class="door-chip">{{ a.feedback.round_phrase }}</span>
     {% endif %}
     <span class="door-chip state {{ 'live' if disp_state in ('In review','Approved') }}">{{ disp_state }}</span>
   </div>
@@ -303,14 +312,16 @@
     <div class="whisper sr-whisper">
       <span class="w-dot"></span>
       <span>
-        {% if request.query_params.get('submitted') == a.project_id|string %}
+        {% if closed %}
+          Delivered. The studio takes it from here — thank you for the music.
+        {% elif request.query_params.get('submitted') == a.project_id|string %}
           Version received — the studio has been notified and is reviewing it. The client's notes will appear here once it's published.
         {% elif a.creative_lock %}
           Master approved. The room is in delivery — {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
         {% elif a.pending and not a.versions %}
-          Your first take is with the studio. Nothing to do but breathe.
+          Your first take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %} — you'll get an email when it's published or notes land.
         {% elif a.pending %}
-          Your updated take is with the studio — the room will show it once it's published.
+          Your updated take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %} — you'll get an email when it's published or notes land.
         {% elif open_ct %}
           {{ open_ct }} client note{{ 's' if open_ct != 1 }} waiting on the timeline. Press N.
         {% elif not a.versions %}
@@ -381,13 +392,13 @@
     {% endif %}
     <div class="brief-meta">
       <span class="chip">Your role: {{ a.role }}</span>
-      {% if a.deadline_rel %}<span class="chip">{{ a.deadline_rel|capitalize }}</span>{% endif %}
-      {% if a.feedback and a.feedback.revisions_included %}
-      <span class="chip">Revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
+      {% if a.deadline_rel and not closed %}<span class="chip">{{ a.deadline_rel|capitalize }}</span>{% endif %}
+      {% if a.feedback and a.feedback.round_phrase %}
+      <span class="chip">{{ a.feedback.round_phrase }}</span>
       {% endif %}
       <span class="chip">{{ disp_state }}</span>
     </div>
-    <h3>What this engagement delivers</h3>
+    <h3>What this project delivers</h3>
     {% if a.brief and a.brief.deliverables_needed %}
     <p class="brief-body" style="margin-bottom:6px">{{ a.brief.deliverables_needed }}</p>
     {% endif %}
@@ -408,17 +419,18 @@
     <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
     {% if a.feedback and a.feedback.notes %}
     <div class="fb-top">
-      <span class="open-ct">{{ a.feedback.open_count }} open</span>
-      {% if a.feedback.revisions_included %}
-      <span>· revision {{ a.feedback.revisions_used }} of {{ a.feedback.revisions_included }}</span>
-      {% endif %}
+      <span class="open-ct">{{ a.feedback.open_count }} to address</span>
+      {% if a.feedback.round_phrase %}<span>· {{ a.feedback.round_phrase }}</span>{% endif %}
+      <span>· "addressed" is your working state — the client's list only changes when the studio publishes</span>
     </div>
     {% for n in a.feedback.notes %}
-    <div class="note-card sr-note {{ 'done' if n.resolved }}" data-note="{{ n.id }}">
+    <div class="note-card sr-note {{ 'done' if (n.resolved or n.addressed) }}" data-note="{{ n.id }}">
       <div class="nc-top">
         <span class="nc-dot"></span>
         <span class="nc-who">{{ n.author }}</span>
         {% if n.kind == 'change_request' %}<span class="nc-tag">changes</span>{% endif %}
+        {% if n.resolved %}<span class="nc-tag" style="color:var(--dim);background:transparent;border:1px solid var(--hair2)">client resolved</span>
+        {% elif n.addressed %}<span class="nc-tag" style="color:var(--orange);background:var(--orange-soft)">addressed</span>{% endif %}
         {% if n.t is not none %}
         <button type="button" class="nc-tc sr-jump" data-t="{{ n.t }}"
                 aria-label="Jump to {{ '%d:%02d'|format((n.t/60)|int, (n.t%60)|int) }}">
@@ -426,14 +438,25 @@
         {% endif %}
       </div>
       <div class="nc-body">{{ n.body }}</div>
+      {% for r in n.replies %}
+      <div class="reply-line"><b>{{ r.author }}</b>{% if r.internal %} <span class="reply-int">to the studio</span>{% endif %} — {{ r.body }}</div>
+      {% endfor %}
       <div class="nc-foot">
         {% if n.t is not none %}
         <button type="button" class="nc-jump sr-jump" data-t="{{ n.t }}">▶ Play this moment</button>
         {% endif %}
+        {% if n.kind == 'change_request' or not n.resolved %}
         <form method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/note/{{ n.id }}/address" style="margin:0">
-          <button type="submit" class="nc-addr">{{ 'Reopen' if n.resolved else '✓ Mark addressed' }}</button>
+          <button type="submit" class="nc-addr">{{ 'Reopen' if n.addressed else '✓ Mark addressed' }}</button>
         </form>
+        {% endif %}
+        <button type="button" class="nc-addr sr-ask" data-note="{{ n.id }}">Ask the studio</button>
       </div>
+      <form class="ask-form" method="post" hidden
+            action="/creator/{{ token }}/project/{{ a.project_id }}/note/{{ n.id }}/reply">
+        <input type="text" name="body" maxlength="600" placeholder="Your question or read on this note — goes to the studio, never the client">
+        <button class="btn tiny" type="submit">Send to the studio</button>
+      </form>
     </div>
     {% endfor %}
     {% else %}
@@ -473,6 +496,8 @@
       <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
       {% if d.uploaded %}
       <span class="ok-line">✓ Delivered</span>
+      {% elif d.pending %}
+      <span class="pend-badge">With the studio — under review</span>
       {% else %}
       <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable"
             enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0">
@@ -516,7 +541,7 @@
 
   <script type="application/json" class="sr-notes-data">
     [{% if a.feedback and a.feedback.notes %}{% for n in a.feedback.notes %}
-      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "resolved": {{ 'true' if n.resolved else 'false' }}}{{ "," if not loop.last }}
+      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
 </div>
@@ -662,7 +687,7 @@
         if (n.t === null || n.t === undefined) return;
         var pin = document.createElement("button");
         pin.type = "button";
-        pin.className = "pin" + (n.resolved ? " resolved" : "");
+        pin.className = "pin" + ((n.resolved || n.addressed) ? " resolved" : "");
         pin.style.left = Math.min(100, Math.max(0, n.t / dur * 100)) + "%";
         pin.setAttribute("aria-label", "Client note at " + Math.floor(n.t/60) + ":" +
           String(Math.floor(n.t%60)).padStart(2,"0"));
@@ -752,6 +777,13 @@
         seek(+b.dataset.t); closeAllSheets(); audio.play();
       });
     });
+    // "Ask the studio" reveals the inline reply box under the note
+    root.querySelectorAll(".sr-ask").forEach(function(b){
+      b.addEventListener("click", function(){
+        var f = b.closest(".sr-note").querySelector(".ask-form");
+        if (f){ f.hidden = !f.hidden; if (!f.hidden) f.querySelector("input").focus(); }
+      });
+    });
     // Mark addressed / Reopen stays IN the conversation (no page reload —
     // Linear's speed law): fetch the toggle, flip the card + pin + counts.
     root.querySelectorAll(".nc-foot form").forEach(function(f){
@@ -766,11 +798,12 @@
             card.classList.toggle("done", nowDone);
             btn.textContent = nowDone ? "Reopen" : "✓ Mark addressed";
             var id = +card.dataset.note;
-            notes.forEach(function(n){ if (n.id === id) n.resolved = nowDone; });
+            notes.forEach(function(n){ if (n.id === id) n.addressed = nowDone; });
             renderPins();
-            var openN = notes.filter(function(n){ return !n.resolved; }).length;
+            var openN = notes.filter(function(n){
+              return !(n.resolved || n.addressed); }).length;
             var ct = root.querySelector(".fb-top .open-ct");
-            if (ct) ct.textContent = openN + " open";
+            if (ct) ct.textContent = openN + " to address";
             var badge = root.querySelector('.lk[data-sheet="notes"] .n-open');
             if (badge) badge.textContent = openN ? "· " + openN : "";
           })
@@ -886,18 +919,36 @@
     try { input.files = files; } catch(err){ r.openSheet("takes"); return; }
     input.dispatchEvent(new Event("change"));
     var gated = r.upForm.closest("details");
+    var closed = r.root.dataset.closed === "1";
     r.openSheet("takes");
-    if (gated){
-      // creative lock: revising the master reopens review — that decision gets
-      // an explicit press, never an accidental drop (the disclosure friction
-      // is deliberate; the drop only stages the file).
-      gated.open = true;
-      toast("Take staged — press Submit for review to reopen the master.");
+    if (gated || closed){
+      // creative lock OR a delivered room: revising the master reopens review —
+      // that decision gets an explicit press, never an accidental drop.
+      if (gated) gated.open = true;
+      toast(closed
+        ? "This project is delivered — take staged only. Press Submit if you really need to reopen it."
+        : "Take staged — press Submit for review to reopen the master.");
     } else {
-      // spec Act 3: "No modal. No form." — the drop IS the submission.
-      r.upForm.dispatchEvent(new Event("submit", { cancelable: true }));
+      // spec Act 3: the drop IS the submission — but with the spec's §10.8
+      // undo-over-confirm: a 5-second window where Esc cancels before anything
+      // is sent or anyone is notified (composer review: no-confirm-no-undo).
+      pendingDrop = { room: r, timer: setTimeout(function(){
+        pendingDrop = null;
+        r.upForm.dispatchEvent(new Event("submit", { cancelable: true }));
+      }, 5000) };
+      toast("Submitting your take in 5s — press Esc to cancel.");
     }
   });
+  var pendingDrop = null;
+  function cancelPendingDrop(){
+    if (!pendingDrop) return false;
+    clearTimeout(pendingDrop.timer);
+    var input = pendingDrop.room.upForm.querySelector("input[type=file]");
+    if (input) input.value = "";
+    pendingDrop = null;
+    toast("Cancelled — nothing was sent.");
+    return true;
+  }
 
   // ── keyboard: the room's grammar (nearest room owns the keys) ──
   function activeRoom(){
@@ -916,7 +967,7 @@
         && (e.code === "Space" || e.key === "Enter")) return;
     var r = activeRoom(); if (!r) return;
     if (e.code === "Space"){ e.preventDefault(); r.toggle(); }
-    else if (e.key === "Escape") closeAllSheets();
+    else if (e.key === "Escape"){ if (!cancelPendingDrop()) closeAllSheets(); }
     else if (e.key === "ArrowLeft"){ e.preventDefault(); r.seek((r.audio.currentTime || 0) - 2); }
     else if (e.key === "ArrowRight"){ e.preventDefault(); r.seek((r.audio.currentTime || 0) + 2); }
     else if (e.key === "b" || e.key === "B") r.openSheet("brief");
@@ -943,7 +994,8 @@
             if (data && data.ok){
               var row = f.parentNode; f.remove();
               var ok = document.createElement("span");
-              ok.className = "ok-line"; ok.textContent = "✓ Delivered";
+              // honest state: it's with the studio (publish gate), not yet delivered
+              ok.className = "pend-badge"; ok.textContent = "With the studio — under review";
               row.appendChild(ok);
             } else {
               btn.disabled = false; btn.textContent = orig;

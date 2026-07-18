@@ -4994,22 +4994,47 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
     Returns the actionable notes for the current version + the revision budget."""
     cur = current_version(delivery)
     cur_n = str(cur["n"]) if cur else "0"
-    notes = []
-    for c in db.list_review_comments(conn, project_id):
+    notes, by_id = [], {}
+    rows = db.list_review_comments(conn, project_id)
+    for c in rows:
         # Only the notes a composer acts on, and only for the version they're on now.
         if c["kind"] not in ("comment", "change_request", "asset_change"):
             continue
+        if c["parent_id"]:
+            continue                       # replies thread under their parent below
         if (c["version"] or "") != cur_n:
             continue
-        notes.append({
+        keys = c.keys()
+        n = {
             "id": c["id"], "t": c["t_seconds"], "author": c["author"],
             "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
-        })
+            "addressed": bool(c["composer_addressed"]
+                              if "composer_addressed" in keys else 0),
+            "replies": [],
+        }
+        notes.append(n); by_id[c["id"]] = n
+    for c in rows:                          # thread replies (client, studio, composer)
+        if c["parent_id"] and c["parent_id"] in by_id:
+            keys = c.keys()
+            by_id[c["parent_id"]]["replies"].append({
+                "author": c["author"], "body": c["body"],
+                "internal": bool(c["internal"] if "internal" in keys else 0),
+            })
+    used = int(delivery.get("revisions_used") or 0)
+    scoped = int(delivery.get("revisions_included") or 0) or None
     return {
         "notes": notes,
-        "open_count": sum(1 for n in notes if not n["resolved"]),
-        "revisions_used": int(delivery.get("revisions_used") or 0),
-        "revisions_included": int(delivery.get("revisions_included") or 0) or None,
+        # What's OWED: unhandled change requests. Praise/comments never inflate
+        # the composer's to-do count (composer review P1-7 / EP P2-5).
+        "open_count": sum(1 for n in notes
+                          if n["kind"] == "change_request"
+                          and not (n["resolved"] or n["addressed"])),
+        "revisions_used": used,
+        "revisions_included": scoped,
+        # ONE round sentence across all three doors (EP P0-2) — identical formula
+        # to the delivery portal/console chips.
+        "round_phrase": (f"Round {min(used + 1, scoped)} of {scoped}"
+                         if scoped else ""),
     }
 
 
@@ -5042,13 +5067,21 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         # cutdowns, verticals, stems). Surface those so the portal can ask for them —
         # the master is the version ladder, so it's excluded here.
         locked = bool(production.creative_lock(delivery))
+        # Scoped deliverables + specs are DAY-ONE knowledge (composer review P1-8:
+        # "I bounce to spec from take one if you tell me on day one"), not a
+        # post-approval surprise. Pending = submitted, with the studio (EP P0-3).
+        pending_labels = {(a.get("label") or "").strip().lower()
+                          for a in (delivery.get("pending_assets") or [])}
         deliverables = []
-        if locked and prow is not None:
+        if prow is not None:
             for d in scoped_deliverables(prow, delivery):
                 if d.get("is_master"):
                     continue
-                deliverables.append({"asset": d["asset"], "group": d["group"],
-                                     "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded"))})
+                deliverables.append({
+                    "asset": d["asset"], "group": d["group"],
+                    "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
+                    "pending": (d["asset"] or "").strip().lower() in pending_labels,
+                })
         out.append({
             "project_id": a["project_id"],
             "role": a["role"],
@@ -5097,11 +5130,12 @@ def creator_portal(request: Request, token: str):
 
 @app.post("/creator/{token}/project/{project_id}/note/{comment_id}/address")
 def creator_address_note(token: str, project_id: int, comment_id: int):
-    """The composer marks a client note addressed (or reopens it) from the room.
+    """The composer marks a client note addressed (or reopens it) — COMPOSER-side
+    working state only (EP P0-1): the client's resolved flag is untouched, so the
+    client never sees a note flip "resolved" without the studio publishing a take.
 
     Same double guard as every creator action: valid portal token AND an actual
-    assignment. Reuses the reviewer-side toggle (attributable via the assignment —
-    only this project's assigned creator can reach it)."""
+    assignment to this project."""
     conn = db.connect()
     try:
         row = db.get_talent_by_portal_token(conn, token)
@@ -5109,9 +5143,49 @@ def creator_address_note(token: str, project_id: int, comment_id: int):
             return HTMLResponse("Not found", status_code=404)
         if not db.talent_is_assigned(conn, row["id"], project_id):
             return HTMLResponse("Not assigned to this project", status_code=403)
-        db.toggle_comment_resolved(conn, project_id, comment_id)
+        db.toggle_comment_addressed(conn, project_id, comment_id)
     finally:
         conn.close()
+    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+
+
+@app.post("/creator/{token}/project/{project_id}/note/{comment_id}/reply")
+async def creator_reply_note(token: str, project_id: int, comment_id: int,
+                             body: str = Form("")):
+    """The composer asks the studio about a note — the talk-back channel both
+    persona reviews named as the #1 reason the phone stays primary.
+
+    The reply is INTERNAL (composer↔studio): it threads under the client's note in
+    the composer room and the studio console, and never renders on the client
+    portal — the studio mediates what reaches the client (production model:
+    feedback→interpretation is the house's craft)."""
+    conn = db.connect()
+    who = ""
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.talent_is_assigned(conn, row["id"], project_id):
+            return HTMLResponse("Not assigned to this project", status_code=403)
+        text = (body or "").strip()
+        if text:
+            who = row["name"]
+            parent = conn.execute(
+                "SELECT id FROM review_comments WHERE id = ? AND project_id = ?",
+                (comment_id, project_id)).fetchone()
+            if parent is not None:
+                db.add_review_comment(
+                    conn, project_id, author=who,
+                    email=(row["email"] or "") if "email" in row.keys() else "",
+                    body=text, kind="comment", parent_id=comment_id, internal=True)
+        project = db.get_project(conn, project_id)
+    finally:
+        conn.close()
+    if who:
+        await run_in_threadpool(
+            _notify_operator_review, project_id, project,
+            f"Composer question — {_campaign_label(project) if project else 'campaign'}",
+            f"{who} replied to a client note. Review it in the delivery console.")
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
@@ -5204,25 +5278,32 @@ async def creator_submit_deliverable(
         safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
         _persist_upload(conn, safe_name, data)
         delivery = db.get_delivery(conn, project_id)
-        assets = list(delivery.get("assets") or [])
+        # EP review P0-3: deliverables get the SAME studio gate as the master.
+        # The upload lands PENDING — the studio vets and publishes it before the
+        # client can ever see it (uniform publish gate, stems included).
+        from datetime import datetime as _dt, timezone as _tz
+        pending = list(delivery.get("pending_assets") or [])
         deliverable = (label.strip() or file.filename)
-        assets.append({"label": deliverable, "url": f"/uploads/{safe_name}",
-                       "filename": safe_name, "kind": kind})
-        db.update_delivery(conn, project_id, "assets", assets)
-        # CONFIRM it actually persisted before telling the client "Delivered".
-        stored = db.get_delivery(conn, project_id).get("assets") or []
+        pending.append({"label": deliverable, "url": f"/uploads/{safe_name}",
+                        "filename": safe_name, "orig": file.filename,
+                        "kind": kind, "by": who,
+                        "at": _dt.now(_tz.utc).isoformat()})
+        db.update_delivery(conn, project_id, "pending_assets", pending)
+        # CONFIRM it actually persisted before telling the composer it landed.
+        stored = db.get_delivery(conn, project_id).get("pending_assets") or []
         landed = any(a.get("filename") == safe_name for a in stored)
         count = len(stored)
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
-        db.add_update(conn, project_id, f"{who} delivered '{deliverable}' — ready for client sign-off.")
+        db.add_update(conn, project_id,
+                      f"{who} submitted '{deliverable}' — with the studio for review.")
     finally:
         conn.close()
     if not landed:
         return _fail("not saved — please try again", 500)
     await run_in_threadpool(
-        _notify_operator_review, project_id, None, f"Deliverable uploaded — {campaign}",
-        f"{who} uploaded a deliverable. Review it in the delivery console.")
+        _notify_operator_review, project_id, None, f"Deliverable submitted — {campaign}",
+        f"{who} submitted a deliverable. Vet it in the delivery console, then publish.")
     if xhr:
         return JSONResponse({"ok": True, "label": deliverable, "count": count})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
@@ -5682,7 +5763,7 @@ def _project_estimate(conn, row):
     return build_estimate(opp, team, qual.discipline, rate_overrides=overrides)
 
 
-def _delivery_view(conn, project_id: int, selected_v=None):
+def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = False):
     """Assemble the Delivery OS data for a project (engine docs + state), or None.
 
     ``selected_v`` (IP2) picks which version the review surface opens — its track
@@ -5732,7 +5813,10 @@ def _delivery_view(conn, project_id: int, selected_v=None):
     # warnings + the honest partial labelling so we never ship "everything" when the
     # cutdowns/stems were never uploaded.
     completeness = delivery_completeness(row, delivery)
-    comments = db.list_review_comments(conn, project_id)
+    # The client portal never sees composer↔studio internal notes (publish-gate
+    # principle applied to words); the console sees everything.
+    comments = db.list_review_comments(conn, project_id,
+                                       include_internal=not client_view)
     timeline = build_timeline(row, delivery, comments)
 
     # Per-asset approval (granular sign-off): attach each deliverable asset's
@@ -6749,7 +6833,7 @@ def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
         # token must match. A missing project / no valid token 404s identically.
         if row is None or not (k_ok or verified is not None):
             return HTMLResponse("Not found", status_code=404)
-        view = _delivery_view(conn, project_id, selected_v=v)
+        view = _delivery_view(conn, project_id, selected_v=v, client_view=True)
     finally:
         conn.close()
     # The share token is what the page's generic forms carry. If the reviewer
@@ -7468,6 +7552,37 @@ def delivery_build(project_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/asset/publish")
+def delivery_publish_asset(project_id: int, filename: str = Form(""),
+                           action: str = Form("publish")):
+    """Jon's disposition of a creator's pending DELIVERABLE (stems, cutdowns,
+    verticals): publish it into the client-visible assets, or discard it. The same
+    gate the master gets — uniform, per the EP review (unvetted stems on delivery
+    night were the hole)."""
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        pending = list(delivery.get("pending_assets") or [])
+        hit = next((a for a in pending if a.get("filename") == filename), None)
+        if hit is None:
+            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
+        pending = [a for a in pending if a.get("filename") != filename]
+        db.update_delivery(conn, project_id, "pending_assets", pending)
+        if action == "discard":
+            db.add_update(conn, project_id,
+                          f"Sent back the pending deliverable '{hit.get('label')}'.")
+        else:
+            assets = list(delivery.get("assets") or [])
+            assets.append({"label": hit.get("label"), "url": hit.get("url"),
+                           "filename": hit.get("filename"), "kind": hit.get("kind")})
+            db.update_delivery(conn, project_id, "assets", assets)
+            db.add_update(conn, project_id,
+                          f"Published '{hit.get('label')}' — ready for client sign-off.")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/publish")

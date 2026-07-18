@@ -137,7 +137,10 @@
         <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
         {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
         <span class="rc-a">{{ c['author'] }}</span>
-        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span></span>
+        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span>
+          {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
+          {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
+        </span>
       </li>
       {% else %}
       <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
@@ -174,7 +177,8 @@
       <div class="ah"><span class="ico">🎧</span> Versions &amp; rounds</div>
       <div class="lines">
         Current: <b>v{{ current_n or '—' }}</b> · {{ version_state }}<br>
-        Revision rounds: <b>{{ revisions.used }}</b> of {{ revisions.scoped }} used <span class="k">({{ revisions.remaining }} left)</span><br>
+        {# ONE round sentence, identical on all three doors (EP P0-2) #}
+        <b>Round {{ revisions.used + 1 if revisions.remaining > 0 else revisions.scoped }} of {{ revisions.scoped }}</b> <span class="k">({{ revisions.remaining }} round{{ 's' if revisions.remaining != 1 }} left)</span><br>
         {% if pending_version %}<span class="pend">1 submission awaiting your review ↑</span>{% else %}Versions logged: {{ versions|length }}{% endif %}
       </div>
     </div>
@@ -432,6 +436,22 @@
 <div class="cols-2">
   <section class="card" id="assets">
     <div class="card-head"><h2>Deliverable assets</h2><span class="muted small">{{ asset_rollup.approved }}/{{ asset_rollup.total }} approved · {{ assets|length }} file{{ 's' if assets|length != 1 }}</span></div>
+    {# Pending creator deliverables — the SAME gate the master gets (EP P0-3):
+       the client can't see these until you publish each one. #}
+    {% for pa in delivery.pending_assets or [] %}
+    <div class="asset-row" style="border-left:3px solid var(--orange);padding-left:8px">
+      <span>⏳ <b>{{ pa.label }}</b> <span class="muted small">from {{ pa.by }}{% if pa.at %} · {{ pa.at[:10] }}{% endif %} — the client can't see this yet</span>
+        {% if pa.url %}<audio controls preload="none" src="{{ pa.url }}" style="height:26px;vertical-align:middle;margin-left:6px"></audio>{% endif %}
+      </span>
+      <span class="inline">
+        <form method="post" action="/project/{{ project['id'] }}/delivery/asset/publish" class="inline">
+          <input type="hidden" name="filename" value="{{ pa.filename }}">
+          <button class="btn tiny primary" name="action" value="publish" type="submit">Publish to client</button>
+          <button class="btn tiny" name="action" value="discard" type="submit">Send back</button>
+        </form>
+      </span>
+    </div>
+    {% endfor %}
     {% for a in assets %}
     <div class="asset-row">
       <span>{% if a.kind == 'audio' %}🎵{% else %}📄{% endif %} <a class="link" href="{{ a.url }}">{{ a.label }}</a>

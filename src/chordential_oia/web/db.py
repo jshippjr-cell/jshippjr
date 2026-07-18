@@ -789,6 +789,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # not free text. Older DBs predate the column.
     if "verified" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN verified INTEGER DEFAULT 0")
+    # Session Room (EP review P0-1): the composer's "mark addressed" is COMPOSER
+    # state, never the client's resolved flag — the publish-gate principle applied
+    # to note state. And a composer's question/reply is INTERNAL (composer↔studio):
+    # it must never render on the client portal.
+    if "composer_addressed" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN composer_addressed INTEGER DEFAULT 0")
+    if "internal" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN internal INTEGER DEFAULT 0")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -4994,7 +5002,7 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
-    parent_id=None, verified: bool = False,
+    parent_id=None, verified: bool = False, internal: bool = False,
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
     change request. Attributed to the reviewer's name + email. Returns the new id.
@@ -5007,26 +5015,29 @@ def add_review_comment(
     cur = conn.execute(
         """INSERT INTO review_comments
            (project_id, version, t_seconds, author, email, body, kind, created_at,
-            resolved, parent_id, verified)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            resolved, parent_id, verified, internal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (project_id, version or "", t_seconds, author or "Anonymous",
          (email or "").strip() or None, body or "", kind,
          datetime.now(timezone.utc).isoformat(),
          0, int(parent_id) if parent_id not in (None, "") else None,
-         1 if verified else 0),
+         1 if verified else 0, 1 if internal else 0),
     )
     conn.commit()
     return int(cur.lastrowid)
 
 
 def list_review_comments(
-    conn: sqlite3.Connection, project_id: int
+    conn: sqlite3.Connection, project_id: int, include_internal: bool = True
 ) -> List[sqlite3.Row]:
-    """All review events for a project, oldest first (the campaign's feedback tape)."""
-    return conn.execute(
-        "SELECT * FROM review_comments WHERE project_id = ? ORDER BY created_at ASC, id ASC",
-        (project_id,),
-    ).fetchall()
+    """All review events for a project, oldest first (the campaign's feedback tape).
+
+    ``include_internal=False`` is the CLIENT-portal view: composer↔studio internal
+    replies never render there (the publish-gate principle applied to words)."""
+    q = "SELECT * FROM review_comments WHERE project_id = ?"
+    if not include_internal:
+        q += " AND COALESCE(internal, 0) = 0"
+    return conn.execute(q + " ORDER BY created_at ASC, id ASC", (project_id,)).fetchall()
 
 
 def get_review_comment(
@@ -5053,6 +5064,29 @@ def toggle_comment_resolved(
     new_val = 0 if (row["resolved"] or 0) else 1
     conn.execute(
         "UPDATE review_comments SET resolved = ? WHERE id = ? AND project_id = ?",
+        (new_val, comment_id, project_id),
+    )
+    conn.commit()
+    return new_val
+
+
+def toggle_comment_addressed(
+    conn: sqlite3.Connection, project_id: int, comment_id: int
+) -> Optional[int]:
+    """Flip the COMPOSER's addressed flag on a note — composer-side working state,
+    entirely separate from the client's ``resolved`` (EP review P0-1: a composer
+    marking their own work done must never change what the client sees as open).
+    Scoped to the project; returns the new value, or None if not this project's."""
+    row = conn.execute(
+        "SELECT COALESCE(composer_addressed, 0) AS ca FROM review_comments "
+        "WHERE id = ? AND project_id = ?",
+        (comment_id, project_id),
+    ).fetchone()
+    if row is None:
+        return None
+    new_val = 0 if (row["ca"] or 0) else 1
+    conn.execute(
+        "UPDATE review_comments SET composer_addressed = ? WHERE id = ? AND project_id = ?",
         (new_val, comment_id, project_id),
     )
     conn.commit()
