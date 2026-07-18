@@ -490,7 +490,7 @@
 
     {% if a.creative_lock %}
     <h3>✓ Master approved — now deliver the remaining assets</h3>
-    <p class="fineprint" style="margin:0 0 6px">Upload each below. Each goes to the client for sign-off, and the studio is notified.</p>
+    <p class="fineprint" style="margin:0 0 6px">Upload each below. It lands with the studio for review first — we publish it to the client for sign-off.</p>
     {% for d in a.deliverables %}
     <div class="deliv-row">
       <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>

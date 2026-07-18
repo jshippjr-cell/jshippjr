@@ -137,7 +137,7 @@
         <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
         {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}</span>{% endif %}
         <span class="rc-a">{{ c['author'] }}</span>
-        <span class="rc-b">{{ c['body'] }} <span class="muted small">· v{{ c['version'] }}</span>
+        <span class="rc-b">{{ c['body'] }}{% if c['version'] %} <span class="muted small">· v{{ c['version'] }}</span>{% endif %}
           {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
           {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
         </span>
