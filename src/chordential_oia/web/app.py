@@ -5167,7 +5167,7 @@ async def creator_reply_note(token: str, project_id: int, comment_id: int,
             return HTMLResponse("Not found", status_code=404)
         if not db.talent_is_assigned(conn, row["id"], project_id):
             return HTMLResponse("Not assigned to this project", status_code=403)
-        text = (body or "").strip()
+        text = (body or "").strip()[:600]     # server-side cap; maxlength is advisory
         if text:
             who = row["name"]
             parent = conn.execute(
@@ -7571,6 +7571,14 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
         pending = [a for a in pending if a.get("filename") != filename]
         db.update_delivery(conn, project_id, "pending_assets", pending)
         if action == "discard":
+            # A rejected deliverable must not stay downloadable: remove the blob
+            # (best-effort, path-guarded inside UPLOAD_DIR — engineering P2).
+            try:
+                blob = os.path.realpath(os.path.join(UPLOAD_DIR, hit.get("filename") or ""))
+                if blob.startswith(os.path.realpath(UPLOAD_DIR) + os.sep) and os.path.isfile(blob):
+                    os.remove(blob)
+            except OSError:
+                pass
             db.add_update(conn, project_id,
                           f"Sent back the pending deliverable '{hit.get('label')}'.")
         else:

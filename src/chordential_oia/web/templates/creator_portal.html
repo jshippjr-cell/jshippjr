@@ -931,11 +931,17 @@
     } else {
       // spec Act 3: the drop IS the submission — but with the spec's §10.8
       // undo-over-confirm: a 5-second window where Esc cancels before anything
-      // is sent or anyone is notified (composer review: no-confirm-no-undo).
-      pendingDrop = { room: r, timer: setTimeout(function(){
+      // is sent or anyone is notified. A NEW drop supersedes any armed one
+      // (clear + self-check), so Esc's guarantee holds and rapid drops can
+      // never multi-submit (engineering re-check P1).
+      if (pendingDrop) clearTimeout(pendingDrop.timer);
+      var mine = { room: r };
+      mine.timer = setTimeout(function(){
+        if (pendingDrop !== mine) return;
         pendingDrop = null;
         r.upForm.dispatchEvent(new Event("submit", { cancelable: true }));
-      }, 5000) };
+      }, 5000);
+      pendingDrop = mine;
       toast("Submitting your take in 5s — press Esc to cancel.");
     }
   });
