@@ -36,7 +36,10 @@ def _seed_pair(db_mod):
         tid = db_mod.insert_talent(conn, Talent(
             name="Composer Cay", disciplines=[MusicDiscipline.COMPOSITION],
             credits="Two national spots.", review_status=ReviewStatus.APPROVED,
+            rate=95.0, rate_unit="hourly",
         ))
+        # ADR-0024: assignment requires an executed agreement + rate on file.
+        db_mod.set_talent_agreement(conn, tid, "2026-07-18", "test agreement")
     finally:
         conn.close()
     return opp_id, tid

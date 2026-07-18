@@ -46,5 +46,24 @@
 {% endif %}
 
 {% include "_brief_document.html" %}
+<script>
+// Scroll-position restore — standalone copy of base.html's fix (this template
+// deliberately doesn't extend base: it's a printable client-facing document).
+// Record scroll right before any form submits; restore it after the reload so
+// a same-page edit keeps you looking at what you just changed.
+(function () {
+  var KEY = 'chordential:scrollY:' + location.pathname;
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.tagName === 'FORM') {
+      sessionStorage.setItem(KEY, String(window.scrollY));
+    }
+  }, true);
+  var saved = sessionStorage.getItem(KEY);
+  if (saved !== null) {
+    sessionStorage.removeItem(KEY);
+    window.scrollTo(0, parseInt(saved, 10) || 0);
+  }
+})();
+</script>
 </body>
 </html>

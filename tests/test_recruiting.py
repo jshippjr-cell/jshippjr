@@ -270,7 +270,9 @@ def test_project_assign_route_emails_the_signed_creator(ctx, monkeypatch):
     conn = db_mod.connect()
     tid = db_mod.insert_talent(conn, Talent(
         name="Ada Lin", email="ada@example.com",
-        disciplines=[MusicDiscipline.COMPOSITION]))
+        disciplines=[MusicDiscipline.COMPOSITION], rate=90.0))
+    # ADR-0024: assignment requires an executed agreement + rate on file.
+    db_mod.set_talent_agreement(conn, tid, "2026-07-18", "test agreement")
     pid = db_mod.insert_project(
         conn, opp_id=None, client="Acme Corp", need="A 30s brand anthem",
         budget_min=4000, budget_max=6000, deadline="2026-08-01", roles=["Composer"],

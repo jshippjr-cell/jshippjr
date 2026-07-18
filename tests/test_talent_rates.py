@@ -132,6 +132,10 @@ def test_assigned_day_rate_flows_into_proposal(ctx):
         follow_redirects=False,
     )
     tid = int(r.headers["location"].split("/talent/")[1])
+    # ADR-0024: assignment requires an executed agreement + rate on file.
+    conn = db_mod.connect()
+    db_mod.set_talent_agreement(conn, tid, "2026-07-18", "test agreement")
+    conn.close()
     client.post(f"/project/{pid}/assign", data={"role": role, "talent_id": tid})
 
     # Generate the proposal — the assigned talent's day rate must drive the line.

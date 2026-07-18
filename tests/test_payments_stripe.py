@@ -66,7 +66,9 @@ def test_create_checkout_builds_session_and_returns_url(fake_stripe):
     li = c["line_items"][0]["price_data"]
     assert li["currency"] == "usd" and li["unit_amount"] == 125000  # dollars -> cents
     # Payer lands on a PUBLIC page, never the admin-gated project route.
-    assert c["success_url"] == "https://chordential.com/?paid=7"
+    # /pay/return is the public (admin-gate-exempt) landing that applies the
+    # payment — see the pay-link redesign; the payer never hits a gated route.
+    assert c["success_url"] == "https://chordential.com/pay/return?invoice=7"
     assert c["cancel_url"] == "https://chordential.com/?canceled=7"
 
 
