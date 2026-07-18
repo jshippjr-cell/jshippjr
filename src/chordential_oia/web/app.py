@@ -63,7 +63,7 @@ from . import (
     directory_crawl, directory_parsers, discovery,
     enrichment, intake_lanes, intelligence, kickoff, meeting_scheduler, meetings_service,
     music_opportunity, next_action, opportunity_signals, outreach_engine, procurement,
-    producer_learning, production, relationships,
+    producer_learning, production, queue as queue_mod, relationships,
     scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
@@ -8122,6 +8122,20 @@ def revenue_dashboard(request: Request):
 # Payout ledger — pay the crew. Owed rows are generated when a client invoice is
 # Paid; Jon pays off-platform and marks each Paid (W-9 must be on file first).
 # --------------------------------------------------------------------------- #
+@app.get("/queue", response_class=HTMLResponse)
+def disposition_queue(request: Request):
+    """The Disposition Queue — every pending founder decision, one ranked surface.
+    Pure aggregation (queue.py) over existing decision routes; the queue renders
+    and links, the decision buttons stay where they live. Machine proposes, the
+    operator disposes — here, ergonomically."""
+    conn = db.connect()
+    try:
+        view = queue_mod.queue_view(conn, db)
+    finally:
+        conn.close()
+    return render(request, "queue.html", nav="queue", **view)
+
+
 @app.get("/payouts", response_class=HTMLResponse)
 def payouts_ledger(request: Request, err: str = "", paid: str = ""):
     conn = db.connect()

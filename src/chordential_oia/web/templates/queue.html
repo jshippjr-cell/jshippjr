@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Disposition Queue{% endblock %}
+{% block heading %}Disposition Queue{% endblock %}
+{% block content %}
+
+<div class="detail-head card">
+  <div>
+    <h1 class="detail-title">Every decision waiting on you</h1>
+    <div class="muted">One ranked surface — revenue- and client-touching first, oldest first
+      within a rung. Each card links to the surface where the decision already lives; the
+      machine proposes, you dispose. Nothing here acts on its own.</div>
+  </div>
+  <div class="detail-fit">
+    <div class="big-num" id="q-total" data-total="{{ total }}">{{ total }}</div>
+    <div class="muted">pending</div>
+  </div>
+</div>
+
+{% if groups %}
+{% for g in groups %}
+<section class="card">
+  <div class="card-head"><h2>{{ g.label }} <span class="muted">— {{ g.cards|length }}</span></h2></div>
+  <div class="stack">
+    {% for c in g.cards %}
+    <div class="assigned-row" style="align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div><strong>{{ c.title }}</strong></div>
+        <div class="muted small">{{ c.detail }}{% if c.evidence %} <span class="mono">· {{ c.evidence }}</span>{% endif %}</div>
+      </div>
+      <a class="btn tiny" href="{{ c.url }}">Open →</a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% else %}
+<section class="card">
+  <div class="card-head"><h2>Queue clear</h2></div>
+  <p class="muted">Nothing is waiting on you. Every pending decision in the company —
+    discovery requests, unpaid invoices, owed payouts, follow-ups, deal moves, submissions,
+    REVIEW-tier opportunities, reels, floor gaps, intelligence conflicts — lands here the
+    moment it exists.</p>
+</section>
+{% endif %}
+
+<script>
+  /* Living element: the pending count becomes true — honest motion, only on load. */
+  (function () {
+    var el = document.getElementById("q-total");
+    if (el && window.Live) Live.count(el, parseInt(el.dataset.total || "0", 10));
+  })();
+</script>
+
+{% endblock %}
