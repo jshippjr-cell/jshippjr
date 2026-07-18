@@ -47,7 +47,8 @@
   .wordmark{font-family:var(--serif);font-size:15px;white-space:nowrap}
   .wordmark b{color:var(--orange);font-weight:400}
   .kicker{font:700 9.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--dim2)}
-  .door-title{font-size:13px;color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .door-title{font-size:13px;color:var(--dim);flex:0 1 auto;min-width:80px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
   .door-title b{color:var(--text);font-weight:600}
   .doorline .spacer{flex:1}
   .door-chip{font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--hair);border-radius:999px;
@@ -71,14 +72,15 @@
     border-radius:5px;padding:4px 8px;font-variant-numeric:tabular-nums}
   .picture-note{position:absolute;left:14px;top:12px;font:600 9.5px var(--mono);letter-spacing:.14em;
     color:rgba(214,207,196,.5);background:rgba(13,12,11,.45);border-radius:4px;padding:4px 8px}
-  /* the play affordance lives bottom-left, off the room's identity */
-  .bigplay{position:absolute;left:16px;bottom:14px;z-index:5}
+  /* the play affordance lives bottom-left, ABOVE the whisper band — it must
+     never occlude the room's identity (title) or its voice (the whisper) */
+  .bigplay{position:absolute;left:16px;bottom:56px;z-index:5}
   .bigplay button{width:52px;height:52px;border-radius:50%;background:rgba(240,119,44,.94);color:#1B120B;
     font-size:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 36px rgba(0,0,0,.55);
     transition:transform .18s var(--ease)}
   .bigplay button:hover{transform:scale(1.07)}
   .stage.playing .bigplay,.stage.noaudio .bigplay{display:none}
-  .whisper{position:absolute;left:0;right:0;bottom:0;padding:12px 84px 12px 16px;font-family:var(--serif);
+  .whisper{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;font-family:var(--serif);
     font-size:14px;color:rgba(252,247,248,.8);background:linear-gradient(0deg,rgba(13,12,11,.85),transparent);
     display:flex;gap:8px;align-items:baseline;transition:opacity 1.2s ease}
   .whisper.rested{opacity:.55}
@@ -118,6 +120,7 @@
   .take-chip:hover{border-color:var(--hair2)}
   .take-chip.on{border-color:rgba(240,119,44,.6);color:var(--orange);background:var(--orange-soft)}
   .take-chip.pending{border-style:dashed}
+  .take-chip.dead{opacity:.4;cursor:default}
   .t-keys{font:10.5px var(--mono);color:var(--dim2)}
   .transport .spacer{flex:1}
   .layer-keys{display:flex;gap:6px}
@@ -231,6 +234,7 @@
   @media (max-width:760px){
     .stage{aspect-ratio:16/10}
     .picture-note{display:none}
+    .tc{display:none}
     .poster-title{inset:0 0 34% 0}
     .whisper{padding-right:16px}
     .doorline{gap:8px}
@@ -337,12 +341,15 @@
     <button class="t-btn sr-nudge" data-d="-5" aria-label="Back 5 seconds">↺</button>
     <button class="t-btn sr-nudge" data-d="5" aria-label="Forward 5 seconds">↻</button>
     <div class="take-chips">
+      {# the listening default is the last PUBLISHED take — the pending one may be
+         an undecodable bounce (AIFF in Chrome) and the room must stay alive #}
       {% for v in a.versions %}
-      <button class="take-chip sr-take {{ 'on' if loop.last and not a.pending }}"
+      <button class="take-chip sr-take {{ 'on' if loop.last }}"
               data-src="{{ v.url or '' }}">{{ v.label }}</button>
       {% endfor %}
       {% if a.pending %}
-      <button class="take-chip pending sr-take on" data-src="{{ a.pending.url or '' }}">with the studio</button>
+      <button class="take-chip pending sr-take {{ 'on' if not a.versions }}"
+              data-src="{{ a.pending.url or '' }}">with the studio</button>
       {% endif %}
     </div>
     <span class="t-keys">space · ←/→ · B brief · N notes · V takes</span>
@@ -685,6 +692,25 @@
     });
     audio.addEventListener("pause", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
     audio.addEventListener("ended", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
+    // An undecodable take (Chrome can't play AIFF — Logic's default bounce) must
+    // never kill the time-anchored room: say so honestly, mark the chip, and fall
+    // back to the newest take the browser CAN play so pins + transport stay alive.
+    audio.addEventListener("error", function(){
+      var cur = root.querySelector(".sr-take.on");
+      if (cur){ cur.classList.add("dead"); cur.title = "This take can't be previewed in the browser — it's safely with the studio."; }
+      var alive = [];
+      chips.forEach(function(c){ if (c.dataset.src && !c.classList.contains("dead")) alive.push(c); });
+      if (alive.length){
+        var next = alive[alive.length - 1];
+        loadTake(next);
+        toast("That take can't be previewed in this browser — it's safely with the studio. Showing " + next.textContent.trim() + ".");
+      } else {
+        hasAudio = false; dur = 0;
+        stage.classList.add("noaudio"); stage.classList.remove("playing");
+        playBtn.textContent = "▶"; drawWave();
+        toast("This take can't be previewed in the browser — it's safely with the studio.");
+      }
+    });
     function loop(){
       if (audio.paused) return;
       update(); requestAnimationFrame(loop);
@@ -724,6 +750,32 @@
     root.querySelectorAll(".sr-jump").forEach(function(b){
       b.addEventListener("click", function(){
         seek(+b.dataset.t); closeAllSheets(); audio.play();
+      });
+    });
+    // Mark addressed / Reopen stays IN the conversation (no page reload —
+    // Linear's speed law): fetch the toggle, flip the card + pin + counts.
+    root.querySelectorAll(".nc-foot form").forEach(function(f){
+      f.addEventListener("submit", function(e){
+        e.preventDefault();
+        var card = f.closest(".sr-note"), btn = f.querySelector("button");
+        btn.disabled = true;
+        fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" } })
+          .then(function(r){
+            if (!r.ok) throw new Error("failed");
+            var nowDone = !card.classList.contains("done");
+            card.classList.toggle("done", nowDone);
+            btn.textContent = nowDone ? "Reopen" : "✓ Mark addressed";
+            var id = +card.dataset.note;
+            notes.forEach(function(n){ if (n.id === id) n.resolved = nowDone; });
+            renderPins();
+            var openN = notes.filter(function(n){ return !n.resolved; }).length;
+            var ct = root.querySelector(".fb-top .open-ct");
+            if (ct) ct.textContent = openN + " open";
+            var badge = root.querySelector('.lk[data-sheet="notes"] .n-open');
+            if (badge) badge.textContent = openN ? "· " + openN : "";
+          })
+          .catch(function(){ toast("Couldn't update the note — try again."); })
+          .finally(function(){ btn.disabled = false; });
       });
     });
 
