@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 from contextlib import asynccontextmanager
@@ -5001,8 +5002,8 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         if (c["version"] or "") != cur_n:
             continue
         notes.append({
-            "t": c["t_seconds"], "author": c["author"], "body": c["body"],
-            "kind": c["kind"], "resolved": bool(c["resolved"]),
+            "id": c["id"], "t": c["t_seconds"], "author": c["author"],
+            "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
         })
     return {
         "notes": notes,
@@ -5010,6 +5011,22 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         "revisions_used": int(delivery.get("revisions_used") or 0),
         "revisions_included": int(delivery.get("revisions_included") or 0) or None,
     }
+
+
+def _rel_deadline(iso: str) -> str:
+    """A deadline as the room speaks it — 'due in 11 days', not raw ISO."""
+    try:
+        from datetime import date as _d
+        days = (_d.fromisoformat(str(iso).strip()[:10]) - _d.today()).days
+    except (ValueError, TypeError):
+        return str(iso or "")
+    if days > 1:
+        return f"due in {days} days"
+    if days == 1:
+        return "due tomorrow"
+    if days == 0:
+        return "due today"
+    return f"{-days} day{'s' if days != -1 else ''} past due"
 
 
 def _creator_assignment_view(conn, talent_id: int) -> list:
@@ -5049,6 +5066,14 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             "feedback": _creator_feedback(conn, a["project_id"], delivery),
             "creative_lock": locked,
             "deliverables": deliverables,
+            # The room's Brief layer renders the REAL creative brief (the same
+            # effective brief the console shows), not a restatement of the title.
+            "brief": seed_brief(
+                prow,
+                db.get_opportunity(conn, prow["opp_id"])
+                if prow is not None and prow["opp_id"] else None,
+                delivery),
+            "deadline_rel": _rel_deadline(a["deadline"]) if a["deadline"] else "",
         })
     return out
 
@@ -5068,6 +5093,26 @@ def creator_portal(request: Request, token: str):
         request, "creator_portal.html", nav="", token=token, t=t,
         completeness=profile_completeness(t), assignments=assignments,
     )
+
+
+@app.post("/creator/{token}/project/{project_id}/note/{comment_id}/address")
+def creator_address_note(token: str, project_id: int, comment_id: int):
+    """The composer marks a client note addressed (or reopens it) from the room.
+
+    Same double guard as every creator action: valid portal token AND an actual
+    assignment. Reuses the reviewer-side toggle (attributable via the assignment —
+    only this project's assigned creator can reach it)."""
+    conn = db.connect()
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.talent_is_assigned(conn, row["id"], project_id):
+            return HTMLResponse("Not assigned to this project", status_code=403)
+        db.toggle_comment_resolved(conn, project_id, comment_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 
 @app.post("/creator/{token}/project/{project_id}/version")
@@ -7011,6 +7056,13 @@ def review_comment(
                 try:
                     t_seconds = float(t) if str(t).strip() != "" else None
                 except ValueError:
+                    t_seconds = None
+                # A non-finite timecode (inf/nan — anyone with the share token can
+                # POST one) round-trips SQLite REAL and then 500s every template
+                # that formats it (creator portal, delivery portal, console).
+                # Guard once at the write site; negatives are equally meaningless.
+                if t_seconds is not None and (
+                        not math.isfinite(t_seconds) or t_seconds < 0):
                     t_seconds = None
             project = db.get_project(conn, project_id)
             delivery = db.get_delivery(conn, project_id)
