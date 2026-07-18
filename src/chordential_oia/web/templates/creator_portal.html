@@ -319,7 +319,9 @@
   <div class="stage sr-stage {{ 'has-picture' if a.picture }}">
     {% if a.picture %}
     <video class="sr-video" src="{{ a.picture.url }}" preload="metadata" playsinline muted></video>
-    <span class="picture-note">CUT {{ a.picture.n }}{% if a.picture.orig %} · {{ a.picture.orig|upper }}{% endif %}</span>
+    <span class="picture-note">CUT {{ a.picture.n }}{% if a.picture.orig %} · {{ a.picture.orig|upper }}{% endif %}
+      · <a href="{{ a.picture.url }}" download="{{ a.picture.orig or 'cut.mp4' }}"
+           style="color:var(--orange);pointer-events:auto">⇓ DOWNLOAD FOR YOUR DAW</a></span>
     {% else %}
     <canvas class="sr-poster"></canvas>
     <div class="poster-title">
@@ -458,8 +460,8 @@
     <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
     {% if a.picture and a.picture.n > 1 %}
     <div class="conform"><b>Picture changed — this is cut {{ a.picture.n }}.</b>
-      Notes tagged from an earlier cut may have moved; changes the new cut causes are
-      conforms, not revisions.</div>
+      Re-syncing your music to the new cut is a conform — <b>it doesn't count against
+      your rounds.</b> Notes tagged from an earlier cut may have moved.</div>
     {% endif %}
     {% if a.feedback and a.feedback.notes %}
     <div class="fb-top">
