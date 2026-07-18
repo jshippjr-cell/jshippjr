@@ -432,6 +432,34 @@
   {% endif %}
 </section>
 
+<!-- THE PICTURE + REFERENCES (Phase 2 — what dresses the composer's room) -->
+<section class="card" id="picture">
+  <div class="card-head"><h2>Picture &amp; references</h2>
+    <span class="muted small">{% if delivery.get('picture') %}cut {{ delivery['picture']['n'] }} in the room{% else %}no cut yet — the composer scores blind{% endif %}
+      · {{ (delivery.get('references') or [])|length }} reference{{ 's' if (delivery.get('references') or [])|length != 1 }}</span></div>
+  {% if delivery.get('picture') %}
+  <p class="muted small">Cut {{ delivery['picture']['n'] }} — {{ delivery['picture']['orig'] }} · from {{ delivery['picture']['by'] }}{% if delivery['picture']['at'] %} · {{ delivery['picture']['at'][:10] }}{% endif %}
+    <a class="link" href="{{ delivery['picture']['url'] }}">open</a></p>
+  {% endif %}
+  <div class="inline" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
+    <form method="post" action="/project/{{ project['id'] }}/delivery/picture" enctype="multipart/form-data"
+          style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input type="file" name="file" accept=".mp4,.mov,.m4v,.webm" required style="font-size:12px;max-width:200px">
+      <button class="btn tiny" type="submit">{{ 'Replace cut' if delivery.get('picture') else 'Log the cut' }}</button>
+    </form>
+    <form method="post" action="/project/{{ project['id'] }}/delivery/reference" enctype="multipart/form-data"
+          style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input type="text" name="label" placeholder="Reference label" style="font-size:12px;max-width:160px">
+      <input type="file" name="file" required style="font-size:12px;max-width:200px">
+      <button class="btn tiny" type="submit">Add reference</button>
+    </form>
+  </div>
+  {% for ref in delivery.get('references') or [] %}
+  <p class="muted small" style="margin:6px 0 0">♫ {{ ref.label }} <span class="k">from {{ ref.by }}</span>
+    <a class="link" href="{{ ref.url }}">open</a></p>
+  {% endfor %}
+</section>
+
 <!-- DELIVERABLE ASSETS + UPLOAD CONTROLS -->
 <div class="cols-2">
   <section class="card" id="assets">

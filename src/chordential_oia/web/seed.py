@@ -601,9 +601,13 @@ def purge_demo_data(conn: sqlite3.Connection) -> int:
             pass
     removed = conn.execute(
         f"DELETE FROM opportunities WHERE id IN ({ph})", demo).rowcount
-    # All seeded talent is demo; keep only creators who actually applied.
+    # All seeded talent is demo; keep only creators who actually applied — AND
+    # anyone still assigned to a surviving project (deleting them would orphan
+    # live assignments; Phase-2 watchlist: the seed-idempotency guard).
     try:
-        conn.execute("DELETE FROM talent WHERE IFNULL(source,'') != 'applicant'")
+        conn.execute(
+            "DELETE FROM talent WHERE IFNULL(source,'') != 'applicant' "
+            "AND id NOT IN (SELECT talent_id FROM assignments WHERE talent_id IS NOT NULL)")
     except Exception:
         pass
     conn.commit()

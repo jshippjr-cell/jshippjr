@@ -61,6 +61,17 @@
   .stage{position:relative;background:#0D0C0B;border:1px solid var(--hair);border-radius:12px 12px 0 0;
     overflow:hidden;aspect-ratio:16/6.8;min-height:210px}
   .stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .stage.has-picture{aspect-ratio:16/9;background:#000}
+  /* conform banner — a new cut changes the ground truth; say so where notes live */
+  .conform{display:flex;gap:8px;align-items:baseline;padding:8px 12px;margin-top:8px;border:1px solid rgba(139,160,174,.4);
+    border-radius:8px;background:rgba(139,160,174,.08);font-size:11.5px;color:var(--dim)}
+  .conform b{color:var(--slate)}
+  .nc-cut{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--slate);
+    background:rgba(139,160,174,.14);border-radius:3px;padding:2px 6px}
+  .ref-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+  .ref-row:first-of-type{border-top:0}
+  .ref-row .fname{font:10.5px var(--mono);color:var(--dim2)}
   .poster-title{position:absolute;inset:0 0 22% 0;display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:8px;pointer-events:none;text-align:center;padding:0 20px}
   .poster-title .pt-kick{font:700 9.5px var(--mono);letter-spacing:.22em;color:rgba(252,247,248,.45)}
@@ -269,10 +280,16 @@
 </div>
 {% endif %}
 
-{% if assignments|length > 1 %}
+{% if all_rooms|length > 1 %}
 <div class="room" style="padding-bottom:0">
   <div class="roomnav">
-    {% for a in assignments %}<a href="#p{{ a.project_id }}">{{ a.need[:34] }}</a>{% endfor %}
+    {# each engagement has its own door (?p=), ADR-0025; rooms sort needs-first #}
+    {% if focused %}<a href="/creator/{{ token }}">← All rooms</a>{% endif %}
+    {% for a in all_rooms %}
+    <a href="/creator/{{ token }}?p={{ a.project_id }}"
+       {% if focused == a.project_id %}style="color:var(--orange);border-color:rgba(240,119,44,.5)"{% endif %}
+    >{{ a.need[:34] }}</a>
+    {% endfor %}
   </div>
 </div>
 {% endif %}
@@ -298,8 +315,12 @@
     <span class="door-chip state {{ 'live' if disp_state in ('In review','Approved') }}">{{ disp_state }}</span>
   </div>
 
-  <!-- the stage: the poster holds the picture position until the client's cut (Phase 2) -->
-  <div class="stage sr-stage">
+  <!-- the stage: the client's cut when it exists; the poster holds the position until then -->
+  <div class="stage sr-stage {{ 'has-picture' if a.picture }}">
+    {% if a.picture %}
+    <video class="sr-video" src="{{ a.picture.url }}" preload="metadata" playsinline muted></video>
+    <span class="picture-note">CUT {{ a.picture.n }}{% if a.picture.orig %} · {{ a.picture.orig|upper }}{% endif %}</span>
+    {% else %}
     <canvas class="sr-poster"></canvas>
     <div class="poster-title">
       <span class="pt-kick">{{ a.client|upper }}</span>
@@ -307,6 +328,7 @@
       <span class="pt-sub">Your role: {{ a.role }}</span>
     </div>
     <span class="picture-note">PICTURE ARRIVES WITH THE CLIENT'S CUT</span>
+    {% endif %}
     <span class="tc sr-tc">00:00:00:00</span>
     <div class="bigplay"><button class="sr-bigplay" aria-label="Play">▶</button></div>
     <div class="whisper sr-whisper">
@@ -363,6 +385,9 @@
               data-src="{{ a.pending.url or '' }}">with the studio</button>
       {% endif %}
     </div>
+    {% if a.picture %}
+    <button class="take-chip sr-cutaudio" title="Toggle the cut's own audio (VO/temp) under your music">cut audio: off</button>
+    {% endif %}
     <span class="t-keys">space · ←/→ · B brief · N notes · V takes</span>
     <span class="spacer"></span>
     <div class="layer-keys">
@@ -398,6 +423,20 @@
       {% endif %}
       <span class="chip">{{ disp_state }}</span>
     </div>
+    {% if a.references %}
+    <h3>References — hear them, don't guess them</h3>
+    {% for ref in a.references %}
+    <div class="ref-row">
+      {% if ref.kind == 'audio' %}
+      <button type="button" class="row-play sr-ref-play" data-src="{{ ref.url }}" aria-label="Play {{ ref.label }}">▶</button>
+      {% else %}
+      <a class="row-play" href="{{ ref.url }}" target="_blank" rel="noopener" aria-label="Open {{ ref.label }}">↗</a>
+      {% endif %}
+      <span>{{ ref.label }}</span>
+      <span class="fname">from {{ ref.by }}{% if ref.at %} · {{ ref.at[:10] }}{% endif %}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
     <h3>What this project delivers</h3>
     {% if a.brief and a.brief.deliverables_needed %}
     <p class="brief-body" style="margin-bottom:6px">{{ a.brief.deliverables_needed }}</p>
@@ -417,6 +456,11 @@
   <!-- ── LAYER: Notes ── -->
   <div class="sheet sr-sheet" data-sheet="notes" role="dialog" aria-modal="true" aria-label="Client feedback" tabindex="-1">
     <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
+    {% if a.picture and a.picture.n > 1 %}
+    <div class="conform"><b>Picture changed — this is cut {{ a.picture.n }}.</b>
+      Notes tagged from an earlier cut may have moved; changes the new cut causes are
+      conforms, not revisions.</div>
+    {% endif %}
     {% if a.feedback and a.feedback.notes %}
     <div class="fb-top">
       <span class="open-ct">{{ a.feedback.open_count }} to address</span>
@@ -431,6 +475,9 @@
         {% if n.kind == 'change_request' %}<span class="nc-tag">changes</span>{% endif %}
         {% if n.resolved %}<span class="nc-tag" style="color:var(--dim);background:transparent;border:1px solid var(--hair2)">client resolved</span>
         {% elif n.addressed %}<span class="nc-tag" style="color:var(--orange);background:var(--orange-soft)">addressed</span>{% endif %}
+        {% if a.picture and a.picture.n > 1 and n.at and n.at < a.picture.at %}
+        <span class="nc-cut" title="This note was pinned on an earlier cut — its timecode may have moved">cut {{ a.picture.n - 1 }}</span>
+        {% endif %}
         {% if n.t is not none %}
         <button type="button" class="nc-tc sr-jump" data-t="{{ n.t }}"
                 aria-label="Jump to {{ '%d:%02d'|format((n.t/60)|int, (n.t%60)|int) }}">
@@ -595,8 +642,16 @@
     var notes = [];
     try { notes = JSON.parse(root.querySelector(".sr-notes-data").textContent) || []; } catch(e){}
 
+    // Phase 2: when the client's cut exists, the VIDEO is the room's master
+    // clock — timecode, playhead, and pins address the picture; the take audio
+    // syncs underneath it. Without picture, the take audio is the master
+    // (Phase 1 behavior, unchanged).
+    var video = root.querySelector(".sr-video"), hasPicture = !!video;
     var audio = new Audio(), dur = 0, hasAudio = false;
     audio.preload = "metadata";
+    function mDur(){ return hasPicture ? (video.duration || 0) : dur; }
+    function mTime(){ return hasPicture ? (video.currentTime || 0) : (audio.currentTime || 0); }
+    function mPaused(){ return hasPicture ? video.paused : audio.paused; }
     // peaks: lazy (decoded on first PLAY, not on load — review P1-5), cached per
     // src, size-capped, race-guarded, AudioContext always closed.
     var peakCache = {}, peaks = null, decoding = false;
@@ -606,14 +661,17 @@
     function loadTake(chip){
       chips.forEach(function(c){ c.classList.remove("on"); });
       peaks = null;
-      if (!chip){ stage.classList.add("noaudio"); hasAudio = false; return; }
+      // 'noaudio' only silences the room when there is no picture either —
+      // with a cut loaded, the stage plays picture-only just fine
+      if (!chip){ if (!hasPicture) stage.classList.add("noaudio"); hasAudio = false; return; }
       chip.classList.add("on");
       var src = chip.dataset.src;
-      if (!src){ stage.classList.add("noaudio"); hasAudio = false; drawWave(); return; }
+      if (!src){ if (!hasPicture) stage.classList.add("noaudio"); hasAudio = false; drawWave(); return; }
       hasAudio = true; stage.classList.remove("noaudio");
       audio.src = src;
       peaks = peakCache[src] || null;
       drawWave();
+      if (hasPicture) syncAudio();
     }
 
     function decodePeaks(){
@@ -650,21 +708,26 @@
           g = waveCv.getContext("2d");
       g.clearRect(0, 0, w, h);
       if (!hasAudio) return;
+      // Against picture, the waveform occupies its true span of the master
+      // timeline (a :45 take under a :60 cut fills 75% of the lane).
+      var span = (hasPicture && mDur()) ? Math.min(1, (dur || 0) / mDur()) : 1;
       var prog = dur ? (audio.currentTime || 0) / dur : 0;
+      var W = w * span;
       if (peaks){
         var n = peaks.length;
         for (var i = 0; i < n; i++){
-          var bh = Math.max(2, peaks[i] * h * 0.88), x = i / n * w;
+          var bh = Math.max(2, peaks[i] * h * 0.88), x = i / n * W;
           g.fillStyle = (i / n <= prog) ? "rgba(240,119,44,.9)" : "rgba(240,119,44,.28)";
-          g.fillRect(x, (h - bh) / 2, Math.max(1, w / n - 1.5), bh);
+          g.fillRect(x, (h - bh) / 2, Math.max(1, W / n - 1.5), bh);
         }
       } else {
-        g.fillStyle = "rgba(240,119,44,.25)"; g.fillRect(0, h/2 - 1, w, 2);
-        g.fillStyle = "rgba(240,119,44,.9)"; g.fillRect(0, h/2 - 1, w * prog, 2);
+        g.fillStyle = "rgba(240,119,44,.25)"; g.fillRect(0, h/2 - 1, W, 2);
+        g.fillStyle = "rgba(240,119,44,.9)"; g.fillRect(0, h/2 - 1, W * prog, 2);
       }
     }
 
     function drawPoster(){
+      if (!poster) return;                      // picture rooms have no poster canvas
       var w = poster.width = poster.clientWidth * devicePixelRatio,
           h = poster.height = poster.clientHeight * devicePixelRatio,
           g = poster.getContext("2d");
@@ -682,13 +745,14 @@
     }
     function renderPins(){
       noteLane.querySelectorAll(".pin").forEach(function(p){ p.remove(); });
-      if (!dur) return;
+      var D = mDur();
+      if (!D) return;
       notes.forEach(function(n){
         if (n.t === null || n.t === undefined) return;
         var pin = document.createElement("button");
         pin.type = "button";
         pin.className = "pin" + ((n.resolved || n.addressed) ? " resolved" : "");
-        pin.style.left = Math.min(100, Math.max(0, n.t / dur * 100)) + "%";
+        pin.style.left = Math.min(100, Math.max(0, n.t / D * 100)) + "%";
         pin.setAttribute("aria-label", "Client note at " + Math.floor(n.t/60) + ":" +
           String(Math.floor(n.t%60)).padStart(2,"0"));
         pin.title = pin.getAttribute("aria-label");
@@ -705,18 +769,24 @@
       });
     }
     function update(){
-      var t = audio.currentTime || 0;
-      playhead.style.left = (dur ? Math.min(100, t / dur * 100) : 0) + "%";
+      var t = mTime(), D = mDur();
+      playhead.style.left = (D ? Math.min(100, t / D * 100) : 0) + "%";
       tcEl.textContent = tcFmt(t);
       drawWave();
     }
     audio.addEventListener("loadedmetadata", function(){ dur = audio.duration || 0; renderPins(); update(); });
     audio.addEventListener("timeupdate", update);
     audio.addEventListener("play", function(){
-      stage.classList.add("playing"); playBtn.textContent = "❚❚"; decodePeaks(); loop();
+      // with picture, the video owns the transport chrome — the take is a follower
+      if (!hasPicture){ stage.classList.add("playing"); playBtn.textContent = "❚❚"; }
+      decodePeaks(); loop();
     });
-    audio.addEventListener("pause", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
-    audio.addEventListener("ended", function(){ stage.classList.remove("playing"); playBtn.textContent = "▶"; });
+    audio.addEventListener("pause", function(){
+      if (!hasPicture){ stage.classList.remove("playing"); playBtn.textContent = "▶"; }
+    });
+    audio.addEventListener("ended", function(){
+      if (!hasPicture){ stage.classList.remove("playing"); playBtn.textContent = "▶"; }
+    });
     // An undecodable take (Chrome can't play AIFF — Logic's default bounce) must
     // never kill the time-anchored room: say so honestly, mark the chip, and fall
     // back to the newest take the browser CAN play so pins + transport stay alive.
@@ -731,23 +801,70 @@
         toast("That take can't be previewed in this browser — it's safely with the studio. Showing " + next.textContent.trim() + ".");
       } else {
         hasAudio = false; dur = 0;
-        stage.classList.add("noaudio"); stage.classList.remove("playing");
-        playBtn.textContent = "▶"; drawWave();
+        if (!hasPicture){ stage.classList.add("noaudio"); stage.classList.remove("playing");
+                          playBtn.textContent = "▶"; }
+        drawWave();
         toast("This take can't be previewed in the browser — it's safely with the studio.");
       }
     });
     function loop(){
-      if (audio.paused) return;
+      if (mPaused()) return;
       update(); requestAnimationFrame(loop);
     }
 
+    function syncAudio(){
+      // the take follows the picture: align, play/pause together, stop at its end
+      if (!hasPicture || !hasAudio) return;
+      var t = video.currentTime || 0;
+      if (t >= (dur || 0)){ if (!audio.paused) audio.pause(); return; }
+      if (Math.abs((audio.currentTime || 0) - t) > 0.3) audio.currentTime = t;
+      if (!video.paused && audio.paused) audio.play();
+      if (video.paused && !audio.paused) audio.pause();
+    }
     function toggle(){
+      if (hasPicture){
+        video.paused ? video.play() : video.pause();
+        return;
+      }
       if (!hasAudio){ toast("No take loaded yet — upload your music and it plays here."); return; }
       audio.paused ? audio.play() : audio.pause();
     }
     function seek(t){
+      if (hasPicture){
+        if (!mDur()) return;
+        video.currentTime = Math.max(0, Math.min(mDur(), t));
+        syncAudio(); update();
+        return;
+      }
       if (!hasAudio || !dur) return;
       audio.currentTime = Math.max(0, Math.min(dur, t)); update();
+    }
+    if (hasPicture){
+      video.addEventListener("loadedmetadata", function(){ renderPins(); update(); });
+      video.addEventListener("play", function(){
+        stage.classList.add("playing"); playBtn.textContent = "❚❚";
+        decodePeaks(); syncAudio(); loop();
+      });
+      video.addEventListener("pause", function(){
+        stage.classList.remove("playing"); playBtn.textContent = "▶"; syncAudio();
+      });
+      video.addEventListener("ended", function(){
+        stage.classList.remove("playing"); playBtn.textContent = "▶";
+        if (!audio.paused) audio.pause();
+      });
+      video.addEventListener("timeupdate", function(){ syncAudio(); update(); });
+      video.addEventListener("click", toggle);
+      video.addEventListener("error", function(){
+        toast("The cut can't be streamed right now — the room falls back to your music.");
+        hasPicture = false; stage.classList.remove("has-picture", "playing");
+        video.style.display = "none"; renderPins(); update();
+      });
+      var cutBtn = root.querySelector(".sr-cutaudio");
+      if (cutBtn) cutBtn.addEventListener("click", function(){
+        video.muted = !video.muted;
+        cutBtn.textContent = "cut audio: " + (video.muted ? "off" : "on");
+        cutBtn.classList.toggle("on", !video.muted);
+      });
     }
 
     playBtn.addEventListener("click", toggle);
@@ -760,7 +877,22 @@
     });
     spine.addEventListener("click", function(e){
       var r = spine.getBoundingClientRect();
-      seek((e.clientX - r.left) / r.width * (dur || 0));
+      seek((e.clientX - r.left) / r.width * (mDur() || 0));
+    });
+    // references play through their own quiet player — never disturbing the takes
+    root.querySelectorAll(".sr-ref-play").forEach(function(b){
+      b.addEventListener("click", function(){
+        if (!window.__refAudio) window.__refAudio = new Audio();
+        var ra = window.__refAudio;
+        if (ra.src && ra.src.indexOf(b.dataset.src) !== -1 && !ra.paused){
+          ra.pause(); b.textContent = "▶"; return;
+        }
+        if (hasPicture && !video.paused) video.pause();
+        if (!audio.paused) audio.pause();
+        document.querySelectorAll(".sr-ref-play").forEach(function(x){ x.textContent = "▶"; });
+        ra.src = b.dataset.src; ra.play(); b.textContent = "❚❚";
+        ra.onended = function(){ b.textContent = "▶"; };
+      });
     });
     // a take row's play button routes through the room's one audio engine —
     // no native browser chrome inside the room (review P1-4)
@@ -965,6 +1097,15 @@
     });
     return best;
   }
+  // ?t= deep link — an email can open the room at the moment (spec §10.2)
+  (function(){
+    var t = new URLSearchParams(location.search).get("t");
+    if (t !== null && rooms.length){
+      var r0 = rooms[0];
+      setTimeout(function(){ r0.seek(parseFloat(t) || 0); }, 600);
+    }
+  })();
+
   addEventListener("keydown", function(e){
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;

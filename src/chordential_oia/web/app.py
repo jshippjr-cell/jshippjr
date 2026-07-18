@@ -135,6 +135,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Audio uploads we accept for relevant-work samples.
 _AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+# Phase 2 (The Picture): the client's cut. Range streaming is served by the
+# existing /uploads route (FileResponse handles Range — Safari requires it).
+_VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 
 
 # --------------------------------------------------------------------------- #
@@ -5010,6 +5013,7 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
             "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
             "addressed": bool(c["composer_addressed"]
                               if "composer_addressed" in keys else 0),
+            "at": c["created_at"] or "",
             "replies": [],
         }
         notes.append(n); by_id[c["id"]] = n
@@ -5107,12 +5111,26 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
                 if prow is not None and prow["opp_id"] else None,
                 delivery),
             "deadline_rel": _rel_deadline(a["deadline"]) if a["deadline"] else "",
+            # Phase 2 — the picture + references + conform marking
+            "picture": delivery.get("picture") or None,
+            "references": list(delivery.get("references") or []),
         })
+    # Needs-me-first (composer review P1): rooms owing the composer work come
+    # before in-motion rooms; delivered rooms sink to the bottom.
+    def _urgency(v):
+        closed = v["delivery_state"] in ("Released", "Delivered")
+        needs_me = (v["feedback"]["open_count"] > 0
+                    or (not v["versions"] and not v["pending"] and not closed))
+        return 2 if closed else (0 if needs_me else 1)
+    out.sort(key=_urgency)
     return out
 
 
 @app.get("/creator/{token}", response_class=HTMLResponse)
-def creator_portal(request: Request, token: str):
+def creator_portal(request: Request, token: str, p: Optional[int] = None):
+    """The composer's Session Room(s). ``?p=<project_id>`` is a room's own door
+    (ADR-0025): one token, each engagement individually addressable; without it,
+    every room stacks needs-first."""
     conn = db.connect()
     try:
         row = db.get_talent_by_portal_token(conn, token)
@@ -5122,9 +5140,13 @@ def creator_portal(request: Request, token: str):
         assignments = _creator_assignment_view(conn, row["id"])
     finally:
         conn.close()
+    all_rooms = assignments
+    if p is not None:
+        assignments = [a for a in assignments if a["project_id"] == p] or all_rooms
     return render(
         request, "creator_portal.html", nav="", token=token, t=t,
         completeness=profile_completeness(t), assignments=assignments,
+        all_rooms=all_rooms, focused=p,
     )
 
 
@@ -7233,6 +7255,150 @@ def session_room_presence(project_id: int, k: str = Form(""), r: str = Form(""),
     who = (name.strip() or fallback)[:40]
     _PRESENCE.setdefault(project_id, {})[f"{role}:{who}"] = (who, role, _t.time())
     return {"ok": True}
+
+
+async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Optional[dict]:
+    """Store the client's cut as the room's PICTURE (Phase 2). The current cut is
+    archived to ``picture_history`` and the cut number bumps — a new cut is a
+    CONFORM event, never a revision (production model): notes from the prior cut
+    get marked by the room. Returns the new picture dict, or None on a bad file."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _VIDEO_EXTS:
+        return None
+    data = await file.read()
+    if not data:
+        return None
+    safe_name = f"proj{project_id}-cut-{os.urandom(5).hex()}{ext}"
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
+    delivery = db.get_delivery(conn, project_id)
+    prior = delivery.get("picture") or None
+    from datetime import datetime as _dt, timezone as _tz
+    pic = {"url": f"/uploads/{safe_name}", "filename": safe_name,
+           "orig": file.filename, "by": by,
+           "at": _dt.now(_tz.utc).isoformat(),
+           "n": (int(prior.get("n") or 0) + 1) if prior else 1}
+    if prior:
+        hist = list(delivery.get("picture_history") or [])
+        hist.append(prior)
+        db.update_delivery(conn, project_id, "picture_history", hist)
+    db.update_delivery(conn, project_id, "picture", pic)
+    db.add_update(conn, project_id,
+                  f"{by} uploaded cut {pic['n']} of the picture ({file.filename})."
+                  + (" Notes from the prior cut are marked — changes it causes are"
+                     " conforms, not revisions." if prior else ""))
+    return pic
+
+
+async def _store_reference(conn, project_id: int, file: UploadFile, by: str,
+                           label: str = "") -> Optional[dict]:
+    """Store an audible/visual REFERENCE for the composer (Phase 2 pull-forward:
+    'Bonobo' is a career, not a reference — give them the actual track)."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    data = await file.read()
+    if not data:
+        return None
+    kind = ("audio" if ext in _AUDIO_EXTS else
+            "video" if ext in _VIDEO_EXTS else "file")
+    safe_name = f"proj{project_id}-ref-{os.urandom(5).hex()}{ext or '.bin'}"
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
+    delivery = db.get_delivery(conn, project_id)
+    refs = list(delivery.get("references") or [])
+    from datetime import datetime as _dt, timezone as _tz
+    ref = {"label": (label or "").strip() or (file.filename or "Reference"),
+           "url": f"/uploads/{safe_name}", "filename": safe_name, "kind": kind,
+           "by": by, "at": _dt.now(_tz.utc).isoformat()}
+    refs.append(ref)
+    db.update_delivery(conn, project_id, "references", refs)
+    db.add_update(conn, project_id, f"{by} added a reference: {ref['label']}.")
+    return ref
+
+
+@app.post("/project/{project_id}/review/picture")
+async def review_upload_picture(
+    request: Request, project_id: int, k: str = Form(""), r: str = Form(""),
+    author: str = Form(""), email: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """The client door's Drop: upload the cut the music is written to. Token-gated
+    like every review action; the room dresses itself around the picture."""
+    conn = db.connect()
+    try:
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return HTMLResponse("Not found", status_code=404)
+        who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
+        pic = None
+        if file is not None and (file.filename or "").strip():
+            pic = await _store_picture(conn, project_id, file, who)
+        project = db.get_project(conn, project_id)
+    finally:
+        conn.close()
+    if pic is not None:
+        await run_in_threadpool(
+            _notify_operator_review, project_id, project,
+            f"Picture uploaded — {_campaign_label(project) if project else 'campaign'}",
+            f"{pic['by']} uploaded cut {pic['n']}. The composer's room now carries it.")
+        await run_in_threadpool(
+            _notify_assigned_creators, project_id, project,
+            subject=f"The picture is in — cut {pic['n']}",
+            body_text=("The client's cut just landed in your session room — the picture "
+                       "is waiting for your music."))
+    return _review_redirect(project_id, k, name=author, email=email, r=r)
+
+
+@app.post("/project/{project_id}/review/reference")
+async def review_upload_reference(
+    request: Request, project_id: int, k: str = Form(""), r: str = Form(""),
+    author: str = Form(""), email: str = Form(""), label: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+):
+    """The client adds a hearable/viewable reference for the composer."""
+    conn = db.connect()
+    try:
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return HTMLResponse("Not found", status_code=404)
+        who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
+        if file is not None and (file.filename or "").strip():
+            await _store_reference(conn, project_id, file, who, label=label)
+    finally:
+        conn.close()
+    return _review_redirect(project_id, k, name=author, email=email, r=r)
+
+
+@app.post("/project/{project_id}/delivery/picture")
+async def delivery_upload_picture(project_id: int,
+                                  file: Optional[UploadFile] = File(None)):
+    """Operator door: log the client's cut from the console (email handoffs
+    happen; the room should still get the picture)."""
+    conn = db.connect()
+    try:
+        pic = None
+        if file is not None and (file.filename or "").strip():
+            pic = await _store_picture(conn, project_id, file, "The studio")
+        project = db.get_project(conn, project_id)
+    finally:
+        conn.close()
+    if pic is not None:
+        await run_in_threadpool(
+            _notify_assigned_creators, project_id, project,
+            subject=f"The picture is in — cut {pic['n']}",
+            body_text=("The cut just landed in your session room — the picture is "
+                       "waiting for your music."))
+    return RedirectResponse(f"/project/{project_id}/delivery#picture", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/reference")
+async def delivery_upload_reference(project_id: int, label: str = Form(""),
+                                    file: Optional[UploadFile] = File(None)):
+    """Operator door: add a reference for the composer."""
+    conn = db.connect()
+    try:
+        if file is not None and (file.filename or "").strip():
+            await _store_reference(conn, project_id, file, "The studio", label=label)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#picture", status_code=303)
 
 
 @app.post("/project/{project_id}/review/resolve")

@@ -530,6 +530,22 @@ queue surfaces approved-but-unsigned creators as floor gaps. When counsel's real
 template lands, `agreement_ref` points at the executed instrument; the gate's shape does
 not change.
 
+### ADR-0025 — One composer token; every engagement gets its own door (?p)
+**Status:** Accepted (2026-07-19) · Source: `web/app.py` creator_portal route,
+`creator_portal.html` roomnav, `docs/design/chordos-studio-experience.md` §2
+**Decision.** A composer has ONE portal token. Their Session Rooms stack on one page
+sorted **needs-me-first** (rooms owing the composer work → in-motion → delivered), and
+each engagement is individually addressable as its own door via `?p=<project_id>` —
+the link the award email carries. Deep links compose (`?p=…&t=…`).
+**Why.** The spec's "three engagements get three doors, not a portfolio manager" is
+about *experience*, not credentials: separate tokens per engagement would multiply
+links to lose and revoke. One token + per-room doors + needs-first ordering delivers
+the same focus with one credential. Both persona reviewers validated the stacked page
+for a multi-gig week; keyboard scoping (nearest room owns the keys) is the accepted
+mechanism.
+**Consequences.** Award emails link `?p=`; never mint per-project composer tokens;
+any future room-level feature must work in both the stacked and single-door views.
+
 ---
 
 ## Adding a new ADR
