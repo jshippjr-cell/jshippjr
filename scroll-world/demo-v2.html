@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chordential — from brief to cleared master</title>
+<style>
+  :root{
+    --cream:#f4ecdf; --sand:#e6d4b5; --olive:#7d7d4e; --slate:#6d7f88;
+    --ink:#241f1b; --wine:#44161e; --orange:#e4671f; --white:#fff;
+    --serif:"Georgia","Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:auto}
+  body{background:var(--cream);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+  /* ---- Top chrome ---- */
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+    padding:clamp(1rem,2.2vw,1.5rem) clamp(1.2rem,4vw,2.8rem);
+    background:linear-gradient(180deg,rgba(244,236,223,.82),rgba(244,236,223,0))}
+  .wordmark{font-family:var(--serif);font-size:1.24rem;letter-spacing:.01em;color:var(--ink)}
+  .wordmark b{color:var(--orange);font-weight:400}
+  .nav{display:flex;gap:1.5rem;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(36,31,27,.5)}
+  .nav a{color:inherit;text-decoration:none;padding-bottom:.25rem;border-bottom:1.5px solid transparent;transition:.3s}
+  .nav a[aria-current="true"]{color:var(--ink);border-color:var(--orange)}
+  .order{font-size:.78rem;font-weight:600;letter-spacing:.02em;color:#fff;background:var(--orange);
+    padding:.62rem 1.2rem;border-radius:100px;text-decoration:none;white-space:nowrap;box-shadow:0 8px 20px rgba(228,103,31,.24)}
+  @media (max-width:860px){ .nav{display:none} }
+
+  /* ---- Hero intro ---- */
+  .intro{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;
+    position:relative;background:radial-gradient(120% 92% at 50% 34%,#fbf6ec 0%,var(--cream) 58%,#ece0cc 100%)}
+  .intro h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,6.6vw,5.6rem);line-height:1.03;letter-spacing:-.018em;max-width:16ch;color:var(--ink)}
+  .intro .accent{color:var(--orange)}
+  .intro p{margin-top:1.5rem;font-size:clamp(1rem,2.2vw,1.28rem);color:var(--slate);max-width:44ch;line-height:1.5}
+  .scrollcue{position:absolute;bottom:2.2rem;left:50%;transform:translateX(-50%);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--olive)}
+  .scrollcue::after{content:"";display:block;width:1px;height:38px;margin:.7rem auto 0;background:linear-gradient(var(--olive),transparent);animation:cue 1.8s ease-in-out infinite}
+  @keyframes cue{0%,100%{opacity:.3;transform:scaleY(.6)}50%{opacity:1;transform:scaleY(1)}}
+
+  /* ---- Scroll stage (FULL-BLEED, camera-through) ---- */
+  .sw{position:relative}
+  .stage{position:sticky;top:0;height:100vh;overflow:hidden;background:var(--cream)}
+  .scenes{position:absolute;inset:0}
+  .scene{position:absolute;inset:0;opacity:0;will-change:opacity}
+  .scene img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;will-change:transform}
+  /* editorial cream scrim: readable text column bottom-left, image breathes top-right */
+  .scrim{position:absolute;inset:0;pointer-events:none;z-index:2;
+    background:
+      linear-gradient(78deg,rgba(244,236,223,.94) 0%,rgba(244,236,223,.9) 26%,rgba(244,236,223,.34) 50%,rgba(244,236,223,0) 70%),
+      linear-gradient(0deg,rgba(244,236,223,.78) 0%,rgba(244,236,223,0) 34%)}
+
+  /* ---- Copy ---- */
+  .copylayer{position:absolute;inset:0;z-index:3;pointer-events:none}
+  .copy{position:absolute;left:clamp(1.4rem,5vw,4.6rem);bottom:clamp(2.4rem,8vw,5.4rem);max-width:42ch;
+    opacity:0;transform:translateY(18px);will-change:opacity,transform;color:var(--ink)}
+  .chapter{display:flex;align-items:center;gap:.7rem;font-size:.74rem;letter-spacing:.2em;color:var(--olive);margin-bottom:1rem;font-weight:600}
+  .chapter .bar{width:34px;height:1.5px;background:var(--orange);display:inline-block}
+  .eyebrow{font-size:.76rem;letter-spacing:.2em;text-transform:uppercase;color:var(--orange);font-weight:700;margin-bottom:.7rem}
+  .copy h2{font-family:var(--serif);font-weight:400;font-size:clamp(2rem,5.4vw,3.9rem);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .copy h2 .accent{color:var(--orange);display:block;margin-top:.1em}
+  .copy p{margin-top:1rem;font-size:clamp(1.02rem,1.7vw,1.22rem);line-height:1.5;color:var(--wine);max-width:38ch}
+  .tags{margin-top:1.2rem;display:flex;flex-wrap:wrap;gap:.5rem}
+  .tags span{font-size:.74rem;letter-spacing:.02em;padding:.34rem .82rem;border:1px solid rgba(68,22,30,.3);border-radius:100px;color:var(--wine)}
+  .ctarow{margin-top:1.7rem;display:flex;gap:.7rem;flex-wrap:wrap}
+  .cta{pointer-events:auto;background:var(--orange);color:#fff;font-weight:600;font-size:.98rem;padding:.85rem 1.7rem;border-radius:100px;text-decoration:none;box-shadow:0 12px 26px rgba(228,103,31,.3)}
+  .cta.ghost{background:transparent;color:var(--wine);border:1.5px solid rgba(68,22,30,.34);box-shadow:none}
+
+  /* right-edge section tab */
+  .sectiontab{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:4;
+    background:rgba(255,255,255,.72);backdrop-filter:blur(6px);border:1px solid rgba(68,22,30,.16);border-right:0;
+    border-radius:100px 0 0 100px;padding:.55rem 1rem .55rem 1.1rem;font-size:.76rem;letter-spacing:.04em;color:var(--wine);font-weight:600}
+
+  /* finale (scene 6) */
+  .copy.finale{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%) translateY(18px);width:min(92vw,780px);max-width:none;text-align:center}
+  .copy.finale .chapter{justify-content:center}
+  .copy.finale .eyebrow{color:var(--olive)}
+  .copy.finale p{margin:1rem auto 0}
+  .copy.finale .ctarow{justify-content:center}
+
+  /* progress rail */
+  .rail{position:fixed;right:clamp(.9rem,2vw,1.7rem);bottom:clamp(1.4rem,4vw,2.4rem);display:flex;gap:.5rem;z-index:15}
+  .rail button{width:26px;height:3px;border-radius:2px;border:0;background:rgba(68,22,30,.24);padding:0;cursor:pointer;transition:.3s}
+  .rail button[aria-current="true"]{background:var(--orange)}
+
+  @media (max-width:700px){
+    .scrim{background:
+      linear-gradient(0deg,rgba(244,236,223,.95) 0%,rgba(244,236,223,.82) 26%,rgba(244,236,223,.1) 54%,rgba(244,236,223,0) 74%)}
+    .copy{max-width:none;right:clamp(1.2rem,5vw,2rem)}
+    .sectiontab{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .scene img{transform:none!important} .scrollcue::after{animation:none} }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="wordmark">Chord<b>ential</b></div>
+    <nav class="nav" id="nav"></nav>
+    <a class="order" href="#">Start a project</a>
+  </div>
+
+  <header class="intro">
+    <h1>Original music for campaigns.<br><span class="accent">Composed. Cleared. Delivered.</span></h1>
+    <p>Scroll to travel from the brief to the final, cleared master — the way the work actually moves.</p>
+    <div class="scrollcue">Scroll</div>
+  </header>
+
+  <section class="sw" id="sw">
+    <div class="stage">
+      <div class="scenes" id="scenes"></div>
+      <div class="scrim"></div>
+      <div class="sectiontab" id="sectiontab">The Brief</div>
+      <div class="copylayer"><div id="copy"></div></div>
+    </div>
+  </section>
+
+  <nav class="rail" id="rail" aria-label="Sections"></nav>
+
+<script>
+const SCENES = [
+  { still:"stills/scene1.png", nav:"The Brief", eyebrow:"The problem",
+    title:"Every campaign starts with a creative brief.",
+    body:"An agency has a campaign. Pressure, a deadline, expectation — not chaos, just the quiet weight of delivering something that matters.",
+    tags:["The brief","The deadline"] },
+  { still:"stills/scene2.png", nav:"The Match", eyebrow:"Why Chordential",
+    title:"We assemble the right creative team for the work.",
+    body:"Not a marketplace. Not AI. The right composers and creative leads, brought together with intention — a creative network built around the work.",
+    tags:["Creative network","By intention"] },
+  { still:"stills/scene3.png", nav:"The Studio", eyebrow:"The craft",
+    title:"Original music begins with people — not prompts.",
+    body:"Hands on keys. Notation. Strings. This is where ideas become music — and where you remember we're a music company.",
+    tags:["Original composition","Human-made"] },
+  { still:"stills/scene4.png", nav:"Approval", eyebrow:"The payoff",
+    title:"Built to survive approval.",
+    body:"Agencies don't celebrate delivery — they celebrate approval. The client smiles, the creative director signs off, the producer exhales.",
+    tags:["Client-ready","Aligned"] },
+  { still:"stills/scene5.png", nav:"Delivery", eyebrow:"The infrastructure",
+    title:"Everything arrives organized, cleared, and ready.",
+    body:"Stems, versions, cue sheets, rights — packaged and delivered. The quiet machine that makes it all feel effortless.",
+    tags:["Cleared","Organized","Delivered"] },
+  { still:"stills/scene6.png", nav:"The Master", eyebrow:"Where it belongs",
+    title:'Original music for campaigns.<span class="accent">Composed. Cleared. Delivered.</span>',
+    body:"The campaign. The film. The audience. The music, living exactly where it belongs.",
+    tags:[], cta:"Start a project", cta2:"Hear the work" },
+];
+const DWELL = 1.25;
+
+const scenesEl=document.getElementById('scenes'), copyEl=document.getElementById('copy'),
+      railEl=document.getElementById('rail'), navEl=document.getElementById('nav'),
+      tabEl=document.getElementById('sectiontab'), sw=document.getElementById('sw');
+
+SCENES.forEach((s,i)=>{
+  const fig=document.createElement('div'); fig.className='scene'; fig.dataset.i=i;
+  const img=new Image(); img.src=s.still; img.alt=s.title; img.loading=i<2?'eager':'lazy';
+  img.onerror=()=>{ img.style.display='none'; fig.style.background='radial-gradient(120% 92% at 50% 40%,#fbf6ec,var(--cream) 60%,#ece0cc)'; };
+  fig.appendChild(img); scenesEl.appendChild(fig);
+
+  const c=document.createElement('div'); c.className='copy'+(i===SCENES.length-1?' finale':''); c.dataset.i=i;
+  c.innerHTML=`<div class="chapter"><span class="bar"></span>${String(i+1).padStart(2,'0')} / ${String(SCENES.length).padStart(2,'0')}</div>`
+    +(s.eyebrow?`<div class="eyebrow">${s.eyebrow}</div>`:'')
+    +`<h2>${s.title}</h2><p>${s.body}</p>`
+    +(s.tags&&s.tags.length?`<div class="tags">${s.tags.map(t=>`<span>${t}</span>`).join('')}</div>`:'')
+    +((s.cta||s.cta2)?`<div class="ctarow">${s.cta?`<a class="cta" href="#">${s.cta}</a>`:''}${s.cta2?`<a class="cta ghost" href="#">${s.cta2}</a>`:''}</div>`:'');
+  copyEl.appendChild(c);
+
+  const a=document.createElement('a'); a.href='#'; a.textContent=s.nav; a.dataset.i=i;
+  a.addEventListener('click',e=>{e.preventDefault();jump(i);}); navEl.appendChild(a);
+
+  const b=document.createElement('button'); b.setAttribute('aria-label',s.nav);
+  b.addEventListener('click',()=>jump(i)); railEl.appendChild(b);
+});
+
+sw.style.height=(SCENES.length*DWELL*100)+'vh';
+const figs=[...scenesEl.children], copies=[...copyEl.children], dots=[...railEl.children], navs=[...navEl.children];
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+function jump(i){ const total=SCENES.length*DWELL*innerHeight-innerHeight; window.scrollTo({top:sw.offsetTop+(i/(SCENES.length-1))*total,behavior:'smooth'}); }
+
+let ticking=false;
+function onScroll(){ if(!ticking){ticking=true;requestAnimationFrame(update);} }
+function update(){
+  ticking=false;
+  const vh=innerHeight, total=SCENES.length*DWELL*vh-vh;
+  const p=Math.max(0,Math.min(1,(scrollY-sw.offsetTop)/total));
+  const fpos=p*(SCENES.length-1), active=Math.round(fpos);
+  const BAND=0.18;
+  const zone=ad=> ad<=0.5-BAND?1:(ad>=0.5+BAND?0:(0.5+BAND-ad)/(2*BAND));
+  figs.forEach((fig,i)=>{
+    const t=fpos-i, d=Math.abs(t);
+    fig.style.opacity=zone(d).toFixed(3);
+    if(!reduce){
+      const img=fig.firstChild;
+      // continuous dolly: one traveling camera pushing through, not A/B crossfade
+      const scale=1.16-0.14*Math.max(-1,Math.min(1,t));
+      const drift=t*-3.2; // vh%
+      img.style.transform=`scale(${scale.toFixed(4)}) translateY(${drift.toFixed(2)}%)`;
+    }
+  });
+  copies.forEach((c,i)=>{
+    const op=zone(Math.abs(fpos-i)); c.style.opacity=op.toFixed(3);
+    const dy=(1-op)*18;
+    c.style.transform=c.classList.contains('finale')?`translate(-50%,-50%) translateY(${dy}px)`:`translateY(${dy}px)`;
+  });
+  dots.forEach((b,i)=>b.setAttribute('aria-current',i===active?'true':'false'));
+  navs.forEach((a,i)=>a.setAttribute('aria-current',i===active?'true':'false'));
+  tabEl.textContent=SCENES[active].nav;
+}
+addEventListener('scroll',onScroll,{passive:true});
+addEventListener('resize',onScroll);
+update();
+
+const qs=new URLSearchParams(location.search).get('scene');
+if(qs!==null){ const i=Math.max(0,Math.min(SCENES.length-1,+qs)); const total=SCENES.length*DWELL*innerHeight-innerHeight; scrollTo(0,sw.offsetTop+(i/(SCENES.length-1))*total); update(); }
+</script>
+</body>
+</html>
