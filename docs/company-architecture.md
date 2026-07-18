@@ -115,11 +115,19 @@ AI employees), most of the Client Workspace sequence past P0/P1/P4, the multi-la
 intake framework, Legal Intelligence (unratified), Relationship Intelligence, Phase
 B/C anything (`campaign-workspace-prd.md`, `PROJECT_STATE.md`).
 
-**What is broken or missing in the live path:** outbound client email (TODO);
-durable object storage (ZIPs die on deploy); Postgres cutover (ops not run; every
-deploy is a ~2-min outage); DocuSign (placeholder); the bot-blocked discovery
-scanner; the over-strict PURSUE gate; composer agreements/payouts (nothing);
-ADR-0014 cited but absent from the log.
+**What is broken or missing in the live path:** durable object storage (ZIPs die
+on deploy); Postgres cutover (ops not run; every deploy is a ~2-min outage);
+DocuSign (placeholder); the bot-blocked discovery scanner.
+
+*Correction (2026-07-18, verified against code after this document was first
+written — the docs lagged the build):* agency-direction reviewer emails
+(`_notify_reviewers_new_version`), the payout ledger (`talent_payouts` + W-9
+gate), and the funnel audit's B0 filter fixes (`_MONEY_RE`, tightened
+`_COLLAB_MARKERS`) were **already built and tested**. Since ratification, the
+remaining true gaps have been closed: composer agreements + the assignment gate
+shipped as **ADR-0024** (Amendment A-3, founder-ratified hard block), the
+**Disposition Queue v1** shipped at `/queue`, and the **ADR-0014 log hole** was
+formally reconstructed.
 
 **Commercial state: $0 revenue, zero pipeline, zero case studies, no demand-gen
 motion** (`market-entry-healthcheck-council.md`, `revenue-drive-council.md`). All

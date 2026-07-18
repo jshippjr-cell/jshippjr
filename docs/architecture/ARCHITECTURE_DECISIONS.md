@@ -190,6 +190,22 @@ disposes, §4.1). Confirmed engagement facts (budget/deadline/discipline) **writ
 Opportunity's own columns**, so every downstream engine (qualification, estimate, brief,
 outreach) recomputes from the same source with no separate "refresh."
 
+### ADR-0014 — Captures are the one evidence envelope (reconstructed entry)
+**Status:** Accepted by practice; entry reconstructed 2026-07-18 (governance repair) ·
+Source: `web/intake_lanes.py`, `captures` table in `web/db.py`, `campaign-intake-prd.md` §19,
+`EXTRACTION_ENGINE.md`, PROJECT_STATE "Intake framework (Increment 1)"
+**Decision.** Every intake lane (discovery call, producer debrief, meeting notes,
+transcript, RFP, email thread, client brief) normalizes to ONE immutable **Capture
+envelope** (`captures` with lane / provenance_source / opp_id / metadata / artifact /
+external / status) and funnels through ONE shared pipeline; every CI field and event cites
+its raw-evidence `capture_id`.
+**Why.** One envelope means one pipeline, one provenance trail, and no privileged lane —
+"why did this change?" is always answerable from the capture it cites.
+**Consequences.** New input modalities are new LANES over the same envelope, never new
+pipelines. *Governance note:* this ruling was cited by ADR-0021/0023 and the extraction
+design but its log entry was missing (the log jumped 0013→0015); this entry reconstructs
+it from the shipped system so the log no longer references a ruling it doesn't contain.
+
 ### ADR-0015 — The Meeting is the business object; providers sit behind two seams
 **Status:** Accepted (2026-07-03, Jon) · Source: `meetings/` (base/null/zoom/recall),
 `web/meetings_service.py`, `campaign_intake.ingest_transcript`, `docs/discovery-call-intake-design.md`
@@ -491,6 +507,28 @@ proposal-only. Env: `CHORDENTIAL_EXTRACTION_ENGINE` (kill switch),
 `ANTHROPIC_API_KEY`. Cost guards: bounded artifact bundle, bounded recall, pool-capped
 parallelism. Never block a capture: provider/worker/recall failures degrade to the
 existing extractors and are recorded in the run report.
+
+### ADR-0024 — The supply-side floor: no assignment without an executed agreement + rate
+**Status:** Accepted (2026-07-18, founder ratification of company-architecture Amendment
+A-3, hard block) · Source: `web/db.py` (`talent_assignment_blockers`,
+`set_talent_agreement`, `agreement_executed_at`/`agreement_ref` columns), the two assign
+routes in `web/app.py`, `docs/company-architecture.md` §17
+**Decision.** A creator may not be assigned to a project until a standing **Composer
+Agreement is executed** (`talent.agreement_executed_at`) **and a rate is on file**
+(`talent.rate`). Both assign paths (`/project/{id}/assign`, `/matchboard/assign`) refuse
+server-side, before any side effect, and surface an actionable banner naming the creator
+and linking the fix. The demo seed models the compliant state for approved creators.
+**Why.** The client-facing rights certificate warrants a clean chain of title; that chain
+begins at the composer's rights conveyance. An assignment without an executed instrument
+makes the company's hero claim unenforceable — the talent council's finding ("money flows
+IN only") named this the moat's missing legal floor. This is the second machine-enforced
+gate (after the payment gate on release): both are receipts of promises, not creative
+decisions, so blocking is consistent with §4.1 (the machine refusing to let a promise be
+broken is not the machine deciding).
+**Consequences.** Never add an assign path that skips `talent_assignment_blockers`. The
+queue surfaces approved-but-unsigned creators as floor gaps. When counsel's real agreement
+template lands, `agreement_ref` points at the executed instrument; the gate's shape does
+not change.
 
 ---
 

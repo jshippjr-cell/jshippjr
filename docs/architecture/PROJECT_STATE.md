@@ -6,7 +6,7 @@ the state materially changes; keep it short and current. For the enduring **why*
 read `CONSTITUTION.md`; for **binding decisions**, `ARCHITECTURE_DECISIONS.md`; for
 **commands/conventions**, `/CLAUDE.md`.*
 
-**Last updated:** 2026-07-02 · **Phase:** A (studio force-multiplier, dogfood-first)
+**Last updated:** 2026-07-18 · **Phase:** A (studio force-multiplier, dogfood-first)
 
 ---
 
@@ -93,6 +93,21 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 - **Later:** CI → Relationship Intelligence (CI accumulates per client across campaigns).
 
 ## Recently completed (this working stretch)
+
+- **The company architecture** (`docs/company-architecture.md`, 2026-07-18): the
+  20-section first-principles redesign of Chordential as a company (AI-executive org,
+  Disposition Queue doctrine, $1M roadmap). Amendments A-1/A-2 remain proposals;
+  **A-3 was founder-ratified as a hard block → ADR-0024.**
+- **ADR-0024 — the supply-side floor**: `talent.agreement_executed_at`/`agreement_ref`
+  (additive), the Agreement block on the talent page, and a server-side refusal on both
+  assign paths until agreement + rate are on file. Demo seed models the compliant state.
+- **Disposition Queue v1** (`/queue`, `web/queue.py`): every pending founder decision on
+  one deterministic, ranked surface (discovery requests → invoices → payouts →
+  follow-ups → deal moves → taste-gate submissions → REVIEW-tier opps → reels → floor
+  gaps → CI housekeeping). Pure aggregation; zero new decision logic; surfaces the
+  funnel audit's hidden REVIEW volume without touching the precision-biased alert tier.
+- **ADR-0014 reconstructed** in the ADR log (the captures-envelope ruling was cited by
+  0021/0023 but its entry was missing).
 
 - **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
   an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain
