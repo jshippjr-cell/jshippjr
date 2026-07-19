@@ -5248,11 +5248,15 @@ async def creator_reply_note(request: Request, token: str, project_id: int,
             return HTMLResponse("Not assigned to this project", status_code=403)
         text = (body or "").strip()[:600]     # server-side cap; maxlength is advisory
         if text:
-            who = row["name"]
             parent = conn.execute(
                 "SELECT id FROM review_comments WHERE id = ? AND project_id = ?",
                 (comment_id, project_id)).fetchone()
+            # Only mark success + notify when the reply ACTUALLY threaded onto a real
+            # note — a stale/cross-project/guessed comment_id must not fabricate a
+            # reply bubble or ping the operator about work that was never recorded
+            # (eng P0). ``who`` is the signal the insert happened.
             if parent is not None:
+                who = row["name"]
                 db.add_review_comment(
                     conn, project_id, author=who,
                     email=(row["email"] or "") if "email" in row.keys() else "",
@@ -5934,10 +5938,12 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     note_cue = {}
     for _c in comments:
         # Any timecoded note (a client's pinned comment or a timed change request)
-        # gets tagged with the cue its timecode falls under — so when the operator
-        # weighs conform-vs-revision, the cue that changed is on screen, not recalled.
+        # gets tagged with the cue(s) it falls under — a RANGE note names every cue
+        # its span overlaps ('m01–m02') so the operator weighing conform-vs-revision
+        # sees a section note touches a section, not just its first frame (EP P0).
         if _c["t_seconds"] is not None:
-            _code = db.cue_for_time(_cues_now, _c["t_seconds"])
+            _te = _c["t_end"] if "t_end" in _c.keys() else None
+            _code = db.cues_for_note(_cues_now, _c["t_seconds"], _te)
             if _code:
                 note_cue[_c["id"]] = _code
     conform_cut_cues = db.cues_touched_by_cut(conn, project_id) if delivery.get("picture") else []
@@ -7361,8 +7367,11 @@ def review_comment(
                 # POST one) round-trips SQLite REAL and then 500s every template
                 # that formats it (creator portal, delivery portal, console).
                 # Guard once at the write site; negatives are equally meaningless.
+                # …and the same 24h sanity cap cues use, so a guest can't plant a
+                # garbled "1666666666666:40" label in the client feed (eng P2).
                 if t_seconds is not None and (
-                        not math.isfinite(t_seconds) or t_seconds < 0):
+                        not math.isfinite(t_seconds) or t_seconds < 0
+                        or t_seconds > db._MAX_TIMECODE_SECONDS):
                     t_seconds = None
             project = db.get_project(conn, project_id)
             delivery = db.get_delivery(conn, project_id)

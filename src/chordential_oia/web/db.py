@@ -5194,12 +5194,17 @@ def delete_hit(conn: sqlite3.Connection, project_id: int, cue_id: int,
     return box["ok"]
 
 
+_CAPTURE_SHELF_MAX = 200
+
+
 def add_capture(conn: sqlite3.Connection, project_id: int, text: str,
                 by: str = "") -> Optional[dict]:
     """Append a private composer capture (Phase 4 §13): a jotted idea/motif that
     lands on the room's own shelf, timestamped. Stored on
-    ``delivery_json['composer_shelf']`` — the composer + studio see it; it is NEVER
-    rendered on the client portal (the private-shelf promise). Returns the entry."""
+    ``delivery_json['composer_shelf']`` — the composer's PRIVATE shelf, NEVER
+    rendered on the client portal (the spec's "never visible to the client"). The
+    shelf keeps the most recent ``_CAPTURE_SHELF_MAX`` entries so a self-serve,
+    no-review write path can't grow the row unbounded (eng P2). Returns the entry."""
     body = (text or "").strip()[:600]
     if not body:
         return None
@@ -5208,6 +5213,8 @@ def add_capture(conn: sqlite3.Connection, project_id: int, text: str,
     entry = {"id": (max((int(e.get("id") or 0) for e in shelf), default=0) + 1),
              "text": body, "by": (by or "").strip(), "at": _utc_now_iso()}
     shelf.append(entry)
+    if len(shelf) > _CAPTURE_SHELF_MAX:
+        shelf = shelf[-_CAPTURE_SHELF_MAX:]
     update_delivery(conn, project_id, "composer_shelf", shelf)
     return entry
 
@@ -5237,6 +5244,33 @@ def cue_for_time(cues: list, t) -> Optional[str]:
         elif ti <= tv <= to:
             return c.get("code")
     return None
+
+
+def cues_for_note(cues: list, t, t_end=None) -> Optional[str]:
+    """The cue label a note is anchored to. For a point note it's the single cue
+    under it; for a RANGE note it's every cue the span overlaps, joined ('m01–m02')
+    — so the operator scoping conform-vs-revision sees a section note touches a
+    section, not just its first frame (EP P0, Phase 4)."""
+    te = _num_or_none(t_end)
+    if te is None:
+        return cue_for_time(cues, t)
+    tv = _num_or_none(t)
+    if tv is None:
+        return None
+    codes = []
+    for c in cues:
+        ti = c.get("t_in")
+        if ti is None:
+            continue
+        to = c.get("t_out")
+        to = ti if to is None else to
+        if not (to < tv or ti > te):            # spans overlap
+            code = c.get("code")
+            if code and code not in codes:
+                codes.append(code)
+    if not codes:
+        return None
+    return codes[0] if len(codes) == 1 else (codes[0] + "–" + codes[-1])
 
 
 def _num_or_none(v):

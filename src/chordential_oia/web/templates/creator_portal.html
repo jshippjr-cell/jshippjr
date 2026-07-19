@@ -43,7 +43,10 @@
     .room>.doorline,.room>.stage,.room>.spine,.room>.transport{animation-duration:.01ms}}
 
   /* ── Arrival (Phase 4, §Act 1): house-lights-up, once per engagement ── */
-  .sr-arrival{position:fixed;inset:0;z-index:100;background:var(--ink,#0d0c0b);
+  /* a scrim, not a wall — the dressed room (picture + drawing spine) shows through,
+     darkest behind the text for legibility (§Act 1: serif line over the picture) */
+  .sr-arrival{position:fixed;inset:0;z-index:100;
+    background:radial-gradient(circle at 50% 54%, rgba(9,8,7,.86) 0%, rgba(9,8,7,.7) 42%, rgba(9,8,7,.52) 100%);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
     text-align:center;padding:24px;opacity:1;transition:opacity 1.2s var(--ease)}
   .sr-arrival.lifting{opacity:0;pointer-events:none}
@@ -77,13 +80,18 @@
   .sr-cmd-item .mono{color:var(--dim)}
   .sr-cmd-item.sel,.sr-cmd-item:hover{background:rgba(240,119,44,.14)}
   .sr-cmd-empty{padding:14px 16px;color:var(--dim2);font-size:13px}
-  /* the spine draws itself left-to-right once, when arrival lifts */
-  .sr-spine.drawing{clip-path:inset(0 100% 0 0);animation:spine-draw 1.4s var(--ease) forwards}
+  /* the spine draws itself left-to-right once, when arrival lifts. opacity:1 is
+     REQUIRED — this rule's `animation` shorthand replaces the `.room>.spine`
+     housefade that would otherwise reveal it, so without this the spine sits at
+     the base opacity:0 forever (the class is intentionally never removed). */
+  .sr-spine.drawing{opacity:1;clip-path:inset(0 100% 0 0);animation:spine-draw 1.4s var(--ease) forwards}
   @keyframes spine-draw{to{clip-path:inset(0 0 0 0)}}
   @media (prefers-reduced-motion:reduce){
-    .sr-arrival-line,.sr-arrival-sub,.sr-begin,.sr-skip{animation-duration:.01ms}
+    /* collapse to a simple fade: zero BOTH duration and the staged delays, so no
+       element sits invisible waiting on a delay (§6: reduced-motion = simple fade) */
+    .sr-arrival-line,.sr-arrival-sub,.sr-begin,.sr-skip{animation-duration:.01ms;animation-delay:0s}
     .sr-arrival{transition-duration:.01ms}
-    .sr-spine.drawing{animation:none;clip-path:none}}
+    .sr-spine.drawing{animation:none;clip-path:none;opacity:1}}
 
   /* the instrument voice — monospace, tabular figures (spec §219). Used for cue
      codes + timecodes in the Brief; the class was referenced but never defined. */
@@ -164,9 +172,12 @@
   .pin::after{content:"";position:absolute;inset:-8px}  /* 27px touch target, invisible */
   .pin.resolved{opacity:.28}
   /* range (span) note — a stretch of the picture, not a point (Phase 4) */
-  .note-span{position:absolute;top:50%;transform:translateY(-50%);height:6px;border-radius:3px;
-    background:linear-gradient(90deg,rgba(154,58,74,.55),rgba(154,58,74,.28));z-index:1;pointer-events:none}
-  .note-span.resolved{opacity:.28}
+  /* higher-contrast so a span reads at a glance from a second monitor (§11) —
+     solid wine fill + end caps distinguish it from a point pin */
+  .note-span{position:absolute;top:50%;transform:translateY(-50%);height:8px;border-radius:4px;
+    background:var(--wine);opacity:.8;box-shadow:inset 2px 0 0 var(--wine),inset -2px 0 0 var(--wine);
+    border-left:2px solid #c25667;border-right:2px solid #c25667;z-index:1;pointer-events:none}
+  .note-span.resolved{opacity:.3}
   /* ── the cue lane (Phase 3) ── regions + hit diamonds, state as border weight */
   .lane.sr-lane-cues{height:38px;background:linear-gradient(180deg,rgba(139,160,174,.05),transparent)}
   /* the cue regions self-identify (m01 · Held breath); the generic lane label would
@@ -294,7 +305,7 @@
   .take-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair);flex-wrap:wrap}
   .take-row:first-of-type{border-top:0}
   .take-row .vlabel{font:700 11.5px var(--mono);color:var(--orange);min-width:34px}
-  .take-row .fname{font:11px var(--mono);color:var(--dim2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .take-row .fname{font:11px var(--mono);color:var(--dim2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .row-play{width:30px;height:30px;border-radius:50%;border:1px solid var(--hair2);display:flex;align-items:center;
     justify-content:center;font-size:11px;flex:0 0 auto;transition:border-color .15s,color .15s}
   .row-play:hover{border-color:var(--orange);color:var(--orange)}
@@ -379,6 +390,7 @@
   .sr-room.mini .stage.has-picture{aspect-ratio:16/9}
   .sr-room.mini .whisper,.sr-room.mini .poster-title,.sr-room.mini .sr-bigplay{display:none}
   .sr-room.mini .lane.sr-lane-cues,.sr-room.mini .lane.music{display:none}
+  .sr-room.mini .pin-beyond{display:none}   /* would collide with the Expand pill */
   .mini-exit{position:fixed;right:20px;bottom:calc(16px + 8px);z-index:91;display:none;
     background:var(--orange);color:var(--ink,#0d0c0b);border:0;border-radius:0 8px 0 8px;
     font:700 10px var(--sans);letter-spacing:.06em;padding:5px 9px;cursor:pointer}
@@ -691,7 +703,7 @@
 
     <!-- Capture (Phase 4 §13): the private shelf — jot a motif/idea; studio-visible, never the client's. -->
     <div class="shelf" data-project="{{ a.project_id }}">
-      <h3 style="margin-top:0">Capture <span class="fineprint">— your private shelf, never the client's</span></h3>
+      <h3 style="margin-top:0">Capture <span class="fineprint">— yours alone, never the client's</span></h3>
       <form class="shelf-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/capture">
         <input type="text" name="text" maxlength="600" placeholder="Hum a motif at 2am? Jot it here — timestamped, just for you and the studio." autocomplete="off">
         <button class="btn tiny" type="submit">Keep</button>
@@ -1590,6 +1602,7 @@
       out.push({ k:"Layer", lbl:"Open Takes", run:function(){ api.openSheet("takes"); } });
       out.push({ k:"Play", lbl:"Play / pause", run:function(){ api.toggle(); } });
       out.push({ k:"Take", lbl:"Download the cut for your DAW", run:function(){ api.download(); } });
+      out.push({ k:"View", lbl:"Mini mode — reference strip", run:function(){ if (window.__toggleMini) window.__toggleMini(); } });
       (api.cues || []).forEach(function(c){
         if (c.t_in == null) return;
         out.push({ k:"Cue", lbl:c.code + (c.name ? " · " + c.name : ""), tc:fmtTc(c.t_in),
@@ -1673,6 +1686,9 @@
       document.body.classList.toggle("has-mini", on);
       if (!on) document.querySelectorAll(".sr-room.mini").forEach(function(r){ r.classList.remove("mini"); });
     }
+    window.__toggleMini = toggle;   // so the ⌘K command bar can reach it (⌘M is
+                                    // intercepted by macOS window-minimize; the
+                                    // command bar is the reliable cross-OS path)
     document.addEventListener("keydown", function(e){
       if ((e.metaKey || e.ctrlKey) && (e.key === "m" || e.key === "M")){ e.preventDefault(); toggle(); }
     });
