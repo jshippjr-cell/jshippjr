@@ -5225,8 +5225,8 @@ def creator_address_note(token: str, project_id: int, comment_id: int):
 
 
 @app.post("/creator/{token}/project/{project_id}/note/{comment_id}/reply")
-async def creator_reply_note(token: str, project_id: int, comment_id: int,
-                             body: str = Form("")):
+async def creator_reply_note(request: Request, token: str, project_id: int,
+                             comment_id: int, body: str = Form("")):
     """The composer asks the studio about a note — the talk-back channel both
     persona reviews named as the #1 reason the phone stays primary.
 
@@ -5261,6 +5261,10 @@ async def creator_reply_note(token: str, project_id: int, comment_id: int,
             _notify_operator_review, project_id, project,
             f"Composer question — {_campaign_label(project) if project else 'campaign'}",
             f"{who} replied to a client note. Review it in the delivery console.")
+    # XHR (Phase 4): thread the reply in place — no full reload, so the composer
+    # keeps their playhead + open sheet (the flow the composer review flagged).
+    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
+        return JSONResponse({"ok": bool(who), "author": who, "body": text if who else ""})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 

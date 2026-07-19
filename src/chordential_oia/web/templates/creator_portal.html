@@ -1138,6 +1138,32 @@
         if (f){ f.hidden = !f.hidden; if (!f.hidden) f.querySelector("input").focus(); }
       });
     });
+    // Ask-the-studio replies thread in place (Phase 4 — composer flow): no full
+    // reload, so the playhead + open Notes sheet survive a punch-list of replies.
+    root.querySelectorAll(".ask-form").forEach(function(f){
+      f.addEventListener("submit", function(e){
+        e.preventDefault();
+        var input = f.querySelector("input"), text = (input.value || "").trim();
+        if (!text) return;
+        var btn = f.querySelector("button"); btn.disabled = true;
+        fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if (d && d.ok){
+              var line = document.createElement("div");
+              line.className = "reply-line";
+              line.innerHTML = "<b></b> <span class='reply-int'>to the studio</span> — <span></span>";
+              line.querySelector("b").textContent = d.author;
+              line.querySelector("span:last-child").textContent = d.body;
+              f.parentNode.insertBefore(line, f);
+              input.value = ""; f.hidden = true;
+              toast("Sent to the studio.");
+            } else { toast("Couldn't send — try again."); }
+          })
+          .catch(function(){ toast("Couldn't send — check your connection."); })
+          .finally(function(){ btn.disabled = false; });
+      });
+    });
     // Mark addressed / Reopen stays IN the conversation (no page reload —
     // Linear's speed law): fetch the toggle, flip the card + pin + counts.
     root.querySelectorAll(".nc-foot form").forEach(function(f){
