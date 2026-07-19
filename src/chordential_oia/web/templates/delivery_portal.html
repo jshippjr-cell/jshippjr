@@ -479,9 +479,12 @@
       <input type="hidden" name="k" value="{{ share_token }}">
       <input type="hidden" name="r" value="{{ reviewer_token }}">
       <input type="hidden" name="t" id="rc-t-val" value="0">
+      <input type="hidden" name="t_end" id="rc-tend-val" value="">
       <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
       <input type="hidden" name="email" class="ident-email" value="{{ reviewer.email if reviewer else '' }}">
       <input type="text" name="body" placeholder="Comment at the current time…" class="rc-in rc-in-wide" required>
+      <button type="button" class="rc-btn" id="rc-range" style="background:#fff;color:var(--wine);border:1px solid var(--wine)"
+              title="Mark a stretch of the picture: click to set the start here, then play to the end and submit">⇤ Range</button>
       <button type="submit" class="rc-btn">Comment at <span id="rc-time">0:00</span></button>
     </form>
     {% endif %}
@@ -803,9 +806,31 @@
   if (!ra) return;
   function fmt(s){ s = Math.floor(s || 0); return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
   var tVal = document.getElementById('rc-t-val'), lbl = document.getElementById('rc-time');
+  var tEnd = document.getElementById('rc-tend-val'), rangeBtn = document.getElementById('rc-range');
+  var rangeStart = null;   // when set, the note covers rangeStart…live playhead
   ra.addEventListener('timeupdate', function () {
-    if (tVal) tVal.value = ra.currentTime || 0;
-    if (lbl) lbl.textContent = fmt(ra.currentTime);
+    if (rangeStart == null){
+      if (tVal) tVal.value = ra.currentTime || 0;
+      if (lbl) lbl.textContent = fmt(ra.currentTime);
+    } else {
+      // start is frozen; the end tracks the playhead (only forward of the start)
+      var end = Math.max(rangeStart, ra.currentTime || 0);
+      if (tEnd) tEnd.value = end;
+      if (lbl) lbl.textContent = fmt(rangeStart) + '–' + fmt(end);
+    }
+  });
+  if (rangeBtn) rangeBtn.addEventListener('click', function () {
+    if (rangeStart == null){
+      rangeStart = ra.currentTime || 0;
+      if (tVal) tVal.value = rangeStart;
+      rangeBtn.textContent = '⇥ End range';
+      rangeBtn.style.background = 'var(--wine)'; rangeBtn.style.color = '#fff';
+    } else {
+      rangeStart = null;
+      if (tEnd) tEnd.value = '';
+      rangeBtn.textContent = '⇤ Range';
+      rangeBtn.style.background = '#fff'; rangeBtn.style.color = 'var(--wine)';
+    }
   });
   document.querySelectorAll('.rc-t[data-t]').forEach(function (a) {
     a.addEventListener('click', function (e) {

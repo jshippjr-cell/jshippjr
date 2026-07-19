@@ -163,6 +163,10 @@
     border:2px solid var(--ink);z-index:2;background:var(--wine);cursor:pointer;padding:0}
   .pin::after{content:"";position:absolute;inset:-8px}  /* 27px touch target, invisible */
   .pin.resolved{opacity:.28}
+  /* range (span) note — a stretch of the picture, not a point (Phase 4) */
+  .note-span{position:absolute;top:50%;transform:translateY(-50%);height:6px;border-radius:3px;
+    background:linear-gradient(90deg,rgba(154,58,74,.55),rgba(154,58,74,.28));z-index:1;pointer-events:none}
+  .note-span.resolved{opacity:.28}
   /* ── the cue lane (Phase 3) ── regions + hit diamonds, state as border weight */
   .lane.sr-lane-cues{height:38px;background:linear-gradient(180deg,rgba(139,160,174,.05),transparent)}
   /* the cue regions self-identify (m01 · Held breath); the generic lane label would
@@ -733,7 +737,7 @@
 
   <script type="application/json" class="sr-notes-data">
     [{% if a.feedback and a.feedback.notes %}{% for n in a.feedback.notes %}
-      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "kind": "{{ n.kind }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
+      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "t_end": {{ n.t_end if n.t_end is not none else 'null' }}, "kind": "{{ n.kind }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
 
@@ -935,6 +939,15 @@
       }
       notes.forEach(function(n){
         if (n.t === null || n.t === undefined || n.t > D) return;
+        // a range note (t_end) draws a span bar under the lane before its pin
+        if (n.t_end != null && n.t_end > n.t){
+          var span = document.createElement("div");
+          span.className = "note-span" + ((n.resolved || n.addressed) ? " resolved" : "");
+          span.style.left = Math.max(0, n.t / D * 100) + "%";
+          span.style.width = Math.max(1, (Math.min(n.t_end, D) - n.t) / D * 100) + "%";
+          span.title = "Client note over " + tcFmt(n.t) + "–" + tcFmt(n.t_end);
+          noteLane.appendChild(span);
+        }
         var pin = document.createElement("button");
         pin.type = "button";
         pin.className = "pin" + ((n.resolved || n.addressed) ? " resolved" : "");

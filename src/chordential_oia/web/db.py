@@ -802,6 +802,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # free). The scope-bearing decision, recorded where the note lives.
     if "conform" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN conform INTEGER DEFAULT 0")
+    # Phase 4 (range/span notes): a note may cover a stretch of the picture, not
+    # just a point — its end timecode. NULL keeps the classic single-point pin.
+    if "t_end" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN t_end REAL")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -5248,7 +5252,7 @@ def _utc_now_iso() -> str:
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
-    parent_id=None, verified: bool = False, internal: bool = False,
+    parent_id=None, verified: bool = False, internal: bool = False, t_end=None,
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
     change request. Attributed to the reviewer's name + email. Returns the new id.
@@ -5257,13 +5261,20 @@ def add_review_comment(
     reply answers its parent so it carries no timecode of its own.
 
     ``verified`` marks the event as posted from a verified reviewer's personal
-    invite link (``?r=``) — its name + email are the locked roster identity."""
+    invite link (``?r=``) — its name + email are the locked roster identity.
+
+    ``t_end`` (Phase 4) makes the note a RANGE — it covers t_seconds…t_end on the
+    picture, rendered as a span, not a point. Only kept when it's a valid end past
+    the start; otherwise the note stays a single-point pin."""
+    te = _num_or_none(t_end)
+    if te is not None and (t_seconds is None or te <= float(t_seconds)):
+        te = None                                # a span must end after it starts
     cur = conn.execute(
         """INSERT INTO review_comments
-           (project_id, version, t_seconds, author, email, body, kind, created_at,
+           (project_id, version, t_seconds, t_end, author, email, body, kind, created_at,
             resolved, parent_id, verified, internal)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (project_id, version or "", t_seconds, author or "Anonymous",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (project_id, version or "", t_seconds, te, author or "Anonymous",
          (email or "").strip() or None, body or "", kind,
          datetime.now(timezone.utc).isoformat(),
          0, int(parent_id) if parent_id not in (None, "") else None,

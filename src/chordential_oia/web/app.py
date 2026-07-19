@@ -5045,7 +5045,9 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
             continue
         keys = c.keys()
         n = {
-            "id": c["id"], "t": c["t_seconds"], "author": c["author"],
+            "id": c["id"], "t": c["t_seconds"],
+            "t_end": (c["t_end"] if "t_end" in keys else None),
+            "author": c["author"],
             "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
             "addressed": bool(c["composer_addressed"]
                               if "composer_addressed" in keys else 0),
@@ -7294,7 +7296,7 @@ def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""
 def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
-    parent_id: str = Form(""), r: str = Form(""),
+    parent_id: str = Form(""), r: str = Form(""), t_end: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style).
 
@@ -7339,10 +7341,21 @@ def review_comment(
                     t_seconds = None
             project = db.get_project(conn, project_id)
             delivery = db.get_delivery(conn, project_id)
+            # Phase 4: an optional end timecode makes this a RANGE note (a span of
+            # the picture), guarded the same way as the start. Ignored on replies.
+            t_end_val = None
+            if parent is None and str(t_end).strip() != "":
+                try:
+                    _te = float(t_end)
+                    if math.isfinite(_te) and _te >= 0:
+                        t_end_val = _te
+                except ValueError:
+                    t_end_val = None
             db.add_review_comment(
                 conn, project_id, version=_current_version_tag(delivery),
-                t_seconds=t_seconds, author=name, email=mail, body=body.strip(),
-                kind="comment", parent_id=parent, verified=reviewer is not None,
+                t_seconds=t_seconds, t_end=t_end_val, author=name, email=mail,
+                body=body.strip(), kind="comment", parent_id=parent,
+                verified=reviewer is not None,
             )
             verb = "replied" if parent is not None else "commented"
             # Session Room bus: the comment becomes an event everyone in the
