@@ -123,7 +123,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   toggle, cut ledger in the console), hearable references with rights-honest copy,
   storage per **ADR-0026** (disk + ≤64MB DB mirror, 512MB cut cap, chunked reads),
   stored-XSS serving policy on `/uploads` (inline media allowlist, attachment +
-  nosniff otherwise, blocked markup extensions on references).
+  nosniff otherwise, blocked markup extensions on references). **Phase-2 gate:
+  PASSED 4/4** — the standing panel (Engineering / Design / Composer / Executive
+  Producer) each independently returned production-ready after two consolidated
+  fix rounds. Key round-2 fixes: classifying a change request as a conform now
+  *returns* the revision round (was cosmetic); the composer room's round sentence
+  reads from the one shared scoped-rounds source; the "to address" counter is
+  consistent from first paint; the client portal shows the conform tag; the
+  Session Room presence strip and approve/ready states are on-palette. **Carried
+  to Phase 3** (round arithmetic): a hard stop / change-order trigger when
+  contracted rounds are exhausted, a conform-spam throttle, and a
+  conform-vs-revision rollup on the console. **Carried to Phase 4** (flow/mobile):
+  AJAX note reply, mobile Companion (§13), tablet touch grammar (§12), and a demo
+  project seeded with a real cut + references so picture+pins are demonstrable.
 
 - **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
   an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain
