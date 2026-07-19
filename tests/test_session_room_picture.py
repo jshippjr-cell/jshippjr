@@ -70,7 +70,8 @@ def test_second_cut_is_a_conform_event(ctx):
     assert len(d.get("picture_history") or []) == 1
     page = client.get(f"/creator/{tok}").text
     assert "Picture changed" in page          # the conform banner
-    assert "conforms, not revisions" in page
+    # the money fact stated outright (composer review P1): conforms are free
+    assert "doesn't count against" in page and "conform" in page
 
 
 def test_non_video_rejected_as_picture(ctx):
@@ -116,6 +117,81 @@ def test_room_door_filter_and_needs_first_sort(ctx):
     solo = client.get(f"/creator/{tok}?p={pid2}").text
     assert f'id="p{pid2}"' in solo and f'id="p{pid1}"' not in solo
     assert "All rooms" in solo
+
+
+def test_species_toggle_conform_shows_free_in_room(ctx):
+    """The operator flips a change request to CONFORM; the composer's room says
+    per-note that it's free (EP P1) — and the toggle is project-scoped."""
+    client, db_mod, _ = ctx
+    tid, pid, tok, share = _composer_with_project(db_mod)
+    conn = db_mod.connect()
+    cid = db_mod.add_review_comment(
+        conn, pid, version="0", t_seconds=12.0, author="Dana",
+        body="Hit the logo harder", kind="change_request")
+    conn.close()
+    page = client.get(f"/creator/{tok}").text
+    assert "conform · free" not in page       # a revision until Jon says otherwise
+    r = client.post(f"/project/{pid}/review/note/{cid}/species",
+                    follow_redirects=False)
+    assert r.status_code == 303
+    page = client.get(f"/creator/{tok}").text
+    assert "conform · free" in page
+    # scoping: toggling through the WRONG project id must not touch the note
+    client.post(f"/project/{pid + 999}/review/note/{cid}/species",
+                follow_redirects=False)
+    conn = db_mod.connect()
+    row = conn.execute("SELECT COALESCE(conform,0) AS cf FROM review_comments "
+                       "WHERE id=?", (cid,)).fetchone()
+    conn.close()
+    assert row["cf"] == 1                     # unchanged by the cross-project poke
+
+
+def test_uploads_nonmedia_served_as_attachment(ctx):
+    """Stored-XSS lane (eng P0): /uploads renders only audio/video/image inline;
+    markup downloads as an attachment with nosniff, and svg is never inline."""
+    import os as _os
+    client, db_mod, app_mod = ctx
+    updir = app_mod.UPLOAD_DIR
+    _os.makedirs(updir, exist_ok=True)
+    for name, body in (("evil.html", b"<script>alert(1)</script>"),
+                       ("evil.svg", b"<svg onload=alert(1)></svg>"),
+                       ("take.mp3", b"ID3fakeaudio")):
+        with open(_os.path.join(updir, name), "wb") as fh:
+            fh.write(body)
+    for name in ("evil.html", "evil.svg"):
+        r = client.get(f"/uploads/{name}")
+        assert r.status_code == 200
+        assert r.headers.get("x-content-type-options") == "nosniff"
+        assert "attachment" in (r.headers.get("content-disposition") or "")
+        assert r.headers["content-type"].startswith("application/octet-stream")
+    r = client.get("/uploads/take.mp3")
+    assert r.status_code == 200
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert "attachment" not in (r.headers.get("content-disposition") or "")
+    assert r.headers["content-type"].startswith("audio/")
+
+
+def test_cut_over_cap_rejected(ctx, monkeypatch):
+    client, db_mod, app_mod = ctx
+    tid, pid, tok, share = _composer_with_project(db_mod)
+    monkeypatch.setattr(app_mod, "_CUT_MAX_BYTES", 10)
+    client.post(f"/project/{pid}/review/picture",
+                data={"k": share, "author": "Dana"},
+                files={"file": ("big.mp4", b"x" * 64, "video/mp4")},
+                follow_redirects=False)
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert not d.get("picture")
+
+
+def test_blocked_reference_extension_rejected(ctx):
+    client, db_mod, _ = ctx
+    tid, pid, tok, share = _composer_with_project(db_mod)
+    client.post(f"/project/{pid}/review/reference",
+                data={"k": share, "author": "Dana", "label": "sneaky"},
+                files={"file": ("evil.html", b"<script>1</script>", "text/html")},
+                follow_redirects=False)
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert not (d.get("references") or [])
 
 
 def test_purge_never_orphans_assigned_talent(ctx):

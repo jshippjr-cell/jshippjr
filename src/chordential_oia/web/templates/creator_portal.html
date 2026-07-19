@@ -62,7 +62,14 @@
     overflow:hidden;aspect-ratio:16/6.8;min-height:210px}
   .stage canvas{position:absolute;inset:0;width:100%;height:100%}
   .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
-  .stage.has-picture{aspect-ratio:16/9;background:#000}
+  /* the picture is the hero but never the whole page: cap at ~58vh (spec §4 —
+     the 27% air is non-negotiable); the cut letterboxes inside */
+  .stage.has-picture{aspect-ratio:16/9;max-height:58vh;background:#000}
+  /* the whisper leaves during playback — nothing captions the client's film */
+  .stage.has-picture.playing .whisper{opacity:0;pointer-events:none}
+  .pin-beyond{position:absolute;right:4px;top:50%;transform:translateY(-50%);z-index:3;
+    font:700 9px var(--mono);color:var(--slate);background:rgba(139,160,174,.16);
+    border:1px solid rgba(139,160,174,.45);border-radius:999px;padding:2px 7px;cursor:pointer}
   /* conform banner — a new cut changes the ground truth; say so where notes live */
   .conform{display:flex;gap:8px;align-items:baseline;padding:8px 12px;margin-top:8px;border:1px solid rgba(139,160,174,.4);
     border-radius:8px;background:rgba(139,160,174,.08);font-size:11.5px;color:var(--dim)}
@@ -427,6 +434,8 @@
     </div>
     {% if a.references %}
     <h3>References — hear them, don't guess them</h3>
+    <p class="fineprint" style="margin:0 0 4px">References guide tone and feel — the score stays original;
+      the melody and arrangement are yours.</p>
     {% for ref in a.references %}
     <div class="ref-row">
       {% if ref.kind == 'audio' %}
@@ -474,7 +483,8 @@
       <div class="nc-top">
         <span class="nc-dot"></span>
         <span class="nc-who">{{ n.author }}</span>
-        {% if n.kind == 'change_request' %}<span class="nc-tag">changes</span>{% endif %}
+        {% if n.kind == 'change_request' and n.conform %}<span class="nc-tag" style="color:var(--slate);border:1px solid var(--hair2);background:transparent" title="A conform re-syncs your music to a new cut — it never counts against your rounds">conform · free</span>
+        {% elif n.kind == 'change_request' %}<span class="nc-tag">changes</span>{% endif %}
         {% if n.resolved %}<span class="nc-tag" style="color:var(--dim);background:transparent;border:1px solid var(--hair2)">client resolved</span>
         {% elif n.addressed %}<span class="nc-tag" style="color:var(--orange);background:var(--orange-soft)">addressed</span>{% endif %}
         {% if a.picture and a.picture.n > 1 and n.at and n.at < a.picture.at %}
@@ -605,8 +615,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="foot">Session Room · the picture position opens when the client's cut arrives ·
-  space plays · Esc always returns to the room</div>
+<div class="foot">Session Room · space plays · Esc always returns to the room</div>
 
 <script>
 (function(){
@@ -746,11 +755,23 @@
       return "00:" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0") + ":" + String(f).padStart(2,"0");
     }
     function renderPins(){
-      noteLane.querySelectorAll(".pin").forEach(function(p){ p.remove(); });
+      noteLane.querySelectorAll(".pin,.pin-beyond").forEach(function(p){ p.remove(); });
       var D = mDur();
       if (!D) return;
+      // notes past this cut's end never fake a position (design review P1-3):
+      // they collect into one honest "beyond this cut" badge at the lane's edge
+      var beyond = notes.filter(function(n){
+        return n.t !== null && n.t !== undefined && n.t > D; });
+      if (beyond.length){
+        var bb = document.createElement("button");
+        bb.type = "button"; bb.className = "pin-beyond";
+        bb.textContent = beyond.length + " beyond this cut";
+        bb.title = "Notes timecoded past this cut's end — likely from an earlier, longer cut";
+        bb.addEventListener("click", function(e){ e.stopPropagation(); openSheet("notes"); });
+        noteLane.appendChild(bb);
+      }
       notes.forEach(function(n){
-        if (n.t === null || n.t === undefined) return;
+        if (n.t === null || n.t === undefined || n.t > D) return;
         var pin = document.createElement("button");
         pin.type = "button";
         pin.className = "pin" + ((n.resolved || n.addressed) ? " resolved" : "");
@@ -815,11 +836,13 @@
     }
 
     function syncAudio(){
-      // the take follows the picture: align, play/pause together, stop at its end
+      // the take follows the picture: align, play/pause together, stop at its end.
+      // Drift over ~3 frames (0.12s) snaps — judging a hit against picture needs
+      // tighter lock than the ear forgives (design review P2-7).
       if (!hasPicture || !hasAudio) return;
       var t = video.currentTime || 0;
       if (t >= (dur || 0)){ if (!audio.paused) audio.pause(); return; }
-      if (Math.abs((audio.currentTime || 0) - t) > 0.3) audio.currentTime = t;
+      if (Math.abs((audio.currentTime || 0) - t) > 0.12) audio.currentTime = t;
       if (!video.paused && audio.paused) audio.play();
       if (video.paused && !audio.paused) audio.pause();
     }
@@ -859,7 +882,14 @@
       video.addEventListener("error", function(){
         toast("The cut can't be streamed right now — the room falls back to your music.");
         hasPicture = false; stage.classList.remove("has-picture", "playing");
-        video.style.display = "none"; renderPins(); update();
+        video.style.display = "none";
+        // never leave a black void: restore the poster mood behind the room
+        if (!poster){
+          poster = document.createElement("canvas");
+          poster.className = "sr-poster";
+          stage.insertBefore(poster, stage.firstChild);
+        }
+        drawPoster(); renderPins(); update();
       });
       var cutBtn = root.querySelector(".sr-cutaudio");
       if (cutBtn) cutBtn.addEventListener("click", function(){
@@ -1099,13 +1129,21 @@
     });
     return best;
   }
-  // ?t= deep link — an email can open the room at the moment (spec §10.2)
+  // ?t= deep link — an email can open the room at the moment (spec §10.2).
+  // Pairs with ?p= (award emails carry both); seeks once metadata is real, not
+  // on a timer race (design review P2-6).
   (function(){
     var t = new URLSearchParams(location.search).get("t");
-    if (t !== null && rooms.length){
-      var r0 = rooms[0];
-      setTimeout(function(){ r0.seek(parseFloat(t) || 0); }, 600);
-    }
+    if (t === null || !rooms.length) return;
+    var target = parseFloat(t);
+    if (!isFinite(target) || target < 0) return;
+    var r0 = rooms[0], tried = false;
+    function go(){ if (tried) return; tried = true; r0.seek(target); }
+    var v = r0.root.querySelector(".sr-video");
+    if (v && v.readyState >= 1) go();
+    else if (v) v.addEventListener("loadedmetadata", go, { once: true });
+    else r0.audio.addEventListener("loadedmetadata", go, { once: true });
+    setTimeout(go, 4000);   // fail-soft if metadata never fires
   })();
 
   addEventListener("keydown", function(e){

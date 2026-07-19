@@ -140,6 +140,16 @@
         <span class="rc-b">{{ c['body'] }}{% if c['version'] %} <span class="muted small">· v{{ c['version'] }}</span>{% endif %}
           {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
           {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
+          {% if c['kind'] == 'change_request' %}
+          {# species classification (EP P1-1): conform = picture-caused, free;
+             revision = counts against rounds. The operator decides, per note. #}
+          <form method="post" action="/project/{{ project['id'] }}/review/note/{{ c['id'] }}/species" class="inline" style="display:inline">
+            <button class="btn tiny" type="submit"
+                    title="Flip this note's species — conforms never count against rounds"
+                    style="{% if c['conform'] %}color:var(--slate);border-color:var(--slate){% endif %}">
+              {{ 'conform (free)' if c['conform'] else 'revision' }}</button>
+          </form>
+          {% endif %}
         </span>
       </li>
       {% else %}
@@ -438,8 +448,13 @@
     <span class="muted small">{% if delivery.get('picture') %}cut {{ delivery['picture']['n'] }} in the room{% else %}no cut yet — the composer scores blind{% endif %}
       · {{ (delivery.get('references') or [])|length }} reference{{ 's' if (delivery.get('references') or [])|length != 1 }}</span></div>
   {% if delivery.get('picture') %}
-  <p class="muted small">Cut {{ delivery['picture']['n'] }} — {{ delivery['picture']['orig'] }} · from {{ delivery['picture']['by'] }}{% if delivery['picture']['at'] %} · {{ delivery['picture']['at'][:10] }}{% endif %}
+  {# the CUT LEDGER (EP P1-2): every cut, immutable, in order — conform billing
+     hangs off "which cut caused this change", so the history is visible here #}
+  <p class="muted small"><b>Cut {{ delivery['picture']['n'] }} (current)</b> — {{ delivery['picture']['orig'] }} · from {{ delivery['picture']['by'] }}{% if delivery['picture']['at'] %} · {{ delivery['picture']['at'][:10] }}{% endif %}
     <a class="link" href="{{ delivery['picture']['url'] }}">open</a></p>
+  {% for old in (delivery.get('picture_history') or [])|reverse %}
+  <p class="muted small" style="opacity:.65">Cut {{ old['n'] }} (superseded) — {{ old['orig'] }} · from {{ old['by'] }}{% if old['at'] %} · {{ old['at'][:10] }}{% endif %}</p>
+  {% endfor %}
   {% endif %}
   <div class="inline" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
     <form method="post" action="/project/{{ project['id'] }}/delivery/picture" enctype="multipart/form-data"

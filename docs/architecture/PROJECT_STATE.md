@@ -108,6 +108,22 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   funnel audit's hidden REVIEW volume without touching the precision-biased alert tier.
 - **ADR-0014 reconstructed** in the ADR log (the captures-envelope ruling was cited by
   0021/0023 but its entry was missing).
+- **The Scoring Stage — the composer's Session Room** (spec:
+  `docs/design/chordos-studio-experience.md`; ADR-0025/0026). Phases 1–2 built and
+  phase-gate reviewed by the standing 4-agent panel (Engineering / Design / Composer /
+  Executive Producer). Phase 1: `creator_portal.html` rebuilt as the Session Room —
+  one dark room per engagement, one shared playhead, summoned sheets (Brief/Notes/
+  Takes on B/N/V, Esc), client feedback threaded with composer-addressed vs
+  client-resolved separation, internal Ask-the-studio replies, publish-gated
+  deliverables, needs-first room sort + `?p` doors (ADR-0025). Phase 2 (The Picture):
+  the client's cut is the stage — client Drop upload with byte progress
+  (`delivery_portal.html`), video master clock with audio follower + drift snap,
+  timeline pins from timecoded notes (beyond-cut pins badge at the edge), new cut =
+  **conform** event (free, per-note `conform · free` species chip, operator species
+  toggle, cut ledger in the console), hearable references with rights-honest copy,
+  storage per **ADR-0026** (disk + ≤64MB DB mirror, 512MB cut cap, chunked reads),
+  stored-XSS serving policy on `/uploads` (inline media allowlist, attachment +
+  nosniff otherwise, blocked markup extensions on references).
 
 - **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
   an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain

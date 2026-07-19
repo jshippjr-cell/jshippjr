@@ -137,7 +137,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 _AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 # Phase 2 (The Picture): the client's cut. Range streaming is served by the
 # existing /uploads route (FileResponse handles Range — Safari requires it).
+# Size policy is ADR-0026: hard cap per cut; DB-mirror only under the threshold.
 _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
+_CUT_MAX_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MAX_MB", "512")) * 1024 * 1024
+_CUT_MIRROR_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MIRROR_MB", "64")) * 1024 * 1024
 
 
 # --------------------------------------------------------------------------- #
@@ -297,7 +300,8 @@ _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
 # list so the exemption can't drift from the actual routes (it did once: resolve + asset
 # were added without updating the matcher, bouncing clients to the admin login). When
 # you add a review action, add it here — and it MUST token-validate in-route.
-_REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset", "reopen")
+_REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset", "reopen",
+                   "picture", "reference")
 _REVIEW_ACTION_RE = re.compile(
     r"^/project/\d+/review/(?:" + "|".join(_REVIEW_ACTIONS) + r")/?$")
 # Payment-gated deliverable download — opened from the token-gated portal; the route
@@ -4451,9 +4455,20 @@ def serve_upload(name: str):
     from fastapi.responses import FileResponse
     if (name or "").lower().endswith(".zip"):
         return PlainTextResponse("not found", status_code=404)
+    # SECURITY (Phase-2 review P0): only audio/video/image render INLINE. Anything
+    # else — .html/.svg/.xml above all — downloads as an attachment with nosniff,
+    # so a token-holding client can never plant same-origin script behind /uploads.
+    import mimetypes as _mt
+    _guess = _mt.guess_type(name or "")[0] or "application/octet-stream"
+    _inline = _guess.split("/")[0] in ("audio", "video", "image") and not _guess.endswith("svg+xml")
+    _headers = {"X-Content-Type-Options": "nosniff"}
     path = _safe_upload_path(name)
     if path is not None:
-        return FileResponse(path)
+        if _inline:
+            return FileResponse(path, headers=_headers)
+        return FileResponse(path, headers=_headers, filename=os.path.basename(name),
+                            media_type="application/octet-stream",
+                            content_disposition_type="attachment")
     # Disk copy gone (ephemeral storage wiped on redeploy) — rehydrate from the durable DB
     # mirror so a published version's audio keeps playing across deploys.
     base = os.path.basename(name or "")
@@ -4476,19 +4491,32 @@ def serve_upload(name: str):
                     fh.write(data)
             except OSError:
                 pass
-            return Response(content=data, media_type=ctype)
+            _rh_inline = (ctype or "").split("/")[0] in ("audio", "video", "image") \
+                and not (ctype or "").endswith("svg+xml")
+            if _rh_inline:
+                return Response(content=data, media_type=ctype, headers=_headers)
+            _headers["Content-Disposition"] = f'attachment; filename="{base}"'
+            return Response(content=data, media_type="application/octet-stream",
+                            headers=_headers)
     return PlainTextResponse("not found", status_code=404)
 
 
-def _persist_upload(conn, name: str, data: bytes, content_type: str = "") -> None:
+def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
+                    mirror: bool = True) -> None:
     """Write an uploaded file to disk AND mirror it into the durable DB (ADR: uploads survive
-    redeploys). The single place that persists media, so every write site is durable."""
+    redeploys). The single place that persists media, so every write site is durable.
+
+    ``mirror=False`` is the VIDEO policy (ADR-0026): cuts above the mirror
+    threshold live on disk only — mirroring a feature-length cut into SQLite
+    would balloon the database. The client door says so honestly."""
     try:
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         with open(os.path.join(UPLOAD_DIR, os.path.basename(name)), "wb") as fh:
             fh.write(data)
     except OSError:
         pass
+    if not mirror:
+        return
     if not content_type:
         import mimetypes
         content_type = mimetypes.guess_type(name)[0] or ""
@@ -5013,6 +5041,9 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
             "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
             "addressed": bool(c["composer_addressed"]
                               if "composer_addressed" in keys else 0),
+            # Species (EP P1): a conform (re-sync to a new cut) is free — the
+            # composer must SEE that per-note, not just in the banner.
+            "conform": bool(c["conform"] if "conform" in keys else 0),
             "at": c["created_at"] or "",
             "replies": [],
         }
@@ -7265,14 +7296,19 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Op
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in _VIDEO_EXTS:
         return None
-    data = await file.read()
+    data = await _read_capped(file, _CUT_MAX_BYTES)
     if not data:
         return None
     safe_name = f"proj{project_id}-cut-{os.urandom(5).hex()}{ext}"
-    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
+    # ADR-0026: cuts mirror into the DB only under the threshold; larger cuts are
+    # disk-only until the object-storage seam ships.
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "",
+                    mirror=len(data) <= _CUT_MIRROR_BYTES)
     delivery = db.get_delivery(conn, project_id)
     prior = delivery.get("picture") or None
     from datetime import datetime as _dt, timezone as _tz
+    if len((by or "").strip()) < 2:
+        by = "The client"                       # attribution fallback (EP P2-3)
     pic = {"url": f"/uploads/{safe_name}", "filename": safe_name,
            "orig": file.filename, "by": by,
            "at": _dt.now(_tz.utc).isoformat(),
@@ -7289,12 +7325,36 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Op
     return pic
 
 
+_REF_BLOCKED_EXTS = {".html", ".htm", ".svg", ".xml", ".xhtml", ".js", ".mjs"}
+_REF_MAX_BYTES = int(os.environ.get("CHORDENTIAL_REF_MAX_MB", "128")) * 1024 * 1024
+
+
+async def _read_capped(file: UploadFile, cap: int) -> Optional[bytes]:
+    """Read an upload in chunks up to ``cap`` bytes; None if it exceeds the cap
+    (never buffer an unbounded body — Phase-2 review P1-3)."""
+    chunks, total = [], 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > cap:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _store_reference(conn, project_id: int, file: UploadFile, by: str,
                            label: str = "") -> Optional[dict]:
     """Store an audible/visual REFERENCE for the composer (Phase 2 pull-forward:
-    'Bonobo' is a career, not a reference — give them the actual track)."""
+    'Bonobo' is a career, not a reference — give them the actual track).
+
+    Markup/script extensions are rejected outright (stored-XSS lane — review P0)
+    and the serving layer additionally forces attachment on anything non-media."""
     ext = os.path.splitext(file.filename or "")[1].lower()
-    data = await file.read()
+    if ext in _REF_BLOCKED_EXTS:
+        return None
+    data = await _read_capped(file, _REF_MAX_BYTES)
     if not data:
         return None
     kind = ("audio" if ext in _AUDIO_EXTS else
@@ -7359,10 +7419,19 @@ async def review_upload_reference(
         if not ok:
             return HTMLResponse("Not found", status_code=404)
         who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
+        ref = None
         if file is not None and (file.filename or "").strip():
-            await _store_reference(conn, project_id, file, who, label=label)
+            ref = await _store_reference(conn, project_id, file, who, label=label)
+        project = db.get_project(conn, project_id)
     finally:
         conn.close()
+    if ref is not None:
+        # the studio hears about every client reference (temp-love / rights lane —
+        # EP review): the operator can veto before the composer leans on it
+        await run_in_threadpool(
+            _notify_operator_review, project_id, project,
+            f"Client reference — {_campaign_label(project) if project else 'campaign'}",
+            f"{ref['by']} added '{ref['label']}'. Listen before the composer leans on it.")
     return _review_redirect(project_id, k, name=author, email=email, r=r)
 
 
@@ -7718,6 +7787,18 @@ def delivery_build(project_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
+
+
+@app.post("/project/{project_id}/review/note/{comment_id}/species")
+def review_note_species(project_id: int, comment_id: int):
+    """Operator door: classify a note as conform (picture-caused, free) or
+    revision (counts against rounds) — the round ledger's species record."""
+    conn = db.connect()
+    try:
+        db.toggle_comment_conform(conn, project_id, comment_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/asset/publish")

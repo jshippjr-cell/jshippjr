@@ -546,6 +546,30 @@ mechanism.
 **Consequences.** Award emails link `?p=`; never mint per-project composer tokens;
 any future room-level feature must work in both the stacked and single-door views.
 
+### ADR-0026 — Video storage: local disk + capped DB mirror until object storage
+**Status:** Accepted (2026-07-18) · Source: `web/app.py` (`_store_picture`,
+`_read_capped`, `_persist_upload`), `docs/design/chordos-studio-experience.md` §12
+**Decision.** The Picture phase ships on the EXISTING storage seam — uploads land on
+local disk (`CHORDENTIAL_UPLOAD_DIR`), with a DB blob mirror ONLY for files
+≤ 64 MB (`CHORDENTIAL_CUT_MIRROR_MB`); larger cuts are disk-only. Cuts are capped at
+512 MB (`CHORDENTIAL_CUT_MAX_MB`), references at 128 MB, both read in 1 MB chunks
+(`_read_capped`) so an oversized body never buffers unbounded. Durable object storage
+(S3/R2) stays DEFERRED; when it lands it replaces the disk path behind
+`_persist_upload` without changing routes, templates, or the mirror policy.
+**Why.** The experience spec named object storage as this phase's infrastructure
+price, but a solo-founder deploy on Render with a persistent disk already survives
+restarts, and the DB mirror was silently ballooning SQLite with video blobs — the
+64 MB mirror cap keeps the rehydrate safety net for briefs/audio while excluding
+exactly the payloads that break it. Re-deferring with caps is honest fail-soft
+(Constitution: defer what can't be done well); re-deferring silently was the sin —
+this ADR is the record.
+**Consequences.** Do not raise the mirror cap to accommodate video — flip to S3/R2
+instead (the seam is `_persist_upload`/`serve_upload`). Any new upload route must go
+through `_read_capped` with an explicit cap and the extension policy
+(`_VIDEO_EXTS` whitelist for cuts, `_REF_BLOCKED_EXTS` blacklist + inline-serving
+allowlist for everything else — the stored-XSS fix in `serve_upload` depends on it).
+Prod backups must include the upload dir, not just the DB, until object storage.
+
 ---
 
 ## Adding a new ADR

@@ -797,6 +797,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE review_comments ADD COLUMN composer_addressed INTEGER DEFAULT 0")
     if "internal" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN internal INTEGER DEFAULT 0")
+    # Phase 2 (EP review): the operator classifies each note's SPECIES — a
+    # revision (counts against rounds) or a conform (caused by a picture change,
+    # free). The scope-bearing decision, recorded where the note lives.
+    if "conform" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN conform INTEGER DEFAULT 0")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -5066,6 +5071,24 @@ def toggle_comment_resolved(
         "UPDATE review_comments SET resolved = ? WHERE id = ? AND project_id = ?",
         (new_val, comment_id, project_id),
     )
+    conn.commit()
+    return new_val
+
+
+def toggle_comment_conform(
+    conn: sqlite3.Connection, project_id: int, comment_id: int
+) -> Optional[int]:
+    """Flip a note's species between revision (0) and conform (1) — the operator's
+    scope classification (conforms never count against rounds). Project-scoped."""
+    row = conn.execute(
+        "SELECT COALESCE(conform, 0) AS cf FROM review_comments "
+        "WHERE id = ? AND project_id = ?", (comment_id, project_id)).fetchone()
+    if row is None:
+        return None
+    new_val = 0 if (row["cf"] or 0) else 1
+    conn.execute(
+        "UPDATE review_comments SET conform = ? WHERE id = ? AND project_id = ?",
+        (new_val, comment_id, project_id))
     conn.commit()
     return new_val
 
