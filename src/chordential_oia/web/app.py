@@ -5074,10 +5074,14 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
     scoped = int(rs.get("scoped") or 0) or None
     return {
         "notes": notes,
-        # What's OWED: unhandled change requests. Praise/comments never inflate
-        # the composer's to-do count (composer review P1-7 / EP P2-5).
+        # What's WAITING: every open human note the composer hasn't handled —
+        # timeline comments AND formal change requests (asset_change is system
+        # bookkeeping, excluded). The client-side recompute after "Mark addressed"
+        # uses the identical rule, so the number is consistent from first paint
+        # through every click (composer review P0: it read 0 on load with notes
+        # waiting, then jumped once JS took over).
         "open_count": sum(1 for n in notes
-                          if n["kind"] == "change_request"
+                          if n["kind"] in ("comment", "change_request")
                           and not (n["resolved"] or n["addressed"])),
         "revisions_used": used,
         "revisions_included": scoped,

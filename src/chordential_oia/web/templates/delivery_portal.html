@@ -149,6 +149,8 @@
   .scope .sc-no{background:#f5efe6;color:#9a6a18}
   .scope-roll{font-size:12px;color:var(--slate);margin:0 0 2px;font-weight:600}
   .scope-roll b{color:var(--wine)}
+  .cf-tag{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--slate);border:1px solid var(--line);border-radius:999px;padding:2px 9px;white-space:nowrap}
   /* Session Room presence strip (Living OS) — the portal ships its own light-palette
      styles; it never loads the control-room stylesheet, so these must live here or the
      widget renders as a raw browser list (design review P0). */
@@ -467,6 +469,7 @@
           <span class="rc-t" style="color:var(--wine)">↻</span>
           <span class="rc-a">{{ c.author }} — changes requested</span>
           <span class="rc-b">{{ c.body }}</span>
+          {% if c.conform %}<span class="cf-tag" title="A conform re-syncs the score to a re-cut picture — it does not use one of your revision rounds">conform · no round used</span>{% endif %}
         </div>
       {% endif %}{% endfor %}
     </div>

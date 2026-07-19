@@ -201,7 +201,11 @@
   .reply-line{margin-top:7px;padding:6px 9px;border-left:2px solid var(--hair2);font-size:11.5px;color:var(--dim)}
   .reply-line b{color:var(--text)}
   .reply-int{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--slate)}
-  .ask-form{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .ask-form{gap:8px;margin-top:8px;align-items:center}
+  /* Respect the [hidden] attribute the toggle flips — an unconditional
+     display:flex beat [hidden]{display:none} so the box was always open and
+     "Ask the studio" did nothing (composer review P1). */
+  .ask-form:not([hidden]){display:flex}
   .ask-form input{flex:1;background:var(--panel3);border:1px solid var(--hair);border-radius:7px;
     padding:8px 10px;font:12px var(--sans);color:var(--text)}
   .ask-form input::placeholder{color:var(--dim2)}
@@ -600,7 +604,7 @@
 
   <script type="application/json" class="sr-notes-data">
     [{% if a.feedback and a.feedback.notes %}{% for n in a.feedback.notes %}
-      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
+      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "kind": "{{ n.kind }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
 </div>
@@ -965,7 +969,8 @@
             notes.forEach(function(n){ if (n.id === id) n.addressed = nowDone; });
             renderPins();
             var openN = notes.filter(function(n){
-              return !(n.resolved || n.addressed); }).length;
+              return (n.kind === "comment" || n.kind === "change_request")
+                && !(n.resolved || n.addressed); }).length;
             var ct = root.querySelector(".fb-top .open-ct");
             if (ct) ct.textContent = openN + " to address";
             var badge = root.querySelector('.lk[data-sheet="notes"] .n-open');
