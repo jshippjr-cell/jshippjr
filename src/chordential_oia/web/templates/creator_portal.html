@@ -337,6 +337,25 @@
   .roomnav a:hover{color:var(--text);border-color:var(--hair2)}
 
   .companion-note{display:none}
+
+  /* ── Mini mode (Phase 4, ⌘M): the room as a reference instrument ── */
+  /* the active room collapses to a fixed 380px strip; the DAW owns the screen */
+  body.has-mini .sr-room:not(.mini){display:none}
+  body.has-mini{background:transparent}
+  .sr-room.mini{position:fixed;right:16px;bottom:16px;left:auto;top:auto;z-index:90;
+    width:380px;max-width:92vw;margin:0;padding:8px;background:var(--ink,#0d0c0b);
+    border:1px solid var(--hair2);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  .sr-room.mini>*{display:none !important}
+  .sr-room.mini>.stage,.sr-room.mini>.spine{display:block !important;opacity:1;animation:none}
+  .sr-room.mini .stage{border-radius:8px 8px 0 0;max-height:200px}
+  .sr-room.mini .stage.has-picture{aspect-ratio:16/9}
+  .sr-room.mini .whisper,.sr-room.mini .poster-title,.sr-room.mini .sr-bigplay{display:none}
+  .sr-room.mini .lane.sr-lane-cues,.sr-room.mini .lane.music{display:none}
+  .mini-exit{position:fixed;right:20px;bottom:calc(16px + 8px);z-index:91;display:none;
+    background:var(--orange);color:var(--ink,#0d0c0b);border:0;border-radius:0 8px 0 8px;
+    font:700 10px var(--sans);letter-spacing:.06em;padding:5px 9px;cursor:pointer}
+  body.has-mini .mini-exit{display:block}
+
   @media (max-width:760px){
     .stage{aspect-ratio:16/10}
     .picture-note{display:none}
@@ -744,6 +763,8 @@
     <div class="sr-cmd-list" id="sr-cmd-list"></div>
   </div>
 </div>
+
+<button class="mini-exit" id="mini-exit" type="button" title="Expand the room (⌘M)">⤢ Expand</button>
 
 <div class="veil" id="veil"></div>
 <div class="dropveil" id="dropveil">
@@ -1556,6 +1577,36 @@
     });
     input.addEventListener("input", render);
     box.addEventListener("click", function(e){ if (e.target === box) close(); });
+  })();
+
+  // ── Mini mode (Phase 4, ⌘M): collapse the active room to a reference strip ──
+  (function(){
+    var exit = document.getElementById("mini-exit");
+    function activeRoom(){
+      var rooms = Array.prototype.slice.call(document.querySelectorAll(".sr-room"));
+      if (!rooms.length) return null;
+      var minied = document.querySelector(".sr-room.mini");
+      if (minied) return minied;
+      var mid = window.scrollY + window.innerHeight/2, best = rooms[0], bestD = Infinity;
+      rooms.forEach(function(r){ var b = r.getBoundingClientRect(), top = b.top + window.scrollY;
+        var d = Math.abs(top + b.height/2 - mid); if (d < bestD){ bestD = d; best = r; } });
+      return best;
+    }
+    function toggle(){
+      var room = activeRoom(); if (!room) return;
+      var on = room.classList.toggle("mini");
+      document.body.classList.toggle("has-mini", on);
+      if (!on) document.querySelectorAll(".sr-room.mini").forEach(function(r){ r.classList.remove("mini"); });
+    }
+    document.addEventListener("keydown", function(e){
+      if ((e.metaKey || e.ctrlKey) && (e.key === "m" || e.key === "M")){ e.preventDefault(); toggle(); }
+    });
+    if (exit) exit.addEventListener("click", toggle);
+    // clicking the mini strip's picture toggles play (handled per-room); a dblclick expands
+    document.addEventListener("dblclick", function(e){
+      var m = document.querySelector(".sr-room.mini");
+      if (m && m.contains(e.target)){ toggle(); }
+    });
   })();
 })();
 </script>
