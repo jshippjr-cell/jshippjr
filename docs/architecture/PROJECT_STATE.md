@@ -266,6 +266,17 @@ room → The Picture → The Cue Layer → Flow polish, each phase-gated by the 
 
 ## Known deferred / not-yet-built (do not assume these exist)
 
+- **Scoring Stage — master-review carryover** (`docs/design/scoring-stage-master-review.md`):
+  a **round-exhaustion hard stop + conform-spam throttle** (the round ledger displays
+  but never *gates* — an unenforced revision budget is a commercial-guardrail gap
+  named at the Phase-2 gate and never resolved; do not let it drop again); generalize
+  **`_mutate_cues`** into a blob-mutation primitive for all `delivery_json` sub-keys
+  (the lost-update race ADR-0027 fixed is still open for `add_capture`, reviewer
+  add/remove, asset approval) **and make the lock Postgres-safe** (it no-ops on the
+  Postgres cutover); the purpose-built **§13 mobile Companion** (Listen/Capture/Know,
+  not a squeezed desktop); real demo **footage** (not SMPTE bars); WRITING-state
+  **transport density** (>7 elements) + ⌘K/⌘M **debounce**. Precomputed waveform peaks
+  need server-side audio decode (not in the current env).
 - **Postgres cutover ops** — code ready, not run; prod is still SQLite on a
   single-attach disk (every deploy ~2-min blip).
 - **DocuSign e-signature** — placeholder only.
