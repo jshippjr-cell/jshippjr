@@ -138,6 +138,7 @@
     background:rgba(240,119,44,.28);animation:hit-flash .32s ease-out}
   @keyframes hit-flash{from{opacity:1}to{opacity:0}}
   .cue-code{position:absolute;left:4px;top:50%;transform:translateY(-50%);font:700 9px var(--mono);
+    font-variant-numeric:tabular-nums;  /* the `font` shorthand resets it — digits must still align (§219) */
     letter-spacing:.02em;color:var(--dim);white-space:nowrap;pointer-events:none}
   .hit-diamond{position:absolute;top:50%;width:8px;height:8px;transform:translate(-50%,-50%) rotate(45deg);
     background:var(--orange);border:1px solid var(--ink);cursor:pointer;z-index:2}

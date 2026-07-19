@@ -136,6 +136,22 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   conform-vs-revision rollup on the console. **Carried to Phase 4** (flow/mobile):
   AJAX note reply, mobile Companion (§13), tablet touch grammar (§12), and a demo
   project seeded with a real cut + references so picture+pins are demonstrable.
+- **The Scoring Stage — Phase 3, The Cue Layer** (ADR-0027). **Gate: PASSED 4/4**
+  after one consolidated fix round. Scoring cues + hits live on `delivery_json['cues']`
+  (blob pattern). Operator builds the list on the console (`/delivery/cues/*`);
+  cue state runs `open → take → published → approved` with **every advance a human
+  button press** (single `set_cue_state` call site proves no self-approval). The
+  composer gets it read-only: cue regions (state as border weight) + hit diamonds
+  on the spine, a readable cue list with direction in the Brief, click-to-seek +
+  whisper. **Conform is anchored to the cue that changed** — each timecoded note
+  shows the cue it falls under (`cue_for_time`), the banner names the cues the cut
+  touches (`cues_touched_by_cut`). Round-2 fixes hardened it: cue mutations serialize
+  through `_mutate_cues` (`BEGIN IMMEDIATE`) so concurrent writers can't lose an
+  update or misplace an approval; the delete-confirm no longer interpolates a cue
+  field into inline JS (stored-XSS lane closed); timecodes cap at 24h; `.mono` is
+  defined (cue codes/timecodes were rendering sans-serif); cues beyond the cut get a
+  "N beyond this cut" badge. **Carried to Phase 4**: per-cue deadline/assignee, AJAX
+  cue editing, CSV/EDL cue import, SMPTE timecode display.
 
 - **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
   an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain
