@@ -336,15 +336,29 @@
   .roomnav a{font-size:11px;font-weight:600;color:var(--dim);border:1px solid var(--hair);border-radius:999px;padding:4px 11px}
   .roomnav a:hover{color:var(--text);border-color:var(--hair2)}
 
+  .companion-note{display:none}
   @media (max-width:760px){
     .stage{aspect-ratio:16/10}
     .picture-note{display:none}
     .tc{display:none}
     .poster-title{inset:0 0 34% 0}
     .whisper{padding-right:16px}
-    .doorline{gap:8px}
     .t-keys{display:none}
     .drop-box{padding:30px 26px}
+    /* ── Mobile Companion (§13): Listen + Know, never deliver from a phone ── */
+    /* Know — the doorline reads as a status card */
+    .doorline{gap:8px 10px;background:var(--panel);border:1px solid var(--hair);
+      border-radius:12px;padding:12px 14px;margin-bottom:12px}
+    /* No delivering work from a phone: hide the upload CTA + the in-sheet upload
+       forms + the delivery checklist; the companion note explains why. */
+    .upload-cta{display:none}
+    .sr-upload-form,.uploader{display:none !important}
+    .spec-row{display:none}
+    .companion-note{display:block;font-size:12px;color:var(--dim);font-style:italic;
+      margin:10px 2px 0;line-height:1.5}
+    /* Listen — the cue lane is desk detail; the phone keeps picture + notes clean */
+    .lane.sr-lane-cues{display:none}
+    .sr-cmd-box{width:94vw}
   }
 </style>
 </head>
@@ -487,6 +501,9 @@
       <button class="lk sr-open" data-sheet="takes"><b>V</b>Takes</button>
     </div>
     <button class="upload-cta sr-upload-cta">⇪ {{ 'Upload your first take' if (not a.versions and not a.pending) else 'Upload a new take' }}</button>
+    {# Mobile Companion (§13): the phone is for Listen/Know, not delivering work —
+       uploading a take happens at the desk. Shown only on the phone breakpoint. #}
+    <p class="companion-note">Companion mode — listen and check in here; upload your take from the studio at your desk.</p>
   </div>
 
   <!-- ── LAYER: Brief (the REAL brief — objective, references, tone) ── -->
