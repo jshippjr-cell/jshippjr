@@ -701,7 +701,8 @@
   <div class="sheet sr-sheet" data-sheet="takes" role="dialog" aria-modal="true" aria-label="Your takes" tabindex="-1">
     <div class="sheet-head"><h2>Your takes</h2><button class="esc sr-close">ESC</button></div>
 
-    <!-- Capture (Phase 4 §13): the private shelf — jot a motif/idea; studio-visible, never the client's. -->
+    <!-- Capture (Phase 4 §13): the composer's own private shelf — jot a motif/idea;
+         never the client's (spec: "never visible to the client"). -->
     <div class="shelf" data-project="{{ a.project_id }}">
       <h3 style="margin-top:0">Capture <span class="fineprint">— yours alone, never the client's</span></h3>
       <form class="shelf-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/capture">

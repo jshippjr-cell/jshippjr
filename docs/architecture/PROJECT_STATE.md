@@ -152,6 +152,28 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   defined (cue codes/timecodes were rendering sans-serif); cues beyond the cut get a
   "N beyond this cut" badge. **Carried to Phase 4**: per-cue deadline/assignee, AJAX
   cue editing, CSV/EDL cue import, SMPTE timecode display.
+- **The Scoring Stage — Phase 4, Flow polish** (Session Room). **Gate: PASSED 4/4**
+  after one consolidated fix round. Shipped: the **Arrival sequence** (once-per-
+  engagement house-lights — the dressed room shows through a scrim, spine draws
+  left-to-right, Begin; localStorage-gated, reduced-motion-safe); the **⌘K command
+  bar** (Raycast-style fuzzy jump to cues/notes/layers/actions/mini); **AJAX
+  ask-the-studio reply** (no reload, playhead survives); **mini mode ⌘M** (room →
+  380px reference strip; reachable from ⌘K since macOS eats ⌘M); **range/span
+  notes** (`review_comments.t_end`; the ⇤ Range control on the portal; a wine span
+  bar on the spine; rendered on all three doors; span-aware cue attribution
+  `m01–m02`); the **private Capture shelf** (§13 — composer-only, never the client,
+  leak-tested, capped at 200); **mobile Companion** (§13 Listen/Know, uploads +
+  checklist stripped); **tablet grammar** (§12). A/B take scrubbing already shipped
+  (take-chips). The review round caught and fixed a **critical** regression (the
+  arrival's spine-draw clobbered the spine's opacity reveal → the whole work
+  surface was invisible on every first visit) plus a phantom-reply bug and the
+  range-render gap. **Deferred**: precomputed waveform peaks (needs server-side
+  audio decode not in this env), a purpose-built 3-screen mobile Companion, and a
+  studio-side view of composer captures.
+
+The four-phase Scoring Stage (Session Room) build is complete: audio-and-notes
+room → The Picture → The Cue Layer → Flow polish, each phase-gated by the standing
+4-agent panel (Engineering / Design / Composer / Executive Producer).
 
 - **The Campaign Intelligence Extraction Engine (ADR-0023)** — extraction into CI is now
   an orchestrated system (`src/chordential_oia/extraction/`): ten parallel domain
