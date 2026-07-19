@@ -66,7 +66,7 @@
   .rc-btn{background:var(--wine);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
   .rc-decide{display:flex;gap:14px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
   .rc-decide form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .rc-approve{background:#1d6b43;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
+  .rc-approve{background:var(--wine);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
   .rc-changes{background:#fff;color:var(--wine);border:1px solid var(--wine);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
   .whois{background:var(--cream);border:1px dashed #d9cfc2;border-radius:10px;padding:12px 14px;margin:0 0 14px}
   /* version rail — the anti-chaos "which version am I on" strip */
@@ -88,7 +88,7 @@
   .rc-actions{flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:auto}
   .rc-mini{background:none;border:0;color:var(--orange);font:inherit;font-size:11px;
     font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
-  .rc-mini.resolve{color:#1d6b43}
+  .rc-mini.resolve{color:var(--slate)}
   /* Per-asset approval (granular sign-off). */
   .aa-block{margin:14px 0;padding:12px 14px;background:var(--paper,#fbf9f5);
     border:1px solid var(--line);border-radius:8px}
@@ -100,11 +100,11 @@
   .aa-nm{font-size:13px;font-weight:600;flex:0 1 auto}
   .aa-acts{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
   .aa-note{font-size:12px;padding:3px 6px;max-width:180px}
-  .aa-approve{color:#1d6b43}
+  .aa-approve{color:var(--wine)}
   .aa-changes-btn{color:var(--wine)}
   .aa-badge{font-size:10.5px;font-weight:700;letter-spacing:.04em;
     text-transform:uppercase;padding:2px 7px;border-radius:4px;white-space:nowrap}
-  .aa-approved{background:#e6f3ec;color:#1d6b43}
+  .aa-approved{background:#f3efe6;color:var(--wine)}
   .aa-changes{background:#f7e9ec;color:var(--wine)}
   .aa-pending{background:#eee;color:var(--muted)}
   .rc-reply{margin:6px 0 4px 46px;display:none}
@@ -115,15 +115,15 @@
   .round{display:inline-block;border:1px solid var(--orange);color:var(--orange);font-size:10px;
     letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:4px;margin-left:8px}
   /* delivery-package-ready card — the payoff moment */
-  .ready{background:linear-gradient(135deg,#2b6a44 0%,#1d6b43 60%,#185c39 100%);color:#fff;
-    border:0;border-radius:16px;padding:26px 26px 24px;margin-bottom:24px;box-shadow:0 8px 30px rgba(24,92,57,.18)}
+  .ready{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
+    border:0;border-radius:16px;padding:26px 26px 24px;margin-bottom:24px;box-shadow:0 8px 30px rgba(24,10,12,.22)}
   .ready h2{color:#fff;font-size:24px;margin:0 0 4px}
   .ready .sub{color:rgba(255,255,255,.82);margin:0 0 16px}
   .ready ul.pack{list-style:none;margin:0 0 20px;padding:0;display:grid;
     grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 18px}
   .ready ul.pack li{font-size:13.5px;color:#fff;display:flex;gap:8px;align-items:baseline}
   .ready ul.pack li b{color:#bff3d2;font-weight:800;flex:0 0 auto}
-  .dl-all{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#185c39;
+  .dl-all{display:inline-flex;align-items:center;gap:10px;background:#fff;color:var(--wine);
     text-decoration:none;font-weight:800;font-size:16px;padding:14px 26px;border-radius:999px;
     box-shadow:0 4px 14px rgba(0,0,0,.16)}
   .dl-all:hover{background:#f3fff8}
@@ -145,10 +145,28 @@
   .scope .sc-m{display:block;font-size:11px;color:var(--muted)}
   .scope .sc-badge{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.04em;
     text-transform:uppercase;padding:2px 8px;border-radius:4px;white-space:nowrap}
-  .scope .sc-yes{background:#e6f3ec;color:#1d6b43}
+  .scope .sc-yes{background:#f3efe6;color:var(--wine)}
   .scope .sc-no{background:#f5efe6;color:#9a6a18}
   .scope-roll{font-size:12px;color:var(--slate);margin:0 0 2px;font-weight:600}
   .scope-roll b{color:var(--wine)}
+  /* Session Room presence strip (Living OS) — the portal ships its own light-palette
+     styles; it never loads the control-room stylesheet, so these must live here or the
+     widget renders as a raw browser list (design review P0). */
+  #session-room{margin:26px 0 0}
+  .sr-line{display:flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);font-weight:700}
+  .sr-dot{width:8px;height:8px;border-radius:50%;background:var(--orange);
+    animation:sr-breathe 2.6s ease-in-out infinite}
+  .sr-label{white-space:nowrap}
+  .sr-who{font-weight:500;text-transform:none;letter-spacing:0;color:var(--slate)}
+  .sr-feed{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+  .sr-ev{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:baseline;
+    font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 10px}
+  .sr-ev-approval{border-color:var(--sand);background:#faf6ee}
+  .sr-ico{text-align:center}
+  .sr-ev .sr-at{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  @keyframes sr-breathe{0%,100%{opacity:.45;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+  @media (prefers-reduced-motion:reduce){.sr-dot{animation:none}}
 </style>
 </head>
 <body>
@@ -334,7 +352,7 @@
        The free-entry "Who's reviewing?" block is only shown to share-link guests. #}
     {% if verified %}
     <p class="sub" id="whoami-verified" style="margin:-2px 0 12px">
-      <span style="display:inline-block;border:1px solid #1d6b43;color:#1d6b43;font-size:10px;
+      <span style="display:inline-block;border:1px solid var(--wine);color:var(--wine);font-size:10px;
         letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px">✓ Verified reviewer</span>
       Reviewing as <b>{{ reviewer.name }}</b>{% if reviewer.email %} &lt;{{ reviewer.email }}&gt;{% endif %}{% if reviewer.role %} · {{ reviewer.role }}{% endif %}.
       <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link — your identity is verified, so only you can approve as you.</span>
@@ -553,7 +571,7 @@
         <button type="submit" class="rc-approve">✓ Approve the master</button>
       </form>
       {% else %}
-      <p class="sub" style="margin:0 0 10px"><b style="color:#1d6b43">✓ Master approved.</b>
+      <p class="sub" style="margin:0 0 10px"><b style="color:var(--wine)">✓ Master approved.</b>
         {% if scoped_rollup and scoped_rollup.total and scoped_rollup.approved == scoped_rollup.total %}All <b>{{ scoped_rollup.total }}</b> deliverables approved — Chordential is finalizing your package for release.{% elif scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> — sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
       {% endif %}
       {% if creative_lock %}
@@ -617,7 +635,7 @@
     <p class="sub">The full record of how this delivery reached FINAL — comments, change requests, and approvals.</p>
     {% for c in comments %}
     <div class="rc">
-      {% if c.kind == 'approval' %}<span class="rc-t" style="color:#1d6b43">✓</span>
+      {% if c.kind == 'approval' %}<span class="rc-t" style="color:var(--wine)">✓</span>
       {% elif c.kind == 'change_request' %}<span class="rc-t" style="color:var(--wine)">↻</span>
       {% elif c.t_seconds is not none %}<span class="rc-t">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}</span>
       {% else %}<span class="rc-t">—</span>{% endif %}
@@ -876,11 +894,11 @@
 </script>
 
 <script src="/static/wave-live.js?v={{ static_v }}" defer></script>
-<div id="session-room"
+<div class="wrap"><div id="session-room"
   data-project="{{ project['id'] }}" data-role="client"
   data-name="{{ reviewer.name if reviewer else 'Client' }}"
   data-token="{{ reviewer.token if reviewer and reviewer.token else share_token }}"
-  data-token-kind="{{ 'r' if reviewer and reviewer.token else 'k' }}"></div>
+  data-token-kind="{{ 'r' if reviewer and reviewer.token else 'k' }}"></div></div>
 <script src="/static/live.js?v={{ static_v }}" defer></script>
 <script src="/static/session-room.js?v={{ static_v }}" defer></script>
 </body>

@@ -183,6 +183,58 @@ def test_cut_over_cap_rejected(ctx, monkeypatch):
     assert not d.get("picture")
 
 
+def test_conform_returns_the_round_everywhere(ctx):
+    """The core promise (EP P0): a change request burns a round; classifying it a
+    conform RETURNS that round, and the composer room shows the round sentence from
+    the SAME counter (not a phantom field that was never written)."""
+    client, db_mod, _ = ctx
+    tid, pid, tok, share = _composer_with_project(db_mod)
+    # baseline: no rounds used, composer room shows Round 1 of 2 (scoped defaults to 2)
+    page = client.get(f"/creator/{tok}").text
+    assert "Round 1 of 2" in page
+    # client requests changes → a round is consumed
+    client.post(f"/project/{pid}/review/changes",
+                data={"k": share, "author": "Dana", "email": "d@x.example",
+                      "note": "Resync the tail to the recut ending"},
+                follow_redirects=False)
+    conn = db_mod.connect()
+    d = db_mod.get_delivery(conn, pid)
+    cid = conn.execute("SELECT id FROM review_comments WHERE project_id=? AND "
+                       "kind='change_request' ORDER BY id DESC LIMIT 1", (pid,)).fetchone()[0]
+    conn.close()
+    assert int(d.get("revisions_used") or 0) == 1
+    assert "Round 2 of 2" in client.get(f"/creator/{tok}").text
+    # operator classifies it a conform → the round comes back, room reflects it
+    client.post(f"/project/{pid}/review/note/{cid}/species", follow_redirects=False)
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert int(d.get("revisions_used") or 0) == 0        # round returned, not cosmetic
+    page = client.get(f"/creator/{tok}").text
+    assert "Round 1 of 2" in page and "conform · free" in page
+
+
+def test_creator_submission_over_cap_rejected(ctx, monkeypatch):
+    """A composer's take/deliverable upload is token-gated (no admin auth) — an
+    oversized body must be refused via the chunked cap, never buffered whole
+    (eng re-verify P1)."""
+    client, db_mod, app_mod = ctx
+    tid, pid, tok, share = _composer_with_project(db_mod)
+    monkeypatch.setattr(app_mod, "_SUBMISSION_MAX_BYTES", 10)
+    r = client.post(f"/creator/{tok}/project/{pid}/version",
+                    files={"file": ("take.mp3", b"x" * 64, "audio/mpeg")},
+                    follow_redirects=False)
+    assert r.status_code == 303                # bounced, nothing stored
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert not (d.get("pending") or d.get("versions"))
+    r = client.post(f"/creator/{tok}/project/{pid}/deliverable",
+                    data={"label": "stems"},
+                    headers={"X-Requested-With": "fetch"},
+                    files={"file": ("stems.wav", b"x" * 64, "audio/wav")},
+                    follow_redirects=False)
+    assert r.status_code == 400                # XHR path returns a hard error
+    conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
+    assert not (d.get("pending_assets") or [])
+
+
 def test_blocked_reference_extension_rejected(ctx):
     client, db_mod, _ = ctx
     tid, pid, tok, share = _composer_with_project(db_mod)

@@ -141,6 +141,9 @@ _AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 _CUT_MAX_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MAX_MB", "512")) * 1024 * 1024
 _CUT_MIRROR_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MIRROR_MB", "64")) * 1024 * 1024
+# A composer's submitted take / deliverable (audio-weight, occasionally a video mix)
+# rides the same chunked cap — token-gated routes must never buffer an unbounded body.
+_SUBMISSION_MAX_BYTES = int(os.environ.get("CHORDENTIAL_SUBMISSION_MAX_MB", "512")) * 1024 * 1024
 
 
 # --------------------------------------------------------------------------- #
@@ -4495,7 +4498,12 @@ def serve_upload(name: str):
                 and not (ctype or "").endswith("svg+xml")
             if _rh_inline:
                 return Response(content=data, media_type=ctype, headers=_headers)
-            _headers["Content-Disposition"] = f'attachment; filename="{base}"'
+            # Encode the filename the same way FileResponse does (RFC 5987) rather
+            # than raw-interpolating into the header — defense-in-depth even though
+            # `base` is always an os.urandom-generated key here, never user input.
+            from urllib.parse import quote as _q
+            _headers["Content-Disposition"] = (
+                f"attachment; filename*=utf-8''{_q(base)}")
             return Response(content=data, media_type="application/octet-stream",
                             headers=_headers)
     return PlainTextResponse("not found", status_code=404)
@@ -5055,8 +5063,15 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
                 "author": c["author"], "body": c["body"],
                 "internal": bool(c["internal"] if "internal" in keys else 0),
             })
-    used = int(delivery.get("revisions_used") or 0)
-    scoped = int(delivery.get("revisions_included") or 0) or None
+    # Scoped rounds come from the SAME source the console/portal read — the
+    # estimate's revision multiplier via revision_status — not a phantom
+    # ``revisions_included`` field that was never written (so the composer's
+    # round sentence was always blank; EP review P0). One source, three doors.
+    row = db.get_project(conn, project_id)
+    est = _project_estimate(conn, row) if row is not None else None
+    rs = revision_status(row, est, delivery) if row is not None else {}
+    used = int(rs.get("used", delivery.get("revisions_used") or 0))
+    scoped = int(rs.get("scoped") or 0) or None
     return {
         "notes": notes,
         # What's OWED: unhandled change requests. Praise/comments never inflate
@@ -5260,7 +5275,9 @@ async def creator_submit_version(
             return HTMLResponse("Not assigned to this project", status_code=403)
         if file is None or not (file.filename or "").strip():
             return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
-        data = await file.read()
+        data = await _read_capped(file, _SUBMISSION_MAX_BYTES)
+        if not data:                              # over cap or empty — never buffer unbounded
+            return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
         who = row["name"]
         # A creator's submission does NOT go straight to the client — it waits as a
         # pending submission for Jon to vet, then publish. This is the "machine
@@ -5322,14 +5339,14 @@ async def creator_submit_deliverable(
         ext = os.path.splitext(file.filename)[1].lower()
         ctype = (file.content_type or "").lower()
         kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
-        data = await file.read()
-        if not data:
-            return _fail("empty file", 400)
+        data = await _read_capped(file, _SUBMISSION_MAX_BYTES)
+        if not data:                              # empty OR over cap — never buffer unbounded
+            return _fail("file missing or too large", 400)
         # Collision-proof on-disk name (random suffix) so nothing can overwrite another
         # upload's file — no counter to race on.
         safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
         safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
-        _persist_upload(conn, safe_name, data)
+        _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)  # ADR-0026
         delivery = db.get_delivery(conn, project_id)
         # EP review P0-3: deliverables get the SAME studio gate as the master.
         # The upload lands PENDING — the studio vets and publishes it before the
@@ -6706,7 +6723,9 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     # live only in the durable DB mirror after a redeploy — a new submission overwrote the
     # previous version's blob under the same key, so v1/v2 ended up pointing at one file.
     safe_name = f"proj{project_id}-v{os.urandom(5).hex()}{safe_ext}"
-    _persist_upload(conn, safe_name, data)
+    # ADR-0026: disk always; DB mirror only under threshold (a large take must not
+    # blob into SQLite).
+    _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)
     db.update_delivery(conn, project_id, "pending_version", {
         "url": f"/uploads/{safe_name}",
         "filename": safe_name,
@@ -7351,7 +7370,9 @@ async def _store_reference(conn, project_id: int, file: UploadFile, by: str,
 
     Markup/script extensions are rejected outright (stored-XSS lane — review P0)
     and the serving layer additionally forces attachment on anything non-media."""
-    ext = os.path.splitext(file.filename or "")[1].lower()
+    # Normalize before the blocklist check: os.path.splitext("evil.html.") yields
+    # ".", sneaking markup past a raw ext test (eng P2). Strip trailing dots/space.
+    ext = os.path.splitext((file.filename or "").rstrip(". ").strip())[1].lower()
     if ext in _REF_BLOCKED_EXTS:
         return None
     data = await _read_capped(file, _REF_MAX_BYTES)
@@ -7360,7 +7381,11 @@ async def _store_reference(conn, project_id: int, file: UploadFile, by: str,
     kind = ("audio" if ext in _AUDIO_EXTS else
             "video" if ext in _VIDEO_EXTS else "file")
     safe_name = f"proj{project_id}-ref-{os.urandom(5).hex()}{ext or '.bin'}"
-    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
+    # ADR-0026 mirror cap applies to references too — a 128MB video reference must
+    # not blob into SQLite (eng P0: this path defaulted mirror=True, defeating the
+    # ADR). Disk always; DB mirror only under the same threshold as a cut.
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "",
+                    mirror=len(data) <= _CUT_MIRROR_BYTES)
     delivery = db.get_delivery(conn, project_id)
     refs = list(delivery.get("references") or [])
     from datetime import datetime as _dt, timezone as _tz
@@ -7792,10 +7817,27 @@ def delivery_build(project_id: int):
 @app.post("/project/{project_id}/review/note/{comment_id}/species")
 def review_note_species(project_id: int, comment_id: int):
     """Operator door: classify a note as conform (picture-caused, free) or
-    revision (counts against rounds) — the round ledger's species record."""
+    revision (counts against rounds) — the round ledger's species record.
+
+    Classifying a change request as a conform RETURNS its round to the budget
+    (and flipping back consumes one again, floored at zero). Without this the
+    'conform · free' label was cosmetic — the round was already spent at
+    request time and nothing gave it back (EP review P0). This keeps the one
+    ``revisions_used`` counter — read identically by console, portal, and the
+    composer room — actually honest."""
     conn = db.connect()
     try:
-        db.toggle_comment_conform(conn, project_id, comment_id)
+        new_val = db.toggle_comment_conform(conn, project_id, comment_id)
+        if new_val is not None:
+            crow = conn.execute(
+                "SELECT kind FROM review_comments WHERE id = ? AND project_id = ?",
+                (comment_id, project_id)).fetchone()
+            # Only change requests consume rounds; praise/comments never did.
+            if crow is not None and crow["kind"] == "change_request":
+                delivery = db.get_delivery(conn, project_id)
+                used = int(delivery.get("revisions_used") or 0)
+                used = max(0, used - 1) if new_val == 1 else used + 1
+                db.update_delivery(conn, project_id, "revisions_used", used)
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
