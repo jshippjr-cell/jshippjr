@@ -143,3 +143,26 @@ def test_review_action_exemption_lists_every_review_route(tmp_path, monkeypatch)
     exempted = set(app_mod._REVIEW_ACTIONS)
     missing = registered - exempted
     assert not missing, f"review routes not exempted from the admin gate: {missing}"
+
+
+def test_every_creator_portal_post_bypasses_the_gate(tmp_path, monkeypatch):
+    """Drift guard (CTO master-review P0): EVERY /creator/{token}/... POST route
+    must be covered by _CREATOR_PORTAL_RE, or the gate silently 303s the composer
+    to /admin/login on their own token-gated page. reply/address/capture were
+    omitted once and broke Phase 4.3/4.7 in prod — this asserts the regex matches
+    every registered creator POST path so it can't recur."""
+    app_mod = _build(tmp_path, monkeypatch, gated=True)
+    import re
+    missing = []
+    for route in app_mod.app.routes:
+        path = getattr(route, "path", "")
+        methods = getattr(route, "methods", set()) or set()
+        if not path.startswith("/creator/") or "POST" not in methods:
+            continue
+        # substitute concrete values for the path params, then test the regex
+        concrete = (path.replace("{token}", "TOKENabc123")
+                        .replace("{project_id}", "1")
+                        .replace("{comment_id}", "2"))
+        if not app_mod._CREATOR_PORTAL_RE.match(concrete):
+            missing.append(path)
+    assert not missing, f"creator POST routes not gate-exempt: {missing}"
