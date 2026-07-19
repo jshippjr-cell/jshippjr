@@ -581,8 +581,14 @@ this for new per-record editable state"). A cue's `state` runs
 `open → take → published → approved`; **every advance, including approval, is a
 human button press** (Constitution §4.1) — the machine never self-approves a cue.
 Timecodes accept `m:ss` / `h:m:s` / raw seconds through one guarded parser
-(`_num_or_none`, finite + non-negative). Conform surfacing reads
-`cues_touched_by_cut` (span overlap; whole-timeline recut → all cues). The composer
+(`_num_or_none`, finite + non-negative + a 24h sanity cap). Conform surfacing is
+**anchored to the cue that changed**: the console tags each timecoded change request
+with the cue its timecode falls under (`cue_for_time`) and names the cues the current
+cut touches (`cues_touched_by_cut`, span overlap; whole-timeline recut → all cues), so
+the operator classifies conform-vs-revision against the cue that moved, not from
+memory. Cue mutations are serialized through `_mutate_cues` (an `BEGIN IMMEDIATE`
+critical section) so concurrent writers can't lose an update or land an approval on
+the wrong cue. The composer
 gets the cue list **read-only**: regions + hit diamonds on the spine (state as border
 weight, not color noise) and a readable direction list in the Brief; Jon owns the
 list. Fail-soft: no cues → the audio-and-notes room, unchanged.

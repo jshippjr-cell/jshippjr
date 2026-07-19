@@ -140,6 +140,10 @@
         <span class="rc-b">{{ c['body'] }}{% if c['version'] %} <span class="muted small">· v{{ c['version'] }}</span>{% endif %}
           {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
           {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
+          {# The cue this note falls under (EP P0): any timecoded note is tagged
+             with its cue, so when the operator weighs conform-vs-revision the cue
+             that changed is on screen, not recalled from memory. #}
+          {% if note_cue.get(c['id']) %}<span class="mono muted small" title="This note's timecode falls inside cue {{ note_cue[c['id']] }}">under {{ note_cue[c['id']] }}</span>{% endif %}
           {% if c['kind'] == 'change_request' %}
           {# species classification (EP P1-1): conform = picture-caused, free;
              revision = counts against rounds. The operator decides, per note. #}
@@ -490,6 +494,7 @@
       <span>{{ c.name or 'Untitled cue' }}</span>
       {% if c.t_in is not none %}<span class="mono muted small">{{ '%d:%02d'|format((c.t_in/60)|int,(c.t_in%60)|int) }}{% if c.t_out is not none %}–{{ '%d:%02d'|format((c.t_out/60)|int,(c.t_out%60)|int) }}{% endif %}</span>{% endif %}
       <span class="pill" style="text-transform:uppercase;font-size:10px;letter-spacing:.06em;border:1px solid var(--border2);padding:1px 8px;border-radius:999px">{{ c.state }}</span>
+      {% if c.state == 'approved' and c.approved_at %}<span class="mono muted small" title="Signed off {{ c.approved_at }}">✓ {{ c.approved_at[:10] }}</span>{% endif %}
     </div>
     {% if c.direction %}<p class="muted small" style="margin:4px 0 0">{{ c.direction }}</p>{% endif %}
 
@@ -504,7 +509,8 @@
       {# state advance — the human presses each button (Constitution §4.1) #}
       {% for s in cue_states %}
       {% if s != c.state %}
-      <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/state" style="display:inline">
+      <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/state" style="display:inline"
+            {% if s == 'approved' %}onsubmit="return confirm('Sign off this cue? Approving is a decision the client sees.')"{% endif %}>
         <input type="hidden" name="state" value="{{ s }}">
         <button class="btn tiny" type="submit">{{ '✓ Approve' if s == 'approved' else 'Mark ' + s }}</button>
       </form>
@@ -515,8 +521,11 @@
         <input type="text" name="name" placeholder="hit name" style="width:110px;font-size:12px">
         <button class="btn tiny" type="submit">+ Hit</button>
       </form>
+      {# Never interpolate a user-controlled field into an inline JS string — the
+         browser entity-decodes the attribute before compiling it, so autoescape
+         doesn't stop a JS-string breakout (eng P1). Generic, code-free message. #}
       <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/delete" style="display:inline"
-            onsubmit="return confirm('Delete cue {{ c.code }}?')">
+            onsubmit="return confirm('Delete this cue?')">
         <button class="btn tiny ghost" type="submit">Delete</button>
       </form>
     </div>
@@ -527,7 +536,7 @@
 
   {# conform surfacing: if a cut landed, name the cues it lands under #}
   {% if delivery.get('picture') and scoring_cues %}
-  <p class="muted small" style="margin:10px 0 0;color:var(--accent)">↻ Cut {{ delivery['picture']['n'] }} is in the room — a re-cut under a scored cue is a <b>conform</b> (free), not a revision. Classify the client's resulting notes on the Versions card.</p>
+  <p class="muted small" style="margin:10px 0 0;color:var(--accent)">↻ Cut {{ delivery['picture']['n'] }} is in the room{% if conform_cut_cues %} — it lands under <b class="mono">{{ conform_cut_cues|join(', ') }}</b>{% endif %}. A re-cut under a scored cue is a <b>conform</b> (free), not a revision; each client note shows the cue it falls under, so you classify it against the cue that changed — not from memory.</p>
   {% endif %}
 
   <form method="post" action="/project/{{ project['id'] }}/delivery/cues/add" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">

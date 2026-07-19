@@ -927,6 +927,9 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .mc-clock{font-size:22px;font-weight:650;letter-spacing:.04em;color:var(--accent-deep);
   font-variant-numeric:tabular-nums;font-family:ui-monospace,'SF Mono',Menlo,monospace}
 .mc-clocksub{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-top:3px}
+/* the instrument voice — monospace + tabular figures (spec §219): cue codes,
+   timecodes, IDs. Referenced across the console cue panel; define it once here. */
+.mono{font-family:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .machine-feed{list-style:none;margin:0;padding:0}
 .machine-feed li{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:baseline;
   padding:8px 0;border-top:1px solid var(--border);font-size:13px}

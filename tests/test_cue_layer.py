@@ -72,7 +72,50 @@ def test_bad_timecode_is_guarded(ctx):
     conn = db_mod.connect()
     cue = db_mod.add_cue(conn, pid, name="bad", t_in="1e999", t_out="-5")
     assert cue["t_in"] is None and cue["t_out"] is None
+    # a fat-fingered clock value past the 24h cap is rejected too (eng P2)
+    c2 = db_mod.add_cue(conn, pid, name="fat", t_in="99:99:99")
+    assert c2["t_in"] is None
     conn.close()
+
+
+def test_cue_for_time_ties_note_to_cue(ctx):
+    """A timecoded note maps to the cue its timecode falls under — the structural
+    tie that anchors conform classification to the cue that changed (EP P0)."""
+    _, db_mod, _ = ctx
+    _, pid, _ = _composer_with_project(db_mod)
+    conn = db_mod.connect()
+    db_mod.add_cue(conn, pid, name="a", t_in="0", t_out="5")     # m01
+    db_mod.add_cue(conn, pid, name="b", t_in="5", t_out="12")    # m02
+    cues = db_mod.get_cues(conn, pid)
+    assert db_mod.cue_for_time(cues, 3) == "m01"
+    assert db_mod.cue_for_time(cues, 8) == "m02"
+    assert db_mod.cue_for_time(cues, 20) is None                 # past every cue
+    assert db_mod.cue_for_time(cues, None) is None
+    conn.close()
+
+
+def test_concurrent_cue_writes_dont_lose_updates(ctx, tmp_path, monkeypatch):
+    """The atomic _mutate_cues serializes concurrent writers (eng P0): every add
+    survives with a unique id — no lost update, no id scramble."""
+    import threading
+    _, db_mod, _ = ctx
+    _, pid, _ = _composer_with_project(db_mod)
+
+    def _add(i):
+        cc = db_mod.connect()
+        db_mod.add_cue(cc, pid, code=f"race{i}", name=f"n{i}")
+        cc.close()
+    threads = [threading.Thread(target=_add, args=(i,)) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    conn = db_mod.connect()
+    cues = db_mod.get_cues(conn, pid)
+    conn.close()
+    ids = [c["id"] for c in cues]
+    assert len(cues) == 10                       # nothing lost
+    assert len(set(ids)) == len(ids)             # ids stay unique
 
 
 def test_conform_surfacing_which_cues_a_cut_touches(ctx):

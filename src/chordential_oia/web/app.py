@@ -5895,6 +5895,21 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     comments = db.list_review_comments(conn, project_id,
                                        include_internal=not client_view)
     timeline = build_timeline(row, delivery, comments)
+    # Tie conform classification to the cue that changed (EP P0): map each
+    # timecoded change request to the cue its timecode falls under, and name the
+    # cues the current cut touches. Both read the live cue list — the once-dead
+    # cue_for_time/cues_touched_by_cut helpers now drive the console's conform copy.
+    _cues_now = db.get_cues(conn, project_id)
+    note_cue = {}
+    for _c in comments:
+        # Any timecoded note (a client's pinned comment or a timed change request)
+        # gets tagged with the cue its timecode falls under — so when the operator
+        # weighs conform-vs-revision, the cue that changed is on screen, not recalled.
+        if _c["t_seconds"] is not None:
+            _code = db.cue_for_time(_cues_now, _c["t_seconds"])
+            if _code:
+                note_cue[_c["id"]] = _code
+    conform_cut_cues = db.cues_touched_by_cut(conn, project_id) if delivery.get("picture") else []
 
     # Per-asset approval (granular sign-off): attach each deliverable asset's
     # current per-asset status + stable key so the portal/console can render a
@@ -6034,8 +6049,13 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # The Cue Layer (Phase 3): the scoring cue list + hits + per-cue state.
         # Distinct from ``cues`` (the licensing cue SHEET above) — this is the
         # timed, scoreable spine the composer works against.
-        "scoring_cues": db.get_cues(conn, project_id),
+        "scoring_cues": _cues_now,
         "cue_states": db.CUE_STATES,
+        # Conform↔cue tie (EP P0): which cue each timecoded change request lands
+        # under, and which cues the current cut touches — surfaced where the
+        # operator actually classifies conform vs revision.
+        "note_cue": note_cue,
+        "conform_cut_cues": conform_cut_cues,
         "manifest": manifest,
         "revisions": revisions,
         "license": cert.license,

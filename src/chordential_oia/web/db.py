@@ -5036,11 +5036,46 @@ def cues_touched_by_cut(conn: sqlite3.Connection, project_id: int,
     return [code for code in out if code]
 
 
+# A generous ceiling on a stored timecode (24h) — a fat-fingered "99:99:99" is
+# almost certainly a typo, not a real cue at hour 100 (eng P2).
+_MAX_TIMECODE_SECONDS = 24 * 3600
+
+
 def get_cues(conn: sqlite3.Connection, project_id: int) -> list:
     """The project's cue list (time-sorted), or [] — never raises."""
     cues = list(get_delivery(conn, project_id).get("cues") or [])
     cues.sort(key=lambda c: (c.get("t_in") if c.get("t_in") is not None else 1e9))
     return cues
+
+
+def _mutate_cues(conn, project_id: int, fn):
+    """Atomic read-modify-write of ``delivery_json['cues']`` (eng P0). Concurrent
+    cue writers (two tabs, a double-click, a retried POST) otherwise race on the
+    read → mutate → blind-UPDATE cycle and silently lose writes — worst case a
+    human 'approve' lands on whatever content raced into that id. We take an
+    IMMEDIATE write lock so the read and the write are one critical section;
+    ``busy_timeout`` already makes the loser wait rather than error.
+
+    ``fn(cues)`` mutates the list in place and returns the call's result."""
+    import sqlite3 as _sq
+    native = getattr(conn, "_conn", conn)          # unwrap the _PgConn shim if present
+    is_sqlite = isinstance(native, _sq.Connection)
+    if is_sqlite:
+        native.execute("BEGIN IMMEDIATE")
+    try:
+        delivery = get_delivery(conn, project_id)
+        cues = list(delivery.get("cues") or [])
+        result = fn(cues)
+        delivery["cues"] = cues
+        # save_delivery commits, closing the IMMEDIATE transaction.
+        save_delivery(conn, project_id, delivery)
+        return result
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        raise
 
 
 def _next_cue_id(cues: list) -> int:
@@ -5050,41 +5085,41 @@ def _next_cue_id(cues: list) -> int:
 def add_cue(conn: sqlite3.Connection, project_id: int, *, code: str = "",
             name: str = "", t_in=None, t_out=None, direction: str = "") -> dict:
     """Append a cue. ``code`` defaults to m01/m02… by position. Returns the cue."""
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
-    cue = {
-        "id": _next_cue_id(cues),
-        "code": (code or "").strip() or f"m{len(cues) + 1:02d}",
-        "name": (name or "").strip(),
-        "t_in": _num_or_none(t_in),
-        "t_out": _num_or_none(t_out),
-        "direction": (direction or "").strip(),
-        "state": "open",
-        "hits": [],
-    }
-    cues.append(cue)
-    update_delivery(conn, project_id, "cues", cues)
-    return cue
+    box = {}
+
+    def _do(cues):
+        cue = {
+            "id": _next_cue_id(cues),
+            "code": (code or "").strip() or f"m{len(cues) + 1:02d}",
+            "name": (name or "").strip(),
+            "t_in": _num_or_none(t_in),
+            "t_out": _num_or_none(t_out),
+            "direction": (direction or "").strip(),
+            "state": "open",
+            "hits": [],
+        }
+        cues.append(cue)
+        box["cue"] = cue
+    _mutate_cues(conn, project_id, _do)
+    return box["cue"]
 
 
 def update_cue(conn: sqlite3.Connection, project_id: int, cue_id: int,
                **fields) -> Optional[dict]:
     """Merge fields into one cue (by id). Returns the cue, or None if not found."""
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
-    hit = None
-    for c in cues:
-        if int(c.get("id") or 0) == int(cue_id):
-            for k, v in fields.items():
-                if k in ("t_in", "t_out"):
-                    v = _num_or_none(v)
-                c[k] = v
-            hit = c
-            break
-    if hit is None:
-        return None
-    update_delivery(conn, project_id, "cues", cues)
-    return hit
+    box = {"cue": None}
+
+    def _do(cues):
+        for c in cues:
+            if int(c.get("id") or 0) == int(cue_id):
+                for k, v in fields.items():
+                    if k in ("t_in", "t_out"):
+                        v = _num_or_none(v)
+                    c[k] = v
+                box["cue"] = c
+                return
+    _mutate_cues(conn, project_id, _do)
+    return box["cue"]
 
 
 def set_cue_state(conn: sqlite3.Connection, project_id: int, cue_id: int,
@@ -5093,65 +5128,86 @@ def set_cue_state(conn: sqlite3.Connection, project_id: int, cue_id: int,
     ``approved_at`` when it lands on approved (cleared otherwise). Project-scoped."""
     if state not in _CUE_STATES:
         return None
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
-    found = None
-    for c in cues:
-        if int(c.get("id") or 0) == int(cue_id):
-            c["state"] = state
-            c["approved_at"] = _utc_now_iso() if state == "approved" else None
-            found = c
-            break
-    if found is None:
-        return None
-    update_delivery(conn, project_id, "cues", cues)
-    return found
+    box = {"cue": None}
+
+    def _do(cues):
+        for c in cues:
+            if int(c.get("id") or 0) == int(cue_id):
+                c["state"] = state
+                c["approved_at"] = _utc_now_iso() if state == "approved" else None
+                box["cue"] = c
+                return
+    _mutate_cues(conn, project_id, _do)
+    return box["cue"]
 
 
 def delete_cue(conn: sqlite3.Connection, project_id: int, cue_id: int) -> bool:
     """Remove a cue by id. Returns True if one was removed."""
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
-    kept = [c for c in cues if int(c.get("id") or 0) != int(cue_id)]
-    if len(kept) == len(cues):
-        return False
-    update_delivery(conn, project_id, "cues", kept)
-    return True
+    box = {"ok": False}
+
+    def _do(cues):
+        kept = [c for c in cues if int(c.get("id") or 0) != int(cue_id)]
+        box["ok"] = len(kept) != len(cues)
+        cues[:] = kept
+    _mutate_cues(conn, project_id, _do)
+    return box["ok"]
 
 
 def add_hit(conn: sqlite3.Connection, project_id: int, cue_id: int, *,
             t=None, name: str = "") -> Optional[dict]:
     """Add a hit (a moment the music must honor) to a cue. Returns the hit."""
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
-    for c in cues:
-        if int(c.get("id") or 0) == int(cue_id):
-            hits = list(c.get("hits") or [])
-            hit = {"id": (max((int(h.get("id") or 0) for h in hits), default=0) + 1),
-                   "t": _num_or_none(t), "name": (name or "").strip()}
-            hits.append(hit)
-            hits.sort(key=lambda h: (h.get("t") if h.get("t") is not None else 1e9))
-            c["hits"] = hits
-            update_delivery(conn, project_id, "cues", cues)
-            return hit
-    return None
+    box = {"hit": None}
+
+    def _do(cues):
+        for c in cues:
+            if int(c.get("id") or 0) == int(cue_id):
+                hits = list(c.get("hits") or [])
+                hit = {"id": (max((int(h.get("id") or 0) for h in hits), default=0) + 1),
+                       "t": _num_or_none(t), "name": (name or "").strip()}
+                hits.append(hit)
+                hits.sort(key=lambda h: (h.get("t") if h.get("t") is not None else 1e9))
+                c["hits"] = hits
+                box["hit"] = hit
+                return
+    _mutate_cues(conn, project_id, _do)
+    return box["hit"]
 
 
 def delete_hit(conn: sqlite3.Connection, project_id: int, cue_id: int,
                hit_id: int) -> bool:
     """Remove a hit from a cue. Returns True if one was removed."""
-    delivery = get_delivery(conn, project_id)
-    cues = list(delivery.get("cues") or [])
+    box = {"ok": False}
+
+    def _do(cues):
+        for c in cues:
+            if int(c.get("id") or 0) == int(cue_id):
+                hits = list(c.get("hits") or [])
+                kept = [h for h in hits if int(h.get("id") or 0) != int(hit_id)]
+                box["ok"] = len(kept) != len(hits)
+                c["hits"] = kept
+                return
+    _mutate_cues(conn, project_id, _do)
+    return box["ok"]
+
+
+def cue_for_time(cues: list, t) -> Optional[str]:
+    """The code of the cue a timecode falls under (or None) — ties a client's
+    timecoded note to the cue it lands in, so conform classification is anchored
+    to the cue that actually changed (EP P0). First matching span wins."""
+    tv = _num_or_none(t)
+    if tv is None:
+        return None
     for c in cues:
-        if int(c.get("id") or 0) == int(cue_id):
-            hits = list(c.get("hits") or [])
-            kept = [h for h in hits if int(h.get("id") or 0) != int(hit_id)]
-            if len(kept) == len(hits):
-                return False
-            c["hits"] = kept
-            update_delivery(conn, project_id, "cues", cues)
-            return True
-    return False
+        ti = c.get("t_in")
+        if ti is None:
+            continue
+        to = c.get("t_out")
+        if to is None:
+            if abs(tv - ti) < 0.5:
+                return c.get("code")
+        elif ti <= tv <= to:
+            return c.get("code")
+    return None
 
 
 def _num_or_none(v):
@@ -5179,8 +5235,8 @@ def _num_or_none(v):
             secs = float(s)
         except ValueError:
             return None
-    if not _m.isfinite(secs) or secs < 0:
-        return None
+    if not _m.isfinite(secs) or secs < 0 or secs > _MAX_TIMECODE_SECONDS:
+        return None                              # reject fat-fingered "99:99:99" (eng P2)
     return secs
 
 

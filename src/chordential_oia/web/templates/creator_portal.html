@@ -42,6 +42,9 @@
   @media (prefers-reduced-motion:reduce){
     .room>.doorline,.room>.stage,.room>.spine,.room>.transport{animation-duration:.01ms}}
 
+  /* the instrument voice — monospace, tabular figures (spec §219). Used for cue
+     codes + timecodes in the Brief; the class was referenced but never defined. */
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
   /* ── doorline ── */
   .doorline{display:flex;align-items:center;gap:12px;padding:14px 0 18px;flex-wrap:wrap}
   .wordmark{font-family:var(--serif);font-size:15px;white-space:nowrap}
@@ -122,17 +125,23 @@
   /* the cue regions self-identify (m01 · Held breath); the generic lane label would
      collide with the first region's code, so it's hidden on this lane */
   .lane.sr-lane-cues>.lane-label{display:none}
+  /* state encoded as border WEIGHT (spec §item 3), not color noise: the region
+     thickens as it advances open→take→published→approved. */
   .cue-region{position:absolute;top:6px;bottom:6px;border:1px solid var(--slate);border-radius:5px;
-    background:rgba(139,160,174,.10);cursor:pointer;overflow:hidden;min-width:2px;z-index:1}
-  .cue-region.st-take{border-width:1.5px;background:rgba(240,119,44,.09);border-color:var(--orange)}
-  .cue-region.st-published{border-width:2px;background:rgba(240,119,44,.14);border-color:var(--orange)}
-  .cue-region.st-approved{border-width:2px;border-style:solid;border-color:var(--slate);background:rgba(139,160,174,.18)}
+    background:rgba(139,160,174,.09);cursor:pointer;overflow:hidden;min-width:2px;z-index:1;opacity:.72}
+  .cue-region.st-take{border-width:2px;opacity:.85}
+  .cue-region.st-published{border-width:3px;opacity:1}
+  .cue-region.st-approved{border-width:3px;box-shadow:inset 0 0 0 1px var(--slate);opacity:1}
   .cue-region.st-approved::after{content:"✓";position:absolute;right:3px;top:1px;font-size:9px;color:var(--slate)}
+  /* the picture flashes when a hit is struck (spec §item 4) — was an inert class */
+  .stage.hit-flash::before{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;
+    background:rgba(240,119,44,.28);animation:hit-flash .32s ease-out}
+  @keyframes hit-flash{from{opacity:1}to{opacity:0}}
   .cue-code{position:absolute;left:4px;top:50%;transform:translateY(-50%);font:700 9px var(--mono);
     letter-spacing:.02em;color:var(--dim);white-space:nowrap;pointer-events:none}
   .hit-diamond{position:absolute;top:50%;width:8px;height:8px;transform:translate(-50%,-50%) rotate(45deg);
     background:var(--orange);border:1px solid var(--ink);cursor:pointer;z-index:2}
-  .hit-diamond::after{content:"";position:absolute;inset:-7px}  /* touch target */
+  .hit-diamond::after{content:"";position:absolute;inset:-3px}  /* small touch pad — the region stays clickable around it (composer P1) */
   /* the Brief's readable cue list (the composer reads direction; the spine shows position) */
   .cue-brief{border-left:2px solid var(--hair2);padding:2px 0 6px 12px;margin:8px 0}
   .cue-brief-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -861,6 +870,17 @@
       cueLane.querySelectorAll(".cue-region,.hit-diamond").forEach(function(x){ x.remove(); });
       var D = mDur();
       if (!D || !cues.length) return;
+      // cues past this cut don't fake a position (parity with the Notes lane's
+      // "beyond this cut" badge, design P1-2): collect them into one edge tag.
+      var beyond = cues.filter(function(c){ return (c.t_in != null ? c.t_in : 0) > D; });
+      if (beyond.length){
+        var bc = document.createElement("button");
+        bc.type = "button"; bc.className = "pin-beyond";
+        bc.textContent = beyond.length + " cue" + (beyond.length > 1 ? "s" : "") + " beyond this cut";
+        bc.title = beyond.map(function(c){ return c.code + (c.name ? " · " + c.name : ""); }).join("\n");
+        bc.addEventListener("click", function(e){ e.stopPropagation(); openSheet("brief"); });
+        cueLane.appendChild(bc);
+      }
       cues.forEach(function(c){
         var ti = (c.t_in == null ? 0 : c.t_in);
         var to = (c.t_out == null ? ti : c.t_out);
@@ -869,11 +889,14 @@
         var reg = document.createElement("div");
         reg.className = "cue-region st-" + (c.state || "open");
         reg.style.left = (ti / D * 100) + "%";
-        reg.style.width = Math.max(0.6, (to - ti) / D * 100) + "%";
+        var w = Math.max(0.6, (to - ti) / D * 100);
+        reg.style.width = w + "%";
         var label = c.code + (c.name ? " · " + c.name : "");
         reg.title = label + (c.direction ? " — " + c.direction : "") + "  [" + (c.state || "open") + "]";
         var codeEl = document.createElement("span");
-        codeEl.className = "cue-code"; codeEl.textContent = c.code;
+        codeEl.className = "cue-code";
+        // show the name inside the region when there's room; bare code when tight
+        codeEl.textContent = (w > 14 && c.name) ? (c.code + " · " + c.name) : c.code;
         reg.appendChild(codeEl);
         reg.addEventListener("click", function(e){
           e.stopPropagation(); seek(ti);
