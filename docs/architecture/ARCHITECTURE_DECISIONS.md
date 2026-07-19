@@ -570,6 +570,36 @@ through `_read_capped` with an explicit cap and the extension policy
 allowlist for everything else — the stored-XSS fix in `serve_upload` depends on it).
 Prod backups must include the upload dir, not just the DB, until object storage.
 
+### ADR-0027 — The Cue Layer: cues + hits as a delivery_json blob, per-cue human approval
+**Status:** Accepted (2026-07-19) · Source: `web/db.py` (cue helpers), `web/app.py`
+(`/delivery/cues/*` routes, creator/console views), `creator_portal.html`,
+`delivery_console.html`, `docs/design/chordos-studio-experience.md` §Phase 3
+**Decision.** Scoring cues live as `delivery_json['cues']` — a per-project list of
+`{id, code, name, t_in, t_out, direction, state, hits:[{id,t,name}]}` — mirroring the
+`references`/`pending_assets` blob pattern rather than new tables (CLAUDE.md: "mirror
+this for new per-record editable state"). A cue's `state` runs
+`open → take → published → approved`; **every advance, including approval, is a
+human button press** (Constitution §4.1) — the machine never self-approves a cue.
+Timecodes accept `m:ss` / `h:m:s` / raw seconds through one guarded parser
+(`_num_or_none`, finite + non-negative). Conform surfacing reads
+`cues_touched_by_cut` (span overlap; whole-timeline recut → all cues). The composer
+gets the cue list **read-only**: regions + hit diamonds on the spine (state as border
+weight, not color noise) and a readable direction list in the Brief; Jon owns the
+list. Fail-soft: no cues → the audio-and-notes room, unchanged.
+**Why.** The blob pattern keeps cues additive, per-project, and editable with zero
+schema migration and no new join surface — the same reasoning that put picture,
+references, and pending assets on `delivery_json`. Cue approval is modeled as its own
+state (not folded into the per-deliverable approval records) because a cue and a
+deliverable are different objects: a cue is a span of the picture the music honors, a
+deliverable is a file the client signs off. Conflating them would make "approve m02"
+and "approve the TV mix" the same row, which they are not.
+**Consequences.** New cue mutations go through the `db.py` cue helpers (never write
+`delivery_json['cues']` inline) so the timecode guard and id assignment stay in one
+place. The legacy `/delivery/cue` route (licensing `cue_meta`: ISRC/ISWC/duration) is
+a different concept and stays separate — the scoring Cue Layer is namespaced under
+`/delivery/cues/…`. If per-cue approval ever needs to gate delivery, map it *onto* the
+deliverable approval at read time; do not merge the two stores.
+
 ---
 
 ## Adding a new ADR

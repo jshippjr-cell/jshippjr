@@ -133,6 +133,13 @@
   .hit-diamond{position:absolute;top:50%;width:8px;height:8px;transform:translate(-50%,-50%) rotate(45deg);
     background:var(--orange);border:1px solid var(--ink);cursor:pointer;z-index:2}
   .hit-diamond::after{content:"";position:absolute;inset:-7px}  /* touch target */
+  /* the Brief's readable cue list (the composer reads direction; the spine shows position) */
+  .cue-brief{border-left:2px solid var(--hair2);padding:2px 0 6px 12px;margin:8px 0}
+  .cue-brief-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .cue-dir{margin:3px 0 0;color:var(--dim);font-size:13px}
+  .cue-state{font:700 9px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--orange);
+    border:1px solid var(--hair2);border-radius:999px;padding:1px 7px}
+  .cue-state.ok{color:var(--slate)}
   .ember{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
     font:600 10.5px var(--mono);letter-spacing:.1em;color:var(--dim2)}
   .ember i{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:breath 2.2s ease-in-out infinite}
@@ -466,6 +473,22 @@
       {% endif %}
       <span>{{ ref.label }}</span>
       <span class="fname">from {{ ref.by }}{% if ref.at %} · {{ ref.at[:10] }}{% endif %}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if a.cues %}
+    <h3>Cues — the spots your music hits</h3>
+    <p class="fineprint" style="margin:0 0 6px">Each cue is a moment on the picture with its own direction. They're marked on the spine — click a cue there to jump to it.</p>
+    {% for c in a.cues %}
+    <div class="cue-brief">
+      <div class="cue-brief-top">
+        <b class="mono">{{ c.code }}</b>
+        <span>{{ c.name or 'Untitled' }}</span>
+        {% if c.t_in is not none %}<span class="mono fineprint">{{ '%d:%02d'|format((c.t_in/60)|int,(c.t_in%60)|int) }}{% if c.t_out is not none %}–{{ '%d:%02d'|format((c.t_out/60)|int,(c.t_out%60)|int) }}{% endif %}</span>{% endif %}
+        {% if c.state == 'approved' %}<span class="cue-state ok">approved</span>{% elif c.state != 'open' %}<span class="cue-state">{{ c.state }}</span>{% endif %}
+      </div>
+      {% if c.direction %}<p class="cue-dir">{{ c.direction }}</p>{% endif %}
+      {% if c.hits %}<p class="fineprint" style="margin:2px 0 0">Hits: {% for h in c.hits %}<span class="mono">◆ {% if h.t is not none %}{{ '%d:%02d'|format((h.t/60)|int,(h.t%60)|int) }}{% endif %}{% if h.name %} {{ h.name }}{% endif %}</span>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
     </div>
     {% endfor %}
     {% endif %}
