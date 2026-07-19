@@ -475,6 +475,71 @@
   {% endfor %}
 </section>
 
+<!-- THE CUE LAYER (Phase 3): the scoring cue list — Jon builds it, the composer scores it -->
+<section class="card" id="cues">
+  <div class="card-head"><h2>Cue list</h2>
+    <span class="muted small">{{ scoring_cues|length }} cue{{ 's' if scoring_cues|length != 1 }}
+      {%- set approved_cues = scoring_cues|selectattr('state','equalto','approved')|list %}
+      {% if scoring_cues %}· {{ approved_cues|length }}/{{ scoring_cues|length }} approved{% endif %}</span></div>
+  <p class="muted small" style="margin:0 0 10px">The spots the music must hit, in time. You define them; the composer scores against them; each cue is signed off one at a time — the machine never self-approves.</p>
+
+  {% for c in scoring_cues %}
+  <div class="cue-row" style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+      <b class="mono">{{ c.code }}</b>
+      <span>{{ c.name or 'Untitled cue' }}</span>
+      {% if c.t_in is not none %}<span class="mono muted small">{{ '%d:%02d'|format((c.t_in/60)|int,(c.t_in%60)|int) }}{% if c.t_out is not none %}–{{ '%d:%02d'|format((c.t_out/60)|int,(c.t_out%60)|int) }}{% endif %}</span>{% endif %}
+      <span class="pill" style="text-transform:uppercase;font-size:10px;letter-spacing:.06em;border:1px solid var(--border2);padding:1px 8px;border-radius:999px">{{ c.state }}</span>
+    </div>
+    {% if c.direction %}<p class="muted small" style="margin:4px 0 0">{{ c.direction }}</p>{% endif %}
+
+    {# hits inside this cue #}
+    {% if c.hits %}
+    <p class="muted small" style="margin:6px 0 2px">Hits:
+      {% for h in c.hits %}<span class="mono" style="margin-right:8px">◆ {% if h.t is not none %}{{ '%d:%02d'|format((h.t/60)|int,(h.t%60)|int) }}{% endif %}{% if h.name %} {{ h.name }}{% endif %}
+        <a class="link" href="#" onclick="this.nextElementSibling.submit();return false">×</a><form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/hit/{{ h.id }}/delete" style="display:none"></form></span>{% endfor %}</p>
+    {% endif %}
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+      {# state advance — the human presses each button (Constitution §4.1) #}
+      {% for s in cue_states %}
+      {% if s != c.state %}
+      <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/state" style="display:inline">
+        <input type="hidden" name="state" value="{{ s }}">
+        <button class="btn tiny" type="submit">{{ '✓ Approve' if s == 'approved' else 'Mark ' + s }}</button>
+      </form>
+      {% endif %}
+      {% endfor %}
+      <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/hit" style="display:inline-flex;gap:4px;align-items:center">
+        <input type="text" name="t" placeholder="0:06" style="width:52px;font-size:12px" class="mono">
+        <input type="text" name="name" placeholder="hit name" style="width:110px;font-size:12px">
+        <button class="btn tiny" type="submit">+ Hit</button>
+      </form>
+      <form method="post" action="/project/{{ project['id'] }}/delivery/cues/{{ c.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete cue {{ c.code }}?')">
+        <button class="btn tiny ghost" type="submit">Delete</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted small">No cues yet — add the first one below. Until then the composer scores to a single open canvas.</p>
+  {% endfor %}
+
+  {# conform surfacing: if a cut landed, name the cues it lands under #}
+  {% if delivery.get('picture') and scoring_cues %}
+  <p class="muted small" style="margin:10px 0 0;color:var(--accent)">↻ Cut {{ delivery['picture']['n'] }} is in the room — a re-cut under a scored cue is a <b>conform</b> (free), not a revision. Classify the client's resulting notes on the Versions card.</p>
+  {% endif %}
+
+  <form method="post" action="/project/{{ project['id'] }}/delivery/cues/add" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <input type="text" name="code" placeholder="m01" class="mono" style="width:52px;font-size:12px">
+    <input type="text" name="name" placeholder="Cue name (e.g. Held breath)" style="width:180px;font-size:12px">
+    <input type="text" name="t_in" placeholder="in 0:00" class="mono" style="width:64px;font-size:12px">
+    <input type="text" name="t_out" placeholder="out 0:14" class="mono" style="width:64px;font-size:12px">
+    <input type="text" name="direction" placeholder="direction (sparse, tense…)" style="width:200px;font-size:12px">
+    <button class="btn tiny" type="submit">+ Add cue</button>
+  </form>
+</section>
+
 <!-- DELIVERABLE ASSETS + UPLOAD CONTROLS -->
 <div class="cols-2">
   <section class="card" id="assets">

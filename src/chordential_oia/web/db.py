@@ -5015,7 +5015,25 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
 #
 # Cue shape:   {id, code, name, t_in, t_out, direction, state, approved_at}
 # Hit shape:   {id, t, name}  (stored on the owning cue as cue['hits'])
-_CUE_STATES = ("open", "take", "published", "approved")
+CUE_STATES = ("open", "take", "published", "approved")
+_CUE_STATES = CUE_STATES  # internal alias (kept for existing call sites)
+
+
+def cues_touched_by_cut(conn: sqlite3.Connection, project_id: int,
+                        cut_in=None, cut_out=None) -> list:
+    """Which cues a picture change lands under (Phase 3 conform surfacing:
+    'picture changed under m02'). With no window given, every cue is considered
+    touched (a whole-timeline recut). Returns the affected cue codes."""
+    ci, co = _num_or_none(cut_in), _num_or_none(cut_out)
+    out = []
+    for c in get_cues(conn, project_id):
+        ti = c.get("t_in") if c.get("t_in") is not None else 0.0
+        to = c.get("t_out") if c.get("t_out") is not None else ti
+        if ci is None or co is None:
+            out.append(c.get("code") or "")
+        elif not (to < ci or ti > co):        # spans overlap
+            out.append(c.get("code") or "")
+    return [code for code in out if code]
 
 
 def get_cues(conn: sqlite3.Connection, project_id: int) -> list:
@@ -5137,15 +5155,33 @@ def delete_hit(conn: sqlite3.Connection, project_id: int, cue_id: int,
 
 
 def _num_or_none(v):
-    """Parse a timecode-ish value to a non-negative finite float, else None."""
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
+    """Parse a timecode to a non-negative finite float (seconds), else None.
+
+    Accepts raw seconds ("14", "14.5") and clock form ("0:14", "1:23", "1:02:03")
+    so the operator can type cues the way they read a timeline."""
+    if v is None:
         return None
     import math as _m
-    if not _m.isfinite(f) or f < 0:
+    s = str(v).strip()
+    if not s:
         return None
-    return f
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            nums = [float(p) for p in parts]
+        except ValueError:
+            return None
+        secs = 0.0
+        for p in nums:                       # h:m:s or m:s, left-to-right
+            secs = secs * 60 + p
+    else:
+        try:
+            secs = float(s)
+        except ValueError:
+            return None
+    if not _m.isfinite(secs) or secs < 0:
+        return None
+    return secs
 
 
 def _utc_now_iso() -> str:

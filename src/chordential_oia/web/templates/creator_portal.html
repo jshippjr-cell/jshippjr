@@ -117,6 +117,22 @@
     border:2px solid var(--ink);z-index:2;background:var(--wine);cursor:pointer;padding:0}
   .pin::after{content:"";position:absolute;inset:-8px}  /* 27px touch target, invisible */
   .pin.resolved{opacity:.28}
+  /* ── the cue lane (Phase 3) ── regions + hit diamonds, state as border weight */
+  .lane.sr-lane-cues{height:38px;background:linear-gradient(180deg,rgba(139,160,174,.05),transparent)}
+  /* the cue regions self-identify (m01 · Held breath); the generic lane label would
+     collide with the first region's code, so it's hidden on this lane */
+  .lane.sr-lane-cues>.lane-label{display:none}
+  .cue-region{position:absolute;top:6px;bottom:6px;border:1px solid var(--slate);border-radius:5px;
+    background:rgba(139,160,174,.10);cursor:pointer;overflow:hidden;min-width:2px;z-index:1}
+  .cue-region.st-take{border-width:1.5px;background:rgba(240,119,44,.09);border-color:var(--orange)}
+  .cue-region.st-published{border-width:2px;background:rgba(240,119,44,.14);border-color:var(--orange)}
+  .cue-region.st-approved{border-width:2px;border-style:solid;border-color:var(--slate);background:rgba(139,160,174,.18)}
+  .cue-region.st-approved::after{content:"✓";position:absolute;right:3px;top:1px;font-size:9px;color:var(--slate)}
+  .cue-code{position:absolute;left:4px;top:50%;transform:translateY(-50%);font:700 9px var(--mono);
+    letter-spacing:.02em;color:var(--dim);white-space:nowrap;pointer-events:none}
+  .hit-diamond{position:absolute;top:50%;width:8px;height:8px;transform:translate(-50%,-50%) rotate(45deg);
+    background:var(--orange);border:1px solid var(--ink);cursor:pointer;z-index:2}
+  .hit-diamond::after{content:"";position:absolute;inset:-7px}  /* touch target */
   .ember{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
     font:600 10.5px var(--mono);letter-spacing:.1em;color:var(--dim2)}
   .ember i{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:breath 2.2s ease-in-out infinite}
@@ -370,6 +386,7 @@
 
   <!-- the spine -->
   <div class="spine sr-spine">
+    {% if a.cues %}<div class="lane sr-lane-cues"><span class="lane-label">Cues</span></div>{% endif %}
     <div class="lane sr-lane-notes"><span class="lane-label">Notes</span></div>
     <div class="lane music">
       <span class="lane-label">Music</span>
@@ -607,6 +624,13 @@
       {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "kind": "{{ n.kind }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
+
+  <script type="application/json" class="sr-cues-data">
+    [{% for c in a.cues %}
+      {"code": {{ c.code|tojson }}, "name": {{ (c.name or '')|tojson }}, "t_in": {{ c.t_in if c.t_in is not none else 'null' }}, "t_out": {{ c.t_out if c.t_out is not none else 'null' }}, "state": {{ c.state|tojson }}, "direction": {{ (c.direction or '')|tojson }},
+       "hits": [{% for h in c.hits or [] %}{"t": {{ h.t if h.t is not none else 'null' }}, "name": {{ (h.name or '')|tojson }}}{{ "," if not loop.last }}{% endfor %}]}{{ "," if not loop.last }}
+    {% endfor %}]
+  </script>
 </div>
 {% endfor %}
 
@@ -650,12 +674,15 @@
         spine = root.querySelector(".sr-spine"),
         playhead = root.querySelector(".sr-playhead"),
         noteLane = root.querySelector(".sr-lane-notes"),
+        cueLane = root.querySelector(".sr-lane-cues"),
         waveCv = root.querySelector(".sr-wave"),
         whisperEl = root.querySelector(".sr-whisper"),
         chips = root.querySelectorAll(".sr-take");
 
     var notes = [];
     try { notes = JSON.parse(root.querySelector(".sr-notes-data").textContent) || []; } catch(e){}
+    var cues = [];
+    try { cues = JSON.parse(root.querySelector(".sr-cues-data").textContent) || []; } catch(e){}
 
     // Phase 2: when the client's cut exists, the VIDEO is the room's master
     // clock — timecode, playhead, and pins address the picture; the take audio
@@ -795,13 +822,64 @@
         noteLane.appendChild(pin);
       });
     }
+    // The whisper is the room's one voice — set its text + un-rest it briefly.
+    var whisperTextEl = whisperEl ? whisperEl.querySelector("span:last-child") : null;
+    function whisper(text){
+      if (!whisperTextEl) return;
+      whisperTextEl.textContent = text;
+      whisperEl.classList.remove("rested");
+      clearTimeout(whisper._t);
+      whisper._t = setTimeout(function(){ whisperEl.classList.add("rested"); }, 4000);
+    }
+    // Cue regions + hit diamonds (Phase 3). Anchored to the master duration D so
+    // they line up with the picture and the playhead. Read-only: click seeks.
+    function renderCues(){
+      if (!cueLane) return;
+      cueLane.querySelectorAll(".cue-region,.hit-diamond").forEach(function(x){ x.remove(); });
+      var D = mDur();
+      if (!D || !cues.length) return;
+      cues.forEach(function(c){
+        var ti = (c.t_in == null ? 0 : c.t_in);
+        var to = (c.t_out == null ? ti : c.t_out);
+        if (ti > D) return;                       // a cue past this cut can't be placed honestly
+        to = Math.min(to, D);
+        var reg = document.createElement("div");
+        reg.className = "cue-region st-" + (c.state || "open");
+        reg.style.left = (ti / D * 100) + "%";
+        reg.style.width = Math.max(0.6, (to - ti) / D * 100) + "%";
+        var label = c.code + (c.name ? " · " + c.name : "");
+        reg.title = label + (c.direction ? " — " + c.direction : "") + "  [" + (c.state || "open") + "]";
+        var codeEl = document.createElement("span");
+        codeEl.className = "cue-code"; codeEl.textContent = c.code;
+        reg.appendChild(codeEl);
+        reg.addEventListener("click", function(e){
+          e.stopPropagation(); seek(ti);
+          whisper(label + (c.direction ? " — " + c.direction : ""));
+        });
+        cueLane.appendChild(reg);
+        (c.hits || []).forEach(function(h){
+          if (h.t == null || h.t > D) return;
+          var d = document.createElement("div");
+          d.className = "hit-diamond";
+          d.style.left = (h.t / D * 100) + "%";
+          d.title = "Hit" + (h.name ? " · " + h.name : "") + " @ " + tcFmt(h.t);
+          d.addEventListener("click", function(e){
+            e.stopPropagation(); seek(h.t);
+            if (hasPicture && video){ stage.classList.add("hit-flash");
+              setTimeout(function(){ stage.classList.remove("hit-flash"); }, 320); }
+            whisper("Hit" + (h.name ? " · " + h.name : ""));
+          });
+          cueLane.appendChild(d);
+        });
+      });
+    }
     function update(){
       var t = mTime(), D = mDur();
       playhead.style.left = (D ? Math.min(100, t / D * 100) : 0) + "%";
       tcEl.textContent = tcFmt(t);
       drawWave();
     }
-    audio.addEventListener("loadedmetadata", function(){ dur = audio.duration || 0; renderPins(); update(); });
+    audio.addEventListener("loadedmetadata", function(){ dur = audio.duration || 0; renderPins(); renderCues(); update(); });
     audio.addEventListener("timeupdate", update);
     audio.addEventListener("play", function(){
       // with picture, the video owns the transport chrome — the take is a follower
@@ -869,7 +947,7 @@
       audio.currentTime = Math.max(0, Math.min(dur, t)); update();
     }
     if (hasPicture){
-      video.addEventListener("loadedmetadata", function(){ renderPins(); update(); });
+      video.addEventListener("loadedmetadata", function(){ renderPins(); renderCues(); update(); });
       video.addEventListener("play", function(){
         stage.classList.add("playing"); playBtn.textContent = "❚❚";
         decodePeaks(); syncAudio(); loop();
@@ -893,7 +971,7 @@
           poster.className = "sr-poster";
           stage.insertBefore(poster, stage.firstChild);
         }
-        drawPoster(); renderPins(); update();
+        drawPoster(); renderPins(); renderCues(); update();
       });
       var cutBtn = root.querySelector(".sr-cutaudio");
       if (cutBtn) cutBtn.addEventListener("click", function(){

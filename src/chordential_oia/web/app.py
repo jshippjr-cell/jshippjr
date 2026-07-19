@@ -5164,6 +5164,9 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             # Phase 2 — the picture + references + conform marking
             "picture": delivery.get("picture") or None,
             "references": list(delivery.get("references") or []),
+            # Phase 3 — the Cue Layer: cue regions + hit diamonds on the spine.
+            # Read-only for the composer (Jon owns the cue list); they score to it.
+            "cues": db.get_cues(conn, a["project_id"]),
         })
     # Needs-me-first (composer review P1): rooms owing the composer work come
     # before in-motion rooms; delivered rooms sink to the bottom.
@@ -6028,6 +6031,11 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # so the browser doc and the ZIP doc can't drift on legally-material copy.
         "content_id_honest": CONTENT_ID_HONEST,
         "cues": cues,
+        # The Cue Layer (Phase 3): the scoring cue list + hits + per-cue state.
+        # Distinct from ``cues`` (the licensing cue SHEET above) — this is the
+        # timed, scoreable spine the composer works against.
+        "scoring_cues": db.get_cues(conn, project_id),
+        "cue_states": db.CUE_STATES,
         "manifest": manifest,
         "revisions": revisions,
         "license": cert.license,
@@ -6536,6 +6544,87 @@ def delivery_set_cue_meta(
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
+
+
+# ── The Cue Layer (Phase 3) — operator doors. "The machine proposes, Jon ──────
+# disposes": Jon builds the cue list + hits; the composer scores against it; per-cue
+# approval maps onto the same human-pressed sign-off as deliverables. Namespaced
+# under /delivery/cues/… to stay clear of the legacy /delivery/cue metadata route.
+@app.post("/project/{project_id}/delivery/cues/add")
+def delivery_cue_add(project_id: int, code: str = Form(""), name: str = Form(""),
+                     t_in: str = Form(""), t_out: str = Form(""),
+                     direction: str = Form("")):
+    """Add a scoring cue (a named, timed span the composer scores)."""
+    conn = db.connect()
+    try:
+        if db.get_project(conn, project_id) is None:
+            return HTMLResponse("Project not found", status_code=404)
+        db.add_cue(conn, project_id, code=code, name=name, t_in=t_in, t_out=t_out,
+                   direction=direction)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cues/{cue_id}/state")
+def delivery_cue_state(project_id: int, cue_id: int, state: str = Form("")):
+    """Advance/reset a cue's state (open|take|published|approved). Approving a cue
+    is a human decision (Constitution §4.1) — the machine never self-approves."""
+    conn = db.connect()
+    try:
+        db.set_cue_state(conn, project_id, cue_id, (state or "").strip())
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cues/{cue_id}/edit")
+def delivery_cue_edit(project_id: int, cue_id: int, code: str = Form(""),
+                      name: str = Form(""), t_in: str = Form(""),
+                      t_out: str = Form(""), direction: str = Form("")):
+    """Edit a cue's label/timing/direction in place."""
+    conn = db.connect()
+    try:
+        db.update_cue(conn, project_id, cue_id, code=(code or "").strip(),
+                      name=(name or "").strip(), t_in=t_in, t_out=t_out,
+                      direction=(direction or "").strip())
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cues/{cue_id}/delete")
+def delivery_cue_delete(project_id: int, cue_id: int):
+    """Remove a cue."""
+    conn = db.connect()
+    try:
+        db.delete_cue(conn, project_id, cue_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cues/{cue_id}/hit")
+def delivery_cue_hit_add(project_id: int, cue_id: int, t: str = Form(""),
+                         name: str = Form("")):
+    """Add a hit (a moment the music must honor) inside a cue."""
+    conn = db.connect()
+    try:
+        db.add_hit(conn, project_id, cue_id, t=t, name=name)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
+
+
+@app.post("/project/{project_id}/delivery/cues/{cue_id}/hit/{hit_id}/delete")
+def delivery_cue_hit_delete(project_id: int, cue_id: int, hit_id: int):
+    """Remove a hit from a cue."""
+    conn = db.connect()
+    try:
+        db.delete_hit(conn, project_id, cue_id, hit_id)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#cues", status_code=303)
 
 
 @app.post("/project/{project_id}/delivery/revision")
