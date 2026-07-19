@@ -5169,6 +5169,8 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             # Phase 3 — the Cue Layer: cue regions + hit diamonds on the spine.
             # Read-only for the composer (Jon owns the cue list); they score to it.
             "cues": db.get_cues(conn, a["project_id"]),
+            # Phase 4 §13 — the private Capture shelf (composer + studio only).
+            "captures": db.get_captures(conn, a["project_id"]),
         })
     # Needs-me-first (composer review P1): rooms owing the composer work come
     # before in-motion rooms; delivered rooms sink to the bottom.
@@ -5267,6 +5269,29 @@ async def creator_reply_note(request: Request, token: str, project_id: int,
     # keeps their playhead + open sheet (the flow the composer review flagged).
     if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
         return JSONResponse({"ok": bool(who), "author": who, "body": text if who else ""})
+    return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
+
+
+@app.post("/creator/{token}/project/{project_id}/capture")
+def creator_capture(request: Request, token: str, project_id: int,
+                    text: str = Form("")):
+    """Capture (Phase 4 §13): the composer jots an idea/motif to the room's private
+    shelf — timestamped, composer + studio only, NEVER shown to the client."""
+    conn = db.connect()
+    entry = None
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not db.talent_is_assigned(conn, row["id"], project_id):
+            return HTMLResponse("Not assigned to this project", status_code=403)
+        entry = db.add_capture(conn, project_id, text, by=row["name"])
+    finally:
+        conn.close()
+    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
+        return JSONResponse({"ok": bool(entry),
+                             "text": entry["text"] if entry else "",
+                             "at": entry["at"] if entry else ""})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)
 
 

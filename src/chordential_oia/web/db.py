@@ -5194,6 +5194,31 @@ def delete_hit(conn: sqlite3.Connection, project_id: int, cue_id: int,
     return box["ok"]
 
 
+def add_capture(conn: sqlite3.Connection, project_id: int, text: str,
+                by: str = "") -> Optional[dict]:
+    """Append a private composer capture (Phase 4 §13): a jotted idea/motif that
+    lands on the room's own shelf, timestamped. Stored on
+    ``delivery_json['composer_shelf']`` — the composer + studio see it; it is NEVER
+    rendered on the client portal (the private-shelf promise). Returns the entry."""
+    body = (text or "").strip()[:600]
+    if not body:
+        return None
+    delivery = get_delivery(conn, project_id)
+    shelf = list(delivery.get("composer_shelf") or [])
+    entry = {"id": (max((int(e.get("id") or 0) for e in shelf), default=0) + 1),
+             "text": body, "by": (by or "").strip(), "at": _utc_now_iso()}
+    shelf.append(entry)
+    update_delivery(conn, project_id, "composer_shelf", shelf)
+    return entry
+
+
+def get_captures(conn: sqlite3.Connection, project_id: int) -> list:
+    """The room's private composer shelf (newest first), or []."""
+    shelf = list(get_delivery(conn, project_id).get("composer_shelf") or [])
+    shelf.reverse()
+    return shelf
+
+
 def cue_for_time(cues: list, t) -> Optional[str]:
     """The code of the cue a timecode falls under (or None) — ties a client's
     timecoded note to the cue it lands in, so conform classification is anchored

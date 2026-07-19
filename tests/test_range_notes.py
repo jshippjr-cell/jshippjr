@@ -82,3 +82,32 @@ def test_no_t_end_is_a_plain_point_note(ctx):
                        "WHERE project_id=? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
     conn.close()
     assert row["t_end"] is None
+
+
+def test_capture_shelf_is_private_to_composer(ctx):
+    """Phase 4 §13: a captured idea shows in the composer room + persists, but is
+    NEVER rendered on the client portal (the private-shelf promise)."""
+    client, db_mod, _ = ctx
+    pid, tok, share = _setup(db_mod)
+    secret = "SECRETMOTIF_rising_fifth"
+    r = client.post(f"/creator/{tok}/project/{pid}/capture",
+                    data={"text": secret},
+                    headers={"X-Requested-With": "fetch"}, follow_redirects=False)
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert secret in client.get(f"/creator/{tok}").text
+    assert secret not in client.get(f"/project/{pid}/delivery-portal?k={share}").text
+    # persisted on the shelf
+    conn = db_mod.connect()
+    caps = db_mod.get_captures(conn, pid)
+    conn.close()
+    assert len(caps) == 1 and caps[0]["text"] == secret
+
+
+def test_empty_capture_is_ignored(ctx):
+    client, db_mod, _ = ctx
+    pid, tok, share = _setup(db_mod)
+    client.post(f"/creator/{tok}/project/{pid}/capture", data={"text": "   "},
+                headers={"X-Requested-With": "fetch"}, follow_redirects=False)
+    conn = db_mod.connect()
+    assert db_mod.get_captures(conn, pid) == []
+    conn.close()
