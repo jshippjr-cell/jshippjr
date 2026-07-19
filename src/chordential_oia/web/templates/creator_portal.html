@@ -42,6 +42,31 @@
   @media (prefers-reduced-motion:reduce){
     .room>.doorline,.room>.stage,.room>.spine,.room>.transport{animation-duration:.01ms}}
 
+  /* ── Arrival (Phase 4, §Act 1): house-lights-up, once per engagement ── */
+  .sr-arrival{position:fixed;inset:0;z-index:100;background:var(--ink,#0d0c0b);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    text-align:center;padding:24px;opacity:1;transition:opacity 1.2s var(--ease)}
+  .sr-arrival.lifting{opacity:0;pointer-events:none}
+  .sr-arrival-line{font-family:var(--serif);font-size:clamp(20px,3.4vw,30px);line-height:1.5;
+    color:var(--text);max-width:22ch;opacity:0;animation:arr-in 1.1s var(--ease) .5s forwards}
+  .sr-arrival-sub{font:600 10.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim2);opacity:0;animation:arr-in 1s var(--ease) .3s forwards}
+  .sr-begin{font:700 12px var(--sans);letter-spacing:.06em;color:var(--ink,#0d0c0b);
+    background:var(--orange);border:0;border-radius:9px;padding:12px 30px;cursor:pointer;
+    opacity:0;animation:arr-in 1s var(--ease) 1.1s forwards}
+  .sr-begin:hover{filter:brightness(1.08)}
+  .sr-skip{position:absolute;right:20px;bottom:18px;background:none;border:0;cursor:pointer;
+    font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);
+    opacity:0;animation:arr-in 1s var(--ease) 1.4s forwards}
+  @keyframes arr-in{to{opacity:1}}
+  /* the spine draws itself left-to-right once, when arrival lifts */
+  .sr-spine.drawing{clip-path:inset(0 100% 0 0);animation:spine-draw 1.4s var(--ease) forwards}
+  @keyframes spine-draw{to{clip-path:inset(0 0 0 0)}}
+  @media (prefers-reduced-motion:reduce){
+    .sr-arrival-line,.sr-arrival-sub,.sr-begin,.sr-skip{animation-duration:.01ms}
+    .sr-arrival{transition-duration:.01ms}
+    .sr-spine.drawing{animation:none;clip-path:none}}
+
   /* the instrument voice — monospace, tabular figures (spec §219). Used for cue
      codes + timecodes in the Brief; the class was referenced but never defined. */
   .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -666,6 +691,15 @@
   </script>
 </div>
 {% endfor %}
+
+{# Arrival (Phase 4 §Act 1): the once-per-engagement house-lights sequence. Rendered
+   hidden; JS shows it only for a fresh, un-arrived, open room (localStorage-gated). #}
+<div class="sr-arrival" id="sr-arrival" hidden>
+  <div class="sr-arrival-sub">Chordential · Session Room</div>
+  <div class="sr-arrival-line">Everything is ready.<br>This room is waiting for your music.</div>
+  <button class="sr-begin" type="button" id="sr-begin">Begin</button>
+  <button class="sr-skip" type="button" id="sr-skip">Skip intro</button>
+</div>
 
 <div class="veil" id="veil"></div>
 <div class="dropveil" id="dropveil">
@@ -1323,6 +1357,37 @@
       });
     });
   });
+
+  // ── Arrival (Phase 4 §Act 1): house-lights-up, once per engagement ──
+  (function(){
+    var arr = document.getElementById("sr-arrival");
+    if (!arr) return;
+    // the first open (not-closed) room is the one we dress; closed rooms never arrive
+    var room = document.querySelector(".sr-room:not([data-closed])");
+    if (!room){ arr.remove(); return; }
+    var key = "chordos_arrived_" + room.id;
+    var already;
+    try { already = window.localStorage.getItem(key); } catch(e){ already = "1"; }
+    // ?arrive=1 forces a replay (demo/testing); otherwise show once
+    var force = /[?&]arrive=1/.test(window.location.search);
+    if (already && !force){ arr.remove(); return; }
+    arr.hidden = false;
+    var spine = room.querySelector(".sr-spine");
+    if (spine) spine.classList.add("drawing");
+    function begin(){
+      if (arr.classList.contains("lifting")) return;
+      arr.classList.add("lifting");
+      try { window.localStorage.setItem(key, "1"); } catch(e){}
+      setTimeout(function(){ if (arr && arr.parentNode) arr.remove(); }, 1300);
+    }
+    document.getElementById("sr-begin").addEventListener("click", begin);
+    document.getElementById("sr-skip").addEventListener("click", begin);
+    // skippable with any key (spec) — capture-phase so it beats the room shortcuts
+    document.addEventListener("keydown", function onk(e){
+      if (arr.classList.contains("lifting")) { document.removeEventListener("keydown", onk, true); return; }
+      begin(); document.removeEventListener("keydown", onk, true);
+    }, true);
+  })();
 })();
 </script>
 </body>
