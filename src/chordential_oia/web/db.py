@@ -5004,6 +5004,155 @@ def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) 
     return delivery
 
 
+# --------------------------------------------------------------------------- #
+# The Cue Layer (Phase 3, ADR-0027) — cues + hits as a per-project list on
+# delivery_json['cues'], mirroring the references/pending_assets blob pattern
+# (CLAUDE.md: "mirror this for new per-record editable state"). A cue is a named,
+# timed span the composer scores; a hit is a moment inside the picture the music
+# must honor. Cues carry their own state (open → take → published → approved) and
+# map to the existing per-deliverable approval. Fail-soft: no cues → the room is
+# the audio-and-notes room, unchanged.
+#
+# Cue shape:   {id, code, name, t_in, t_out, direction, state, approved_at}
+# Hit shape:   {id, t, name}  (stored on the owning cue as cue['hits'])
+_CUE_STATES = ("open", "take", "published", "approved")
+
+
+def get_cues(conn: sqlite3.Connection, project_id: int) -> list:
+    """The project's cue list (time-sorted), or [] — never raises."""
+    cues = list(get_delivery(conn, project_id).get("cues") or [])
+    cues.sort(key=lambda c: (c.get("t_in") if c.get("t_in") is not None else 1e9))
+    return cues
+
+
+def _next_cue_id(cues: list) -> int:
+    return (max((int(c.get("id") or 0) for c in cues), default=0) + 1)
+
+
+def add_cue(conn: sqlite3.Connection, project_id: int, *, code: str = "",
+            name: str = "", t_in=None, t_out=None, direction: str = "") -> dict:
+    """Append a cue. ``code`` defaults to m01/m02… by position. Returns the cue."""
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    cue = {
+        "id": _next_cue_id(cues),
+        "code": (code or "").strip() or f"m{len(cues) + 1:02d}",
+        "name": (name or "").strip(),
+        "t_in": _num_or_none(t_in),
+        "t_out": _num_or_none(t_out),
+        "direction": (direction or "").strip(),
+        "state": "open",
+        "hits": [],
+    }
+    cues.append(cue)
+    update_delivery(conn, project_id, "cues", cues)
+    return cue
+
+
+def update_cue(conn: sqlite3.Connection, project_id: int, cue_id: int,
+               **fields) -> Optional[dict]:
+    """Merge fields into one cue (by id). Returns the cue, or None if not found."""
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    hit = None
+    for c in cues:
+        if int(c.get("id") or 0) == int(cue_id):
+            for k, v in fields.items():
+                if k in ("t_in", "t_out"):
+                    v = _num_or_none(v)
+                c[k] = v
+            hit = c
+            break
+    if hit is None:
+        return None
+    update_delivery(conn, project_id, "cues", cues)
+    return hit
+
+
+def set_cue_state(conn: sqlite3.Connection, project_id: int, cue_id: int,
+                  state: str) -> Optional[dict]:
+    """Advance/reset a cue's state (open|take|published|approved). Stamps
+    ``approved_at`` when it lands on approved (cleared otherwise). Project-scoped."""
+    if state not in _CUE_STATES:
+        return None
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    found = None
+    for c in cues:
+        if int(c.get("id") or 0) == int(cue_id):
+            c["state"] = state
+            c["approved_at"] = _utc_now_iso() if state == "approved" else None
+            found = c
+            break
+    if found is None:
+        return None
+    update_delivery(conn, project_id, "cues", cues)
+    return found
+
+
+def delete_cue(conn: sqlite3.Connection, project_id: int, cue_id: int) -> bool:
+    """Remove a cue by id. Returns True if one was removed."""
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    kept = [c for c in cues if int(c.get("id") or 0) != int(cue_id)]
+    if len(kept) == len(cues):
+        return False
+    update_delivery(conn, project_id, "cues", kept)
+    return True
+
+
+def add_hit(conn: sqlite3.Connection, project_id: int, cue_id: int, *,
+            t=None, name: str = "") -> Optional[dict]:
+    """Add a hit (a moment the music must honor) to a cue. Returns the hit."""
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    for c in cues:
+        if int(c.get("id") or 0) == int(cue_id):
+            hits = list(c.get("hits") or [])
+            hit = {"id": (max((int(h.get("id") or 0) for h in hits), default=0) + 1),
+                   "t": _num_or_none(t), "name": (name or "").strip()}
+            hits.append(hit)
+            hits.sort(key=lambda h: (h.get("t") if h.get("t") is not None else 1e9))
+            c["hits"] = hits
+            update_delivery(conn, project_id, "cues", cues)
+            return hit
+    return None
+
+
+def delete_hit(conn: sqlite3.Connection, project_id: int, cue_id: int,
+               hit_id: int) -> bool:
+    """Remove a hit from a cue. Returns True if one was removed."""
+    delivery = get_delivery(conn, project_id)
+    cues = list(delivery.get("cues") or [])
+    for c in cues:
+        if int(c.get("id") or 0) == int(cue_id):
+            hits = list(c.get("hits") or [])
+            kept = [h for h in hits if int(h.get("id") or 0) != int(hit_id)]
+            if len(kept) == len(hits):
+                return False
+            c["hits"] = kept
+            update_delivery(conn, project_id, "cues", cues)
+            return True
+    return False
+
+
+def _num_or_none(v):
+    """Parse a timecode-ish value to a non-negative finite float, else None."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    import math as _m
+    if not _m.isfinite(f) or f < 0:
+        return None
+    return f
+
+
+def _utc_now_iso() -> str:
+    from datetime import datetime as _dt, timezone as _tz
+    return _dt.now(_tz.utc).isoformat()
+
+
 def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
