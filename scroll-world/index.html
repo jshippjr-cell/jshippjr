@@ -141,6 +141,7 @@ SCENES.forEach((s,i)=>{
 sw.style.height = (SCENES.length*DWELL*100)+'vh';
 const figs=[...scenesEl.children], copies=[...copyEl.children], dots=[...railEl.children];
 const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const DIVE = new URLSearchParams(location.search).get('dive')==='1'; // ?dive=1 → simulate the camera fly-in (free preview)
 
 let target=0, cur=0, ticking=false;
 function onScroll(){ if(!ticking){ticking=true;requestAnimationFrame(update);} }
@@ -158,9 +159,15 @@ function update(){
     fig.style.opacity=zone(d).toFixed(3);   // hold crisp, cross quickly
     if(!reduce){
       const img=fig.firstChild;
-      const scale=1.03+0.05*(1-Math.min(1,d)); // subtle ken-burns toward center
-      const drift=(fpos-i)*-16;
-      img.style.transform=`scale(${scale}) translateY(${drift}px)`;
+      if(DIVE){
+        const t=Math.max(0,Math.min(1,(fpos-i)+0.5)); // 0→1 across this scene's dwell
+        const scale=1.02+0.62*t;                       // fly IN: wide → deep inside
+        img.style.transform=`scale(${scale.toFixed(3)})`;
+      } else {
+        const scale=1.03+0.05*(1-Math.min(1,d));       // subtle ken-burns
+        const drift=(fpos-i)*-16;
+        img.style.transform=`scale(${scale}) translateY(${drift}px)`;
+      }
     }
   });
   copies.forEach((c,i)=>{
