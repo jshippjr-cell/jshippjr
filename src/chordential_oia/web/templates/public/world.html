@@ -19,6 +19,9 @@
   --sw-font-display: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
 }
 html,body{margin:0;background:var(--sw-bg)}
+/* small screens: the copy block runs tall — drop the scroll hint so it never
+   collides with the tag pills (the first flick dismisses it anyway) */
+@media (max-width: 640px){ .sw-root .sw-hint{ display:none } }
 </style>
 </head>
 <body>
