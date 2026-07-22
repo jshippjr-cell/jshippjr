@@ -76,6 +76,7 @@ where = ["src"]
     "static/public/*.pdf",
     "static/public/img/*.jpg",
     "static/public/img/*.png",
+    "static/public/world/*",
 ]
 
 [tool.pytest.ini_options]

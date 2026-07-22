@@ -59,6 +59,19 @@ def test_experience_film_still_lives_at_its_route(client):
     assert "AURORA_Anthem_60_MASTER_v3_FINAL" in page  # the film, untouched
 
 
+def test_world_assets_are_packaged(client):
+    """Package-data uses per-directory globs; a new static subdirectory ships to
+    prod ONLY if pyproject covers it. The world/ dir 404'd in prod exactly this
+    way — this pins the pattern so it can't silently regress."""
+    import tomllib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    data = tomllib.loads((root / "pyproject.toml").read_text())
+    patterns = data["tool"]["setuptools"]["package-data"]["chordential_oia.web"]
+    assert any(p.startswith("static/public/world/") for p in patterns), (
+        "static/public/world/* missing from package-data — prod will 404 the world assets"
+    )
+
+
 def test_world_assets_exist_and_are_served(client):
     # on disk (a missing render must fail loudly, not 404 silently in prod)
     for name in ["scrub-engine.js"] + [f"leg{i}.mp4" for i in range(1, 6)] \
