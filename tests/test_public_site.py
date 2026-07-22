@@ -25,12 +25,15 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_public_home_is_the_experience(client):
-    # The front door IS the Chordential Experience film — promise + invitation.
+def test_public_home_is_the_world(client):
+    # The front door is the World — the scroll-scrubbed client journey ending
+    # at the intake. The Experience film lives on at /experience.
     r = client.get("/")
     assert r.status_code == 200
-    assert "Original music." in r.text and "Ready for campaign." in r.text
-    assert "Begin a session" in r.text and "/start" in r.text
+    assert "mountScrollWorld" in r.text
+    assert "Start your brief" in r.text and "/start" in r.text
+    exp = client.get("/experience")
+    assert exp.status_code == 200 and "Original music." in exp.text
 
 
 def test_public_home_at_root(client):
@@ -69,16 +72,18 @@ def test_samples_page_renders_capability_demos(client):
 
 
 def test_home_work_is_truthful_capability_demonstrations(client):
-    # The front door must not imply delivered client engagements — the reel is
-    # ten fictional creative scenarios, framed as capability demonstrations.
+    # The front door must not imply delivered client engagements. The World
+    # tells the process story only; the honesty line ships with the Session
+    # scene. The reel's capability-demonstration framing lives at /experience.
     r = client.get("/")
     assert r.status_code == 200
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
         assert past_claim not in r.text
-    assert "Capability demonstration" in r.text
-    # Honest demo branding only (invented brands, never real trademarks).
-    assert "AURORA" in r.text and "VANCE_HOLIDAY_2026/" in r.text
+    assert "never AI-generated audio" in r.text
+    exp = client.get("/experience").text
+    assert "Capability demonstration" in exp
+    assert "AURORA" in exp and "VANCE_HOLIDAY_2026/" in exp
 
 
 def test_delivery_sample_page(client):
