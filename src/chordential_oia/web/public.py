@@ -123,10 +123,12 @@ def _validate_lead_contact(email: str, phone: str, linkedin: str):
 
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
-    """The front door IS the Chordential Experience — the client-facing film
-    (docs/design/chordential-experience-final-cut.md). The brochure homepage
-    retired when the film passed its ship gate; /start remains the intake."""
-    return render(request, "public/experience.html", active="home")
+    """The front door is the World — a scroll-scrubbed camera flight through the
+    client journey (brief → estimate → session → clearance → delivery) over the
+    handcrafted-world film, sliced into frame-locked legs and driven by the
+    scroll-world scrub engine. The Experience film remains at /experience;
+    /start remains the intake."""
+    return render(request, "public/world.html", active="home")
 
 
 @router.get("/capabilities", response_class=HTMLResponse)
