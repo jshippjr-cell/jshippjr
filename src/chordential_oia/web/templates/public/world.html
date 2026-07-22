@@ -25,7 +25,7 @@ html,body{margin:0;background:var(--sw-bg)}
 <div id="top"></div>
 <div id="world"></div>
 
-<script src="/static/public/world/scrub-engine.js"></script>
+<script src="/static/public/world/scrub-engine.js?v={{ asset_v }}"></script>
 <script>
 /* h264 is the shipping codec; a browser without it (rare) gets the VP9 webm twins */
 var H264 = document.createElement('video').canPlayType('video/mp4; codecs="avc1.64001f"');
