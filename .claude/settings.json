@@ -5,7 +5,8 @@
       "Bash(python:*)",
       "Bash(python3:*)",
       "Bash(pip install:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "mcp__Higgsfiled"
     ]
   }
 }
