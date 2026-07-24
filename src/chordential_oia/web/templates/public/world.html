@@ -32,7 +32,9 @@ html,body{margin:0;background:var(--sw-bg)}
 <script>
 /* h264 is the shipping codec; a browser without it (rare) gets the VP9 webm twins */
 var H264 = document.createElement('video').canPlayType('video/mp4; codecs="avc1.64001f"');
-function CLIP(n){ return '/static/public/world/leg' + n + (H264 ? '.mp4' : '.webm'); }
+var V = '?v={{ asset_v }}';   /* cache-buster: new film releases must not serve stale */
+function CLIP(n){ return '/static/public/world/leg' + n + (H264 ? '.mp4' : '.webm') + V; }
+function STILL(n){ return '/static/public/world/still' + n + '.jpg' + V; }
 mountScrollWorld(document.getElementById('world'), {
   brand: { name: 'Chordential', href: '#top' },
   hint: 'scroll to begin the score',
@@ -42,9 +44,9 @@ mountScrollWorld(document.getElementById('world'), {
   sections: [
     {
       id: 'brief', label: 'The Brief',
-      still: '/static/public/world/still1.jpg',
+      still: STILL(1),
       clip:  CLIP(1),
-      clipMobile: H264 ? '/static/public/world/leg1-m.mp4' : undefined,
+      clipMobile: H264 ? '/static/public/world/leg1-m.mp4' + V : undefined,
       accent: '#B87B33',
       scroll: 1.6, linger: 0.35,
       eyebrow: 'Measure 01 · The Brief',
@@ -54,9 +56,9 @@ mountScrollWorld(document.getElementById('world'), {
     },
     {
       id: 'estimate', label: 'The Number',
-      still: '/static/public/world/still2.jpg',
+      still: STILL(2),
       clip:  CLIP(2),
-      clipMobile: H264 ? '/static/public/world/leg2-m.mp4' : undefined,
+      clipMobile: H264 ? '/static/public/world/leg2-m.mp4' + V : undefined,
       accent: '#5A7A96',
       eyebrow: 'Measure 02 · The Estimate',
       title: 'A number you can take to procurement.',
@@ -65,9 +67,9 @@ mountScrollWorld(document.getElementById('world'), {
     },
     {
       id: 'session', label: 'The Session',
-      still: '/static/public/world/still3.jpg',
+      still: STILL(3),
       clip:  CLIP(3),
-      clipMobile: H264 ? '/static/public/world/leg3-m.mp4' : undefined,
+      clipMobile: H264 ? '/static/public/world/leg3-m.mp4' + V : undefined,
       accent: '#C05B4D',
       scroll: 1.7, linger: 0.4,
       eyebrow: 'Measure 03 · The Session',
@@ -77,9 +79,9 @@ mountScrollWorld(document.getElementById('world'), {
     },
     {
       id: 'clearance', label: 'Clearance',
-      still: '/static/public/world/still4.jpg',
+      still: STILL(4),
       clip:  CLIP(4),
-      clipMobile: H264 ? '/static/public/world/leg4-m.mp4' : undefined,
+      clipMobile: H264 ? '/static/public/world/leg4-m.mp4' + V : undefined,
       accent: '#5E8A5C',
       eyebrow: 'Measure 04 · Review & Clearance',
       title: 'Every note cleared.',
@@ -88,9 +90,9 @@ mountScrollWorld(document.getElementById('world'), {
     },
     {
       id: 'delivery', label: 'Delivery',
-      still: '/static/public/world/still5.jpg',
+      still: STILL(5),
       clip:  CLIP(5),
-      clipMobile: H264 ? '/static/public/world/leg5-m.mp4' : undefined,
+      clipMobile: H264 ? '/static/public/world/leg5-m.mp4' + V : undefined,
       accent: '#E4671F',
       scroll: 1.8, linger: 0.45,
       eyebrow: 'Measure 05 · The Delivery',

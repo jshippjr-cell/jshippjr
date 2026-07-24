@@ -32,12 +32,12 @@ def test_home_serves_the_world(client):
     page = client.get("/").text
     assert "mountScrollWorld" in page
     assert "/static/public/world/scrub-engine.js" in page
-    # clips are wired codec-aware: CLIP(n) → leg-n .mp4 (h264) or .webm (VP9)
+    # clips are wired codec-aware + cache-busted: CLIP(n)/STILL(n) append ?v=asset_v
     assert "function CLIP(n)" in page and ".webm" in page
+    assert "function STILL(n)" in page and "?v=" in page
     for i in range(1, 6):
-        assert f"CLIP({i})" in page
+        assert f"CLIP({i})" in page and f"STILL({i})" in page
         assert f"/static/public/world/leg{i}-m.mp4" in page
-        assert f"/static/public/world/still{i}.jpg" in page
     # the journey lands on the intake
     assert "/start" in page and "Start your brief" in page
     # honesty line ships with the session scene
