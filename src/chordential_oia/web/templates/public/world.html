@@ -22,6 +22,9 @@ html,body{margin:0;background:var(--sw-bg)}
 /* small screens: the copy block runs tall — drop the scroll hint so it never
    collides with the tag pills (the first flick dismisses it anyway) */
 @media (max-width: 640px){ .sw-root .sw-hint{ display:none } }
+/* real wordmark replaces the engine's generic gradient mark */
+.sw-brand__mark{display:none !important}
+.sw-brand img{height:22px;width:auto;display:block}
 </style>
 </head>
 <body>
@@ -104,6 +107,12 @@ mountScrollWorld(document.getElementById('world'), {
     },
   ],
 });
+/* swap the engine's text brand for the Chordential wordmark */
+(function(){
+  var b = document.querySelector('.sw-brand');
+  if (!b) return;
+  b.innerHTML = '<img src="/static/public/wordmark-dark.png' + V + '" alt="Chordential">';
+})();
 </script>
 </body>
 </html>
