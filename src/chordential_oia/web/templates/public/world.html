@@ -38,7 +38,7 @@ function STILL(n){ return '/static/public/world/still' + n + '.jpg' + V; }
 mountScrollWorld(document.getElementById('world'), {
   brand: { name: 'Chordential', href: '#top' },
   hint: 'scroll to begin the score',
-  diveScroll: 1.5,
+  diveScroll: 0.8,
   crossfade: 0.08,
   connectors: [],                /* one continuous take — the legs ARE the journey */
   sections: [
@@ -48,7 +48,7 @@ mountScrollWorld(document.getElementById('world'), {
       clip:  CLIP(1),
       clipMobile: H264 ? '/static/public/world/leg1-m.mp4' + V : undefined,
       accent: '#B87B33',
-      scroll: 1.6, linger: 0.35,
+      scroll: 0.9, linger: 0.2,
       eyebrow: 'Measure 01 · The Brief',
       title: 'Every score starts as a spark.',
       body: 'Tell us the film, the brand, the feeling. One page, no jargon — a structured brief turns your idea into something a studio can act on.',
@@ -71,7 +71,7 @@ mountScrollWorld(document.getElementById('world'), {
       clip:  CLIP(3),
       clipMobile: H264 ? '/static/public/world/leg3-m.mp4' + V : undefined,
       accent: '#C05B4D',
-      scroll: 1.7, linger: 0.4,
+      scroll: 0.9, linger: 0.2,
       eyebrow: 'Measure 03 · The Session',
       title: 'Real rooms. Real players.',
       body: 'Versions land in your session room the day they’re cut, synced against your picture. Human-made, always — never AI-generated audio.',
@@ -94,7 +94,7 @@ mountScrollWorld(document.getElementById('world'), {
       clip:  CLIP(5),
       clipMobile: H264 ? '/static/public/world/leg5-m.mp4' + V : undefined,
       accent: '#E4671F',
-      scroll: 1.8, linger: 0.45,
+      scroll: 1.0, linger: 0.25,
       eyebrow: 'Measure 05 · The Delivery',
       title: 'Delivered like you’ve never seen.',
       body: 'Masters, stems, cutdowns, metadata, licensing docs — named and organized the same way, every time. Broadcast-ready the moment it lands.',
