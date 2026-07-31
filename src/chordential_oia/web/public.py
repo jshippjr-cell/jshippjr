@@ -131,6 +131,15 @@ def public_home(request: Request):
     return render(request, "public/world.html", active="home")
 
 
+@router.get("/commission", response_class=HTMLResponse)
+def public_commission(request: Request):
+    """The Commission — the score runs live behind the copy while the visitor
+    leaves a note on a cue, prices a planning band, watches the clearance
+    certificate issue, and sees the delivery pack itself. Standalone: it carries
+    its own header rather than the marketing chrome."""
+    return render(request, "public/commission.html", active="home")
+
+
 @router.get("/capabilities", response_class=HTMLResponse)
 def public_capabilities(request: Request):
     show = get_showcase()

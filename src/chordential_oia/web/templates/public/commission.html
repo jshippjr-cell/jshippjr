@@ -1,0 +1,2121 @@
+<title>Chordential — original music for campaigns</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="The music department you don't have to build. Original score for campaigns — written and recorded in house, cleared before it ships. One delivery with everything in it: masters, stems, license and chain of title.">
+<style>
+:root{
+  --ink:#0E0508; --ink2:#160A0E; --wine:#22090F; --wine2:#38121A;
+  --ember:#E4671F; --amber:#F3B074; --cream:#FCF7F8; --sand:#D8CDB6;
+  --line:rgba(216,205,182,.16); --line2:rgba(216,205,182,.30);
+  --muted:rgba(252,247,248,.66); --muted2:rgba(252,247,248,.46);
+  --open:#C89B62; --shut:#4E7A4A;
+  --serif:Georgia,'Iowan Old Style','Times New Roman',serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ink);color:var(--cream);overflow-x:clip;
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+#bg{position:fixed;inset:0;z-index:0;display:block;width:100%;height:100%}
+#vig,#grain,#scrim{position:fixed;inset:-3%;pointer-events:none;z-index:1}
+#vig{background:radial-gradient(125% 95% at 50% 45%, transparent 40%, rgba(6,2,4,.62) 100%)}
+/* the copy side of the room is darker than the players' side. its opacity is driven
+   per-section by the scroll — this is the handoff between score and copy. */
+#scrim{background:linear-gradient(90deg,
+  rgba(9,3,6,.96) 0%, rgba(9,3,6,.92) 26%, rgba(9,3,6,.66) 46%, rgba(9,3,6,.14) 66%, transparent 78%);
+  will-change:opacity}
+@media(max-width:760px){ #scrim{background:linear-gradient(180deg,rgba(9,3,6,.52),rgba(9,3,6,.82))} }
+#grain{opacity:.13;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:gr 7s steps(6) infinite}
+@keyframes gr{0%,100%{transform:translate(0,0)}20%{transform:translate(-2%,1%)}40%{transform:translate(1%,-2%)}
+  60%{transform:translate(-1%,-1%)}80%{transform:translate(2%,1%)}}
+main{position:relative;z-index:2}
+::selection{background:var(--ember);color:#fff}
+a{color:var(--amber)}
+
+/* ---------- chrome ---------- */
+/* the bar needs its own darkness — on mobile every headline passes under it */
+.bar{position:fixed;left:0;right:0;top:0;z-index:20;display:flex;align-items:center;
+  justify-content:space-between;padding:18px 24px;gap:14px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(9,3,6,.985) 0%,rgba(9,3,6,.94) 62%,rgba(9,3,6,0) 100%);
+  -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)}
+.wm{font-family:var(--serif);font-size:20px;letter-spacing:-.01em;pointer-events:auto}
+.wm i{font-style:normal;color:var(--ember)}
+.barR{display:flex;gap:10px;align-items:center;pointer-events:auto}
+/* ember is reserved for a human decision. chrome is sand. */
+.btn{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  padding:11px 18px;border-radius:3px;text-decoration:none;white-space:nowrap;cursor:pointer;
+  border:1px solid var(--line2);background:transparent;color:var(--cream);
+  transition:background .25s var(--ease),color .25s var(--ease),border-color .25s var(--ease)}
+.btn:hover{background:rgba(216,205,182,.14);border-color:var(--sand)}
+.btn.solid{background:var(--cream);color:#170A0D;border-color:var(--cream)}
+.btn.solid:hover{background:var(--amber);border-color:var(--amber)}
+.btn:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+
+#rail{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:20;
+  display:flex;flex-direction:column;gap:8px;pointer-events:auto}
+#rail button{all:unset;cursor:pointer;display:flex;align-items:center;gap:9px;
+  justify-content:flex-end;min-height:26px;padding:0 2px;border-radius:3px}
+#rail .dot{width:7px;height:7px;border-radius:50%;background:var(--sand);opacity:.3;transition:.35s var(--ease)}
+#rail .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--sand);opacity:0;transition:.35s var(--ease);white-space:nowrap}
+#rail button:hover .lbl,#rail button.on .lbl{opacity:.85}
+#rail button.on .dot{opacity:1;background:var(--cream);box-shadow:0 0 10px rgba(252,247,248,.7)}
+#rail button:focus-visible{outline:2px solid var(--amber);outline-offset:4px}
+#rail button:focus-visible .lbl{opacity:1}
+
+/* ---------- THE DESK ---------- */
+#desk{position:fixed;right:22px;bottom:22px;z-index:20;width:208px;pointer-events:none;display:none;
+  border:1px solid var(--line);border-radius:4px;padding:14px 15px 11px;
+  background:rgba(14,5,8,.84);
+  box-shadow:0 24px 60px -18px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,225,205,.08);
+  opacity:0;transform:translateY(8px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+@media (hover:hover) and (pointer:fine) and (min-width:900px){ #desk{display:block} }
+#desk{pointer-events:none}
+#desk .sndBtn{pointer-events:auto}
+#desk.on{opacity:1;transform:none}
+#desk .dh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+#desk .dt{font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--sand);opacity:.75}
+#desk .dm{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--sand);opacity:.7}
+#desk .hint{font-family:var(--mono);font-size:8.6px;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(216,205,182,.62);margin:0 0 10px}
+#desk .tiny{font-family:var(--mono);font-size:8px;line-height:1.45;letter-spacing:.04em;
+  color:rgba(216,205,182,.46);margin:9px 0 0}
+/* opting in to sound is a decision, so it keeps the ember */
+.sndBtn{all:unset;box-sizing:border-box;cursor:pointer;pointer-events:auto;
+  display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:0 12px;
+  border:1px solid var(--line2);border-radius:3px;margin:10px 0 0;
+  font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--sand);transition:.25s var(--ease)}
+.sndBtn:hover{border-color:var(--sand);color:var(--cream)}
+.sndBtn:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.sndBtn .dot{width:6px;height:6px;border-radius:50%;background:var(--sand);opacity:.45;transition:.3s}
+.sndBtn.on{border-color:var(--ember);color:var(--cream)}
+.sndBtn.on .dot{background:var(--ember);opacity:1;box-shadow:0 0 9px var(--ember)}
+.ch{display:grid;grid-template-columns:52px 1fr;gap:9px;align-items:center;margin-bottom:7px}
+.ch .nm{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--sand);opacity:.8;white-space:nowrap;transition:color .3s,opacity .3s}
+.ch .mtr{height:5px;border-radius:3px;overflow:hidden;position:relative;
+  background:rgba(216,205,182,.09);box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.ch .mtr i{display:block;height:100%;width:0%;border-radius:3px;
+  background:linear-gradient(90deg,rgba(216,205,182,.4),var(--sand))}
+.ch.hot .nm{color:var(--cream);opacity:1}
+.ch.hot .mtr i{background:linear-gradient(90deg,var(--sand),var(--cream))}
+
+/* ---------- sections ---------- */
+section{position:relative;padding:96px 24px 74px;min-height:100vh;display:flex;align-items:center}
+.inner{max-width:1080px;margin:0 auto;width:100%}
+.col{max-width:520px;position:relative}
+#arrival .col{max-width:680px}
+/* the copy-owned rooms are a different colour of dark — wine, not brown-black */
+/* wine is a colour of dark, not a blackout — it used to erase the score behind it */
+#estimate:before,#paper:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;
+  background:linear-gradient(96deg,rgba(46,12,20,.62) 0%,rgba(46,12,20,.46) 38%,rgba(46,12,20,0) 70%)}
+.eb{font-family:var(--mono);font-size:10px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--sand);opacity:.62;margin:0 0 18px}
+h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.03em;line-height:1.02;margin:0}
+h1{font-size:clamp(34px,4.6vw,56px)}
+h2{font-size:clamp(26px,3.6vw,42px)}
+h1 em,h2 em{font-style:italic;color:var(--ember)}
+.lede{font-size:17px;line-height:1.58;color:var(--muted);margin:20px 0 0;max-width:40ch}
+.sub{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--sand);opacity:.55;margin:20px 0 0}
+.rowbtns{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
+/* Four denials, one per line, each landing a beat after the last. The stagger
+   is the whole point: read as a block they are a list, read in sequence they
+   are someone crossing items off. */
+.notlist{list-style:none;margin:28px 0 0;padding:0}
+.notlist li{font-family:var(--serif);font-size:clamp(21px,2.5vw,31px);line-height:1.34;
+  letter-spacing:-.012em;color:rgba(252,247,248,.80);margin:0 0 6px}
+.js .notlist li:nth-child(1){transition-delay:.05s}
+.js .notlist li:nth-child(2){transition-delay:.19s}
+.js .notlist li:nth-child(3){transition-delay:.33s}
+.js .notlist li:nth-child(4){transition-delay:.47s}
+.closer{font-family:var(--serif);font-size:clamp(25px,3.1vw,40px);line-height:1.16;
+  letter-spacing:-.018em;margin:30px 0 0;color:var(--cream)}
+.closer em{font-style:italic;color:var(--ember)}
+.js .closer{transition-delay:.66s}
+.steer{display:inline-flex;align-items:center;gap:9px;margin-top:26px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--sand)}
+.steer b{color:var(--sand);font-weight:400;opacity:.85;display:none}
+@media (hover:hover) and (pointer:fine){ .steer b{display:inline} }
+
+/* reveal — visible by default, hidden only once JS confirms it can un-hide them */
+.rv{opacity:1;transform:none}
+.js .rv{opacity:0;transform:translateY(24px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.js .rv.in{opacity:1;transform:none}
+
+/* ---------- panel ---------- */
+.panel{border:1px solid var(--line);background:rgba(14,5,8,.86);border-radius:4px;padding:22px 24px}
+.panel h3{font-family:var(--serif);font-size:21px;margin:0 0 4px;letter-spacing:-.015em}
+.kv{display:grid;grid-template-columns:1fr auto;gap:9px 16px;font-family:var(--mono);
+  font-size:12px;letter-spacing:.04em;margin-top:14px}
+.kv span:nth-child(even){color:var(--sand);font-variant-numeric:tabular-nums}
+.kv span:nth-child(odd){color:var(--muted)}
+
+/* ---------- the take ---------- */
+.take{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:18px;max-width:560px}
+.player{border:1px solid var(--line2);border-radius:4px;padding:15px 18px;background:rgba(14,5,8,.9)}
+.ptop{display:flex;align-items:center;gap:14px}
+.play{all:unset;cursor:pointer;width:46px;height:46px;border-radius:50%;flex:0 0 46px;
+  border:1px solid var(--line2);display:grid;place-items:center;transition:.25s var(--ease)}
+.play:hover{background:rgba(216,205,182,.16);border-color:var(--sand)}
+.play:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.play svg{width:15px;height:15px;fill:var(--cream)}
+.pmeta{flex:1;min-width:0}
+.pmeta b{display:block;font-family:var(--serif);font-size:17px;font-weight:700}
+.pmeta span{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--sand);opacity:.75}
+.scrub{margin-top:15px;height:4px;border-radius:2px;background:rgba(216,205,182,.12);position:relative;cursor:pointer}
+.scrub i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:rgba(252,247,248,.78);width:0%}
+.tc{display:flex;justify-content:space-between;margin-top:7px;font-family:var(--mono);
+  font-size:9.5px;letter-spacing:.1em;color:var(--muted2);font-variant-numeric:tabular-nums}
+.disclose{font-family:var(--mono);font-size:9.5px;line-height:1.5;letter-spacing:.06em;
+  color:var(--sand);opacity:.68;margin-top:10px}
+.credits{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.credits[hidden]{display:none}      /* the author rule outranks the UA's [hidden] — say it here */
+.credits span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  border:1px solid var(--line);border-radius:2px;padding:6px 9px;color:var(--sand)}
+
+/* the note pin — a human decision, so it keeps the ember */
+.pin{all:unset;cursor:pointer;display:inline-flex;flex-direction:column;gap:3px;position:relative;
+  border:1px solid var(--ember);border-radius:4px;padding:12px 17px;margin-top:18px;
+  background:rgba(56,18,26,.5);transition:.25s var(--ease)}
+.pin:hover{background:rgba(56,18,26,.9)}
+.pin:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.pin .t{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--ember)}
+.pin .b{font-size:14.5px}
+.pin[disabled]{opacity:.62;cursor:default}
+.pin.waiting{opacity:.62}          /* the mark is not available until you can hear it */
+/* the note travels: a rule leaves the pin and runs out into the score */
+#wire{position:absolute;left:100%;top:50%;height:2px;width:0;background:var(--ember);
+  box-shadow:0 0 14px 1px rgba(228,103,31,.9);pointer-events:none;opacity:0;z-index:3}
+#wire.go{opacity:1;width:60vw;transition:width 1.05s var(--ease),opacity .3s}
+.verdict{margin-top:14px;font-family:var(--serif);font-size:clamp(19px,2.3vw,25px);
+  line-height:1.34;letter-spacing:-.015em;color:var(--cream);max-width:30ch;
+  opacity:0;transform:translateY(8px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.verdict em{font-style:italic;color:var(--ember)}
+.verdict.on{opacity:1;transform:none}
+
+/* ---------- the ask / estimate ---------- */
+.ask{display:grid;gap:12px;margin-top:26px;max-width:540px}
+.field{border:1px solid var(--line2);border-radius:4px;background:rgba(14,5,8,.9);padding:14px 16px}
+.field label{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--sand);opacity:.75;margin-bottom:7px}
+.field input,.field select{all:unset;width:100%;font:inherit;font-size:16px;color:var(--cream);
+  box-sizing:border-box}
+.field .val{display:none}          /* the touch mirror — never both at once */
+.field select:focus-visible{outline:2px solid var(--amber);outline-offset:4px}
+.field input::placeholder{color:var(--muted2)}
+.field:focus-within{border-color:var(--sand)}
+.field select option{background:#160A0E;color:var(--cream)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#quote{margin-top:16px;opacity:0;visibility:hidden;transform:translateY(10px);transition:.7s var(--ease)}
+#quote.on{opacity:1;visibility:visible;transform:none}
+/* the number is the climax of its own section — it outranks the headline that sets it up */
+/* the band is one object — a range broken across two lines reads as two prices */
+.band{font-family:var(--serif);font-size:clamp(44px,5.4vw,74px);letter-spacing:-.035em;
+  line-height:1;color:var(--cream);margin:2px 0 0;white-space:nowrap}
+.band em{font-style:normal;color:var(--ember)}
+
+/* ---------- certificate ---------- */
+.cert{border:1px solid var(--line2);border-radius:4px;background:linear-gradient(180deg,rgba(28,12,16,.94),rgba(14,5,8,.94));
+  padding:26px 28px;max-width:560px;margin-top:26px;position:relative}
+.cert:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--line2)}
+.cert.done:before{background:var(--ember)}
+.cert h3{font-family:var(--serif);font-size:20px;margin:0 0 3px}
+.cert .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--sand);opacity:.75}
+.clause{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.clause p{margin:0;font-size:14.5px;color:var(--muted);line-height:1.55}
+/* state is a chip, not a hue — at 9px a red and an ember read identically */
+.clause .flag{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.16em;
+  text-transform:uppercase;background:var(--open);color:#160A0E;padding:4px 9px;border-radius:2px;
+  margin:0 0 10px;font-weight:600}
+.clause.fixed .flag{background:var(--shut);color:#F2F7F1}
+.sig{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.sig div{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--sand);opacity:.75}
+.sig b{display:block;color:var(--cream);opacity:1;font-weight:500;margin-top:3px}
+
+/* ---------- delivery ---------- */
+#deliver{min-height:120vh}
+.crate{max-width:460px;margin-top:26px}
+.crate .lid{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--sand);opacity:.8;margin-bottom:12px;transition:color .5s}
+.crate.sealed .lid{color:var(--ember);opacity:1}
+/* deliberately transparent: the manifest is printed ON the score, and at this point in
+   the page the score has taken the stage behind it */
+.manifest{display:grid;gap:0;border:1px solid var(--line2);border-radius:4px;overflow:hidden;
+  background:rgba(9,3,6,.34);backdrop-filter:blur(3px)}
+.manifest div{display:flex;justify-content:space-between;gap:16px;padding:12px 16px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--muted);
+  border-bottom:1px solid var(--line);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+/* pending until its object files — dimmed, never absent */
+.js .manifest div{opacity:.26;transform:translateX(-8px)}
+.js .manifest div:after{content:"\2713";color:#8ec08e;opacity:0;font-size:11px;
+  transition:opacity .16s ease}
+.js .manifest div.in:after{opacity:1}
+.manifest div:last-child{border-bottom:none}
+.manifest div.in{opacity:1;transform:none}
+.manifest b{color:var(--cream);font-weight:500}
+
+/* ---------- the pack: the delivery assembles itself into a box ----------
+   Ported from the choreography on the earlier site, where the parts filed into a
+   folder. Same grammar — objects burst, hold long enough to be read, then dive and
+   dissolve into the receptacle; each manifest line ticks in only AFTER its object is
+   gone, so the line reads as the receipt for the thing that just left. The folder is
+   now a box, and the box closes its flaps at the end. 96bpm: beat 625, 16th 156. */
+.crate{position:relative}
+.packstage{position:relative;height:262px;margin:6px 0 2px;perspective:900px}
+.packbtn{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;
+  gap:9px;min-height:48px;padding:0 18px;margin:0 0 16px;border:1px solid var(--ember);
+  border-radius:3px;background:rgba(56,18,26,.5);color:var(--cream);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  transition:background .25s var(--ease),border-color .25s var(--ease)}
+.packbtn:hover{background:rgba(56,18,26,.92)}
+.packbtn:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.packbtn[disabled]{opacity:.5;cursor:default}
+
+/* the objects — five of the six lines have one; the metadata manifest is generated */
+.item{position:absolute;left:50%;top:33%;opacity:0;pointer-events:none;
+  transform:translate(-50%,-50%) scale(.6);
+  transition:transform .62s cubic-bezier(.34,1.45,.64,1),opacity .31s ease}
+.item.audio{width:170px;height:44px;border-radius:8px;padding:6px 10px;
+  background:linear-gradient(160deg,#2a2125,#1b1518);border:1px solid rgba(216,205,182,.30);
+  box-shadow:0 14px 34px rgba(0,0,0,.5)}
+.item.audio .l{font-family:var(--mono);font-size:8px;letter-spacing:.08em;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;color:var(--sand);opacity:.72}
+.item.audio .w{display:flex;gap:1.5px;height:14px;align-items:center;margin-top:4px}
+.item.audio .w i{flex:1;border-radius:1px;background:var(--sand);opacity:.75}
+.item.paper{width:106px;min-height:68px;border-radius:3px;padding:8px 9px 16px;
+  background:linear-gradient(165deg,#FCF7F8,#EFE6DA);border:1px solid #D8CDB6;color:#44161E;
+  box-shadow:0 14px 34px rgba(0,0,0,.5)}
+.item.paper .l{font-family:var(--mono);font-size:7.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:#737469}
+.item.paper .t{font-family:var(--serif);font-size:11px;font-weight:700;margin-top:3px;line-height:1.2}
+.item.paper .ln{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.item.paper .ln i{display:block;height:2px;border-radius:1px;background:#D8CDB6}
+.item.paper .seal{position:absolute;right:7px;bottom:7px;width:16px;height:16px;border-radius:50%;
+  border:1.5px solid var(--ember);color:var(--ember);font-size:8px;display:grid;place-items:center}
+
+/* the box. A well the parts fall into, two flaps that shut, one taped face. */
+.box{position:absolute;left:50%;bottom:0;width:216px;height:100px;
+  transform:translateX(-50%) translateY(10px);opacity:.5;transform-style:preserve-3d;
+  transition:opacity .5s var(--ease),transform .62s var(--ease)}
+.box.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.box .well{position:absolute;left:9px;right:9px;top:0;height:27px;border-radius:2px 2px 0 0;
+  background:linear-gradient(180deg,#070204,#180b0e);
+  border:1px solid var(--line2);border-bottom:0}
+.box .face{position:absolute;left:0;right:0;bottom:0;height:75px;border-radius:2px 2px 3px 3px;
+  background:linear-gradient(168deg,#3c2c23,#241a15);border:1px solid rgba(216,205,182,.34);
+  box-shadow:inset 0 1px 0 rgba(255,225,205,.10),0 18px 42px rgba(0,0,0,.62)}
+.box .face:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+  background:rgba(216,205,182,.14)}
+.box .flap{position:absolute;top:0;width:calc(50% - 9px);height:27px;
+  background:linear-gradient(180deg,#46342b,#2e221c);border:1px solid rgba(216,205,182,.30);
+  transform-origin:bottom center;transform:rotateX(-108deg);
+  transition:transform .5s var(--ease)}
+.box .flap.l{left:9px}
+.box .flap.r{right:9px}
+.box.sealed .flap{transform:rotateX(0deg)}
+.box.sealed .face{border-color:rgba(228,103,31,.42)}
+
+/* the stamp: the seal is a stamp landing, not a lid graphic */
+.stamp{position:absolute;right:-26px;bottom:-20px;margin:0;padding:8px 15px;
+  border:2px solid var(--ember);border-radius:5px;color:var(--ember);font-family:var(--mono);
+  font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;
+  transform:rotate(-7deg) scale(1.6);opacity:0;pointer-events:none;
+  box-shadow:0 0 30px rgba(228,103,31,.25)}
+.stamp.land{animation:stampin .31s cubic-bezier(.6,0,.4,1) forwards}
+@keyframes stampin{60%{opacity:1;transform:rotate(-7deg) scale(.97)}
+  100%{opacity:1;transform:rotate(-7deg) scale(1)}}
+footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative;z-index:2;
+  background:linear-gradient(180deg,transparent,rgba(14,5,8,.9) 40%)}
+.foot{max-width:1080px;margin:0 auto;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2)}
+
+@media(min-width:1900px){
+  .inner{max-width:1320px}
+  #desk{width:268px}
+  #desk .dt,#desk .dm,.ch .nm{font-size:10.5px}
+  #desk .hint{font-size:9.5px}
+  .ch{grid-template-columns:64px 1fr}
+  #rail .lbl{font-size:10.5px}
+}
+@media(max-width:760px){
+  #rail{display:none}
+  #skip{display:none}
+  .grid2{grid-template-columns:1fr}
+  section{min-height:auto;padding:80px 20px}
+  .bar{padding:14px 16px}
+  .btn{padding:10px 13px;font-size:9.5px}
+  #deliver{min-height:auto}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .js .rv{opacity:1;transform:none;transition:none}
+  #grain{animation:none}
+  #wire.go{transition:none}
+}
+
+/* ==================================================================================
+   MOBILE — designed, not merely unbroken.
+   The previous mobile rule was `section{min-height:auto}`, a defensive dodge around
+   the 100vh URL-bar problem. It removed the only rule that made this a story: not one
+   of the seven sections measured 1.00 screens, so two beats were always on screen at
+   once. 100svh is the answer that did not exist when that line was written.
+   ================================================================================== */
+:root{ --bar-h:56px }
+
+/* the bottom dock: the one persistent action, in the thumb's half of the phone */
+#dock{display:none;position:fixed;left:0;right:0;bottom:0;z-index:21;align-items:center;gap:12px;
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));
+  background:linear-gradient(0deg,rgba(9,3,6,.96) 40%,rgba(9,3,6,.60) 100%);
+  border-top:1px solid var(--line);transform:translateY(0);transition:transform .45s var(--ease)}
+#dock.hide{transform:translateY(115%)}
+#dockCta{margin-left:auto;min-height:48px;display:inline-flex;align-items:center}
+#dock .sndBtn{margin-left:auto}
+#dock .sndBtn + #dockCta{margin-left:10px}
+#dockMix{display:flex;gap:10px;opacity:0;transition:opacity .5s var(--ease)}
+#dockMix.on{opacity:1}
+.dch{display:flex;flex-direction:column;gap:5px;width:34px}
+.dch b{font:400 10px/1 var(--mono);letter-spacing:.1em;color:var(--sand);opacity:.7;transition:.3s}
+.dch i{display:block;height:3px;border-radius:2px;background:rgba(216,205,182,.16);overflow:hidden}
+.dch i:after{content:"";display:block;height:100%;width:var(--lv,0%);border-radius:2px;
+  background:var(--sand);transition:width .12s linear}
+.dch.hot b{color:var(--cream);opacity:1}
+.dch.hot i:after{background:var(--cream)}
+
+@media (pointer:coarse){
+  /* 17 of 22 targets failed 44x44. 48 is the floor here — these controls carry money. */
+  .btn{min-height:48px;display:inline-flex;align-items:center;justify-content:center;padding:0 18px}
+  .play{width:56px;height:56px;flex:0 0 56px}
+  .pin{min-height:64px;padding:14px 18px}
+  .rowbtns .btn{flex:1 1 auto;min-width:calc(50% - 6px)}
+  /* the whole field is the control, not the 25.6px select inside it */
+  .field{position:relative;padding:24px 16px 14px;min-height:66px}
+  .field label{position:absolute;top:11px;left:16px;margin:0}
+  .js .field select{position:absolute;inset:0;width:100%;height:100%;padding:26px 16px 10px;
+    font-size:16px;opacity:.001;z-index:2}
+  .js .field .val{display:block;font-size:16px;color:var(--cream);pointer-events:none}
+  .js .field:after{content:"▾";position:absolute;right:16px;bottom:14px;color:var(--sand);
+    opacity:.6;pointer-events:none}
+  /* a 4px seek bar is not a control */
+  .scrub{height:4px;margin-top:24px;touch-action:none}
+  .scrub:before{content:"";position:absolute;left:0;right:0;top:-22px;bottom:-22px}
+  .scrub i:after{content:"";position:absolute;right:-7px;top:-5px;width:14px;height:14px;
+    border-radius:50%;background:var(--cream);box-shadow:0 0 0 3px rgba(9,3,6,.7)}
+  /* #wire is absolutely positioned at left:100% with width:60vw — pressing the pin
+     widened the document 390 -> 603px and rescaled the page to 65% for the session,
+     pushing the only CTA off screen. It has no job on a phone. */
+  #wire{display:none !important}
+  main{touch-action:pan-y pinch-zoom}
+}
+
+@media (max-width:760px){
+  section{min-height:100svh;padding:calc(var(--bar-h) + 22px) 20px 92px;
+    display:flex;align-items:center;scroll-margin-top:var(--bar-h)}
+  #deliver{min-height:100svh}
+  h1,h2,.eb{scroll-margin-top:calc(var(--bar-h) + 16px)}
+  .inner{max-width:none}
+  #arrival .col{max-width:none}
+
+  /* every clamp() bottomed out on a phone, so mobile was running the desktop MINIMUM:
+     h1:body was 2.4:1 here against 4.1:1 on desktop. The small screen was given less
+     hierarchy than the large one. */
+  h1{font-size:clamp(30px,8.8vw,40px);line-height:1.06;letter-spacing:-.02em;text-wrap:balance}
+  /* the authored breaks stay: hiding a <br> welds the sentences together */
+  h2{font-size:clamp(25px,7.2vw,34px);line-height:1.10;letter-spacing:-.02em;text-wrap:balance}
+  /* a phone has no room to hold the range on one line — let it break there */
+  .band{font-size:clamp(40px,12.4vw,54px);white-space:normal}
+  .lede{font-size:17px;line-height:1.62;max-width:34ch;color:rgba(252,247,248,.82)}
+  /* nothing below 12px, and tracking scales down with size */
+  .eb,.sub,.foot span,.disclose,.tc,.sig div,.credits span,.btn,.pin .t,
+  .field label,.clause .flag,.crate .lid,.pmeta span{font-size:12px;letter-spacing:.11em}
+  .manifest div{font-size:13px}
+  .sub{opacity:.74}                      /* 4.33:1 -> 5.9:1 */
+  .tc{color:rgba(252,247,248,.64)}       /* 4.41:1 -> 5.7:1 */
+  .steer{display:none}                   /* "Scroll to read" is not information here */
+  /* two-column data wrapped every label to three lines at 292px */
+  .sig{grid-template-columns:1fr;gap:12px}
+  .kv{grid-template-columns:1fr;gap:2px 0}
+  .kv span:nth-child(even){padding-bottom:11px}
+  .take{max-width:none}
+  .player,.cert,.crate,.ask{max-width:none}
+
+  /* on desktop the scrim is horizontal — copy left, score right, never overlapping.
+     The mobile override made it vertical, so copy sat directly on live score: p99
+     contrast 6.37:1, worst case 1.17:1. Bands restore the separation on the axis a
+     phone actually has. */
+  #scrim{background:linear-gradient(180deg,rgba(9,3,6,.28) 0%,rgba(9,3,6,.93) 19%,
+    rgba(9,3,6,.93) 81%,rgba(9,3,6,.28) 100%)}
+  #estimate:before,#paper:before{background:linear-gradient(180deg,rgba(46,12,20,0),
+    rgba(46,12,20,.52) 12%,rgba(46,12,20,.52) 88%,rgba(46,12,20,0))}
+
+  .bar{height:var(--bar-h);padding:0 16px;align-items:center;
+    background:linear-gradient(180deg,rgba(9,3,6,.985) 0%,rgba(9,3,6,.94) 68%,rgba(9,3,6,0) 100%);
+    -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)}
+  .bar .barR{display:none}               /* the CTA leaves the hardest pixel to reach */
+  #dock{display:flex;gap:8px}
+  #dock .sndBtn{margin:0;min-height:44px;min-width:44px;padding:0 10px;font-size:9.5px;
+    letter-spacing:.1em;justify-content:center}
+  #dock .sndBtn .lbl{display:none}
+  #dock .sndBtn:after{content:"PARTS"}
+  #dock .sndBtn.on:after{content:"ON"}
+  #dockMix{gap:7px}
+  .dch{width:24px}
+  .dch b{font-size:8.5px}
+  #dockCta{padding:0 13px;font-size:9.5px}
+  footer{padding:56px 20px calc(140px + env(safe-area-inset-bottom))}
+  .foot{flex-direction:column;gap:12px}
+}
+@supports not (min-height:100svh){ @media(max-width:760px){ section{min-height:100vh} } }
+
+@media (max-width:400px){
+  section{padding-left:16px;padding-right:16px;padding-bottom:86px}
+  #dock{padding-left:12px;padding-right:12px;gap:6px}
+  #dockMix{gap:5px}
+  .dch{width:18px}
+  .dch b{font-size:7.5px;letter-spacing:.04em}
+  #dockCta{padding:0 10px;font-size:9px;letter-spacing:.1em}
+  #dock .sndBtn{padding:0 8px;font-size:9px}
+  .lede{font-size:16px;line-height:1.55}
+  .cert{padding:18px 16px}
+  .sig{gap:9px;margin-top:14px;padding-top:12px}
+  .clause{margin-top:14px;padding-top:12px}
+  .take{margin-top:14px}
+  .rowbtns{margin-top:22px}
+  .player{padding:14px}
+  .cert{padding:20px 18px}
+  .dch{width:28px}
+  #dockCta{padding:0 14px}
+}
+
+/* landscape phone: 844x390 was getting the DESKTOP layout inside a 390px-tall
+   viewport — a 76.8px bar, 96px section padding, the rail visible over the score,
+   and 10.75 screens of scroll. Height is the constraint here, not width. */
+@media (orientation:landscape) and (max-height:560px){
+  :root{ --bar-h:44px }
+  .bar{height:44px;padding:0 16px}
+  .bar .barR{display:flex}
+  #skip{display:none}
+  #rail,#desk,#dock{display:none}
+  section{min-height:auto;padding:calc(var(--bar-h) + 14px) 24px 26px;align-items:flex-start}
+  h1{font-size:clamp(26px,4.6vw,38px);line-height:1.08}
+  h2{font-size:clamp(22px,3.8vw,30px);line-height:1.10}
+  .band{font-size:clamp(34px,5.6vw,48px)}
+  .lede{font-size:15px;line-height:1.5;max-width:40ch;margin-top:12px}
+  .take,.ask,.cert,.crate{margin-top:16px}
+  .grid2{grid-template-columns:1fr 1fr}
+  footer{padding:34px 24px 40px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  #wire{display:none}                    /* it fired regardless of the preference */
+  .manifest div{opacity:1;transform:none;transition:none}
+  .verdict,#quote{transition:none}
+  /* the pack still happens — it just stops being a performance */
+  .item,.box,.box .flap{transition:none}
+  .stamp.land{animation:none;opacity:1;transform:rotate(-7deg) scale(1)}
+}
+
+/* the pack on a phone: the box and the fan scale, the stamp stops hanging off-canvas */
+@media (max-width:760px){
+  .packstage{height:172px}
+  .item.audio{width:132px;height:38px}
+  .item.paper{width:94px;min-height:60px}
+  .box{width:184px;height:88px}
+  .box .face{height:66px}
+  /* the stamp waits at scale(1.6). At 390px that pushed the document to 421 wide —
+     the same failure #wire had. It lands from closer in here. */
+  .stamp{right:10px;bottom:-10px;font-size:11px;padding:7px 12px;
+    transform:rotate(-7deg) scale(1.25)}
+  .packbtn{width:100%;justify-content:center}
+}
+@media (max-width:400px){
+  .packstage{height:158px}
+  .item.audio{width:118px}
+  .box{width:162px}
+}
+</style>
+<noscript><style>.rv{opacity:1 !important;transform:none !important}</style></noscript>
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<div id="vig" aria-hidden="true"></div>
+<div id="scrim" aria-hidden="true"></div>
+<div id="grain" aria-hidden="true"></div>
+
+<header class="bar">
+  <span class="wm">ch<i>o</i>rdential</span>
+  <span class="barR">
+    <button class="btn" id="skip" type="button">Skip the story</button>
+    <a class="btn solid" href="#brief">Start a brief</a>
+  </span>
+</header>
+
+<nav id="rail" aria-label="Sections"></nav>
+
+<div id="desk" aria-hidden="true">
+  <div class="dh"><span class="dt">The score</span><span class="dm" id="deskmode">live</span></div>
+  <p class="hint">Hover a stave to hear that part</p>
+  <div class="ch" data-ch="0"><span class="nm">Strings</span><span class="mtr"><i></i></span></div>
+  <div class="ch" data-ch="1"><span class="nm">Piano</span><span class="mtr"><i></i></span></div>
+  <div class="ch" data-ch="2"><span class="nm">Brass</span><span class="mtr"><i></i></span></div>
+  <div class="ch" data-ch="3"><span class="nm">Low</span><span class="mtr"><i></i></span></div>
+  <button class="sndBtn" type="button" aria-pressed="false"><span class="dot"></span><span class="lbl">Hear the parts</span></button>
+  <p class="tiny">Sounded live from the written notation. Masters are performed by people, never generated.</p>
+</div>
+
+<main>
+  <!-- 1 · ARRIVAL -->
+  <section id="arrival"><div class="inner"><div class="col">
+    <p class="eb rv">Chordential</p>
+    <h1 class="rv">The music department<br>you don't have to <em>build</em>.</h1>
+    <p class="lede rv">Original score for campaigns, written and recorded in house.
+    One delivery with everything in it — masters, stems, license and chain of title, cleared.</p>
+    <div class="rowbtns rv">
+      <a class="btn solid" href="#brief">Start a brief</a>
+      <a class="btn" href="#take">Hear the score</a>
+    </div>
+    <span class="steer rv">
+      <svg width="34" height="10" viewBox="0 0 34 10" fill="none" aria-hidden="true">
+        <path d="M1 5h32M5 1L1 5l4 4M29 1l4 4-4 4" stroke="#D8CDB6" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      Scroll to read<b> · hover the score to feature a part</b>
+    </span>
+  </div></div></section>
+
+  <!-- 2 · THE TAKE — the score's own house. the "no" that earns the "yes". -->
+  <section id="take"><div class="inner"><div class="col">
+    <p class="eb rv">One · your notes</p>
+    <h2 class="rv">Leave the note where you <em>heard</em> it.</h2>
+    <p class="lede rv">Every commission comes with a portal. Play the cue, mark the exact second
+    you want changed, and your note goes straight to the composer while the piece is still open.
+    No email thread, no writing out timecode, no describing which four seconds you mean.</p>
+
+    <div class="take rv">
+      <div class="player">
+        <div class="ptop">
+          <button class="play" id="playBtn" aria-label="Play the cue"><svg viewBox="0 0 16 16"><path d="M3 1.5v13L14 8z"/></svg></button>
+          <div class="pmeta">
+            <b id="takeName">Movement one</b>
+            <span id="takeState">Draft cue · open for notes</span>
+          </div>
+        </div>
+        <div class="scrub" id="scrub" role="progressbar" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="scrubFill"></i></div>
+        <div class="tc"><span id="tcNow">0:00</span><span id="tcEnd">0:20</span></div>
+        <p class="disclose" id="takeHint">Try it here. Press play, then mark the moment you
+        would change. This is exactly how a note is given in your portal.</p>
+      </div>
+
+      <button class="pin waiting" id="notePin" type="button">
+        <span class="t" id="pinTc">Your note</span>
+        <span class="b" id="pinLabel">Press play, then mark the moment</span>
+        <span id="wire" aria-hidden="true"></span>
+      </button>
+      <p class="verdict" id="verdict"></p>
+
+      <div class="credits" id="credits" hidden>
+        <span>Timestamped</span><span>Sent to the composer</span><span>Answered in the portal</span>
+      </div>
+    </div>
+  </div></div></section>
+
+  <!-- 3 · THE NUMBER — copy's room. the score pulls back and runs low in frame. -->
+  <section id="estimate"><div class="inner"><div class="col">
+    <p class="eb rv">Two · the number</p>
+    <h2 class="rv">Know the range before we <em>talk</em>.</h2>
+    <p class="lede rv">Three answers puts a planning band on screen, so you can size the line
+    before you spend an hour with anyone. Your actual number comes out of the discovery call,
+    once we know the picture, the players and the term.</p>
+
+    <div class="ask rv">
+      <div class="field">
+        <label for="fType">What is it</label>
+        <select id="fType">
+          <option value="anthem">Brand anthem / hero film</option>
+          <option value="spot">Broadcast spot</option>
+          <option value="title">Title sequence / identity</option>
+          <option value="social">Social cutdowns</option>
+        </select>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="fLen">How long</label>
+          <select id="fLen">
+            <option value="15">:15</option>
+            <option value="30" selected>:30</option>
+            <option value="60">:60</option>
+            <option value="120">2:00+</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fUse">Where it runs</label>
+          <select id="fUse">
+            <option value="social">Social / owned</option>
+            <option value="national" selected>National broadcast</option>
+            <option value="global">Global, all media</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn solid" id="priceBtn" type="button" style="justify-self:start">Price it</button>
+    </div>
+
+    <div id="quote">
+      <p class="sub" style="margin-bottom:0">Planning range · not a quote</p>
+      <p class="band" id="bandTxt">—</p>
+      <div class="panel" style="margin-top:22px">
+        <div class="kv" id="bandKv"></div>
+      </div>
+      <p class="disclose">A planning band, not a quote. It is here so you can check we fit the
+      budget you already have. The number you sign comes out of the discovery call, where the
+      picture, the players and the term move it up or down. Nobody should hold either of us
+      to this one.</p>
+      <div class="rowbtns" style="margin-top:24px">
+        <a class="btn solid" href="#brief">Book a discovery call</a>
+      </div>
+    </div>
+  </div></div></section>
+
+  <!-- 4 · THE PAPER -->
+  <section id="paper"><div class="inner"><div class="col">
+    <p class="eb rv">Three · the paper</p>
+    <h2 class="rv">The music arrives with its <em>paperwork</em>.</h2>
+    <p class="lede rv">Everyone who plays on your score signs to us before a note leaves the
+    building. What reaches you is one certificate — warranty, chain of title, territory and
+    term on a single page. Title from one counterparty, not five.</p>
+
+    <div class="cert rv" id="cert">
+      <h3>Clearance certificate</h3>
+      <p class="who">AURORA — “Vance Athletic” :30 · cue 01</p>
+      <div class="clause" id="clause">
+        <p class="flag" id="clauseFlag">In production · 4 of 5 signed</p>
+        <p id="clauseTxt">Four of five contributors have returned work-for-hire agreements. The
+        session cellist's is out for signature — the certificate issues once it's back, which
+        happens before anything ships.</p>
+      </div>
+      <div class="sig">
+        <div>Original work warranty<b id="s1">Drafted</b></div>
+        <div>Chain of title<b id="s2">Assembling</b></div>
+        <div>Contributors signed<b id="s3">4 of 5</b></div>
+        <div>Usage · term<b id="s4">National broadcast · 1 yr</b></div>
+      </div>
+      <button class="btn" id="closeBtn" type="button" style="margin-top:20px">Issue the certificate</button>
+    </div>
+    <p class="sub rv">Illustrative document · brands are invented</p>
+  </div></div></section>
+
+  <!-- 5 · DELIVERY — the score's peak. the scrim drains, the camera dives. -->
+  <section id="deliver"><div class="inner"><div class="col">
+    <p class="eb rv">Four · delivered</p>
+    <h2 class="rv">Everything, named the <em>same way</em>, every time.</h2>
+    <p class="lede rv">Your editor opens one folder and works. Nothing to chase, nothing to
+    rename, nothing outstanding.</p>
+    <div class="crate rv" id="crate">
+      <p class="lid" id="crateLid">Open · nothing packed</p>
+
+      <!-- the objects and the box they pack into. Decorative: the manifest below is
+           the real content and reads identically with none of this running. -->
+      <div class="packstage" id="packstage" aria-hidden="true">
+        <div class="box" id="box">
+          <span class="well"></span>
+          <span class="flap l"></span><span class="flap r"></span>
+          <span class="face"></span>
+        </div>
+      </div>
+
+      <button class="packbtn" id="packBtn" type="button">Pack the delivery</button>
+
+      <div class="manifest" id="manifest">
+        <div><span>Master · 48k/24</span><b>WAV</b></div>
+        <div><span>Stems · 6 groups</span><b>WAV</b></div>
+        <div><span>Cutdowns · :30 / :15 / :06</span><b>WAV</b></div>
+        <div><span>Cue sheet</span><b>PDF</b></div>
+        <div><span>Clearance certificate</span><b>PDF</b></div>
+        <div><span>Metadata + naming manifest</span><b>CSV</b></div>
+      </div>
+      <p class="stamp" id="packStamp" aria-hidden="true">Campaign ready</p>
+    </div>
+  </div></div></section>
+
+  <!-- 6 · THE CLOSE — four denials, then the one instruction -->
+  <section id="brief"><div class="inner"><div class="col">
+    <p class="eb rv">When the campaign ships...</p>
+    <h2 class="rv">Nothing should still be <em>waiting</em>.</h2>
+    <ul class="notlist" role="list">
+      <li class="rv">Not the music.</li>
+      <li class="rv">Not the versions.</li>
+      <li class="rv">Not the rights.</li>
+      <li class="rv">Not the paperwork.</li>
+    </ul>
+    <p class="closer rv">Just press <em>publish</em>.</p>
+    <div class="rowbtns rv">
+      <a class="btn solid" href="#brief" id="startBrief">Start a Brief</a>
+      <a class="btn" href="#brief">Book a Discovery Call</a>
+    </div>
+  </div></div></section>
+</main>
+
+<div id="dock">
+  <div id="dockMix" aria-hidden="true">
+    <span class="dch" data-ch="0"><b>Str</b><i></i></span>
+    <span class="dch" data-ch="1"><b>Pno</b><i></i></span>
+    <span class="dch" data-ch="2"><b>Brs</b><i></i></span>
+    <span class="dch" data-ch="3"><b>Low</b><i></i></span>
+  </div>
+  <button class="sndBtn" type="button" aria-pressed="false" aria-label="Hear the parts"><span class="dot"></span><span class="lbl">Hear the parts</span></button>
+  <a class="btn solid" id="dockCta" href="#brief">Start a brief</a>
+</div>
+
+<footer>
+  <div class="foot">
+    <span>Original music for campaigns — performed by people, cleared before it ships.</span>
+    <span>Brands shown are illustrative · score playback is sounded from notation</span>
+  </div>
+</footer>
+
+<script src="/static/public/vendor/three.min.js?v={{ asset_v }}"></script>
+<script>
+/* Four independently guarded units. A throw in any one of them must not take the
+   document with it — the page previously rendered a black rectangle if a single
+   line failed, because .rv was hidden by CSS and only JS could un-hide it. */
+document.documentElement.lang = 'en';
+document.documentElement.classList.add('js');
+
+var REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+var SMALL  = innerWidth < 900 || !matchMedia('(pointer:fine)').matches;
+var TOUCH  = matchMedia('(pointer:coarse)').matches;
+var PHONE  = TOUCH && innerWidth < 900;
+var LOWPOWER = false;
+try{ LOWPOWER = (navigator.hardwareConcurrency||8) <= 4 || (navigator.deviceMemory||8) <= 4; }catch(e){}
+/* STILL is a stated preference, not a device capability. Folding low-power hardware in
+   here froze the page outright on any 4-core machine — a large slice of real Android.
+   A weak device gets CHEAPER motion; only the person who asked gets none. */
+var STILL = REDUCE;
+var CHEAP = PHONE || LOWPOWER;
+var CHORD  = {};                        /* the one channel between the units */
+
+function unit(name, fn){ try{ fn(); }catch(e){ if(window.console) console.warn(name, e); } }
+
+/* ===================== UNIT 1 · reveal + rail ===================== */
+unit('chrome', function(){
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold:.18});
+  [].forEach.call(document.querySelectorAll('.rv'), function(n){ io.observe(n); });
+
+  var SECT = [['arrival','Arrival'],['take','Your notes'],['estimate','The number'],
+              ['paper','The paper'],['deliver','Delivered'],['brief','Start here']];
+  var rail = document.getElementById('rail');
+  function goto(id){
+    var el = document.getElementById(id);
+    el.scrollIntoView({behavior: REDUCE?'auto':'smooth', block:'start'});
+    el.setAttribute('tabindex','-1');            /* keyboard focus must follow the scroll */
+    el.focus({preventScroll:true});
+  }
+  SECT.forEach(function(s){
+    var b = document.createElement('button');
+    b.type='button'; b.dataset.id=s[0];
+    b.innerHTML = '<span class="lbl">'+s[1]+'</span><span class="dot"></span>';
+    b.addEventListener('click', function(){ goto(s[0]); });
+    rail.appendChild(b);
+  });
+  document.getElementById('skip').addEventListener('click', function(){ goto('brief'); });
+  CHORD.rail = rail;
+});
+
+/* ===================== UNIT 2 · the take ===================== */
+unit('take', function(){
+  /* There is no file to play, and the one that used to be here could not be sourced. The
+     cue IS the score behind you — the same arrays the engraver draws from, sounded by the
+     browser. This transport spent four builds apologising for an empty player while a
+     written cue ran, unheard, three feet behind the copy. */
+  var playBtn = document.getElementById('playBtn'),
+      scrub   = document.getElementById('scrub'),
+      fill    = document.getElementById('scrubFill'),
+      tcNow   = document.getElementById('tcNow'),
+      tcEnd   = document.getElementById('tcEnd'),
+      state   = document.getElementById('takeState'),
+      title   = document.getElementById('takeName'),
+      pin     = document.getElementById('notePin'),
+      pinTc   = document.getElementById('pinTc'),
+      pinLbl  = document.getElementById('pinLabel'),
+      verdict = document.getElementById('verdict');
+  var warmed = false, tick = 0;
+
+  function fmt(t){ t = Math.max(0, t||0);
+    return Math.floor(t/60) + ':' + String(Math.floor(t%60)).padStart(2,'0'); }
+  var ICON_PLAY  = '<svg viewBox="0 0 16 16"><path d="M3 1.5v13L14 8z"/></svg>',
+      ICON_PAUSE = '<svg viewBox="0 0 16 16"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>';
+  function loopLen(){ return CHORD.loop ? CHORD.loop() : 20; }
+  function pos(){ return CHORD.pos ? CHORD.pos() : 0; }
+  function sounding(){ return !!(CHORD.sounding && CHORD.sounding()); }
+
+  function paint(){
+    var t = pos(), L = loopLen();
+    fill.style.width = (t/L*100).toFixed(2) + '%';
+    tcNow.textContent = fmt(t);
+    scrub.setAttribute('aria-valuenow', Math.round(t/L*100));
+    scrub.setAttribute('aria-valuetext', fmt(t) + ' of ' + fmt(L));
+  }
+
+  /* the desk's "hear the parts" and this play button drive ONE transport, so each face
+     has to be told when the other one moves */
+  CHORD.transport = function(isOn){
+    playBtn.innerHTML = isOn ? ICON_PAUSE : ICON_PLAY;
+    playBtn.setAttribute('aria-label', isOn ? 'Pause the cue' : 'Play the cue');
+    clearInterval(tick);
+    if (isOn){ tick = setInterval(paint, 120); paint(); }
+    if (warmed) return;
+    pin.classList.toggle('waiting', !isOn);
+    pinTc.textContent  = isOn ? 'Your note · listening' : 'Your note';
+    pinLbl.textContent = isOn ? '“Too thin. Warmer.” →' : 'Press play, then mark it';
+  };
+
+  function start(){
+    if (!CHORD.sound || !CHORD.sound(true)){
+      state.textContent = 'Audio unavailable in this browser'; return false; }
+    return true;
+  }
+  playBtn.addEventListener('click', function(){
+    if (sounding()){ if (CHORD.sound) CHORD.sound(false); } else start();
+  });
+
+  /* THE NOTE. One click; three things answer — the take, the score, and the paperwork.
+     The timestamp is read off the running transport, so it lands where you actually
+     said it. An earlier build printed a fixed "0:06" and applied the tilt whenever you
+     clicked; the number was decoration, and it was false. */
+  pin.addEventListener('click', function(){
+    if (warmed) return;
+    if (!sounding()){ start(); return; }      /* mark what you can hear, not a number we chose */
+    warmed = true;
+    var at = pos();
+    if (CHORD.warm) CHORD.warm();             /* the tilt lands now, on what is sounding */
+    document.getElementById('wire').classList.add('go');
+    title.textContent  = 'Movement one · new pass';
+    state.textContent  = 'Answered from ' + fmt(at) + ' · returned to your portal';
+    pinTc.textContent  = 'Your note at ' + fmt(at);
+    pinLbl.textContent = 'Sent to the composer';
+    /* the instruction has been followed, so it stops being an instruction */
+    var hint = document.getElementById('takeHint');
+    if (hint) hint.textContent = 'Every note in your portal works this way: pinned to the '+
+      'second, visible to the composer, answered in the same place you left it.';
+    pin.classList.remove('waiting');
+    pin.disabled = true;
+    setTimeout(function(){
+      verdict.innerHTML = 'Your note is pinned to <em>' + fmt(at) + '</em>, not buried in a '+
+        'paragraph trying to describe it. The composer works from the same second you heard, '+
+        'and the next pass comes back in the same place. This one just did.';
+      verdict.classList.add('on');
+      document.getElementById('credits').hidden = false;
+    }, REDUCE ? 0 : 2400);
+    if (CHORD.note) CHORD.note();
+  });
+
+  tcEnd.textContent = fmt(loopLen());
+  /* the bar reports position; it does not seek. The score is a running loop of scheduled
+     voices, not a file with a cursor, and a scrubber that lied about that would be worse
+     than none. */
+  scrub.style.cursor = 'default';
+  scrub.setAttribute('aria-readonly','true');
+});
+
+
+/* ===================== UNIT 3 · the number, the paper, the crate ============ */
+unit('commerce', function(){
+  /* Bands are benchmarked against the published music-house rate cards and the 4A's
+     production survey: music lands at roughly 4–7% of a national :30 production budget.
+     Territory · term is the biggest lever in the category — a worldwide perpetual grant
+     runs ~2.5x a one-year North America baseline, so global steps 2x off the 1 yr band
+     the breakdown quotes. */
+  var BASE = {anthem:[16000,28000], spot:[9000,18000], title:[12000,22000], social:[4500,9000]};
+  var LENM = {'15':0.8,'30':1,'60':1.25,'120':1.6};
+  var USEM = {social:0.75, national:1, global:2.0};
+  var quote=document.getElementById('quote');
+  document.getElementById('priceBtn').addEventListener('click', function(){
+    var t=document.getElementById('fType').value,
+        l=document.getElementById('fLen').value,
+        u=document.getElementById('fUse').value;
+    var b=BASE[t], m=LENM[l]*USEM[u];
+    var lo=Math.round(b[0]*m/500)*500, hi=Math.round(b[1]*m/500)*500;
+    document.getElementById('bandTxt').innerHTML =
+      '$'+lo.toLocaleString()+' <em>–</em> $'+hi.toLocaleString();
+    var typeLbl=document.getElementById('fType').selectedOptions[0].text,
+        useLbl=document.getElementById('fUse').selectedOptions[0].text,
+        lenLbl=(l>=120?'2:00+':':'+l);
+    document.getElementById('bandKv').innerHTML =
+      '<span>Scope</span><span>'+typeLbl+'</span>'+
+      '<span>Duration</span><span>'+lenLbl+'</span>'+
+      '<span>Usage · term · territory</span><span>'+useLbl+' · 1 yr</span>'+
+      '<span>Musicians &amp; studio</span><span>Itemised in the quote</span>'+
+      '<span>Clearance certificate</span><span>Included</span>';
+    quote.classList.add('on');
+    /* the certificate below is the same deal seen from the other end — it carries the
+       scope you priced, not a scope of its own. Two documents disagreeing about the
+       term is the one thing this page cannot afford to demonstrate. */
+    document.getElementById('s4').textContent = useLbl + ' · 1 yr';
+    if (matchMedia('(max-width:760px)').matches){
+      requestAnimationFrame(function(){
+        document.querySelector('#quote .band').scrollIntoView(
+          {behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto':'smooth',
+           block:'center'});
+      });
+    }
+    if (CHORD.price) CHORD.price({type:typeLbl, len:lenLbl, use:useLbl, lo:lo, hi:hi});
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', function(){
+    document.getElementById('clause').classList.add('fixed');
+    document.getElementById('cert').classList.add('done');
+    document.getElementById('clauseFlag').textContent = 'Issued · all contributors signed';
+    document.getElementById('clauseTxt').textContent =
+      'Last agreement returned and countersigned. The chain of title is whole, the warranty '+
+      'stands, and the certificate ships in the package alongside the masters.';
+    document.getElementById('s1').textContent='Signed';
+    document.getElementById('s2').textContent='Complete';
+    document.getElementById('s3').textContent='5 of 5';
+    this.disabled = true; this.textContent = 'Issued';
+    if (CHORD.cleared) CHORD.cleared();
+  });
+
+  /* the 25.6px select was the only hit area inside a 77px card. The card is now the
+     control and the native picker still opens — which is the right control on glass. */
+  [].forEach.call(document.querySelectorAll('.field select'), function(sel){
+    var val = document.createElement('span'); val.className = 'val';
+    val.textContent = sel.selectedOptions[0].text;
+    sel.parentNode.appendChild(val);
+    sel.addEventListener('change', function(){ val.textContent = sel.selectedOptions[0].text; });
+    var dk = document.getElementById('dock');
+    sel.addEventListener('focus', function(){ if(dk) dk.classList.add('hide'); });
+    sel.addEventListener('blur',  function(){ if(dk) dk.classList.remove('hide'); });
+  });
+
+  /* ---- the pack. The visitor presses it; the machine does not pack itself. ----
+     Ported from the earlier site's filing choreography — burst, hold, dive, receipt,
+     seal — with the folder replaced by a box. 96bpm grid, as before. */
+  var BEAT=625, B16=156;
+  var manifest=document.getElementById('manifest'), rows=manifest.children;
+  var stage=document.getElementById('packstage'), box=document.getElementById('box');
+  var packBtn=document.getElementById('packBtn'), lid=document.getElementById('crateLid');
+  var crate=document.getElementById('crate'), stamp=document.getElementById('packStamp');
+  var timers=[], packed=false;
+  function at(ms, fn){ timers.push(setTimeout(fn, REDUCE ? Math.min(ms,60) : ms)); }
+
+  /* five objects for six lines — the metadata manifest is written by the system, so
+     nothing flies into it. That asymmetry is the point of the last row. */
+  var OBJ = [
+    {k:'audio', l:'MASTER · 48k/24'},
+    {k:'audio', l:'STEMS · 6 GROUPS'},
+    {k:'audio', l:'CUTDOWNS · :30 :15 :06'},
+    {k:'paper', l:'DOCUMENTATION · PDF', t:'Cue sheet'},
+    {k:'paper', l:'RIGHTS · CLEARED', t:'Clearance certificate', seal:true}
+  ];
+  var FAN = [[-120,-40],[0,-62],[120,-40],[-150,30],[150,30]];
+  var items = OBJ.map(function(o,i){
+    var el = document.createElement('div');
+    el.className = 'item ' + o.k;
+    if (o.k === 'audio'){
+      var w = '';
+      for (var b=0;b<20;b++){
+        w += '<i style="height:'+(20+Math.abs(Math.sin(b*0.8)*Math.sin(b*0.31))*80)+'%"></i>';
+      }
+      el.innerHTML = '<div class="l">'+o.l+'</div><div class="w">'+w+'</div>';
+    } else {
+      el.innerHTML = '<div class="l">'+o.l+'</div><div class="t">'+o.t+'</div>' +
+        '<div class="ln"><i style="width:80%"></i><i style="width:62%"></i><i style="width:71%"></i></div>' +
+        (o.seal ? '<div class="seal">✓</div>' : '');
+    }
+    stage.insertBefore(el, box);
+    return el;
+  });
+
+  var FS = Math.min(1, (Math.min(innerWidth, 560) - 40) / 520);
+  function burst(){
+    items.forEach(function(el,i){
+      at(i<3 ? i*B16 : (2+i)*B16, function(){
+        el.style.transition = '';
+        el.style.opacity = '1';
+        el.style.transform = 'translate(calc(-50% + '+Math.round(FAN[i][0]*FS)+'px), calc(-50% + '+
+          Math.round(FAN[i][1]*FS)+'px)) rotate('+(i>2?(i===3?-4:4):0)+'deg) scale(1)';
+      });
+    });
+  }
+  function fileAway(el, rot){
+    el.style.transition = 'transform '+BEAT+'ms cubic-bezier(.6,0,.4,1), opacity 320ms ease';
+    el.style.transform = 'translate(-50%, calc(-50% + 84px)) '+(rot||'')+' scale(.16)';
+    el.style.opacity = '0';
+  }
+  function fileIn(){
+    lid.textContent = 'Filing…';
+    at(200, function(){ box.classList.add('show'); });
+    [].forEach.call(rows, function(r,i){
+      at(i*BEAT*0.7, function(){
+        if (items[i]) fileAway(items[i], i===3 ? 'rotate(-4deg)' : i===4 ? 'rotate(4deg)' : '');
+        at(430, function(){ r.classList.add('in'); });
+      });
+    });
+    at(rows.length*BEAT*0.7 + BEAT + 430, function(){
+      box.classList.add('sealed');
+      at(REDUCE?0:260, function(){
+        stamp.classList.add('land');
+        crate.classList.add('sealed');
+        lid.textContent = 'Sealed · delivered';
+        packBtn.disabled = false;
+        packBtn.textContent = '↺ Pack it again';
+      });
+    });
+  }
+  function reset(){
+    timers.forEach(clearTimeout); timers = [];
+    box.classList.remove('show','sealed');
+    crate.classList.remove('sealed');
+    stamp.classList.remove('land');
+    [].forEach.call(rows, function(r){ r.classList.remove('in'); });
+    items.forEach(function(el,i){
+      el.style.transition = 'none';
+      el.style.opacity = '0';
+      el.style.transform = 'translate(-50%,-50%) scale(.6)';
+    });
+    void stage.offsetWidth;                 /* commit the reset before re-animating */
+    items.forEach(function(el){ el.style.transition = ''; });
+    lid.textContent = 'Open · nothing packed';
+  }
+  packBtn.addEventListener('click', function(){
+    if (packed) reset();
+    packed = true;
+    packBtn.disabled = true;
+    packBtn.textContent = 'Packing…';
+    lid.textContent = 'Five objects · loose';
+    at(REDUCE?0:30, function(){ burst(); at(7*B16 + BEAT*1.6, fileIn); });
+  });
+});
+
+/* ==================================================================================
+   UNIT 4 · THE SCORE — a real engraved four-part score, and the page's other half.
+   All content above lives in semantic DOM and works if none of this initialises.
+   ------------------------------------------------------------------------------
+   THE MUSIC — written and voice-led by the supervising composer.
+   8 bars, 4/4, B-flat major (2 flats).
+     bars 1-4  Bb | Gm7 | Cm7 | F7            (I - vi7 - ii7 - V7)
+     bars 5-8  Bb/D | Gm7 | Ebm | F7sus4-3    (iv borrowed from Bb minor = the warmth)
+   One convention everywhere: b and d are BOTH in sixteenths. Quarter = d:4.
+   s = staff steps from that stave's middle line, hard-limited to -5..+5 because this
+   renderer draws no ledger lines. acc = ACCENT. alt = written accidental.
+   ================================================================================== */
+unit('score', function(){
+
+var STRINGS_LINE = [
+  {b:0,s:2,d:16,tie:1},{b:16,s:2,d:16},{b:32,s:3,d:16,tie:1},{b:48,s:3,d:16},
+  {b:64,s:2,d:16},{b:80,s:4,d:16},{b:96,s:3,d:16},{b:112,s:0,d:8},{b:120,s:-1,d:8}
+];
+/* the "warmer" re-voicing: a companion voice a third below, and bar 7 re-centred on
+   the borrowed Gb — thirds read warm where open fifths read cold */
+var STRINGS_WARM = [
+  {b:64,s:0,d:16},{b:80,s:2,d:16},{b:96,s:-2,d:16,alt:'b'},{b:112,s:-2,d:8},{b:120,s:-3,d:8},
+  {b:96,s:0,d:16}
+];
+var PIANO_LINE = [
+  {b:0,s:-2,d:8,h:'b'},{b:8,s:2,d:8,h:'b'},{b:16,s:-4,d:8,h:'b'},{b:24,s:2,d:8,h:'b'},
+  {b:32,s:-1,d:8,h:'b'},{b:40,s:3,d:8,h:'b'},{b:48,s:-5,d:8,h:'b'},{b:56,s:1,d:8,h:'b'},
+  {b:64,s:0,d:8,h:'b'},{b:72,s:2,d:8,h:'b'},{b:80,s:-4,d:8,h:'b'},{b:88,s:2,d:8,h:'b'},
+  {b:96,s:1,d:8,h:'b'},{b:104,s:-2,d:8,h:'b'},{b:112,s:-5,d:4,h:'b'},{b:116,s:-2,d:4,h:'b'},
+  {b:120,s:-5,d:4,h:'b'},{b:124,s:4,d:4,h:'b'},
+  /* right hand: silent through the first six sixteenths of every bar, then speaks on
+     the "and" of beat 2 — the only voice off the strong beats */
+  {b:6,s:4,d:10,h:'t'},{b:22,s:5,d:10,h:'t'},{b:38,s:1,d:10,h:'t'},{b:54,s:-1,d:10,h:'t'},
+  {b:70,s:4,d:10,h:'t'},{b:86,s:0,d:10,h:'t'},{b:102,s:5,d:10,h:'t',alt:'b'},{b:118,s:1,d:10,h:'t'}
+];
+var BRASS_LINE = [
+  {b:0,s:0,d:4,acc:1},{b:8,s:0,d:4,acc:1},{b:16,s:-2,d:4,acc:1},{b:24,s:-2,d:4,acc:1},
+  {b:32,s:1,d:4,acc:1},{b:40,s:1,d:4,acc:1},{b:48,s:4,d:4,acc:1},{b:56,s:4,d:4,acc:1},
+  {b:64,s:2,d:4,acc:1},{b:72,s:2,d:4,acc:1},{b:80,s:-2,d:4,acc:1},{b:88,s:-2,d:4,acc:1},
+  {b:96,s:3,d:4,acc:1,alt:'b'},{b:104,s:-2,d:4},{b:112,s:-2,d:4,acc:1},{b:120,s:4,d:4,acc:1}
+];
+var LOW_LINE = [
+  {b:0,s:-2,d:8},{b:8,s:-2,d:8},{b:16,s:-4,d:8},{b:24,s:-4,d:8},
+  {b:32,s:-1,d:8},{b:40,s:-1,d:8},{b:48,s:-5,d:8},{b:56,s:-5,d:8},
+  {b:64,s:0,d:8},{b:72,s:0,d:8},{b:80,s:-4,d:8},{b:88,s:-4,d:8},
+  {b:96,s:1,d:8},{b:104,s:1,d:8},{b:112,s:2,d:8},{b:120,s:2,d:8}
+];
+/* a companion voice a diatonic third below, generated rather than hand-set — the
+   accidentals only matter on the two borrowed notes, which are hand-voiced above */
+function third(line){
+  return line.filter(function(n){ return n.b % 16 === 0; })
+             .map(function(n){ return {b:n.b, s:Math.max(-5, n.s-2), d:n.d, h:n.h}; });
+}
+var STEMS = [
+  {name:'Strings', y: 5.00, hue:[0.92,0.42,0.22], staves:[{clef:'treble', off:0}],
+   rhythm:STRINGS_LINE, warmRhythm:STRINGS_WARM},
+  {name:'Piano',   y: 1.55, hue:[0.98,0.72,0.42],
+   staves:[{clef:'treble', off: 0.95},{clef:'bass', off:-0.95}], grand:true,
+   rhythm:PIANO_LINE, warmRhythm:third(PIANO_LINE)},
+  {name:'Brass',   y:-2.10, hue:[0.86,0.34,0.14], staves:[{clef:'bass', off:0}],
+   rhythm:BRASS_LINE, warmRhythm:third(BRASS_LINE)},
+  {name:'Low',     y:-5.00, hue:[0.72,0.28,0.18], staves:[{clef:'bass', off:0}],
+   rhythm:LOW_LINE, warmRhythm:third(LOW_LINE)}
+];
+var LEN = CHEAP ? 160 : 420, SPACING = 1.15, TILE = 26, PXU = 132;
+var SPAN = LEN*SPACING;
+var HEAD_PX = 172;                       /* the lead-in every tile leaves empty */
+var X0 = HEAD_PX/PXU, XW = (TILE*PXU - 192)/PXU;
+var DPX = CHEAP ? 0.34 : (SMALL ? 0.5 : 1);   /* the staff planes are 39% of the phone frame */
+
+/* ---------- ENGRAVER: the music only. the clef/key/time live on their own mesh,
+     placed once every eight tiles — a score does not restate its key every four bars. */
+function engrave(st){
+  var W = TILE*PXU, SP = 26, rows = st.staves, H = st.grand ? 520 : 384;
+  var c = document.createElement('canvas');
+  c.width = Math.round(W*DPX); c.height = Math.round(H*DPX);
+  var x = c.getContext('2d'); x.scale(DPX, DPX);
+  var midOf = function(row){ return H/2 - row.off*PXU; };
+  x.strokeStyle='rgba(236,226,206,0.62)'; x.lineCap='round';
+
+  rows.forEach(function(row){
+    var mid = midOf(row);
+    function yOf(step){ return mid - step*(SP/2); }
+    x.lineWidth=1.6;
+    for (var ln=-2; ln<=2; ln++){ x.beginPath(); x.moveTo(0,yOf(ln*2)); x.lineTo(W,yOf(ln*2)); x.stroke(); }
+    x.lineWidth=2.0;
+    for (var bar=1; bar<4; bar++){ var bx=bar*(W/4);
+      x.beginPath(); x.moveTo(bx,yOf(-4)); x.lineTo(bx,yOf(4)); x.stroke(); }
+    x.lineWidth=3.2; x.beginPath(); x.moveTo(W-4,yOf(-4)); x.lineTo(W-4,yOf(4)); x.stroke();
+  });
+
+  var R = st.rhythm;
+  x.strokeStyle='rgba(240,231,213,0.82)';
+  R.forEach(function(n,i){
+    var row = st.grand ? (n.h === 'b' ? rows[1] : rows[0]) : rows[0];
+    var mid = midOf(row), ns = n.s;
+    var nx = HEAD_PX + (n.b/128)*(W-192), ny = mid - ns*(SP/2);
+    var up = ns < 1, stemLen = SP*3.2;
+    if (n.d < 16){ x.lineWidth=2.4; x.beginPath();
+      x.moveTo(nx+(up?8.5:-8.5), ny); x.lineTo(nx+(up?8.5:-8.5), ny+(up?-stemLen:stemLen)); x.stroke(); }
+    if (n.d<=2 && (n.b%16)%4===0 && R[i+3]){
+      var r2 = st.grand ? (R[i+3].h==='b'?rows[1]:rows[0]) : rows[0];
+      var x2 = HEAD_PX + (R[i+3].b/128)*(W-192), y2 = midOf(r2) - R[i+3].s*(SP/2);
+      x.lineWidth=5.0; x.beginPath();
+      x.moveTo(nx+(up?8.5:-8.5), ny+(up?-stemLen:stemLen));
+      x.lineTo(x2+(up?8.5:-8.5), y2+(up?-stemLen:stemLen)); x.stroke();
+      x.lineWidth=2.8; x.beginPath();
+      x.moveTo(nx+(up?8.5:-8.5), ny+(up?-stemLen+9:stemLen-9));
+      x.lineTo(x2+(up?8.5:-8.5), y2+(up?-stemLen+9:stemLen-9)); x.stroke();
+    }
+    if (n.alt){                       /* without this, bar 7's borrowed note prints natural */
+      x.fillStyle='rgba(246,238,222,0.95)';
+      x.font='600 '+(SP*2.0)+'px Georgia, serif';
+      x.fillText('♭', nx-30, ny+SP*0.60);
+    }
+    if (n.acc){ x.lineWidth=2.2; x.beginPath();
+      x.moveTo(nx-9,ny-SP*1.7); x.lineTo(nx+9,ny-SP*1.55); x.lineTo(nx-9,ny-SP*1.4); x.stroke(); }
+    if (n.tie && R[i+1]){
+      var tx2 = HEAD_PX + (R[i+1].b/128)*(W-192);
+      x.lineWidth=2.2; x.beginPath();
+      x.moveTo(nx+11, ny+SP*0.85);
+      x.quadraticCurveTo((nx+tx2)/2, ny+SP*2.2, tx2-11, ny+SP*0.85); x.stroke();
+    }
+  });
+  var tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = SPAN/TILE;
+  tex.anisotropy = SMALL ? 2 : 8;
+  return {tex:tex, H:H, SP:SP, W:W, midOf:midOf, rows:rows};
+}
+
+/* the system head — clef, key signature, time signature, brace. Drawn once, placed
+   at the start of every eighth tile, so passing one reads as a new system. */
+function engraveHead(st){
+  var W = HEAD_PX, SP = 26, rows = st.staves, H = st.grand ? 520 : 384;
+  var c = document.createElement('canvas');
+  c.width = Math.round(W*DPX); c.height = Math.round(H*DPX);
+  var x = c.getContext('2d'); x.scale(DPX, DPX);
+  var midOf = function(row){ return H/2 - row.off*PXU; };
+  rows.forEach(function(row){
+    var mid = midOf(row);
+    function yOf(step){ return mid - step*(SP/2); }
+    x.strokeStyle='rgba(236,226,206,0.62)'; x.lineWidth=1.6;
+    for (var ln=-2; ln<=2; ln++){ x.beginPath(); x.moveTo(0,yOf(ln*2)); x.lineTo(W,yOf(ln*2)); x.stroke(); }
+    x.save(); x.translate(30, mid);
+    x.strokeStyle='rgba(244,236,220,0.95)'; x.lineWidth=4.6; x.lineJoin='round';
+    if (row.clef==='treble'){
+      x.beginPath();
+      x.moveTo(6,46); x.bezierCurveTo(30,42,32,12,10,6); x.bezierCurveTo(-14,0,-16,30,4,34);
+      x.bezierCurveTo(26,39,30,6,22,-22); x.bezierCurveTo(16,-44,-2,-50,-6,-32);
+      x.bezierCurveTo(-9,-16,6,-6,18,8); x.bezierCurveTo(30,24,26,54,8,58);
+      x.bezierCurveTo(-2,60,-8,54,-8,48); x.stroke();
+      x.beginPath(); x.arc(-7,50,4.6,0,6.3); x.fillStyle='rgba(244,236,220,0.95)'; x.fill();
+    } else {
+      x.beginPath(); x.moveTo(-8,-20);
+      x.bezierCurveTo(14,-24,26,-6,20,14); x.bezierCurveTo(15,30,0,40,-14,44); x.stroke();
+      x.beginPath(); x.arc(-9,-20,5.2,0,6.3); x.fillStyle='rgba(244,236,220,0.95)'; x.fill();
+      x.beginPath(); x.arc(28,-8,3.6,0,6.3); x.fill();
+      x.beginPath(); x.arc(28, 4,3.6,0,6.3); x.fill();
+    }
+    x.restore();
+    x.fillStyle='rgba(240,231,213,0.88)'; x.font='600 '+(SP*2.1)+'px Georgia, serif';
+    var fl = (row.clef==='treble') ? [4,1] : [2,-1];
+    for (var f=0;f<2;f++){ x.fillText('♭', 84+f*17, yOf(fl[f])+SP*0.62); }
+    x.font='700 '+(SP*1.95)+'px Georgia, serif'; x.textAlign='center';
+    x.fillText('4',140,yOf(2)+SP*0.72); x.fillText('4',140,yOf(-2)+SP*0.78);
+    x.textAlign='left';
+  });
+  if (st.grand){
+    var t0=midOf(rows[0])-SP*2.4, t1=midOf(rows[1])+SP*2.4;
+    x.strokeStyle='rgba(244,236,220,0.85)'; x.lineWidth=5;
+    x.beginPath(); x.moveTo(14,t0);
+    x.bezierCurveTo(-14,(t0+t1)/2-40, 26,(t0+t1)/2, 4,(t0+t1)/2);
+    x.bezierCurveTo(26,(t0+t1)/2, -14,(t0+t1)/2+40, 14,t1);
+    x.stroke();
+    x.lineWidth=3; x.beginPath(); x.moveTo(20,t0); x.lineTo(20,t1); x.stroke();
+  }
+  var tex = new THREE.CanvasTexture(c); tex.anisotropy = SMALL ? 2 : 8;
+  return tex;
+}
+
+/* deterministic per-part envelopes — the shape each ribbon breathes to */
+STEMS.forEach(function(st, i){
+  var seed = 9001 + i*7717, sr = function(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; };
+  var amp=[], env=0;
+  for (var k=0;k<LEN;k++){
+    var phrase = 0.5 + 0.5*Math.sin(k/LEN*Math.PI*6 + i*1.7);
+    env += (phrase*(0.45+0.55*sr())-env)*0.16;
+    var carrier = Math.abs(Math.sin(k*(2.9+i*0.7))*0.5 + Math.sin(k*(1.13+i*0.31))*0.32 + Math.sin(k*(5.7+i))*0.18);
+    amp.push(env*(0.10+0.90*carrier));
+  }
+  st.amp = amp;
+});
+
+/* -------------------- state: computed in one place, applied in another ---------- */
+var S = {
+  prog:0, stage:0, act:0,          /* stage is CONTINUOUS — every ramp keys off it */
+  listenY:1.55, listenTarget:1.55, camX:0, camZ:14.2, camY:0.15,
+  atmo:1, scrim:0.96, fold:0,
+  mix:[0,0,0,0], note:-1, warm:false, priced:false, cleared:false
+};
+/* per-section keyframes. the score owns 0,1,4; the copy owns 2,3; 5 is the return. */
+var K_ATMO  = [1.00, 1.14, 0.82, 0.80, 1.30, 0.98];
+/* the zoom used to travel 7.4 -> 21.5, a 2.9x lurch that re-scaled the staves between
+   every section. The shape is kept — closer for the take, back for the copy rooms, a
+   dip for the delivery — inside a 1.6x range, so scrolling reads as one move. */
+var K_Z     = [13.8, 11.8, 16.8, 17.2, 10.6, 14.2];
+var K_Y     = [0.15, 0.05, 3.10, 3.30, -0.30, 0.55];
+var K_SCRIM = [0.86, 0.52, 0.74, 0.76, 0.10, 0.40];
+function track(K, s){
+  var i = Math.max(0, Math.min(K.length-1, Math.floor(s)));
+  var j = Math.min(K.length-1, i+1), f = Math.max(0, Math.min(1, s-i));
+  f = f*f*(3-2*f);
+  return K[i] + (K[j]-K[i])*f;
+}
+
+var cv = document.getElementById('bg'), ok=false, renderer, scene, camera, ribbons=[], floorMat,
+    post=null, marks=[], t0=performance.now(), FLOOR=-8.2;
+var BLOOM = !REDUCE && !SMALL && !LOWPOWER;
+
+renderer = new THREE.WebGLRenderer({canvas:cv, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(CHEAP ? 1 : Math.min(devicePixelRatio, 1.5));  /* fill, not dpr, is the cost */
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x0B0407, 1);
+scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0B0407, 0.024);
+camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 400);
+
+/* ---- the floor: a polished dark stage, lit by what stands on it ---- */
+floorMat = new THREE.ShaderMaterial({
+  uniforms:{ uCam:{value:new THREE.Vector3()}, uDim:{value:1} },
+  vertexShader:[
+    'varying vec3 vW;',
+    'void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz;',
+    '  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }'].join('\n'),
+  fragmentShader:[
+    'uniform vec3 uCam; uniform float uDim; varying vec3 vW;',
+    'void main(){',
+    '  float d = distance(vW.xz, uCam.xz);',
+    '  float near = smoothstep(170.0, 3.0, d);',
+    '  float ln = smoothstep(0.988, 1.0, abs(sin(vW.x*0.30)));',
+    '  vec3 base = mix(vec3(0.006,0.002,0.004), vec3(0.115,0.048,0.038), pow(near,1.4));',
+    '  base += ln * near * vec3(0.075,0.032,0.022);',
+    '  float side = smoothstep(46.0, 4.0, abs(vW.x - uCam.x));',
+    '  gl_FragColor = vec4(base*(0.30+side*0.70)*uDim, 1.0);',
+    '}'].join('\n')
+});
+var floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(SPAN+300, 150, 1, 1), floorMat);
+floorMesh.rotation.x = -Math.PI/2;
+floorMesh.position.set(SPAN/2, FLOOR, -6);
+if (!CHEAP) scene.add(floorMesh);   /* 31% of the phone frame, for a gradient */
+
+var RIB_V = [
+  'attribute float edge; varying float vEdge; varying float vFog;',
+  'void main(){ vEdge=edge;',
+  '  vec4 mv = modelViewMatrix*vec4(position,1.0);',
+  '  vFog = clamp(1.0-(-mv.z)/62.0, 0.0, 1.0);',
+  '  gl_Position = projectionMatrix*mv; }'].join('\n');
+var RIB_F = [
+  'uniform vec3 uColor; uniform float uLevel; uniform float uOpacity;',
+  'varying float vEdge; varying float vFog;',
+  'void main(){',
+  '  float g = 1.0-abs(vEdge);',
+  '  float core = pow(g, 7.0);',
+  '  float body = pow(g, 1.15);',
+  '  float lvl = 0.30 + uLevel*1.15;',
+  '  float a = (body*0.20 + core*0.72) * pow(vFog,1.45) * lvl * uOpacity;',
+  '  vec3 c = mix(uColor, vec3(1.0,0.95,0.88), core*0.85);',
+  '  gl_FragColor = vec4(c*lvl, a);',
+  '}'].join('\n');
+var NOTE_V = [
+  'attribute float size; uniform float uPlay;',
+  'varying float vFog; varying float vHit;',
+  'void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0);',
+  '  vFog = clamp(1.0-(-mv.z)/58.0,0.0,1.0);',
+  '  vHit = smoothstep(1.7, 0.0, abs(position.x - uPlay));',
+  '  gl_PointSize = size*(1.0+vHit*0.42)*190.0/max(-mv.z,1.0);',
+  '  gl_Position = projectionMatrix*mv; }'].join('\n');
+var NOTE_F = [
+  'uniform sampler2D uTex; uniform vec3 uColor; uniform float uLevel; uniform float uFade;',
+  'varying float vFog; varying float vHit;',
+  'void main(){ vec4 t = texture2D(uTex, gl_PointCoord);',
+  /* the heat rides the ALPHA, not the colour magnitude. Boosting the rgb was what
+     made the pass read white: ember*2.5 clamps every channel to 1.0. */
+  '  float a = t.a * pow(vFog,1.5) * (0.46 + uLevel*0.62 + vHit*1.15) * uFade;',
+  '  if(a < 0.01) discard;',
+  '  float hot = pow(vHit, 1.55);',
+  '  vec3 c = mix(uColor*(0.60+uLevel*0.80), vec3(1.00,0.36,0.07), hot);',
+  '  gl_FragColor = vec4(c*(1.0+hot*0.30), a); }'].join('\n');
+function headTex(open){
+  var hc = document.createElement('canvas'); hc.width=hc.height=64;
+  var h = hc.getContext('2d');
+  h.translate(32,32); h.rotate(-0.34);
+  if (open){ h.strokeStyle='#fff'; h.lineWidth=7; h.beginPath(); h.ellipse(0,0,19,13,0,0,6.3); h.stroke(); }
+  else { h.fillStyle='#fff'; h.beginPath(); h.ellipse(0,0,21,14,0,0,6.3); h.fill(); }
+  return new THREE.CanvasTexture(hc);
+}
+var TEX_FILLED = headTex(false), TEX_OPEN = headTex(true);
+
+function notesFrom(list, st, eng, STEP_W, z, colour){
+  var groups = [[],[]];
+  var tiles = Math.ceil(SPAN/TILE);
+  list.forEach(function(n){
+    var row = st.grand ? (n.h === 'b' ? eng.rows[1] : eng.rows[0]) : eng.rows[0];
+    var wy  = st.y + row.off + n.s*STEP_W;
+    for (var tI=0; tI<tiles; tI++){
+      var wx = tI*TILE + X0 + (n.b/128)*XW;
+      if (wx > SPAN) continue;
+      groups[n.d>16?1:0].push(wx, wy, z, n.acc?1.2:(n.d<=4?0.74:1.0));
+    }
+  });
+  return groups.map(function(arr, gi){
+    if (!arr.length) return null;
+    var p=[], sz=[];
+    for (var q=0;q<arr.length;q+=4){ p.push(arr[q],arr[q+1],arr[q+2]); sz.push(arr[q+3]); }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p,3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+    var m = new THREE.ShaderMaterial({
+      uniforms:{ uTex:{value: gi===1?TEX_OPEN:TEX_FILLED},
+                 uColor:{value:new THREE.Color(colour[0],colour[1],colour[2])},
+                 uLevel:{value:0}, uPlay:{value:0}, uFade:{value:1} },
+      vertexShader:NOTE_V, fragmentShader:NOTE_F,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending });
+    return {pts:new THREE.Points(g,m), mat:m};
+  }).filter(Boolean);
+}
+
+STEMS.forEach(function(st){
+  var geo = new THREE.BufferGeometry();
+  var pos = new Float32Array(LEN*2*3), edg = new Float32Array(LEN*2), idx=[];
+  for (var k=0;k<LEN;k++){
+    var px = k*SPACING;
+    pos[k*6+0]=px; pos[k*6+1]= st.y + st.amp[k]*0.30; pos[k*6+2]=0;
+    pos[k*6+3]=px; pos[k*6+4]= st.y - st.amp[k]*0.30; pos[k*6+5]=0;
+    edg[k*2]=1; edg[k*2+1]=-1;
+    if(k<LEN-1){ var a=k*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('edge', new THREE.BufferAttribute(edg,1));
+  geo.setIndex(idx);
+  function ribMat(op){
+    return new THREE.ShaderMaterial({
+      uniforms:{ uColor:{value:new THREE.Color(st.hue[0],st.hue[1],st.hue[2])},
+                 uLevel:{value:0}, uOpacity:{value:op} },
+      vertexShader:RIB_V, fragmentShader:RIB_F,
+      transparent:true, side:THREE.DoubleSide,
+      blending:THREE.AdditiveBlending, depthWrite:false });
+  }
+  var grp = new THREE.Group(); scene.add(grp);
+  var mat = ribMat(1.0), mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 3; grp.add(mesh);
+  var rmat = ribMat(0.24), refl = null;
+  if (!CHEAP){                                  /* reflections are 14.5% of the frame */
+    refl = new THREE.Mesh(geo, rmat);
+    refl.scale.y = -1; refl.position.y = 2*FLOOR; refl.renderOrder = 2; scene.add(refl);
+  }
+
+  var eng = engrave(st);
+  var staffMat = new THREE.MeshBasicMaterial({ map:eng.tex, transparent:true,
+    depthWrite:false, opacity:0.9 });
+  var staff = new THREE.Mesh(new THREE.PlaneGeometry(SPAN, eng.H/PXU), staffMat);
+  staff.position.set(SPAN/2, st.y, 0);
+  staff.renderOrder = 2; grp.add(staff);
+
+  /* one system head every eight tiles */
+  var headMat = new THREE.MeshBasicMaterial({ map:engraveHead(st), transparent:true,
+    depthWrite:false, opacity:0.9 });
+  var headW = HEAD_PX/PXU, heads=[];
+  for (var hI=0; hI*TILE*8 < SPAN; hI++){
+    var hm = new THREE.Mesh(new THREE.PlaneGeometry(headW, eng.H/PXU), headMat);
+    hm.position.set(hI*TILE*8 + headW/2, st.y, 0.01);
+    hm.renderOrder = 3; grp.add(hm); heads.push(hm);
+  }
+
+  var STEP_W = (eng.SP/2)/PXU;
+  var noteObjs = notesFrom(st.rhythm, st, eng, STEP_W, 0.03, [1.0,0.88,0.74]);
+  noteObjs.forEach(function(n){ n.pts.renderOrder = 4; grp.add(n.pts); });
+
+  /* the companion voice this part gains when the client gives the note. Per-part —
+     a single shared material silently clobbered every stem but the last. */
+  var warmObjs = notesFrom(st.warmRhythm, st, eng, STEP_W, 0.05, [1.0,0.70,0.40]);
+  warmObjs.forEach(function(n){ n.pts.renderOrder = 5; n.mat.uniforms.uFade.value = 0; grp.add(n.pts); });
+
+  var lc = document.createElement('canvas'); lc.width=512; lc.height=128;
+  var lx = lc.getContext('2d');
+  lx.font='600 54px ui-monospace, Menlo, monospace';
+  lx.fillStyle='rgba(252,247,248,0.92)'; lx.textAlign='center'; lx.textBaseline='middle';
+  lx.letterSpacing = '10px';
+  lx.fillText(st.name.toUpperCase(), 256, 64);
+  var label = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(lc), transparent:true, depthWrite:false, depthTest:false, opacity:0 }));
+  label.scale.set(4.0,1.0,1); label.renderOrder = 6; scene.add(label);
+
+  ribbons.push({grp:grp, refl:refl, mat:mat, rmat:rmat, geo:geo, stem:st, headMat:headMat,
+                staffMat:staffMat, notes:noteObjs, warms:warmObjs, label:label});
+});
+
+/* ---------------- THE PLAYHEAD: one thin rule standing on the score, where the ear
+   is. It reads as a line, not a glow — the halo is only wide enough to sit in the
+   air rather than float on top of it. ---------------- */
+var PLAY_V = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }';
+var PLAY_F = [
+  'uniform float uOp; varying vec2 vUv;',
+  'void main(){',
+  '  float x = abs(vUv.x-0.5)*2.0;',
+  '  float core = pow(max(0.0,1.0-x), 30.0);',   /* the rule itself — a couple of px */
+  '  float halo = pow(max(0.0,1.0-x), 3.5)*0.13;',
+  '  float ends = smoothstep(0.0,0.10,vUv.y)*smoothstep(1.0,0.90,vUv.y);',
+  '  float a = (core+halo)*ends*uOp;',
+  '  if(a < 0.004) discard;',
+  '  vec3 c = mix(vec3(1.00,0.46,0.14), vec3(1.0,0.88,0.70), core);',
+  '  gl_FragColor = vec4(c*(0.85+core*1.5), a);',
+  '}'].join('\n');
+var playMat = new THREE.ShaderMaterial({
+  uniforms:{ uOp:{value:0} }, vertexShader:PLAY_V, fragmentShader:PLAY_F,
+  transparent:true, depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending });
+var playLine = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 15.6), playMat);
+playLine.renderOrder = 8; scene.add(playLine);
+
+/* ---------------- THE MARKS: everything the visitor decides gets engraved into the
+   manuscript, permanently, in music's own notation. At the door they are looking at
+   their own marked-up part. ---------------- */
+var MARK_V = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }';
+var MARK_F = [
+  'uniform sampler2D uTex; uniform float uReveal; uniform float uOp; varying vec2 vUv;',
+  'void main(){ if(vUv.x > uReveal) discard;',
+  '  vec4 t = texture2D(uTex, vUv);',
+  '  if(t.a < 0.01) discard;',
+  '  gl_FragColor = vec4(t.rgb, t.a*uOp); }'].join('\n');
+function addMark(draw, w, h, wx, wy){
+  var px = Math.min(2048, Math.round(innerWidth * Math.min(devicePixelRatio,2) * 1.4));
+  var c = document.createElement('canvas');
+  c.width = px; c.height = Math.max(2, Math.round(px*h/w));
+  draw(c.getContext('2d'), c.width, c.height);
+  var m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.ShaderMaterial({
+    uniforms:{uTex:{value:new THREE.CanvasTexture(c)}, uReveal:{value:0}, uOp:{value:1}},
+    vertexShader:MARK_V, fragmentShader:MARK_F,
+    transparent:true, depthWrite:false, depthTest:false}));
+  m.position.set(wx + w/2, wy, 0.14); m.renderOrder = 9; scene.add(m);
+  var rec = {mesh:m, mat:m.material, x0:wx, x1:wx+w, born:performance.now(), dur:STILL?1:520};
+  marks.push(rec); return rec;
+}
+var EMBER = '#E4671F', EMBER_S = 'rgba(228,103,31,';
+
+/* the note: a conductor's marking. It brackets SIX BARS OF THE WHOLE SCORE — every
+   part is inside the region, because a mix note lands on the arrangement, not on one
+   player. Sizes are all in u = px per world unit, so it engraves at the score's scale. */
+var PORTRAIT = innerWidth/innerHeight < 0.9;
+/* at aspect 0.46, framing 39 units needs z=95.7 — where FogExp2(.024) is 99.5% opaque.
+   A phone brackets TWO bars, which is what a conductor actually writes anyway. */
+var MARK_W = PORTRAIT ? 12.0 : 39, MARK_H = 12.4;
+var MARK_TX = PORTRAIT ? 0.10 : 0.56;
+var MARK_LABEL = PORTRAIT ? '0:06 → 0:08 · YOUR NOTE' : '0:06 → 0:14   ·   YOUR NOTE';
+function fitZ(worldW, margin){
+  return (worldW + margin) / (2*Math.tan(camera.fov*Math.PI/360)*camera.aspect);
+}
+function drawMarking(x, W, H){
+  var u = W/MARK_W;                       /* px per world unit */
+  function cy(worldY){ return H/2 - worldY*u; }
+  var SP = 0.197*u;                       /* one stave space, matching the engraver */
+  x.lineCap='butt';
+  [5.00, 1.55, -2.10, -5.00].forEach(function(sy){
+    var m = cy(sy);
+    x.fillStyle = EMBER_S+'0.14)';
+    x.fillRect(0, m-SP*2.1, W, SP*4.2);   /* the stave interior, tinted */
+    x.fillStyle = EMBER_S+'0.85)';
+    x.fillRect(0, m-SP*2.6, W, Math.max(1.5, SP*0.16));
+  });
+  /* the region brackets — this passage, top to bottom */
+  var top = cy(6.0), bot = cy(-6.2);
+  x.fillStyle = EMBER;
+  x.fillRect(0, top, Math.max(2, u*0.05), bot-top);
+  x.fillRect(W-Math.max(2, u*0.05), top, Math.max(2, u*0.05), bot-top);
+  x.fillRect(0, top, u*0.55, Math.max(2, u*0.05));
+  x.fillRect(W-u*0.55, top, u*0.55, Math.max(2, u*0.05));
+  x.font = '600 '+Math.round(u*0.30)+'px ui-monospace, Menlo, monospace';
+  x.fillStyle = EMBER;
+  x.fillText(MARK_LABEL, W*MARK_TX, top - u*0.20);
+  /* the marking itself, under the strings — where a conductor would write it */
+  var sm = cy(5.00);
+  x.font = 'italic 700 '+Math.round(u*0.46)+'px Georgia, serif';
+  x.fillText('più caldo', W*MARK_TX, sm + SP*4.8);
+  x.strokeStyle = EMBER; x.lineWidth = Math.max(1.5, u*0.045); x.lineCap='round';
+  var hx = W*MARK_TX, hy = sm + SP*6.6, hw = u*(PORTRAIT?3.4:9);   /* a hairpin over two bars */
+  x.beginPath(); x.moveTo(hx, hy); x.lineTo(hx+hw, hy - SP*1.2);
+  x.moveTo(hx, hy); x.lineTo(hx+hw, hy + SP*1.2); x.stroke();
+}
+/* the price: a cue-sheet stamp in the margin. "indicative" is set into the stamp
+   itself, so the labelling rule is satisfied by design and not by a disclaimer. */
+var STAMP_W = 22, STAMP_H = 2.7;
+function drawStamp(q){
+  return function(x, W, H){
+    var u = W/STAMP_W;
+    x.fillStyle = 'rgba(9,3,6,0.80)'; x.fillRect(0,0,W,H);
+    x.strokeStyle = 'rgba(216,205,182,0.55)'; x.lineWidth = Math.max(1.5,u*0.03);
+    x.strokeRect(u*0.06,u*0.06,W-u*0.12,H-u*0.12);
+    x.font = '600 '+Math.round(u*0.30)+'px ui-monospace, Menlo, monospace';
+    x.fillStyle = 'rgba(216,205,182,0.92)';
+    x.fillText('CUE 01 · '+q.type.toUpperCase()+' · '+q.len+' · '+q.use.toUpperCase(), u*0.34, u*0.62);
+    x.font = '600 '+Math.round(u*0.46)+'px ui-monospace, Menlo, monospace'; x.fillStyle = EMBER;
+    x.fillText('INDICATIVE  $'+q.lo.toLocaleString()+'–'+q.hi.toLocaleString(), u*0.34, u*1.28);
+    x.font = '600 '+Math.round(u*0.24)+'px ui-monospace, Menlo, monospace';
+    x.fillStyle = 'rgba(216,205,182,0.6)';
+    x.fillText('NOT A QUOTE · A SIGNED NUMBER FOLLOWS A BRIEF', u*0.34, u*1.86);
+  };
+}
+/* the clause: the visual grammar of a signed-off part. No name is written — nobody
+   real signed this, and the page never pretends otherwise. */
+var SIGN_W = 20, SIGN_H = 3.0;
+function drawSignoff(x, W, H){
+  var u = W/SIGN_W;
+  x.strokeStyle = EMBER; x.lineWidth = Math.max(2,u*0.05); x.lineCap='round'; x.lineJoin='round';
+  x.beginPath(); x.moveTo(u*0.4, H*0.58);
+  x.bezierCurveTo(W*0.14, H*0.14, W*0.24, H*0.86, W*0.34, H*0.44);
+  x.bezierCurveTo(W*0.42, H*0.10, W*0.50, H*0.82, W*0.62, H*0.40);
+  x.stroke();
+  x.lineWidth = Math.max(1.5,u*0.03);
+  x.beginPath(); x.moveTo(u*0.4, H*0.74); x.lineTo(W*0.68, H*0.74); x.stroke();
+  x.font = '600 '+Math.round(u*0.26)+'px ui-monospace, Menlo, monospace';
+  x.fillStyle = 'rgba(216,205,182,0.92)';
+  x.fillText('CONTRIBUTORS 5/5 · CHAIN OF TITLE COMPLETE', u*0.4, H*0.94);
+}
+
+/* ---------------- post ---------------- */
+function buildPost(){
+  if (post) return;
+  var HDR = {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:THREE.HalfFloatType};
+  var w = innerWidth, h = innerHeight, q = 3;      /* the blur runs at a third res */
+  var rtScene = new THREE.WebGLRenderTarget(w, h, HDR);
+  var rtBloom = new THREE.WebGLRenderTarget(Math.max(2,Math.floor(w/q)), Math.max(2,Math.floor(h/q)), HDR);
+  var quadScene = new THREE.Scene();
+  var blurMat = new THREE.ShaderMaterial({
+    uniforms:{ uTex:{value:rtScene.texture}, uTexel:{value:new THREE.Vector2(1/w,1/h)} },
+    vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
+    fragmentShader:[
+      'uniform sampler2D uTex; uniform vec2 uTexel; varying vec2 vUv;',
+      'void main(){',
+      '  vec3 sum = vec3(0.0); float wsum = 0.0;',
+      '  for(int i=-1;i<=1;i++){ for(int j=-1;j<=1;j++){',
+      '    vec2 o = vec2(float(i),float(j))*uTexel*7.5;',
+      '    vec3 c = texture2D(uTex, vUv+o).rgb;',
+      '    float lum = dot(c, vec3(0.299,0.587,0.114));',
+      '    vec3 bright = c * smoothstep(0.80, 1.45, lum);',
+      '    float w = 1.0/(1.0+float(i*i+j*j)*0.5);',
+      '    sum += bright*w; wsum += w; } }',
+      '  gl_FragColor = vec4(sum/wsum, 1.0); }'].join('\n')
+  });
+  var compMat = new THREE.ShaderMaterial({
+    uniforms:{ uScene:{value:rtScene.texture}, uBloom:{value:rtBloom.texture} },
+    vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
+    fragmentShader:[
+      'uniform sampler2D uScene; uniform sampler2D uBloom; varying vec2 vUv;',
+      'void main(){',
+      '  vec3 s = texture2D(uScene, vUv).rgb;',
+      '  vec3 b = texture2D(uBloom, vUv).rgb;',
+      '  vec3 c = s + b*1.3;',
+      '  c = c/(c+vec3(0.85));',
+      '  c = pow(c, vec3(0.88));',
+      '  gl_FragColor = vec4(c, 1.0); }'].join('\n')
+  });
+  var quad = new THREE.Mesh(new THREE.PlaneGeometry(2,2), blurMat);
+  quadScene.add(quad);
+  post = {rtScene:rtScene, rtBloom:rtBloom, q:q,
+          quadCam:new THREE.OrthographicCamera(-1,1,1,-1,0,1),
+          quadScene:quadScene, quad:quad, blurMat:blurMat, compMat:compMat};
+}
+function dropPost(){
+  if (!post) return;
+  post.rtScene.dispose(); post.rtBloom.dispose();
+  post.quad.geometry.dispose(); post.blurMat.dispose(); post.compMat.dispose();
+  post = null;
+}
+if (BLOOM) buildPost();
+
+var rzT = 0;
+addEventListener('resize', function(){
+  clearTimeout(rzT);
+  rzT = setTimeout(function(){
+    SMALL = innerWidth < 900 || !matchMedia('(pointer:fine)').matches;
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    var want = !REDUCE && !SMALL;                 /* the gate is live, not load-time */
+    if (!want) dropPost();
+    else if (!post) buildPost();
+    else {
+      post.rtScene.setSize(innerWidth, innerHeight);
+      post.rtBloom.setSize(Math.max(2,Math.floor(innerWidth/post.q)), Math.max(2,Math.floor(innerHeight/post.q)));
+      post.blurMat.uniforms.uTexel.value.set(1/innerWidth, 1/innerHeight);
+    }
+  }, 150);
+}, {passive:true});
+
+cv.addEventListener('webglcontextlost', function(e){
+  e.preventDefault(); ok = false;
+  cv.style.display='none';
+  var d=document.getElementById('desk'); if(d) d.classList.remove('on');
+}, false);
+ok = true;
+
+/* ---------------- what the DOM asks the score to do ---------------- */
+var noteStart = -1, hush = 0, noteCam = 0;
+var HOME = X0 + TILE*3, markX = HOME;   /* the passage the commission is written on */
+
+CHORD.note = function(){
+  if (!ok) return;
+  noteStart = performance.now();
+  var rec = addMark(drawMarking, MARK_W, MARK_H, HOME, 0);
+  rec.dur = 900;
+  S.warm = true;
+  STEMS.forEach(function(s){ s.warm = true; });
+  ribbons.forEach(function(rb){ rb.warms.forEach(function(w){ w.on = true; }); });
+};
+CHORD.price = function(q){
+  if (!ok) return;
+  S.priced = true;
+  addMark(drawStamp(q), STAMP_W, STAMP_H, HOME + 14.0, STEMS[0].y + 3.4);
+};
+CHORD.cleared = function(){
+  if (!ok) return;
+  S.cleared = true;
+  addMark(drawSignoff, SIGN_W, SIGN_H, HOME + 16.0, STEMS[3].y - 2.4);
+};
+
+/* ---------------- scroll: a CONTINUOUS stage value, not an integer section ------- */
+var sections = [].slice.call(document.querySelectorAll('main section'));
+function onScroll(){
+  var max = document.documentElement.scrollHeight - innerHeight;
+  S.prog = max>0 ? Math.min(1, Math.max(0, scrollY/max)) : 0;
+  var line = innerHeight*0.5, a = 0;
+  for (var i=0;i<sections.length;i++) if (sections[i].getBoundingClientRect().top < line) a = i;
+  S.act = a;
+  var top = sections[a].getBoundingClientRect().top;
+  var next = (a+1 < sections.length) ? sections[a+1].getBoundingClientRect().top : top + innerHeight;
+  var span = Math.max(1, next - top);
+  S.stage = a + Math.max(0, Math.min(0.999, (line - top)/span));
+  if (CHORD.rail) [].forEach.call(CHORD.rail.children, function(b,i){ b.classList.toggle('on', i===a); });
+}
+addEventListener('scroll', onScroll, {passive:true});
+onScroll();
+
+var ptr = {x:0.5, y:0.42, has:false};
+function onMove(e){ ptr.x=e.clientX/innerWidth; ptr.y=e.clientY/innerHeight; ptr.has=true; }
+if (!REDUCE && !TOUCH){
+  addEventListener('pointermove', onMove, {passive:true});
+  addEventListener('mousemove', onMove, {passive:true});
+}
+
+/* A phone has exactly one uncommitted axis. Vertical scroll is spoken for; horizontal
+   is free — and the score is a horizontal object, a part read left to right. So: drag
+   sideways to read further along it, release and it eases back to where the scroll
+   says you are. Scroll wins any ambiguous gesture. */
+var dragX = 0, dragTarget = 0;
+if (TOUCH && !STILL){
+  var d0 = null, axis = null;
+  addEventListener('pointerdown', function(e){
+    if (e.target.closest && e.target.closest('button,a,select,input,.scrub,#dock')) return;
+    d0 = {x:e.clientX, y:e.clientY, base:dragTarget}; axis = null;
+  }, {passive:true});
+  addEventListener('pointermove', function(e){
+    if (!d0) return;
+    var dx = e.clientX-d0.x, dy = e.clientY-d0.y;
+    if (axis === null){
+      if (Math.abs(dx) + Math.abs(dy) < 12) return;
+      axis = (Math.abs(dx) > Math.abs(dy)*1.6) ? 'x' : 'y';
+    }
+    if (axis !== 'x') return;
+    dragTarget = Math.max(-26, Math.min(26, d0.base - dx*0.045));   /* +/- one tile */
+  }, {passive:true});
+  function endDrag(){ d0 = null; axis = null; }
+  addEventListener('pointerup', endDrag, {passive:true});
+  addEventListener('pointercancel', endDrag, {passive:true});
+}
+var _ndc = new THREE.Vector2(), _ray = new THREE.Raycaster(),
+    _plane = new THREE.Plane(new THREE.Vector3(0,0,1), 0), _hit = new THREE.Vector3();
+
+/* the mix engine was writing ~240 style mutations a second into a display:none panel */
+var meters = [].slice.call(document.querySelectorAll(TOUCH ? '.dch' : '.ch')).map(function(el){
+  return {el:el, bar:el.querySelector('i'), last:-1, hot:false};
+});
+var desk = document.getElementById('desk'), scrimEl = document.getElementById('scrim');
+var dockMix = document.getElementById('dockMix');
+var deskReady = false;
+if (!REDUCE) setTimeout(function(){ deskReady = true; }, 1500);
+
+/* the note's mix profile: who re-enters, when, and at what new level */
+var RE = [ {d:450, lv:0.86}, {d:300, lv:0.70}, {d:150, lv:0.82}, {d:0, lv:1.00} ];
+
+/* one diagnostic surface — the harness asserts against this rather than guessing */
+window.__probe = function(){
+  return {warm:STEMS.filter(function(x){return x.warm;}).length, marks:marks.length,
+          stage:+S.stage.toFixed(2), atmo:+S.atmo.toFixed(2), camZ:+S.camZ.toFixed(1),
+          camY:+S.camY.toFixed(2), scrim:+S.scrim.toFixed(2), fold:+S.fold.toFixed(2),
+          bloom:!!post, noteCam:+noteCam.toFixed(2), hush:+hush.toFixed(2),
+          nt: noteStart<0 ? -1 : Math.round(performance.now()-noteStart)};
+};
+
+/* ==================================================================================
+   SCORE PLAYBACK — each stave sounds ITS OWN written line.
+   This is the notation rendered to tone, the way a score editor auditions a part:
+   the pitches and rhythms are the composer's, read straight out of the same arrays
+   the engraver draws from. It is NOT a recording and it is NOT a stand-in for the
+   studio's work — the page says so next to the control. Opt-in, never autoplay.
+   ================================================================================== */
+var BPM = 96, SIXTEENTH = 60/BPM/4, LOOP = 128*SIXTEENTH;
+/* B-flat major from C: C D Eb F G A Bb */
+var SEMI = [0,2,3,5,7,9,10];
+function midiOf(clef, step){
+  var li = (clef==='treble' ? 6 : 1) + step;          /* treble mid line Bb4, bass mid D3 */
+  var oct = (clef==='treble' ? 4 : 3) + Math.floor(li/7);
+  return 12*(oct+1) + SEMI[((li%7)+7)%7];
+}
+function hzOf(m){ return 440*Math.pow(2,(m-69)/12); }
+var TONE = [
+  {wave:'sawtooth', cut:1150, q:0.7, atk:0.20, rel:0.55, amp:0.15, sus:0.92, voices:2, det:6},
+  {wave:'triangle', cut:2600, q:0.6, atk:0.004,rel:0.45, amp:0.20, sus:0.42, voices:1, det:0},
+  {wave:'square',   cut:1450, q:1.2, atk:0.07, rel:0.30, amp:0.11, sus:0.80, voices:1, det:0},
+  {wave:'sine',     cut:420,  q:0.5, atk:0.03, rel:0.38, amp:0.28, sus:0.90, voices:1, det:0}
+];
+function partNotes(st){
+  return st.rhythm.map(function(n){
+    var clef = st.grand ? (n.h==='b' ? 'bass' : 'treble') : st.staves[0].clef;
+    var m = midiOf(clef, n.s);
+    if (n.alt === 'b') m -= 1;                        /* the written flat is a real flat */
+    return {t:n.b*SIXTEENTH, m:m, d:Math.max(1,(n.d||4))*SIXTEENTH};
+  });
+}
+var sctx = null, smaster = null, sparts = [], sndOn = false, loopAt = 0, loopTimer = 0;
+var swLow = null, swTop = null, t0Score = 0;   /* the warm tilt, and where the loop began */
+function buildScoreAudio(){
+  if (sctx) return true;
+  try{
+    sctx = new (window.AudioContext||window.webkitAudioContext)();
+    smaster = sctx.createGain(); smaster.gain.value = 0.0001;
+    /* the note the visitor leaves is a real EQ move on the master, applied when they
+       leave it — not a pre-baked "after" file swapped in behind their back */
+    swLow = sctx.createBiquadFilter(); swLow.type='lowshelf'; swLow.frequency.value=250; swLow.gain.value=0;
+    swTop = sctx.createBiquadFilter(); swTop.type='lowpass';  swTop.frequency.value=14000; swTop.Q.value=0.5;
+    smaster.connect(swLow); swLow.connect(swTop); swTop.connect(sctx.destination);
+    STEMS.forEach(function(st,i){
+      var g = sctx.createGain(); g.gain.value = 0;
+      var f = sctx.createBiquadFilter();
+      f.type='lowpass'; f.frequency.value = TONE[i].cut; f.Q.value = TONE[i].q;
+      f.connect(g);
+      if (sctx.createStereoPanner){
+        var pan = sctx.createStereoPanner(); pan.pan.value = (i-1.5)/2.4;
+        g.connect(pan); pan.connect(smaster);
+      } else g.connect(smaster);
+      sparts.push({gain:g, filt:f, tone:TONE[i], notes:partNotes(st)});
+    });
+    return true;
+  }catch(e){ sctx = null; return false; }
+}
+function voice(p, when, midi, dur){
+  var t = p.tone;
+  for (var v=0; v<t.voices; v++){
+    var o = sctx.createOscillator();
+    o.type = t.wave;
+    o.frequency.value = hzOf(midi);
+    o.detune.value = (v - (t.voices-1)/2) * t.det * 2;
+    var g = sctx.createGain();
+    var peak = t.amp / t.voices;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(peak, when + t.atk);
+    var hold = when + Math.max(t.atk + 0.06, dur * t.sus);
+    g.gain.exponentialRampToValueAtTime(0.0001, hold + t.rel);
+    o.connect(g); g.connect(p.filt);
+    o.start(when); o.stop(hold + t.rel + 0.05);
+  }
+}
+function scheduleLoop(at){
+  for (var i=0;i<sparts.length;i++){
+    var p = sparts[i];
+    for (var k=0;k<p.notes.length;k++) voice(p, at + p.notes[k].t, p.notes[k].m, p.notes[k].d);
+  }
+}
+function pump(){
+  if (!sndOn || !sctx) return;
+  if (sctx.currentTime > loopAt - 1.2){ loopAt += LOOP; scheduleLoop(loopAt); }
+  loopTimer = setTimeout(pump, 400);
+}
+function setSound(on){
+  if (on && !buildScoreAudio()){ return false; }
+  if (sctx && sctx.state === 'suspended') sctx.resume();
+  sndOn = on;
+  if (on){
+    loopAt = sctx.currentTime + 0.12; t0Score = loopAt;
+    scheduleLoop(loopAt);
+    smaster.gain.setTargetAtTime(0.30, sctx.currentTime, 0.25);
+    clearTimeout(loopTimer); pump();
+  } else if (sctx){
+    smaster.gain.setTargetAtTime(0.0001, sctx.currentTime, 0.2);
+    clearTimeout(loopTimer);
+  }
+  [].forEach.call(document.querySelectorAll('.sndBtn'), function(b){
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+    b.querySelector('.lbl').textContent = on ? 'Parts on' : 'Hear the parts';
+  });
+  document.body.classList.toggle('sounding', on);
+  if (CHORD.transport) CHORD.transport(on);
+  return true;
+}
+/* the seams the take section drives the transport through */
+CHORD.sound    = setSound;
+CHORD.sounding = function(){ return sndOn; };
+CHORD.loop     = function(){ return LOOP; };
+CHORD.pos      = function(){ if (!sctx || !sndOn) return 0;
+  var d = sctx.currentTime - t0Score; return d < 0 ? 0 : (d % LOOP); };
+CHORD.warm     = function(){ if (!sctx || !swTop) return;
+  swTop.frequency.setTargetAtTime(2600, sctx.currentTime, 0.6);
+  swLow.gain.setTargetAtTime(5.0, sctx.currentTime, 0.6); };
+[].forEach.call(document.querySelectorAll('.sndBtn'), function(b){
+  b.addEventListener('click', function(){
+    if (!setSound(!sndOn)) b.querySelector('.lbl').textContent = 'Audio unavailable';
+  });
+});
+
+var lastT = performance.now(), hidden = false, lastScrim = -1, stillDirty = true;
+document.addEventListener('visibilitychange', function(){ hidden = document.hidden; });
+if (STILL) addEventListener('scroll', function(){ stillDirty = true; }, {passive:true});
+
+function frame(){
+  if (!ok) return;                         /* nothing left to schedule */
+  requestAnimationFrame(frame);
+  if (hidden) return;
+  var now = performance.now();
+  var dt = Math.min(0.1, Math.max(0, (now-lastT)/1000)); lastT = now;
+  var t = (now-t0)/1000;
+  var kFast = 1-Math.exp(-dt*11), kSlow = 1-Math.exp(-dt*6);
+  if (STILL){
+    if (!stillDirty && noteCam <= 0 && (noteStart < 0)) return;   /* the last frame stands */
+    stillDirty = false; kFast = 1; kSlow = 1;                     /* no easing to chase */
+  }
+
+  /* ---- the note choreography. the arrangement stops before it answers. ---- */
+  var nt = noteStart < 0 ? -1 : now - noteStart;
+  hush    = nt < 0 ? 0 : Math.max(0, Math.min(1, (nt-120)/180) - Math.max(0, Math.min(1, (nt-900)/300)));
+  noteCam = nt < 0 ? 0 : Math.max(0, Math.min(1, (nt-320)/700) - Math.max(0, Math.min(1, (nt-3400)/900)));
+  if (STILL) noteCam = 0;      /* the state change survives; the camera stays put */
+  if (nt > 5000) noteStart = -1;
+
+  /* ---- steer ---- */
+  if (TOUCH){
+    /* the visitor is already scrolling — so scrolling is what features a part. The four
+       staves are traversed top to bottom across the sections the score owns. */
+    var band = (S.stage < 2) ? S.stage/2 : Math.max(0, Math.min(1, (S.stage-3.6)/1.6));
+    S.listenTarget = 5.0 - band*10.0;
+  } else if (!REDUCE){
+    if (ptr.has){
+      _ndc.set(ptr.x*2-1, -(ptr.y*2-1));
+      _ray.setFromCamera(_ndc, camera);
+      if (_ray.ray.intersectPlane(_plane, _hit))
+        S.listenTarget = Math.max(-5, Math.min(5, _hit.y));
+    } else {
+      S.listenTarget = 1.55 + 3.3*Math.sin(t*0.15);
+    }
+  }
+  if (noteCam > 0.01) S.listenTarget = S.listenTarget*(1-noteCam);   /* toward the centroid */
+  S.listenY += (S.listenTarget-S.listenY)*kFast;
+
+  /* ---- the interchange: continuous, keyed on stage, never on the integer ---- */
+  var st = S.stage;
+  /* the note owns the room for its four seconds, wherever it was given — otherwise
+     giving it low in a copy-owned section plays the whole beat at 30% brightness */
+  var aWant = track(K_ATMO, st), sWant = track(K_SCRIM, st);
+  aWant = Math.max(aWant, 1.18*noteCam);
+  sWant = Math.min(sWant, 1 - 0.62*noteCam);
+  S.atmo  += (aWant - S.atmo)*kSlow;
+  S.camY  += (track(K_Y, st) - S.camY)*kSlow;
+  S.scrim += (sWant - S.scrim)*kSlow;
+  var zNote = Math.max(13, Math.min(20.5, fitZ(MARK_W, 3)));   /* derived, not a 1.6-aspect constant */
+  var zWant = track(K_Z, st); zWant += (zNote - zWant)*noteCam;
+  S.camZ  += (zWant - S.camZ)*kSlow;
+
+  /* the fold is a triangle: the parts pour into the crate, then the score returns
+     for the door, carrying every mark the visitor made */
+  var up = Math.max(0, Math.min(1, (S.prog-0.70)/0.15));
+  var dn = Math.max(0, Math.min(1, (S.prog-0.87)/0.09));
+  up = up*up*(3-2*up); dn = dn*dn*(3-2*dn);
+  S.fold = up*(1-dn);
+
+  /* ---- camera X: scroll, the note, and the return to the marked-up part ---- */
+  var xWant = 8 + S.prog*(SPAN - 90);
+  if (noteCam > 0.01) xWant += ((markX + MARK_W/2 - 2.4) - xWant)*noteCam;
+  var backZ = 0;
+  if (marks.length && st > 4.55){
+    var mn=1e9, mx=-1e9;
+    for (var q=0;q<marks.length;q++){ mn=Math.min(mn,marks[q].x0); mx=Math.max(mx,marks[q].x1); }
+    var need = ((mx-mn)+10) / (2*Math.tan(camera.fov*Math.PI/360)*camera.aspect);
+    var k = Math.max(0, Math.min(1, (st-4.55)/0.6)); k = k*k*(3-2*k);
+    xWant += ((mn+mx)/2 - 2.4 - xWant)*k;
+    /* never retreat past z=26 — beyond that the fog eats the marks. If they do not
+       all fit, read ACROSS them instead, which is what you do with a part. */
+    backZ = Math.min(Math.max(0, need - S.camZ), Math.max(0, 20.5 - S.camZ)) * k;
+    if (need > 20.5) xWant += ((mn + (mx-mn-2)*Math.max(0,Math.min(1,(st-4.55)/1.2))) - 2.4 - xWant)*k*0.9;
+  }
+  if (TOUCH && !STILL){
+    dragTarget *= Math.max(0, 1 - dt*0.55);      /* released, it returns to the scroll */
+    dragX += (dragTarget - dragX)*kSlow;
+    xWant += dragX;
+  }
+  S.camX += (xWant - S.camX)*kSlow;
+  camera.position.set(S.camX, S.listenY*0.20 + S.camY + (REDUCE?0:Math.sin(t*0.3)*0.04), S.camZ + backZ);
+  camera.lookAt(S.camX + 2.4, S.listenY*0.14 - 0.05 + S.camY*0.35, -6.0);
+  var play = S.camX + 2.2;
+  if (sndOn && sctx){          /* the playhead follows the ear, not the scrollbar */
+    var pos = ((sctx.currentTime - loopAt) % LOOP + LOOP) % LOOP;
+    var tile = Math.round((play - X0 - XW/2) / TILE);
+    play = tile*TILE + X0 + (pos/LOOP)*XW;
+  }
+
+  /* ---- position → mix, with the note's staggered re-entry laid over it ---- */
+  for (var i=0;i<4;i++){
+    var d = Math.abs(S.listenY - STEMS[i].y);
+    var w = 1/(1+Math.pow(d/1.75,2));
+    var breath = REDUCE ? 0.9 : (0.82 + 0.18*Math.sin(t*(0.7+i*0.23) + i));
+    var target = w*breath;
+    if (nt >= 0){
+      var re = RE[i], enter = Math.max(0, Math.min(1, (nt-900-re.d)/520));
+      var blend = Math.max(0, Math.min(1, (nt-900)/400)) * (1 - Math.max(0, Math.min(1, (nt-3400)/900)));
+      target = target*(1-blend) + re.lv*enter*blend;
+      target *= (1 - hush*0.86);
+    }
+    S.mix[i] += (target - S.mix[i])*kFast;
+    var pc = Math.round(S.mix[i]*100), m = meters[i];
+    if (pc !== m.last){
+      if (TOUCH) m.el.style.setProperty('--lv', pc+'%'); else m.bar.style.width = pc+'%';
+      m.last = pc;
+    }
+    var isHot = S.mix[i] > 0.55;
+    if (isHot !== m.hot){ m.el.classList.toggle('hot', isHot); m.hot = isHot; }
+  }
+  if (sndOn && sctx){
+    for (var sp=0; sp<sparts.length; sp++)
+      sparts[sp].gain.gain.setTargetAtTime(Math.pow(S.mix[sp],1.4)*0.95, sctx.currentTime, 0.10);
+  }
+  if (TOUCH){ if (dockMix) dockMix.classList.toggle('on', S.atmo > 0.45 && S.fold < 0.5); }
+  else if (deskReady) desk.classList.toggle('on', S.fold < 0.5);
+  var sc = Math.round(S.scrim*100)/100;
+  if (sc !== lastScrim){ scrimEl.style.opacity = sc; lastScrim = sc; }
+
+  /* 40% of the scroll renders a full-cost frame of a score held at 26-30% brightness
+     under a 100% scrim. On a phone, hold the last frame instead. */
+  if (CHEAP && S.atmo < 0.35 && noteCam < 0.01 && S.fold < 0.02) return;
+
+  /* ---- apply ---- */
+  for (var r=0;r<ribbons.length;r++){
+    var rb=ribbons[r], sm=rb.stem, m2=S.mix[r];
+    var ord = 3 - r;
+    var fi = Math.max(0, Math.min(1, (S.fold - 0.10 - ord*0.052)/0.58));
+    var e3 = fi*fi*fi;
+    var sq = 1 - Math.max(0, Math.min(1, (S.fold-0.06)/0.62));
+    var scl = 1 - 0.94*e3;
+    var arc = Math.sin(fi*Math.PI)*1.35;
+    rb.grp.scale.setScalar(scl);
+    rb.grp.position.set((S.camX+2.4)*(1-scl), (-0.45)*(1-scl) - sm.y*e3 + arc, 0);
+
+    var base = sm.warm ? [1.0,0.66,0.34] : sm.hue;
+    var pos = rb.geo.attributes.position.array;
+    for (var k2=0;k2<LEN;k2++){
+      var live = sm.amp[k2]*(0.46 + m2*1.15)*(sm.warm ? 0.84 : 1);
+      var wob = REDUCE ? 1 : (1 + 0.05*Math.sin(t*2.0 + k2*0.085 + r));
+      pos[k2*6+1] = sm.y + live*0.30*wob;
+      pos[k2*6+4] = sm.y - live*0.30*wob;
+    }
+    rb.geo.attributes.position.needsUpdate = true;
+    rb.mat.uniforms.uColor.value.setRGB(base[0],base[1],base[2]);
+    rb.rmat.uniforms.uColor.value.setRGB(base[0],base[1],base[2]);
+    rb.mat.uniforms.uLevel.value  = m2*sq*S.atmo;
+    rb.rmat.uniforms.uLevel.value = m2*sq*sq*S.atmo;
+    if (rb.refl) rb.refl.visible = S.fold < 0.25 && S.atmo > 0.45;
+    /* a hard floor: the score is the room, and the room is never switched off.
+       sq alone dims it during the fold, which is the one time it should recede. */
+    var op = Math.max(0.58*sq, (0.52 + m2*0.38) * sq * Math.min(1.18, S.atmo));
+    rb.staffMat.opacity = op; rb.headMat.opacity = op;
+    for (var q2=0;q2<rb.notes.length;q2++){
+      var nm = rb.notes[q2].mat;
+      nm.uniforms.uLevel.value = m2*sq;
+      nm.uniforms.uPlay.value  = play;
+      nm.uniforms.uFade.value  = Math.max(0.44*sq*sq, sq*sq*S.atmo);
+      nm.uniforms.uColor.value.setRGB(1.0, sm.warm?0.80:0.90, sm.warm?0.58:0.76);
+    }
+    /* the third arrives note by note, left to right, swept by its own playhead */
+    for (var q3=0;q3<rb.warms.length;q3++){
+      var wm = rb.warms[q3], wu = wm.mat.uniforms;
+      var want = wm.on ? sq*S.atmo : 0;
+      wu.uFade.value += (want - wu.uFade.value)*kSlow;
+      wu.uLevel.value = m2*sq;
+      wu.uPlay.value = (nt >= 700 && nt < 1400) ? markX + ((nt-700)/700)*39 : play;
+    }
+    rb.label.position.set(S.camX - 9.0, sm.y + 0.68, 0);
+    rb.label.material.opacity = Math.max(0, (m2-0.56)*2.4) * sq * S.atmo * (1-noteCam);
+  }
+
+  /* the playhead stands where the ear is, and leaves with the score during the fold */
+  var pSq = 1 - Math.max(0, Math.min(1, (S.fold-0.06)/0.62));
+  playLine.position.set(play, 0.0, 0.09);
+  playMat.uniforms.uOp.value = (0.44 + S.mix[1]*0.52) * pSq *
+                               Math.min(1.1, S.atmo) * (1 - noteCam*0.55);
+
+  for (var q4=0;q4<marks.length;q4++){
+    var mk = marks[q4], age = now - mk.born;
+    var rv = Math.max(0, Math.min(1, age/mk.dur));
+    mk.mat.uniforms.uReveal.value = rv*rv*(3-2*rv);
+    mk.mat.uniforms.uOp.value = (0.56 + 0.44*noteCam) *
+                                Math.max(0.30, Math.min(1, S.atmo*1.05)) * (1 - S.fold*0.9);
+  }
+
+  floorMat.uniforms.uCam.value.copy(camera.position);
+  floorMat.uniforms.uDim.value = 0.42 + S.atmo*0.58;
+
+  if (post){
+    renderer.setRenderTarget(post.rtScene); renderer.render(scene, camera);
+    post.quad.material = post.blurMat;
+    renderer.setRenderTarget(post.rtBloom); renderer.render(post.quadScene, post.quadCam);
+    post.quad.material = post.compMat;
+    renderer.setRenderTarget(null); renderer.render(post.quadScene, post.quadCam);
+  } else {
+    renderer.render(scene, camera);
+  }
+}
+frame();
+
+/* The close is fixed copy now: four denials and one instruction. Nothing
+   here is recapped back at the reader. */
+
+});
+</script>
