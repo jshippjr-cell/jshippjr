@@ -1556,8 +1556,13 @@ def update_status(
 ) -> None:
     if status not in PIPELINE_STATES:
         raise ValueError(f"Unknown status {status!r}")
+    # COALESCE, not a bare assignment: most callers move the stage without carrying a
+    # value (the board and the stepper post status alone), and a bare assignment wrote
+    # NULL over the recorded number — marking a deal Won erased what it was worth.
+    # Only an explicitly supplied value overwrites.
     conn.execute(
-        "UPDATE opportunities SET status = ?, outcome_value = ? WHERE id = ?",
+        "UPDATE opportunities SET status = ?, outcome_value = COALESCE(?, outcome_value) "
+        "WHERE id = ?",
         (status, outcome_value, opp_id),
     )
     conn.commit()

@@ -166,19 +166,18 @@ _GALLERY_GRADIENTS = [
 @router.get("/experience", response_class=HTMLResponse)
 def public_experience(request: Request):
     """The Chordential Experience — 'The One That Ships' (client-facing film,
-    built beat by beat per docs/design/chordential-experience-*). Now the
+    built beat by beat per docs/design/chordential-experience-*). A former
     homepage; this route stays so existing deep links keep working."""
     return render(request, "public/experience.html", active="")
 
 
 @router.get("/reel")
 def public_reel():
-    """Retired: the standalone reel spiral is gone — 'See the work' lives on the hero as the
-    spinning reel wheel. Any old link/bookmark to /reel lands there via the /#reel deep-link."""
+    """Retired. The reel deep-link handler it used to target lived on a homepage that has
+    since been replaced twice, so an old bookmark landed at the top of a film showing no
+    work at all. Send it to the page that actually plays the tracks."""
     from fastapi.responses import RedirectResponse
-    # ?reel=1 (not #reel) — URL fragments can be dropped across a redirect; the query form
-    # survives, and the homepage deep-link handler accepts both.
-    return RedirectResponse("/?reel=1", status_code=307)
+    return RedirectResponse("/samples", status_code=307)
 
 
 @router.get("/stills", response_class=HTMLResponse)

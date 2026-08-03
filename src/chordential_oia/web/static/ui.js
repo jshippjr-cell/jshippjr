@@ -38,39 +38,13 @@
     });
   }
 
-  /* ---- eased hairline progress (§2.8): the number is choreography too ---- */
-  window.chordentialEasedProgress = function (el, getTarget, onDone) {
-    var bar = el.querySelector('i');
-    if (!bar) return;
-    if (reduced) { bar.style.width = '100%'; onDone && onDone(); return; }
-    var v = 0;
-    (function tick() {
-      v += (getTarget() - v) * 0.04;
-      bar.style.width = v + '%';
-      if (v >= 99.5) { bar.style.width = '100%'; onDone && onDone(); return; }
-      requestAnimationFrame(tick);
-    })();
-  };
-
-  /* Forms marked data-progress show the hairline while submitting (analyze, etc.) */
-  function initProgressForms() {
-    document.querySelectorAll('form[data-progress]').forEach(function (form) {
-      form.addEventListener('submit', function () {
-        var host = form.querySelector('.progress-hairline');
-        if (!host) {
-          host = document.createElement('div');
-          host.className = 'progress-hairline';
-          host.innerHTML = '<i></i>';
-          form.appendChild(host);
-        }
-        host.style.display = 'block';
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) { btn.disabled = true; btn.dataset.prevText = btn.textContent; btn.textContent = form.dataset.progress || 'Working…'; }
-        // ease toward 90 until the server responds (the page will navigate)
-        window.chordentialEasedProgress(host, function () { return 90; });
-      });
-    });
-  }
+  /* The eased hairline that crept toward 90% while a request was in flight lived
+     here. It was removed, not fixed: the width was a decay curve on a timer with
+     no connection to the work, on the one form that also runs the thinking veil —
+     so the page claimed determinate progress it could not know, three loading
+     states deep. The Living OS rule is that motion reports real state. The
+     .progress-hairline CSS stays for a transfer that can report real bytes (the
+     client portal's upload already drives one from XHR progress events). */
 
   /* ---- drawer (§2.3): act on an entity without leaving it ---- */
   var drawerEls = null, drawerTrigger = null;
@@ -217,7 +191,6 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     initArrive();
-    initProgressForms();
     initDrawerLinks();
     initViewSwitch();
     initQstack();

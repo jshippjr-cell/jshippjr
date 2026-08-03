@@ -278,9 +278,9 @@
      of the real analyze request; the path tokens name the REAL modules the
      capture propagates through (council ruling — no theater). No JS: plain post. #}
   <form class="ci-update" method="post" enctype="multipart/form-data"
-        data-progress="✨ Analyzing…" data-think
+        data-think
         data-think-path="Source|Campaign Intelligence|Qualification|Buyer Profile|Campaign Brief"
-        {% if ai_spend and ai_spend.enabled and not ai_spend.over %}onsubmit="return this.stance.value=='debrief' || confirm('This runs the 10-agent AI engine and uses Anthropic API credit — about \$0.30–0.50 for this analyze. Continue?');"{% endif %}
+        {% if ai_spend and ai_spend.enabled and not ai_spend.over %}data-confirm="This runs the 10-agent AI engine and uses Anthropic API credit — about $0.30–0.50 for this analyze. Continue?" data-confirm-skip-when="stance=debrief"{% endif %}
         action="/opportunity/{{ row['id'] }}/intelligence/analyze">
     <div class="ci-controls">
       <div class="ci-stance">

@@ -33,10 +33,20 @@ It creates the schema, copies every table, and prints `sqlite=N postgres=N` per 
 fresh empty Postgres.)
 
 ## Step 3 — flip to Postgres + remove the disk (the last deploy with downtime)
+
+> ⛔ **BLOCKER — the disk holds more than the database.** `CHORDENTIAL_UPLOAD_DIR` is
+> `/var/data/uploads`: every client picture cut, master, stem and built delivery ZIP
+> lives there. Files above the 64 MB mirror cap (`_CUT_MIRROR_BYTES`) have **no other
+> copy anywhere** — not in Postgres, not on the mirror. Migrating the database does not
+> migrate them. Removing the disk before uploaded media is on object storage (S3/R2)
+> destroys it irrecoverably. Wire the storage seam and move the files **first**, then
+> come back to this step.
+
 Edit the service config (Blueprint sync of `render.yaml`, or the dashboard):
 
 1. Set **`CHORDENTIAL_DB`** to the Postgres URL (or use a `fromDatabase` reference).
-2. **Remove the `disk:` block** and the old `/var/data` `CHORDENTIAL_DB` value.
+2. **Remove the `disk:` block** and the old `/var/data` `CHORDENTIAL_DB` value — only
+   after the uploads migration above.
 
 `render.yaml` at cutover looks like:
 

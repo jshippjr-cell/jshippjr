@@ -150,9 +150,34 @@
   var Live = window.Live;
   var KEY_THOUGHT = "lv:thought", KEY_FIT = "lv:fit-before";
 
+  /* A form that spends money or is otherwise irreversible declares data-confirm.
+     The guard MUST live here rather than in an inline onsubmit=: this listener is
+     capture-phase, so it reaches the event before any handler bound to the form
+     itself — an inline confirm() ran only AFTER the fetch below had already sent
+     the request, and answering No cancelled nothing but the navigation. The
+     data-confirm-skip-when="field=value" escape lets one form ask only for the
+     variant that actually spends. */
+  function confirmed(form) {
+    var msg = form.getAttribute("data-confirm");
+    if (!msg) return true;
+    var skip = form.getAttribute("data-confirm-skip-when");
+    if (skip) {
+      var i = skip.indexOf("=");
+      var field = i < 0 ? null : form.elements[skip.slice(0, i)];
+      if (field && field.value === skip.slice(i + 1)) return true;
+    }
+    return window.confirm(msg);
+  }
+
   document.addEventListener("submit", function (e) {
     var form = e.target;
-    if (!form || !form.hasAttribute || !form.hasAttribute("data-think")) return;
+    if (!form || !form.hasAttribute) return;
+    if (form.hasAttribute("data-confirm") && !confirmed(form)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;                                        // declined: nothing is sent
+    }
+    if (!form.hasAttribute("data-think")) return;
     if (!window.fetch || !window.FormData) return;   // no-JS/legacy: normal post
     e.preventDefault();
     var path = (form.getAttribute("data-think-path") || "").split("|").filter(Boolean);

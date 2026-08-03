@@ -42,7 +42,7 @@ a{color:var(--amber)}
   justify-content:space-between;padding:18px 24px;gap:14px;pointer-events:none;
   background:linear-gradient(180deg,rgba(9,3,6,.985) 0%,rgba(9,3,6,.94) 62%,rgba(9,3,6,0) 100%);
   -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)}
-.wm{font-family:var(--serif);font-size:20px;letter-spacing:-.01em;pointer-events:auto}
+.wm{font-family:var(--serif);font-size:20px;letter-spacing:-.01em;pointer-events:auto;color:inherit;text-decoration:none}
 .wm i{font-style:normal;color:var(--ember)}
 .barR{display:flex;gap:10px;align-items:center;pointer-events:auto}
 /* ember is reserved for a human decision. chrome is sand. */
@@ -548,10 +548,10 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
 <div id="grain" aria-hidden="true"></div>
 
 <header class="bar">
-  <span class="wm">ch<i>o</i>rdential</span>
+  <a class="wm" href="/">ch<i>o</i>rdential</a>
   <span class="barR">
     <button class="btn" id="skip" type="button">Skip the story</button>
-    <a class="btn solid" href="#brief">Start a brief</a>
+    <a class="btn solid" href="/start">Start a brief</a>
   </span>
 </header>
 
@@ -576,7 +576,7 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
     <p class="lede rv">Original score for campaigns, written and recorded in house.
     One delivery with everything in it — masters, stems, license and chain of title, cleared.</p>
     <div class="rowbtns rv">
-      <a class="btn solid" href="#brief">Start a brief</a>
+      <a class="btn solid" href="/start">Start a brief</a>
       <a class="btn" href="#take">Hear the score</a>
     </div>
     <span class="steer rv">
@@ -674,7 +674,7 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
       picture, the players and the term move it up or down. Nobody should hold either of us
       to this one.</p>
       <div class="rowbtns" style="margin-top:24px">
-        <a class="btn solid" href="#brief">Book a discovery call</a>
+        <a class="btn solid" href="/book">Book a discovery call</a>
       </div>
     </div>
   </div></div></section>
@@ -752,8 +752,8 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
     </ul>
     <p class="closer rv">Just press <em>publish</em>.</p>
     <div class="rowbtns rv">
-      <a class="btn solid" href="#brief" id="startBrief">Start a Brief</a>
-      <a class="btn" href="#brief">Book a Discovery Call</a>
+      <a class="btn solid" href="/start" id="startBrief">Start a Brief</a>
+      <a class="btn" href="/book">Book a Discovery Call</a>
     </div>
   </div></div></section>
 </main>
@@ -766,7 +766,7 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
     <span class="dch" data-ch="3"><b>Low</b><i></i></span>
   </div>
   <button class="sndBtn" type="button" aria-pressed="false" aria-label="Hear the parts"><span class="dot"></span><span class="lbl">Hear the parts</span></button>
-  <a class="btn solid" id="dockCta" href="#brief">Start a brief</a>
+  <a class="btn solid" id="dockCta" href="/start">Start a brief</a>
 </div>
 
 <footer>

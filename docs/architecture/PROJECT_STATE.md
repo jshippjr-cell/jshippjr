@@ -94,6 +94,20 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Launch review — Phase 1** (`docs/launch-review.md`, 2026-08-03): ten independent
+  reviewers over the whole product; 98 findings, cross-examined against the code. The
+  launch-blocking set is fixed: every `/commission` CTA dead-ended at its own closing
+  section; sitewide `Work`/`About` pointed at anchors of two retired homepages; marking a
+  deal **Won erased its recorded value** (`update_status` now COALESCEs); prod uploads
+  landed in the ephemeral package dir (`CHORDENTIAL_UPLOAD_DIR` → `/var/data/uploads` —
+  **removing the disk at cutover now deletes client media unless object storage lands
+  first**); a duplicate `/webhooks/stripe` handler shadowed the live one; the AI spend
+  confirm fired *after* the paid request was dispatched; the portal stamped CLEARED over
+  draft terms and read "Delivered" on upload. Also: GZip (nothing was compressed —
+  `/commission` 718 KB → 187 KB), AA-passing ember text tokens, `public/home.html`
+  deleted. **Phases 2–4 in that document are the standing backlog** — the pricing model's
+  four disagreeing voices, the two "waiting on you" aggregators, and the cue sheet's
+  rights contradiction are the largest.
 - **The company architecture** (`docs/company-architecture.md`, 2026-07-18): the
   20-section first-principles redesign of Chordential as a company (AI-executive org,
   Disposition Queue doctrine, $1M roadmap). Amendments A-1/A-2 remain proposals;
@@ -280,7 +294,10 @@ room → The Picture → The Cue Layer → Flow polish, each phase-gated by the 
 - **Postgres cutover ops** — code ready, not run; prod is still SQLite on a
   single-attach disk (every deploy ~2-min blip).
 - **DocuSign e-signature** — placeholder only.
-- **Durable object storage** — uploads are on local disk (S3/R2 seam not wired).
+- **Durable object storage** — uploads are on the persistent disk (S3/R2 seam not wired).
+  Media above the 64 MB mirror cap has exactly one copy, on that disk. The Postgres
+  cutover runbook removes the disk: **migrate uploads to object storage first or the
+  cutover destroys every client cut, master and stem.** Postgres does not cover them.
 - **Server-side PDF rendering** of branded docs — best-effort/print-to-PDF only.
 - **Scheduler-internals hardening** (from the audit's P3 tail, deliberately left for a
   dedicated pass): auto-fetch/discovery still parses hostile HTML **in-process**

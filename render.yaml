@@ -28,6 +28,13 @@ services:
       # (CHORDENTIAL_ADMIN_TOKEN) is set in the Render dashboard, not committed here.
       - key: CHORDENTIAL_DB
         value: "/var/data/chordential.db"
+      # Client cuts, masters and stems land here. WITHOUT this the default is a
+      # package-relative directory inside the build — ephemeral, so every deploy
+      # (and autoDeploy means every push) deleted the uploads. The disk is the only
+      # durable surface until the S3/R2 object-store seam lands; that migration
+      # must move these files too.
+      - key: CHORDENTIAL_UPLOAD_DIR
+        value: "/var/data/uploads"
       # Master switch for live fetching. When set, the crawler actually pulls +
       # parses pages (results land in the review queue) AND the in-process
       # background auto-fetcher runs, scanning your On sources on a schedule.
@@ -98,6 +105,9 @@ services:
     # value above, add a Render Postgres `databases:` block + a fromDatabase env,
     # AFTER migrating the data. Do NOT remove the disk before the data migration —
     # see docs/zero-downtime-cutover.md for the exact, safe order.
+    # The disk also holds CHORDENTIAL_UPLOAD_DIR (/var/data/uploads): removing it
+    # without moving uploaded media to object storage first DELETES every client
+    # cut, master and stem. Postgres alone does not cover them.
     disk:
       name: chordential-data
       mountPath: /var/data

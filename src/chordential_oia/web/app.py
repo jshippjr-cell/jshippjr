@@ -30,6 +30,7 @@ from fastapi.responses import (
     HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.gzip import GZipMiddleware
 
 from ..estimation import ROLE_RATES, RoleLine
 from ..invoicing import build_invoice
@@ -99,12 +100,14 @@ templates.env.filters["fromjson"] = json.loads
 # engines are actually on — honest liveness. Callable so env changes apply live.
 templates.env.globals["machine_on"] = scheduler.autonomous_engines_on
 
-# Founder-uploaded audio samples for the "Relevant work" section. Path is
+# Every uploaded file — founder samples, client picture cuts, masters, stems. Path is
 # overridable (CHORDENTIAL_UPLOAD_DIR) with a module-relative default; created on
 # import so the upload + serve routes can rely on it existing.
-# NOTE (honest persistence caveat): files saved to this local disk are NOT durable
-# on Render once the persistent disk is removed for the zero-downtime (blue-green)
-# cutover — durable storage needs object storage (S3/R2). Acceptable for now.
+# NOTE (persistence): the module-relative default lives INSIDE the installed package,
+# which on Render is rebuilt every deploy — anything written there is gone on the next
+# push. Production must point this at the persistent disk (render.yaml sets
+# /var/data/uploads). That disk is also single-attach, so it blocks the blue-green
+# cutover: durable, deploy-independent storage needs object storage (S3/R2).
 UPLOAD_DIR = os.environ.get("CHORDENTIAL_UPLOAD_DIR") or os.path.join(_HERE, "uploads")
 
 # The Company Profile (ADR-0022) — entered once, the source for every procurement document.
@@ -230,7 +233,45 @@ async def lifespan(app: FastAPI):
         autofetch_task.cancel()
 
 
+class SelectiveGZip:
+    """GZip for text, and strictly nothing else.
+
+    Starlette's GZipMiddleware compresses by size alone: it has no notion of Range
+    requests, so it will happily gzip a 206 body while leaving ``content-range``
+    describing the *uncompressed* extent — the response then contradicts itself and
+    the client cannot assemble the file. The scroll-world film is scrubbed through
+    exactly those range requests, so that is not a theoretical concern.
+
+    Two bypasses, both delegating to the raw app: a request carrying ``Range``, and
+    a path whose extension is already-compressed media (where gzip buys nothing and
+    costs CPU on every byte of a 512 MB master).
+    """
+
+    _ALREADY_COMPRESSED = (
+        ".mp4", ".webm", ".mov", ".m4v", ".mp3", ".wav", ".m4a", ".aac", ".ogg",
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".ico",
+        ".zip", ".gz", ".woff", ".woff2", ".pdf",
+    )
+
+    def __init__(self, app, minimum_size: int = 1024):
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            return await self.app(scope, receive, send)
+        if any(k == b"range" for k, _ in scope.get("headers") or ()):
+            return await self.app(scope, receive, send)
+        if scope.get("path", "").lower().endswith(self._ALREADY_COMPRESSED):
+            return await self.app(scope, receive, send)
+        return await self.gzip(scope, receive, send)
+
+
 app = FastAPI(title="Chordential — Procurement OS", lifespan=lifespan)
+# Nothing was encoded before this: the vendored three.js build (~594 KB) and the
+# largest templates (~107 KB) went out raw over whatever connection the visitor had.
+# Text compresses ~4x here; media does not, and must not (see SelectiveGZip).
+app.add_middleware(SelectiveGZip, minimum_size=1024)
 app.mount("/static", StaticFiles(directory=os.path.join(_HERE, "static")), name="static")
 # Public front-of-house site (magazine/brochure surface + inbound intake), at the
 # site root (/). Shares this app + DB; renders its own standalone layout, no internal nav.
@@ -7888,12 +7929,15 @@ def review_approve(
     **assembles the delivery package** (organise → document → convert → ZIP) and
     flips state to Delivered with the founder's payoff checklist + ZIP url stored.
 
-    Verified-identity gate: Approve — the single most consequential action (it locks
-    FINAL + auto-builds the delivery ZIP) — requires a **verified reviewer link**
-    (``?r=<reviewer_token>``). The generic share link (``?k=``) can view + comment as
-    a guest but CANNOT approve, and a posted free-typed name + email is ignored — the
-    sign-off is recorded with the reviewer's LOCKED roster name + email. Approve is no
-    longer pressable by anyone with the share token, signed as any typed name.
+    Identity, two strengths (ADR-0020 — the client's single approval IS the award, so
+    it must not be gated behind a link they may not have): a **verified reviewer link**
+    (``?r=<reviewer_token>``) signs with the roster's LOCKED name + email, unspoofable;
+    the workspace share link (``?k=``) may also approve, signing with a captured name +
+    email, which is intent enough under ESIGN/UETA. Both paths record who and when.
+
+    Note what that means operationally: the share link is forwardable, so anyone holding
+    it can approve under any typed name. That is accepted, not overlooked — the mitigation
+    is reviewer links for consequential sign-off and treating ``?k=`` as a bearer token.
     """
     conn = db.connect()
     name, mail = "", ""
@@ -8834,47 +8878,6 @@ def payout_unpay(payout_id: int):
     finally:
         conn.close()
     return RedirectResponse("/payouts", status_code=303)
-
-
-@app.post("/webhooks/stripe")
-async def stripe_webhook(request: Request):
-    """Stripe payment webhook — marks an invoice Paid when its checkout completes.
-
-    Public (no admin cookie): authenticity is the Stripe signature, verified in
-    the provider against STRIPE_WEBHOOK_SECRET. Idempotent — a re-delivered event
-    for an already-Paid invoice is a no-op. Only acts in Stripe mode.
-    """
-    provider = get_payment_provider()
-    if getattr(provider, "name", "") != "stripe":
-        return Response(status_code=200)  # not in Stripe mode — ignore
-    body = await request.body()
-    signature = request.headers.get("stripe-signature", "")
-    try:
-        event = provider.handle_webhook({"body": body, "signature": signature})
-    except Exception as e:  # surface the reason in Stripe's delivery log
-        return Response(content=f"webhook error: {type(e).__name__}: {e}"[:400],
-                        status_code=400)
-    invoice_id = event.get("invoice_id")
-    if event.get("status") == "Paid" and invoice_id is not None:
-        conn = db.connect()
-        try:
-            inv = db.get_invoice(conn, int(invoice_id))
-            if inv is not None and inv["status"] != "Paid":
-                db.update_invoice_status(
-                    conn, int(invoice_id), "Paid",
-                    external_ref=event.get("external_ref"),
-                )
-                if inv["project_id"]:
-                    db.add_update(conn, inv["project_id"],
-                                  f"{inv['kind']} invoice paid (Stripe).", "invoice")
-                    # Client payment in → generate the crew payout ledger (Owed).
-                    n = db.ensure_project_payouts(conn, inv["project_id"])
-                    if n:
-                        db.add_update(conn, inv["project_id"],
-                                      f"{n} crew payout(s) queued (Owed).", "invoice")
-        finally:
-            conn.close()
-    return Response(status_code=200)
 
 
 # --------------------------------------------------------------------------- #

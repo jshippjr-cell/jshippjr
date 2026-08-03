@@ -1824,9 +1824,14 @@ def test_per_asset_event_lands_on_tape_and_pushes_operator(client, monkeypatch):
 # Brief-as-contract — the brief on the portal + scope reconciliation (HTTP).
 # --------------------------------------------------------------------------- #
 def test_portal_renders_brief_card_and_scope_checklist(client):
-    """(c)+(d) The client portal shows "The brief" card + a scope checklist with a
-    Delivered and a Pending item, plus the "N of M" rollup. Seed a brief with two
-    deliverables + one matching asset."""
+    """(c)+(d) The client portal shows "The brief" card + a scope checklist with an
+    Uploaded and a Pending item, plus the "N of M" rollup. Seed a brief with two
+    deliverables + one matching asset.
+
+    The badge reads "Uploaded", not "Delivered": the match fires the moment a file
+    lands that plausibly satisfies the item, which is before the client has approved
+    anything. The portal was telling a client an item was delivered on the same
+    screen as a sign-off block reading 0 approved."""
     pid = _win_and_make_project(client, 1)
     token = _project_token(client, pid)
     # A brief scoping two deliverables.
@@ -1840,11 +1845,11 @@ def test_portal_renders_brief_card_and_scope_checklist(client):
     # The brief card + its agreed-scope copy.
     assert "The brief" in page
     assert "Energetic :60 anthem for the launch." in page
-    # The scope checklist: one Delivered, one Pending.
-    assert "✓ Delivered" in page
+    # The scope checklist: one Uploaded, one Pending.
+    assert "✓ Uploaded" in page
     assert "⧗ Pending" in page
     assert ":06 bumper" in page
-    # The rollup ("N of M brief items delivered").
+    # The rollup ("N of M brief items uploaded").
     assert "1 of 2" in page
     assert "brief item" in page
 
@@ -2065,6 +2070,11 @@ def test_zip_contains_branded_html_docs_with_playable_audio(client):
     client.post(f"/project/{pid}/delivery/asset",
                 data={"label": "Anthem :60 master", "action": "add"},
                 files=files, follow_redirects=True)
+    # Confirm the grant — the seal follows the certificate's own state, so a package
+    # shipped on unconfirmed template terms is stamped IN CLEARANCE rather than
+    # CLEARED (the document already says "Draft, pending confirmation" in that case).
+    client.post(f"/project/{pid}/delivery/license/confirm",
+                data={"by": "Jon Shipp"}, follow_redirects=True)
     from chordential_oia.web import db as db_mod
     conn = db_mod.connect()
     try:

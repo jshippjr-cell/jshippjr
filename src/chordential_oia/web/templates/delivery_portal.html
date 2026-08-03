@@ -7,7 +7,12 @@
 <style>
   :root{
     --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
-    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#7a756d;
+    /* This page carries its own palette, so it needs its own copy of the pair from
+       style.css: ember as TYPE is 3.16:1 on cream, under AA. This is the buyer's
+       surface — the one page a client's accessibility review will actually open. */
+    --orange-text:#A94A0C; --orange-solid:#C2510F;
+    /* muted was #7a756d — 4.31:1 on this page's cream, just under AA */
+    --sand:#D8CDB6; --slate:#546671; --line:#E6DFD2; --muted:#736E66;
     --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
@@ -18,10 +23,10 @@
     padding:46px 0 40px;margin-bottom:30px}
   .hero .wrap{padding-top:0}
   .logo{height:26px;width:auto;display:block;margin-bottom:22px}
-  .kick{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:700;margin:0 0 8px}
+  .kick{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--orange-text);font-weight:700;margin:0 0 8px}
   h1{font-family:var(--serif);font-weight:600;font-size:38px;line-height:1.08;margin:0 0 8px}
   .hero .tag{color:var(--sand);font-size:15px;max-width:90%;margin:0}
-  .status{display:inline-block;margin-top:22px;border:1px solid var(--orange);color:var(--orange);
+  .status{display:inline-block;margin-top:22px;border:1px solid var(--orange);color:var(--orange-text);
     font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;padding:7px 14px;border-radius:4px}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
   h2{font-family:var(--serif);font-size:22px;color:var(--wine);margin:0 0 4px;font-weight:600}
@@ -31,7 +36,7 @@
     border-bottom:2px solid var(--wine);padding:7px 6px}
   td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   tr.grp td{background:var(--cream);font-weight:700;color:var(--wine);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px}
-  .tick{color:var(--orange);font-weight:800}
+  .tick{color:var(--orange-text);font-weight:800}
   ul.clean{margin:6px 0;padding-left:18px;font-size:13px;line-height:1.8}
   .legend{font-size:12px;color:var(--muted)}
   .muted-note{font-size:11px;color:var(--muted);font-style:italic;margin-top:12px}
@@ -39,15 +44,18 @@
     display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
     font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
   .seal b{font-family:var(--serif);font-size:14px;letter-spacing:0}
+  /* pre-confirmation: reads as an open state, not an achievement — dashed, unsaturated */
+  .seal-pending{border-style:dashed;border-color:#B9AFA4;color:#6B6259}
+  .seal-pending b{font-size:12px}
   .asset{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--line)}
   .asset:last-child{border-bottom:0}
   .asset .nm{font-weight:600;font-size:14px}
-  .dl{color:var(--orange);text-decoration:none;font-weight:700;font-size:13px}
+  .dl{color:var(--orange-text);text-decoration:none;font-weight:700;font-size:13px}
   /* compact, brand-coloured audio player */
   .cap-audio{display:inline-flex;align-items:center;gap:10px;max-width:380px;width:100%;
     background:var(--cream);border:1px solid #e4ddd8;border-radius:999px;padding:5px 14px 5px 5px}
   .cap-audio-btn{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:0;
-    background:var(--orange);color:#fff;font-size:12px;line-height:1;cursor:pointer;
+    background:var(--orange-solid);color:#fff;font-size:12px;line-height:1;cursor:pointer;
     display:inline-flex;align-items:center;justify-content:center}
   .cap-audio-body{flex:1 1 auto;min-width:110px}
   .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
@@ -57,7 +65,7 @@
   /* review portal */
   .rc{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
   .rc:last-child{border-bottom:0}
-  .rc-t{flex:0 0 auto;color:var(--orange);font-weight:800;font-variant-numeric:tabular-nums;text-decoration:none;min-width:38px}
+  .rc-t{flex:0 0 auto;color:var(--orange-text);font-weight:800;font-variant-numeric:tabular-nums;text-decoration:none;min-width:38px}
   .rc-a{flex:0 0 auto;font-weight:700;color:var(--wine)}
   .rc-b{flex:1 1 auto;color:var(--ink)}
   .rc-form{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
@@ -86,7 +94,7 @@
   .rc.done .rc-b{text-decoration:line-through;color:var(--muted)}
   .rc.done{opacity:.62}
   .rc-actions{flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:auto}
-  .rc-mini{background:none;border:0;color:var(--orange);font:inherit;font-size:11px;
+  .rc-mini{background:none;border:0;color:var(--orange-text);font:inherit;font-size:11px;
     font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
   .rc-mini.resolve{color:var(--slate)}
   /* Per-asset approval (granular sign-off). */
@@ -112,7 +120,7 @@
   .rc-thread{margin-left:46px;border-left:2px solid var(--line);padding-left:12px}
   .rc-thread .rc{padding:5px 0}
   .rc-thread .rc-t{min-width:0;color:var(--slate)}
-  .round{display:inline-block;border:1px solid var(--orange);color:var(--orange);font-size:10px;
+  .round{display:inline-block;border:1px solid var(--orange);color:var(--orange-text);font-size:10px;
     letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:4px;margin-left:8px}
   /* delivery-package-ready card — the payoff moment */
   .ready{background:radial-gradient(120% 90% at 20% 0%, #3a1219 0%, #1f1013 60%, #160c0e 100%);color:var(--cream);
@@ -357,7 +365,7 @@
       <span style="display:inline-block;border:1px solid var(--wine);color:var(--wine);font-size:10px;
         letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px">✓ Verified reviewer</span>
       Reviewing as <b>{{ reviewer.name }}</b>{% if reviewer.email %} &lt;{{ reviewer.email }}&gt;{% endif %}{% if reviewer.role %} · {{ reviewer.role }}{% endif %}.
-      <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link — your identity is verified, so only you can approve as you.</span>
+      <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link — your name and email are locked to it, so anything you sign is recorded as yours. Keep it to yourself.</span>
     </p>
     {% else %}
     {# IP1: capture the GUEST's identity once (name + email), then remember it in a
@@ -375,7 +383,7 @@
     {% if reviewer and reviewer.known %}
     <p class="sub" id="whoami" style="margin:-6px 0 10px">
       Reviewing as <b>{{ reviewer.name }}</b> &lt;{{ reviewer.email }}&gt; —
-      <a href="#" id="whois-edit" style="color:var(--orange)">change</a>
+      <a href="#" id="whois-edit" style="color:var(--orange-text)">change</a>
     </p>
     {% endif %}
     {% endif %}
@@ -395,7 +403,7 @@
     {% if selected_n|string != current_n|string and current_n != 0 %}
     <p class="muted-note" style="margin:-8px 0 12px">
       You're viewing <b>v{{ selected_n }}</b> — an earlier round.
-      <a href="/project/{{ project['id'] }}/delivery-portal?{% if reviewer_token %}r={{ reviewer_token }}{% else %}k={{ share_token }}{% endif %}#review" style="color:var(--orange)">Back to current (v{{ current_n }})</a>
+      <a href="/project/{{ project['id'] }}/delivery-portal?{% if reviewer_token %}r={{ reviewer_token }}{% else %}k={{ share_token }}{% endif %}#review" style="color:var(--orange-text)">Back to current (v{{ current_n }})</a>
     </p>
     {% endif %}
     {% endif %}
@@ -620,12 +628,16 @@
     </dl>
     {% if brief_items %}
     <div style="margin-top:16px">
-      <p class="scope-roll"><b>{{ brief_rollup.delivered }} of {{ brief_rollup.total }}</b> brief item{{ 's' if brief_rollup.total != 1 }} delivered</p>
+      {# "Uploaded", not "Delivered": the match fires when a file lands that plausibly
+         satisfies the item — before you have approved anything. Saying delivered here
+         while the sign-off block above reads 0 approved is the portal contradicting
+         itself on the one page where the client is deciding whether to trust it. #}
+      <p class="scope-roll"><b>{{ brief_rollup.delivered }} of {{ brief_rollup.total }}</b> brief item{{ 's' if brief_rollup.total != 1 }} uploaded</p>
       <ul class="scope">
         {% for it in brief_items %}
         <li>
           <span class="sc-i">{{ it.item }}{% if it.matched %}<span class="sc-m">↳ {{ it.matched }}</span>{% endif %}</span>
-          {% if it.status == "Delivered" %}<span class="sc-badge sc-yes">✓ Delivered</span>{% else %}<span class="sc-badge sc-no">⧗ Pending</span>{% endif %}
+          {% if it.status == "Delivered" %}<span class="sc-badge sc-yes">✓ Uploaded</span>{% else %}<span class="sc-badge sc-no">⧗ Pending</span>{% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -667,12 +679,12 @@
             {% set ns.grp = r.group %}
           {% endif %}
           <tr><td>{{ r.asset }}</td><td>{{ r.spec }}</td>
-            <td>{% if r.status == "Delivered" %}<span class="tick">✓</span> Delivered{% else %}{{ r.status }}{% endif %}</td></tr>
+            <td>{% if r.status == "Delivered" %}<span class="tick">✓</span> Uploaded{% else %}{{ r.status }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
     {% if brief_items %}
-    <p class="sub" style="margin-top:14px"><b>Against the brief:</b> {{ brief_rollup.delivered }} of {{ brief_rollup.total }} brief item{{ 's' if brief_rollup.total != 1 }} delivered.{% if brief_rollup.delivered < brief_rollup.total %} See <a href="#brief" style="color:var(--orange)">The brief</a> for the full scope checklist.{% endif %}</p>
+    <p class="sub" style="margin-top:14px"><b>Against the brief:</b> {{ brief_rollup.delivered }} of {{ brief_rollup.total }} brief item{{ 's' if brief_rollup.total != 1 }} uploaded.{% if brief_rollup.delivered < brief_rollup.total %} See <a href="#brief" style="color:var(--orange-text)">The brief</a> for the full scope checklist.{% endif %}</p>
     {% endif %}
   </div>
 
@@ -730,21 +742,37 @@
         <p class="legend" style="margin-top:6px">Original work — no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
       </div>
       <div style="flex:0 0 auto;text-align:center">
+        {# The seal is the product's whole promise, so it may never outrun the paperwork:
+           it appears once the grant is confirmed AND a version is certified. Stamping
+           CLEARED over terms the page itself labels "Draft, pending confirmation" is the
+           one contradiction a client's business-affairs reviewer is certain to catch. #}
+        {% if not cert.license_draft and cert.certified_version %}
         <div class="seal"><span>Chordential</span><b>CLEARED</b><span>original work</span></div>
+        {% else %}
+        <div class="seal seal-pending"><span>Chordential</span><b>IN CLEARANCE</b><span>seal on confirmation</span></div>
+        {% endif %}
       </div>
     </div>
     {% if cert.contributors %}
+    {# Roles, not names. The talent writes under Chordential — naming the composer on a
+       browsable pre-payment page hands over the roster and breaks the anonymity the
+       creators were signed under. Named chain of title belongs in the rights certificate
+       inside the paid package, where it is legally required and access is controlled. #}
     <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Created by</p>
     <ul class="clean">
-      {% for c in cert.contributors %}<li>{{ c.name }} — {{ c.role }}</li>{% endfor %}
+      <li>Chordential studio — {{ cert.contributors | map(attribute='role') | unique | join(', ') }}</li>
     </ul>
     {% endif %}
-    <!-- IP3 — signatory block: warranty attaches to a named signer, version + date -->
+    <!-- IP3 — signatory block: warranty attaches to a named signer, version + date.
+         Shown only once there is a certified version to attach it to; a warranty
+         naming a signer against nothing is a signature on a blank page. -->
+    {% if cert.certified_version %}
     <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Certified by</p>
     <ul class="clean">
       <li><b>{{ cert.signatory.entity }}</b>{% if cert.signatory.signer %} — {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}{% endif %}</li>
-      {% if cert.certified_version %}<li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>{% endif %}
+      <li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>
     </ul>
+    {% endif %}
   </div>
 
   {% set ns_ap = namespace(any=false) %}

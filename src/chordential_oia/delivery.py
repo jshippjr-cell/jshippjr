@@ -1478,9 +1478,14 @@ def _audio_player_html(label: str, rel_src: str) -> str:
 
 
 def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
-                           *, seal_label: str = "CLEARED") -> str:
+                           *, seal_label: str = "") -> str:
     """The inner HTML of the Clearance Certificate (warranty, contributors, grant,
-    seal, honest Content-ID, signatory) — shared by the package + standalone cert."""
+    seal, honest Content-ID, signatory) — shared by the package + standalone cert.
+
+    ``seal_label`` defaults to the certificate's own state rather than a constant
+    "CLEARED": the body already titles the grant "Draft, pending confirmation" and
+    prints "not yet confirmed as the deal grant", so stamping a clearance seal beside
+    it made the document disagree with itself. Pass a label explicitly to override."""
     if cert.contributors:
         contrib_rows = "".join(
             f"<tr><td>{_esc(c.role)}</td><td>{_esc(c.name)}</td></tr>"
@@ -1490,6 +1495,7 @@ def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
         contrib_rows = '<tr><td colspan="2" class="legend">No contributors assigned yet.</td></tr>'
 
     draft = cert.license_draft
+    seal_label = seal_label or ("IN CLEARANCE" if draft else "CLEARED")
     grant_title = "Grant of rights" + (" — Draft, pending confirmation" if draft else "")
     draft_note = (
         '<p style="margin:0 0 8px;font-size:10.5px;color:#7a756d">'

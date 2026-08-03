@@ -332,9 +332,11 @@
 <section class="card" id="reviewers">
   <div class="card-head"><h2>Reviewers <span class="muted">— verified-identity approval</span></h2></div>
   <p class="small muted" style="margin:0 0 12px">
-    Invite named reviewers. Each gets a <b>personal review link</b> — that link is the
-    only way to <b>approve</b> (which locks FINAL and assembles the delivery package).
-    The generic client link can view &amp; comment as a guest, but cannot approve.
+    Invite named reviewers. Each gets a <b>personal review link</b> that signs an
+    <b>approval</b> (which locks FINAL and assembles the delivery package) with their
+    locked roster identity — it cannot be signed under anyone else's name. The generic
+    client link can also approve, signed with whatever name the holder enters, so treat
+    it as forwardable: send personal links for the sign-off that matters.
   </p>
   <p class="small" style="margin:0 0 12px">
     {% if mail_configured %}

@@ -41,6 +41,9 @@ function CLIP(n){ return '/static/public/world/leg' + n + (H264 ? '.mp4' : '.web
 function STILL(n){ return '/static/public/world/still' + n + '.jpg' + V; }
 mountScrollWorld(document.getElementById('world'), {
   brand: { name: 'Chordential', href: '#top' },
+  /* the film is five viewport-heights long; the way out rides along with it,
+     on phones too (the section nav is the only chrome that drops at 860px) */
+  cta: { label: 'Start your brief', href: '/start' },
   hint: 'scroll to begin the score',
   diveScroll: 0.8,
   crossfade: 0.08,
