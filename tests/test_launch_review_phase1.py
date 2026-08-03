@@ -69,6 +69,48 @@ def test_homepage_carries_a_persistent_cta(client):
     assert "cta:" in body and "/start" in body
 
 
+def test_every_front_of_house_route_is_reachable_with_the_gate_on():
+    """The admin gate is path-allowlisted, so a public page whose route was written
+    without adding it to _PUBLIC_PATHS answers 303 -> /admin/login in production and
+    nowhere else — it looks fine in dev, where the gate is off. That is how
+    /commission shipped unreachable: the page was built, linked and tested, and the
+    only thing missing was one string in a set on the other side of the app."""
+    import re
+    from pathlib import Path
+    from chordential_oia.web import app as app_mod
+
+    src = Path(app_mod.__file__).read_text()
+    block = src.split("_PUBLIC_PATHS = frozenset({")[1].split("})")[0]
+    allowed = set(re.findall(r'"([^"]+)"', block))
+
+    public_py = (Path(app_mod.__file__).parent / "public.py").read_text()
+    routes = set(re.findall(r'@router\.get\(\s*"(/[a-z-]*)"', public_py))
+
+    missing = {r for r in routes if r not in allowed}
+    assert not missing, f"front-of-house routes gated behind the admin login: {missing}"
+
+
+def test_public_pages_answer_with_the_gate_enabled(tmp_path, monkeypatch):
+    """The behavioural half of the test above: with a token set, every front-of-house
+    page must still render rather than redirect to the login."""
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "gate.db"))
+    monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "secret-passphrase")
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    from chordential_oia.web import app as app_mod
+    importlib.reload(app_mod)
+
+    with TestClient(app_mod.app) as c:
+        for path in ("/", "/commission", "/experience", "/capabilities", "/samples",
+                     "/start", "/book"):
+            r = c.get(path, follow_redirects=False)
+            assert r.status_code == 200, (
+                f"{path} answered {r.status_code} "
+                f"({r.headers.get('location')}) with the admin gate on")
+        # and the gate still actually gates the console
+        assert c.get("/dashboard", follow_redirects=False).status_code == 303
+
+
 def test_retired_homepage_template_is_gone(client):
     """public/home.html was rendered by no route while remaining the only inbound
     link to /samples — dead code feeding stale links into the live site."""

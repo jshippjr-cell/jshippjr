@@ -292,6 +292,12 @@ ADMIN_COOKIE = "cdl_admin"
 _PUBLIC_PATHS = frozenset({
     "/", "/capabilities", "/samples", "/start", "/book", "/thanks", "/apply",
     "/delivery-sample", "/refer", "/for-artists", "/showreel", "/reel", "/stills",
+    # Added late: both are front-of-house pages that were left out of this set when
+    # their routes were written, so in production (where the token is set) they
+    # answered 303 -> /admin/login. A sales page nobody outside the login can open
+    # is the same defect as a CTA that goes nowhere. If you add a route to
+    # public.py, add it here — test_launch_review_phase1 asserts the two lists agree.
+    "/commission", "/experience",
 })
 
 
