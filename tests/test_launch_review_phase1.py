@@ -111,6 +111,51 @@ def test_public_pages_answer_with_the_gate_enabled(tmp_path, monkeypatch):
         assert c.get("/dashboard", follow_redirects=False).status_code == 303
 
 
+def test_every_shipped_asset_is_actually_packaged():
+    """Assets are installed by the package-data globs in pyproject, and those are
+    setuptools globs: ``*`` stops at a directory separator. In dev this is invisible
+    because StaticFiles serves the source tree, so a file can be committed, linked,
+    requested by a template and covered by a test, and still 404 in production because
+    it was never installed. That is exactly what happened to the vendored three.js:
+    ``static/public/*.js`` does not reach ``static/public/vendor/``, so /commission
+    rendered with no 3D layer at all on the live site.
+
+    Asserting the glob list covers the tree catches the next one too — a TestClient
+    request never can, whatever it asserts."""
+    import glob
+    import os
+    import tomllib
+    from pathlib import Path
+    from chordential_oia.web import app as app_mod
+
+    repo = Path(__file__).resolve().parents[1]
+    cfg = tomllib.loads((repo / "pyproject.toml").read_text())
+    patterns = cfg["tool"]["setuptools"]["package-data"]["chordential_oia.web"]
+
+    web = Path(app_mod.__file__).parent
+    included = set()
+    for pattern in patterns:
+        for hit in glob.glob(str(web / pattern)):
+            included.add(os.path.relpath(hit, web))
+
+    missing = []
+    for f in web.rglob("*"):
+        if not f.is_file():
+            continue
+        rel = f.relative_to(web).as_posix()
+        if rel.endswith(".py") or "__pycache__" in rel:
+            continue
+        if rel.startswith("uploads/"):     # runtime data, correctly not shipped
+            continue
+        if rel not in included:
+            missing.append(rel)
+
+    assert not missing, (
+        "these files are served in dev but would 404 in production — add a "
+        f"package-data glob for each: {sorted(missing)}"
+    )
+
+
 def test_retired_homepage_template_is_gone(client):
     """public/home.html was rendered by no route while remaining the only inbound
     link to /samples — dead code feeding stale links into the live site."""

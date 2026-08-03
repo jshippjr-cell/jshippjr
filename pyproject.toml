@@ -77,6 +77,12 @@ where = ["src"]
     "static/public/img/*.jpg",
     "static/public/img/*.png",
     "static/public/world/*",
+    # These globs are setuptools', not shell: * stops at a directory separator, so
+    # "static/public/*.js" does NOT reach a subdirectory. three.min.js was committed
+    # and served fine in dev (where StaticFiles reads the source tree) while never
+    # being installed — so /commission 404'd on it in production and rendered with
+    # no 3D layer at all. A new asset subdirectory needs its own line here.
+    "static/public/vendor/*",
 ]
 
 [tool.pytest.ini_options]
