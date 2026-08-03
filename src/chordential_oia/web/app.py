@@ -239,8 +239,9 @@ class SelectiveGZip:
     Starlette's GZipMiddleware compresses by size alone: it has no notion of Range
     requests, so it will happily gzip a 206 body while leaving ``content-range``
     describing the *uncompressed* extent — the response then contradicts itself and
-    the client cannot assemble the file. The scroll-world film is scrubbed through
-    exactly those range requests, so that is not a theoretical concern.
+    the client cannot assemble the file. Every audio and video element in the client
+    delivery portal seeks through exactly those range requests, so that is not a
+    theoretical concern.
 
     Two bypasses, both delegating to the raw app: a request carrying ``Range``, and
     a path whose extension is already-compressed media (where gzip buys nothing and
@@ -297,7 +298,7 @@ _PUBLIC_PATHS = frozenset({
     # answered 303 -> /admin/login. A sales page nobody outside the login can open
     # is the same defect as a CTA that goes nowhere. If you add a route to
     # public.py, add it here — test_launch_review_phase1 asserts the two lists agree.
-    "/commission", "/experience", "/world",
+    "/commission",
 })
 
 

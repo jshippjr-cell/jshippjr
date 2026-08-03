@@ -54,7 +54,7 @@ def test_public_css_cachebuster_comes_from_one_source(client):
     per template — a bump used to require editing 4 files, and once didn't, serving
     stale CSS. Every public page that uses site.css must render the resolved value.
 
-    The homepage (``/`` → experience.html) is a self-contained immersive page with its
+    The homepage (``/`` → commission.html) is a self-contained immersive page with its
     own inline styles and deliberately does NOT link site.css, so it's excluded here."""
     from chordential_oia.web.public import ASSET_VERSION
     for path in ("/showreel", "/stills"):

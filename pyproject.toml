@@ -76,7 +76,6 @@ where = ["src"]
     "static/public/*.pdf",
     "static/public/img/*.jpg",
     "static/public/img/*.png",
-    "static/public/world/*",
     # These globs are setuptools', not shell: * stops at a directory separator, so
     # "static/public/*.js" does NOT reach a subdirectory. three.min.js was committed
     # and served fine in dev (where StaticFiles reads the source tree) while never

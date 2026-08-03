@@ -72,9 +72,3 @@ def test_commission_is_the_front_door(client):
     assert home.text == client.get("/commission").text
 
 
-def test_the_world_film_survives_the_swap(client):
-    """Losing the film would be the expensive part of this change, so pin it: the
-    World keeps its own address, whole."""
-    world = client.get("/world")
-    assert world.status_code == 200
-    assert "mountScrollWorld" in world.text

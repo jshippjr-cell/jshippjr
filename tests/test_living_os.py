@@ -161,13 +161,3 @@ def test_session_room_strip_mounted_on_console_and_portal(client):
     assert "session-room.js" in portal
 
 
-def test_experience_beat3_ships_the_signature(client):
-    """The Experience (public film): Beat 3 is live at /experience — the master,
-    the client's folder tree, and the CAMPAIGN READY stamp, in the Reassurance
-    Voice. Honest demo branding only."""
-    page = client.get("/experience").text
-    assert "AURORA_Anthem_60_MASTER_v3_FINAL" in page
-    assert "VANCE_HOLIDAY_2026/" in page
-    assert "Campaign Ready" in page
-    assert "Organized like this. Every time." in page
-    assert "prefers-reduced-motion" in page

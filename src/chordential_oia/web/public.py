@@ -129,8 +129,9 @@ def public_home(request: Request):
     own header rather than the marketing chrome.
 
     It opens on the work the business actually sells. The World film that used to land
-    here opened on a brush drawing on paper — craft, but not a scoring stage — and is
-    kept whole at /world. /start remains the intake."""
+    here opened on a brush drawing on paper — craft, but not a scoring stage. It was
+    removed rather than parked at a second address (its 4K master is archived in
+    media/masters/, and the legs are re-cuttable from it). /start remains the intake."""
     return render(request, "public/commission.html", active="home")
 
 
@@ -139,15 +140,6 @@ def public_commission(request: Request):
     """The Commission at its original address, so links handed out before it became
     the front door still land on it."""
     return render(request, "public/commission.html", active="home")
-
-
-@router.get("/world", response_class=HTMLResponse)
-def public_world(request: Request):
-    """The World — a scroll-scrubbed camera flight through the client journey (brief →
-    estimate → session → clearance → delivery) over the handcrafted-world film, sliced
-    into frame-locked legs and driven by the scrub engine. It was the homepage until
-    the Commission took the front door; kept whole, at its own address."""
-    return render(request, "public/world.html", active="world")
 
 
 @router.get("/capabilities", response_class=HTMLResponse)
@@ -171,14 +163,6 @@ def public_samples(request: Request):
 _GALLERY_GRADIENTS = [
     "wine-orange", "slate-sand", "ink-orange", "wine-slate", "orange-sand", "ink-wine",
 ]
-
-
-@router.get("/experience", response_class=HTMLResponse)
-def public_experience(request: Request):
-    """The Chordential Experience — 'The One That Ships' (client-facing film,
-    built beat by beat per docs/design/chordential-experience-*). A former
-    homepage; this route stays so existing deep links keep working."""
-    return render(request, "public/experience.html", active="")
 
 
 @router.get("/reel")

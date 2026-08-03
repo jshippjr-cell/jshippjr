@@ -63,18 +63,14 @@ def test_reel_redirect_lands_somewhere_that_shows_work(client):
 
 def test_homepage_carries_a_persistent_cta(client):
     """Whatever is at the front door, a visitor must be able to leave for the intake
-    without first scrolling the whole story: the World shipped with its only two CTAs
-    after five viewport-heights of film, and on phones its nav is hidden entirely.
-
-    The assertion is on the requirement rather than one page's mechanism, because the
-    front door has now changed twice — the World declares a topbar CTA through the
-    scroll engine's config, the Commission carries a header button and a fixed dock."""
+    without first scrolling the whole story. The film that used to land here shipped
+    with its only two CTAs after five viewport-heights, and on phones its nav was
+    hidden entirely. The Commission carries a header button and a fixed dock; a future
+    front door has to carry its own equivalent."""
     body = client.get("/").text
     assert "/start" in body, "the homepage has no route to the intake at all"
 
-    world_topbar = "cta:" in body                       # scrub-engine config
-    commission_chrome = 'id="dockCta"' in body and '<header class="bar">' in body
-    assert world_topbar or commission_chrome, (
+    assert 'id="dockCta"' in body and '<header class="bar">' in body, (
         "the homepage exposes no CTA from persistent chrome — the only way out is "
         "reaching the end of the page"
     )
@@ -112,7 +108,7 @@ def test_public_pages_answer_with_the_gate_enabled(tmp_path, monkeypatch):
     importlib.reload(app_mod)
 
     with TestClient(app_mod.app) as c:
-        for path in ("/", "/commission", "/experience", "/capabilities", "/samples",
+        for path in ("/", "/commission", "/capabilities", "/samples",
                      "/start", "/book"):
             r = c.get(path, follow_redirects=False)
             assert r.status_code == 200, (
@@ -282,12 +278,6 @@ def test_analyze_form_does_not_fake_progress():
     assert "chordentialEasedProgress" not in (web / "static" / "ui.js").read_text()
 
 
-def test_demo_copy_carries_no_real_trademark(client):
-    """The invented-brand rule exists so the demo fiction stays honest; a real
-    campaign was hanging inside a fabricated client's brief."""
-    body = client.get("/experience").text
-    assert "Nike" not in body
-
 
 def test_text_is_compressed(client):
     """Nothing was content-encoded before: the vendored three.js build went out as
@@ -303,7 +293,7 @@ def test_range_requests_are_never_compressed(client):
     a 206 body while leaving content-range describing the uncompressed extent, so the
     response contradicts itself. The homepage film is scrubbed through range requests,
     so this would break the front door on any browser that seeks."""
-    r = client.get("/static/public/world/leg1.mp4",
+    r = client.get("/static/public/hero-spliced.mp4",
                    headers={"Range": "bytes=0-1023", "Accept-Encoding": "gzip"})
     assert r.status_code == 206
     assert r.headers.get("content-encoding") is None, "a partial response was gzipped"
@@ -313,7 +303,7 @@ def test_range_requests_are_never_compressed(client):
 
 def test_already_compressed_media_is_not_re_compressed(client):
     """Gzipping a JPEG or a 512 MB master buys nothing and costs CPU per byte."""
-    r = client.get("/static/public/world/still1.jpg",
+    r = client.get("/static/public/hero-spliced-poster.jpg",
                    headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200
     assert r.headers.get("content-encoding") is None

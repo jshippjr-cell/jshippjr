@@ -27,15 +27,14 @@ def client(tmp_path, monkeypatch):
 
 def test_public_home_is_the_commission(client):
     # The front door is the Commission — the live score, ending at the intake. The
-    # World film it replaced is kept at /world; the Experience film at /experience.
+    # World film and the Experience film that preceded it were deleted rather than
+    # parked at second addresses (their masters are archived in media/masters/).
     r = client.get("/")
     assert r.status_code == 200
     assert "The music department" in r.text
     assert "/start" in r.text
-    world = client.get("/world")
-    assert world.status_code == 200 and "mountScrollWorld" in world.text
-    exp = client.get("/experience")
-    assert exp.status_code == 200 and "Original music." in exp.text
+    for retired in ("/world", "/experience"):
+        assert client.get(retired).status_code == 404, f"{retired} is back"
 
 
 def test_public_home_at_root(client):
@@ -76,17 +75,13 @@ def test_samples_page_renders_capability_demos(client):
 def test_home_work_is_truthful_capability_demonstrations(client):
     # The front door must not imply delivered client engagements, and the no-AI-audio
     # rule has to be stated on it — that claim moved with the front door rather than
-    # being left behind on the page that used to carry it. The reel's
-    # capability-demonstration framing lives at /experience.
+    # being left behind on the page that used to carry it.
     r = client.get("/")
     assert r.status_code == 200
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
         assert past_claim not in r.text
     assert "never AI-generated audio" in r.text
-    exp = client.get("/experience").text
-    assert "Capability demonstration" in exp
-    assert "AURORA" in exp and "VANCE_HOLIDAY_2026/" in exp
 
 
 def test_delivery_sample_page(client):

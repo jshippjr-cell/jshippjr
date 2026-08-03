@@ -31,19 +31,20 @@ Almost none of this required building. It required wiring, reconciling, and dele
    on every brochure page; both anchors existed only on retired homepages. The post-submit
    thank-you page sent every fresh lead to the same dead anchor. Found independently by
    five of ten seats. *(Fixed — Phase 1.)*
-3. **The homepage was a conversion dead end.** No persistent CTA (the scroll engine has
-   supported one all along at `scrub-engine.js:123`; `world.html` never passed it), no nav
-   to any other page, no way to hear a note of music, and the section nav is hidden
-   entirely below 860px. *(CTA fixed — Phase 1; "hear the work" is Phase 2.)*
+3. **The homepage was a conversion dead end.** No persistent CTA, no nav to any other
+   page, no way to hear a note of music, and the section nav hidden entirely below 860px.
+   *(CTA fixed — Phase 1, and the requirement now rides with whatever page is the front
+   door rather than one page's mechanism; "hear the work" is Phase 2.)*
 4. **Front-of-house was three homepages plus six orphans** — the root cause of 1–3.
    `/commission`, `/experience`, `/samples`, `/showreel`, `/stills`, `/delivery-sample` had
    zero inbound links; `home.html` was rendered by no route yet was the only thing linking
-   `/samples`. Each retired homepage left stale links behind. *(`home.html` deleted and
-   both gated pages un-gated in Phase 1. **The flagship question was then settled: the
-   Commission is the front door**, and the World film moved whole to `/world`. That leaves
-   `/world` and `/experience` as archived addresses reachable only by direct link — kept
-   deliberately so old links land, but they are the orphan pattern, and the next retired
-   homepage should be deleted rather than parked.)*
+   `/samples`. Each retired homepage left stale links behind. ***Resolved.*** `home.html`
+   was deleted, the flagship question was settled — **the Commission is the front door** —
+   and the two retired homepages were then deleted outright rather than parked at second
+   addresses, on the operator's call: nothing pointed at either, so keeping them would only
+   have grown the orphan set that caused this finding. Their masters are archived in
+   `media/masters/`, so the films themselves are re-cuttable. Front-of-house is now one
+   flagship plus its brochure pages.
 5. **Marking a deal Won erased its recorded value.** The board and stepper post `status`
    alone; `update_status` assigned `outcome_value` unconditionally, writing NULL.
    Reproduced live on seeded data. *(Fixed — Phase 1, with a regression test.)*
@@ -85,7 +86,7 @@ Almost none of this required building. It required wiring, reconciling, and dele
 |---|---|
 | Six `/commission` CTAs → `/start` / `/book`; wordmark links home | `commission.html:554–769` |
 | `Work` → `/samples`, `About` deleted, `/reel` → `/samples`, thanks-page CTA repointed | `public_base.html:19–21`, `thanks.html:34` |
-| Persistent homepage CTA via the engine's existing `config.cta` | `scrub-engine.js:123` unused |
+| Persistent homepage CTA (header + fixed dock on the Commission) | the film's only CTAs sat after five viewport-heights |
 | `home.html` deleted | rendered by no route |
 | `update_status` COALESCEs `outcome_value` | reproduced data loss |
 | Shadowed second `/webhooks/stripe` handler deleted | `app.py:8839–8877`, divergent logic |
