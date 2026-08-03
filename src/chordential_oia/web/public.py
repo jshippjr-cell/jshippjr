@@ -123,21 +123,31 @@ def _validate_lead_contact(email: str, phone: str, linkedin: str):
 
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
-    """The front door is the World — a scroll-scrubbed camera flight through the
-    client journey (brief → estimate → session → clearance → delivery) over the
-    handcrafted-world film, sliced into frame-locked legs and driven by the
-    scroll-world scrub engine. The Experience film remains at /experience;
-    /start remains the intake."""
-    return render(request, "public/world.html", active="home")
+    """The front door is the Commission — the score runs live behind the copy while
+    the visitor leaves a note on a cue, prices a planning band, watches the clearance
+    certificate issue, and sees the delivery pack itself. Standalone: it carries its
+    own header rather than the marketing chrome.
+
+    It opens on the work the business actually sells. The World film that used to land
+    here opened on a brush drawing on paper — craft, but not a scoring stage — and is
+    kept whole at /world. /start remains the intake."""
+    return render(request, "public/commission.html", active="home")
 
 
 @router.get("/commission", response_class=HTMLResponse)
 def public_commission(request: Request):
-    """The Commission — the score runs live behind the copy while the visitor
-    leaves a note on a cue, prices a planning band, watches the clearance
-    certificate issue, and sees the delivery pack itself. Standalone: it carries
-    its own header rather than the marketing chrome."""
+    """The Commission at its original address, so links handed out before it became
+    the front door still land on it."""
     return render(request, "public/commission.html", active="home")
+
+
+@router.get("/world", response_class=HTMLResponse)
+def public_world(request: Request):
+    """The World — a scroll-scrubbed camera flight through the client journey (brief →
+    estimate → session → clearance → delivery) over the handcrafted-world film, sliced
+    into frame-locked legs and driven by the scrub engine. It was the homepage until
+    the Commission took the front door; kept whole, at its own address."""
+    return render(request, "public/world.html", active="world")
 
 
 @router.get("/capabilities", response_class=HTMLResponse)

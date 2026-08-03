@@ -94,6 +94,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
+  — the live score, the note on a cue, the planning band, the certificate, the packing.
+  The World film that landed here (it opened on a brush drawing on paper) is kept whole at
+  **`/world`**; `/experience` is unchanged. Both are archived addresses nothing links to,
+  so old links still land. Two related fixes shipped with it: `/commission` and
+  `/experience` were never in the admin gate's `_PUBLIC_PATHS`, so in production they
+  answered `303 → /admin/login` — the Commission had never been publicly viewable — and
+  `static/public/vendor/` was missing from the package-data globs, so the vendored
+  three.js 404'd in prod and the score layer never rendered there at all. Tests now assert
+  public.py's routes against `_PUBLIC_PATHS`, and every shipped file against the
+  package-data globs (dev serves the source tree, so no request-based test can catch that).
 - **Launch review — Phase 1** (`docs/launch-review.md`, 2026-08-03): ten independent
   reviewers over the whole product; 98 findings, cross-examined against the code. The
   launch-blocking set is fixed: every `/commission` CTA dead-ended at its own closing

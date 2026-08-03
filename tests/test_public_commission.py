@@ -62,8 +62,19 @@ def test_commission_requests_three_and_the_asset_exists(client):
     assert b"WebGLRenderer" in lib.content
 
 
-def test_commission_does_not_replace_the_front_door(client):
-    """The World is still the homepage; the Commission is its own address."""
+def test_commission_is_the_front_door(client):
+    """The Commission became the homepage: it opens on the work the business sells,
+    where the World film opened on a brush drawing on paper. Both addresses serve it,
+    so links handed out before the swap still land."""
     home = client.get("/")
     assert home.status_code == 200
-    assert "Nothing should still be" not in home.text
+    assert "Nothing should still be" in home.text
+    assert home.text == client.get("/commission").text
+
+
+def test_the_world_film_survives_the_swap(client):
+    """Losing the film would be the expensive part of this change, so pin it: the
+    World keeps its own address, whole."""
+    world = client.get("/world")
+    assert world.status_code == 200
+    assert "mountScrollWorld" in world.text

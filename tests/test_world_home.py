@@ -28,8 +28,10 @@ WORLD_DIR = (
 )
 
 
-def test_home_serves_the_world(client):
-    page = client.get("/").text
+def test_world_serves_the_film(client):
+    """The World was the homepage until the Commission took the front door. It is
+    kept whole at /world — the film, the five legs and the scrub engine unchanged."""
+    page = client.get("/world").text
     assert "mountScrollWorld" in page
     assert "/static/public/world/scrub-engine.js" in page
     # clips are wired codec-aware + cache-busted: CLIP(n)/STILL(n) append ?v=asset_v
@@ -44,12 +46,12 @@ def test_home_serves_the_world(client):
     assert "never AI-generated audio" in page
 
 
-def test_home_is_public_with_admin_gate_enabled(tmp_path, monkeypatch):
+def test_world_is_public_with_admin_gate_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "g.db"))
     monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "secret")
     from chordential_oia.web.app import app
     with TestClient(app) as c:
-        r = c.get("/", follow_redirects=False)
+        r = c.get("/world", follow_redirects=False)
         assert r.status_code == 200
         assert "mountScrollWorld" in r.text
 

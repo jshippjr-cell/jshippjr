@@ -25,13 +25,15 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_public_home_is_the_world(client):
-    # The front door is the World — the scroll-scrubbed client journey ending
-    # at the intake. The Experience film lives on at /experience.
+def test_public_home_is_the_commission(client):
+    # The front door is the Commission — the live score, ending at the intake. The
+    # World film it replaced is kept at /world; the Experience film at /experience.
     r = client.get("/")
     assert r.status_code == 200
-    assert "mountScrollWorld" in r.text
-    assert "Start your brief" in r.text and "/start" in r.text
+    assert "The music department" in r.text
+    assert "/start" in r.text
+    world = client.get("/world")
+    assert world.status_code == 200 and "mountScrollWorld" in world.text
     exp = client.get("/experience")
     assert exp.status_code == 200 and "Original music." in exp.text
 
@@ -72,9 +74,10 @@ def test_samples_page_renders_capability_demos(client):
 
 
 def test_home_work_is_truthful_capability_demonstrations(client):
-    # The front door must not imply delivered client engagements. The World
-    # tells the process story only; the honesty line ships with the Session
-    # scene. The reel's capability-demonstration framing lives at /experience.
+    # The front door must not imply delivered client engagements, and the no-AI-audio
+    # rule has to be stated on it — that claim moved with the front door rather than
+    # being left behind on the page that used to carry it. The reel's
+    # capability-demonstration framing lives at /experience.
     r = client.get("/")
     assert r.status_code == 200
     for past_claim in ("Recent work", "See all work", "How we solved it",

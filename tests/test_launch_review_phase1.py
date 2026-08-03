@@ -62,11 +62,22 @@ def test_reel_redirect_lands_somewhere_that_shows_work(client):
 
 
 def test_homepage_carries_a_persistent_cta(client):
-    """The scroll engine has always supported a topbar CTA; the homepage never
-    passed one, so the only way out was two buttons after five viewport-heights of
-    film — and on phones the section nav is hidden entirely."""
+    """Whatever is at the front door, a visitor must be able to leave for the intake
+    without first scrolling the whole story: the World shipped with its only two CTAs
+    after five viewport-heights of film, and on phones its nav is hidden entirely.
+
+    The assertion is on the requirement rather than one page's mechanism, because the
+    front door has now changed twice — the World declares a topbar CTA through the
+    scroll engine's config, the Commission carries a header button and a fixed dock."""
     body = client.get("/").text
-    assert "cta:" in body and "/start" in body
+    assert "/start" in body, "the homepage has no route to the intake at all"
+
+    world_topbar = "cta:" in body                       # scrub-engine config
+    commission_chrome = 'id="dockCta"' in body and '<header class="bar">' in body
+    assert world_topbar or commission_chrome, (
+        "the homepage exposes no CTA from persistent chrome — the only way out is "
+        "reaching the end of the page"
+    )
 
 
 def test_every_front_of_house_route_is_reachable_with_the_gate_on():

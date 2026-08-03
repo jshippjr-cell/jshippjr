@@ -38,8 +38,12 @@ Almost none of this required building. It required wiring, reconciling, and dele
 4. **Front-of-house was three homepages plus six orphans** — the root cause of 1–3.
    `/commission`, `/experience`, `/samples`, `/showreel`, `/stills`, `/delivery-sample` had
    zero inbound links; `home.html` was rendered by no route yet was the only thing linking
-   `/samples`. Each retired homepage left stale links behind. *(`home.html` deleted —
-   Phase 1; the rest is Phase 2's "one flagship, chapters not competitors".)*
+   `/samples`. Each retired homepage left stale links behind. *(`home.html` deleted and
+   both gated pages un-gated in Phase 1. **The flagship question was then settled: the
+   Commission is the front door**, and the World film moved whole to `/world`. That leaves
+   `/world` and `/experience` as archived addresses reachable only by direct link — kept
+   deliberately so old links land, but they are the orphan pattern, and the next retired
+   homepage should be deleted rather than parked.)*
 5. **Marking a deal Won erased its recorded value.** The board and stepper post `status`
    alone; `update_status` assigned `outcome_value` unconditionally, writing NULL.
    Reproduced live on seeded data. *(Fixed — Phase 1, with a regression test.)*
@@ -123,8 +127,8 @@ console nav diet (remove `/lanes`, the three filter quick-links; `/incoming` as 
 triage surface) · portal ordered by court-state · fileable cue sheets (writers only as
 composers, split writer/publisher shares, per-contributor PRO, media on the license) ·
 naming system stops fabricating `_60_MASTER` on :30 spots · real byte-progress on console
-uploads · share-token rotation · one flagship with `/commission` as its linked chapter and
-"hear the work" on the homepage · finish the contrast pass: `--olive` (#737469) is a brand
+uploads · share-token rotation · "hear the work" on the homepage · finish the contrast
+pass: `--olive` (#737469) is a brand
 token used as body text on internal surfaces at 4.47:1, marginally under AA — changing it
 is a palette decision, not a bug fix, so it was left out of Phase 1.
 

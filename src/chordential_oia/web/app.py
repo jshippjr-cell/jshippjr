@@ -297,7 +297,7 @@ _PUBLIC_PATHS = frozenset({
     # answered 303 -> /admin/login. A sales page nobody outside the login can open
     # is the same defect as a CTA that goes nowhere. If you add a route to
     # public.py, add it here — test_launch_review_phase1 asserts the two lists agree.
-    "/commission", "/experience",
+    "/commission", "/experience", "/world",
 })
 
 
