@@ -31,11 +31,16 @@ def _opp(app_mod, conn, budget="$30,000"):
     return oid
 
 
+# `_build_review_for_opp` is an /opportunity-only helper and travelled with those
+# routes when ADR-0044 moved them out of app.py.
+from chordential_oia.web import opportunity_routes  # noqa: E402
+
+
 def test_commercial_pricing_follows_discovered_budget(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     oid = _opp(app_mod, conn, "$30,000")
-    _row, review = app_mod._build_review_for_opp(conn, oid)
+    _row, review = opportunity_routes._build_review_for_opp(conn, oid)
     conn.close()
     # the quote reflects the $30k budget, NOT the estimator's low cost band
     assert review.fee_low == 30000 and review.fee_high == 30000
@@ -55,7 +60,7 @@ def test_commercial_price_is_editable(tmp_path, monkeypatch):
         c.post(f"/opportunity/{oid}/commercial/edit",
                data={"fee_low": "40000", "fee_high": "48000", "deposit_pct": "40"})
     conn = app_mod.db.connect()
-    _row, review = app_mod._build_review_for_opp(conn, oid)
+    _row, review = opportunity_routes._build_review_for_opp(conn, oid)
     conn.close()
     assert review.fee_low == 40000 and review.fee_high == 48000        # override wins
     assert abs(review.deposit_pct - 0.40) < 1e-6

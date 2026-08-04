@@ -303,8 +303,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   carried in the two previous entries: the blocking helpers were **not** `_load`,
   `_brief_for`, `_outreach_for`, `_quote_band_for` — three of those four are used by only
   one route group and block nothing.
-  **app.py is now 6,917 lines / 186 routes** — from 9,133 / 251. `/opportunity` (58) and
-  `/project` (57) are now unblocked and are the next two slices.
+  **Slice 5:** the opportunity surface (`/opportunity`, 58 routes) →
+  `opportunity_routes.py`, with the twelve helpers and four constants that only this group
+  uses. Proved equivalent by running the previous commit in a git worktree side by side:
+  same status on all 58 routes, byte-identical GET responses, same stored rows after the
+  same writes. `_quote_band_for` moved into the shared layer — slice 4 had called it
+  "/project-only", which was true of its direct route callers and false of the transitive
+  closure through `_brief_for`.
+  **app.py is now 5,204 lines / 128 routes** — from 9,133 / 251. `/project` (57 routes) is
+  the last large group.
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ..capabilities import quote_band as capabilities_quote_band
 from ..models import BuyerValue, MusicDiscipline
 from . import campaign_intelligence, campaigns, db, production
 from .buyer_intel import assess_relationship, days_since
@@ -206,3 +207,16 @@ def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
         except Exception:  # noqa: BLE001 — seeding never blocks the award
             pass
     return pid
+
+
+def _quote_band_for(conn, row, opp, est):
+    """THE number we'd put in front of this buyer (ADR-0034) — the same call the
+    client's Campaign Brief and Commercial Review render. Resolving it needs the DB
+    (Campaign Intelligence + the operator's commercial overrides), which is why the
+    engines take it as a parameter rather than deriving one each."""
+    ci_view, _met = _brief_ci_context(conn, row)
+    overrides = db.get_doc_overrides(conn, row["id"]).get("commercial") or {}
+    return capabilities_quote_band(
+        opp, est, ci_fields=(ci_view or {}).get("fields") or {},
+        commercial_overrides=overrides,
+    )

@@ -27,6 +27,7 @@ from chordential_oia.capabilities import (
     _price_band, build_capabilities_doc, default_toggles, quote_band, quote_phrase,
 )
 from chordential_oia.models import Opportunity
+from chordential_oia.web import opportunity_routes
 from chordential_oia.web.estimate import estimate_for
 from chordential_oia.web.evaluate import evaluate
 
@@ -143,16 +144,16 @@ def test_all_four_surfaces_quote_the_same_number(app_mod):
             assert (doc.price_low, doc.price_high) == expected, (
                 f"opp {oid}: the CLIENT's Campaign Brief quotes something else")
 
-            _rr, review = app_mod._build_review_for_opp(conn, oid)
+            _rr, review = opportunity_routes._build_review_for_opp(conn, oid)
             assert (review.fee_low, review.fee_high) == expected, (
                 f"opp {oid}: the CLIENT's Commercial Review quotes something else")
 
-            _r2, _o2, plan = app_mod._outreach_for(conn, oid)
+            _r2, _o2, plan = opportunity_routes._outreach_for(conn, oid)
             step = [s for s in plan.steps if "indicative quote" in s.talking_point]
             assert step and want in step[0].talking_point, (
                 f"opp {oid}: the outreach cadence quotes something else")
 
-            _r3, _o3, brief = app_mod._brief_for(conn, oid)
+            _r3, _o3, brief = opportunity_routes._brief_for(conn, oid)
             line = [c for c in brief.checklist if "indicative quote" in c]
             assert line and want in line[0], (
                 f"opp {oid}: the pursuit checklist quotes something else")
@@ -173,8 +174,8 @@ def test_the_operators_surfaces_never_quote_our_cost(app_mod):
             oid = row["id"]
             _r, opp, ev = app_mod._load(conn, oid)
             est = estimate_for(opp, qual=ev[0])
-            _r3, _o3, brief = app_mod._brief_for(conn, oid)
-            _r2, _o2, plan = app_mod._outreach_for(conn, oid)
+            _r3, _o3, brief = opportunity_routes._brief_for(conn, oid)
+            _r2, _o2, plan = opportunity_routes._outreach_for(conn, oid)
             quoting = ([c for c in brief.checklist if "indicative quote" in c]
                        + [s.talking_point for s in plan.steps
                           if "indicative quote" in s.talking_point])
@@ -256,7 +257,7 @@ def test_the_generated_proposal_and_the_review_agree_on_the_deposit(app_mod):
         est = estimate_for(opp, conn=conn, project_id=prow["id"], qual=qual)
         band = app_mod._quote_band_for(conn, row, opp, est)
         proposal = build_proposal(opp, qual, est, quote_band=band)
-        _rr, review = app_mod._build_review_for_opp(conn, oid)
+        _rr, review = opportunity_routes._build_review_for_opp(conn, oid)
     finally:
         conn.close()
 
@@ -325,7 +326,7 @@ def test_brief_text_and_the_brief_page_show_the_same_steps(app_mod):
     try:
         oid = conn.execute(
             "SELECT id FROM opportunities WHERE qualified = 1 LIMIT 1").fetchone()["id"]
-        _r, _o, brief = app_mod._brief_for(conn, oid)
+        _r, _o, brief = opportunity_routes._brief_for(conn, oid)
     finally:
         conn.close()
 

@@ -30,7 +30,11 @@ def test_delete_opportunity_cascades_and_confirms(tmp_path, monkeypatch):
     app_mod.campaign_intelligence.contribute(conn, cid, "commercial",
         "procurement_requirements", "We need a W-9.", kind="fact", source="discovery_call")
     db.create_meeting(conn, opp_id=oid, start_at="2026-07-01T14:00:00+00:00", status="ingested")
-    app_mod.procurement.discover_from_ci(conn, oid, cid)
+    # Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes
+    # out, and with them app.py's need to import this engine. app.py is the route
+    # layer, not a namespace for the package.
+    from chordential_oia.web import procurement
+    procurement.discover_from_ci(conn, oid, cid)
     token = db.ensure_share_token(conn, oid)
     pid = db.insert_project(conn, oid, "Fake Client A", "Demo anthem", 0, 0, ["Composer"],
                             share_token=token)

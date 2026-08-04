@@ -1206,6 +1206,46 @@ and it silently redirects writes into the installed package directory — which 
 **app.py: 7,662 → 6,917 lines; 186 routes remain** (this pass moved no routes — 745 lines
 of helpers, which is what unblocks the next two). Suite 1,321 → 1,356 tests.
 
+**Slice 5 (2026-08-04) — the opportunity surface.** `/opportunity` (58 routes) →
+`opportunity_routes.py`, the largest group in the file and the one the previous slice
+existed to unblock. The measurement says so plainly: before slice 4 these routes reached
+21 `app.py` helpers; after it, the number they reach that is **shared with any other
+group is zero**. All twelve remaining helpers (`_brief_for`, `_outreach_for`,
+`_build_review_for_opp`, `_compose_state`, `_save_proposal_edits`, …) and four constants
+are used by this group and nothing else, so they travelled with it. Like the discovery
+slice this was **not** one block — 31 unrelated routes (the client workspace, the creator
+portal, the Match Board, the buyer pages, `/uploads`) sit inside its span — so the
+extraction was per route in source order. Zero route-pattern collisions against the other
+212 routes, checked before moving anything.
+
+**One correction to slice 4.** It recorded `_quote_band_for` as "/project-only … blocks
+nothing." That was measured at *route* level only, and it was wrong: `/opportunity`
+reaches it through `_brief_for`, so the moment `_brief_for` left, `_quote_band_for` became
+cross-module and had to move — it now sits in `opportunity_ops.py` with the rest of the
+shared layer. The lesson is specific: **for "is this helper shared?", direct callers are
+not enough; the transitive closure is the answer.** Slice 4 computed that closure to
+decide what to move and then used a direct-callers count to decide what was safe to leave.
+
+**The bug this pass hit** was in the extraction itself, not the code: `ast` puts `.lineno`
+on the `def`, **not** on the decorators above it, so slicing a route by `.lineno` leaves
+`@app.post(...)` behind in `app.py`, bound to whatever definition follows. Here it failed
+loudly (a `SyntaxError` on the first import) but the dangerous shape is silent — a
+decorator sliding onto a neighbouring function registers a real URL against the wrong
+handler. Two tests now pin it: each router carries its whole group and nothing outside its
+prefix, and the **total route count across `app.py` plus the routers is conserved at 252
+with no (method, path) declared twice.**
+
+Equivalence was proved by comparison, not assertion: a git worktree at the previous commit
+ran the old tree on one port and this one on another, against identically seeded
+databases. All 58 routes returned the same status, every GET returned a **byte-identical**
+response, twenty neighbouring pages likewise, and the same three writes produced the same
+stored rows on both. **app.py: 6,917 → 5,204 lines; 128 routes remain** — from 9,133 lines
+and 251 routes. Suite 1,356 → 1,365.
+
+Four test files stopped reaching engines and `/opportunity` helpers through `app_mod` and
+now import the module that owns the code. That is the point rather than a side effect:
+`app.py` should not be a namespace for the package.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

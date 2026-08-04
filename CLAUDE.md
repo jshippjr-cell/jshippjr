@@ -36,7 +36,8 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   demo data; `public.py` is the public front-of-house site.
 - **`app.py` is being taken apart** (ADR-0044) — it was 9,133 lines. Below it sit
   `shell.py` (Jinja env, `render`, `safe_local`, admin auth), the route modules
-  (`agencies_routes.py`, `discovery_routes.py`, `talent_routes.py`) and the helper layer
+  (`agencies_routes.py`, `discovery_routes.py`, `talent_routes.py`,
+  `opportunity_routes.py`) and the helper layer
   (`uploads.py`, `billing.py`, `delivery_ops.py`, `opportunity_ops.py`). **Imports flow one
   way: `app.py` → routes → helpers → `shell.py`.** Never import `app.py` from any of them;
   `tests/test_app_structure.py` fails the build if you do. Put new work in the module it

@@ -178,10 +178,10 @@ two documents a **client** reads.
 every write and read now goes through `storage.get_object_store()`, local by default,
 S3/R2 on a flag. Four of five uploaded files had exactly one copy before it, because
 three routes bypassed the mirroring helper. *The bucket migration itself is an ops step
-and is not done.* · `app.py` into modules — **in progress** (ADR-0044): `shell.py` + three
+and is not done.* · `app.py` into modules — **in progress** (ADR-0044): `shell.py` + four
 route modules + the helper layer (`uploads`, `billing`, `delivery_ops`, `opportunity_ops`),
-**9,133 → 6,917 lines, 186 routes still to go** — the coupled `/opportunity` + `/project`
-pair, now unblocked. Was:
+**9,133 → 5,204 lines, 128 routes still to go** — `/project` (57) is the last large group.
+Was:
 domain routers with the delivery and pipeline state machines moved into the engines ·
 request-scoped connections, pooling, indexes (there are none), batched dashboard context ·
 `delivery_json` concurrency — promote `asset_approvals` / `versions` to rows · scheduler

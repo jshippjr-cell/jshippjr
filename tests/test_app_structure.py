@@ -28,7 +28,7 @@ from chordential_oia.web import app as app_mod  # noqa: E402
 
 WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
-           "talent_routes.py"]           # grows with each slice
+           "talent_routes.py", "opportunity_routes.py"]   # grows with each slice
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
@@ -157,6 +157,7 @@ def test_every_moved_route_still_answers():
     ("/leads", "discovery_routes.py"),
     ("/talent", "talent_routes.py"),
     ("/payouts", "talent_routes.py"),
+    ("/opportunity", "opportunity_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
@@ -181,7 +182,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 7000, (
+    assert n < 5400, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -190,6 +191,47 @@ def test_the_router_carries_the_whole_group():
     paths = _module_paths("agencies_routes.py")
     assert len(paths) == 26
     assert all(p.startswith("/agencies") for _m, p in paths)
+
+
+@pytest.mark.parametrize("module,prefix,count", [
+    ("agencies_routes.py", "/agencies", 26),
+    ("talent_routes.py", None, 15),          # two prefixes: /talent + /payouts
+    ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
+    ("opportunity_routes.py", "/opportunity", 58),
+])
+def test_a_router_carries_its_whole_group_and_nothing_else(module, prefix, count):
+    """A route module holds one group. A stray path from somewhere else means a
+    decorator landed on the wrong function during the move — which is exactly the shape
+    of the bug this slice hit: `ast` puts `.lineno` on the `def`, not on the decorators
+    above it, so slicing by `.lineno` leaves `@app.post(...)` behind, bound to whatever
+    definition follows it."""
+    paths = _module_paths(module)
+    assert len(paths) == count
+    if prefix:
+        assert all(p.startswith(prefix) for _m, p in paths), (
+            f"{module} declares paths outside {prefix}: "
+            f"{[p for _m, p in paths if not p.startswith(prefix)]}")
+
+
+def test_no_route_was_lost_or_duplicated_by_any_slice():
+    """The invariant the whole breakup rests on: moving code changes no URL. Every
+    slice removes declarations from `app.py` and adds the same ones to a router, so the
+    total is conserved and no (method, path) is declared twice. A duplicate would
+    register two handlers for one URL — the first wins silently and the second becomes
+    dead code that still looks maintained.
+
+    252 is pinned deliberately. It was 251 when the breakup began; one route
+    (share-token rotation) was added since. Change this number only when you mean to
+    add or remove a URL, never to make a refactor pass."""
+    decls = []
+    for name, dec in [("app.py", "app")] + [(r, "router") for r in ROUTERS]:
+        src = (WEB / name).read_text(encoding="utf-8")
+        decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
+    dupes = sorted({d for d in decls if decls.count(d) > 1})
+    assert dupes == [], f"declared more than once: {dupes}"
+    assert len(decls) == 252, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 252 — "
+        f"a slice lost or gained a URL")
 
 
 # --------------------------------------------------------------------------- #
@@ -237,8 +279,8 @@ MOVED_HELPERS = [
     "_client_portal_url", "_ensure_project_for_opp", "_gate_banner",
     "_invoice_from_proposal_row", "_load", "_maybe_finalize_delivery",
     "_notify_assigned_creators", "_notify_operator_review", "_persist_upload",
-    "_proposal_from_row", "_reconcile_opp_status", "_send_invoice_pay_link",
-    "_store_pending_submission", "_to_utc_iso",
+    "_proposal_from_row", "_quote_band_for", "_reconcile_opp_status",
+    "_send_invoice_pay_link", "_store_pending_submission", "_to_utc_iso",
 ]
 
 

@@ -4,6 +4,9 @@ document generation from the one Company Profile, the workspace, audit, and clie
 import importlib
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+# Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes
+# out of app.py and with them app.py's need to import this engine.
+from chordential_oia.web import procurement
 
 
 def _app(tmp_path, monkeypatch):
@@ -38,7 +41,7 @@ def _opp_with_procurement(app_mod, conn, client="Vance Athletic", text=None):
 # --------------------------------------------------------------------------- #
 def test_discovery_is_adaptive_per_client(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    P = app_mod.procurement
+    P = procurement
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     a = _opp_with_procurement(app_mod, conn, "Client A",
                               text="Just send us a W-9 and an ACH form.")
@@ -60,7 +63,7 @@ def test_discovery_is_adaptive_per_client(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 def test_generation_real_and_placeholder(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    P = app_mod.procurement
+    P = procurement
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     oid = _opp_with_procurement(app_mod, conn)
     P.discover_from_ci(conn, oid)

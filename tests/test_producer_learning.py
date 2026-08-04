@@ -4,6 +4,9 @@ scratchpad, and the learning ledger whose priors tune the next extraction.
 import importlib
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+# Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes
+# out of app.py and with them app.py's need to import this engine.
+from chordential_oia.web import producer_learning
 
 
 def _app(tmp_path, monkeypatch):
@@ -30,7 +33,7 @@ def _opp(dbm, conn):
 # --------------------------------------------------------------------------- #
 def test_edit_distance_and_prior_stances(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    pl = app_mod.producer_learning
+    pl = producer_learning
     assert pl.edit_distance("stems", "stems") == 0.0
     assert pl.edit_distance("", "anything") == 1.0
     assert 0.0 < pl.edit_distance("warm", "warm cinematic with restrained brass") < 1.0
@@ -101,10 +104,10 @@ def test_dispositions_record_events_and_feed_the_prompt(tmp_path, monkeypatch):
     assert rows[1]["final_value"] == "Feature film"
     # the prompt now carries the learned priors (once each field crosses 2 events it shows;
     # a single event won't — assert the plumbing: priors_summary is injected into the prompt)
-    app_mod.producer_learning.record_event(
+    producer_learning.record_event(
         conn, ci_id=ci_id, opp_id=oid, facet="engagement", key="campaign_type",
         action="added", ai_value="", final_value="Feature film")
-    priors = app_mod.producer_learning.priors_summary(conn)
+    priors = producer_learning.priors_summary(conn)
     conn.close()
     assert "campaign_type" in priors
     prompt = app_mod.campaign_intake._build_extraction_prompt(
