@@ -463,12 +463,12 @@
   {% endfor %}
   {% endif %}
   <div class="inline" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
-    <form method="post" action="/project/{{ project['id'] }}/delivery/picture" enctype="multipart/form-data"
+    <form method="post" action="/project/{{ project['id'] }}/delivery/picture" enctype="multipart/form-data" data-upload
           style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <input type="file" name="file" accept=".mp4,.mov,.m4v,.webm" required style="font-size:12px;max-width:200px">
       <button class="btn tiny" type="submit">{{ 'Replace cut' if delivery.get('picture') else 'Log the cut' }}</button>
     </form>
-    <form method="post" action="/project/{{ project['id'] }}/delivery/reference" enctype="multipart/form-data"
+    <form method="post" action="/project/{{ project['id'] }}/delivery/reference" enctype="multipart/form-data" data-upload
           style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <input type="text" name="label" placeholder="Reference label" style="font-size:12px;max-width:160px">
       <input type="file" name="file" required style="font-size:12px;max-width:200px">
@@ -603,14 +603,14 @@
     <p class="muted small">No deliverable files uploaded yet.</p>
     {% endfor %}
 
-    <form method="post" action="/project/{{ project['id'] }}/delivery/asset" enctype="multipart/form-data" class="stack" style="margin-top:14px">
+    <form method="post" action="/project/{{ project['id'] }}/delivery/asset" enctype="multipart/form-data" data-upload class="stack" style="margin-top:14px">
       <label>Upload a deliverable</label>
       <input type="text" name="label" placeholder="Label (e.g. :60 Broadcast Mix)">
       <input type="file" name="file" required>
       <button class="btn primary" type="submit">Upload asset</button>
     </form>
 
-    <form method="post" action="/project/{{ project['id'] }}/delivery/version" enctype="multipart/form-data" class="stack" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+    <form method="post" action="/project/{{ project['id'] }}/delivery/version" enctype="multipart/form-data" data-upload class="stack" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
       <label>Log a new version of the master</label>
       <input type="file" name="file" required>
       <button class="btn" type="submit">Upload version</button>

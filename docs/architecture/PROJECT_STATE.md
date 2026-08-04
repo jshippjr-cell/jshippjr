@@ -216,6 +216,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   assuming :30, naming abstains. One shared `app._master_stem()` for both upload paths;
   the manifest renders the stored stem. Seeded output is now `ORIGINAL_30_MASTER_v1`,
   `BRAND_MASTER_v1`, `SUMMER_MASTER_v1`, `HOLIDAY_MASTER_v1`.
+- **Console uploads show real bytes** (ADR-0038, 2026-08-04). The delivery console carries
+  the largest files in the system (a cut or a stem package is hundreds of MB) and all four
+  of its upload forms were **naked synchronous POSTs** — blank tab, no feedback, no way to
+  tell a stalled upload from a slow one. Both client-facing surfaces already had XHR byte
+  progress, so the operator had the worst experience in the product. One declarative
+  `data-upload` behaviour now lives in `live.js` (rather than a third copy of the same
+  twenty lines) and covers the console's four plus the two `audio/*` attachments on the
+  brief doc and compose. The bar is driven by `ev.loaded/ev.total` only — no timer, no
+  indeterminate crawl. `data-think` still wins where the wait is the server thinking (the
+  AI intake). Verified in Chromium on a throttled 24 MB upload, plus the abort path and
+  the JS-disabled fallback.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

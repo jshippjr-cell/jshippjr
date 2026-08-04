@@ -921,6 +921,39 @@ abstains, and "anthem" alone is not a duration. When a length genuinely is state
 reach the filename — the seeded CPG project names `ORIGINAL_30_MASTER_v1`. Existing
 delivered files keep their stored names; nothing renames retroactively.
 
+### ADR-0038 — One declarative uploader; progress means bytes
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (real
+byte-progress on console uploads) · `static/live.js`, `static/style.css`,
+`delivery_console.html`, `_brief_document.html`, `compose.html`
+**Decision.** A form marked **`data-upload`** sends over XHR and renders a rail driven by
+`ev.loaded / ev.total` — percent and megabytes, nothing else. The behaviour lives once in
+`live.js`; templates add an attribute, never a script. `data-think` wins when a form has
+both: that veil belongs to forms whose wait is the *server* thinking, and two capture-phase
+handlers calling `preventDefault` on one submit is a bug waiting to happen. Applied to the
+delivery console's four uploads (picture, reference, asset, version) and the two
+`audio/*` attachments on `_brief_document.html` / `compose.html`.
+**Why.** The console carries the largest files in the system — a picture cut or a stem
+package is hundreds of MB — and all four of its upload forms were **naked synchronous
+multipart POSTs**: a blank tab, no feedback, and no way to distinguish a stalled upload
+from a slow one. Both *client-facing* surfaces already had real byte progress (the
+portal's Drop, the creator portal's master upload), so the operator moving the biggest
+files had strictly the worst experience in the product. A third copy-paste of those twenty
+lines was the obvious fix and the wrong one — hence one behaviour, three surfaces.
+**Consequences.** `tests/test_upload_progress.py` fails if a console upload form loses
+`data-upload`, if the upload path grows a `setInterval`/`setTimeout`/`Math.random` (a bar
+that animates on a clock while bytes may not be moving is decoration, and worse than
+none), if the failure path stops preserving the chosen file, if the `data-think` guard is
+removed, or if the console grows its own `XMLHttpRequest` instead of using the behaviour.
+Verified in Chromium against a throttled 24 MB upload: `0 of 24 MB` → `13% · 3.1 MB of 24
+MB`, tracking real loaded bytes; the abort path shows *"Connection lost — the file is
+still chosen, try again"* with the button re-enabled and the file still selected; and with
+JavaScript disabled the form still posts normally. **Not** applied to the AI intake form
+(`detail.html`, `data-think`) — its wait is the 10-agent extraction, not the voice memo's
+bytes — nor to the small procurement document upload. The creator portal keeps its own
+inline uploader: it is standalone and does not load `live.js`, so migrating it would mean
+pulling the whole living-OS module onto a page that needs one behaviour; that duplication
+is known and deliberate.
+
 ---
 
 ## Adding a new ADR

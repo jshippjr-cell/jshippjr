@@ -216,3 +216,97 @@
     }
   });
 })();
+
+/* ---- Uploads with REAL byte progress (ADR-0038). ------------------------------
+ * A form marked data-upload sends over XHR so the operator watches actual bytes
+ * move instead of a spinning tab. The console's four uploads — the picture cut,
+ * a reference, a deliverable, a new master — carry the largest files in the
+ * system (a cut or a stem package is hundreds of MB) and previously had NO
+ * feedback at all: a naked multipart POST, a blank tab, and no way to tell a
+ * stalled upload from a slow one.
+ *
+ * Honest liveness, per the Living OS rule: the bar tracks ev.loaded/ev.total and
+ * nothing else. There is no indeterminate crawl and no minimum duration — when
+ * the browser reports no total (lengthComputable false) we say "Sending…" rather
+ * than animate a number we don't have. A failure says so and leaves the file
+ * chosen, so the operator retries instead of re-picking.
+ *
+ * Progressive: no JS, no XHR, or no file chosen → the form posts normally.
+ * --------------------------------------------------------------------------- */
+(function () {
+  "use strict";
+
+  function human(bytes) {
+    if (!(bytes >= 0)) return "";
+    var mb = bytes / 1048576;
+    if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
+    return mb >= 10 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
+  }
+
+  /* The progress element is created on demand so no template has to carry
+     markup for a state it may never enter. */
+  function rail(form) {
+    var el = form.querySelector(".lv-up");
+    if (el) return el;
+    el = document.createElement("div");
+    el.className = "lv-up";
+    el.innerHTML = '<div class="lv-up-bar"><i></i></div><span class="lv-up-note"></span>';
+    form.appendChild(el);
+    return el;
+  }
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.hasAttribute || !form.hasAttribute("data-upload")) return;
+    /* data-think owns the submit for forms whose wait is the SERVER thinking (the
+       AI intake analyze). Two capture-phase handlers both calling preventDefault
+       on one submit is a bug waiting to happen, and a veil is the honest signal
+       there anyway — the wait is the 10-agent extraction, not the voice memo's
+       bytes. Never both; data-think wins. */
+    if (form.hasAttribute("data-think")) return;
+    var input = form.querySelector('input[type=file]');
+    if (!input || !input.files || !input.files.length) return;   // nothing to send
+    if (!window.XMLHttpRequest || !window.FormData) return;      // legacy: plain post
+
+    e.preventDefault();
+    var btn = form.querySelector('button[type=submit], button:not([type=button])');
+    var label = btn ? btn.textContent : "";
+    var el = rail(form), fill = el.querySelector("i"), note = el.querySelector(".lv-up-note");
+    var total = input.files[0].size || 0;
+    el.classList.add("on");
+    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+    note.textContent = total ? ("0 of " + human(total)) : "Sending…";
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", form.action);
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (!ev.lengthComputable) { note.textContent = "Sending…"; return; }
+      var pct = ev.loaded / ev.total;
+      fill.style.width = (pct * 100) + "%";
+      note.textContent = Math.round(pct * 100) + "% · " +
+        human(ev.loaded) + " of " + human(ev.total);
+    });
+    /* Upload done, server still working (naming, packaging, the ZIP). Say that
+       rather than sit at 100% looking hung. */
+    xhr.upload.addEventListener("load", function () {
+      fill.style.width = "100%";
+      note.textContent = "Uploaded — filing it…";
+    });
+    xhr.addEventListener("load", function () {
+      if (xhr.status < 400) { window.location.reload(); return; }
+      el.classList.add("failed");
+      note.textContent = "Upload failed (" + xhr.status + ") — the file is still chosen, try again";
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    });
+    xhr.addEventListener("error", function () {
+      el.classList.add("failed");
+      note.textContent = "Connection lost — the file is still chosen, try again";
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    });
+    xhr.addEventListener("abort", function () {
+      el.classList.remove("on");
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    });
+    xhr.send(new FormData(form));
+  }, true);
+})();
