@@ -235,9 +235,17 @@ def version_name(campaign, cue, length, role, n, state) -> str:
     e.g. ``version_name("Aurora Outdoor", "Anthem", 60, "Master", 3, "FINAL")`` →
     ``AURORA_Anthem_60_MASTER_v3_FINAL``. Each token is slugged (alnum only); the
     cue keeps its original casing (it's the human-recognisable bit), everything
-    else is uppercased. Blank fields are skipped so the stem never has ``__``."""
-    cue_tok = re.sub(r"[^0-9a-zA-Z]+", "", str(cue or "")) or "Cue"
-    parts = [slug_campaign(campaign), cue_tok]
+    else is uppercased.
+
+    **Every token is optional and a blank one is SKIPPED** (ADR-0037) — the stem
+    never has ``__``, and never invents a value it wasn't given. A blank cue used
+    to become the literal placeholder ``Cue``; a caller with no cue name now gets
+    ``CAMPAIGN_30_MASTER_v1`` rather than a filename asserting a cue that isn't one.
+    """
+    cue_tok = re.sub(r"[^0-9a-zA-Z]+", "", str(cue or ""))
+    parts = [slug_campaign(campaign)]
+    if cue_tok:
+        parts.append(cue_tok)
     length_tok = slug_token(length)
     if length_tok:
         parts.append(length_tok)
@@ -531,9 +539,15 @@ def build_manifest(
     for i, v in enumerate(versions, start=1):
         n = v.get("n", i)
         label = v.get("label") or version_label(n)
-        # FINAL once it's the released name; the deterministic stem is the file.
-        state = "FINAL" if "FINAL" in label.upper() else f"v{n}"
-        name = version_name(campaign, "Master", 60, "Master", n, state)
+        # ADR-0037: render the stem the version was ACTUALLY written with. This used
+        # to recompute one — `version_name(campaign, "Master", 60, "Master", n, ...)`
+        # — so the manifest could name a file that doesn't exist, and asserted a :60
+        # master on briefs that never said :60. Recompute only for legacy rows that
+        # predate stored names, and without inventing a length or a cue.
+        name = (v.get("name") or "").strip() or version_name(
+            campaign, "", "", "Master", n,
+            "FINAL" if "FINAL" in label.upper() else "",
+        )
         suffix = " · current" if i == last else ""
         rows.append(ManifestRow(
             group="Versions", asset=f"{name} — {label}{suffix}",

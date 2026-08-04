@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
-from ..estimation import ROLE_RATES, RoleLine
+from ..estimation import ROLE_RATES, RoleLine, stated_length
 from ..invoicing import build_invoice
 from .. import mailer
 from .. import recruiting
@@ -6884,6 +6884,33 @@ def _next_version_label(delivery: dict, *, final: bool = False) -> tuple:
     return n, version_label(n, final=final)
 
 
+def _master_stem(conn, project_id: int, row, n: int, label: str) -> str:
+    """The deterministic filename stem for a project's master version (ADR-0037).
+
+    Both upload paths — the admin Assets agent and the composer portal — go through
+    here so they cannot drift, and so neither invents a token. Previously both called
+    ``version_name(campaign, "Master", 60, "Master", n, f"v{n}")``, which produced
+    e.g. ``SUMMER_Master_60_MASTER_v1_V1``: a hardcoded :60 on a brief that never said
+    :60, the word Master twice (once filling the CUE slot), and the version number
+    twice (``f"v{n}"`` landing in the STATE slot, which is for FINAL).
+
+    Length comes from what the brief STATES — the project's need plus the linked
+    opportunity's need/description — and is omitted when nothing states one. A master
+    spans the whole piece, so there is no cue to name; that slot stays empty.
+    """
+    campaign = (row["need"] if row is not None else "") or "Campaign"
+    text = campaign
+    opp_id = row["opp_id"] if row is not None and "opp_id" in row.keys() else None
+    if opp_id:
+        opp_row = db.get_opportunity(conn, opp_id)
+        if opp_row is not None:
+            text = f"{campaign} {opp_row['need'] or ''} {opp_row['description'] or ''}"
+    return version_name(
+        campaign, "", stated_length(text) or "", "Master", n,
+        "FINAL" if "FINAL" in label.upper() else "",
+    )
+
+
 def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename: str) -> tuple:
     """Write uploaded audio bytes as the next version in a project's delivery ladder.
 
@@ -6899,8 +6926,7 @@ def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename:
     n, label = _next_version_label(delivery)
     row = db.get_project(conn, project_id)
     campaign = (row["need"] if row is not None else "") or "Campaign"
-    stem = version_name(campaign, "Master", 60, "Master", n,
-                        "FINAL" if "FINAL" in label.upper() else f"v{n}")
+    stem = _master_stem(conn, project_id, row, n, label)
     safe_name = f"proj{project_id}-v{n}{safe_ext}"
     bump = 1
     while os.path.exists(os.path.join(UPLOAD_DIR, safe_name)):
@@ -6962,8 +6988,7 @@ def _publish_pending_submission(conn, project_id: int):
     n, label = _next_version_label(delivery)
     row = db.get_project(conn, project_id)
     campaign = (row["need"] if row is not None else "") or "Campaign"
-    stem = version_name(campaign, "Master", 60, "Master", n,
-                        "FINAL" if "FINAL" in label.upper() else f"v{n}")
+    stem = _master_stem(conn, project_id, row, n, label)
     versions.append({
         "n": n, "label": label, "url": pv.get("url"),
         "filename": pv.get("filename"), "name": stem,

@@ -346,13 +346,13 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
             {
                 "n": 1, "label": version_label(1),
                 "url": _demo_audio(2), "filename": "",
-                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 1, "v1"),
+                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 1, ""),
                 "created_at": _iso(6, hour=10),
             },
             {
                 "n": 2, "label": version_label(2),
                 "url": _demo_audio(0), "filename": "",
-                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 2, "v2"),
+                "name": version_name("Vance Athletic", "Anthem", 60, "Master", 2, ""),
                 "created_at": _iso(2, hour=15),
             },
         ]
@@ -422,13 +422,13 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
             {
                 "n": 1, "label": version_label(1),
                 "url": _demo_audio(0), "filename": "",
-                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 1, "v1"),
+                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 1, ""),
                 "created_at": _iso(20, hour=11),
             },
             {
                 "n": 2, "label": version_label(2),
                 "url": _demo_audio(3), "filename": "",
-                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 2, "v2"),
+                "name": version_name("Northwind Coffee", "Anthem", 60, "Master", 2, ""),
                 "created_at": _iso(14, hour=16),
             },
             {

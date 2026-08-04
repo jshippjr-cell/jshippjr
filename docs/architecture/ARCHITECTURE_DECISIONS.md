@@ -890,6 +890,37 @@ keeping: what was removed is the *decision* row and the phantom label, not the c
 ability to talk to the room — the timecoded comment form was already track-gated before
 this change, for the good reason that a note needs a timeline to land on.
 
+### ADR-0037 — A delivery filename asserts only what the brief states
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (naming
+system) · `estimation.py`, `delivery.py`, `web/app.py`, `web/seed.py`
+**Decision.** The stem contract `CAMPAIGN_CUE_LEN_ROLE_vN_STATE` stands, with two rules
+added: **every token is optional and a blank one is skipped** (no placeholder is ever
+substituted), and **the length token comes from `estimation.stated_length()`** — the
+duration the brief actually says — and is omitted when the brief says none. `_infer_duration`
+keeps assuming `:30` for pricing; naming may not. Both upload paths (the admin Assets
+agent, the composer portal) go through one helper, `app._master_stem()`; the manifest
+renders the stem a version was **written with** rather than recomputing one.
+**Why.** Both upload paths called
+`version_name(campaign, "Master", 60, "Master", n, f"v{n}")`, producing
+`SUMMER_Master_60_MASTER_v1_V1` — three fabrications in a filename the client receives.
+The **`60`** was hardcoded: of four seeded projects, three have briefs that never say :60,
+and one says ":06/:15/:30 cutdowns" — a **:30** master. **`Master` appeared twice**
+because the caller filled the CUE slot with it as well as the ROLE slot (and a blank cue
+fell back to the literal placeholder `Cue`). **`_v1_V1`** was the version number again,
+because `f"v{n}"` landed in the STATE slot, which exists for `FINAL`. Separately the
+manifest *recomputed* a stem instead of reading the stored one, so it could list a file
+the package does not contain. A delivery filename is the most-copied artefact we produce
+— it goes into the client's DAM, their edit bay, and their PRO paperwork; asserting a
+duration nobody measured is the honesty rule applied to the smallest surface we own.
+**Consequences.** `tests/test_naming.py` fails if a stem names a length its brief never
+stated, if a stem repeats `MASTER` or ends `_vN_VN`, if a blank token is substituted, or
+if the two upload paths call `version_name` directly instead of sharing `_master_stem`.
+Note the deliberate asymmetry: pricing MUST put a number on an unstated brief (a quote
+needs one), so `_infer_duration` still assumes and still treats "anthem" as :60; naming
+abstains, and "anthem" alone is not a duration. When a length genuinely is stated it does
+reach the filename — the seeded CPG project names `ORIGINAL_30_MASTER_v1`. Existing
+delivered files keep their stored names; nothing renames retroactively.
+
 ---
 
 ## Adding a new ADR

@@ -204,6 +204,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   badge + sentence, cards are placed by court (client → review leads; studio → send us
   the cut; delivered → package), and with no track the section is "The listening room"
   with no version label, no round counter, and no decision row.
+- **Delivery filenames stopped fabricating** (ADR-0037, 2026-08-04). Both upload paths
+  called `version_name(campaign, "Master", 60, "Master", n, f"v{n}")` →
+  **`SUMMER_Master_60_MASTER_v1_V1`**: a hardcoded `:60` (three of four seeded briefs
+  never say :60; one says ":06/:15/:30 cutdowns", i.e. a **:30** master), `Master` twice
+  (the CUE slot filled with the role; a blank cue became the placeholder `Cue`), and the
+  version number twice (`f"v{n}"` in the STATE slot, which is for `FINAL`). The manifest
+  separately *recomputed* a stem instead of reading the stored one, so it could list a
+  file the package doesn't contain. Now: `estimation.stated_length()` reads the duration
+  the brief actually states and the token is omitted when none is — pricing keeps
+  assuming :30, naming abstains. One shared `app._master_stem()` for both upload paths;
+  the manifest renders the stored stem. Seeded output is now `ORIGINAL_30_MASTER_v1`,
+  `BRAND_MASTER_v1`, `SUMMER_MASTER_v1`, `HOLIDAY_MASTER_v1`.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

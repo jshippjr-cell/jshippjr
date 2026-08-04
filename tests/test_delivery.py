@@ -150,9 +150,12 @@ def test_manifest_shows_deterministic_version_named_files():
     rows = build_manifest(_fake_project(), versions=versions)
     version_rows = [r for r in rows if r.group == "Versions"]
     assert len(version_rows) == 2
-    # Deterministic, version-named filenames in the manifest.
-    assert any("_v1_" in r.asset for r in version_rows)
-    assert any("_v2_" in r.asset for r in version_rows)
+    # Deterministic, version-named filenames in the manifest. ADR-0037: a non-final
+    # version's stem ENDS at the version token — it used to read `_v1_V1`, repeating
+    # the number because `f"v{n}"` was passed into the STATE slot (which is for FINAL).
+    stems = [r.asset.split(" — ")[0] for r in version_rows]
+    assert any(s.endswith("_v1") for s in stems), stems
+    assert any(s.endswith("_v2") for s in stems), stems
     # The campaign token leads the filename.
     assert all(r.asset.startswith("FIND") for r in version_rows)
     # The latest is flagged current.

@@ -196,6 +196,33 @@ def public_band(kind: str, length: str, usage: str) -> tuple:
     return round(low * factor), round(high * factor)
 
 
+# The length a brief STATES, longest first. "anthem" is deliberately absent: it is a
+# genre convention that usually means :60, which is good enough to price against but
+# not good enough to stamp on a filename (ADR-0037).
+_STATED_LENGTHS = (
+    (120, (":120", "2-minute", "two minute", "long form")),
+    (60, (":60", "60-second", "60 second")),
+    (30, (":30", "30-second", "30 second")),
+    (15, (":15", ":06", "15-second", "15 second")),
+)
+
+
+def stated_length(text: str) -> Optional[int]:
+    """The spot length in seconds the brief actually STATES, or ``None``.
+
+    Longest mention wins, same as ``_infer_duration`` — a brief listing its cutdown
+    suite is a :60 job, not a :15 one. Unlike ``_infer_duration`` this NEVER falls
+    back to an assumption: pricing must put a number on an unstated brief, but a
+    *filename* asserting ``_30_`` on a deliverable nobody measured is a claim we
+    cannot back. Callers that name files omit the token when this returns None.
+    """
+    low = (text or "").lower()
+    for seconds, keys in _STATED_LENGTHS:
+        if any(k in low for k in keys):
+            return seconds
+    return None
+
+
 def _infer_duration(text: str) -> Multiplier:
     """Longest mention wins.
 
