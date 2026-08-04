@@ -116,7 +116,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   also floors on the recorded stage, so a **Won** deal staffed and in delivery can no
   longer be featured as "Schedule the discovery call" just because no meeting row exists.
   Note: `compute_queue` now runs on the dashboard too — its cost is on the Phase 3 batching
-  list. **Still open:** the three disagreeing money ledgers.
+  list.
+- **One open-pipeline number** (ADR-0030, 2026-08-04). Three surfaces asserted three
+  pipelines on one DB: the KPI summed `budget_max` (the client's *ceiling*), the Tentative
+  column summed `outcome_value`, and `/revenue` read the `proposals` table — where a row
+  needs a `project_id`, so it cannot exist until the deal is **won**, making open pipeline
+  structurally $0 there. `db.open_pipeline()` now owns it: our bid → the disclosed
+  budget's midpoint → counted as unknown, with the composition returned so the number
+  shows its provenance. All three read the same figure on the seeded DB.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

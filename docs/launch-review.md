@@ -54,8 +54,11 @@ Almost none of this required building. It required wiring, reconciling, and dele
    featured move. ***Fixed — Phase 2 (ADR-0029).*** `queue.compute_queue()` is the only
    computation; the dashboard reports its length and links to `/queue`, its inline sum is
    deleted, and the duplicate "▶ Your move" table is gone. The ladder now treats the
-   recorded stage as a floor. *Still open: the three money ledgers ($15,000 / $4,847 / $0)
-   — `revenue_summary` reads a `proposals` table the Submitted transition never writes to.*
+   recorded stage as a floor. **The three money ledgers are fixed too (ADR-0030):**
+   `db.open_pipeline()` is the only valuation — our bid, else the disclosed budget's
+   midpoint, else counted as unknown — and it returns its own composition so the figure
+   can be explained. `/revenue` no longer sources open pipeline from `proposals`, a table
+   that cannot hold a row until the deal is already won.
 7. **Pricing spoke with four voices.** Public `/commission` band $9–18k for a national
    :30; the engine priced the same brief at $4,847; the client-facing band rendered
    ≈$3.1–6.6k. The estimator also classified a brief by its **smallest** duration — ":60

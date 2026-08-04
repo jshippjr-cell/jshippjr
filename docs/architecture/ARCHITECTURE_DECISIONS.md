@@ -654,6 +654,29 @@ too, so its cost matters: the batching work in the review's Phase 3 should cover
 `tests/test_one_aggregator.py` fails if the two numbers ever diverge again, or if any Won
 deal or any deal with a project is offered a discovery-stage move.
 
+### ADR-0030 — One open-pipeline number, with its provenance
+**Status:** Accepted (2026-08-04, operator directive) · Source: `docs/launch-review.md`
+finding 6 (money ledgers) · `web/db.py`
+**Decision.** `db.open_pipeline(conn, statuses=None)` is the **only** valuation of open
+pipeline. One precedence, best evidence first: (1) what we actually bid
+(`outcome_value`), (2) the **midpoint** of the disclosed budget, (3) nothing — counted as
+`unknown`, never guessed at. It returns the composition alongside the total, and surfaces
+render that provenance. The dashboard KPI, the Tentative column subtotal and
+`/revenue`'s Open pipeline all read it. Open = `Pursuing` + `Submitted`; `New` is an
+unworked lead, not pipeline.
+**Why.** Three surfaces asserted three different pipelines on one database: the KPI summed
+`budget_max` (the client's *ceiling*, which flatters every disclosed range), the Tentative
+column summed `outcome_value`, and `/revenue` read the `proposals` table — where
+`insert_proposal` requires a `project_id`, so a row cannot exist until the deal is already
+**won**. Open pipeline there was structurally always $0. A money figure with no stated
+provenance is what let three of them coexist unnoticed.
+**Consequences.** Do not add another pipeline sum — extend the precedence here and every
+surface inherits it. The `proposals`-derived figures survive as `proposed_sent` /
+`proposed_accepted`, which are post-award proposal values and must not be relabelled as
+pipeline. If a future stage belongs in the pipeline, add it to `OPEN_PIPELINE_STATES`.
+`tests/test_one_pipeline_number.py` fails if the surfaces diverge, if open pipeline reads
+a post-award table again, or if the ceiling is used in place of the midpoint.
+
 ---
 
 ## Adding a new ADR

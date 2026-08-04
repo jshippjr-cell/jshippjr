@@ -3596,6 +3596,53 @@ def update_invoice_status(
     conn.commit()
 
 
+# Deals still live: not yet won, lost or passed. "New" is excluded — an unworked
+# lead is not pipeline until someone decides to pursue it.
+OPEN_PIPELINE_STATES = ("Pursuing", "Submitted")
+
+
+def open_pipeline(conn: sqlite3.Connection, statuses=None) -> dict:
+    """THE open-pipeline number, and what it is made of.
+
+    Three surfaces used to answer this with three different sums: the dashboard KPI
+    added up ``budget_max`` (what the *client* said they'd spend), the Tentative
+    column added up ``outcome_value`` (what *we* bid), and /revenue read the
+    ``proposals`` table — which is written only once a project exists, i.e. only
+    after a deal is WON, so open pipeline there was structurally always $0.
+
+    One precedence, best evidence first:
+      1. what we actually bid (``outcome_value``)
+      2. the midpoint of the budget the client disclosed
+      3. nothing — counted, but never guessed at
+
+    Returns the total plus its composition, so a surface can say where the number
+    came from instead of asserting a figure with no provenance.
+    """
+    states = tuple(statuses or OPEN_PIPELINE_STATES)
+    placeholders = ",".join("?" for _ in states)
+    rows = conn.execute(
+        f"SELECT outcome_value, budget_min, budget_max FROM opportunities "
+        f"WHERE status IN ({placeholders})", states
+    ).fetchall()
+
+    total = 0.0
+    from_bids = from_budgets = unknown = 0
+    for r in rows:
+        bid = r["outcome_value"] or 0
+        if bid > 0:
+            total += bid
+            from_bids += 1
+            continue
+        lo, hi = r["budget_min"] or 0, r["budget_max"] or 0
+        if lo or hi:
+            total += (lo + hi) / 2.0 if (lo and hi) else (lo or hi)
+            from_budgets += 1
+        else:
+            unknown += 1
+    return {"value": total, "deals": len(rows), "from_bids": from_bids,
+            "from_budgets": from_budgets, "unknown": unknown}
+
+
 def revenue_summary(conn: sqlite3.Connection) -> dict:
     """Company-wide revenue rollup for the dashboard — computed from data we already
     store (invoices, proposals, projects, opportunities). The CRO's home screen:
@@ -3609,10 +3656,15 @@ def revenue_summary(conn: sqlite3.Connection) -> dict:
         "SELECT SUM(amount) FROM invoices WHERE status='Paid' AND kind='Deposit'")
     finals_paid = _sum(
         "SELECT SUM(amount) FROM invoices WHERE status='Paid' AND kind='Final'")
-    # Pipeline (money proposed, not yet collected): Sent = open, Accepted = verbal-yes.
-    pipeline_sent = _sum(
+    # Open pipeline: deals still live, valued by the shared precedence. It used to
+    # read the proposals table, which is only written once a project exists — i.e.
+    # after the deal is already WON — so this KPI could only ever show $0.
+    pipe = open_pipeline(conn)
+    # Proposals issued against real projects. Kept, but no longer mislabelled as
+    # open pipeline: by the time one of these exists the deal has been awarded.
+    proposed_sent = _sum(
         "SELECT SUM(total_price) FROM proposals WHERE status='Sent'")
-    pipeline_accepted = _sum(
+    proposed_accepted = _sum(
         "SELECT SUM(total_price) FROM proposals WHERE status='Accepted'")
     # Conversion funnel counts.
     qualified = _sum("SELECT COUNT(*) FROM opportunities WHERE qualified=1")
@@ -3632,9 +3684,12 @@ def revenue_summary(conn: sqlite3.Connection) -> dict:
         "billed": collected + outstanding,
         "deposits_paid": deposits_paid,
         "finals_paid": finals_paid,
-        "pipeline_sent": pipeline_sent,
-        "pipeline_accepted": pipeline_accepted,
-        "pipeline_open": pipeline_sent + pipeline_accepted,
+        "pipeline_open": pipe["value"],
+        "pipeline_deals": pipe["deals"],
+        "pipeline_from_bids": pipe["from_bids"],
+        "pipeline_from_budgets": pipe["from_budgets"],
+        "proposed_sent": proposed_sent,
+        "proposed_accepted": proposed_accepted,
         "funnel": {
             "qualified": qualified,
             "proposals_sent": proposals_sent,
@@ -5859,10 +5914,10 @@ def exec_metrics(conn: sqlite3.Connection) -> Dict:
         "SELECT COUNT(*) FROM opportunities WHERE status IN ('Pursuing','Submitted')"
     )
     won_value = scalar("SELECT SUM(outcome_value) FROM opportunities WHERE status = 'Won'")
-    pipeline_value = scalar(
-        """SELECT SUM(COALESCE(budget_max, budget_min, 0))
-           FROM opportunities WHERE status IN ('Pursuing','Submitted')"""
-    )
+    # One definition, shared with /revenue and the pipeline columns. This used to
+    # sum budget_max — the client's stated ceiling — and call it pipeline.
+    pipeline = open_pipeline(conn)
+    pipeline_value = pipeline["value"]
     decided = won + lost
     win_rate = (won / decided * 100.0) if decided else 0.0
     avg_alignment = scalar("SELECT AVG(alignment) FROM opportunities WHERE qualified = 1")

@@ -1361,8 +1361,11 @@ def dashboard(request: Request):
         incoming = incoming_all[:6]            # home preview — first few, newest first
         incoming_total = len(incoming_all)
         metrics = db.exec_metrics(conn)
+        # Same valuation basis as the headline pipeline number, scoped to the
+        # column — so the subtotal and the KPI above it are commensurable. Won is
+        # a settled figure and stays exactly what was recorded.
         totals = {
-            "tentative_value": sum((r["outcome_value"] or 0) for r in tentative),
+            "tentative_value": db.open_pipeline(conn, ["Submitted"])["value"],
             "won_value": sum((r["outcome_value"] or 0) for r in won),
         }
         from datetime import datetime, timedelta, timezone

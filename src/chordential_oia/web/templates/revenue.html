@@ -26,7 +26,10 @@
   <a class="kpi" href="/projects">
     <div class="kpi-label">Open pipeline</div>
     <div class="kpi-value">{{ summary.pipeline_open|money }}</div>
-    <div class="kpi-sub">sent {{ summary.pipeline_sent|money }} · accepted {{ summary.pipeline_accepted|money }}</div>
+    {# Say where the number came from — a money figure with no provenance is how
+       three surfaces ended up asserting three different pipelines. #}
+    <div class="kpi-sub">{{ summary.pipeline_deals }} open ·
+      {{ summary.pipeline_from_bids }} bid, {{ summary.pipeline_from_budgets }} at disclosed budget</div>
   </a>
   <a class="kpi" href="/payouts">
     <div class="kpi-label">Paid-in-full projects</div>
