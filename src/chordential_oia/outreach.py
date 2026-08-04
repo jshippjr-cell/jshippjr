@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from urllib.parse import quote, quote_plus
 
+from .capabilities import quote_phrase
 from .estimation import Estimate
 from .models import BuyerType, MusicDiscipline, Opportunity, QualificationResult, ScoredOpportunity
 from .strategic import StrategicValue
@@ -470,8 +471,14 @@ def build_outreach_plan(
     estimate: Optional[Estimate],
     strategic: StrategicValue,
     contact_name: Optional[str] = None,
+    quote_band: Optional[tuple] = None,
 ) -> OutreachPlan:
-    """Assemble a deterministic outreach plan from existing engine outputs."""
+    """Assemble a deterministic outreach plan from existing engine outputs.
+
+    ``quote_band`` is ``capabilities.quote_band(...)`` — the ONE number we quote a
+    buyer (ADR-0034), resolved by the caller because it needs Campaign Intelligence
+    and the operator's overrides. The cadence renders it; it never derives its own.
+    """
     discipline = qual.discipline
     buyer = opp.buyer_type.value.replace("_", " ")
     target = scored.decision_maker  # inferred role/name from the scoring engine
@@ -479,13 +486,11 @@ def build_outreach_plan(
         opp.buyer_type, _CHANNELS[BuyerType.UNKNOWN]
     )
 
-    if estimate is not None:
-        price = estimate.suggested_price
-        price_phrase = f"~${price:,.0f}"
-        cost_range = estimate.cost_range
-    else:
-        price_phrase = "TBD"
-        cost_range = "TBD"
+    # Step 4 tells the operator what to put in front of the buyer, so it renders the
+    # quote authority — not the estimator's point suggested_price, which ignores both
+    # the disclosed budget and any operator override. On the seeded book that gap ran
+    # from 58% under the client's own floor to 33% over their ceiling.
+    quoted = quote_phrase(quote_band)
 
     first_touch_message = _build_first_touch(opp, qual, contact_name)
     # Subject line for the one-click mailto draft (kept short and concrete).
@@ -522,7 +527,7 @@ def build_outreach_plan(
         OutreachStep(
             0, "Send indicative quote / proposal", "Email",
             "After the call (or Day 7)",
-            f"Provide the indicative quote ({price_phrase}); close with one clear next step.",
+            f"Provide the indicative quote ({quoted}); close with one clear next step.",
         ),
     ]
     steps += base

@@ -1,7 +1,13 @@
 """Proposals (Cycle 3.1) — deterministic paperwork from the estimator.
 
-The proposal total and line items must equal the estimator's output exactly; the
-deposit is a simple fraction of that total. No independent pricing.
+Line items come straight from the estimator; the deposit is a simple fraction of the
+total. No independent pricing math lives here.
+
+Since ADR-0034 the *total* is the **quote** — what this buyer was actually told, via
+``capabilities.quote_band`` — rather than the estimator's internal suggested price.
+Conflating the two let a generated proposal contradict the Commercial Review the same
+client had already approved. ``build_proposal`` without a band still falls back to the
+estimator, which is correct for callers that only want the terms.
 """
 
 import importlib
@@ -12,6 +18,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from chordential_oia.capabilities import quote_band
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 from chordential_oia.estimation import build_estimate
 from chordential_oia.proposals import DEFAULT_DEPOSIT_PCT, build_proposal
@@ -35,6 +42,7 @@ def _sample_opp():
 
 
 def test_proposal_total_equals_estimator():
+    """The no-band path: with no quote resolved, the estimator's number stands."""
     opp = _sample_opp()
     qual, est = _qual_and_estimate(opp)
     p = build_proposal(opp, qual, est)
@@ -91,7 +99,9 @@ def test_generate_and_view_proposal(ctx):
     assert page.status_code == 200
     assert "Total" in page.text
 
-    # Stored total equals the estimator's suggested price.
+    # ADR-0034: the stored total is the QUOTE — what this buyer was told — not the
+    # estimator's internal suggestion. The two used to be conflated, so a generated
+    # proposal could contradict the Commercial Review the client had already approved.
     conn = db_mod.connect()
     try:
         opp_row = db_mod.get_project(conn, pid)
@@ -101,7 +111,11 @@ def test_generate_and_view_proposal(ctx):
     assert prop is not None
     opp = _sample_opp()
     _, est = _qual_and_estimate(opp)
-    assert round(prop["total_price"], 2) == round(est.suggested_price, 2)
+    lo, hi = quote_band(opp, est)
+    assert (lo, hi) == (8000, 15000), "the fixture's disclosed budget is the quote"
+    assert round(prop["total_price"], 2) == round((lo + hi) / 2, 2)
+    # Line items still come from the estimate — the crew and cost are real.
+    assert prop["deposit_amount"] + prop["balance_due"] == prop["total_price"]
 
 
 def test_proposal_status_and_export(ctx):

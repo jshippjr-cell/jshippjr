@@ -16,6 +16,7 @@ Any section can also be toggled by hand before exporting.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field, fields
 from typing import List, Optional
 
@@ -151,11 +152,68 @@ def _round100(value: float, up: bool) -> int:
 
 
 def _price_band(est: Estimate) -> tuple:
-    """Client-facing price band from the estimate's cost band, using the same
-    margin conversion the public site shows. Rounded to tidy $100s."""
+    """The estimator's own price band — its cost band converted at target margin,
+    the same conversion the public site shows. Rounded to tidy $100s.
+
+    This is the LAST leg of ``quote_band``'s precedence, not a quote in itself.
+    Call ``quote_band``; a surface that reaches straight for this one ignores both
+    the client's disclosed budget and the operator's decision."""
     margin = (est.expected_margin_pct or TARGET_MARGIN * 100) / 100.0
     denom = max(0.1, 1.0 - margin)
     return _round100(est.cost_low / denom, up=False), _round100(est.cost_high / denom, up=True)
+
+
+def _money_ints(text: str) -> list:
+    """Every dollar figure in a string → ints. '$18,000–$24,000' → [18000, 24000]."""
+    return [int(m.replace(",", "")) for m in re.findall(r"\$?\s*([\d][\d,]{2,})", text or "")]
+
+
+def quote_band(
+    opp: Opportunity, estimate: Optional[Estimate], *,
+    ci_fields: Optional[dict] = None, commercial_overrides: Optional[dict] = None,
+) -> tuple:
+    """**THE** number we put in front of a buyer (ADR-0034). One authority, every
+    renderer: the client Campaign Brief, the client Commercial Review, the pursuit
+    checklist, and the outreach cadence all quote this and nothing else.
+
+    Precedence (ADR-0020 — Campaign Intelligence is the source of truth):
+
+    1. an explicit operator override (``fee_low``/``fee_high``) — a human decided;
+    2. the **discovered budget** — CI's ``budget_band``, else the opportunity's own
+       budget columns. What the client told us they'd spend is what we quote to;
+    3. the estimator's price band — cost converted at target margin.
+
+    Returns ``(low, high)``, or ``(None, None)`` when nothing resolves — never a
+    fabricated number, and never the estimate's *cost* range.
+    """
+    ov = commercial_overrides or {}
+    olo, ohi = ov.get("fee_low"), ov.get("fee_high")
+    if olo and ohi:
+        return int(olo), int(ohi)
+    nums = _money_ints((ci_fields or {}).get("budget_band") or "")
+    if not nums:
+        lo = int(getattr(opp, "budget_min", 0) or 0)
+        hi = int(getattr(opp, "budget_max", 0) or 0)
+        nums = [n for n in (lo, hi) if n]
+    if nums:
+        return min(nums), max(nums)
+    if estimate is None:
+        return None, None
+    return _price_band(estimate)
+
+
+def quote_phrase(band: Optional[tuple]) -> str:
+    """Render a ``quote_band`` result for an internal action list ("Provide an
+    indicative quote: …"). An unresolved band says so — the surfaces that used to
+    fill this slot reached for the estimate's *cost* range or its point suggested
+    price, which is how they ended up quoting numbers the client documents never
+    showed."""
+    lo, hi = band or (None, None)
+    if not lo or not hi:
+        return "TBD — no budget discovered and no operator price set"
+    if lo == hi:
+        return f"${lo:,.0f}"
+    return f"${lo:,.0f}–${hi:,.0f}"
 
 
 def _relevant_examples(qual: QualificationResult) -> List[WorkExample]:
@@ -610,7 +668,14 @@ def build_capabilities_doc(
 
     price_low = price_high = None
     if show_cost:
-        price_low, price_high = _price_band(estimate)
+        # ADR-0034: the client brief and the Commercial Review are two documents the
+        # SAME buyer reads. They quoted different bands — this one reached straight for
+        # the estimator while the Review quoted to the disclosed budget, so a client who
+        # told us $20–40k was shown $7.2–15.1k here and $20–40k there.
+        price_low, price_high = quote_band(
+            opp, estimate, ci_fields=ci_fields,
+            commercial_overrides=overrides.get("commercial"),
+        )
 
     terms: List[str] = []
     if show_terms:

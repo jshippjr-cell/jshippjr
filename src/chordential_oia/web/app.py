@@ -47,6 +47,7 @@ from ..outreach import (
 from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, build_understanding,
     chips_for, default_toggles, doc_from_json, doc_to_json,
+    quote_band as capabilities_quote_band,
 )
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet,
@@ -3481,6 +3482,19 @@ def estimate_page(request: Request, opp_id: int):
     )
 
 
+def _quote_band_for(conn, row, opp, est):
+    """THE number we'd put in front of this buyer (ADR-0034) — the same call the
+    client's Campaign Brief and Commercial Review render. Resolving it needs the DB
+    (Campaign Intelligence + the operator's commercial overrides), which is why the
+    engines take it as a parameter rather than deriving one each."""
+    ci_view, _met = _brief_ci_context(conn, row)
+    overrides = db.get_doc_overrides(conn, row["id"]).get("commercial") or {}
+    return capabilities_quote_band(
+        opp, est, ci_fields=(ci_view or {}).get("fields") or {},
+        commercial_overrides=overrides,
+    )
+
+
 def _brief_for(conn, opp_id: int):
     """Load an opportunity and assemble its pursuit brief (None if missing)."""
     row, opp, ev = _load(conn, opp_id)
@@ -3489,7 +3503,8 @@ def _brief_for(conn, opp_id: int):
     qual, scored = ev
     est = estimate_for(opp, qual=qual)
     strategic = assess_strategic_value(opp)
-    brief = build_pursuit_brief(opp, qual, scored, est, strategic)
+    brief = build_pursuit_brief(opp, qual, scored, est, strategic,
+                                quote_band=_quote_band_for(conn, row, opp, est))
     return row, opp, brief
 
 
@@ -3556,7 +3571,8 @@ def _outreach_for(conn, opp_id: int):
     est = estimate_for(opp, qual=qual)
     strategic = assess_strategic_value(opp)
     plan = build_outreach_plan(
-        opp, qual, scored, est, strategic, contact_name=row["contact_name"]
+        opp, qual, scored, est, strategic, contact_name=row["contact_name"],
+        quote_band=_quote_band_for(conn, row, opp, est),
     )
     return row, opp, plan
 
@@ -4195,7 +4211,14 @@ def _live_brief_ctx(conn, opp_id):
         opp, qual, est, toggles=toggles, overrides=overrides,
         call_url=call_url, ci_view=ci_view, met=met)
     project = db.project_for_opp(conn, opp_id)
-    deposit_amount = build_proposal(opp, qual, est).deposit_amount
+    # ADR-0034: a fraction of the band the client is shown, not of the estimate.
+    # ci_view/overrides are already loaded here — no extra query on a client page.
+    deposit_amount = build_proposal(
+        opp, qual, est,
+        quote_band=capabilities_quote_band(
+            opp, est, ci_fields=(ci_view or {}).get("fields") or {},
+            commercial_overrides=(overrides or {}).get("commercial")),
+    ).deposit_amount
     deposit_invoice_id = None
     if project is not None:
         sp = db.proposal_for_project(conn, project["id"])
@@ -4298,12 +4321,20 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
         key: tmpl["label"] for key, tmpl in DELIVERY_TEMPLATES.items()
     }
 
-    # Deposit amount for the Pay-deposit element: the stored proposal's deposit if
-    # the project's been spun up, otherwise the estimate-derived deposit.
+    # Deposit amount for the Pay-deposit element: the stored proposal's deposit if the
+    # project's been spun up, otherwise a fraction of the band shown on THIS page
+    # (ADR-0034). It used to derive from the estimate, so the button and the "Indicative
+    # investment" figure above it disagreed. ci_view/overrides are already loaded — this
+    # needs no further DB work, which matters because the connection is closed by here.
     if stored_proposal is not None and stored_proposal["deposit_amount"]:
         deposit_amount = stored_proposal["deposit_amount"]
     else:
-        deposit_amount = build_proposal(opp, qual, est).deposit_amount
+        deposit_amount = build_proposal(
+            opp, qual, est,
+            quote_band=capabilities_quote_band(
+                opp, est, ci_fields=(ci_view or {}).get("fields") or {},
+                commercial_overrides=(overrides or {}).get("commercial")),
+        ).deposit_amount
 
     return render(
         request, "capabilities_doc.html", nav="inbox", row=row, doc=doc,
@@ -8341,7 +8372,8 @@ def project_generate_proposal(project_id: int):
         # ``project_id`` pulls in the assigned talent's own rates, so the
         # client-facing proposal reflects real assigned cost — not role defaults.
         est = estimate_for(opp, conn=conn, project_id=project_id, qual=qual)
-        proposal = build_proposal(opp, qual, est)
+        proposal = build_proposal(
+            opp, qual, est, quote_band=_quote_band_for(conn, row, opp, est))
         db.insert_proposal(conn, project_id, opp_id, proposal)
         db.add_update(conn, project_id, "Proposal generated.", "proposal")
     finally:

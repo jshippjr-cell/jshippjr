@@ -435,7 +435,8 @@
     {% if doc.show_cost and doc.price_low %}
     <section class="block">
       <h2 class="sec">Indicative investment</h2>
-      <div class="price">${{ '{:,}'.format(doc.price_low) }}–${{ '{:,}'.format(doc.price_high) }} <small>ballpark — firmed up after a scoping call</small></div>
+      {# A client who disclosed a single figure gets that figure, not "$12,000–$12,000". #}
+      <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %}–${{ '{:,}'.format(doc.price_high) }}{% endif %} <small>ballpark — firmed up after a scoping call</small></div>
     </section>
     {% endif %}
 

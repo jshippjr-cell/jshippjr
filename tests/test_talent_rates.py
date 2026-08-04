@@ -159,16 +159,23 @@ def test_assigned_day_rate_flows_into_proposal(ctx):
     page = client.get(f"/project/{pid}/proposal").text
     assert "$2,000/day" in page
 
-    # The proposal total must match the override-driven estimate, and differ
-    # from the no-rate (default) estimate for the same team.
+    # The assigned day rate must still reach the ESTIMATE — that is what the line
+    # items above prove, and what tells Jon the real cost of the crew he assigned.
     opp = _sample_opp()
     override_est = build_estimate(
         opp, roles, MusicDiscipline.COMPOSITION,
         rate_overrides={role: {"rate": 2000.0, "unit": "day"}},
     )
     default_est = build_estimate(opp, roles, MusicDiscipline.COMPOSITION)
-    assert round(prop["total_price"], 2) == round(override_est.suggested_price, 2)
     assert round(override_est.suggested_price, 2) != round(default_est.suggested_price, 2)
+
+    # ADR-0034: the proposal's TOTAL is the quote, not the cost-derived suggestion.
+    # These are deliberately different numbers — the client agreed to a price, and
+    # what the crew costs is our margin question, reported on the estimate page.
+    from chordential_oia.capabilities import quote_band
+    lo, hi = quote_band(opp, override_est)
+    assert (lo, hi) == (8000, 15000), "the fixture's disclosed budget is the quote"
+    assert round(prop["total_price"], 2) == round((lo + hi) / 2, 2)
 
 
 def test_opportunity_price_band_path_unchanged(ctx):

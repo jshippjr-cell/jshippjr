@@ -72,8 +72,15 @@ Almost none of this required building. It required wiring, reconciling, and dele
    only way the web layer prices anything. Two of the nine — the dashboard KPI and the
    project estimate — skipped the qualified-fallback, so a disqualified deal priced at
    **$7,810 on the dashboard and $8,350 on its own estimate page**; and only one of the
-   nine resolved assigned rates. *Still open: the outreach cadence quoting a different
-   figure from the commercial engine.*
+   nine resolved assigned rates. ***The last thread — the outreach cadence — is closed
+   too (ADR-0034), and pulling it found three more:*** four surfaces derived a client
+   quote four ways. The two the **same buyer reads** disagreed — the Campaign Brief
+   showed Brightline **$7,200–$15,100** while the Commercial Review showed
+   **$20,000–$40,000** — and the pursuit checklist printed our *production cost*
+   ($4,342–$9,018) labelled "Provide an indicative quote". It reached the money as well:
+   a generated proposal totalled **$9,712** where the client's own review implied
+   **$8,000**. `capabilities.quote_band` is now the only authority — client brief,
+   commercial review, checklist, cadence, proposal total and deposit all render it.
 8. **The clearance certificate contradicted itself.** "Full buyout / work-made-for-hire"
    coexists with Chordential-as-100%-publisher cue sheets and category-limited
    exclusivity; the cue sheet credited mixers and PMs as composers and hardcoded BMI; the

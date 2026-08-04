@@ -5,19 +5,23 @@ import importlib
 import pytest
 
 from chordential_oia.capabilities import (
-    _price_band, build_capabilities_doc, default_toggles,
+    _price_band, build_capabilities_doc, default_toggles, quote_band,
 )
 from chordential_oia.models import MusicDiscipline, Opportunity
 from chordential_oia.web.estimate import build_estimate
 from chordential_oia.web.evaluate import evaluate
 
 
-def _doc(status, **override):
-    opp = Opportunity(
+def _doc_opp():
+    return Opportunity(
         client="Acme Agency", need="Original :30 brand spot music",
         description="Original composition for a national TV spot. Budget: $12,000.",
         budget_min=12000, budget_max=12000,
     )
+
+
+def _doc(status, **override):
+    opp = _doc_opp()
     qual, _ = evaluate(opp)
     disc = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
     est = build_estimate(opp, qual.team_shape or disc.team_shape, disc)
@@ -40,7 +44,12 @@ def test_proposal_stage_shows_price_band_and_terms():
     doc, est = _doc("Submitted")
     assert doc.stage == "proposal"
     assert doc.show_cost is True
-    assert (doc.price_low, doc.price_high) == _price_band(est)
+    # ADR-0034: the band the CLIENT sees is the quote authority, not the estimator's
+    # own band. This assertion used to read ``== _price_band(est)`` — which is exactly
+    # how the brief came to quote $7,200–$15,100 to a client the Commercial Review
+    # quoted $20,000–$40,000. The fixture discloses $12,000, so that is what we quote.
+    assert (doc.price_low, doc.price_high) == quote_band(_doc_opp(), est)
+    assert (doc.price_low, doc.price_high) == (12000, 12000)
     assert doc.price_low <= doc.price_high
     assert doc.show_terms is True and len(doc.terms) > 0
     assert doc.show_docusign is False

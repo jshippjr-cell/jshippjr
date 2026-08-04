@@ -16,12 +16,11 @@ regenerates from current CI as a new version. So CI stays the single source of t
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass, field, fields
 from typing import List, Optional
 
 from ..capabilities import (
-    Deliverable, _price_band, build_capabilities_doc, default_toggles,
+    Deliverable, build_capabilities_doc, default_toggles, quote_band,
 )
 from ..models import MusicRequirement, Opportunity, QualificationResult
 from ..proposals import build_proposal
@@ -112,31 +111,6 @@ def _schedule(ci_fields: dict) -> List[dict]:
     ]
 
 
-def _money_ints(text: str) -> list:
-    """Every dollar figure in a string → ints. '$18,000–$24,000' → [18000, 24000]."""
-    return [int(m.replace(",", "")) for m in re.findall(r"\$?\s*([\d][\d,]{2,})", text or "")]
-
-
-def _quote_band(opp, ci_fields: dict, estimate, overrides: dict) -> tuple:
-    """The client-facing price band. Precedence (ADR-0020 — CI is the source of truth):
-    an explicit operator override → the discovered budget (CI budget_band, then the opp's own
-    budget columns) → the estimator's cost band. The discovered budget is what the client told
-    us they'd spend, so it's what we quote to — not a from-scratch estimate."""
-    ov = overrides or {}
-    olo, ohi = ov.get("fee_low"), ov.get("fee_high")
-    if olo and ohi:
-        return int(olo), int(ohi)
-    nums = _money_ints(ci_fields.get("budget_band") or "")
-    if not nums:
-        lo = int(getattr(opp, "budget_min", 0) or 0)
-        hi = int(getattr(opp, "budget_max", 0) or 0)
-        nums = [n for n in (lo, hi) if n]
-    if nums:
-        lo, hi = min(nums), max(nums)
-        return lo, hi
-    return _price_band(estimate)
-
-
 def build_commercial_review(
     opp: Opportunity, qual: QualificationResult, estimate, ci_view: Optional[dict] = None,
     *, met: bool = True, version: int = 1, overrides: Optional[dict] = None,
@@ -166,8 +140,9 @@ def build_commercial_review(
     # Price from what the CLIENT actually said they'd spend when we know it (the discovered
     # budget is the number to quote to), falling back to the estimator's cost-based band only
     # when no budget was captured. An operator price override wins over both.
-    fee_low, fee_high = _quote_band(opp, ci_fields, estimate, overrides)
-    proposal = build_proposal(opp, qual, estimate)
+    fee_low, fee_high = quote_band(
+        opp, estimate, ci_fields=ci_fields, commercial_overrides=overrides)
+    proposal = build_proposal(opp, qual, estimate, quote_band=(fee_low, fee_high))
     deposit_pct = float(overrides.get("deposit_pct") or proposal.deposit_pct)
     if fee_low and fee_high:
         # Re-derive the deposit off the quoted band, not the estimator's, so the schedule

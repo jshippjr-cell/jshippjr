@@ -155,6 +155,26 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   project_id=, qual=)` is now the only path — eleven call sites across `app.py`,
   `public.py` and `seed.py` route through it, and a test fails if a web module calls
   `build_estimate` directly or if the fallback idiom spreads back out.
+- **One quote authority** (ADR-0034, 2026-08-04). Chasing the last open thread of the
+  pricing finding — "the outreach cadence quotes a different figure from the commercial
+  engine" — found **four** surfaces deriving a client quote four ways. The two the *same
+  buyer reads* disagreed on every seeded deal: the Campaign Brief reached for
+  `_price_band` while the Commercial Review quoted to the disclosed budget, showing
+  Brightline **$7,200–$15,100** and **$20,000–$40,000** respectively (Halcyon the other
+  way: $8,600–$18,000 vs $6,000–$10,000). Internally the pursuit checklist printed
+  `estimate.cost_range` — *our production cost* — under "Provide an indicative quote",
+  telling Jon to quote **$4,342** into a disclosed $20,000–$40,000 budget; the cadence
+  quoted the estimator's point price, 58% under one client's floor and 33% over
+  another's ceiling. It reached the money too: the project's Generate-proposal button
+  totalled **$9,712** on a deal whose Commercial Review had told the client a deposit
+  implying **$8,000**, and the brief's Pay-deposit figure disagreed with the band printed
+  above it. `capabilities.quote_band` (override → discovered budget → estimator's band,
+  ADR-0020's precedence) is now the one authority; the client brief, the review, the
+  checklist, the cadence, the proposal total and the deposit all render it. Also
+  collapsed: `PursuitBrief` carried **three** action lists — the HTML page
+  showed `checklist`, `brief.txt` showed `response_outline` + `next_steps` — so one
+  brief gave two different instruction sets, with the bad quote line in all three.
+  `checklist` is the only list now.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

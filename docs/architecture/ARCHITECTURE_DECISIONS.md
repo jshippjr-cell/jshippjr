@@ -762,6 +762,57 @@ appear once more — in `_ensure_project_for_opp`, which uses it to derive proje
 not a price. Changing the fallback (e.g. to refuse to price a disqualified deal at all)
 is now a one-line change in one file, which is the point.
 
+### ADR-0034 — One quote authority: `capabilities.quote_band`
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` finding 7 (the open
+thread) · `capabilities.py`, `web/commercial.py`, `prepare.py`, `outreach.py`,
+`proposals.py`, `web/app.py`
+**Decision.** `capabilities.quote_band(opp, estimate, *, ci_fields, commercial_overrides)`
+is the **only** thing that answers "what number do we put in front of this buyer." Its
+precedence, unchanged from ADR-0020: an explicit operator override (`fee_low`/`fee_high`)
+→ the **discovered budget** (CI `budget_band`, then the opportunity's own budget columns)
+→ the estimator's price band. It returns `(None, None)` rather than inventing a figure.
+Every surface renders it and derives nothing: the client's Campaign Brief, the client's
+Commercial Review, the pursuit checklist, the outreach cadence, and — via
+`build_proposal(..., quote_band=)` — the generated proposal's **total** and the brief's
+**Pay-deposit** amount. `_price_band` is demoted to what it always was: the last leg of
+the precedence, not a quote.
+**Why.** Four surfaces computed a quote four ways. The two the **same buyer reads** were
+the worst: the Campaign Brief reached straight for `_price_band` while the Commercial
+Review quoted to the disclosed budget, so on the seeded book Brightline was shown
+**$7,200–$15,100 in the brief and $20,000–$40,000 in the review** — and Halcyon the
+reverse, $8,600–$18,000 against $6,000–$10,000. Internally it was worse than inconsistent:
+the pursuit checklist printed `estimate.cost_range` — *what production costs us* — under
+the label "Provide an indicative quote", instructing Jon to quote **$4,342** to a client
+who had disclosed $20,000–$40,000; and the outreach cadence quoted the estimator's point
+`suggested_price`, which on the seeded book ran from 58% under a client's own floor to 33%
+over their ceiling. And it reached the money: the project's Generate-proposal button
+totalled `estimate.suggested_price`, producing a **$9,712** proposal on a deal whose
+Commercial Review had told the client a deposit implying **$8,000** — while the *other*
+proposal path (`_ensure_proposal_from_review`) correctly rewrote the money from the
+approved review. Two proposal paths, two totals, one deal. The brief's Pay-deposit figure
+had the same fault, disagreeing with the band printed directly above it on the same page.
+The estimate is an internal cost-plus-margin read; the quote is a commercial decision
+about a specific buyer. Conflating them is what produced every one of these.
+**Consequences.** Never render `_price_band`, `estimate.cost_range` or
+`estimate.suggested_price` as a client-facing figure — `tests/test_one_quote.py` fails on
+each, and asserts every surface agrees on every seeded deal with a disclosed budget.
+`build_proposal` without a `quote_band` still totals the estimator's number, which is
+correct for callers that only want `.terms`; any caller producing a *client* proposal
+must pass the band. The frozen review snapshot still wins in
+`_ensure_proposal_from_review` — what the client approved binds, even if CI has moved since.
+`prepare` and `outreach` take the band as a parameter (resolving it needs the DB); the web
+layer resolves it once in `app._quote_band_for`. A deal with only one disclosed figure
+quotes that figure — the brief template renders a single number, not `$12,000–$12,000`.
+The pursuit brief's `budget_line` keeps the internal read ("Estimated $X–$Y; suggested
+price $Z at 40% target margin") — that is honest analysis, explicitly labelled, and it is
+the one place cost belongs.
+**Also removed here.** `PursuitBrief.response_outline` and `.next_steps` are deleted. The
+brief carried **three** action lists with the same steps worded differently; the HTML page
+rendered only `checklist` while `brief.txt` rendered only the other two, so one brief gave
+two different instruction sets depending on how it was opened — and the wrong quote line
+sat in all three, which is how it survived. `checklist` is the single list; `render_text`
+prints it.
+
 ---
 
 ## Adding a new ADR

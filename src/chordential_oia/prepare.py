@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from .capabilities import quote_phrase
 from .estimation import Estimate
 from .models import (
     MusicDiscipline,
@@ -49,8 +50,11 @@ class PursuitBrief:
     team: List[str]
     budget_line: str
     strategic_angle: str
-    response_outline: List[str]
-    next_steps: List[str]
+    # ONE action list. It used to be three — ``response_outline``, ``next_steps`` and
+    # this — with the same steps worded differently; the HTML brief rendered only the
+    # checklist while ``brief.txt`` rendered only the other two, so the same brief gave
+    # two different instructions depending on how you opened it. The quote line was in
+    # all three, which is how the wrong number survived three separate reviews.
     checklist: List[str] = field(default_factory=list)
     qualified: bool = True
     assumptions: List[str] = field(default_factory=list)
@@ -77,9 +81,7 @@ class PursuitBrief:
             f"Budget: {self.budget_line}",
             f"Strategic angle: {self.strategic_angle}",
             "",
-            block("Suggested response outline:", self.response_outline),
-            "",
-            block("Next steps:", self.next_steps),
+            block("Pursuit checklist:", self.checklist),
         ]
         return "\n".join(parts)
 
@@ -90,8 +92,15 @@ def build_pursuit_brief(
     scored: ScoredOpportunity,
     estimate: Optional[Estimate],
     strategic: StrategicValue,
+    quote_band: Optional[tuple] = None,
 ) -> PursuitBrief:
-    """Assemble a deterministic pursuit brief from existing engine outputs."""
+    """Assemble a deterministic pursuit brief from existing engine outputs.
+
+    ``quote_band`` is ``capabilities.quote_band(...)`` — the ONE number we quote a
+    buyer (ADR-0034), resolved by the caller because it needs Campaign Intelligence
+    and the operator's overrides. The brief renders it; it never derives a quote of
+    its own. Without it the checklist says so rather than inventing a figure.
+    """
     discipline = qual.discipline
     buyer = opp.buyer_type.value.replace("_", " ")
 
@@ -115,37 +124,18 @@ def build_pursuit_brief(
             f"{estimate.budget_delta_note}"
         )
     else:
-        price = None
         budget_line = "No estimate available."
 
     strategic_angle = strategic.callout or strategic.rationale
 
-    price_phrase = f"~${price:,.0f}" if price is not None else "TBD"
-    outline = [
-        f"Acknowledge the brief: {opp.need}.",
-        f"Why Chordential: {discipline.label} craft, fast turnaround, fit for {buyer} work.",
-    ]
+    # The one client-facing number, resolved by the caller. This step used to read
+    # "Provide an indicative quote: $4,342–$9,018" — the estimate's *cost* range,
+    # what production costs US, labelled as the quote to give the buyer. On the
+    # seeded Brightline deal that instructed quoting $4,342 to a client who had
+    # disclosed a $20,000–$40,000 budget.
+    quoted = quote_phrase(quote_band)
+
     hint = _DISCIPLINE_HINT.get(discipline, "")
-    if hint:
-        outline.append(hint)
-    outline += [
-        f"Proposed team: {', '.join(team) if team else 'TBD'}.",
-        f"Indicative budget: {estimate.cost_range if estimate else 'TBD'} "
-        f"(suggested {price_phrase}).",
-        "Close with timeline and a single clear next step.",
-    ]
-
-    next_steps = [
-        f"Confirm scope, deliverables, and deadline with {scored.decision_maker}.",
-        "Send relevant reel / 2–3 reference pieces.",
-        f"Provide an indicative quote ({price_phrase}).",
-        f"Pre-check team availability: {', '.join(team) if team else 'TBD'}.",
-        "Log the outcome (win/loss) once decided — it feeds the moat.",
-    ]
-
-    # Single, ordered pursuit checklist — the response outline and next steps
-    # merged into one trackable sequence with their overlaps (budget, team,
-    # close) collapsed. This is what the brief page renders and tracks.
     team_line = ", ".join(team) if team else "TBD"
     checklist = [
         f"Acknowledge the brief and confirm scope, deliverables, and deadline with {scored.decision_maker}.",
@@ -156,7 +146,7 @@ def build_pursuit_brief(
     checklist += [
         f"Confirm team availability: {team_line}.",
         "Attach a relevant reel / 2–3 reference pieces (see the Outreach tab's recommended examples).",
-        f"Provide an indicative quote: {estimate.cost_range if estimate else 'TBD'} (suggested {price_phrase}).",
+        f"Provide an indicative quote: {quoted}.",
         "Send the response and close with a timeline and one clear next step.",
         "Log the outcome (win/loss) once decided — it feeds the moat.",
     ]
@@ -172,8 +162,6 @@ def build_pursuit_brief(
         team=team,
         budget_line=budget_line,
         strategic_angle=strategic_angle,
-        response_outline=outline,
-        next_steps=next_steps,
         checklist=checklist,
         qualified=qual.qualified,
         assumptions=[

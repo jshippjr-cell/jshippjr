@@ -67,14 +67,22 @@ def build_proposal(
     qual: QualificationResult,
     estimate: Estimate,
     deposit_pct: float = DEFAULT_DEPOSIT_PCT,
+    quote_band: Optional[tuple] = None,
 ) -> Proposal:
     """Assemble a deterministic proposal from existing engine outputs.
 
-    Line items and total come directly from ``estimate``; the deposit is a simple
-    fraction of that total. No independent pricing decision is made here.
+    Line items come directly from ``estimate``; the deposit is a simple fraction of
+    the total. No independent pricing decision is made here.
+
+    ``quote_band`` is ``capabilities.quote_band(...)`` — the one number we put in
+    front of this buyer (ADR-0034). When it resolves, the **total is its midpoint**:
+    the proposal is a client document and must carry the price the client was
+    quoted, not the estimator's internal suggestion. Without it the estimator's
+    number stands, which is right for callers that only want the terms.
     """
     discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    total = estimate.suggested_price
+    lo, hi = quote_band or (None, None)
+    total = round((lo + hi) / 2) if (lo and hi) else estimate.suggested_price
     deposit = round(total * deposit_pct, 2)
     balance = round(total - deposit, 2)
     terms = [

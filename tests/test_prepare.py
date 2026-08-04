@@ -34,15 +34,21 @@ def test_brief_assembles_from_engines():
     assert "Pursue" in b.recommendation
     assert b.team  # composer etc.
     assert "$" in b.budget_line
-    assert b.response_outline and b.next_steps
+    assert b.checklist
     assert b.why_fit and b.why_fit != ["—"]
 
 
 def test_render_text_is_copyable_and_complete():
-    text = _brief_for(_agency()).render_text()
+    """ADR-0034: one action list. ``render_text`` used to print `response_outline` +
+    `next_steps` while the HTML page printed `checklist` — the same brief giving two
+    different instruction sets depending on how it was opened."""
+    brief = _brief_for(_agency())
+    text = brief.render_text()
     for marker in ("PURSUIT BRIEF", "Recommendation:", "Why it fits:",
-                   "Suggested response outline:", "Next steps:", "Budget:"):
+                   "Pursuit checklist:", "Budget:"):
         assert marker in text
+    for step in brief.checklist:
+        assert step in text
 
 
 def test_discipline_hint_appears_for_sonic_branding():
@@ -55,7 +61,7 @@ def test_discipline_hint_appears_for_sonic_branding():
         budget_min=20_000, budget_max=30_000,
     )
     b = _brief_for(opp)
-    assert any("mnemonic" in line.lower() for line in b.response_outline)
+    assert any("mnemonic" in line.lower() for line in b.checklist)
 
 
 def test_strategic_callout_used_as_angle_when_present():
