@@ -931,9 +931,13 @@ unit('commerce', function(){
      Territory · term is the biggest lever in the category — a worldwide perpetual grant
      runs ~2.5x a one-year North America baseline, so global steps 2x off the 1 yr band
      the breakdown quotes. */
-  var BASE = {anthem:[16000,28000], spot:[9000,18000], title:[12000,22000], social:[4500,9000]};
-  var LENM = {'15':0.8,'30':1,'60':1.25,'120':1.6};
-  var USEM = {social:0.75, national:1, global:2.0};
+  /* Rendered from estimation.PUBLIC_BANDS / PUBLIC_LENGTHS / PUBLIC_USAGE — the
+     same priors the internal estimator is calibrated against. They used to be
+     hardcoded here, which is how this page came to quote $9,000–18,000 for a job
+     the engine costed at $4,847. */
+  var BASE = {{ public_bands | tojson }};
+  var LENM = {{ public_lengths | tojson }};
+  var USEM = {{ public_usage | tojson }};
   var quote=document.getElementById('quote');
   document.getElementById('priceBtn').addEventListener('click', function(){
     var t=document.getElementById('fType').value,

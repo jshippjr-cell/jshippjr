@@ -606,6 +606,31 @@ a different concept and stays separate — the scoring Cue Layer is namespaced u
 `/delivery/cues/…`. If per-cue approval ever needs to gate delivery, map it *onto* the
 deliverable approval at read time; do not merge the two stores.
 
+### ADR-0028 — One pricing voice: the public band is the prior, the engine is calibrated to it
+**Status:** Accepted (2026-08-04, operator directive) · Source: `docs/launch-review.md`
+finding 7 · `estimation.py`, `capabilities.py`, `public/commission.html`
+**Decision.** The researched, operator-ratified **public planning band** is the market
+prior. `estimation.PUBLIC_BANDS` / `PUBLIC_LENGTHS` / `PUBLIC_USAGE` are its single
+definition, rendered into the `/commission` estimator rather than hardcoded there, and the
+cost engine is calibrated so its suggested price lands **inside** that band for the common
+briefs. Three structural corrections make that possible: role hours describe one campaign
+cue end to end (not one demo); **session cost is a real line** — players and the room,
+selected by instrumentation — instead of a ×4 on desk hours that paid no one; and
+**usage/licence is a fee on price, not a cost of production**. Every `Multiplier` declares
+where it lands (`applies="desk"|"price"`), and `multiplier_total` is exactly the product of
+the desk factors.
+**Why.** The same buyer was shown $9,000–18,000 on the site and quoted from an engine that
+costed the job at $4,847, with a client-facing band of ≈$3,100–6,600 — three disjoint
+numbers for one brief. The engine was low because it priced a demo, never paid a musician,
+and treated a wider licence as a production cost. Calibrating the engine to the band (not
+the band to the engine) keeps the public promise and fixes the model that was wrong.
+**Consequences.** Rate/hour changes must be re-checked against `test_pricing_voice.py`,
+which asserts the engine lands inside the public band and that the page renders the engine's
+own constants. Do not reintroduce a pricing constant in a template. Instrumentation beyond
+what the public tool can express (a 30-piece orchestra) may legitimately exceed the band —
+that is why the page says the real number comes out of the discovery call. `ROLE_RATES` and
+`SESSION_PACKAGES` remain placeholders until AFM / SAG-AFTRA rate-card data replaces them.
+
 ---
 
 ## Adding a new ADR

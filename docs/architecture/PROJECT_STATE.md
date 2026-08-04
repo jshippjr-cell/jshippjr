@@ -94,6 +94,21 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Launch review — Phase 2, first pass: one pricing voice** (ADR-0028, 2026-08-04). The
+  same brief was quoted four ways — $9–18k on the site, $4,847 by the engine, ≈$3.1–6.6k on
+  the client proposal, ~$8,694 in the outreach cadence. Three structural faults, all fixed:
+  the estimator classified a brief by its **smallest** duration (":60 anthem with :30 and
+  :15 cutdowns" priced at half a bare :30 — naming the work made it cheaper); "full
+  orchestra" was a **×4 on desk hours** including the PM's and **paid no players**; and
+  usage/licence was a **cost** multiplier rather than a fee on price. Role hours now
+  describe a campaign cue rather than one demo, `SESSION_PACKAGES` pays players and the
+  room, and `PUBLIC_BANDS`/`PUBLIC_LENGTHS`/`PUBLIC_USAGE` are the single definition the
+  `/commission` estimator renders from. A national :30 now suggests **$10,414** inside the
+  public $9–18k, and the seeded Meridian deal quotes $15,414 against its $15–30k disclosed
+  budget (was $8,694). `tests/test_pricing_voice.py` holds the two voices together.
+  **Still open in Phase 2:** the nine divergent `build_estimate` call sites, the two
+  "waiting on you" aggregators, the cue sheet's rights contradiction, console nav diet,
+  portal court-state ordering.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

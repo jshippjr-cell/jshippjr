@@ -26,6 +26,7 @@ from .estimate import build_estimate
 from .evaluate import evaluate
 from .filters import displayurl, money, pct, slug
 from .showcase import get_showcase
+from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
 # Disciplines offered on the public applicant form (exclude the disqualified bucket).
 APPLY_DISCIPLINES = [d for d in MusicDiscipline if d is not MusicDiscipline.NON_CRAFT]
@@ -132,14 +133,25 @@ def public_home(request: Request):
     here opened on a brush drawing on paper — craft, but not a scoring stage. It was
     removed rather than parked at a second address (its 4K master is archived in
     media/masters/, and the legs are re-cuttable from it). /start remains the intake."""
-    return render(request, "public/commission.html", active="home")
+    return _render_commission(request)
 
 
 @router.get("/commission", response_class=HTMLResponse)
 def public_commission(request: Request):
     """The Commission at its original address, so links handed out before it became
     the front door still land on it."""
-    return render(request, "public/commission.html", active="home")
+    return _render_commission(request)
+
+
+def _render_commission(request: Request):
+    """The planning band's priors come from the estimation engine rather than being
+    hardcoded in the template, so the number a visitor is shown and the number the
+    engine works from cannot drift apart again."""
+    return render(
+        request, "public/commission.html", active="home",
+        public_bands={k: list(v) for k, v in PUBLIC_BANDS.items()},
+        public_lengths=PUBLIC_LENGTHS, public_usage=PUBLIC_USAGE,
+    )
 
 
 @router.get("/capabilities", response_class=HTMLResponse)

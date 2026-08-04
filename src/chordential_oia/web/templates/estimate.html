@@ -33,14 +33,21 @@
   <section class="card">
     <div class="card-head"><h2>Complexity multipliers</h2></div>
     <table class="table">
-      <thead><tr><th>Factor</th><th>Setting</th><th>×</th></tr></thead>
+      {# Every row says where it lands, and the footer is the product of the rows
+         that say "on cost" — this table used to list four factors above a
+         compounded number that was not their product. #}
+      <thead><tr><th>Factor</th><th>Setting</th><th>×</th><th>Applies</th></tr></thead>
       <tbody>
         {% for m in est.multipliers %}
-        <tr><td class="strong">{{ m.name }}</td><td>{{ m.setting }}</td><td>{{ '%.2f'|format(m.factor) }}×</td></tr>
+        <tr><td class="strong">{{ m.name }}</td><td>{{ m.setting }}</td><td>{{ '%.2f'|format(m.factor) }}×</td>
+          <td class="muted small">{{ 'on cost' if m.applies == 'desk' else 'fee on price' }}</td></tr>
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr><td colspan="2" class="strong">Compounded multiplier</td><td class="strong">{{ '%.2f'|format(est.multiplier_total) }}×</td></tr>
+        <tr><td colspan="2" class="strong">Compounded on studio cost</td><td class="strong">{{ '%.2f'|format(est.multiplier_total) }}×</td><td></td></tr>
+        {% if est.session_cost %}
+        <tr><td colspan="2">Session — {{ est.session_label }} (players + room)</td><td colspan="2">{{ est.session_cost | money }}</td></tr>
+        {% endif %}
       </tfoot>
     </table>
     <ul class="assume">

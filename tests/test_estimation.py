@@ -56,22 +56,53 @@ def test_multipliers_inferred_from_text():
         ["Composer", "Mixer"], MusicDiscipline.COMPOSITION,
     )
     settings = {m.name: m.factor for m in est.multipliers}
-    assert settings["Duration"] == 1.5          # :60 / anthem
-    assert settings["Instrumentation"] == 4.0   # full orchestra
-    assert settings["Licensing reach"] == 1.2   # national
+    assert settings["Duration"] == 1.25         # :60 / anthem
+    assert settings["Instrumentation"] == 1.6   # full orchestra — WRITING complexity
+    assert settings["Usage / licence"] == 1.0   # national is the baseline licence
     assert settings["Revisions"] == 1.30        # 3 rounds
+    # The orchestra is paid on its own line, not by inflating desk hours.
+    assert est.session_cost > 20000 and est.session_label == "Full orchestra"
+
+
+def test_longest_duration_wins_so_listing_cutdowns_cannot_cheapen_a_brief():
+    """The engine tested ":15" before ":60", so a real campaign brief — which
+    always enumerates its cutdown suite — was classified by its SHORTEST
+    deliverable. ":60 anthem with :30 and :15 cutdowns" priced at half a bare
+    :30: naming the extra work made the job cheaper."""
+    bare = build_estimate(_opp(need="Original :30 brand spot, national"),
+                          ["Composer", "Mixer"], MusicDiscipline.COMPOSITION)
+    full = build_estimate(
+        _opp(need="Original :30 brand spot, national",
+             description=":60 anthem with :30 and :15 cutdowns"),
+        ["Composer", "Mixer"], MusicDiscipline.COMPOSITION)
+    assert full.suggested_price > bare.suggested_price, (
+        "enumerating deliverables must never reduce the price")
+
+
+def test_usage_is_a_fee_on_price_not_a_cost_of_production():
+    """A wider licence does not make the session longer. Rolling it into cost
+    implied it did, and inflated the margin calculation with it."""
+    national = build_estimate(_opp(need="Original :30 spot, national"),
+                              ["Composer", "Mixer"], MusicDiscipline.COMPOSITION)
+    world = build_estimate(_opp(need="Original :30 spot, global"),
+                           ["Composer", "Mixer"], MusicDiscipline.COMPOSITION)
+    assert abs(world.estimated_cost - national.estimated_cost) < 1e-6
+    assert abs(world.suggested_price - national.suggested_price * 2.0) < 1e-6
 
 
 def test_regression_known_numbers():
-    # Composer+Mixer+PM, :30 (1.0) x piano (1.0) x local (1.0) x 2-rev (1.15).
-    # base = 8*150 + 5*110 + 2*85 = 1200 + 550 + 170 = 1920
-    # estimated = 1920 * 1.0 * 1.15 = 2208
+    # Composer+Mixer+PM at campaign scale, :30 (1.0) x simple (1.0) x 2-rev (1.15),
+    # plus the session line that pays the player and the room.
+    # base    = 20*150 + 8*110 + 6*85 = 3000 + 880 + 510 = 4390
+    # desk    = 4390 * 1.0 * 1.15 = 5048.5
+    # session = (1*600 + 600) * 1.0 = 1200
     est = build_estimate(
         Opportunity(client="X", need="Original music"),
         ["Composer", "Mixer"], MusicDiscipline.COMPOSITION,
     )
-    assert abs(est.base_cost - 1920.0) < 1e-6
-    assert abs(est.estimated_cost - 2208.0) < 1e-6
+    assert abs(est.base_cost - 4390.0) < 1e-6
+    assert abs(est.session_cost - 1200.0) < 1e-6
+    assert abs(est.estimated_cost - 6248.5) < 1e-6
 
 
 def test_web_shim_reexports_engine():

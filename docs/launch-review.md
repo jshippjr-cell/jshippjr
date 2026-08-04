@@ -53,13 +53,17 @@ Almost none of this required building. It required wiring, reconciling, and dele
    stage, so a **Won** deal in active delivery showed "Schedule the discovery call" as the
    featured move. Three money ledgers disagree the same way ($15,000 / $4,847 / $0).
    *(Phase 2.)*
-7. **Pricing speaks with four voices.** Public `/commission` band $9–18k for a national
-   :30; the engine prices the same brief at $4,847; the client-facing band renders
-   ≈$3.1–6.6k; outreach says quote ~$8,694 while the commercial engine quotes $15–30k. The
-   estimator also classifies a brief by its **smallest** duration — ":60 anthem with :30
-   and :15 cutdowns" prices as a :15 spot at half the bare :30 — and has no cost line for
-   session players. The estimate idiom is copy-pasted at nine divergent call sites.
-   *(Phase 2.)*
+7. **Pricing spoke with four voices.** Public `/commission` band $9–18k for a national
+   :30; the engine priced the same brief at $4,847; the client-facing band rendered
+   ≈$3.1–6.6k. The estimator also classified a brief by its **smallest** duration — ":60
+   anthem with :30 and :15 cutdowns" priced as a :15 spot at half the bare :30 — and had
+   no cost line for session players. ***Fixed — Phase 2 (ADR-0028).*** The public band is
+   now the single prior, rendered into the page from `estimation.PUBLIC_BANDS`; role hours
+   describe a campaign cue rather than a demo; players and the room are a real session
+   line instead of a ×4 on desk hours; usage is a fee on price, not a production cost. The
+   engine now lands inside the public band ($10,414 against $9–18k), and tests assert it.
+   *Still open: the nine divergent `build_estimate` call sites, and the outreach cadence
+   quoting a different figure from the commercial engine.*
 8. **The clearance certificate contradicted itself.** "Full buyout / work-made-for-hire"
    coexists with Chordential-as-100%-publisher cue sheets and category-limited
    exclusivity; the cue sheet credits mixers and PMs as composers and hardcodes BMI; the
