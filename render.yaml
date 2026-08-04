@@ -35,6 +35,15 @@ services:
       # must move these files too.
       - key: CHORDENTIAL_UPLOAD_DIR
         value: "/var/data/uploads"
+      # Where client media lives (ADR-0043). "local" = the disk below, which the
+      # cutover removes; "s3" = an S3-compatible bucket (Cloudflare R2 is the
+      # intended target — no egress fees, and the delivery package is all egress).
+      # Flip this to "s3" and set the four secrets in the Render dashboard AFTER
+      # copying /var/data/uploads into the bucket; the app reports at startup
+      # which store is actually active, so a half-configured switch is loud.
+      #   CHORDENTIAL_S3_BUCKET / _ENDPOINT / _ACCESS_KEY / _SECRET_KEY / _REGION
+      - key: CHORDENTIAL_STORAGE
+        value: "local"
       # Master switch for live fetching. When set, the crawler actually pulls +
       # parses pages (results land in the review queue) AND the in-process
       # background auto-fetcher runs, scanning your On sources on a schedule.

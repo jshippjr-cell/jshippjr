@@ -1076,6 +1076,43 @@ this backlog item needed no work: `/start`, `/book` and `/thanks` already share 
 wordmark, serif, ember and warm palette, and all six front-of-house routes resolve —
 checked before changing anything, and left alone.
 
+### ADR-0043 — Client media lives behind a storage seam
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (object
+storage) · `storage/`, `web/app.py`, `web/seed.py`, `render.yaml`, `pyproject.toml`
+**Decision.** Every write and read of client media goes through
+`storage.get_object_store()` — the same provider-seam shape as payments and mail:
+**local disk by default** (behaviour unchanged), S3-compatible when
+`CHORDENTIAL_STORAGE=s3`. `_persist_upload` is the only writer; no route may open a file
+under `UPLOAD_DIR` for writing. The SQLite mirror is written **only when the store is not
+durable** — it is the net under the disk, and with a bucket configured it would double
+every master into the database for no benefit. A remote store serves by **presigned
+redirect** so bytes never stream through the app and Range/seek stay the bucket's job;
+local keeps serving `FileResponse` off a real path. Selecting `s3` without full
+credentials **falls back to disk and says so at boot**.
+**Why.** The cutover runbook is blunt: *"migrate uploads to object storage first or the
+cutover destroys every client cut, master and stem."* Measured on a seeded instance,
+**four of five uploaded files had exactly one copy** — because three routes wrote straight
+into `UPLOAD_DIR`, bypassing the helper whose own docstring claimed to be *"the single
+place that persists media, so every write site is durable"*: the intake artifact (a voice
+memo, a transcript, an RFP), the procurement document (a W-9, a COI), and the opportunity
+doc upload (the audio on the client-facing brief). A false claim in a docstring is worse
+than no claim, because it stops anyone checking.
+**Consequences.** `tests/test_object_storage.py` fails if any route opens `UPLOAD_DIR`
+for writing, if an upload route stops leaving a second copy, if a durable store still
+gets mirrored, if a remote store streams instead of redirecting, or if the payment-gated
+`.zip` becomes reachable through `/uploads`. `_safe_upload_path` is deleted — its
+traversal guard now lives in `LocalObjectStore._path`, travelling with the store that
+needs it. `boto3` is the optional `s3` extra, imported lazily.
+**What is NOT done, and must not be assumed.** No bucket has ever been written to from
+this code — there are no credentials in the build environment, so the S3 backend is
+covered by its contract, its configuration logic and a fake store, never by a live
+round-trip. **Before the cutover:** copy `/var/data/uploads` into the bucket, set
+`CHORDENTIAL_STORAGE=s3` plus the four secrets, confirm the boot line reads *"object
+storage active"*, verify a real upload and a real download, and only then remove the
+disk. The existing files are not migrated by this change; the seam is the prerequisite,
+not the migration.
+
+
 ---
 
 ## Adding a new ADR

@@ -272,6 +272,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   and palette, and all six front-of-house routes resolve.
 
 **Phase 2 of the launch review is complete.**
+- **Client media is behind a storage seam** (ADR-0043, 2026-08-04). Phase 3, first item.
+  The cutover runbook says removing the disk "destroys every client cut, master and
+  stem" — and measured on a seeded instance, **four of five uploaded files had exactly
+  one copy**, because three routes wrote straight into `UPLOAD_DIR`, bypassing the helper
+  whose docstring claimed to be "the single place that persists media": the intake
+  artifact, the procurement document, and the opportunity doc upload. Now every write and
+  read goes through `storage.get_object_store()` (local by default, S3/R2 when
+  `CHORDENTIAL_STORAGE=s3`); the SQLite mirror is written only when the store isn't
+  durable; a remote store serves by presigned redirect; a half-configured switch falls
+  back to disk and says so at boot. **The migration itself is not done** — no bucket has
+  been written to from this code (no credentials in the build environment). Copy
+  `/var/data/uploads` into the bucket, flip the env, confirm the boot line, verify a real
+  upload/download, and only then remove the disk.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older
@@ -485,7 +498,8 @@ room → The Picture → The Cue Layer → Flow polish, each phase-gated by the 
 - **Postgres cutover ops** — code ready, not run; prod is still SQLite on a
   single-attach disk (every deploy ~2-min blip).
 - **DocuSign e-signature** — placeholder only.
-- **Durable object storage** — uploads are on the persistent disk (S3/R2 seam not wired).
+- **Durable object storage** — the **seam is wired** (ADR-0043, `CHORDENTIAL_STORAGE=s3`);
+  what remains is the ops step: copy the existing files into a bucket and flip the env.
   Media above the 64 MB mirror cap has exactly one copy, on that disk. The Postgres
   cutover runbook removes the disk: **migrate uploads to object storage first or the
   cutover destroys every client cut, master and stem.** Postgres does not cover them.

@@ -233,6 +233,14 @@ def _stage_bundled_master(upload_dir: str, filename: str) -> bool:
     try:
         if not os.path.isfile(_BUNDLED_DEMO_AUDIO):
             return False
+        # ADR-0043: through the store, so a demo instance with a bucket configured
+        # doesn't stage audio onto a disk the read path no longer looks at. It also
+        # keeps a local copy either way, because build_delivery_zip packages files
+        # off the filesystem.
+        with open(_BUNDLED_DEMO_AUDIO, "rb") as fh:
+            data = fh.read()
+        from ..storage import get_object_store
+        get_object_store(upload_dir).put(filename, data, "audio/mpeg")
         import shutil
         os.makedirs(upload_dir, exist_ok=True)
         shutil.copyfile(_BUNDLED_DEMO_AUDIO, os.path.join(upload_dir, filename))
@@ -519,6 +527,15 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
                 project_c, assignments_c, db.get_delivery(conn, pid_c), upload_dir,
                 generated_at=_iso(7),
             )
+            # ADR-0043: the built ZIP goes through the store too, so the demo's
+            # "Download everything" works whichever backend is configured.
+            try:
+                from ..storage import get_object_store
+                with open(os.path.join(upload_dir, os.path.basename(pkg["filename"])), "rb") as fh:
+                    get_object_store(upload_dir).put(
+                        os.path.basename(pkg["filename"]), fh.read(), "application/zip")
+            except OSError:
+                pass
             db.update_delivery(conn, pid_c, "delivery_zip", {
                 "filename": pkg["filename"], "url": pkg["url"],
                 "built_at": pkg["built_at"],

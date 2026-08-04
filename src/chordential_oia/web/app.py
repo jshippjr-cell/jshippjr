@@ -33,6 +33,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
 from ..estimation import ROLE_RATES, RoleLine, stated_length
+from ..storage import get_object_store, storage_status
 from ..invoicing import build_invoice
 from .. import mailer
 from .. import recruiting
@@ -204,6 +205,21 @@ templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ADR-0043: say where client media is going, at every boot. "We never actually
+    # turned object storage on" must not be something discovered by losing a master,
+    # and a half-configured switch (CHORDENTIAL_STORAGE=s3 with a missing key) falls
+    # back to disk — silently, unless it announces itself here.
+    _st = storage_status(UPLOAD_DIR)
+    if _st["misconfigured"]:
+        print(f"[storage] WARNING: CHORDENTIAL_STORAGE={_st['requested']} was requested "
+              f"but the bucket is not fully configured — falling back to the LOCAL disk "
+              f"at {UPLOAD_DIR}. Uploads are NOT durable.", flush=True)
+    elif not _st["durable"]:
+        print(f"[storage] local disk at {UPLOAD_DIR} — not durable across a disk "
+              f"removal; set CHORDENTIAL_STORAGE=s3 before the Postgres cutover.",
+              flush=True)
+    else:
+        print("[storage] object storage active — uploads are durable.", flush=True)
     conn = db.connect()
     db.init_db(conn)
     discovery.sync_catalog(conn)
@@ -2163,20 +2179,25 @@ async def opp_intelligence_analyze(
     text = (text or "").strip()
     the_lane = intake_lanes.resolve_lane(lane_key=lane, stance=stance, modality=modality)
     artifact_ref = upload_name = ""
+    artifact_bytes = None
     if file is not None and (file.filename or "").strip():
         ext = os.path.splitext(file.filename)[1].lower()
         safe = f"intake_{opp_id}_{abs(hash(file.filename)) % 10**8}{ext}"
         try:
-            data = await file.read()
-            with open(os.path.join(UPLOAD_DIR, safe), "wb") as fh:
-                fh.write(data)
+            # ADR-0043: read here (the text extraction below needs the bytes) but
+            # persist through the store once the connection is open — this route
+            # used to write straight into UPLOAD_DIR, so a voice memo or an RFP had
+            # exactly one copy on the disk the cutover removes.
+            artifact_bytes = await file.read()
             upload_name, artifact_ref = file.filename, safe
             # a text-like upload (transcript/rfp/email exported as .txt) can be read now
             if not text and ext in (".txt", ".md", ".vtt", ".srt"):
-                text = data.decode("utf-8", "ignore").strip()
+                text = artifact_bytes.decode("utf-8", "ignore").strip()
         except (OSError, ValueError):
-            pass
+            artifact_ref = upload_name = ""
     conn = db.connect()
+    if artifact_ref and artifact_bytes is not None:
+        _persist_upload(conn, artifact_ref, artifact_bytes)
     try:
         row = db.get_opportunity(conn, opp_id)
         if row is None:
@@ -2411,9 +2432,10 @@ async def procurement_upload(opp_id: int, rid: int, file: UploadFile = File(...)
             safe = f"procurement_{opp_id}_{r['req_key']}{ext}"
             try:
                 data = await file.read()
-                os.makedirs(UPLOAD_DIR, exist_ok=True)
-                with open(os.path.join(UPLOAD_DIR, safe), "wb") as fh:
-                    fh.write(data)
+                # ADR-0043: a procurement document is a compliance artefact — a W-9,
+                # a COI, a signed vendor form. It used to be written straight to disk
+                # with no second copy.
+                _persist_upload(conn, safe, data)
                 db.update_procurement_requirement(conn, rid, artifact_ref=f"upload/{safe}",
                                                   status="uploaded")
                 procurement.add_event(conn, opp_id, "uploaded", f"Uploaded {r['label']}")
@@ -4492,21 +4514,16 @@ def chips_custom(
 # --------------------------------------------------------------------------- #
 # Relevant-work audio uploads — the founder uploads samples from their machine.
 #
-# PERSISTENCE CAVEAT (honest): these files land on the LOCAL disk (UPLOAD_DIR).
-# That is NOT durable on Render once the persistent disk is removed for the
-# zero-downtime (blue-green) cutover — a redeploy/instance swap loses them.
-# Durable storage needs object storage (S3/R2). Acceptable for now; note it.
+# The persistence caveat that used to sit here ("these land on the LOCAL disk...
+# durable storage needs object storage (S3/R2). Acceptable for now") is answered:
+# ADR-0043 put every write and read behind `storage.get_object_store()`. Set
+# CHORDENTIAL_STORAGE=s3 and the bytes stop depending on this machine. Left unset,
+# behaviour is exactly what it was.
+#
+# `_safe_upload_path` lived here and is gone: its traversal guard now belongs to
+# LocalObjectStore._path, so the check travels with the store that needs it rather
+# than sitting beside one of several callers.
 # --------------------------------------------------------------------------- #
-def _safe_upload_path(name: str) -> Optional[str]:
-    """Resolve a bare filename to a real path inside UPLOAD_DIR, or None. Guards
-    against path traversal (only a bare basename that exists is accepted)."""
-    base = os.path.basename(name or "")
-    if not base or base != name:
-        return None
-    path = os.path.join(UPLOAD_DIR, base)
-    if os.path.realpath(path) != os.path.join(os.path.realpath(UPLOAD_DIR), base):
-        return None
-    return path if os.path.isfile(path) else None
 
 
 @app.get("/uploads/{name}")
@@ -4527,13 +4544,24 @@ def serve_upload(name: str):
     _guess = _mt.guess_type(name or "")[0] or "application/octet-stream"
     _inline = _guess.split("/")[0] in ("audio", "video", "image") and not _guess.endswith("svg+xml")
     _headers = {"X-Content-Type-Options": "nosniff"}
-    path = _safe_upload_path(name)
+    # ADR-0043: the store answers first. A LOCAL store hands back a real path, so
+    # FileResponse still gives native Range/seek — that is what makes a long cut
+    # scrub in the review player. A REMOTE store hands back a presigned URL and the
+    # browser fetches the bucket directly, so the bytes never stream through this
+    # process (and Range is the bucket's problem, which it is good at).
+    _store = get_object_store(UPLOAD_DIR)
+    _key = os.path.basename(name or "")
+    path = _store.local_path(_key) if _key and _key == name else None
     if path is not None:
         if _inline:
             return FileResponse(path, headers=_headers)
         return FileResponse(path, headers=_headers, filename=os.path.basename(name),
                             media_type="application/octet-stream",
                             content_disposition_type="attachment")
+    if _key and _key == name and getattr(_store, "durable", False):
+        signed = _store.url(_key)
+        if signed:
+            return RedirectResponse(signed, status_code=307)
     # Disk copy gone (ephemeral storage wiped on redeploy) — rehydrate from the durable DB
     # mirror so a published version's audio keeps playing across deploys.
     base = os.path.basename(name or "")
@@ -4550,12 +4578,11 @@ def serve_upload(name: str):
                 ctype = mimetypes.guess_type(base)[0] or "application/octet-stream"
             # Best-effort: restore the file to disk so future reads hit the fast path + so
             # range/seek requests are served natively; then serve the bytes now.
-            try:
-                os.makedirs(UPLOAD_DIR, exist_ok=True)
-                with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
-                    fh.write(data)
-            except OSError:
-                pass
+            # ADR-0043: put it back through the STORE. On local this restores the
+            # disk copy so the next read hits FileResponse and Range works; with a
+            # bucket configured it repairs the missing object instead of writing a
+            # local file nothing would serve.
+            get_object_store(UPLOAD_DIR).put(base, data, ctype)
             _rh_inline = (ctype or "").split("/")[0] in ("audio", "video", "image") \
                 and not (ctype or "").endswith("svg+xml")
             if _rh_inline:
@@ -4573,24 +4600,34 @@ def serve_upload(name: str):
 
 def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
                     mirror: bool = True) -> None:
-    """Write an uploaded file to disk AND mirror it into the durable DB (ADR: uploads survive
-    redeploys). The single place that persists media, so every write site is durable.
+    """THE place client media is written (ADR-0043). Every upload route goes through
+    here; none may open a file under ``UPLOAD_DIR`` itself.
 
-    ``mirror=False`` is the VIDEO policy (ADR-0026): cuts above the mirror
-    threshold live on disk only — mirroring a feature-length cut into SQLite
-    would balloon the database. The client door says so honestly."""
-    try:
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        with open(os.path.join(UPLOAD_DIR, os.path.basename(name)), "wb") as fh:
-            fh.write(data)
-    except OSError:
-        pass
-    if not mirror:
-        return
+    Bytes go to the configured object store — the local disk by default, an
+    S3-compatible bucket when ``CHORDENTIAL_STORAGE=s3``. The SQLite mirror is the
+    net under a store that ISN'T durable, so it is written only then: with a real
+    bucket configured, mirroring would double every master into the database for no
+    benefit, and the Postgres cutover is partly motivated by that bloat.
+
+    ``mirror=False`` is the VIDEO policy (ADR-0026): cuts above the threshold skip
+    the mirror even on local, because a feature-length cut in SQLite is worse than
+    the risk it covers. The client door says so honestly.
+
+    This docstring used to claim to be "the single place that persists media, so
+    every write site is durable" while three routes wrote to the directory directly
+    — the intake artifact, the procurement document, and the opportunity doc upload.
+    Measured on a seeded instance, four of five uploaded files had exactly one copy,
+    on the disk the cutover removes. The claim is now enforced by a test.
+    """
     if not content_type:
         import mimetypes
         content_type = mimetypes.guess_type(name)[0] or ""
-    db.save_media_blob(conn, os.path.basename(name), data, content_type)
+    key = os.path.basename(name)
+    store = get_object_store(UPLOAD_DIR)
+    store.put(key, data, content_type)
+    if not mirror or getattr(store, "durable", False):
+        return
+    db.save_media_blob(conn, key, data, content_type)
 
 
 @app.get("/project/{project_id}/dl/{name}")
@@ -4633,9 +4670,17 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
             return PlainTextResponse("not found", status_code=404)
     finally:
         conn.close()
-    path = _safe_upload_path(name)
+    # ADR-0043: the gate above has already passed, so it is safe to hand the client
+    # a direct URL. Local keeps serving the file itself.
+    _store = get_object_store(UPLOAD_DIR)
+    _key = os.path.basename(name or "")
+    path = _store.local_path(_key) if _key and _key == name else None
     if path is not None:
         return FileResponse(path, filename=os.path.basename(path))
+    if _key and _key == name and getattr(_store, "durable", False):
+        signed = _store.url(_key)
+        if signed:
+            return RedirectResponse(signed, status_code=307)
     # Ephemeral disk wiped: rehydrate from the durable DB mirror (ZIPs are mirrored at build,
     # assets via _persist_upload). A ZIP built BEFORE the mirror existed isn't stored — rebuild
     # it from the durable source media (which _build_delivery_package rehydrates first).
@@ -4653,12 +4698,11 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
             conn2.close()
         if blob is not None:
             data, ctype = blob
-            try:
-                os.makedirs(UPLOAD_DIR, exist_ok=True)
-                with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
-                    fh.write(data)
-            except OSError:
-                pass
+            # ADR-0043: put it back through the STORE. On local this restores the
+            # disk copy so the next read hits FileResponse and Range works; with a
+            # bucket configured it repairs the missing object instead of writing a
+            # local file nothing would serve.
+            get_object_store(UPLOAD_DIR).put(base, data, ctype)
             return Response(content=data, media_type=ctype or "application/zip",
                             headers={"Content-Disposition": f'attachment; filename="{base}"'})
     return PlainTextResponse("not found", status_code=404)
@@ -4734,14 +4778,16 @@ async def doc_upload(
             u.get("filename")
             for u in (db.get_doc_overrides(conn, opp_id).get("relevant_uploads") or [])
         }
+        # ADR-0043: uniqueness is asked of the STORE, not of the local filesystem —
+        # with a bucket configured there is no local file to collide with.
+        _store = get_object_store(UPLOAD_DIR)
         n = 1
-        while f"opp{opp_id}-{n}{ext}" in existing or os.path.exists(
-            os.path.join(UPLOAD_DIR, f"opp{opp_id}-{n}{ext}")
-        ):
+        while f"opp{opp_id}-{n}{ext}" in existing or _store.exists(f"opp{opp_id}-{n}{ext}"):
             n += 1
         safe_name = f"opp{opp_id}-{n}{ext}"
-        with open(os.path.join(UPLOAD_DIR, safe_name), "wb") as fh:
-            fh.write(data)
+        # This route wrote straight to disk too; the client-facing brief's audio had
+        # exactly one copy.
+        _persist_upload(conn, safe_name, data)
 
         overrides = db.get_doc_overrides(conn, opp_id)
         uploads = list(overrides.get("relevant_uploads") or [])
@@ -7931,19 +7977,18 @@ def _rehydrate_delivery_media(conn, project_id: int) -> int:
     if pv.get("filename"):
         names.add(os.path.basename(pv["filename"]))
     restored = 0
+    store = get_object_store(UPLOAD_DIR)
     for base in names:
-        if not base or os.path.exists(os.path.join(UPLOAD_DIR, base)):
+        # ADR-0043: ask the STORE whether the bytes are there. A durable store needs
+        # no rehydration at all — this loop exists to repair a wiped local disk from
+        # the SQLite mirror before zipping, and a bucket does not get wiped.
+        if not base or store.exists(base):
             continue
         blob = db.get_media_blob(conn, base)
         if blob is None:
             continue
-        try:
-            os.makedirs(UPLOAD_DIR, exist_ok=True)
-            with open(os.path.join(UPLOAD_DIR, base), "wb") as fh:
-                fh.write(blob[0])
+        if store.put(base, blob[0], blob[1] or ""):
             restored += 1
-        except OSError:
-            pass
     return restored
 
 
