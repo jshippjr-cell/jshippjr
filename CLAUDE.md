@@ -34,10 +34,10 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - **Web app:** `src/chordential_oia/web/` — FastAPI + Jinja templates (`templates/`),
   SQLite via stdlib `sqlite3` (`db.py`). `app.py` is the route layer; `seed.py` seeds
   demo data; `public.py` is the public front-of-house site.
-- **`app.py` is being taken apart** (ADR-0044) — it was 9,133 lines and is now 2,725. Below it sit
+- **`app.py` is being taken apart** (ADR-0044) — it was 9,133 lines and is now 2,326. Below it sit
   `shell.py` (Jinja env, `render`, `safe_local`, admin auth), the route modules
   (`agencies_routes.py`, `discovery_routes.py`, `talent_routes.py`,
-  `opportunity_routes.py`, `project_routes.py`) and the helper layer
+  `opportunity_routes.py`, `project_routes.py`, `creator_routes.py`) and the helper layer
   (`uploads.py`, `billing.py`, `delivery_ops.py`, `opportunity_ops.py`). **Imports flow one
   way: `app.py` → routes → helpers → `shell.py`.** Never import `app.py` from any of them;
   `tests/test_app_structure.py` fails the build if you do. Put new work in the module it
@@ -61,7 +61,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,372 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,376 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.

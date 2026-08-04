@@ -221,7 +221,10 @@ def test_creator_submission_over_cap_rejected(ctx, monkeypatch):
     (eng re-verify P1)."""
     client, db_mod, app_mod = ctx
     tid, pid, tok, share = _composer_with_project(db_mod)
-    monkeypatch.setattr(app_mod, "_SUBMISSION_MAX_BYTES", 10)
+    # Patched on `web.creator_routes`: ADR-0044 moved the /creator routes and this
+    # cap out together, and a route reads its own module globals.
+    from chordential_oia.web import creator_routes
+    monkeypatch.setattr(creator_routes, "_SUBMISSION_MAX_BYTES", 10)
     r = client.post(f"/creator/{tok}/project/{pid}/version",
                     files={"file": ("take.mp3", b"x" * 64, "audio/mpeg")},
                     follow_redirects=False)

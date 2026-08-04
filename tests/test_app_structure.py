@@ -29,7 +29,7 @@ from chordential_oia.web import app as app_mod  # noqa: E402
 WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py", "opportunity_routes.py",
-           "project_routes.py"]                          # grows with each slice
+           "project_routes.py", "creator_routes.py"]     # grows with each slice
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
@@ -164,6 +164,7 @@ def test_every_moved_route_still_answers():
     ("/payouts", "talent_routes.py"),
     ("/opportunity", "opportunity_routes.py"),
     ("/project", "project_routes.py"),
+    ("/creator", "creator_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
@@ -191,7 +192,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 2800, (
+    assert n < 2400, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -208,6 +209,7 @@ def test_the_router_carries_the_whole_group():
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 58),
     ("project_routes.py", "/project", 57),
+    ("creator_routes.py", "/creator", 6),
 ])
 def test_a_router_carries_its_whole_group_and_nothing_else(module, prefix, count):
     """A route module holds one group. A stray path from somewhere else means a

@@ -1291,6 +1291,36 @@ identical, and the same writes producing the same rows. The one apparent differe
 delivery ZIP, 299,635 vs 299,636 bytes — was opened and diffed entry by entry: identical
 except `metadata.json`'s `generated_at`, five seconds apart. Suite 1,365 → 1,372.
 
+**Slice 7 (2026-08-04) — the creator portal.** `/creator` (6 routes) →
+`creator_routes.py`. **The cleanest extraction of the series, and only because the earlier
+ones did their job:** one contiguous block (L1891–L2126), **zero** interleaved routes, and
+**zero** helpers shared with any other group — everything it reached that another group
+also uses had already moved into the helper layer in slices 4 and 6 (`_read_capped`,
+`_store_pending_submission`, `_project_estimate`, `_sync_role_milestones`). Four names
+were exclusive and travelled with it (152 lines). Zero route-pattern collisions against
+the other 264 routes.
+
+Equivalence was proved on the **happy path**, not just the error paths, which took
+setting up the data: the seeded book has no creator carrying a `portal_token`, so the
+first comparison run agreed only on 404s and 422s — a green result that proved nothing.
+Minting an identical token on both trees produced the real check: the portal renders
+**byte-identical at 80,734 bytes**, a version submission through
+`uploads._store_pending_submission` stores the same `pending_version` (`by='Devin Park'`,
+`orig='take.mp3'`, url present) on both, the portal re-renders identically at 81,146
+bytes afterwards, and a note reply + address pair matched.
+
+**app.py: 2,725 → 2,326 lines; 65 routes remain** — from 9,133 and 251, so **75% of the
+file and 74% of the routes have moved.** What is left is the application object itself
+(lifespan, middleware, the admin gate, the PWA endpoints) plus seven small groups —
+`/campaign` (7), `/simulator` (7), `/workspace` (5), `/admin`, `/matchboard`, `/invoice`,
+`/push` (3 each) — and the singletons.
+
+One test followed the code: `_SUBMISSION_MAX_BYTES` moved with the group, and the cap test
+patched it on `app`. That one failed loudly (`monkeypatch.setattr` raises on a missing
+attribute), unlike slice 6's `_notify_operator_review`, where the name still existed on
+`app` as a re-export and the patch silently stopped affecting the route. **A re-export is
+what makes a stale patch site quiet** — worth knowing for the remaining slices.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,
