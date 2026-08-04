@@ -1174,6 +1174,38 @@ dominated by the coupled pair: `/opportunity` (58) and `/project` (57) are 62% o
 remaining routes and need `_load`, `_brief_for`, `_outreach_for` and `_quote_band_for`
 relocated first.
 
+**Slice 4 (2026-08-04) — the helper layer, not a route group.** The "four shared helpers"
+this ADR named twice (`_load`, `_brief_for`, `_outreach_for`, `_quote_band_for`) **were the
+wrong four.** Measured: of the 46 `app.py` helpers `/opportunity` and `/project` reach for,
+only `_load` and `_persist_upload` are shared between *those two* — `_brief_for` and
+`_outreach_for` are `/opportunity`-only and `_quote_band_for` is `/project`-only, so none
+of the last three blocks anything. The real blockers are the **16 helpers called by two or
+more route groups**, whose transitive closure is **31 functions and 5 constants**. Those
+moved; the single-group helpers stay to travel with their own routes later.
+
+The closure was not filed by taste. Its call graph has **ten connected components**, and
+they sort into four modules with no component straddling a boundary: `uploads.py` (the
+write door), `billing.py` (proposal → invoice → payment → receipt), `delivery_ops.py`
+(approve → package → finalize → notify), `opportunity_ops.py` (open a record, reconcile a
+stage, assemble a buyer). The admin-auth trio (`_admin_secret`, `_admin_cookie_value`,
+`_admin_authed`) went to `shell.py` — an env var and a cookie, the same category as
+`safe_local`; the gate *middleware* and the public-path allowlist stay in `app.py` because
+they are properties of the application object. Imports flow one way: `delivery_ops` →
+`billing`/`uploads`, nothing back, enforced by a test.
+
+Every name is imported back into `app.py` under its original spelling, so **not one of the
+186 remaining handlers was edited** — a relocation that renames is two changes wearing one
+commit. **`UPLOAD_DIR` is the exception, and the one real trap:** a dozen test modules set
+`CHORDENTIAL_UPLOAD_DIR` and reload only `db` and `app`. A module-level constant in
+`uploads.py` would never see the new value, because `from .uploads import UPLOAD_DIR` binds
+a *value* and reloading `app` does not re-execute `uploads`. So `uploads.upload_dir()` reads
+the environment per call and `app.UPLOAD_DIR` is computed from it at app-import time. The
+frozen-constant shape was built deliberately to confirm the new test catches it: it fails,
+and it silently redirects writes into the installed package directory — which is the
+`/var/data` persistence bug of ADR-0043 all over again.
+**app.py: 7,662 → 6,917 lines; 186 routes remain** (this pass moved no routes — 745 lines
+of helpers, which is what unblocks the next two). Suite 1,321 → 1,356 tests.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

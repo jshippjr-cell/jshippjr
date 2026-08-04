@@ -30,6 +30,16 @@ WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py"]           # grows with each slice
 
+# The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
+# and `/project` reach for, 16 are called by two or more route groups, and the
+# transitive closure of those 16 is 31 functions. Those 31 are what could not stay in
+# `app.py` if either group is ever to move; the single-group helpers travel with their
+# own routes later. The closure fell into these four files on its own — its dependency
+# graph has ten components and none of them straddles a file boundary.
+HELPERS = ["uploads.py", "billing.py", "delivery_ops.py", "opportunity_ops.py"]
+
+MODULES = ROUTERS + HELPERS
+
 
 def _module_paths(name):
     """Every (method, path) a route module registers, in its own order."""
@@ -40,7 +50,7 @@ def _module_paths(name):
 # --------------------------------------------------------------------------- #
 # The direction of dependency
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("name", ROUTERS)
+@pytest.mark.parametrize("name", MODULES)
 def test_a_route_module_never_imports_app(name):
     """The cycle this whole structure exists to avoid. `app.py` imports the routers;
     a router that imports `app.py` back would make the split cosmetic and the import
@@ -54,7 +64,7 @@ def test_a_route_module_never_imports_app(name):
                 assert not a.name.endswith(".app"), f"{name} imports app.py"
 
 
-@pytest.mark.parametrize("name", ROUTERS)
+@pytest.mark.parametrize("name", MODULES)
 def test_a_route_module_resolves_every_name_it_uses(name):
     """The failure mode this move actually hit: two module-level constants
     (`AGENCIES_PAGE_SIZE`, `_COMPLETE_MARKER`) stayed behind, so the module imported
@@ -171,7 +181,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 7700, (
+    assert n < 7000, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -180,3 +190,91 @@ def test_the_router_carries_the_whole_group():
     paths = _module_paths("agencies_routes.py")
     assert len(paths) == 26
     assert all(p.startswith("/agencies") for _m, p in paths)
+
+
+# --------------------------------------------------------------------------- #
+# The helper layer
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("name", HELPERS)
+def test_a_helper_module_declares_no_routes(name):
+    """These exist so routes can leave. A helper module that starts serving URLs is
+    a second `app.py` beginning, and the next slice would be blocked on it in exactly
+    the way this one was blocked on `app.py`."""
+    src = (WEB / name).read_text(encoding="utf-8")
+    assert not re.search(r'^@(app|router)\.[a-z]+\(', src, re.M), (
+        f"{name} declares a route — it is a helper module")
+
+
+def test_the_helper_layer_flows_one_way():
+    """`delivery_ops` may call `billing` and `uploads`; nothing may call back. A cycle
+    here would not be caught by the import check — Python resolves it at call time —
+    it would just make the load order load-bearing again."""
+    allowed = {
+        "uploads.py": set(),
+        "billing.py": set(),
+        "delivery_ops.py": {"billing", "uploads"},
+        "opportunity_ops.py": set(),
+    }
+    helper_names = {h[:-3] for h in HELPERS}
+    for name in HELPERS:
+        tree = ast.parse((WEB / name).read_text(encoding="utf-8"))
+        reached = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level and node.module:
+                reached.add(node.module.split(".")[-1])
+            if isinstance(node, ast.ImportFrom) and node.level and node.module is None:
+                reached |= {a.name for a in node.names}
+        assert (reached & helper_names) <= allowed[name], (
+            f"{name} imports {sorted((reached & helper_names) - allowed[name])} — "
+            f"the helper layer has to stay a DAG")
+        assert not any(r.endswith("_routes") for r in reached), (
+            f"{name} imports a route module — helpers sit below routes, not beside them")
+
+
+MOVED_HELPERS = [
+    "_admin_authed", "_apply_invoice_payment", "_approve_version_core",
+    "_brief_ci_context", "_build_delivery_package", "_buyer_context", "_campaign_label",
+    "_client_portal_url", "_ensure_project_for_opp", "_gate_banner",
+    "_invoice_from_proposal_row", "_load", "_maybe_finalize_delivery",
+    "_notify_assigned_creators", "_notify_operator_review", "_persist_upload",
+    "_proposal_from_row", "_reconcile_opp_status", "_send_invoice_pay_link",
+    "_store_pending_submission", "_to_utc_iso",
+]
+
+
+@pytest.mark.parametrize("helper", MOVED_HELPERS)
+def test_a_moved_helper_is_defined_once_and_still_reachable(helper):
+    """Two things at once, because the move is only safe if both hold: the definition
+    is gone from `app.py` (otherwise the copy in the helper module is dead weight that
+    still looks maintained), and the name still resolves on `app` — 186 routes and a
+    dozen test modules call these by their old names, and the whole point of importing
+    them back is that no handler had to be edited."""
+    tree = ast.parse((WEB / "app.py").read_text(encoding="utf-8"))
+    defined = {n.name for n in tree.body
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert helper not in defined, f"{helper} is still defined in app.py"
+    assert callable(getattr(app_mod, helper, None)), (
+        f"{helper} is no longer reachable as app.{helper}")
+
+
+def test_the_upload_directory_still_follows_the_environment(monkeypatch, tmp_path):
+    """The trap this move walked into. A dozen test modules set
+    `CHORDENTIAL_UPLOAD_DIR` and then reload only `db` and `app`. Had `UPLOAD_DIR`
+    moved into `uploads.py` as a module-level constant, reloading `app` would not
+    re-execute that file and every one of those tests would have written to the
+    previous directory. `upload_dir()` reads the environment per call; `app.UPLOAD_DIR`
+    is computed from it at app-import time, which is what makes the reload work."""
+    import importlib
+
+    from chordential_oia.web import uploads as uploads_mod
+
+    target = tmp_path / "elsewhere"
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(target))
+    assert uploads_mod.upload_dir() == str(target)
+    reloaded = importlib.reload(app_mod)
+    try:
+        assert reloaded.UPLOAD_DIR == str(target), (
+            "app.UPLOAD_DIR ignored the environment on reload")
+    finally:
+        monkeypatch.undo()
+        importlib.reload(app_mod)

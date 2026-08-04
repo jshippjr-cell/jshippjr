@@ -296,7 +296,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `/sources`, `/leads` — 25 routes, zero helper coupling) → `discovery_routes.py`, and
   `_safe_local` → `shell.safe_local`. **app.py: 8,545 → 8,051 lines, 201 routes left.** **Slice 3:** the supply side
   (`/talent` + `/payouts`, 15 routes) → `talent_routes.py` with the rate helpers.
-  **app.py is now 7,662 lines / 186 routes** — from 9,133 / 251.
+  **Slice 4:** the **helper layer**, not a route group — the 16 helpers called by more
+  than one group, closure of 31 functions, into `uploads.py` / `billing.py` /
+  `delivery_ops.py` / `opportunity_ops.py`, with admin-auth to `shell.py`. Every name is
+  imported back under its old spelling, so no handler changed. This corrected the claim
+  carried in the two previous entries: the blocking helpers were **not** `_load`,
+  `_brief_for`, `_outreach_for`, `_quote_band_for` — three of those four are used by only
+  one route group and block nothing.
+  **app.py is now 6,917 lines / 186 routes** — from 9,133 / 251. `/opportunity` (58) and
+  `/project` (57) are now unblocked and are the next two slices.
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

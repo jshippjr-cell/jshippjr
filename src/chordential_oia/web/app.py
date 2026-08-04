@@ -14,7 +14,6 @@ Run it::
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import json
 import math
@@ -32,14 +31,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
-from ..estimation import ROLE_RATES, RoleLine, stated_length
+from ..estimation import ROLE_RATES, stated_length
 from ..storage import get_object_store, storage_status
-from ..invoicing import build_invoice
 from .. import mailer
 from .. import recruiting
 from ..models import BuyerValue, MusicDiscipline, Opportunity
 from ..payments import get_payment_provider
-from ..proposals import Proposal, build_proposal
+from ..proposals import build_proposal
 from ..prepare import build_pursuit_brief
 from ..outreach import (
     COMPOSE_BLOCK_KEYS, assemble_email, build_compose_blocks, build_outreach_plan,
@@ -52,7 +50,7 @@ from ..capabilities import (
 )
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet,
-    build_delivery_zip, build_manifest, build_timeline, current_version,
+    build_manifest, build_timeline, current_version,
     delivery_completeness,
     license_confirmation, merge_license, merge_signatory, reconcile_brief,
     revision_status, scoped_deliverables, seed_brief, version_label,
@@ -74,6 +72,30 @@ from .buyer_intel import assess_relationship, days_since
 from .estimate import estimate_for
 from .evaluate import evaluate
 from .filters import displayurl, money, pct, slug
+from . import uploads
+# Imported back under the names the routes below already use. ADR-0044: the helper
+# layer moved OUT of this file so /opportunity and /project can follow it; importing
+# the names back keeps the move a pure relocation, with no edit inside any handler.
+from .billing import (
+    _apply_invoice_payment, _client_portal_url, _ensure_final_invoice_issued,
+    _invoice_from_proposal_row, _proposal_from_row, _send_invoice_pay_link,
+)
+from .delivery_ops import (
+    _approve_version_core, _build_delivery_package, _campaign_label,
+    _current_version_tag, _gate_banner, _maybe_finalize_delivery,
+    _notify_assigned_creators, _notify_operator_review,
+)
+from .opportunity_ops import (
+    _KANBAN_STAGES, _brief_ci_context, _buyer_context, _ensure_project_for_opp,
+    _load, _reconcile_opp_status, _to_utc_iso,
+)
+from .uploads import (
+    _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _store_pending_submission,
+)
+from .shell import (
+    ADMIN_COOKIE, admin_authed as _admin_authed, admin_cookie_value as _admin_cookie_value,
+    admin_secret as _admin_secret,
+)
 from .agencies_routes import _profile_from_row, router as agencies_router
 from .discovery_routes import router as discovery_router
 from .talent_routes import _parse_rate, router as talent_router
@@ -118,7 +140,10 @@ templates.env.globals["machine_on"] = scheduler.autonomous_engines_on
 # push. Production must point this at the persistent disk (render.yaml sets
 # /var/data/uploads). That disk is also single-attach, so it blocks the blue-green
 # cutover: durable, deploy-independent storage needs object storage (S3/R2).
-UPLOAD_DIR = os.environ.get("CHORDENTIAL_UPLOAD_DIR") or os.path.join(_HERE, "uploads")
+# Resolved HERE, at app-import time, from `uploads.upload_dir()` — the routes below
+# and a dozen test modules read `app.UPLOAD_DIR`, and those tests set the env var and
+# then reload `app`, so the value has to be recomputed by this module's own execution.
+UPLOAD_DIR = uploads.upload_dir()
 
 # The Company Profile (ADR-0022) — entered once, the source for every procurement document.
 _COMPANY_PROFILE_FIELDS = [
@@ -146,14 +171,11 @@ _COMPANY_PROFILE_FIELDS = [
 ]
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Audio uploads we accept for relevant-work samples.
-_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 # Phase 2 (The Picture): the client's cut. Range streaming is served by the
 # existing /uploads route (FileResponse handles Range — Safari requires it).
 # Size policy is ADR-0026: hard cap per cut; DB-mirror only under the threshold.
 _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 _CUT_MAX_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MAX_MB", "512")) * 1024 * 1024
-_CUT_MIRROR_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MIRROR_MB", "64")) * 1024 * 1024
 # A composer's submitted take / deliverable (audio-weight, occasionally a video mix)
 # rides the same chunked cap — token-gated routes must never buffer an unbounded body.
 _SUBMISSION_MAX_BYTES = int(os.environ.get("CHORDENTIAL_SUBMISSION_MAX_MB", "512")) * 1024 * 1024
@@ -170,12 +192,6 @@ _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
 # way to Won — kept separate from _NEXT_STATUS so the action-bar's "close via the
 # win/loss form" behaviour is undisturbed. New → Reaching out → Proposal out → Won.
 _STEPPER_NEXT = {"New": "Pursuing", "Pursuing": "Submitted", "Submitted": "Won"}
-
-# The linear stage vocabulary, rendered as the detail page's stepper rail and used
-# to order the pipeline. (It named the /lanes kanban's columns too, until ADR-0035
-# deleted that board.) Friendly labels are applied at the view layer via stage_label.
-_KANBAN_STAGES = ["New", "Pursuing", "Submitted", "Won"]
-
 
 
 
@@ -301,14 +317,6 @@ app.include_router(talent_router)
 app.include_router(public_router)
 
 
-# --------------------------------------------------------------------------- #
-# Internal admin gate — a light single-operator shared secret (NOT multi-user
-# auth). OFF unless CHORDENTIAL_ADMIN_TOKEN is set, so dev/tests are unchanged;
-# set it in the Render env to keep the dashboard (/dashboard + all internal
-# routes) private while the public site at / stays open.
-# --------------------------------------------------------------------------- #
-ADMIN_COOKIE = "cdl_admin"
-
 # Public surfaces served at the site root — these never require the admin secret.
 # Everything NOT listed here is gated, so new internal routes are private by
 # default; a new *public* page must be added to this set.
@@ -411,23 +419,6 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _CLIENT_PAY_RE.match(path)
         or path == "/pay/return"
     )
-
-
-def _admin_secret() -> Optional[str]:
-    return os.environ.get("CHORDENTIAL_ADMIN_TOKEN") or None
-
-
-def _admin_cookie_value(token: str) -> str:
-    # Store proof-of-knowledge, never the raw token.
-    return hashlib.sha256(f"cdl|{token}".encode()).hexdigest()
-
-
-def _admin_authed(request: Request) -> bool:
-    token = _admin_secret()
-    if not token:
-        return True  # gate disabled
-    cookie = request.cookies.get(ADMIN_COOKIE) or ""
-    return bool(cookie) and hmac.compare_digest(cookie, _admin_cookie_value(token))
 
 
 def _is_public_path(path: str) -> bool:
@@ -979,18 +970,6 @@ def inbox(
 # (search + six filters + the same advance); the dashboard is the daily read.
 
 
-# --------------------------------------------------------------------------- #
-# Opportunity detail + subpages
-# --------------------------------------------------------------------------- #
-def _load(conn, opp_id: int):
-    row = db.get_opportunity(conn, opp_id)
-    if row is None:
-        return None, None, None
-    opp = db.opportunity_from_row(row)
-    qual, scored = evaluate(opp)
-    return row, opp, (qual, scored)
-
-
 @app.get("/opportunity/{opp_id}", response_class=HTMLResponse)
 def opportunity_detail(request: Request, opp_id: int, understood: str = "",
                        added: str = "", asked: str = ""):
@@ -1532,25 +1511,6 @@ def discovery_cancel(opp_id: int, meeting_id: int):
     return RedirectResponse(f"/opportunity/{opp_id}", status_code=303)
 
 
-def _to_utc_iso(local_iso: str, tz_offset_min: str) -> str:
-    """Convert a naive LOCAL wall-clock datetime (what the user typed) to a UTC ISO string,
-    using the browser's ``getTimezoneOffset()`` minutes (positive when local is behind UTC —
-    e.g. US Eastern = 240). No offset → treated as UTC. So the operator never does the math."""
-    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
-    s = (local_iso or "").strip().replace(" ", "T")
-    if not s:
-        return ""
-    try:
-        naive = _dt.fromisoformat(s)
-    except ValueError:
-        return ""
-    try:
-        off = int(str(tz_offset_min).strip())
-    except (ValueError, TypeError):
-        off = 0
-    return (naive + _td(minutes=off)).replace(tzinfo=_tz.utc).isoformat()
-
-
 # ── Client Discovery REQUEST (ADR-0016) — the client asks; it schedules nothing. ──────
 def _request_token_ok(conn, opp_id: int, k: str):
     row = db.get_opportunity(conn, opp_id)
@@ -1947,39 +1907,6 @@ def client_workspace(request: Request, token: str):
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
                   deposit_pay=deposit_pay,
                   **(brief_ctx or {}))
-
-
-# ── The Commercial Review (ADR-0018, Phase 1) — the formal agreement, from CI. ────────
-def _reconcile_opp_status(conn, opp_id, project=None) -> None:
-    """Keep the pipeline stage honest with where the deal actually is (ADR-0020 §6): the
-    New → Reaching out → Proposal out → Won buttons follow the lifecycle automatically.
-    FORWARD-only — a manual override or a later stage is never rolled back; a closed deal
-    (Won/Lost/Passed) is left alone. Called at each transition and as a self-heal on view."""
-    row = db.get_opportunity(conn, opp_id)
-    if row is None:
-        return
-    cur = row["status"]
-    if cur in ("Won", "Lost", "Passed"):
-        return
-    order = _KANBAN_STAGES                       # New, Pursuing, Submitted, Won
-    review = db.current_commercial_review(conn, opp_id)
-    proj = project if project is not None else db.project_for_opp(conn, opp_id)
-    approved = bool(review) and review["status"] == "approved"
-    if approved or proj is not None:
-        implied = "Won"
-    elif review is not None and review["status"] == "released":
-        implied = "Submitted"                    # "Proposal out"
-    else:
-        met = any((m["status"] in ("ingested", "transcript_ready"))
-                  for m in db.list_meetings(conn, opp_id))
-        confirmed = bool(db.get_doc_overrides(conn, opp_id).get("scope_confirmed"))
-        snap = db.latest_brief_snapshot(conn, opp_id) if hasattr(db, "latest_brief_snapshot") else None
-        implied = "Pursuing" if (met or confirmed or snap) else "New"   # "Reaching out"
-    if cur in order and implied in order and order.index(implied) > order.index(cur):
-        try:
-            db.update_status(conn, opp_id, implied, row["outcome_value"])
-        except Exception:  # noqa: BLE001 — status honesty never blocks the request
-            pass
 
 
 def _build_review_for_opp(conn, opp_id, version=1):
@@ -2773,30 +2700,6 @@ def talent_match_page(request: Request, opp_id: int):
     )
 
 
-# --------------------------------------------------------------------------- #
-# Match Board — opportunities (left) × qualified talent (right), drag/tap assign
-# --------------------------------------------------------------------------- #
-def _gate_banner(err: str, t: Optional[int]) -> Optional[dict]:
-    """The A-3 refusal banner (ADR-0024): who was blocked and what's missing, so
-    the operator's next click is the fix, not a mystery. Pure lookup — returns
-    None unless this request is the redirect from a refused assign."""
-    if err != "agreement" or not t:
-        return None
-    conn = db.connect()
-    try:
-        row = db.get_talent(conn, int(t))
-    finally:
-        conn.close()
-    if row is None:
-        return None
-    blockers = db.talent_assignment_blockers(row)
-    missing = " + ".join(
-        {"agreement": "an executed Composer Agreement",
-         "rate": "a rate"}[b] for b in blockers) or "nothing"
-    name = (row["name"] or "This creator") if "name" in row.keys() else "This creator"
-    return {"talent_id": row["id"], "name": name, "missing": missing}
-
-
 @app.get("/matchboard", response_class=HTMLResponse)
 def matchboard(request: Request, opp: Optional[int] = None,
                err: str = "", t: Optional[int] = None):
@@ -3006,62 +2909,6 @@ def buyers_directory(
     )
 
 
-def _buyer_context(conn, client: str) -> Optional[dict]:
-    """Assemble the full buyer-profile context (None when the buyer is unknown).
-    Shared by the standalone /buyer/{client} page and the opp-scoped tab."""
-    rows = db.buyer_opportunities(conn, client)
-    if not rows:
-        return None
-    touch = db.buyer_touch_summary(conn, client)
-    contacts = db.buyer_contacts(conn, client)
-    website = db.company_website(conn, client)
-
-    won = [r for r in rows if r["status"] == "Won"]
-    lost = [r for r in rows if r["status"] == "Lost"]
-    pursuing = [r for r in rows if r["status"] in ("Pursuing", "Submitted")]
-    decided = len(won) + len(lost)
-
-    # Strategic standing is a buyer-level attribute — resolve the strongest seen.
-    bv_rank = {"enterprise": 3, "repeat": 2, "one_time": 1, "unknown": 0}
-    best_bv = max((r["buyer_value"] or "unknown" for r in rows), key=lambda v: bv_rank.get(v, 0))
-    tier_rank = {"Door-opener": 3, "High": 2, "Medium": 1, "Low": 0}
-    best_tier = max(
-        (r["strategic_tier"] for r in rows if r["strategic_tier"]),
-        key=lambda t: tier_rank.get(t, 0), default=None,
-    )
-    strat_vals = [r["strategic_value"] for r in rows if r["strategic_value"] is not None]
-
-    summary = {
-        "client": client,
-        "buyer_type": rows[0]["buyer_type"],
-        "total": len(rows),
-        "qualified": sum(1 for r in rows if r["qualified"]),
-        "won": len(won),
-        "lost": len(lost),
-        "pursuing": len(pursuing),
-        "win_rate": (len(won) / decided * 100.0) if decided else None,
-        "won_value": sum((r["outcome_value"] or 0) for r in won),
-        "avg_alignment": (sum(r["alignment"] or 0 for r in rows) / len(rows)),
-        "disciplines": sorted({r["discipline"] for r in rows if r["qualified"]}),
-        # CMO buyer-value standing
-        "buyer_value": BuyerValue(best_bv).label,
-        "marquee": any(r["marquee"] for r in rows),
-        "strategic_tier": best_tier,
-        "avg_strategic": (sum(strat_vals) / len(strat_vals)) if strat_vals else None,
-    }
-    rel = assess_relationship(
-        opps=len(rows), qualified=summary["qualified"],
-        won=len(won), lost=len(lost), open_pursuits=len(pursuing),
-        touches=int(touch["touches"] or 0),
-        last_contacted_days=days_since(touch["last_contacted"]),
-        strategic_tier=best_tier,
-    )
-    return {
-        "summary": summary, "rows": rows, "rel": rel, "contacts": contacts,
-        "last_contacted": touch["last_contacted"], "company_website": website,
-    }
-
-
 @app.get("/buyer/{client}", response_class=HTMLResponse)
 def buyer_profile(request: Request, client: str):
     conn = db.connect()
@@ -3089,27 +2936,6 @@ def opportunity_buyer(request: Request, opp_id: int):
     if ctx is None:
         return HTMLResponse("Buyer not found", status_code=404)
     return render(request, "buyer.html", nav="inbox", opp_row=row, **ctx)
-
-
-def _brief_ci_context(conn, row):
-    """ADR-0017: the brief renders Campaign Intelligence first. Returns (ci_view, met) —
-    the canonical CI values + whether a discovery meeting has actually happened (tone)."""
-    from datetime import datetime, timezone
-    ci_view, met = {}, False
-    if campaigns.workspace_enabled():
-        try:
-            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
-            ci_view = campaign_intelligence.brief_view(conn, ci_row["id"])
-        except Exception:  # noqa: BLE001 — the brief must render even if CI hiccups
-            ci_view = {}
-    now_iso = datetime.now(timezone.utc).isoformat()
-    for m in db.list_meetings(conn, row["id"]):
-        if m["status"] in ("ingested", "transcript_ready") or (
-                m["status"] not in ("canceled",) and (m["start_at"] or "") and
-                m["start_at"] <= now_iso):
-            met = True
-            break
-    return ci_view, met
 
 
 def _live_brief_ctx(conn, opp_id):
@@ -3523,38 +3349,6 @@ def serve_upload(name: str):
             return Response(content=data, media_type="application/octet-stream",
                             headers=_headers)
     return PlainTextResponse("not found", status_code=404)
-
-
-def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
-                    mirror: bool = True) -> None:
-    """THE place client media is written (ADR-0043). Every upload route goes through
-    here; none may open a file under ``UPLOAD_DIR`` itself.
-
-    Bytes go to the configured object store — the local disk by default, an
-    S3-compatible bucket when ``CHORDENTIAL_STORAGE=s3``. The SQLite mirror is the
-    net under a store that ISN'T durable, so it is written only then: with a real
-    bucket configured, mirroring would double every master into the database for no
-    benefit, and the Postgres cutover is partly motivated by that bloat.
-
-    ``mirror=False`` is the VIDEO policy (ADR-0026): cuts above the threshold skip
-    the mirror even on local, because a feature-length cut in SQLite is worse than
-    the risk it covers. The client door says so honestly.
-
-    This docstring used to claim to be "the single place that persists media, so
-    every write site is durable" while three routes wrote to the directory directly
-    — the intake artifact, the procurement document, and the opportunity doc upload.
-    Measured on a seeded instance, four of five uploaded files had exactly one copy,
-    on the disk the cutover removes. The claim is now enforced by a test.
-    """
-    if not content_type:
-        import mimetypes
-        content_type = mimetypes.guess_type(name)[0] or ""
-    key = os.path.basename(name)
-    store = get_object_store(UPLOAD_DIR)
-    store.put(key, data, content_type)
-    if not mirror or getattr(store, "durable", False):
-        return
-    db.save_media_blob(conn, key, data, content_type)
 
 
 @app.get("/project/{project_id}/dl/{name}")
@@ -4198,51 +3992,6 @@ def _ensure_proposal_from_review(conn, opp_row, project_id, review_row) -> None:
     proposal.balance_due = (review.balance_amount
                             or max(0, (total_mid or proposal.total_price) - proposal.deposit_amount))
     db.insert_proposal(conn, project_id, opp_row["id"], proposal)
-
-
-def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
-    """Return the opportunity's project id, creating the project (with scoped
-    roles + default milestones) if it doesn't exist yet. Shared by the project
-    button and the Match Board so both stay in sync."""
-    existing = db.project_for_opp(conn, opp_id)
-    if existing is not None:
-        return existing["id"]
-    row, opp, ev = _load(conn, opp_id)
-    if row is None:
-        return None
-    qual, scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    roles = qual.team_shape or discipline.team_shape
-    # Thread the buyer link: resolve (and record on the opp) the Agency Intelligence
-    # record this opportunity is for, so the project — and the campaign it becomes —
-    # can reach the agency's intelligence, not just a client name. Best-effort: an
-    # exact name match or nothing (DISCOVERY_INTELLIGENCE_LINEAGE.md, step 1).
-    agency_id = db.resolve_opportunity_agency(conn, row)
-    # ADR-0018: the project inherits the opportunity's workspace token so the client's
-    # single URL never changes across the award boundary.
-    workspace_token = db.ensure_share_token(conn, opp_id)
-    pid = db.insert_project(
-        conn, opp_id, opp.client, opp.need, opp.budget_min, opp.budget_max, roles,
-        agency_id=agency_id, share_token=workspace_token,
-    )
-    db.seed_default_milestones(conn, pid, roles)
-    # ADR-0020: Direction is born in Discovery — production inherits it. Seed the approved
-    # creative territory from Campaign Intelligence; nobody creates directions later.
-    if campaigns.workspace_enabled():
-        try:
-            ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
-            fields = campaign_intelligence.brief_view(conn, ci_row["id"]).get("fields") or {}
-            name_ = (fields.get("campaign_objective") or "").strip()
-            thesis = (fields.get("emotional_arc") or "").strip()
-            if name_ or thesis:
-                d = production.add_direction(conn, db, pid,
-                                             name=(name_ or "The approved direction")[:80],
-                                             thesis=thesis[:160])
-                if d:
-                    production.decide_direction(conn, db, pid, d["id"], status="selected")
-        except Exception:  # noqa: BLE001 — seeding never blocks the award
-            pass
-    return pid
 
 
 @app.post("/opportunity/{opp_id}/project")
@@ -5628,32 +5377,6 @@ def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename:
     return label, campaign
 
 
-def _store_pending_submission(conn, project_id: int, data: bytes,
-                              src_filename: str, who: str) -> None:
-    """A creator's submission lands here — NOT in the client-visible version ladder.
-    It waits in ``delivery_json['pending_version']`` until Jon publishes it, so the
-    client never hears work he hasn't vetted ("the machine proposes, Jon disposes").
-    The file is written now; publishing just moves the metadata into the ladder."""
-    from datetime import datetime as _dt, timezone as _tz
-    ext = os.path.splitext(src_filename or "")[1].lower()
-    safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
-    # Unique, PERMANENT per-submission name (random suffix). The old "proj{id}-pending"
-    # scheme reused one filename and — because the disk-existence check misses files that
-    # live only in the durable DB mirror after a redeploy — a new submission overwrote the
-    # previous version's blob under the same key, so v1/v2 ended up pointing at one file.
-    safe_name = f"proj{project_id}-v{os.urandom(5).hex()}{safe_ext}"
-    # ADR-0026: disk always; DB mirror only under threshold (a large take must not
-    # blob into SQLite).
-    _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)
-    db.update_delivery(conn, project_id, "pending_version", {
-        "url": f"/uploads/{safe_name}",
-        "filename": safe_name,
-        "orig": src_filename or "",
-        "by": who or "A creator",
-        "at": _dt.now(_tz.utc).isoformat(),
-    })
-
-
 def _publish_pending_submission(conn, project_id: int):
     """Move the pending creator submission into the live version ladder (Jon's
     'Publish to client' press). Returns ``(label, campaign)`` for the client-direction
@@ -5849,14 +5572,6 @@ def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
     return render(request, "delivery_portal.html", nav="", **view)
 
 
-def _current_version_tag(delivery: dict) -> str:
-    """The version number a comment/approval is tagged with: the current version's
-    ``n`` (anti-chaos — feedback always lands on the version it was made against).
-    Falls back to ``"0"`` for a Phase-0 project that never logged a version."""
-    cur = current_version(delivery)
-    return str(cur["n"]) if cur else "0"
-
-
 def _review_token_ok(conn, project_id: int, k: str) -> bool:
     """The per-project share token is the access control for client review actions."""
     row = db.get_project(conn, project_id)
@@ -5926,10 +5641,6 @@ def _set_reviewer_cookie(resp, name: str, email: str) -> None:
     )
 
 
-def _delivery_console_url(project_id: int) -> str:
-    return f"/project/{project_id}/delivery"
-
-
 
 
 def _reviewer_review_url(project_id: int, token: str) -> str:
@@ -5976,92 +5687,6 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
             _email_reviewer_link(project_id, rv, campaign, subject=subject, lead=lead)
         except Exception:  # noqa: BLE001 — one reviewer's failure must not stop the rest
             pass
-
-
-def _notify_assigned_creators(project_id: int, project, *, subject: str,
-                              body_text: str, exclude_email: str = "") -> None:
-    """Composer-direction notification: email each assigned creator (with an email)
-    when the client acts on their work — approved, or changes requested. Also used to
-    broadcast a new assignment to the whole project crew. Closes the loop the review
-    portal opened: the composer hears the verdict from us instead of Jon relaying it by
-    hand. ``exclude_email`` skips one recipient (e.g. the just-assigned creator who has
-    already had a tailored email). Best-effort, per creator, never raises. Runs in its
-    own DB connection so it's safe to fire-and-forget off the request thread."""
-    conn = db.connect()
-    try:
-        assignments = db.list_assignments(conn, project_id)
-    finally:
-        conn.close()
-    if not mailer.mail_configured():
-        return
-    base = _public_base()
-    seen = set()
-    if exclude_email:
-        seen.add(exclude_email.strip().lower())
-    # Look up each creator's portal token so the email can carry their one link (courtesy:
-    # the composer opens straight into their portal to see the notes / submit the next take).
-    portal_by_talent = {}
-    conn2 = db.connect()
-    try:
-        for a in assignments:
-            tid = a["talent_id"] if "talent_id" in a.keys() else None
-            if tid is not None:
-                trow = db.get_talent(conn2, tid)
-                tok = (trow["portal_token"] if trow is not None and "portal_token" in trow.keys()
-                       else "") or ""
-                if tok:
-                    portal_by_talent[tid] = tok
-    finally:
-        conn2.close()
-    for a in assignments:
-        email = (a["talent_email"] or "").strip() if "talent_email" in a.keys() else ""
-        if not email or email.lower() in seen:
-            continue
-        seen.add(email.lower())
-        name = (a["talent_name"] or "there").strip() if "talent_name" in a.keys() else "there"
-        tid = a["talent_id"] if "talent_id" in a.keys() else None
-        text = f"Hi {name},\n\n{body_text}"
-        tok = portal_by_talent.get(tid)
-        if tok:
-            text += f"\n\nOpen your portal — the feedback and your upload box are here:\n{base}/creator/{tok}"
-        text += "\n\n— Chordential"
-        try:
-            mailer.send_email(email, subject, text, html=mailer.branded_html(base, text))
-        except Exception:  # noqa: BLE001 — best-effort; one creator's failure never stops the rest
-            pass
-
-
-def _notify_operator_review(project_id: int, project, title: str, body: str) -> None:
-    """Push the operator (Jon) when the agency comments / requests changes /
-    approves — the coordination signal that 'one link, no email' would otherwise
-    drop. Best-effort, never blocks the request (mirrors notify_new_gig).
-
-    Operator-direction only. Agency-direction email (notify the reviewer when a new
-    version is uploaded) needs the deferred outbound-send infra that doesn't exist
-    yet — see the TODO below; we do NOT fake it here.
-
-    TODO(delivery-os): agency-direction notifications. When a new version is
-    uploaded or the operator replies, email the reviewer at their captured
-    ``review_comments.email``. Requires a transactional send channel (deferred
-    outbound email infra) — not wired yet, so left unimplemented rather than faked.
-    """
-    url = _delivery_console_url(project_id)
-    try:
-        webpush.send_web_push(title, body=body, url=url)
-    except Exception:  # noqa: BLE001 — push is best-effort, never block the action
-        pass
-    try:
-        signals.send_push(title, body=body, click_url=url)
-    except Exception:  # noqa: BLE001
-        pass
-
-
-def _campaign_label(project) -> str:
-    """A short campaign label for the operator push (client / need)."""
-    try:
-        return (project["need"] or project["client"] or "Campaign").strip()
-    except Exception:  # noqa: BLE001
-        return "Campaign"
 
 
 def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
@@ -6448,188 +6073,6 @@ def review_resolve(
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
-def _ready_to_deliver(delivery: dict, project) -> bool:
-    """The gate to the full download (Option 1 model): the master is approved (Creative Lock),
-    every scoped deliverable is UPLOADED, AND every uploaded derivative is SIGNED OFF by the
-    client. The primary master IS the review version — approving it (the main creative approval)
-    delivers + approves it; the derivatives (instrumental, cutdowns, verticals, stems) are the
-    composer's uploads, each signed off one at a time. Only when all of that is true does the
-    full package assemble and the download unlock — so a client can never download an
-    incomplete or unapproved delivery."""
-    if not production.creative_lock(delivery):            # master approved?
-        return False
-    if not delivery_completeness(project, delivery)["complete"]:   # everything uploaded?
-        return False
-    roll = db.asset_approval_rollup(delivery)             # every derivative signed off?
-    return roll["total"] == 0 or roll["approved"] == roll["total"]
-
-
-def _ensure_final_invoice_issued(conn, project_id: int) -> None:
-    """When the package is finalized, raise the balance (Final) invoice as *Issued* so it is a
-    real outstanding amount. Without this, the download gate treats a paid DEPOSIT as
-    "paid in full" (the balance invoice is created lazily, so nothing shows outstanding) and
-    the files unlock without the balance ever being paid — reported live. Idempotent; needs a
-    stored proposal and a non-zero balance."""
-    prow = db.get_project(conn, project_id)
-    prop = db.proposal_for_project(conn, project_id)
-    if prow is None or prop is None:
-        return
-    inv = next((i for i in db.list_invoices(conn, project_id)
-                if (i["kind"] or "") == "Final"), None)
-    if inv is None:
-        new_id = db.insert_invoice(
-            conn, project_id, prop["id"], _invoice_from_proposal_row(prow, prop, "Final"))
-        inv = db.get_invoice(conn, new_id)
-    if inv is None:
-        return
-    status = (inv["status"] or "").lower()
-    if (inv["amount"] or 0) and status in ("", "draft"):
-        db.update_invoice_status(conn, inv["id"], "Issued")
-
-
-def _maybe_finalize_delivery(conn, project_id: int) -> bool:
-    """Ship the delivery package + mark Delivered ONLY when the creative is approved (Creative
-    Lock) AND every deliverable is uploaded + signed off. This is the SINGLE door to the full
-    download; approving the master version alone never opens it. Returns True if it finalized."""
-    delivery = db.get_delivery(conn, project_id)
-    project = db.get_project(conn, project_id)
-    if project is None or not production.creative_lock(delivery):
-        return False
-    if (delivery.get("state") or "") in ("Delivered", "Released"):
-        _ensure_final_invoice_issued(conn, project_id)   # self-heal older Delivered deals
-        return True
-    if not _ready_to_deliver(delivery, project):
-        return False
-    try:
-        _build_delivery_package(conn, project_id)
-        db.update_delivery(conn, project_id, "state", "Delivered")
-        # The balance is now owed — raise it so the download stays gated behind it, and EMAIL
-        # the client their pay link automatically (reported live: the final invoice just sat
-        # in the operator's queue). Sent once, here, on the delivery transition.
-        _ensure_final_invoice_issued(conn, project_id)
-        _fin = next((i for i in db.list_invoices(conn, project_id)
-                     if (i["kind"] or "") == "Final"), None)
-        if _fin is not None and (_fin["status"] or "").lower() not in ("paid", "settled"):
-            try:
-                _send_invoice_pay_link(conn, _fin["id"])
-            except Exception:  # noqa: BLE001 — the auto-send never blocks delivery
-                pass
-        db.add_project_event(conn, project_id, "delivered", actor_role="operator",
-                             actor_name="ChordOS",
-                             body="All deliverables approved — delivery package assembled.")
-        return True
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
-    """Record the client's approval of the current master version — this is the CREATIVE
-    approval (Creative Lock), NOT final delivery. The full package ships only once every
-    deliverable is also uploaded + signed off (``_maybe_finalize_delivery``), so a client can
-    never download an incomplete package by approving the master alone. Reversible via
-    /review/reopen. Returns the approved version tag."""
-    delivery = db.get_delivery(conn, project_id)
-    project = db.get_project(conn, project_id)
-    approved_n = _current_version_tag(delivery)
-    db.add_review_comment(
-        conn, project_id, version=approved_n, author=name, email=mail,
-        body=f"Approved v{approved_n} — creative locked.", kind="approval", verified=True)
-    if not production.creative_lock(delivery):
-        production.set_creative_lock(conn, db, project_id, version_n=int(approved_n or 0), by=name)
-    versions = versions_list(delivery)
-    if versions:
-        versions[-1] = dict(versions[-1])
-        versions[-1]["label"] = version_label(versions[-1]["n"], final=True)
-        db.update_delivery(conn, project_id, "versions", versions)
-        db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-    # Creative approved — but delivery stays LOCKED until every deliverable is signed off.
-    db.update_delivery(conn, project_id, "state", "Approved")
-    finalized = _maybe_finalize_delivery(conn, project_id)   # ships iff complete + all approved
-    db.add_project_event(conn, project_id, "approval", actor_role="client", actor_name=name,
-                         body=f"Approved v{approved_n} — creative locked.")
-    remaining = "" if finalized else " Delivery unlocks once every deliverable is uploaded and signed off."
-    _notify_operator_review(
-        project_id, project, title=f"{_campaign_label(project)} — creative approved by {name}",
-        body=f"v{approved_n} creative approved.{remaining}")
-    campaign = _campaign_label(project)
-    signals.fire_and_forget(
-        _notify_assigned_creators, project_id, project, subject=f"Creative approved — {campaign}",
-        body_text=(f"Good news — the client approved the creative on {campaign}. Thank you. "
-                   "We'll finish preparing the deliverables for sign-off."))
-    return approved_n
-
-
-def _rehydrate_delivery_media(conn, project_id: int) -> int:
-    """Restore a project's delivery media (asset + version files) from the durable DB blob
-    mirror back to disk when the ephemeral disk was wiped — so a package (re)build actually
-    contains the audio instead of README placeholders. Returns the count restored."""
-    delivery = db.get_delivery(conn, project_id)
-    names = set()
-    for a in (delivery.get("assets") or []):
-        if a.get("filename"):
-            names.add(os.path.basename(a["filename"]))
-    for v in (delivery.get("versions") or []):
-        if v.get("filename"):
-            names.add(os.path.basename(v["filename"]))
-    pv = delivery.get("pending_version") or {}
-    if pv.get("filename"):
-        names.add(os.path.basename(pv["filename"]))
-    restored = 0
-    store = get_object_store(UPLOAD_DIR)
-    for base in names:
-        # ADR-0043: ask the STORE whether the bytes are there. A durable store needs
-        # no rehydration at all — this loop exists to repair a wiped local disk from
-        # the SQLite mirror before zipping, and a bucket does not get wiped.
-        if not base or store.exists(base):
-            continue
-        blob = db.get_media_blob(conn, base)
-        if blob is None:
-            continue
-        if store.put(base, blob[0], blob[1] or ""):
-            restored += 1
-    return restored
-
-
-def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
-    """Delivery automation (Phase 3): assemble the delivery ZIP for a project and
-    store its descriptor + checklist on ``delivery_json``. Returns the descriptor
-    (or None if the project is gone). Deterministic + best-effort: the stdlib ZIP +
-    docs always build; audio conversion is attempted only if ffmpeg is available.
-
-    Durable across ephemeral-disk wipes: rehydrates the source media from the DB mirror
-    before zipping, and mirrors the built ZIP itself into the blob store so the download
-    survives a redeploy.
-
-    Stored shape::
-
-        delivery_json['delivery_zip']       = {filename, url, built_at}
-        delivery_json['delivery_checklist'] = [item, …]   (founder's payoff list)
-    """
-    row = db.get_project(conn, project_id)
-    if row is None:
-        return None
-    _rehydrate_delivery_media(conn, project_id)      # source audio back on disk before zipping
-    assignments = db.list_assignments(conn, project_id)
-    delivery = db.get_delivery(conn, project_id)
-    pkg = build_delivery_zip(row, assignments, delivery, UPLOAD_DIR)
-    # Mirror the built ZIP for durability (the same DB blob store uploads use).
-    try:
-        with open(os.path.join(UPLOAD_DIR, os.path.basename(pkg["filename"])), "rb") as fh:
-            db.save_media_blob(conn, os.path.basename(pkg["filename"]), fh.read(), "application/zip")
-    except (OSError, KeyError):
-        pass
-    db.update_delivery(conn, project_id, "delivery_zip", {
-        "filename": pkg["filename"], "url": pkg["url"], "built_at": pkg["built_at"],
-        # Honest partial labelling: the portal card + ZIP descriptor read "Partial
-        # delivery — N of M deliverables" (not "everything") when incomplete.
-        "partial": pkg.get("partial", False),
-        "descriptor": pkg.get("descriptor", ""),
-        "completeness": pkg.get("completeness", {}),
-    })
-    db.update_delivery(conn, project_id, "delivery_checklist", pkg["checklist"])
-    return pkg
-
-
 @app.post("/project/{project_id}/review/approve")
 def review_approve(
     request: Request, project_id: int, k: str = Form(""),
@@ -7009,30 +6452,6 @@ def review_asset(
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
-# --------------------------------------------------------------------------- #
-# Proposals — deterministic paperwork generated from the estimator
-# --------------------------------------------------------------------------- #
-def _proposal_from_row(row) -> Proposal:
-    """Reconstruct a Proposal object from a stored row (for render/export)."""
-    items = json.loads(row["line_items"]) if row["line_items"] else []
-    lines = []
-    for i in items:
-        line = RoleLine(i["role"], i["hours"], i["rate"], unit=i.get("unit", "hourly"))
-        # Preserve a day/flat line cost that isn't simply hours × rate (e.g. an
-        # assigned talent's day or per-project rate) so the stored doc renders as
-        # generated.
-        stored_cost = i.get("cost")
-        if stored_cost is not None and abs(stored_cost - line.hours * line.rate) > 1e-9:
-            line.cost_override = stored_cost
-        lines.append(line)
-    return Proposal(
-        client="", need="", discipline="", lines=lines,
-        total_price=row["total_price"], deposit_pct=row["deposit_pct"],
-        deposit_amount=row["deposit_amount"], balance_due=row["balance_due"],
-        terms=json.loads(row["terms"]) if row["terms"] else [],
-    )
-
-
 @app.post("/project/{project_id}/proposal")
 def project_generate_proposal(project_id: int):
     """Generate a deterministic proposal for a project from the estimator."""
@@ -7138,17 +6557,6 @@ def proposal_set_status(proposal_id: int, status: str = Form(...)):
     return RedirectResponse("/projects", status_code=303)
 
 
-# --------------------------------------------------------------------------- #
-# Invoices — deterministic; reconcile to the proposal
-# --------------------------------------------------------------------------- #
-def _invoice_from_proposal_row(prow, prop_row, kind: str):
-    """Build an Invoice from the stored proposal (client/need from the project)."""
-    obj = _proposal_from_row(prop_row)
-    obj.client = prow["client"]
-    obj.need = prow["need"]
-    return build_invoice(obj, kind)
-
-
 @app.post("/project/{project_id}/invoice")
 def project_create_invoice(project_id: int, kind: str = Form(...)):
     """Issue a deposit or final invoice from the project's proposal."""
@@ -7195,71 +6603,6 @@ def invoice_checkout(invoice_id: int):
     return RedirectResponse("/projects", status_code=303)
 
 
-def _payment_request_email(kind: str, amount: float, client: str, need: str,
-                           contact_name: str, pay_url: str) -> dict:
-    """A branded 'here's your invoice — pay securely' email for the client."""
-    first = (contact_name or "").strip().split()[0] if contact_name.strip() else ""
-    greeting = f"Hi {first}," if first else "Hi there,"
-    amt = f"${amount:,.0f}" if amount else "your balance"
-    label = (kind or "Payment").strip()
-    is_final = label.lower().startswith("fin")
-    lead = ("Your project is delivered and the final balance is due to release your files."
-            if is_final else
-            "Here's your deposit invoice to get production underway.")
-    tail = ("The moment it's in, your full delivery package unlocks for download."
-            if is_final else "Your deposit reserves the team and starts the work.")
-    body = (
-        f"{greeting}\n\n"
-        f"{lead}\n\n"
-        f"  {label} due:  {amt}\n"
-        f"  Project:      {need or 'your campaign'}\n\n"
-        f"Pay securely here:\n{pay_url}\n\n"
-        f"{tail}\n\n"
-        "— Jon, Chordential")
-    subject = f"{label} due ({amt}) — {need or 'your campaign'}"
-    return {"subject": subject, "body": body}
-
-
-def _send_invoice_pay_link(conn, invoice_id: int) -> str:
-    """Email the CLIENT a secure pay link for one invoice. Issues the invoice if it's still a
-    draft, then sends a branded payment request to the opportunity's contact with a link to
-    their token-gated portal (where the Pay button opens a fresh checkout — a hosted-checkout
-    URL can expire, the portal never does). Returns a status: 'sent' | 'no_email' | 'no_mail'
-    | 'error'. Shared by the operator button AND the automatic send on delivery."""
-    inv = db.get_invoice(conn, invoice_id)
-    if inv is None or not inv["project_id"]:
-        return "error"
-    pid = inv["project_id"]
-    if (inv["status"] or "").lower() in ("", "draft"):
-        ref = get_payment_provider().create_checkout(inv)
-        db.update_invoice_status(conn, invoice_id, "Issued", external_ref=ref)
-        inv = db.get_invoice(conn, invoice_id)
-    prow = db.get_project(conn, pid)
-    opp = db.get_opportunity(conn, prow["opp_id"]) if prow and prow["opp_id"] else None
-    contact_email = (opp["contact_email"] if opp is not None
-                     and "contact_email" in opp.keys() else "") or ""
-    if not contact_email:
-        return "no_email"
-    if not mailer.mail_configured():
-        return "no_mail"
-    base = _public_base()
-    token = db.ensure_project_share_token(conn, pid)
-    pay_url = f"{base}{_client_portal_url(pid, token)}"
-    contact_name = (opp["contact_name"] if opp is not None
-                    and "contact_name" in opp.keys() else "") or ""
-    msg = _payment_request_email(inv["kind"], inv["amount"] or 0,
-                                 (prow["client"] if prow else "") or "",
-                                 (prow["need"] if prow else "") or "", contact_name, pay_url)
-    try:
-        mailer.send_email(contact_email, msg["subject"], msg["body"],
-                          html=mailer.branded_html(base, msg["body"]))
-        db.add_update(conn, pid, f"{inv['kind']} pay link emailed to {contact_email}.",
-                      "invoice")
-        return "sent"
-    except Exception:  # noqa: BLE001
-        return "error"
-
-
 @app.post("/invoice/{invoice_id}/send-pay-link")
 def invoice_send_pay_link(invoice_id: int):
     """Operator action: email the client a secure pay link for this invoice — so the balance
@@ -7275,13 +6618,6 @@ def invoice_send_pay_link(invoice_id: int):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{pid}/proposal?pay={flag}", status_code=303)
-
-
-def _client_portal_url(project_id: int, k: str, extra: str = "") -> str:
-    q = f"?k={k}" if k else ""
-    if extra:
-        q = (q + "&" if q else "?") + extra
-    return f"/project/{project_id}/delivery-portal{q}"
 
 
 @app.post("/project/{project_id}/pay")
@@ -7329,87 +6665,6 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str 
         return RedirectResponse(_back("pay=unavailable"), status_code=303)
     finally:
         conn.close()
-
-
-def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
-                           contact_name: str, workspace_url: str, paid_at: str) -> dict:
-    """A clean, branded receipt for the client when their payment settles."""
-    first = (contact_name or "").strip().split()[0] if contact_name.strip() else ""
-    greeting = f"Hi {first}," if first else "Hi there,"
-    amt = f"${amount:,.0f}" if amount else "your payment"
-    label = (kind or "Payment").strip()
-    date = (paid_at or "")[:10]
-    tail = ("Your deposit is in and we're getting production underway — you'll hear from us "
-            "at your first creative milestone."
-            if label.lower().startswith("dep") else
-            "Your balance is settled and your final files are unlocked in your workspace.")
-    body = (
-        f"{greeting}\n\n"
-        f"Thank you — we've received your {label.lower()} payment. This is your receipt.\n\n"
-        f"  Payment:  {label}\n"
-        f"  Amount:   {amt}\n"
-        f"  Project:  {need or 'your campaign'}\n"
-        + (f"  Date:     {date}\n" if date else "")
-        + f"\n{tail}\n\n"
-        + (f"Everything for your campaign lives in your workspace:\n{workspace_url}\n\n"
-           if workspace_url else "")
-        + "— Jon, Chordential"
-    )
-    subject = f"Receipt — {label} payment received ({amt})"
-    return {"subject": subject, "body": body}
-
-
-def _notify_payment_settled(conn, inv, pid: int) -> None:
-    """Best-effort notifications when a payment settles: a receipt to the client and a phone
-    alert to the operator. Never raises — a notification failure must not undo the payment."""
-    try:
-        project = db.get_project(conn, pid)
-        opp = (db.get_opportunity(conn, project["opp_id"])
-               if project is not None and project["opp_id"] else None)
-        kind = inv["kind"] or "Payment"
-        amount = inv["amount"] or 0
-        client = (project["client"] if project is not None else "") or (
-            opp["client"] if opp is not None else "a client")
-        need = project["need"] if project is not None else ""
-        # Operator phone push — the immediate "you got paid" alert.
-        signals.fire_and_forget(signals.notify_payment_received, client, kind,
-                                f"${amount:,.0f}" if amount else "")
-        # Client receipt email.
-        contact_email = (opp["contact_email"] if opp is not None
-                         and "contact_email" in opp.keys() else "") or ""
-        if contact_email and mailer.mail_configured():
-            base = _public_base()
-            token = db.ensure_share_token(conn, opp["id"]) if opp is not None else ""
-            contact_name = (opp["contact_name"] if opp is not None
-                            and "contact_name" in opp.keys() else "") or ""
-            receipt = _payment_receipt_email(
-                kind, amount, client, need, contact_name,
-                f"{base}/workspace/{token}" if token else "", inv["paid_at"] or "")
-            mailer.send_email(contact_email, receipt["subject"], receipt["body"],
-                              html=mailer.branded_html(base, receipt["body"]))
-    except Exception:  # noqa: BLE001 — notifications are best-effort
-        pass
-
-
-def _apply_invoice_payment(conn, invoice_id: int, external_ref: str = "") -> bool:
-    """Mark an invoice Paid and apply its side effects — unlock the client's downloads
-    (Final) + queue crew payouts + notify (client receipt, operator alert) — exactly once.
-    Idempotent: a no-op if already paid, so the Stripe success-return and the webhook can
-    BOTH fire without double-applying."""
-    inv = db.get_invoice(conn, invoice_id)
-    if inv is None or not inv["project_id"]:
-        return False
-    if (inv["status"] or "").lower() in ("paid", "settled"):
-        return False
-    pid = inv["project_id"]
-    db.update_invoice_status(conn, inv["id"], "Paid", external_ref=external_ref or None)
-    if (inv["kind"] or "") == "Final":
-        db.update_delivery(conn, pid, "download_unlocked", True)
-    db.ensure_project_payouts(conn, pid)
-    db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
-    # Re-read so the receipt carries the stamped paid_at.
-    _notify_payment_settled(conn, db.get_invoice(conn, inv["id"]) or inv, pid)
-    return True
 
 
 @app.get("/pay/return", response_class=HTMLResponse)

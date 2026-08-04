@@ -120,14 +120,22 @@ def test_the_s3_backend_never_raises_without_boto3(tmp_path, monkeypatch):
 def test_no_route_writes_to_the_upload_directory_itself():
     """The claim `_persist_upload` used to make in its docstring and did not keep.
     Reads and the packaging step may touch the directory; opening it for WRITING is
-    what put four of five files on one disk."""
+    what put four of five files on one disk.
+
+    Scanned across the whole web package, not just `app.py`: ADR-0044 moved the write
+    door into `uploads.py` and the packaging step into `delivery_ops.py`, so a scan of
+    one file would now pass by looking at the wrong place. Both spellings of the
+    directory count — the frozen `UPLOAD_DIR` and the per-call `upload_dir()`.
+    """
     import chordential_oia.web.app as app_mod
-    src = Path(app_mod.__file__).read_text(encoding="utf-8")
-    offenders = [
-        line.strip()
-        for line in src.splitlines()
-        if "open(os.path.join(UPLOAD_DIR" in line and '"wb"' in line
-    ]
+    web = Path(app_mod.__file__).parent
+    offenders = []
+    for path in sorted(web.glob("*.py")):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if '"wb"' not in line:
+                continue
+            if "open(os.path.join(UPLOAD_DIR" in line or "open(os.path.join(upload_dir()" in line:
+                offenders.append(f"{path.name}:{n}: {line.strip()}")
     assert offenders == [], (
         "these write client media straight to disk instead of through the store:\n  "
         + "\n  ".join(offenders))
@@ -204,7 +212,10 @@ def test_the_mirror_is_skipped_when_the_store_is_durable(app_mod, monkeypatch, t
         def url(self, k, *, expires=3600): return f"https://bucket.example/{k}?sig=x"
 
     fake = FakeStore()
-    monkeypatch.setattr(app_mod, "get_object_store", lambda *a, **k: fake)
+    # Patched on `web.uploads`, not on `app` — that is where the write door lives since
+    # ADR-0044 moved it, and a function resolves its globals in its own module.
+    from chordential_oia.web import uploads as uploads_mod
+    monkeypatch.setattr(uploads_mod, "get_object_store", lambda *a, **k: fake)
 
     conn = db.connect()
     try:

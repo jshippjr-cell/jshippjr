@@ -18,7 +18,10 @@ domain engine, it does not belong in this module.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+from typing import Optional
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -75,4 +78,33 @@ def public_base() -> str:
     ).rstrip("/")
 
 
-__all__ = ["templates", "render", "public_base", "safe_local"]
+# --------------------------------------------------------------------------- #
+# Who is asking
+# --------------------------------------------------------------------------- #
+# The admin gate itself (the middleware and the public-path allowlist) stays in
+# `app.py`, because it is a property of the application object. What lives here is
+# only the question a *route* asks — "is this request authenticated?" — which
+# /admin, /project and the raw-HTTP handlers all ask, and which therefore blocked
+# those groups from moving. No database, no domain: an env var and a cookie.
+ADMIN_COOKIE = "cdl_admin"
+
+
+def admin_secret() -> Optional[str]:
+    return os.environ.get("CHORDENTIAL_ADMIN_TOKEN") or None
+
+
+def admin_cookie_value(token: str) -> str:
+    # Store proof-of-knowledge, never the raw token.
+    return hashlib.sha256(f"cdl|{token}".encode()).hexdigest()
+
+
+def admin_authed(request: Request) -> bool:
+    token = admin_secret()
+    if not token:
+        return True  # gate disabled
+    cookie = request.cookies.get(ADMIN_COOKIE) or ""
+    return bool(cookie) and hmac.compare_digest(cookie, admin_cookie_value(token))
+
+
+__all__ = ["templates", "render", "public_base", "safe_local",
+           "ADMIN_COOKIE", "admin_secret", "admin_cookie_value", "admin_authed"]
