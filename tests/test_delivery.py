@@ -629,7 +629,10 @@ def test_timestamped_comment_renders_on_portal(client):
                 data={"k": token, "author": "Dana", "email": "dana@agency.com",
                       "t": "12.4", "body": "Can we remove percussion?"})
     page = client.get(f"/project/{pid}/delivery-portal", params={"k": token}).text
-    assert "Review &amp; approve" in page          # the Frame.io-for-music section
+    # ADR-0036: this fixture has no track yet, so the section is "The listening room"
+    # — a client may always leave a note, but there is nothing to approve and the
+    # heading no longer claims otherwise. The comment itself still renders.
+    assert "The listening room" in page
     assert "Can we remove percussion?" in page     # the comment body
     assert "0:12" in page                          # the timecode (12.4s → 0:12)
     assert 'name="k"' in page                      # forms carry the token

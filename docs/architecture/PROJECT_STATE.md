@@ -190,6 +190,20 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   carries the value field. This supersedes the `/lanes` half of
   `docs/dashboard-consolidation-council.md`, whose own acceptance test ("no two tabs may
   show the same cards") is what finally decided it.
+- **The portal answers the court question** (ADR-0036, 2026-08-04). ADR-0019 ratified
+  that the client-facing production experience must always answer whose court the ball
+  is in, and built `production.court_state()` to compute it — the portal rendered **none
+  of it**. Measured: **Lumen Health** (court=`studio`, nothing owed) and **Vance
+  Athletic** (court=`client`, v2 waiting) produced the *identical* page — card order
+  `[picture, review, brief]`, the same "Review & approve" CTA — differing only in a hero
+  chip reading our internal state machine ("In production · v1 Concept" vs "In review ·
+  v2 Direction-lock"). Worse, Lumen has **zero versions**: `v1 Concept` is
+  `revision_status`'s *default label*, so the portal named a version never delivered and
+  offered a Request-changes form, which opens a contractual revision round (ADR-0019's
+  `round_log`) against work that doesn't exist. Now: the hero leads with the engine's
+  badge + sentence, cards are placed by court (client → review leads; studio → send us
+  the cut; delivered → package), and with no track the section is "The listening room"
+  with no version label, no round counter, and no decision row.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

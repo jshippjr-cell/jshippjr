@@ -28,6 +28,14 @@
   .hero .tag{color:var(--sand);font-size:15px;max-width:90%;margin:0}
   .status{display:inline-block;margin-top:22px;border:1px solid var(--orange);color:var(--orange-text);
     font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;padding:7px 14px;border-radius:4px}
+  /* The court answer (ADR-0036). Ember only when the ball is actually in the
+     client's court — a page that shouts at you while we're composing is noise. */
+  .court{margin-top:22px}
+  .court-badge{display:inline-block;border:1px solid rgba(255,255,255,.45);color:#fff;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    padding:7px 14px;border-radius:4px}
+  .court-client .court-badge{border-color:var(--orange);background:var(--orange);color:#fff}
+  .court-line{margin:12px auto 0;max-width:52ch;font-size:15px;line-height:1.55;color:rgba(255,255,255,.92)}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
   h2{font-family:var(--serif);font-size:22px;color:var(--wine);margin:0 0 4px;font-weight:600}
   .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
@@ -188,7 +196,14 @@
     <h1>{{ cert.campaign }}</h1>
     <p class="tag">Original music — composed, produced, and cleared for {{ cert.client }}.</p>
     {% if brief and brief.objective %}<p class="tag" style="margin-top:8px">{{ brief.objective }}</p>{% endif %}
-    <span class="status">{{ state }}{% if version_state %} · {{ version_state }}{% endif %}</span>
+    {# ADR-0036: whose court the ball is in, in the client's words — the question the
+       portal exists to answer. This slot used to read "In production · v1 Concept":
+       our internal state machine plus a DEFAULT version label, which on a project with
+       no versions at all named a version that had never been delivered. #}
+    <div class="court court-{{ court.court }}">
+      <span class="court-badge">{{ court.badge }}</span>
+      <p class="court-line">{{ court.line }}</p>
+    </div>
   </div>
 </section>
 
@@ -252,7 +267,13 @@
   </div>
   {% endif %}
 
-  <!-- THE PICTURE (Phase 2) — the client's cut dresses the composer's room -->
+  {# ── THE PICTURE (Phase 2) — the client's cut dresses the composer's room.
+     ADR-0036: defined as a macro so it can be placed by COURT-STATE rather than by
+     a fixed template order. When a version is waiting on the client, reacting to it
+     is the ask and comes first; while we're composing, sending us the cut is the
+     most useful thing they can do, so it leads. Same markup either way — the DOM
+     order is the reading order, no CSS reordering. ── #}
+  {% macro picture_card() %}
   {% if state not in ("Released", "Delivered") %}
   <div class="card" id="picture">
     <h2>Your picture</h2>
@@ -335,14 +356,31 @@
   })();
   </script>
   {% endif %}
+  {% endmacro %}
+
+  {# Studio's court (or delivered): sending us the cut is the useful thing — it leads. #}
+  {% if court.court != 'client' %}{{ picture_card() }}{% endif %}
 
   <!-- REVIEW & APPROVE (Frame.io for music) -->
   {% if state not in ("Released", "Delivered") %}
   <div class="card" id="review">
-    <h2>Review &amp; approve
+    {# ADR-0036: the round counter and the version label describe a version that has
+       been DELIVERED. Before there is anything to hear, `version_state` is
+       `revision_status`'s DEFAULT ("v1 Concept") — showing it named a version that had
+       never been delivered. Leaving a note is still welcome; reacting to a phantom
+       version is not. Gated on `review_track` rather than the version ladder because a
+       Phase-0 project can carry commentable audio with no version logged. #}
+    <h2>{{ 'Review &amp; approve' | safe if review_track else 'The listening room' }}
+      {% if review_track %}
       <span class="round">Round {{ revisions.used + 1 if revisions.remaining > 0 else revisions.scoped }} of {{ revisions.scoped }}</span>
+      {% endif %}
     </h2>
+    {% if review_track %}
     <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
+    {% else %}
+    <p class="sub">Your first version will appear here to stream and comment on, bar by bar.
+      Leave a note any time — we read them in the room.</p>
+    {% endif %}
 
     {# Two-phase model (Option 1): first you approve the MASTER (the piece in the player)
        — that's the creative decision. THEN Chordential produces the derivatives and you
@@ -566,6 +604,12 @@
     </div>
     {% endif %}
 
+    {# ADR-0036: the decision row — Approve and Request changes — only exists once
+       there is something to decide ON. "Request changes" writes to the round ledger,
+       which has contractual meaning (ADR-0019); offering it before a first version
+       lets a client spend a revision round against work that doesn't exist. Notes
+       above stay open — a client may always talk to the room. #}
+    {% if review_track %}
     <div class="rc-decide">
       {# Verified-identity approval: APPROVE locks FINAL + auto-builds the delivery
          ZIP, so it is gated to a VERIFIED reviewer link (?r=). A share-link guest
@@ -612,8 +656,12 @@
         <button type="submit" class="rc-changes">Request changes</button>
       </form>
     </div>
+    {% endif %}
   </div>
   {% endif %}
+
+  {# Client's court: the version waiting on them led the page; the cut comes after. #}
+  {% if court.court == 'client' %}{{ picture_card() }}{% endif %}
 
   <!-- THE BRIEF (brief-as-contract) — the agreed scope, the buyer's document -->
   {% if brief and (brief.objective or brief.references or brief.tone or brief.deadline or brief_items) %}

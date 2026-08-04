@@ -144,20 +144,22 @@ def court_state(project, delivery: dict) -> dict:
 
     if state in ("Released",):
         return {"court": "scheduled", "since": delivery.get("released_at") or since,
-                "what": "released",
+                "what": "released", "badge": "DELIVERED",
                 "line": "Your campaign is delivered and released — nothing further to manage."}
     if state in ("Delivered", "Approved"):
         return {"court": "scheduled", "since": since, "what": "delivered",
+                "badge": "DELIVERED",
                 "line": "Your delivery package is complete. Nothing is needed from you."}
     if delivery.get("pending_version"):
         pv = delivery["pending_version"] or {}
         return {"court": "studio", "since": pv.get("at") or since, "what": "reviewing",
+                "badge": "WITH THE STUDIO",
                 "line": "A new version is in our studio review — it reaches you the moment "
                         "it's ready."}
     if state == "In review" and versions:
         label = cur.get("label") or f"Version {cur.get('n', '')}"
         return {"court": "client", "since": since, "what": "version_ready",
-                "version": cur,
+                "version": cur, "badge": "YOUR MOVE",
                 "line": f"{label} is ready for you — listen when you have a moment and tell "
                         f"us what you think."}
     # In production (or fresh): the studio owes the next version.
@@ -167,6 +169,7 @@ def court_state(project, delivery: dict) -> dict:
         rl = round_log(delivery)
         since2 = rl[-1]["at"] if rl else since
     return {"court": "studio", "since": since2 or since, "what": what,
+            "badge": "WITH THE STUDIO",
             "line": ("We're composing — nothing is needed from you; you'll hear from us "
                      "when the first version is ready."
                      if what == "composing" else

@@ -6138,6 +6138,10 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         "invoice_balance": balance,
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
+        # ADR-0019/0036: the client-facing production experience answers the court
+        # question FIRST. Computed, never stored — one engine, and the portal and the
+        # workspace render the same sentence.
+        "court": production.court_state(row, delivery),
         "cert": cert,
         # The honest Content-ID sentence — the ONE source of truth (delivery.py),
         # so the browser doc and the ZIP doc can't drift on legally-material copy.

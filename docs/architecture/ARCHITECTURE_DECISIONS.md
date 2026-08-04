@@ -852,6 +852,44 @@ authority (ADR-0029), and `/inbox` is load-bearing (the topbar search posts to i
 `/lanes` had no inbound link but the nav and two KPI cells. The council's own acceptance
 test — *"no two tabs may show the same cards"* — is what this ADR finally enforces.
 
+### ADR-0036 — The client portal answers the court question first, and orders itself by it
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (portal
+ordered by court-state) · **Implements** ADR-0019's unmet consequence ·
+`web/production.py`, `delivery_portal.html`, `web/app.py`
+**Decision.** The delivery portal renders `production.court_state()` — the badge, the
+client-voice sentence — as the **first thing in the hero**, and lays its cards out by the
+answer: with the client, the review leads; with the studio, sending us the cut leads;
+delivered, the package leads. The engine gains a `badge` (`YOUR MOVE` / `WITH THE STUDIO`
+/ `DELIVERED`) so the wording has one home and the portal and the workspace cannot drift.
+Reordering is done by placing a Jinja macro, not by CSS `order` — the DOM order stays the
+reading order. And **no card may invite a decision about a version that does not exist**:
+with no track to hear, the section is "The listening room", it carries no version label,
+no round counter, and no Approve / Request-changes row.
+**Why.** ADR-0019 ratified that "the client-facing production experience must always
+answer the court question first" and built `court_state()` to compute it. The portal
+rendered none of it. Measured on the seeded book, **Lumen Health** (court=`studio`,
+nothing owed) and **Vance Athletic** (court=`client`, v2 waiting) produced the *identical*
+page — card order `[picture, review, brief]`, the same "Review & approve" call to action —
+differing only in a hero chip reading our internal state machine: *"In production · v1
+Concept"* against *"In review · v2 Direction-lock"*. Neither answers "what do I need to
+do?", and the first is worse than unhelpful: **Lumen has zero versions**, and `v1 Concept`
+is `revision_status`'s *default label*, not a fact. The portal named a version that had
+never been delivered, told the client to "leave time-stamped notes, then approve or
+request changes", and offered a Request-changes form — which writes to the `round_log`,
+opening a contractual revision round against work that does not exist. That is an
+honesty-rule violation on the surface the client actually reads.
+**Consequences.** `tests/test_portal_court_state.py` fails if a portal omits the badge or
+the engine's sentence, if two court states render the same page, if the review does not
+lead when it is the client's move, if a track-less project names a version or shows a
+round counter, or if Approve / Request-changes is offered with nothing to decide on.
+Never render `version_state` as though it described a delivered version — it is a default
+until one exists. The gate is **`review_track`, not the version ladder**: a Phase-0
+project can carry commentable audio with no version logged (that fallback is deliberate
+in `app.py`), and gating on the ladder wrongly silenced those. Scope discipline worth
+keeping: what was removed is the *decision* row and the phantom label, not the client's
+ability to talk to the room — the timecoded comment form was already track-gated before
+this change, for the good reason that a note needs a timeline to land on.
+
 ---
 
 ## Adding a new ADR
