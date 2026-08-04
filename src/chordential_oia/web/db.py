@@ -1526,7 +1526,13 @@ def list_opportunities(
     if buyer_type:
         clauses.append("buyer_type = ?")
         params.append(buyer_type)
-    if status:
+    if status == "open":
+        # "In flight" — the SAME states the open-pipeline number counts (ADR-0030),
+        # so the dashboard KPI and the list it links to cannot disagree. The KPI used
+        # to link to the kanban, which showed every deal including Won and Closed.
+        clauses.append("status IN (%s)" % ",".join("?" for _ in OPEN_PIPELINE_STATES))
+        params.extend(OPEN_PIPELINE_STATES)
+    elif status:
         clauses.append("status = ?")
         params.append(status)
     if min_alignment is not None:

@@ -112,7 +112,12 @@
     {% endif %}
   </ol>
   <div class="stepper-acts">
-    {% if stepper_next %}
+    {% if stepper_next == 'Won' %}
+    {# Closing a deal goes through the win/loss form so the VALUE is captured — the
+       rule documented at app.py's _NEXT_STATUS. A blind POST here recorded Won with
+       outcome_value NULL, which the won-value sum then counts as $0. #}
+    <a class="btn ghost tiny" href="#winloss">→ Mark {{ stage_label('Won') }}</a>
+    {% elif stepper_next %}
     <form method="post" action="/opportunity/{{ row['id'] }}/status" class="inline">
       <input type="hidden" name="status" value="{{ stepper_next }}">
       <button class="btn ghost tiny" type="submit">→ Mark {{ stage_label(stepper_next) }}</button>
@@ -461,7 +466,7 @@
     <p class="summary-line">{{ qual.fit_summary }}</p>
   </section>
 
-  <section class="card">
+  <section class="card" id="winloss">
     <div class="card-head"><h2>Win / loss tracking</h2></div>
     <div class="status-now">Current status: {{ status_pill(row['status']) }}
       {% if row['outcome_value'] %}<span class="muted">· {{ row['outcome_value']|money }}</span>{% endif %}</div>

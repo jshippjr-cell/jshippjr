@@ -5,7 +5,9 @@
 {% block content %}
 
 <div class="kpi-strip" data-arrive>
-  <a class="kpi-cell" href="/lanes">
+  {# ADR-0035: lands on exactly the deals this KPI counts. It used to open the
+     kanban, which showed every deal — Won and Closed included. #}
+  <a class="kpi-cell" href="/inbox?status=open">
     <div class="kpi-cell-val">{{ metrics.pursuing }}</div>
     <div class="kpi-cell-lbl">in flight · {{ metrics.pipeline_value|money }}</div>
   </a>

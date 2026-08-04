@@ -162,13 +162,10 @@ _NEXT_STATUS = {"New": "Pursuing", "Pursuing": "Submitted"}
 # win/loss form" behaviour is undisturbed. New → Reaching out → Proposal out → Won.
 _STEPPER_NEXT = {"New": "Pursuing", "Pursuing": "Submitted", "Submitted": "Won"}
 
-# Status kanban (Pipeline) — the human pipeline as columns, with a one-click
-# forward advance. Won is terminal; the Submitted ("Proposal out") column offers
-# the win/loss decision directly. Lost + Passed collapse into one "Closed" column
-# (ruling #2) — friendly labels are applied at the view layer via stage_label.
+# The linear stage vocabulary, rendered as the detail page's stepper rail and used
+# to order the pipeline. (It named the /lanes kanban's columns too, until ADR-0035
+# deleted that board.) Friendly labels are applied at the view layer via stage_label.
 _KANBAN_STAGES = ["New", "Pursuing", "Submitted", "Won"]
-# Statuses folded into the single trailing "Closed" archive column.
-_CLOSED_STAGES = ["Lost", "Passed"]
 
 
 def _safe_local(path: str, fallback: str) -> str:
@@ -2032,31 +2029,11 @@ def inbox(
     )
 
 
-# --------------------------------------------------------------------------- #
-# Lanes (Pursue / Review / Pass kanban)
-# --------------------------------------------------------------------------- #
-@app.get("/lanes", response_class=HTMLResponse)
-def lanes(request: Request):
-    """The human pipeline as a status kanban (New → Pursuing → Submitted →
-    Won/Lost), each card advanceable one stage with a click. Matches the
-    Dashboard's pipeline model — same statuses, here as a working board."""
-    conn = db.connect()
-    try:
-        columns = [
-            {"status": s, "rows": db.list_opportunities(conn, status=s, order_by="alignment")}
-            for s in _KANBAN_STAGES
-        ]
-        # Lost + Passed collapse into one "Closed" archive column (ruling #2).
-        closed_rows = []
-        for s in _CLOSED_STAGES:
-            closed_rows += db.list_opportunities(conn, status=s, order_by="created")
-        columns.append({"status": "Lost", "rows": closed_rows})
-    finally:
-        conn.close()
-    return render(
-        request, "lanes.html", nav="lanes", columns=columns,
-        advance=_NEXT_STATUS,
-    )
+# The /lanes kanban was deleted (ADR-0035). It rendered the SAME rows as /inbox —
+# measured identical on the seeded book — and its one unique control, a "Won"
+# button, POSTed status=Won with no outcome_value, booking a won deal at $0 and
+# contradicting the rule documented above at _NEXT_STATUS. /inbox is the deal list
+# (search + six filters + the same advance); the dashboard is the daily read.
 
 
 # --------------------------------------------------------------------------- #

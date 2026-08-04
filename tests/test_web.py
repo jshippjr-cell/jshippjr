@@ -46,25 +46,16 @@ def test_inbox_and_search(client):
     assert client.get("/inbox", params={"q": "campaign"}).status_code == 200
 
 
-def test_lanes_render_status_kanban(client):
-    r = client.get("/lanes")
-    assert r.status_code == 200
-    assert "kanban" in r.text
-    # Columns are the human pipeline stages (relabeled at the view layer), with
-    # Lost + Passed collapsed into one "Closed" archive column.
-    for stage in ("New", "Reaching out", "Proposal out", "Won", "Closed"):
-        assert stage in r.text
-
-
-def test_lanes_card_advances_status(client):
-    # Put opp 3 in New, then advance it from the board; it returns to /lanes.
+def test_the_deal_list_advances_status(client):
+    """ADR-0035 retired the /lanes kanban; /inbox is the deal list and carries the
+    same one-click advance. Put opp 3 in New, advance it, and land back on the list."""
     client.post("/opportunity/3/status", data={"status": "New"}, follow_redirects=True)
     r = client.post(
         "/opportunity/3/status",
-        data={"status": "Pursuing", "return_to": "/lanes"},
+        data={"status": "Pursuing", "return_to": "/inbox"},
         follow_redirects=False,
     )
-    assert r.headers["location"] == "/lanes"
+    assert r.headers["location"] == "/inbox"
     assert client.get("/opportunity/3").text  # still renders
     # The opportunity now reports Pursuing (relabeled "Reaching out"); the next
     # suggested step is the relabeled "Proposal out".
@@ -771,16 +762,15 @@ def test_today_home_renders_without_triage(client):
     assert "all caught up" in r.text
 
 
-def test_lanes_collapses_closed_and_relabels(client):
-    r = client.get("/lanes")
+def test_the_deal_list_relabels_stages(client):
+    """The friendly stage vocabulary used to be asserted on the kanban's column
+    heads. That board is gone (ADR-0035); the labels still have to reach the
+    operator, and /inbox's status filter is where they now show."""
+    r = client.get("/inbox")
     assert r.status_code == 200
-    # Friendly relabels appear as column headers.
     assert "Reaching out" in r.text          # was "Pursuing"
     assert "Proposal out" in r.text          # was "Submitted"
-    # Lost + Passed collapse into a single "Closed" column; the old raw labels
-    # are gone from the board's column heads.
-    assert "Closed" in r.text
-    assert r.text.count("kcol-head") == 5    # New, Reaching out, Proposal out, Won, Closed
+    assert "Closed" in r.text                # Lost + Passed collapse into one label
 
 
 def test_stage_label_maps_view_layer():

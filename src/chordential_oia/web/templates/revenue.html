@@ -44,7 +44,7 @@
   <div class="funnel-row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:stretch">
     {% set f = summary.funnel %}
     {% for step in [
-      ('Qualified opps', f.qualified, '/lanes'),
+      ('Qualified opps', f.qualified, '/inbox?action=Pursue'),
       ('Proposals sent', f.proposals_sent, '/projects'),
       ('Deposits collected', f.deposits_collected, '/revenue'),
       ('Delivered', f.delivered, '/projects'),

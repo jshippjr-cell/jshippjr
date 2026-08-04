@@ -175,6 +175,21 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   showed `checklist`, `brief.txt` showed `response_outline` + `next_steps` — so one
   brief gave two different instruction sets, with the bad quote line in all three.
   `checklist` is the only list now.
+- **Console nav diet** (ADR-0035, 2026-08-04). The sidebar carried **21** links, five of
+  which were not destinations. `/lanes` rendered the **identical 18 opportunities** as
+  `/inbox` — same table, same one-click advance — and its one unique control, a "Won"
+  button, POSTed `status=Won` with no `outcome_value`, booking a won deal at **$0** and
+  contradicting the rule documented six lines above `_NEXT_STATUS` in the same file
+  ($13,325 vs $25,325 on the same two deals). The four "queue" quick-links were saved
+  searches over pages already in the nav — `action` offers Pursue/Review and `status`
+  offers Won in `/inbox`'s own dropdowns, and `#followups` is an anchor on the dashboard.
+  Route + template deleted; 21 → **16** links. The "in flight" KPI now links to
+  `/inbox?status=open`, which reuses `OPEN_PIPELINE_STATES` (ADR-0030) so the number and
+  the list agree — it used to open a board showing Won and Closed deals too. The detail
+  stepper's identical blind-Won path is closed: it hands off to the win/loss card, which
+  carries the value field. This supersedes the `/lanes` half of
+  `docs/dashboard-consolidation-council.md`, whose own acceptance test ("no two tabs may
+  show the same cards") is what finally decided it.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

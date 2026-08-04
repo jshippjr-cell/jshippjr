@@ -813,6 +813,45 @@ two different instruction sets depending on how it was opened — and the wrong 
 sat in all three, which is how it survived. `checklist` is the single list; `render_text`
 prints it.
 
+### ADR-0035 — A nav slot is for a destination, not a saved search
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (console nav
+diet) · `web/templates/base.html`, `web/app.py`, `web/db.py`, `detail.html`
+· **Supersedes** the `/lanes`-related parts of `docs/dashboard-consolidation-council.md`
+**Decision.** The console sidebar carries **destinations only** — a page that answers a
+question no other nav page answers. Two classes of link are removed and must not return:
+a second rendering of a table another nav entry already lists, and a pre-filtered URL or
+in-page anchor into a page already in the nav. Concretely: **`/lanes` is deleted** (route
++ template), and the four "queue" quick-links (`/inbox?action=Pursue`,
+`/inbox?action=Review`, `/dashboard#followups`, `/inbox?status=Won`) are removed. 21
+links → 16.
+**Why.** Measured on the seeded book, `/lanes` and `/inbox` rendered the **identical**
+18 opportunities — the same table, the same one-click advance, different clothes. Its
+only unique control was a "Won" button that POSTed `status=Won` with **no**
+`outcome_value`, booking a won deal at **$0** in every revenue read and contradicting the
+rule documented six lines above `_NEXT_STATUS` in the same file: *"Won is intentionally
+omitted — closing a deal goes through the win/loss form so the value is captured."*
+Closing two deals through the board summed to $13,325; the same two through the form,
+$25,325. The four quick-links were saved searches: `action` offers Pursue/Review and
+`status` offers Won in `/inbox`'s own dropdowns, and `#followups` is an anchor on the
+dashboard, which is the first nav item. None of them was a place; all four cost a
+permanent slot.
+**Consequences.** `tests/test_console_nav.py` fails if a nav link is a filter over
+another nav page, if two nav entries share a path, if the nav exceeds 16 links, or if any
+template can POST `status=Won` without an `outcome_value` field in the same form. The
+dashboard's "in flight" KPI now links to **`/inbox?status=open`**, a filter that reuses
+`OPEN_PIPELINE_STATES` (ADR-0030) rather than restating which stages count — so the
+number and the list beneath it cannot disagree, as they did when it opened a board
+showing Won and Closed deals too. The detail page's stepper hands a win to the win/loss
+card (`#winloss`) instead of recording it blind; that was the second surface with the
+same hole, and it is closed here. The friendly stage vocabulary (`stage_label`) outlived
+the board and is asserted on `/inbox`.
+**Note on the superseded council.** `docs/dashboard-consolidation-council.md` reached the
+opposite split — keep Pipeline, demote Inbox — on the same premise ("three tabs are three
+renderings of one table"). Two things changed since: `/queue` became the "waiting on you"
+authority (ADR-0029), and `/inbox` is load-bearing (the topbar search posts to it), while
+`/lanes` had no inbound link but the nav and two KPI cells. The council's own acceptance
+test — *"no two tabs may show the same cards"* — is what this ADR finally enforces.
+
 ---
 
 ## Adding a new ADR

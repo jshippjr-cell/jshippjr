@@ -71,7 +71,6 @@
       <a href="/queue" class="{{ 'active' if nav=='queue' }}"><span class="ico">☰</span> Queue</a>
       <a href="/inbox" class="{{ 'active' if nav=='inbox' }}"><span class="ico">▤</span> Opportunities</a>
       <a href="/revenue" class="{{ 'active' if nav=='revenue' }}"><span class="ico">＄</span> Revenue</a>
-      <a href="/lanes" class="{{ 'active' if nav=='lanes' }}"><span class="ico">▥</span> Pipeline</a>
       <a href="/buyers" class="{{ 'active' if nav=='buyers' }}"><span class="ico">◈</span> Buyer Graph</a>
     </nav>
     <div class="nav-section">Front-of-House</div>
@@ -93,13 +92,14 @@
       <a href="/projects" class="{{ 'active' if nav=='projects' }}"><span class="ico">▣</span> Projects</a>
       <a href="/payouts" class="{{ 'active' if nav=='payouts' }}"><span class="ico">⛁</span> Payouts</a>
     </nav>
+    {# ADR-0035: the four "queue" links that used to sit here were pre-filtered
+       /inbox URLs (action=Pursue / action=Review / status=Won) and a #followups
+       anchor on the dashboard — every one of them reachable from a page already in
+       this nav, via its own filter dropdown. A permanent nav slot is the scarcest
+       thing on the screen; a saved search does not earn one. #}
     <div class="nav-section">Intelligence</div>
     <nav class="nav">
       <a href="/simulator" class="{{ 'active' if nav=='simulator' }}"><span class="ico">🎙</span> Call simulator</a>
-      <a href="/inbox?action=Pursue"><span class="dot pursue"></span> Pursue queue</a>
-      <a href="/inbox?action=Review"><span class="dot review"></span> Review queue</a>
-      <a href="/dashboard#followups"><span class="dot review"></span> Follow-ups due</a>
-      <a href="/inbox?status=Won"><span class="dot won"></span> Won deals</a>
     </nav>
     <div class="sidebar-foot">
       <span>Music procurement intelligence</span>
