@@ -345,6 +345,27 @@
     <b class="muted">Email notifications: off</b> — copy links manually (set the SMTP env vars to turn this on).
     {% endif %}
   </p>
+
+  {# ADR-0039: the copy above tells the operator to "treat it as forwardable" — this
+     is the remedy that used to be missing. The share token is the ONLY credential on
+     the portal, and a leaked one could never be cut. Rotating breaks the client's
+     current link, so it confirms first and is always an operator press. #}
+  <div class="rotate-link" style="margin:0 0 14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+    <form method="post" action="/project/{{ project['id'] }}/delivery/rotate-link"
+          class="inline" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"
+          data-confirm="Rotate the client link?&#10;&#10;The link you have already sent will STOP WORKING immediately — anyone using it, including your client, will need the new one. Personal reviewer links are unaffected.&#10;&#10;Do this if the link may have leaked.">
+      <button class="btn tiny" type="submit">⟳ Rotate the client link</button>
+      <span class="muted small">
+        {% if project['share_token_rotated_at'] %}
+          Last rotated {{ project['share_token_rotated_at'][:10] }}.
+        {% else %}
+          Never rotated — this is the original link.
+        {% endif %}
+        Cuts off anyone holding the old URL; reviewers' personal links keep working.
+      </span>
+    </form>
+  </div>
+
   {% if reviewers %}
   <table class="table compact">
     <thead><tr><th>Reviewer</th><th>Role</th><th>Personal review link</th><th></th></tr></thead>

@@ -227,6 +227,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   indeterminate crawl. `data-think` still wins where the wait is the server thinking (the
   AI intake). Verified in Chromium on a throttled 24 MB upload, plus the abort path and
   the JS-disabled fallback.
+- **A client link can be cut** (ADR-0039, 2026-08-04). The share token is the **only**
+  credential on the delivery portal — a bare `?k=` opens the unreleased master, the
+  client's brief and scope, and the Request-changes form, which writes the round ledger
+  and so **spends a contractual revision round**; without it the portal 404s. There was
+  no rotate, revoke or expiry anywhere in the codebase, so a forwarded email or an
+  exported Slack channel was permanent access, while the console's own copy told the
+  operator to "treat it as forwardable". `db.rotate_share_token()` now mints a fresh
+  token and rotates **both** records for a deal (the opportunity's and the project's —
+  they can diverge, so rotating one leaves the same work open under the other), stamps
+  `share_token_rotated_at`, and is driven by one confirmed operator press logged to the
+  project history. Reviewer `?r=` links keep working — revoking one person and cutting a
+  leaked link are different acts. Never automatic.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

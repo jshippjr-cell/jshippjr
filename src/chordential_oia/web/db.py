@@ -339,6 +339,8 @@ _PROJECT_COLUMNS = {
     # Unguessable per-project share token gating the client delivery portal
     # (?k=<token>), mirroring the opportunities.share_token first-touch pattern.
     "share_token": "TEXT",
+    # ADR-0039: when that link was last rotated. Blank = never (original link).
+    "share_token_rotated_at": "TEXT",
     # Buyer link threaded from the opportunity (see DISCOVERY_INTELLIGENCE_LINEAGE.md).
     "agency_id": "INTEGER",
     # ADR-0018 Phase 4: the Kickoff→Production gate. A project created by a client's
@@ -351,7 +353,12 @@ _PROJECT_COLUMNS = {
 # Buyer link migrated onto older opportunities / campaigns the same idempotent way.
 # agency_id threads Opportunity → Project → Campaign so downstream modules reach the
 # Agency/Company Intelligence record instead of only a client name.
-_OPPORTUNITY_LINK_COLUMNS = {"agency_id": "INTEGER"}
+_OPPORTUNITY_LINK_COLUMNS = {
+    "agency_id": "INTEGER",
+    # ADR-0039: when the client link was last rotated, so the console can say so.
+    # Blank means "never rotated — this is the original link".
+    "share_token_rotated_at": "TEXT",
+}
 _CAMPAIGN_COLUMNS = {"agency_id": "INTEGER"}
 
 # Company Enrichment Engine state, migrated onto an existing agencies table the
@@ -1605,6 +1612,52 @@ def ensure_share_token(conn: sqlite3.Connection, opp_id: int) -> Optional[str]:
     conn.execute(
         "UPDATE opportunities SET share_token = ? WHERE id = ?", (token, opp_id)
     )
+    conn.commit()
+    return token
+
+
+def rotate_share_token(conn: sqlite3.Connection, *, opp_id=None, project_id=None) -> Optional[str]:
+    """Mint a fresh client link for a deal and kill the old one. Returns the new token.
+
+    **Rotates BOTH records.** A deal can carry two live credentials — the
+    opportunity's (the brief / first-touch page) and the project's (the delivery
+    portal) — and ADR-0018 has them share one value on the normal award path. Left
+    to one, the other keeps opening the same work: rotating half a credential is
+    not rotating it. Pass either id; the linked record is found and rotated too.
+
+    Returns ``None`` when neither id resolves. Reviewer ``?r=`` links are a separate
+    credential with their own revocation (:func:`remove_delivery_reviewer`) and are
+    deliberately untouched — revoking one person is not the same act as cutting a
+    leaked link, and conflating them would make the safe action destructive.
+    """
+    if opp_id is None and project_id is None:
+        return None
+    if opp_id is None:
+        prow = conn.execute(
+            "SELECT opp_id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if prow is None:
+            return None
+        opp_id = prow["opp_id"]
+    if project_id is None and opp_id is not None:
+        prow = conn.execute(
+            "SELECT id FROM projects WHERE opp_id = ?", (opp_id,)).fetchone()
+        project_id = prow["id"] if prow is not None else None
+    if opp_id is None and project_id is None:
+        return None
+
+    token = secrets.token_urlsafe(9)
+    stamp = datetime.now(timezone.utc).isoformat()
+    touched = 0
+    if opp_id is not None:
+        touched += conn.execute(
+            "UPDATE opportunities SET share_token = ?, share_token_rotated_at = ? "
+            "WHERE id = ?", (token, stamp, opp_id)).rowcount
+    if project_id is not None:
+        touched += conn.execute(
+            "UPDATE projects SET share_token = ?, share_token_rotated_at = ? "
+            "WHERE id = ?", (token, stamp, project_id)).rowcount
+    if not touched:
+        return None
     conn.commit()
     return token
 

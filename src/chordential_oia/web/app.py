@@ -6546,6 +6546,34 @@ def delivery_set_signatory(
     return RedirectResponse(f"/project/{project_id}/delivery#license", status_code=303)
 
 
+@app.post("/project/{project_id}/delivery/rotate-link")
+def delivery_rotate_link(project_id: int):
+    """Cut a leaked client link and mint a fresh one (ADR-0039).
+
+    The share token is the ONLY credential on the delivery portal: whoever holds the
+    URL can stream the unreleased masters, read the brief, and post a change request
+    — which spends a contractual revision round. Until now it could never be changed,
+    so a forwarded email or an exported Slack channel was permanent access.
+
+    Destructive by design (the client's existing link stops working the moment this
+    runs), so the button carries a confirm and this is an operator press — the
+    machine never rotates on its own.
+    """
+    conn = db.connect()
+    try:
+        if db.get_project(conn, project_id) is None:
+            return HTMLResponse("Project not found", status_code=404)
+        token = db.rotate_share_token(conn, project_id=project_id)
+        if token:
+            db.add_update(
+                conn, project_id,
+                "Client link rotated — the previous link no longer opens this project.",
+                "rights")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
+
+
 @app.post("/project/{project_id}/delivery/reviewer")
 def delivery_reviewer(
     project_id: int, action: str = Form("add"), name: str = Form(""),

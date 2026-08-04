@@ -954,6 +954,36 @@ inline uploader: it is standalone and does not load `live.js`, so migrating it w
 pulling the whole living-OS module onto a page that needs one behaviour; that duplication
 is known and deliberate.
 
+### ADR-0039 — A client link can be cut
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (share-token
+rotation) · `web/db.py`, `web/app.py`, `delivery_console.html`
+**Decision.** `db.rotate_share_token(conn, *, opp_id=|project_id=)` mints a fresh token
+for a deal and **rotates both records** — the opportunity's (brief / first-touch) and the
+project's (delivery portal) — stamping `share_token_rotated_at` on each (additive column
+migration, the house pattern). One operator route,
+`POST /project/{id}/delivery/rotate-link`, behind a `data-confirm`, logged to the
+project's history. Reviewer `?r=` links are a separate credential with their own
+revocation and are **not** touched.
+**Why.** The share token is the *only* credential on the delivery portal. Measured
+against a gated instance, a bare `?k=` opens the unreleased master (streamable), the
+client's brief and scope, the deliverables list — and the Request-changes form, which
+writes the `round_log` and therefore **spends a contractual revision round** (ADR-0019).
+Without the token the portal 404s, so the URL *is* the credential. `ensure_share_token`
+minted once and returned the same value forever: there was no rotate, no revoke and no
+expiry anywhere in the codebase, so a forwarded email, an exported Slack channel or a
+departed employee's inbox was permanent access. The console's own copy told the operator
+to "treat it as forwardable" while offering no remedy — this is the remedy.
+**Consequences.** `tests/test_share_token_rotation.py` fails if the old link survives, if
+**either** record keeps its old token (rotating half a credential is not rotating it —
+the two can and do diverge on the seeded book, which is the trap these tests exist for),
+if a reviewer's personal link is revoked as collateral, or if anything other than the
+operator's route calls `rotate_share_token`. Rotation is **never automatic**: a token
+that rotated on a schedule would break a client's bookmark with no human deciding to,
+which is the opposite of "the machine proposes, Jon disposes". Deliberately out of scope:
+expiry dates, per-recipient share links, and signed download URLs — each is a separate
+decision and none is what "the link leaked" needs. `share_token_rotated_at` is additive
+and nullable, so pre-existing rows read as "never rotated".
+
 ---
 
 ## Adding a new ADR
