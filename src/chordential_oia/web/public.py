@@ -143,11 +143,19 @@ def public_commission(request: Request):
 def _render_commission(request: Request):
     """The planning band's priors come from the estimation engine rather than being
     hardcoded in the template, so the number a visitor is shown and the number the
-    engine works from cannot drift apart again."""
+    engine works from cannot drift apart again.
+
+    ``demos`` are the real capability demonstrations (ADR-0040) — the front door of a
+    music company has to let you hear music. They come from the same ``showcase``
+    module ``/samples`` renders, so the home section and the full page cannot tell
+    different stories about the same track."""
+    show = get_showcase()
     return render(
         request, "public/commission.html", active="home",
         public_bands={k: list(v) for k, v in PUBLIC_BANDS.items()},
         public_lengths=PUBLIC_LENGTHS, public_usage=PUBLIC_USAGE,
+        demos=[d for d in show.demos if d.audio_url],
+        demos_intro=show.demos_intro,
     )
 
 

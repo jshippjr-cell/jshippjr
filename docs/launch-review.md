@@ -34,7 +34,10 @@ Almost none of this required building. It required wiring, reconciling, and dele
 3. **The homepage was a conversion dead end.** No persistent CTA, no nav to any other
    page, no way to hear a note of music, and the section nav hidden entirely below 860px.
    *(CTA fixed — Phase 1, and the requirement now rides with whatever page is the front
-   door rather than one page's mechanism; "hear the work" is Phase 2.)*
+   door rather than one page's mechanism.)* ***"Hear the work" is closed too
+   (ADR-0040):*** the hero's listen CTA played a **WebAudio oscillator** two lines under
+   a promise of "never AI-generated audio". The homepage now carries the four real
+   capability demonstrations, and the synth says its tone is browser-generated.
 4. **Front-of-house was three homepages plus six orphans** — the root cause of 1–3.
    `/commission`, `/experience`, `/samples`, `/showreel`, `/stills`, `/delivery-sample` had
    zero inbound links; `home.html` was rendered by no route yet was the only thing linking
@@ -161,7 +164,7 @@ open-pipeline number~~ ✔ · ~~fileable cue sheets~~ ✔ · ~~one rights basis~
 ~~console nav diet~~ ✔ · ~~portal ordered by court-state~~ ✔ ·
 brand-unified `/start` `/book` `/thanks` with a budget field ·
 ~~naming system stops fabricating `_60_MASTER` on :30 spots~~ ✔ · ~~real byte-progress on console
-uploads~~ ✔ · ~~share-token rotation~~ ✔ · "hear the work" on the homepage · finish the contrast
+uploads~~ ✔ · ~~share-token rotation~~ ✔ · ~~"hear the work" on the homepage~~ ✔ · finish the contrast
 pass: `--olive` (#737469) is a brand
 token used as body text on internal surfaces at 4.47:1, marginally under AA — changing it
 is a palette decision, not a bug fix, so it was left out of Phase 1.

@@ -239,6 +239,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `share_token_rotated_at`, and is driven by one confirmed operator press logged to the
   project history. Reviewer `?r=` links keep working — revoking one person and cutting a
   leaked link are different acts. Never automatic.
+- **The front door plays music** (ADR-0040, 2026-08-04). The hero promised *"written and
+  recorded in house by people — never AI-generated audio"* and two lines below it offered
+  **"Hear the score"**, which scrolled to a player driven by a **WebAudio oscillator**.
+  There was no `<audio>` element and no recording anywhere on the page. The homepage now
+  carries a **Listen** section rendering the four real capability demonstrations — from
+  the same `showcase.DEMOS` list `/samples` uses, so the two can't drift — with the hero
+  CTA pointing at it, and the synth now discloses that its tone is browser-generated and
+  links to the recordings. Audio moved off the third-party CDN onto our own
+  `/static/public/` (the operator's demo uploads, to be replaced with final masters);
+  swapping a track is a file swap at one path.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

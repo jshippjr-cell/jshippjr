@@ -105,8 +105,29 @@ a{color:var(--amber)}
 .ch.hot .nm{color:var(--cream);opacity:1}
 .ch.hot .mtr i{background:linear-gradient(90deg,var(--sand),var(--cream))}
 
+/* ---------- the work: real recordings, plainly presented ----------
+   No custom transport here on purpose. The native control is the one every visitor
+   already knows, it works with a keyboard and a screen reader, and this section's
+   job is to get music playing — not to be another mechanism. */
+.reel{list-style:none;margin:38px 0 0;padding:0;display:grid;gap:14px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.tk{border:1px solid var(--line);border-radius:12px;padding:16px 18px;
+  background:rgba(22,10,14,.55)}
+.tkh{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.tkn{font-family:var(--serif);font-size:17px;color:var(--cream);font-weight:600;line-height:1.25}
+.tkd{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--sand);opacity:.62;white-space:nowrap}
+.tkb{font-size:13.5px;line-height:1.5;color:var(--muted);margin:8px 0 12px}
+/* color-scheme tells the browser to draw its OWN control in dark form — the standard
+   property, not a filter hack, and it degrades to the light default where unsupported.
+   Keeping the native control is deliberate: it is the transport every visitor already
+   knows and it works with a keyboard and a screen reader. */
+.tka{width:100%;height:34px;color-scheme:dark}
+@media (max-width:640px){ .reel{grid-template-columns:1fr} }
+
 /* ---------- sections ---------- */
 section{position:relative;padding:96px 24px 74px;min-height:100vh;display:flex;align-items:center}
+#work{min-height:auto;padding-bottom:96px}
 .inner{max-width:1080px;margin:0 auto;width:100%}
 .col{max-width:520px;position:relative}
 #arrival .col{max-width:680px}
@@ -578,7 +599,10 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
     and chain of title, cleared.</p>
     <div class="rowbtns rv">
       <a class="btn solid" href="/start">Start a brief</a>
-      <a class="btn" href="#take">Hear the score</a>
+      {# ADR-0040: this pointed at #take, whose player is a synth demonstrating the
+         portal — so a button reading "hear the score", two lines under a promise of
+         "never AI-generated audio", played an oscillator. It now goes to recordings. #}
+      <a class="btn" href="#work">Hear the work</a>
     </div>
     <span class="steer rv">
       <svg width="34" height="10" viewBox="0 0 34 10" fill="none" aria-hidden="true">
@@ -587,6 +611,41 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
       Scroll to read<b> · hover the score to feature a part</b>
     </span>
   </div></div></section>
+
+  <!-- 1b · THE WORK — actual recordings (ADR-0040). The front door of a music company
+       has to let you hear music. Everything else that sounds on this page is a synth
+       demonstrating the PORTAL, and the hero promises "never AI-generated audio" two
+       lines above a button that played an oscillator. These are the real capability
+       demonstrations, the same records /samples renders — one source, one story. -->
+  {% if demos %}
+  <section id="work"><div class="inner">
+    <div class="col">
+      <p class="eb rv">Listen</p>
+      <h2 class="rv">{{ demos_intro.home_title or "Hear how we'd score your brief." }}</h2>
+      <p class="lede rv">Written and recorded by people. These are demonstrations — each one
+      answers a campaign brief we set ourselves, not a client's commission.</p>
+    </div>
+    <ul class="reel rv">
+      {% for d in demos %}
+      <li class="tk">
+        <div class="tkh">
+          <b class="tkn">{{ d.title }}</b>
+          <span class="tkd">{{ d.discipline }}</span>
+        </div>
+        <p class="tkb">{{ d.brief }}</p>
+        {# preload=metadata, not none: with none the control reads "0:00 / 0:00" until
+           you press play, which looks broken. Metadata is a few KB per track and buys
+           an honest duration up front. The audio itself still waits for a press. #}
+        <audio class="tka" controls preload="metadata" src="{{ d.audio_url }}"
+               aria-label="Play {{ d.title }}"></audio>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="rowbtns rv" style="margin-top:26px">
+      <a class="btn" href="/samples">{{ demos_intro.home_cta or "Open the full briefs →" }}</a>
+    </p>
+  </div></section>
+  {% endif %}
 
   <!-- 2 · THE TAKE — the score's own house. the "no" that earns the "yes". -->
   <section id="take"><div class="inner"><div class="col">
@@ -607,8 +666,12 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
         </div>
         <div class="scrub" id="scrub" role="progressbar" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="scrubFill"></i></div>
         <div class="tc"><span id="tcNow">0:00</span><span id="tcEnd">0:20</span></div>
+        {# ADR-0040: say what this is. It demonstrates the note mechanism, and what
+           sounds is generated in the browser — the recordings are above, under Listen. #}
         <p class="disclose" id="takeHint">Try it here. Press play, then mark the moment you
-        would change. This is exactly how a note is given in your portal.</p>
+        would change. This is exactly how a note is given in your portal — the tone is
+        generated by your browser to demonstrate it; <a href="#work">the real recordings
+        are above</a>.</p>
       </div>
 
       <button class="pin waiting" id="notePin" type="button">

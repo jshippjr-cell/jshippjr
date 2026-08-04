@@ -5,6 +5,7 @@ without leaking the internal dashboard chrome, and stay decoupled from internal
 pipeline state.
 """
 
+import re
 import importlib
 
 import pytest
@@ -67,9 +68,12 @@ def test_samples_page_renders_capability_demos(client):
     assert "new studio" not in r.text and "aren’t client commissions" not in r.text
     # Expandable brief on each demo.
     assert "See how we’d approach this brief" in r.text
-    # Audio-only: all four demos render <audio> players from the media CDN, no video.
-    assert r.text.count("res.cloudinary.com") >= 4
+    # Audio-only: all four demos render <audio> players, no video. ADR-0040 moved the
+    # files off the third-party CDN onto our own /static/public/, so assert the
+    # substance — four working players — rather than a hostname that is incidental.
     assert r.text.count("<audio") == 4 and "<video" not in r.text
+    for src in re.findall(r'<audio[^>]*src="([^"]+)"', r.text):
+        assert client.get(src).status_code == 200, f"{src} does not serve"
 
 
 def test_home_work_is_truthful_capability_demonstrations(client):

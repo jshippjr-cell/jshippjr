@@ -984,6 +984,39 @@ expiry dates, per-recipient share links, and signed download URLs — each is a 
 decision and none is what "the link leaked" needs. `share_token_rotated_at` is additive
 and nullable, so pre-existing rows read as "never rotated".
 
+### ADR-0040 — The front door plays music
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` finding 3 ("hear the
+work") · `public/commission.html`, `web/public.py`, `web/showcase.py`
+**Decision.** The homepage carries a **Listen** section rendering the real capability
+demonstrations — title, the brief each answers, and a native `<audio>` control — from the
+same `showcase.DEMOS` list `/samples` renders, so the two surfaces cannot describe the
+same track differently. The hero's listen CTA points there. Demo audio is served from our
+own `/static/public/`, not a third-party CDN. The homepage's synth keeps its place as an
+interactive demonstration of the **note mechanism** and now says that is what it is.
+**Why.** The hero promised *"written and recorded in house by people — never AI-generated
+audio"* and, two lines beneath it, offered a button reading **"Hear the score"** that
+scrolled to a player driven by a **WebAudio oscillator**. There was no `<audio>` element
+and no recording anywhere on the page — the only `.mp3`-ish match in the whole template
+was `o.type = t.wave`. So the one button inviting a visitor to hear the product played a
+machine, on the page that had just promised the opposite. Meanwhile four real
+demonstrations existed with audio attached and honest framing, and `showcase.DEMOS_INTRO`
+already carried a `home_title`/`home_cta` written for a home section nobody had built.
+**Consequences.** `tests/test_hear_the_work.py` fails if the homepage has no audio, if a
+player points at something that isn't a served `audio/*`, if a track is off-site, if two
+cards play the same recording (compared on the audio payload with the ID3 tag stripped,
+so retagging cannot disguise a duplicate), if the hero CTA stops leading to recordings,
+if the "never AI-generated audio" promise is dropped, if the synth stops disclosing that
+its tone is browser-generated, or if the template hardcodes an `.mp3` instead of
+rendering from `showcase`. **Native controls on purpose:** this section's job is to get
+music playing, not to be another mechanism — the native transport is familiar,
+keyboard-navigable and screen-reader-friendly, and it needs no JS. `preload="metadata"`
+rather than `none`, because `none` renders "0:00 / 0:00" and reads as broken. Chromium
+ignores `color-scheme: dark` on media chrome, so the control renders light against the
+dark page; that is a browser limitation and not worth a `::-webkit-media-controls` hack
+or a bespoke player. Swapping a track is a file swap at the path in `showcase.py` —
+nothing else changes. The current files are the operator's demo uploads, to be replaced
+with final masters.
+
 ---
 
 ## Adding a new ADR
