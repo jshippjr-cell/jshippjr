@@ -1143,6 +1143,38 @@ the evidence. **225 routes remain in `app.py`** (8,545 lines). `/opportunity` (5
 (`_load`, `_brief_for`, `_outreach_for`, `_quote_band_for`) relocated before their routes
 follow — that is a later pass, not an afterthought to this one.
 
+### ADR-0045 — The Postgres path is verified against a real Postgres
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
+CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,
+`docs/zero-downtime-cutover.md`
+**Decision.** The SQLite→Postgres compatibility layer is exercised against a **running
+PostgreSQL server**, not reasoned about. `tests/test_postgres_dialect.py` unit-tests the
+translator everywhere and runs the live path when `CHORDENTIAL_TEST_PG` is set. The
+translator gains `BLOB → BYTEA` and `COLLATE NOCASE → LOWER()`; the migration script only
+resets an `id` sequence for tables that have one.
+**Why.** The shim was a **regex SQL translator that had never met a Postgres** —
+`psycopg` was not installed, so every claim about the cutover was plausible rather than
+tested. Standing up PostgreSQL 16 found three defects, each of which fails *during* the
+cutover, with the disk already being decommissioned: **`BLOB` is not a Postgres type**, so
+`media_blob` (the DB mirror of every uploaded master) could not be created and the app
+would not boot; **`COLLATE NOCASE` does not exist**, so `/agencies`, the decision-maker
+list and the roster 500 on their first query; and the **migration script called
+`pg_get_serial_sequence(t, 'id')` for every table** — `media_blob` is keyed by `name` —
+so it crashed mid-copy after several tables were already written, on production data.
+The third is the worst: a half-migrated database is harder to reason about than a failed
+one.
+**Consequences.** The whole path is now verified end to end on a real server: the schema
+builds, every console route serves, writes work (the shim fakes `lastrowid` with
+`RETURNING id`), the migration completes with matching row counts, and an uploaded master
+survives the round trip **byte-for-byte by SHA-256**. `psycopg[binary]` stays the
+optional `postgres` extra. **Skipping is not passing:** the live tests skip without
+`CHORDENTIAL_TEST_PG`, and a green CI run without it says nothing about Postgres — which
+is precisely how the shim reached production untested. Run them against a scratch
+database before the real cutover. Two things this ADR does **not** do: it does not
+perform the cutover (no Render credentials here), and it does not remove the disk — the
+uploads migration (ADR-0043) is still an unrun ops step and remains the gating item.
+
+
 
 
 ---

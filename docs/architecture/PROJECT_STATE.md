@@ -293,6 +293,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `/opportunity` and `/project`, with no route-pattern collision. **app.py: 9,133 → 8,545
   lines; 225 routes remain.** The pattern and its guard-rail tests are in place for the
   next slices; `/opportunity` and `/project` need their shared helpers relocated first.
+- **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
+  regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
+  Running PostgreSQL 16 against it found three defects that each fail *during* the
+  cutover: **`BLOB` isn't a Postgres type** (`media_blob` can't be created — the app
+  won't boot), **`COLLATE NOCASE` doesn't exist** (`/agencies` and the roster 500), and
+  the **migration script crashed mid-copy** on `media_blob`, which has no `id` column,
+  after other tables were already written. All fixed and verified end to end on a real
+  server: schema builds, every console route serves, writes work, the migration
+  completes with matching counts, and an uploaded master survives byte-for-byte
+  (SHA-256). `tests/test_postgres_dialect.py` runs the live path when
+  `CHORDENTIAL_TEST_PG` is set — **skipping is not passing**.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older
@@ -503,7 +514,10 @@ room → The Picture → The Cue Layer → Flow polish, each phase-gated by the 
   not a squeezed desktop); real demo **footage** (not SMPTE bars); WRITING-state
   **transport density** (>7 elements) + ⌘K/⌘M **debounce**. Precomputed waveform peaks
   need server-side audio decode (not in the current env).
-- **Postgres cutover ops** — code ready, not run; prod is still SQLite on a
+- **Postgres cutover ops** — code ready **and now verified against a real PostgreSQL 16**
+  (ADR-0045: three cutover-day defects found and fixed by running it); ops not run.
+  The uploads migration (ADR-0043) gates it — the disk cannot go until the bucket
+  has the files. Prod is still SQLite on a
   single-attach disk (every deploy ~2-min blip).
 - **DocuSign e-signature** — placeholder only.
 - **Durable object storage** — the **seam is wired** (ADR-0043, `CHORDENTIAL_STORAGE=s3`);

@@ -49,10 +49,16 @@ def main() -> int:
             cur.executemany(f'INSERT INTO "{t}" ({collist}) VALUES ({ph})',
                             [tuple(r) for r in rows])
             # Reset the id sequence so future inserts don't collide with copied ids.
-            cur.execute("SELECT pg_get_serial_sequence(%s, 'id')", (t,))
-            seq = cur.fetchone()[0]
-            if seq:
-                cur.execute(f"SELECT setval(%s, COALESCE((SELECT MAX(id) FROM \"{t}\"), 1))", (seq,))
+            # ADR-0045: only for tables that HAVE an id. `media_blob` is keyed by
+            # `name` (it holds the DB mirror of every uploaded master), and asking
+            # Postgres for its id sequence raises UndefinedColumn — which crashed
+            # this script mid-copy, after some tables were already written, on the
+            # production data, during the cutover. Found by running it for real.
+            if "id" in cols:
+                cur.execute("SELECT pg_get_serial_sequence(%s, 'id')", (t,))
+                seq = cur.fetchone()[0]
+                if seq:
+                    cur.execute(f"SELECT setval(%s, COALESCE((SELECT MAX(id) FROM \"{t}\"), 1))", (seq,))
     dst.commit()
 
     # 4) Verify counts match.

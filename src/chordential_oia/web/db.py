@@ -483,6 +483,17 @@ def _pg_translate(sql: str) -> str:
     sql = re.sub(r"PRAGMA\s+table_info\s*\(\s*(\w+)\s*\)",
                  r"SELECT column_name AS name FROM information_schema.columns WHERE table_name = '\1'",
                  sql, flags=re.I)
+    # Types SQLite accepts that Postgres has never heard of. BLOB is the one that
+    # matters: `media_blob` holds the DB mirror of every uploaded master, and
+    # without this the table cannot be CREATEd at all — the cutover would fail on
+    # the first boot, after the disk was already gone. Found by building the real
+    # schema against a real Postgres 16 (ADR-0045).
+    sql = re.sub(r"\bBLOB\b", "BYTEA", sql, flags=re.I)
+    # COLLATE NOCASE is SQLite's case-insensitive sort. Postgres has no collation
+    # by that name, so `ORDER BY company COLLATE NOCASE` is a hard error — the
+    # agencies list, the decision-maker list and the roster all use it. LOWER() is
+    # the faithful equivalent for ordering.
+    sql = re.sub(r"(\w+)\s+COLLATE\s+NOCASE\b", r"LOWER(\1)", sql, flags=re.I)
     # Placeholders (queries use SQLite '?'; no '?' appears in string literals here).
     sql = sql.replace("?", "%s")
     return sql

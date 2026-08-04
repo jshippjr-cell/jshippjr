@@ -183,8 +183,9 @@ and is not done.* · `app.py` into modules — **started** (ADR-0044): `shell.py
 domain routers with the delivery and pipeline state machines moved into the engines ·
 request-scoped connections, pooling, indexes (there are none), batched dashboard context ·
 `delivery_json` concurrency — promote `asset_approvals` / `versions` to rows · scheduler
-advisory locks before the blue-green cutover · Postgres in CI so the regex dialect shim
-cannot corrupt silently · buyer identity as a canonical entity.
+advisory locks before the blue-green cutover · ~~Postgres in CI so the regex dialect shim cannot corrupt silently~~ ✔ (ADR-0045) —
+it had never met a Postgres; running one found **three** cutover-day defects, incl.
+a migration that crashed mid-copy on production data · buyer identity as a canonical entity.
 
 ## Phase 4 — long-term
 

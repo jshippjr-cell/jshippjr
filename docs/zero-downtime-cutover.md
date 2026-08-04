@@ -9,6 +9,31 @@ The code already supports both: `CHORDENTIAL_DB` as a path → SQLite (today); a
 `postgresql://…` URL → Postgres. Nothing else changes. **Follow these steps in order —
 the data migration must happen before the disk is removed, or live data is lost.**
 
+> ### 2026-08-04 — this path has now actually been run (ADR-0045)
+> Until then it never had been: the dialect shim was regex-only and `psycopg` was not
+> even installed, so nothing here was more than plausible. Standing up a real
+> PostgreSQL 16 found **three defects, each of which would have failed *during* the
+> cutover**, with the disk already being decommissioned:
+>
+> | # | Defect | What it would have done |
+> |---|---|---|
+> | 1 | `BLOB` is not a Postgres type | `media_blob` — the DB mirror of every uploaded master — could not be created. **The app would not boot.** |
+> | 2 | `COLLATE NOCASE` does not exist | `/agencies`, the decision-maker list and the roster all **500** on their first query. |
+> | 3 | The migration script asked every table for its `id` sequence | `media_blob` is keyed by `name`. The script **crashed mid-copy**, after several tables were already written, on your production data. |
+>
+> All three are fixed, and the whole path is now verified end to end on a real server:
+> schema builds, all 251 routes serve, writes work (`lastrowid` via `RETURNING id`),
+> the migration completes with matching counts, and an uploaded master survives the
+> SQLite→Postgres round trip **byte-for-byte (SHA-256)**.
+>
+> **Re-verify before you run this for real**, on a scratch database:
+> ```
+> CHORDENTIAL_TEST_PG=postgresql://user@host:5432/postgres \
+>   python -m pytest tests/test_postgres_dialect.py -q
+> ```
+> Those tests **skip** without that variable, and skipping is not passing — a green CI
+> run with no DSN says nothing about Postgres, which is how the shim stayed untested.
+
 ---
 
 ## Step 0 — the code is already deployed (safe)
