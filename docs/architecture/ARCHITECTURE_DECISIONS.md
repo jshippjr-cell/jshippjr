@@ -1046,6 +1046,36 @@ ever changes the hue enough to stop being an olive. When adding a surface colour
 type against it rather than assuming the token is safe: this token passed on `--card`
 the whole time, which is why it survived a review pass.
 
+### ADR-0042 — The intake asks what the project is worth to the client
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 2 (brand-unified
+intake with a budget field) · `public/start.html`, `web/public.py`,
+`static/public/site.css` · **Amends ADR-0034's scope**
+**Decision.** `/start` renders an **optional** budget field. `public_price_band` prefers a
+stated budget through `capabilities.quote_band`, so the range shown at intake is the range
+quoted later. With nothing stated, behaviour is unchanged — ADR-0028's public voice.
+**Why.** The page promised *"a few details is all we need to come back with an approach
+and a price range"* and never asked what it was worth to them. Not for want of plumbing:
+the POST handler already accepted `budget_text`, `promote_lead` already ran it through
+`extract_budget` into `opportunities.budget_min/max`, and those columns are **leg 2 of
+`quote_band`**. The form simply never asked, so the field was empty on every real
+submission and the chain behind it ran dry. Measured end to end: a lead that would have
+said **$25,000–$40,000** was quoted **$7,200–$15,100** — our cost model, **3.4× under**, on
+exactly the deals that arrive through the front door. Capturing it then exposed the next
+link: `public_price_band` still ignored the budget, so a visitor would see $7,200–$15,100
+at intake and be quoted their own $25,000–$40,000 later — a jump that reads as a
+bait-and-switch on the surface where trust is cheapest to lose. ADR-0034 had deliberately
+left that function alone **because intake captured no budget**; that reasoning is now
+retired, which is the amendment.
+**Consequences.** `tests/test_intake_budget.py` fails if the field disappears, if it
+becomes required (a mandatory budget on a first contact costs more leads than it saves),
+if a validation bounce eats what was typed, if a stated budget stops reaching
+`budget_min/max`, or if the intake band and the later quote diverge. Unparseable input
+("we're flexible", "TBD") falls back to the estimator rather than breaking —
+`extract_budget` returning nothing is the normal case, not an error. The brand half of
+this backlog item needed no work: `/start`, `/book` and `/thanks` already share the
+wordmark, serif, ember and warm palette, and all six front-of-house routes resolve —
+checked before changing anything, and left alone.
+
 ---
 
 ## Adding a new ADR

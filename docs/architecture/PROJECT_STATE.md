@@ -258,7 +258,20 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   Self-contained palettes are how a sitewide colour fix misses surfaces. Now `#65665B` —
   OKLCH lightness 0.555 → 0.505, hue and chroma untouched — with a 4.78:1 worst case.
   Both palettes, both client documents, the literal and all fourteen `var()` fallbacks
-  moved together. Phase 2 of the launch review is complete.
+  moved together.
+- **The intake asks for a budget** (ADR-0042, 2026-08-04). `/start` promised "an approach
+  and a price range" and never asked what the project was worth to the client — though
+  the POST handler already accepted `budget_text` and `promote_lead` already extracted it
+  into `opportunities.budget_min/max`, **leg 2 of `quote_band`**. The form never asked, so
+  the chain ran dry: measured end to end, a lead that would have said **$25,000–$40,000**
+  was quoted **$7,200–$15,100** — our cost model, 3.4× under, on exactly the deals that
+  arrive through the front door. The field is optional; `public_price_band` now prefers a
+  stated budget so the intake band and the later quote agree (amending ADR-0034, which
+  had excluded that function precisely because intake captured no budget). The brand half
+  of the item needed no work — the intake pages already share the wordmark, serif, ember
+  and palette, and all six front-of-house routes resolve.
+
+**Phase 2 of the launch review is complete.**
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

@@ -24,6 +24,8 @@ from ..talent import Talent, normalize_url
 from . import db
 from .estimate import estimate_for
 from .filters import displayurl, money, pct, slug
+from ..capabilities import quote_band
+from ..intake import extract_budget
 from .showcase import get_showcase
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
@@ -76,14 +78,22 @@ def _round_band(value: float, *, up: bool) -> int:
     return int((math.ceil if up else math.floor)(value / step) * step)
 
 
-def public_price_band(project_type: str, description: str):
-    """Indicative client-facing price band from the EXISTING estimator.
+def public_price_band(project_type: str, description: str, budget_text: str = ""):
+    """The indicative band a visitor is shown at intake — never a hard quote, and
+    never any new pricing math.
 
-    Builds a lightweight Opportunity from the intake fields, runs the same
-    qualify→team→estimate path the internal estimate page uses, and returns a
-    rounded ``(low, high)`` band around the suggested price — never a hard quote,
-    and never any new pricing math. Returns ``None`` when there's nothing to
-    estimate from.
+    When they tell us a budget it wins, because ``capabilities.quote_band`` is the
+    one authority on what we put in front of a buyer (ADR-0034) and the disclosed
+    budget is its second leg. ADR-0034 deliberately left this function alone on the
+    grounds that intake captured no budget and so had none to prefer; ADR-0042 gave
+    the form a budget field, which retires that reasoning. Without it, a visitor who
+    said "$25,000–$40,000" was shown **$7,200–$15,100** here and quoted their own
+    number later — a jump that reads as a bait-and-switch on the one surface where
+    trust is cheapest to lose.
+
+    With no budget stated this is unchanged: the estimator's cost band converted at
+    the estimate's own margin, which is ADR-0028's single public pricing voice.
+    Returns ``None`` when there's nothing to estimate from.
     """
     text = f"{project_type} {description}".strip()
     if not text:
@@ -92,15 +102,21 @@ def public_price_band(project_type: str, description: str):
         client="(prospect)", need=project_type or "Music commission",
         description=description or "",
     )
+    stated = extract_budget(budget_text or "")
+    if stated and stated[0] and stated[1]:
+        opp.budget_min, opp.budget_max = stated
     est = estimate_for(opp)
-    # Convert the estimator's COST band into a client PRICE band using the same
-    # margin ratio the estimate itself carries (no separate pricing rule here).
     if est.estimated_cost <= 0:
         return None
-    ratio = est.suggested_price / est.estimated_cost
-    low = _round_band(est.cost_low * ratio, up=False)
-    high = _round_band(est.cost_high * ratio, up=True)
-    return {"low": low, "high": high}
+    low, high = quote_band(opp, est)
+    if not (low and high):
+        return None
+    # The estimator's leg comes back as a COST band; convert at the estimate's own
+    # margin. A disclosed budget is already a price and needs no conversion.
+    if not (opp.budget_min and opp.budget_max):
+        ratio = est.suggested_price / est.estimated_cost
+        low, high = est.cost_low * ratio, est.cost_high * ratio
+    return {"low": _round_band(low, up=False), "high": _round_band(high, up=True)}
 
 
 def _validate_lead_contact(email: str, phone: str, linkedin: str):
@@ -280,7 +296,8 @@ def public_start_submit(
             status_code=400,
         )
 
-    band = public_price_band(project_type.strip(), description.strip())
+    band = public_price_band(project_type.strip(), description.strip(),
+                             budget_text.strip())
     conn = db.connect()
     try:
         db.insert_inbound_lead(

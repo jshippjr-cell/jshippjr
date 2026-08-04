@@ -162,7 +162,7 @@ duration-ordering fix, band reconciliation, a session/recording cost block)~~ �
 ~~one estimate call path (`estimate_for()`)~~ ✔ · ~~one
 open-pipeline number~~ ✔ · ~~fileable cue sheets~~ ✔ · ~~one rights basis~~ ✔ ·
 ~~console nav diet~~ ✔ · ~~portal ordered by court-state~~ ✔ ·
-brand-unified `/start` `/book` `/thanks` with a budget field ·
+~~brand-unified `/start` `/book` `/thanks` with a budget field~~ ✔ ·
 ~~naming system stops fabricating `_60_MASTER` on :30 spots~~ ✔ · ~~real byte-progress on console
 uploads~~ ✔ · ~~share-token rotation~~ ✔ · ~~"hear the work" on the homepage~~ ✔ ·
 ~~finish the contrast pass: `--olive`~~ ✔ — ruled by the operator and darkened to
