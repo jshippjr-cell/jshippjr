@@ -174,7 +174,10 @@ def test_uploads_nonmedia_served_as_attachment(ctx):
 def test_cut_over_cap_rejected(ctx, monkeypatch):
     client, db_mod, app_mod = ctx
     tid, pid, tok, share = _composer_with_project(db_mod)
-    monkeypatch.setattr(app_mod, "_CUT_MAX_BYTES", 10)
+    # Patched on `web.project_routes`, not on `app`: ADR-0044 moved the /project
+    # routes and this cap out together, and a route reads its own module globals.
+    from chordential_oia.web import project_routes
+    monkeypatch.setattr(project_routes, "_CUT_MAX_BYTES", 10)
     client.post(f"/project/{pid}/review/picture",
                 data={"k": share, "author": "Dana"},
                 files={"file": ("big.mp4", b"x" * 64, "video/mp4")},

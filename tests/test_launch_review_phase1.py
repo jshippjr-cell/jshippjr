@@ -210,8 +210,9 @@ def test_only_one_stripe_webhook_is_registered():
     the first, so the second was dead code — and it had already drifted: it never
     unlocked client downloads. A payment bug fixed in the dead one would do nothing."""
     from chordential_oia.web import app as app_mod
-    routes = [r for r in app_mod.app.routes
-              if getattr(r, "path", None) == "/webhooks/stripe"]
+    from conftest import registered_routes
+    routes = [r for r in registered_routes(app_mod.app)
+              if r[0] == "/webhooks/stripe"]
     assert len(routes) == 1, f"{len(routes)} stripe webhook routes registered"
 
 

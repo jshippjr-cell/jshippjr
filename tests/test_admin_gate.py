@@ -133,10 +133,10 @@ def test_review_action_exemption_lists_every_review_route(tmp_path, monkeypatch)
     drift out of the gate exemption again."""
     app_mod = _build(tmp_path, monkeypatch, gated=True)
     import re
+    from conftest import registered_routes
     registered = set()
-    for route in app_mod.app.routes:
-        m = re.match(r"^/project/\{project_id\}/review/(\w+)$",
-                     getattr(route, "path", ""))
+    for path, _methods in registered_routes(app_mod.app):
+        m = re.match(r"^/project/\{project_id\}/review/(\w+)$", path)
         if m:
             registered.add(m.group(1))
     assert registered, "no review routes found — test wiring is stale"
@@ -153,10 +153,9 @@ def test_every_creator_portal_post_bypasses_the_gate(tmp_path, monkeypatch):
     every registered creator POST path so it can't recur."""
     app_mod = _build(tmp_path, monkeypatch, gated=True)
     import re
+    from conftest import registered_routes
     missing = []
-    for route in app_mod.app.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set()) or set()
+    for path, methods in registered_routes(app_mod.app):
         if not path.startswith("/creator/") or "POST" not in methods:
             continue
         # substitute concrete values for the path params, then test the regex

@@ -16,6 +16,9 @@ those tests; it is computed at app-import time from this function.
 from __future__ import annotations
 
 import os
+from typing import Optional
+
+from fastapi import UploadFile
 
 from ..storage import get_object_store
 from . import db
@@ -91,3 +94,18 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
         "by": who or "A creator",
         "at": _dt.now(_tz.utc).isoformat(),
     })
+
+
+async def _read_capped(file: UploadFile, cap: int) -> Optional[bytes]:
+    """Read an upload in chunks up to ``cap`` bytes; None if it exceeds the cap
+    (never buffer an unbounded body — Phase-2 review P1-3)."""
+    chunks, total = [], 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > cap:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)

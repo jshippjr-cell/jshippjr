@@ -28,7 +28,8 @@ from chordential_oia.web import app as app_mod  # noqa: E402
 
 WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
-           "talent_routes.py", "opportunity_routes.py"]   # grows with each slice
+           "talent_routes.py", "opportunity_routes.py",
+           "project_routes.py"]                          # grows with each slice
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
@@ -87,7 +88,11 @@ def test_a_route_module_resolves_every_name_it_uses(name):
                         bound.add(x.id)
 
     unresolved = set()
-    fns = [n for n in ast.walk(tree)
+    # TOP-LEVEL functions only. A nested `def` is analysed as part of its parent, where
+    # the enclosing function's parameters are already in `local`; analysing it again on
+    # its own reports every closed-over name as unresolved. `client_pay`'s inner `_back`
+    # reads the route's `k` that way, and it is correct code.
+    fns = [n for n in tree.body
            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
     for fn in fns:
         local = {a.arg for a in fn.args.args + fn.args.kwonlyargs}
@@ -158,14 +163,18 @@ def test_every_moved_route_still_answers():
     ("/talent", "talent_routes.py"),
     ("/payouts", "talent_routes.py"),
     ("/opportunity", "opportunity_routes.py"),
+    ("/project", "project_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
     module becomes dead weight that still looks maintained."""
     app_src = (WEB / "app.py").read_text(encoding="utf-8")
-    assert not re.search(r'^@app\.[a-z]+\("' + re.escape(prefix), app_src, re.M), (
+    # The prefix must end at a path boundary: "/projects" is its own group and is NOT
+    # part of "/project".
+    pat = re.escape(prefix) + r'(?=["/])'
+    assert not re.search(r'^@app\.[a-z]+\("' + pat, app_src, re.M), (
         f"{prefix} routes are still declared in app.py")
-    assert re.search(r'^@router\.[a-z]+\("' + re.escape(prefix), 
+    assert re.search(r'^@router\.[a-z]+\("' + pat,
                      (WEB / module).read_text(encoding="utf-8"), re.M)
 
 
@@ -182,7 +191,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 5400, (
+    assert n < 2800, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -198,6 +207,7 @@ def test_the_router_carries_the_whole_group():
     ("talent_routes.py", None, 15),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 58),
+    ("project_routes.py", "/project", 57),
 ])
 def test_a_router_carries_its_whole_group_and_nothing_else(module, prefix, count):
     """A route module holds one group. A stray path from somewhere else means a
@@ -280,7 +290,8 @@ MOVED_HELPERS = [
     "_invoice_from_proposal_row", "_load", "_maybe_finalize_delivery",
     "_notify_assigned_creators", "_notify_operator_review", "_persist_upload",
     "_proposal_from_row", "_quote_band_for", "_reconcile_opp_status",
-    "_send_invoice_pay_link", "_store_pending_submission", "_to_utc_iso",
+    "_read_capped", "_send_invoice_pay_link", "_store_pending_submission",
+    "_project_estimate", "_sync_role_milestones", "_to_utc_iso",
 ]
 
 

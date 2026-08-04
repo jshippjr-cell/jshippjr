@@ -310,8 +310,20 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   same writes. `_quote_band_for` moved into the shared layer — slice 4 had called it
   "/project-only", which was true of its direct route callers and false of the transitive
   closure through `_brief_for`.
-  **app.py is now 5,204 lines / 128 routes** — from 9,133 / 251. `/project` (57 routes) is
-  the last large group.
+  **Slice 6:** the project surface (`/project`, 57 routes) → `project_routes.py` — the
+  last of the large groups. Three helpers shared only with `/creator` went into the helper
+  layer. Two measurement bugs found and fixed in the closure tooling (local bindings must
+  be excluded, or the `/manifest.webmanifest` route moves by accident; `AnnAssign`
+  constants must be collected, or `_PRESENCE` raises `NameError` on the first poll), and
+  three admin-gate/webhook drift guards that had gone blind to included routers were
+  repaired — they were seeing 81 of 274 routes.
+  **app.py is now 2,725 lines / 71 routes** — from 9,133 / 251, so 70% of the file and 72%
+  of the routes have moved. What remains is the application object itself (middleware,
+  lifespan, the admin gate, the PWA endpoints) plus `/creator`, `/campaign`, `/simulator`,
+  `/workspace`, `/matchboard`, `/invoice` and the singletons.
+  **Open finding:** `_append_version_from_bytes` (40 lines) has no callers anywhere and is
+  kept alive only by a `test_naming.py` source inspection — the naming scheme it guards is
+  therefore not guarded on the live path.
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

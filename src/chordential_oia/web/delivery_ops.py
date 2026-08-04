@@ -13,6 +13,7 @@ the side effects (invoice, notification, event log) that follow.
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Optional
 
@@ -23,6 +24,7 @@ from ..delivery import (
 )
 from ..storage import get_object_store
 from . import db, production, signals, webpush
+from .estimate import estimate_for
 from .billing import _ensure_final_invoice_issued, _send_invoice_pay_link
 from .shell import public_base as _public_base
 from .uploads import upload_dir
@@ -304,3 +306,58 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
         body_text=(f"Good news — the client approved the creative on {campaign}. Thank you. "
                    "We'll finish preparing the deliverables for sign-off."))
     return approved_n
+
+
+# --------------------------------------------------------------------------- #
+# Delivery OS (Phase 0, Pass A) — the delivery engine + generated package +
+# client-facing portal. Deterministic assembly; Jon presses the human buttons
+# (license terms, log a revision, approve, release). See chordential_oia.delivery.
+# --------------------------------------------------------------------------- #
+def _project_estimate(conn, row):
+    """The estimate behind a project (for scoped revision rounds), or None.
+
+    Rebuilt from the linked opportunity the same way the project view does — used
+    only to read the revision multiplier. None when there's no linked opp."""
+    opp_id = row["opp_id"] if "opp_id" in row.keys() else None
+    if opp_id is None:
+        return None
+    opp_row = db.get_opportunity(conn, opp_id)
+    if opp_row is None:
+        return None
+    opp = db.opportunity_from_row(opp_row)
+    return estimate_for(opp, conn=conn, project_id=row["id"])
+
+
+def _sync_role_milestones(conn, project_id: int) -> None:
+    """Keep the per-role Delivery-progress milestones honest with the actual delivery
+    lifecycle (reported live: the Composer milestone stayed 'Pending' after a V1 was
+    submitted). Forward-only, and only touches role-tagged (auto-seeded) milestones —
+    operator-added milestones stay fully manual. The lead role (first scoped role) owns the
+    master; derivative roles begin once the master is locked; everything is Done on ship."""
+    prow = db.get_project(conn, project_id)
+    if prow is None:
+        return
+    try:
+        roles = list(json.loads(prow["roles"] or "[]"))
+    except Exception:  # noqa: BLE001
+        roles = []
+    lead = roles[0] if roles else None
+    delivery = db.get_delivery(conn, project_id)
+    has_version = bool(delivery.get("pending_version")) or bool(versions_list(delivery))
+    locked = bool(production.creative_lock(delivery))
+    shipped = (delivery.get("state") or "") in ("Delivered", "Released")
+    rank = {"Pending": 0, "In progress": 1, "Done": 2}
+    for m in db.list_milestones(conn, project_id):
+        role = (m["role"] or "").strip()
+        if not role:
+            continue                         # operator-added milestones stay manual
+        if shipped:
+            target = "Done"
+        elif locked:
+            target = "Done" if role == lead else "In progress"
+        elif has_version and role == lead:
+            target = "In progress"
+        else:
+            target = m["status"]
+        if rank.get(target, 0) > rank.get(m["status"], 0):
+            db.update_milestone_status(conn, m["id"], target)

@@ -1810,9 +1810,11 @@ def test_per_asset_rollup_renders_n_of_m(client):
 def test_per_asset_event_lands_on_tape_and_pushes_operator(client, monkeypatch):
     """(e) The per-asset event lands in the review tape (kind asset_approval) AND the
     operator push fires (reuse of _notify_operator_review)."""
-    import chordential_oia.web.app as app_mod
+    # Patched on `web.project_routes`, not on `app`: ADR-0044 moved the /project routes
+    # into that module, and the route resolves this name from its OWN globals.
+    from chordential_oia.web import project_routes
     pushed = []
-    monkeypatch.setattr(app_mod, "_notify_operator_review",
+    monkeypatch.setattr(project_routes, "_notify_operator_review",
                         lambda *a, **k: pushed.append((a, k)))
     pid = _win_and_make_project(client, 1)
     _seed_asset(client, pid, name="master60.mp3", label=":60 master")

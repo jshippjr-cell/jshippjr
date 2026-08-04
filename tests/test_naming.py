@@ -33,6 +33,7 @@ from chordential_oia.estimation import _infer_duration, stated_length
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+from chordential_oia.web import project_routes  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -122,7 +123,7 @@ def _project_briefs(app_mod):
                 o = db.get_opportunity(conn, p["opp_id"])
                 if o is not None:
                     text = f"{text} {o['need'] or ''} {o['description'] or ''}"
-            out.append((dict(p), text, app_mod._master_stem(conn, p["id"], p, 1, "v1 Concept")))
+            out.append((dict(p), text, project_routes._master_stem(conn, p["id"], p, 1, "v1 Concept")))
         return out
     finally:
         conn.close()
@@ -163,8 +164,8 @@ def test_both_upload_paths_write_the_same_stem(app_mod):
     cannot be named differently depending on who uploaded it."""
     import inspect
 
-    src = inspect.getsource(app_mod._append_version_from_bytes)
-    pub = inspect.getsource(app_mod._publish_pending_submission)
+    src = inspect.getsource(project_routes._append_version_from_bytes)
+    pub = inspect.getsource(project_routes._publish_pending_submission)
     assert "_master_stem(" in src and "_master_stem(" in pub
     assert "version_name(" not in src and "version_name(" not in pub
 

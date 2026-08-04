@@ -227,6 +227,8 @@ def test_nothing_rotates_a_link_automatically(app_mod):
         src = path.read_text(encoding="utf-8")
         if re.search(r"\brotate_share_token\s*\(", src):
             callers.append(path.name)
-    assert callers == ["app.py"], f"unexpected rotation callers: {callers}"
-    app_src = (web / "app.py").read_text(encoding="utf-8")
-    assert app_src.count("rotate_share_token(") == 1
+    # `project_routes.py` since ADR-0044 moved /project out of app.py — still
+    # exactly one caller, still the operator's own route.
+    assert callers == ["project_routes.py"], f"unexpected rotation callers: {callers}"
+    src = (web / "project_routes.py").read_text(encoding="utf-8")
+    assert src.count("rotate_share_token(") == 1

@@ -1246,6 +1246,51 @@ Four test files stopped reaching engines and `/opportunity` helpers through `app
 now import the module that owns the code. That is the point rather than a side effect:
 `app.py` should not be a namespace for the package.
 
+**Slice 6 (2026-08-04) — the project surface, and the end of the large groups.**
+`/project` (57 routes) → `project_routes.py`: the operator's delivery console, the
+client's review portal, the session room and the payment door. **app.py: 6,917 → 2,725
+lines; 71 routes remain** — from 9,133 lines and 251 routes, so **70% of the file and
+72% of the routes have moved.**
+
+Measured as a **transitive closure from both sides**, since slice 5 proved direct callers
+insufficient: everything reachable from a `/project` route, minus everything reachable
+from any other route. That left 25 names exclusive to the group (609 lines, including the
+277-line `_delivery_view`), and three shared only with `/creator`, which went into the
+helper layer instead — `uploads._read_capped`, `delivery_ops._project_estimate`,
+`delivery_ops._sync_role_milestones`.
+
+Two measurement bugs surfaced and both are worth keeping:
+* the closure must exclude **local** bindings. `_delivery_view` assigns
+  `manifest = build_manifest(...)`, and a naive walk read that as a reference to the
+  module-level `/manifest.webmanifest` **route handler** — which would have moved that
+  route out of `app.py` by accident.
+* the collector must handle **`AnnAssign`**. `_PRESENCE: dict = {}` is annotated, so a
+  collector that only understood `ast.Assign` never saw it, and the module would have
+  raised `NameError` on the first session-room poll.
+
+**A finding, reported rather than acted on.** `_append_version_from_bytes` (40 lines) has
+**no callers anywhere** — not before this slice either. Its docstring claims it is "shared
+by the admin Assets agent and the composer portal"; both call sites were rewritten at some
+point and this was left behind. `tests/test_naming.py` inspects its *source* to assert the
+master-naming scheme, so a test is keeping dead code alive while the live write path goes
+unguarded. It moved with the group unchanged; deleting it means first repointing that test
+at the real path, which is a deliberate piece of work and not a refactor footnote.
+
+**A guard that had gone blind.** Three drift guards enumerate `app.app.routes` — the
+review-action gate exemption, the creator-POST gate exemption, and the duplicate-Stripe-
+webhook check. This FastAPI version wraps an included router in an `_IncludedRouter` with
+no `.path`, so those loops stopped seeing every group the breakup moved: **81 routes
+visible where there are 274.** `tests/conftest.registered_routes()` now flattens included
+routers and all three use it. The review guard's own "test wiring is stale" assertion is
+what caught it.
+
+Equivalence was again proved by side-by-side comparison against a worktree at the previous
+commit: all 57 routes the same status, every GET **byte-identical** (including the client
+delivery portal at 34,372 bytes and the 402 payment gate), seventeen neighbouring pages
+identical, and the same writes producing the same rows. The one apparent difference — the
+delivery ZIP, 299,635 vs 299,636 bytes — was opened and diffed entry by entry: identical
+except `metadata.json`'s `generated_at`, five seconds apart. Suite 1,365 → 1,372.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,
