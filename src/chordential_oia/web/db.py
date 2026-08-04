@@ -414,6 +414,11 @@ _TALENT_COLUMNS = {
     # begins here, so no agreement + rate → no assignment (machine-enforced).
     "agreement_executed_at": "TEXT",
     "agreement_ref": "TEXT",              # where the signed instrument lives (file/DocuSign ref)
+    # Performing-rights organisation this writer is affiliated with (ASCAP / BMI /
+    # SESAC / PRS / …). A cue sheet names the PRO **per writer** — it was a module
+    # constant, so every writer on every sheet was filed as BMI regardless of who
+    # they actually are. Blank is honest: the coordinator fills it or asks.
+    "pro": "TEXT",
 }
 
 # Columns added by the Outreach layer — applied to pre-existing databases via an
@@ -4000,14 +4005,16 @@ def update_talent_profile(
     notes: str,
     rate: Optional[float] = None,
     rate_unit: str = "hourly",
+    pro: str = "",
 ) -> None:
     valid = [d for d in disciplines if d in {m.value for m in MusicDiscipline}]
     conn.execute(
         """UPDATE talent SET name=?, email=?, disciplines=?, credits=?, location=?,
-           demo_reel_url=?, notes=?, rate=?, rate_unit=? WHERE id=?""",
+           demo_reel_url=?, notes=?, rate=?, rate_unit=?, pro=? WHERE id=?""",
         (
             name, email or None, json.dumps(valid), credits, location or None,
-            demo_reel_url or None, notes, rate, (rate_unit or "hourly"), talent_id,
+            demo_reel_url or None, notes, rate, (rate_unit or "hourly"),
+            (pro or "").strip() or None, talent_id,
         ),
     )
     conn.commit()
@@ -5685,7 +5692,8 @@ def remove_assignment(conn: sqlite3.Connection, assignment_id: int) -> None:
 def list_assignments(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
     return conn.execute(
         """SELECT a.*, t.name AS talent_name, t.email AS talent_email,
-                  t.rate AS talent_rate, t.rate_unit AS talent_rate_unit
+                  t.rate AS talent_rate, t.rate_unit AS talent_rate_unit,
+                  t.pro AS talent_pro
            FROM assignments a LEFT JOIN talent t ON a.talent_id = t.id
            WHERE a.project_id = ? ORDER BY a.role, a.created_at""",
         (project_id,),

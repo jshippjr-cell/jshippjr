@@ -72,10 +72,16 @@ Almost none of this required building. It required wiring, reconciling, and dele
    quoting a different figure from the commercial engine.*
 8. **The clearance certificate contradicted itself.** "Full buyout / work-made-for-hire"
    coexists with Chordential-as-100%-publisher cue sheets and category-limited
-   exclusivity; the cue sheet credits mixers and PMs as composers and hardcodes BMI; the
-   license has no media dimension. The portal stamped CLEARED over draft terms and marked
+   exclusivity; the cue sheet credited mixers and PMs as composers and hardcoded BMI; the
+   licence has no media dimension. The portal stamped CLEARED over draft terms and marked
    items "Delivered" on upload, before sign-off. *(Seal gating + the Delivered/Uploaded
-   wording fixed — Phase 1; the rights model itself is Phase 2.)*
+   wording fixed — Phase 1.)* **The cue sheet is fileable now (ADR-0031):** writers only
+   in the composer column, writer and publisher share as separate accounts, PRO per writer
+   from `talent.pro`, and usage derived from the brief instead of asserting `VV` — a sung
+   on-camera performance — for every campaign bed. Reproduced before: `composers='Maya
+   Chen, Leo Park, Ana Ruiz, Sam Diaz'` — the mixer, the editor and the project manager
+   all filed as authors. *Still open: the rights model itself (buyout vs 100% publisher vs
+   category exclusivity) and the missing media dimension on the licence.*
 9. **Client media was not durable.** `render.yaml` never set `CHORDENTIAL_UPLOAD_DIR`, so
    prod uploads landed in the installed package — wiped on every deploy, and `autoDeploy`
    means every push. Files over the 64 MB mirror cap had no durable copy at all; under it

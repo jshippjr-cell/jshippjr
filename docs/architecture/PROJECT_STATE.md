@@ -124,6 +124,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   structurally $0 there. `db.open_pipeline()` now owns it: our bid → the disclosed
   budget's midpoint → counted as unknown, with the composition returned so the number
   shows its provenance. All three read the same figure on the seeded DB.
+- **A fileable cue sheet** (ADR-0031, 2026-08-04). The composer column is what a PRO pays
+  royalties on, and it credited **every** assignment — reproduced as `composers='Maya
+  Chen, Leo Park, Ana Ruiz, Sam Diaz'`, filing the mixer, the editor and the PM as authors
+  of the composition. It also carried one conflated `100%` share, hardcoded `BMI` for
+  every writer, and hardcoded the main cue to `VV` (Visual Vocal — a sung performance on
+  camera) for every bed. Now: `WRITER_ROLES` only, writer/publisher share as separate
+  columns, PRO per writer from the new additive `talent.pro` column (editable on the
+  talent page, blank when unknown), and usage derived `BI`/`BV` from the brief with a
+  per-cue operator override. **Still open in Phase 2:** the rights model's own
+  contradiction (buyout vs 100% publisher vs category exclusivity) and the missing `media`
+  dimension; the nine divergent `build_estimate` call sites; console nav diet; portal
+  court-state ordering.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

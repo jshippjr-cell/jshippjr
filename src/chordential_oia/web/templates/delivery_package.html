@@ -224,12 +224,13 @@
     <h1 class="doc">Cue Sheet</h1>
     <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
     <table>
-      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Writer %</th><th>Publisher</th><th>Pub. %</th><th>PRO</th></tr></thead>
       <tbody>
         {% for q in cues %}
           <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration or '—' }}</td>
             <td>{{ q.isrc or '—' }}</td><td>{{ q.iswc or '—' }}</td>
-            <td>{{ q.composers }}</td><td>{{ q.publisher }}</td><td>{{ q.pro }}</td><td>{{ q.share }}</td></tr>
+            <td>{{ q.composers }}</td><td>{{ q.writer_share }}</td>
+            <td>{{ q.publisher }}</td><td>{{ q.publisher_share }}</td><td>{{ q.pro or '—' }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -43,6 +43,24 @@ from .capabilities import _RIGHTS_SUMMARY, _deliverables_for, Deliverable
 PUBLISHER = "Chordential Music"
 DEFAULT_PRO = "BMI"
 
+# Who is a WRITER. A cue sheet's composer column is a legal claim about authorship
+# of the composition — the PRO pays on it. Everyone assigned to the project used to
+# land in that column, so a mix engineer, an editor and the project manager were all
+# filed as composers of the work. Only these roles author it.
+WRITER_ROLES = frozenset({
+    "composer", "co-composer", "arranger", "orchestrator", "topline",
+    "topliner", "songwriter", "lyricist",
+})
+
+# Standard PRO cue-sheet usage codes. We only ever claim the two we can actually
+# know from a campaign brief: whether the cue carries a vocal. "Visual" codes
+# (VI/VV) assert that performers appear on camera, which nothing in this system
+# knows — the main cue was hardcoded VV, claiming an on-screen vocal performance
+# for every campaign bed we have ever delivered.
+USAGE_BACKGROUND_INSTRUMENTAL = "BI"
+USAGE_BACKGROUND_VOCAL = "BV"
+_VOCAL_HINTS = ("vocal", "topline", "lyric", "sung", "song", "choir", "singer", "anthem vocal")
+
 # IP3 — the certificate signatory block defaults (operator-editable per deal).
 DEFAULT_SIGNATORY = {
     "entity": "Chordential Music",
@@ -116,7 +134,8 @@ def _contributors(assignments) -> List["Contributor"]:
         if key in seen:
             continue
         seen.add(key)
-        out.append(Contributor(role=role or "Contributor", name=name))
+        out.append(Contributor(role=role or "Contributor", name=name,
+                               pro=(_val(a, "talent_pro") or "").strip()))
     return out
 
 
@@ -256,6 +275,15 @@ def current_version(delivery: Optional[dict]) -> Optional[dict]:
 class Contributor:
     role: str
     name: str
+    # PRO affiliation, carried per writer. Blank is honest — the coordinator fills
+    # it or asks; asserting one PRO for everybody is worse than leaving it empty.
+    pro: str = ""
+
+    @property
+    def is_writer(self) -> bool:
+        """Does this role author the composition? Only writers belong in a cue
+        sheet's composer column — the PRO pays royalties on that claim."""
+        return (self.role or "").strip().lower() in WRITER_ROLES
 
 
 @dataclass
@@ -342,8 +370,12 @@ class CueRow:
     duration: str
     composers: str       # joined contributor names
     publisher: str
-    pro: str
-    share: str
+    pro: str                 # per-writer affiliation(s), in name order
+    # The single "share" column conflated the two sides of a cue sheet. A PRO
+    # accounts writer share and publisher share separately; one 100% told it
+    # neither, or told it something impossible.
+    writer_share: str = "100%"
+    publisher_share: str = "100%"
     # IP3 — fileable cue identification (operator-fillable; blank allowed).
     isrc: str = ""       # International Standard Recording Code
     iswc: str = ""       # International Standard Musical Work Code
@@ -374,27 +406,53 @@ def build_cue_sheet(project, assignments, deliverables=None,
     even with no assignments."""
     campaign = (_val(project, "need") or "Main cue").strip() or "Main cue"
     contributors = _contributors(assignments)
-    composers = ", ".join(c.name for c in contributors) or "Chordential"
+    writers = [c for c in contributors if c.is_writer]
+    # Only writers are credited. With none assigned the work is still Chordential's
+    # to account for, so the house stands in — but a mixer never does.
+    composers = ", ".join(c.name for c in writers) or "Chordential"
+    # One PRO per writer, in the same order as the names. Distinct affiliations are
+    # listed; unknown ones stay blank rather than being asserted as the house PRO.
+    pro = ", ".join(c.pro or "" for c in writers).strip(", ") if writers else DEFAULT_PRO
+    # Writer share is split evenly across the credited writers; the publisher share
+    # is the publisher's. These were one "100%" column, which reads as either an
+    # impossible 100% writer share per writer or a conflation of the two sides.
+    writer_share = f"{100.0 / len(writers):.0f}%" if writers else "100%"
+    usage = _infer_usage(project)
     cutdowns_cue = f"{campaign} — cutdowns"
     m_main = _cue_meta(delivery, campaign)
     m_cut = _cue_meta(delivery, cutdowns_cue)
     rows = [
         CueRow(
-            cue=campaign, usage="VV",
+            cue=campaign, usage=(m_main.get("usage") or usage).strip(),
             duration=(m_main.get("duration") or "").strip(),
-            composers=composers, publisher=PUBLISHER, pro=DEFAULT_PRO, share="100%",
+            composers=composers, publisher=PUBLISHER, pro=pro,
+            writer_share=writer_share, publisher_share="100%",
             isrc=(m_main.get("isrc") or "").strip(),
             iswc=(m_main.get("iswc") or "").strip(),
         ),
         CueRow(
-            cue=cutdowns_cue, usage="BI",
+            cue=cutdowns_cue, usage=(m_cut.get("usage") or usage).strip(),
             duration=(m_cut.get("duration") or "").strip(),
-            composers=composers, publisher=PUBLISHER, pro=DEFAULT_PRO, share="100%",
+            composers=composers, publisher=PUBLISHER, pro=pro,
+            writer_share=writer_share, publisher_share="100%",
             isrc=(m_cut.get("isrc") or "").strip(),
             iswc=(m_cut.get("iswc") or "").strip(),
         ),
     ]
     return rows
+
+
+def _infer_usage(project) -> str:
+    """Background instrumental unless the brief says there is a vocal.
+
+    The main cue was hardcoded ``VV`` — Visual Vocal — which asserts a sung
+    performance visible on camera. Nothing here knows whether anyone is on screen,
+    so we never claim a visual code; the operator can override per cue via
+    ``delivery_json['cue_meta'][cue]['usage']``.
+    """
+    text = " ".join(str(_val(project, k) or "") for k in ("need", "description")).lower()
+    return USAGE_BACKGROUND_VOCAL if any(h in text for h in _VOCAL_HINTS) \
+        else USAGE_BACKGROUND_INSTRUMENTAL
 
 
 # --------------------------------------------------------------------------- #
@@ -1020,12 +1078,12 @@ def cue_sheet_csv(project, assignments, delivery: Optional[dict] = None) -> str:
     writer = csv.writer(buf)
     writer.writerow([
         "Cue", "Usage", "Duration", "ISRC", "ISWC",
-        "Composer", "Publisher", "PRO", "Share%",
+        "Composer", "Writer Share%", "Publisher", "Publisher Share%", "PRO",
     ])
     for r in rows:
         writer.writerow([
             r.cue, r.usage, r.duration, r.isrc, r.iswc,
-            r.composers, r.publisher, r.pro, r.share,
+            r.composers, r.writer_share, r.publisher, r.publisher_share, r.pro,
         ])
     return buf.getvalue()
 
@@ -1715,7 +1773,8 @@ def delivery_package_html(
         f"<tr><td>{_esc(q.cue)}</td><td>{_esc(q.usage)}</td>"
         f"<td>{_esc(q.duration or '—')}</td><td>{_esc(q.isrc or '—')}</td>"
         f"<td>{_esc(q.iswc or '—')}</td><td>{_esc(q.composers)}</td>"
-        f"<td>{_esc(q.publisher)}</td><td>{_esc(q.pro)}</td><td>{_esc(q.share)}</td></tr>"
+        f"<td>{_esc(q.writer_share)}</td><td>{_esc(q.publisher)}</td>"
+        f"<td>{_esc(q.publisher_share)}</td><td>{_esc(q.pro or '—')}</td></tr>"
         for q in (cues or [])
     )
     cue_page = f"""

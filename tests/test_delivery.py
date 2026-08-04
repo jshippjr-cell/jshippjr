@@ -88,8 +88,13 @@ def test_cue_sheet_rows_from_project_data():
     primary = rows[0]
     assert "Find Your Horizon" in primary.cue
     assert "J. Shipp" in primary.composers
+    # The mixer is not an author of the composition. This assertion is the one that
+    # was missing: the fixture has always had a Mixer, and the sheet credited them.
+    assert "A. Reyes" not in primary.composers
     assert primary.publisher == "Chordential Music"
-    assert primary.share == "100%"
+    # Writer and publisher share are separate accounts, never one conflated column.
+    assert primary.writer_share == "100%"
+    assert primary.publisher_share == "100%"
 
 
 def test_manifest_combines_standard_types_and_uploaded_assets():
@@ -254,9 +259,11 @@ def test_cue_sheet_csv_has_header_and_rows():
 
     text = cue_sheet_csv(_fake_project(), _fake_assignments())
     rows = list(_csv.reader(_io.StringIO(text)))
-    # IP3: fileable cue sheet — Duration / ISRC / ISWC columns present.
+    # IP3: fileable cue sheet — Duration / ISRC / ISWC columns present. Writer and
+    # publisher share are separate columns (a PRO accounts them separately).
     assert rows[0] == ["Cue", "Usage", "Duration", "ISRC", "ISWC",
-                       "Composer", "Publisher", "PRO", "Share%"]
+                       "Composer", "Writer Share%", "Publisher",
+                       "Publisher Share%", "PRO"]
     # The primary cue carries the campaign + the assigned composer(s).
     body = "\n".join(",".join(r) for r in rows[1:])
     assert "Find Your Horizon" in body
@@ -1668,7 +1675,8 @@ def test_cue_sheet_csv_has_isrc_iswc_duration_columns_fillable(client):
     text = cue_sheet_csv(proj, assigns, delivery=delivery)
     rows = list(_csv.reader(_io.StringIO(text)))
     assert rows[0] == ["Cue", "Usage", "Duration", "ISRC", "ISWC",
-                       "Composer", "Publisher", "PRO", "Share%"]
+                       "Composer", "Writer Share%", "Publisher",
+                       "Publisher Share%", "PRO"]
     body = "\n".join(",".join(r) for r in rows[1:])
     assert "0:60" in body
     assert "US-ABC-26-00001" in body

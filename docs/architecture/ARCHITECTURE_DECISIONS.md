@@ -677,6 +677,34 @@ pipeline. If a future stage belongs in the pipeline, add it to `OPEN_PIPELINE_ST
 `tests/test_one_pipeline_number.py` fails if the surfaces diverge, if open pipeline reads
 a post-award table again, or if the ceiling is used in place of the midpoint.
 
+### ADR-0031 — The cue sheet's composer column is a legal claim, not a credits list
+**Status:** Accepted (2026-08-04, operator directive) · Source: `docs/launch-review.md`
+finding 8 · `delivery.py`, `talent.pro`
+**Decision.** Only `WRITER_ROLES` (composer, co-composer, arranger, orchestrator,
+topline/topliner, songwriter, lyricist) are credited in a cue sheet's composer column.
+Writer share and publisher share are **separate columns**; the writer share splits evenly
+across credited writers. PRO affiliation is carried **per writer** on `talent.pro` — blank
+when unknown, never assumed. Usage is derived from whether the brief indicates a vocal
+(`BV`) or not (`BI`) and is operator-overridable per cue via
+`delivery_json['cue_meta'][cue]['usage']`; the system never claims a **visual** code
+(`VI`/`VV`), because nothing here knows whether a performer is on camera.
+**Why.** A PRO pays royalties on the composer column — it is an assertion of authorship,
+not a thank-you list. The generated sheet credited *every* assignment, so a mix engineer,
+a music editor and the project manager were all filed as authors of the work
+(reproduced: `composers='Maya Chen, Leo Park, Ana Ruiz, Sam Diaz'`). It also carried one
+`100%` share (meaningless across two accounts), hardcoded `BMI` for every writer whatever
+their actual affiliation, and hardcoded the main cue to `VV` — Visual Vocal — asserting a
+sung on-camera performance for every campaign bed ever delivered. A sheet like that is
+rejected on filing, and the rejection lands on the client.
+**Consequences.** New creative roles must be added to `WRITER_ROLES` deliberately — the
+default is *not* a writer. Do not reintroduce a single share column. `talent.pro` is
+additive (idempotent column migration) and editable on the talent page; leaving it blank
+is correct when unknown. `tests/test_fileable_cue_sheet.py` fails if a non-writer is
+credited, if the shares are conflated, if a PRO is assumed, or if a visual usage code is
+claimed. **Still open (finding 8):** the rights model itself — a full buyout /
+work-made-for-hire default coexisting with Chordential-as-100%-publisher and
+category-limited exclusivity — and the missing `media` dimension on the licence.
+
 ---
 
 ## Adding a new ADR
