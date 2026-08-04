@@ -631,6 +631,29 @@ what the public tool can express (a 30-piece orchestra) may legitimately exceed 
 that is why the page says the real number comes out of the discovery call. `ROLE_RATES` and
 `SESSION_PACKAGES` remain placeholders until AFM / SAG-AFTRA rate-card data replaces them.
 
+### ADR-0029 — One "waiting on you" authority; the recorded stage floors the next-action ladder
+**Status:** Accepted (2026-08-04, operator directive) · Source: `docs/launch-review.md`
+findings 6 + the dashboard duplicate · `web/queue.py`, `web/next_action.py`, `web/app.py`
+**Decision.** `queue.compute_queue()` is the **only** computation of "what is waiting on
+me". The dashboard reports its length and links to `/queue` for the detail; the inline sum
+that used to live in the dashboard route is deleted. The duplicate "▶ Your move" table is
+removed — the Mission Control hero features the top move, the queue is the full ranked
+list, one module per question. Separately, `next_action.compute()` treats the **recorded
+stage as a floor**: a deal that is Won, or that has a project, can never be offered a
+discovery or commercial rung.
+**Why.** The dashboard said **2** decisions waiting while `/queue` said **11** on the same
+database — two independently-coded aggregators, visibly disagreeing on the operator's most
+-looked-at number. And the ladder infers position from *artifacts* (meeting rows, a brief
+snapshot, a commercial review), which is right when a deal was worked through the system
+and wrong the moment it was not: a Won deal, staffed and in delivery, was featured as
+"Schedule the discovery call". Winning is a decision a human recorded; it outranks a
+missing artifact.
+**Consequences.** Do not add a second count of pending decisions — extend the queue's
+rungs instead, and every surface inherits it. `compute_queue` now runs on the dashboard
+too, so its cost matters: the batching work in the review's Phase 3 should cover both.
+`tests/test_one_aggregator.py` fails if the two numbers ever diverge again, or if any Won
+deal or any deal with a project is offered a discovery-stage move.
+
 ---
 
 ## Adding a new ADR

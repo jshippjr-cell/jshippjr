@@ -29,27 +29,10 @@
   {% endif %}
 </div>
 
-{# Always render this section so the "follow-ups due" KPI anchor never jumps into
-   the void — when nothing is due it shows a clear all-clear state instead of
-   feeling like a dead link. #}
-{% if operator_moves %}
-<section class="card urgent" id="operator-moves">
-  <div class="card-head"><h2>▶ Your move <span class="muted">— deals waiting on a decision from you</span></h2></div>
-  <table class="table compact">
-    <thead><tr><th>Next action</th><th>Campaign</th><th>Client</th><th></th></tr></thead>
-    <tbody>
-      {% for m in operator_moves %}
-      <tr>
-        <td class="strong">{{ m.label }}</td>
-        <td>{{ m.campaign }}</td>
-        <td class="muted">{{ m.client }}</td>
-        <td>{% if m.post %}<form method="post" action="{{ m.url }}" style="margin:0"><button class="btn tiny primary" type="submit">Go →</button></form>{% else %}<a class="btn tiny primary" href="{{ m.url }}">Go →</a>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
+{# The "▶ Your move" table stood here and listed the same deals the Mission
+   Control hero features from the same set — the page's own comment says ONE
+   number owns it, and it showed the decision twice. The hero features the top
+   move; /queue is the full ranked list. One module per question. #}
 
 {% if pending_reviews %}
 <section class="card urgent" id="pending-reviews">
@@ -122,6 +105,7 @@
       <div class="kpi-label">Waiting on you</div>
       <div class="mc-count">{{ waiting_count }}</div>
       <div class="mc-sub">decision{{ 's' if waiting_count != 1 }} the machine can't make</div>
+      {% if waiting_count %}<a class="link small" href="/queue">See all {{ waiting_count }} →</a>{% endif %}
     </div>
     <div class="mc-feature">
       {% if featured %}

@@ -106,9 +106,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `/commission` estimator renders from. A national :30 now suggests **$10,414** inside the
   public $9–18k, and the seeded Meridian deal quotes $15,414 against its $15–30k disclosed
   budget (was $8,694). `tests/test_pricing_voice.py` holds the two voices together.
-  **Still open in Phase 2:** the nine divergent `build_estimate` call sites, the two
-  "waiting on you" aggregators, the cue sheet's rights contradiction, console nav diet,
-  portal court-state ordering.
+  **Still open in Phase 2:** the nine divergent `build_estimate` call sites, the cue
+  sheet's rights contradiction, console nav diet, portal court-state ordering.
+- **One "waiting on you" authority** (ADR-0029, 2026-08-04). The dashboard said **2**
+  while `/queue` said **11** on the same DB — two independently-coded aggregators
+  disagreeing on the operator's most-looked-at number. `queue.compute_queue()` is now the
+  only one; the dashboard's inline sum and its duplicate "▶ Your move" table (the same
+  decision the Mission Control hero already features) are deleted. `next_action.compute()`
+  also floors on the recorded stage, so a **Won** deal staffed and in delivery can no
+  longer be featured as "Schedule the discovery call" just because no meeting row exists.
+  Note: `compute_queue` now runs on the dashboard too — its cost is on the Phase 3 batching
+  list. **Still open:** the three disagreeing money ledgers.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

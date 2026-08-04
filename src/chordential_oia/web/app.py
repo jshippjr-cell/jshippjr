@@ -1444,9 +1444,14 @@ def dashboard(request: Request):
                                   "label": na["label"], "detail": na.get("detail", ""),
                                   "court": na["court"],
                                   "url": na.get("url") or f"/opportunity/{r['id']}"})
-        waiting_count = (len(followups) + incoming_total + dr_new
-                         + len(pending_reviews) + len(operator_moves)
-                         + len(new_applicants))
+        # ONE authority for "what is waiting on you". This used to be a second,
+        # independently-coded sum living here — and the two disagreed in the open:
+        # the dashboard said 2 while /queue said 11 on the same database, because
+        # this line counted six things and the Disposition Queue ranks ten. The
+        # queue is the richer aggregator and the surface built for the question,
+        # so the dashboard reports its total and links to it for the detail.
+        queue_cards = queue_mod.compute_queue(conn, db)
+        waiting_count = len(queue_cards)
         if operator_moves and not pending_reviews:
             m0 = operator_moves[0]
             _featured_move = {"kind": "Your move", "title": f"{m0['label']} — {m0['campaign']}",

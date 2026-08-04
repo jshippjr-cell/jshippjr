@@ -28,6 +28,15 @@ def compute(conn, db, opp, project) -> dict:
         return {"court": "done", "label": "Nothing — this deal is closed",
                 "detail": f"Marked {status.lower()}.", "url": "", "post": False, "since": ""}
 
+    # The recorded stage is a FLOOR on this ladder. Every rung below infers where
+    # the deal stands from ARTIFACTS — meeting rows, a brief snapshot, a commercial
+    # review — which is right when the deal was worked through the system and wrong
+    # the moment it was not. A deal marked Won, with a project staffed and in
+    # delivery, had no meeting rows, so the ladder offered "Schedule the discovery
+    # call" — and the dashboard featured it as the one thing waiting on the operator.
+    # Winning is a decision a human recorded; it outranks a missing artifact.
+    won = status == "Won" or project is not None
+
     # ── Discovery ───────────────────────────────────────────────────────────
     now = _now_iso()
     met, upcoming, upcoming_at = False, False, ""
@@ -41,7 +50,7 @@ def compute(conn, db, opp, project) -> dict:
             upcoming, upcoming_at = True, m["start_at"]
     proposals_open = any(p["status"] in ("draft", "sent")
                          for p in db.list_meeting_proposals(conn, opp_id))
-    if not met:
+    if not met and not won:
         if upcoming:
             return {"court": "scheduled", "label": "Nothing until the discovery call",
                     "detail": "The call is booked; the transcript will land by itself.",
@@ -59,7 +68,7 @@ def compute(conn, db, opp, project) -> dict:
     confirmed = overrides.get("scope_confirmed") or None
     review = db.current_commercial_review(conn, opp_id)
     approved = bool(review) and review["status"] == "approved"
-    if not approved:
+    if not approved and not won:
         snap = db.latest_brief_snapshot(conn, opp_id)
         if snap is None and not confirmed:
             return {"court": "you", "label": "Send the Discovery Summary",
