@@ -5,8 +5,8 @@
 <style>
   .cw-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px}
   .cw-title{font-family:var(--serif,Georgia,serif);font-size:26px;line-height:1.15;margin:0}
-  .cw-sub{color:var(--olive,#737469);font-size:13px;margin:2px 0 0}
-  .cw-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--olive,#737469)}
+  .cw-sub{color:var(--olive,#65665B);font-size:13px;margin:2px 0 0}
+  .cw-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--olive,#65665B)}
   .cw-meta b{color:var(--ink,#1F1E1E)}
   /* creative timeline rail — the campaign's arc, not a kanban */
   .cw-rail{display:flex;gap:0;align-items:stretch;margin:18px 0 26px;overflow-x:auto}
@@ -18,7 +18,7 @@
   .cw-step.done .dot,.cw-step.done .bar{background:var(--orange,#E4671F);border-color:var(--orange,#E4671F)}
   .cw-step.cur .dot{background:var(--wine,#44161E);border-color:var(--wine,#44161E);
     box-shadow:0 0 0 4px rgba(68,22,30,.14)}
-  .cw-step .lbl{font-size:10.5px;letter-spacing:.02em;color:var(--olive,#737469)}
+  .cw-step .lbl{font-size:10.5px;letter-spacing:.02em;color:var(--olive,#65665B)}
   .cw-step.cur .lbl{color:var(--wine,#44161E);font-weight:700}
   .cw-phasebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-12px 0 24px}
   /* buyer link (Discovery Intelligence spine) */
@@ -26,21 +26,21 @@
     margin:16px 0 4px;padding:9px 13px;border-radius:10px;background:var(--cream,#FCF7F8);
     border:1px solid var(--sand,#D8CDB6)}
   .cw-agency-on{font-weight:700;color:var(--wine,#44161E)}
-  .cw-agency-off{font-weight:700;color:var(--olive,#737469)}
+  .cw-agency-off{font-weight:700;color:var(--olive,#65665B)}
   .cw-agency-intel{color:var(--orange,#E4671F);font-weight:600}
-  .cw-agency-none{color:var(--olive,#737469)}
+  .cw-agency-none{color:var(--olive,#65665B)}
   .cw-agency-btn{background:none;border:0;color:var(--slate,#546671);text-decoration:underline;
     cursor:pointer;font:inherit;font-size:12px;padding:0;margin-left:2px}
   /* creative direction */
   .cw-dir-head{display:flex;align-items:baseline;gap:12px;margin:22px 0 4px}
-  .cw-meter{font-size:12px;color:var(--olive,#737469)}
+  .cw-meter{font-size:12px;color:var(--olive,#65665B)}
   .cw-meter b{color:var(--orange,#E4671F)}
   .cw-sec{border:1px solid var(--sand,#D8CDB6);border-radius:12px;padding:14px 16px;margin:12px 0;background:#fff}
   .cw-sec.done{border-color:var(--orange,#E4671F);background:rgba(228,103,31,.03)}
   .cw-sec-top{display:flex;align-items:center;gap:10px}
   .cw-sec-title{font-weight:700;font-size:14px}
-  .cw-sec-check{margin-left:auto;font-size:12px;color:var(--olive,#737469)}
-  .cw-sec-hint{color:var(--olive,#737469);font-size:12px;margin:2px 0 8px}
+  .cw-sec-check{margin-left:auto;font-size:12px;color:var(--olive,#65665B)}
+  .cw-sec-hint{color:var(--olive,#65665B);font-size:12px;margin:2px 0 8px}
   .cw-sec textarea{width:100%;min-height:70px;border:1px solid var(--sand,#D8CDB6);border-radius:8px;
     padding:9px 11px;font:inherit;font-size:13.5px;resize:vertical;background:var(--cream,#FCF7F8)}
   .cw-sec .row{display:flex;align-items:center;gap:12px;margin-top:8px}
@@ -49,11 +49,11 @@
     color:var(--slate,#546671);text-decoration:none;background:#fff}
   .cw-tab.on{background:var(--wine,#44161E);color:#fff;border-color:var(--wine,#44161E)}
   .cw-body{color:var(--ink,#1F1E1E);font-size:13.5px;white-space:pre-wrap;margin-top:4px}
-  .cw-empty{color:var(--olive,#737469);font-style:italic;font-size:13px}
+  .cw-empty{color:var(--olive,#65665B);font-style:italic;font-size:13px}
   /* Campaign Intelligence — the canonical record + provenance */
   .ci{margin:26px 0 8px}
   .ci-head{display:flex;align-items:baseline;gap:12px}
-  .ci-count{font-size:12px;color:var(--olive,#737469)}
+  .ci-count{font-size:12px;color:var(--olive,#65665B)}
   .ci-count b{color:var(--orange,#E4671F)}
   .ci-facet{margin:16px 0 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--wine,#44161E);font-weight:700}
@@ -64,15 +64,15 @@
   .ci-kind.fact{background:rgba(84,102,113,.12);color:var(--slate,#546671)}
   .ci-kind.insight{background:rgba(68,22,30,.09);color:var(--wine,#44161E)}
   .ci-kind.recommendation{background:rgba(228,103,31,.12);color:var(--orange,#E4671F)}
-  .ci-kind.open_question{background:rgba(120,117,109,.14);color:var(--olive,#737469)}
+  .ci-kind.open_question{background:rgba(120,117,109,.14);color:var(--olive,#65665B)}
   .ci-mid{flex:1 1 auto;min-width:0}
   .ci-label{font-weight:700;font-size:12.5px;color:var(--ink,#1F1E1E)}
   .ci-value{font-size:13px;color:var(--ink,#1F1E1E);margin-top:1px}
-  .ci-prov{font-size:10.5px;color:var(--olive,#737469);margin-top:3px}
+  .ci-prov{font-size:10.5px;color:var(--olive,#65665B);margin-top:3px}
   .ci-src{color:var(--slate,#546671)}
   .ci-risk{color:#b5651d;font-weight:700}
   .ci-right{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-  .ci-status{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--olive,#737469)}
+  .ci-status{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--olive,#65665B)}
   .ci-status.disposed{color:#1d6b43}
   .ci-dispose{font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--sand,#D8CDB6);
     background:#fff;color:var(--wine,#44161E);cursor:pointer;font:inherit;white-space:nowrap}
@@ -88,7 +88,7 @@
   .cap-stance.on{background:var(--wine,#44161E);color:#fff;border-color:var(--wine,#44161E)}
   .cap textarea{width:100%;min-height:64px;border:1px solid var(--sand,#D8CDB6);border-radius:8px;
     padding:9px 11px;font:inherit;font-size:13.5px;resize:vertical;background:#fff}
-  .cap-hint{color:var(--olive,#737469);font-size:12px;margin:2px 0 0}
+  .cap-hint{color:var(--olive,#65665B);font-size:12px;margin:2px 0 0}
   .cap-summary{margin:10px 0 0;padding:9px 13px;border-radius:10px;background:rgba(228,103,31,.07);
     border:1px solid var(--orange,#E4671F);font-size:13px}
   .cap-summary b{color:var(--orange,#E4671F)}

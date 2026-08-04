@@ -164,10 +164,13 @@ open-pipeline number~~ ✔ · ~~fileable cue sheets~~ ✔ · ~~one rights basis~
 ~~console nav diet~~ ✔ · ~~portal ordered by court-state~~ ✔ ·
 brand-unified `/start` `/book` `/thanks` with a budget field ·
 ~~naming system stops fabricating `_60_MASTER` on :30 spots~~ ✔ · ~~real byte-progress on console
-uploads~~ ✔ · ~~share-token rotation~~ ✔ · ~~"hear the work" on the homepage~~ ✔ · finish the contrast
-pass: `--olive` (#737469) is a brand
-token used as body text on internal surfaces at 4.47:1, marginally under AA — changing it
-is a palette decision, not a bug fix, so it was left out of Phase 1.
+uploads~~ ✔ · ~~share-token rotation~~ ✔ · ~~"hear the work" on the homepage~~ ✔ ·
+~~finish the contrast pass: `--olive`~~ ✔ — ruled by the operator and darkened to
+`#65665B` (ADR-0041). It was worse than filed: under AA on **three** of four console
+surfaces, and the same value survived unfixed in `brief.css` and `first_touch.html`,
+two documents a **client** reads.
+
+**Phase 2 is complete.**
 
 ## Phase 3 — strategic architecture
 

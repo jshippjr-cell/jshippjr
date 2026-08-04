@@ -54,7 +54,11 @@ def test_oklch_values_round_trip_to_the_exact_original_hex():
     block = css.split("/* Chordential brand palette")[1].split("}")[0]
 
     expected = {
-        "--cream": "#FCF7F8", "--sand": "#D8CDB6", "--olive": "#737469", "--slate": "#546671",
+        "--cream": "#FCF7F8", "--sand": "#D8CDB6",
+        # ADR-0041 (operator ruling): olive darkened from #737469, which was under
+        # AA as type. The OKLCH value must still land EXACTLY on the intended hex —
+        # that is what this test is for; only the intended hex changed.
+        "--olive": "#65665B", "--slate": "#546671",
         "--ink": "#1F1E1E", "--wine": "#44161E", "--orange": "#E4671F", "--white": "#FFFFFF",
     }
 

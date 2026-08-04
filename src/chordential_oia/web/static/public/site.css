@@ -5,7 +5,10 @@
      the way HSL does. Same visible colors as before — each value below was
      converted from and round-trips exactly back to the original hex. */
   --cream:oklch(0.98 0.005 3.336); --sand:oklch(0.851 0.033 85.479);
-  --olive:oklch(0.555 0.017 111.153); --slate:oklch(0.499 0.028 234.95);
+  /* olive: lightness darkened 0.555 -> 0.505 (ADR-0041, operator ruling) — the
+     old value was under AA as type on every light surface it lands on. Hue and
+     chroma untouched, so it is the same colour, read at a legible weight. */
+  --olive:oklch(0.505 0.017 111.153); --slate:oklch(0.499 0.028 234.95);
   --ink:oklch(0.236 0.002 17.265); --wine:oklch(0.276 0.071 12.476);
   --orange:oklch(0.658 0.174 45.4); --white:oklch(1 0 0);
 

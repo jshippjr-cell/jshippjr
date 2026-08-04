@@ -249,6 +249,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   links to the recordings. Audio moved off the third-party CDN onto our own
   `/static/public/` (the operator's demo uploads, to be replaced with final masters);
   swapping a track is a file swap at one path.
+- **`--olive` clears AA** (ADR-0041, **operator ruling**, 2026-08-04). The last deferred
+  contrast item, and worse than filed: `#737469` measured **4.47:1** on `--bg`, **4.15:1**
+  on `--panel` and **3.89:1** on `--panel2` — under AA on three of the four console
+  surfaces it types on. The Phase-1 pass had fixed `site.css`'s `--muted` but missed the
+  same value in **`brief.css`** and **`first_touch.html`** (documents a *client* reads,
+  at 3.86:1 on the body) and a raw literal on the homepage's paper card (3.84:1).
+  Self-contained palettes are how a sitewide colour fix misses surfaces. Now `#65665B` —
+  OKLCH lightness 0.555 → 0.505, hue and chroma untouched — with a 4.78:1 worst case.
+  Both palettes, both client documents, the literal and all fourteen `var()` fallbacks
+  moved together. Phase 2 of the launch review is complete.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

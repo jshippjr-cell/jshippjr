@@ -3,7 +3,10 @@
        ".capdoc" namespace; everything here is the original doc shell. */
     :root{
       --cream:#FCF7F8; --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F;
-      --slate:#546671; --sand:#D8CDB6; --muted:#737469;
+      --slate:#546671; --sand:#D8CDB6;
+      /* ADR-0041: #737469 was 4.47:1 on the page and 3.86:1 on the body — under AA
+         on a document a CLIENT reads. Same hue, darkened. */
+      --muted:#65665B;
     }
     *{box-sizing:border-box}
     body{margin:0;background:#ece7e3;color:var(--ink);

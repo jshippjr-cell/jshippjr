@@ -1,6 +1,11 @@
 :root{
   /* Chordential brand palette */
-  --cream:#FCF7F8; --sand:#D8CDB6; --olive:#737469; --slate:#546671;
+  --cream:#FCF7F8; --sand:#D8CDB6;
+  /* Darkened from #737469 (ADR-0041, operator ruling): 4.47:1 on cream, 4.15:1 on
+     the sand panels and 3.89:1 on panel2 — under AA as body text on three of the
+     four surfaces it sits on. Same hue and chroma, lightness down 0.05 in OKLCH;
+     worst case is now 4.78:1. */
+  --olive:#65665B; --slate:#546671;
   --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --white:#fff;
 
   /* semantic surfaces (warm light theme) */
@@ -810,7 +815,7 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 }
 .capdoc-rail-label{
   font-size:10px;letter-spacing:.08em;text-transform:uppercase;
-  color:#737469;font-weight:700;margin-bottom:6px;
+  color:var(--olive);font-weight:700;margin-bottom:6px;  /* ADR-0041: was the raw #737469 */
 }
 .chip-rail{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 8px}
 .chip-rail form{margin:0}
@@ -915,7 +920,7 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .lv-up-bar{height:4px;border-radius:2px;background:var(--line,#e6dfd2);overflow:hidden}
 .lv-up-bar i{display:block;height:100%;width:0;background:var(--accent);
   transition:width .18s linear}
-.lv-up-note{display:block;margin-top:6px;font-size:11.5px;color:var(--muted,#737469);
+.lv-up-note{display:block;margin-top:6px;font-size:11.5px;color:var(--muted,#65665B);
   font-variant-numeric:tabular-nums}
 .lv-up.failed .lv-up-bar i{background:#b3261e}
 .lv-up.failed .lv-up-note{color:#b3261e}

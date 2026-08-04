@@ -1017,6 +1017,35 @@ or a bespoke player. Swapping a track is a file swap at the path in `showcase.py
 nothing else changes. The current files are the operator's demo uploads, to be replaced
 with final masters.
 
+### ADR-0041 — `--olive` darkens to clear AA
+**Status:** Accepted (2026-08-04, **operator ruling** — a brand token's value is a
+palette decision, not an engineering one) · Source: `docs/launch-review.md` Phase 2 (the
+deferred contrast item) · `static/style.css`, `static/public/site.css`, `static/brief.css`,
+`first_touch.html`, `commission.html`, `campaign_home.html`
+**Decision.** `--olive` moves from `#737469` to **`#65665B`** — in OKLCH, lightness
+`0.555 → 0.505` with **hue and chroma untouched**. Both palettes move together (the
+console's hex and the public site's OKLCH are the same colour and must stay so), as do
+the two standalone client-document palettes that define the same value as `--muted`, the
+one hardcoded literal on the homepage's paper card, and all fourteen
+`var(--olive, …)` fallbacks.
+**Why.** The launch review flagged `#737469` at 4.47:1 as body text and deferred it,
+correctly, as a palette call. Measured properly it was worse than filed: **4.47:1** on
+`--bg`, **4.15:1** on `--panel`, **3.89:1** on `--panel2` — under AA on *three* of the
+four console surfaces it types on. And the earlier Phase-1 contrast pass had fixed
+`site.css`'s `--muted` while missing the same value in **`brief.css`** and
+**`first_touch.html`** — two documents a *client* reads — at 4.47:1 on the page and
+3.86:1 on the body, plus a raw `#737469` on the homepage's paper card at 3.84:1 against
+the dark end of its own gradient. Self-contained palettes are exactly how a sitewide
+colour fix misses surfaces. Worst case is now **4.78:1**.
+**Consequences.** `tests/test_olive_contrast.py` **computes** the ratios from the
+stylesheets rather than asserting a hex, so the palette may move again as long as it
+keeps passing; it fails if any surface drops under 4.5:1, if the two palettes' lightness
+diverges, if `#737469` reappears anywhere (including as a `var()` fallback — a page that
+renders before the palette must not land on the failing value), or if the "darkening"
+ever changes the hue enough to stop being an olive. When adding a surface colour, check
+type against it rather than assuming the token is safe: this token passed on `--card`
+the whole time, which is why it survived a review pass.
+
 ---
 
 ## Adding a new ADR
