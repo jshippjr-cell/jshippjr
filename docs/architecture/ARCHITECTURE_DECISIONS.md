@@ -1143,6 +1143,22 @@ the evidence. **225 routes remain in `app.py`** (8,545 lines). `/opportunity` (5
 (`_load`, `_brief_for`, `_outreach_for`, `_quote_band_for`) relocated before their routes
 follow — that is a later pass, not an afterthought to this one.
 
+**Slice 2 (2026-08-04) — the discovery surface.** `/signals` (10), `/discovery` (7),
+`/sources` (4) and `/leads` (4) → `discovery_routes.py`: **25 routes with zero references
+to any `app.py` helper**, and a group the console's own nav already treats as one section.
+Unlike `/agencies` these were **not** contiguous — ten unrelated routes (the dashboard,
+the admin login, `/incoming`, an opportunity delete) were interleaved through their span —
+so the extraction was per-route rather than one cut, with relative order preserved.
+`_safe_local` moved to `shell.py` as `safe_local`: an open-redirect guard is a web
+primitive, it is shared by `/admin`, `/opportunity` and `/talent`, and leaving it in
+`app.py` would block every future slice that accepts a `return_to`. The unresolved-name
+guard earned its place again immediately — `os` and `Optional` were missing from the new
+module, which imports cleanly and would have raised `NameError` on a request.
+**app.py: 8,545 → 8,051 lines; 201 routes remain.** `/talent` (11) + `/payouts` (4) are
+the next natural group but their routes are scattered across ~4,000 lines rather than
+clustered, so that pass is a gather rather than a cut and is deliberately not bundled
+here.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

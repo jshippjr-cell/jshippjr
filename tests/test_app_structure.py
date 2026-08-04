@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from chordential_oia.web import app as app_mod  # noqa: E402
 
 WEB = Path(app_mod.__file__).parent
-ROUTERS = ["agencies_routes.py"]          # grows with each slice
+ROUTERS = ["agencies_routes.py", "discovery_routes.py"]   # grows with each slice
 
 
 def _module_paths(name):
@@ -138,6 +138,23 @@ def test_every_moved_route_still_answers():
             assert c.get(path, follow_redirects=False).status_code == 200, path
 
 
+@pytest.mark.parametrize("prefix,module", [
+    ("/agencies", "agencies_routes.py"),
+    ("/signals", "discovery_routes.py"),
+    ("/discovery", "discovery_routes.py"),
+    ("/sources", "discovery_routes.py"),
+    ("/leads", "discovery_routes.py"),
+])
+def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
+    """Declared in both files would register duplicates: the first wins and the
+    module becomes dead weight that still looks maintained."""
+    app_src = (WEB / "app.py").read_text(encoding="utf-8")
+    assert not re.search(r'^@app\.[a-z]+\("' + re.escape(prefix), app_src, re.M), (
+        f"{prefix} routes are still declared in app.py")
+    assert re.search(r'^@router\.[a-z]+\("' + re.escape(prefix), 
+                     (WEB / module).read_text(encoding="utf-8"), re.M)
+
+
 def test_the_agencies_group_left_app_py():
     """If the routes are declared in both places the app would register duplicates —
     the first would win and the module would be dead weight."""
@@ -151,7 +168,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 8600, (
+    assert n < 8100, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 

@@ -292,7 +292,9 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   measurement: 26 routes (10%) touching only four `app.py` helpers, versus 23 and 29 for
   `/opportunity` and `/project`, with no route-pattern collision. **app.py: 9,133 → 8,545
   lines; 225 routes remain.** The pattern and its guard-rail tests are in place for the
-  next slices; `/opportunity` and `/project` need their shared helpers relocated first.
+  next slices; `/opportunity` and `/project` need their shared helpers relocated first. **Slice 2:** the discovery surface (`/signals`, `/discovery`,
+  `/sources`, `/leads` — 25 routes, zero helper coupling) → `discovery_routes.py`, and
+  `_safe_local` → `shell.safe_local`. **app.py: 8,545 → 8,051 lines, 201 routes left.**
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

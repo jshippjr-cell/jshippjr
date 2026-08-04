@@ -52,6 +52,20 @@ def render(request: Request, name: str, **kw):
     return templates.TemplateResponse(request=request, name=name, context=context)
 
 
+def safe_local(path: str, fallback: str) -> str:
+    """Only redirect to a same-site path (guards the ``return_to`` field).
+
+    An open redirect is the classic form-field hole, and every route surface that
+    accepts a `return_to` needs the same guard — `/admin`, `/opportunity` and
+    `/talent` all do. Keeping it here means a route module never has to reach back
+    into `app.py` for it (ADR-0044): `//evil.example` is rejected as well as
+    `https://…`, because a protocol-relative URL leaves the site just as happily.
+    """
+    if path and path.startswith("/") and not path.startswith("//"):
+        return path
+    return fallback
+
+
 def public_base() -> str:
     """Absolute public base for links that land in an email (a relative path is
     dead in a mail client). Uses the configured domain; chordential.com default —
@@ -61,4 +75,4 @@ def public_base() -> str:
     ).rstrip("/")
 
 
-__all__ = ["templates", "render", "public_base"]
+__all__ = ["templates", "render", "public_base", "safe_local"]
