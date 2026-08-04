@@ -80,8 +80,14 @@ Almost none of this required building. It required wiring, reconciling, and dele
    from `talent.pro`, and usage derived from the brief instead of asserting `VV` — a sung
    on-camera performance — for every campaign bed. Reproduced before: `composers='Maya
    Chen, Leo Park, Ana Ruiz, Sam Diaz'` — the mixer, the editor and the project manager
-   all filed as authors. *Still open: the rights model itself (buyout vs 100% publisher vs
-   category exclusivity) and the missing media dimension on the licence.*
+   all filed as authors. ***And the rights model is settled (ADR-0032, operator ruling):***
+   the client buys the **master** outright with a **perpetual sync licence** across every
+   campaign medium; the **composition's publishing is retained**, which is what makes the
+   cue sheet — and the royalties it collects — coherent. The licence gained the missing
+   `media` dimension and an explicit `publishing` term, both now printed on the
+   certificate. The sales copy moved with it: "you own it" → "you own the recording and
+   the right to use it forever", and "no PRO surprises" (beside a cue sheet we file *with*
+   a PRO) → "nothing to clear but ours". **Finding 8 is closed.**
 9. **Client media was not durable.** `render.yaml` never set `CHORDENTIAL_UPLOAD_DIR`, so
    prod uploads landed in the installed package — wiped on every deploy, and `autoDeploy`
    means every push. Files over the 64 MB mirror cap had no durable copy at all; under it

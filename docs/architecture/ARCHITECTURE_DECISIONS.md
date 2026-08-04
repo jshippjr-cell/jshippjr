@@ -705,6 +705,35 @@ claimed. **Still open (finding 8):** the rights model itself — a full buyout /
 work-made-for-hire default coexisting with Chordential-as-100%-publisher and
 category-limited exclusivity — and the missing `media` dimension on the licence.
 
+### ADR-0032 — One rights basis: the master is bought out, the publishing is retained
+**Status:** Accepted (2026-08-04, **operator ruling** — this is a commercial decision,
+not an engineering one) · Source: `docs/launch-review.md` finding 8 · `delivery.py`,
+`capabilities.py`
+**Decision.** The client buys the **recording (master) outright** and receives a
+**perpetual sync licence across every campaign medium**, worldwide, exclusive in the
+campaign category. The **composition's publishing is retained by Chordential Music** —
+which is what the cue sheet files, and what performance royalties are collected against.
+`DEFAULT_LICENSE` gains an explicit `publishing` term and the previously missing `media`
+dimension; the certificate prints both. Per-deal overrides still win — this fixes the
+*default*, which has to be internally consistent.
+**Why.** The package asserted three mutually exclusive positions at once: a licence typed
+"Full buyout / work-made-for-hire", a cue sheet filing Chordential as **100% publisher**,
+and a **category-exclusivity** clause. Under work-made-for-hire the *client* is the author
+and owns the publishing, so we cannot also collect a publisher share; and exclusivity is
+meaningless on rights you no longer hold. Any agency business-affairs reviewer catches
+that on one read, and it lands on the certificate that is the product's whole promise.
+Of the three coherent structures, this is the standard one in advertising music, the only
+one that makes the existing cue sheet correct, and the one that preserves a recurring
+royalty line. The sales copy moved to match: "you own it" → "you own the recording and the
+right to use it forever, in every campaign medium", and "no PRO surprises" (which sat
+beside a cue sheet we file *with* a PRO) → "nothing to clear but ours".
+**Consequences.** Never reintroduce "full buyout" or "work-made-for-hire" as the type —
+`tests/test_rights_model.py` fails on both, and on marketing that promises publishing we
+do not convey. If the business ever moves to a true buyout, the cue sheet's publisher must
+move to the client in the same change. Composer agreements (ADR-0024) must convey the
+master and grant the sync licence while leaving the writers' and publisher's shares
+intact; that instrument is outside this repo and should be checked against this ADR.
+
 ---
 
 ## Adding a new ADR

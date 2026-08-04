@@ -194,12 +194,17 @@ def _deliverables_for(qual: QualificationResult) -> List[Deliverable]:
 
 
 # Standard grant of rights — these are Chordential's own terms, fine to state.
+# ADR-0032: the recording is bought out, the composition's publishing is retained.
+# This used to promise "full buyout / work-made-for-hire" — under which the client
+# would own the publishing too, contradicting the cue sheet we file.
 _RIGHTS_SUMMARY = [
-    "Original work — full buyout / work-made-for-hire",
+    "Original work — you own the master outright",
+    "Perpetual sync licence across every campaign medium",
     "Territory: worldwide",
     "Term: perpetuity",
     "Media: all campaign media (broadcast, digital, social, OOH, in-store)",
-    "100% original & cleared — no samples, no third-party masters, no PRO surprises",
+    "Composition publishing retained by Chordential — we file the cue sheet",
+    "100% original & cleared — no samples, no third-party masters, nothing to clear but ours",
 ]
 
 
@@ -297,8 +302,9 @@ SUPPORT_CHIPS = [
     {"id": "ass-cleared", "family": "assurance", "label": "Original & cleared",
      "sentence": "100% original and cleared — no samples, no third-party masters, no PRO surprises.",
      "templates": None},
-    {"id": "ass-buyout", "family": "assurance", "label": "Full buyout",
-     "sentence": "Delivered as a full buyout — you own it, worldwide, in perpetuity.",
+    {"id": "ass-buyout", "family": "assurance", "label": "Yours in perpetuity",
+     "sentence": "You own the recording and the right to use it forever, worldwide, "
+                 "in every campaign medium.",
      "templates": None},
     {"id": "ass-fixed", "family": "assurance", "label": "Fixed scope & timeline",
      "sentence": "A fixed scope and a dependable timeline — no open-ended creative drift.",

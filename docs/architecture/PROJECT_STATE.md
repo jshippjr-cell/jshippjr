@@ -132,10 +132,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   camera) for every bed. Now: `WRITER_ROLES` only, writer/publisher share as separate
   columns, PRO per writer from the new additive `talent.pro` column (editable on the
   talent page, blank when unknown), and usage derived `BI`/`BV` from the brief with a
-  per-cue operator override. **Still open in Phase 2:** the rights model's own
-  contradiction (buyout vs 100% publisher vs category exclusivity) and the missing `media`
-  dimension; the nine divergent `build_estimate` call sites; console nav diet; portal
-  court-state ordering.
+  per-cue operator override.
+- **One rights basis** (ADR-0032, **operator ruling**, 2026-08-04). The package asserted
+  three mutually exclusive positions at once — a licence typed "Full buyout /
+  work-made-for-hire", a cue sheet filing Chordential as **100% publisher**, and a
+  **category-exclusivity** clause. Under WFH the client is the author and owns the
+  publishing, so we cannot also collect a publisher share, and exclusivity is meaningless
+  on rights we no longer hold. Ratified: **master bought out + perpetual sync licence
+  across all campaign media; composition publishing retained.** `DEFAULT_LICENSE` gained
+  `publishing` and the missing `media` term, both printed on the certificate; sales copy
+  and the demo seed moved to match. Per-deal overrides still win. **Still open in Phase
+  2:** the nine divergent `build_estimate` call sites; console nav diet; portal
+  court-state ordering; brand-unified intake with the budget field.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

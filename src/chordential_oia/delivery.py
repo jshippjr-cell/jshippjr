@@ -83,8 +83,21 @@ VERSION_LABELS = {1: "Concept", 2: "Direction-lock", 3: "FINAL"}
 # Sensible license defaults — Chordential's own standard terms (fine to state),
 # matching the rights summary in the static delivery sample. The license dict in
 # delivery_json overrides any of these per-deal.
+# The rights basis (ADR-0032, operator ruling). This used to read "Full buyout /
+# work-made-for-hire" while the cue sheet filed Chordential as 100% publisher and the
+# grant carried a category-exclusivity clause — three mutually exclusive positions in
+# one package. Under work-made-for-hire the CLIENT is the author and owns the
+# publishing, so we could not also collect a publisher share; and you cannot grant
+# exclusivity on something you no longer own. The ratified structure is the standard
+# one in advertising: the client buys the RECORDING outright and a perpetual sync
+# licence across every campaign medium; the COMPOSITION's publishing stays here, which
+# is what makes the cue sheet — and the performance royalties it collects — coherent.
 DEFAULT_LICENSE = {
-    "type": "Full buyout / work-made-for-hire",
+    "type": "Buyout of master + perpetual sync licence",
+    "publishing": "Composition publishing retained by Chordential Music",
+    # Media was promised in the sales copy ("all campaign media") and had nowhere to
+    # live on the grant, so the certificate could not record the scope being sold.
+    "media": "All campaign media — broadcast, digital, social, OOH, in-store",
     "territory": "Worldwide",
     "term": "Perpetuity",
     "exclusivity": "Exclusive to client for the campaign category",
@@ -1160,6 +1173,13 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
             "deal grant. Confirm the license to certify these terms."
         )
     lines.append(f"  Type:        {cert.license.get('type', '')}")
+    # Publishing and Media are stated explicitly. Leaving publishing implicit is how
+    # a buyout claim and a retained publisher share coexisted unnoticed; leaving media
+    # off meant the certificate could not record the scope the sale promised.
+    if cert.license.get("publishing"):
+        lines.append(f"  Publishing:  {cert.license.get('publishing')}")
+    if cert.license.get("media"):
+        lines.append(f"  Media:       {cert.license.get('media')}")
     lines.append(f"  Territory:   {cert.license.get('territory', '')}")
     lines.append(f"  Term:        {cert.license.get('term', '')}")
     lines.append(f"  Exclusivity: {cert.license.get('exclusivity', '')}")

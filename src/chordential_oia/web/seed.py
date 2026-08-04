@@ -203,7 +203,9 @@ _DELIVERY_DEMO_CLIENTS = ("Lumen Health", "Vance Athletic", "Northwind Coffee")
 # clearance certificate uses the engine's honest IP3 default ("Registrable with
 # Content ID"), never the bare "Content-ID-safe" claim the engine was rebuilt to kill.
 _DELIVERY_DEMO_LICENSE = {
-    "type": "Full buyout / work-made-for-hire",
+    "type": "Buyout of master + perpetual sync licence",
+    "publishing": "Composition publishing retained by Chordential Music",
+    "media": "All campaign media — broadcast, digital, social, OOH, in-store",
     "territory": "Worldwide",
     "term": "Perpetuity",
     "exclusivity": "Exclusive to client for the campaign category",

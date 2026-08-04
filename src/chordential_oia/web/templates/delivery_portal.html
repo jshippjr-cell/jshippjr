@@ -732,6 +732,11 @@
         {% endif %}
         <ul class="clean">
           <li><b>Type:</b> {{ cert.license.type }}</li>
+          {# Publishing and Media are the two terms this grant used to leave unstated —
+             which is how a buyout claim and a retained publisher share coexisted. The
+             client's own page is the first place they should be legible. #}
+          {% if cert.license.publishing %}<li><b>Publishing:</b> {{ cert.license.publishing }}</li>{% endif %}
+          {% if cert.license.media %}<li><b>Media:</b> {{ cert.license.media }}</li>{% endif %}
           <li><b>Territory:</b> {{ cert.license.territory }}</li>
           <li><b>Term:</b> {{ cert.license.term }}</li>
           <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
