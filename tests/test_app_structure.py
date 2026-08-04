@@ -27,7 +27,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from chordential_oia.web import app as app_mod  # noqa: E402
 
 WEB = Path(app_mod.__file__).parent
-ROUTERS = ["agencies_routes.py", "discovery_routes.py"]   # grows with each slice
+ROUTERS = ["agencies_routes.py", "discovery_routes.py",
+           "talent_routes.py"]           # grows with each slice
 
 
 def _module_paths(name):
@@ -144,6 +145,8 @@ def test_every_moved_route_still_answers():
     ("/discovery", "discovery_routes.py"),
     ("/sources", "discovery_routes.py"),
     ("/leads", "discovery_routes.py"),
+    ("/talent", "talent_routes.py"),
+    ("/payouts", "talent_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
@@ -168,7 +171,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 8100, (
+    assert n < 7700, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 

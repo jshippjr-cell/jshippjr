@@ -1159,6 +1159,21 @@ the next natural group but their routes are scattered across ~4,000 lines rather
 clustered, so that pass is a gather rather than a cut and is deliberately not bundled
 here.
 
+**Slice 3 (2026-08-04) — the supply side.** `/talent` (11) + `/payouts` (4) →
+`talent_routes.py`: the console's **Supply** section, minus the Match Board, which
+reaches into the opportunity helpers and waits for that pass. **The "scattered across
+4,000 lines" note in slice 2 was wrong** — measured, both are *contiguous blocks*
+(`/talent` at 3751–4043, `/payouts` at 7847–7901); 4,000 lines was the gap *between* the
+groups, not scatter within them, so this was a straightforward cut. `_parse_rate` and
+`_clean_rate_unit` were defined inside the talent block and moved with it, along with
+`FORM_DISCIPLINES`, `_SOURCE_CHANNELS` and `_ADD_SOURCES`; `app.py` imports `_parse_rate`
+back for `/opportunity` and `/proposal`, the direction `_profile_from_row` already
+travels. **app.py: 8,051 → 7,662 lines; 186 routes remain** — down from 251 and 9,133
+lines, so a third of the file and a quarter of the routes have moved. What is left is
+dominated by the coupled pair: `/opportunity` (58) and `/project` (57) are 62% of the
+remaining routes and need `_load`, `_brief_for`, `_outreach_for` and `_quote_band_for`
+relocated first.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,
