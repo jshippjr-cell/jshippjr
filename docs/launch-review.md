@@ -68,8 +68,12 @@ Almost none of this required building. It required wiring, reconciling, and dele
    describe a campaign cue rather than a demo; players and the room are a real session
    line instead of a ×4 on desk hours; usage is a fee on price, not a production cost. The
    engine now lands inside the public band ($10,414 against $9–18k), and tests assert it.
-   *Still open: the nine divergent `build_estimate` call sites, and the outreach cadence
-   quoting a different figure from the commercial engine.*
+   ***The nine call sites are closed too (ADR-0033):*** `web.estimate.estimate_for` is the
+   only way the web layer prices anything. Two of the nine — the dashboard KPI and the
+   project estimate — skipped the qualified-fallback, so a disqualified deal priced at
+   **$7,810 on the dashboard and $8,350 on its own estimate page**; and only one of the
+   nine resolved assigned rates. *Still open: the outreach cadence quoting a different
+   figure from the commercial engine.*
 8. **The clearance certificate contradicted itself.** "Full buyout / work-made-for-hire"
    coexists with Chordential-as-100%-publisher cue sheets and category-limited
    exclusivity; the cue sheet credited mixers and PMs as composers and hardcoded BMI; the
@@ -142,13 +146,14 @@ has to touch `style.css`, `site.css`, and the standalone templates.
 
 ## Phase 2 — high-impact, post-launch
 
-One waiting-on-me aggregator (`queue.py` owns it; delete the dashboard's parallel
-computation) and stage-floored next actions · one pricing voice (`estimate_for()`, the
-duration-ordering fix, band reconciliation, a session/recording cost block) · one
-open-pipeline number · brand-unified `/start` `/book` `/thanks` with a budget field ·
+~~One waiting-on-me aggregator (`queue.py` owns it; delete the dashboard's parallel
+computation) and stage-floored next actions~~ ✔ · ~~one pricing voice (the
+duration-ordering fix, band reconciliation, a session/recording cost block)~~ ✔ ·
+~~one estimate call path (`estimate_for()`)~~ ✔ · ~~one
+open-pipeline number~~ ✔ · ~~fileable cue sheets~~ ✔ · ~~one rights basis~~ ✔ ·
+brand-unified `/start` `/book` `/thanks` with a budget field ·
 console nav diet (remove `/lanes`, the three filter quick-links; `/incoming` as the only
-triage surface) · portal ordered by court-state · fileable cue sheets (writers only as
-composers, split writer/publisher shares, per-contributor PRO, media on the license) ·
+triage surface) · portal ordered by court-state ·
 naming system stops fabricating `_60_MASTER` on :30 spots · real byte-progress on console
 uploads · share-token rotation · "hear the work" on the homepage · finish the contrast
 pass: `--olive` (#737469) is a brand

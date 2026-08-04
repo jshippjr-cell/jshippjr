@@ -142,8 +142,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   across all campaign media; composition publishing retained.** `DEFAULT_LICENSE` gained
   `publishing` and the missing `media` term, both printed on the certificate; sales copy
   and the demo seed moved to match. Per-deal overrides still win. **Still open in Phase
-  2:** the nine divergent `build_estimate` call sites; console nav diet; portal
-  court-state ordering; brand-unified intake with the budget field.
+  2:** console nav diet; portal court-state ordering; brand-unified intake with the
+  budget field.
+- **One estimate call path** (ADR-0033, 2026-08-04). The four lines that turn an
+  opportunity into an estimate were copy-pasted at **nine** web-layer call sites in
+  **three** versions. Seven applied the qualified-fallback; the dashboard KPI
+  (`_suggested_price`) and the project estimate used `qual.discipline` raw — and because
+  `NON_CRAFT` carries an *empty* team shape, the same disqualified deal priced at
+  **$7,810 on the dashboard and $8,350 on its own estimate page**. Separately, only the
+  project estimate resolved `assigned_rate_overrides`, so an approved number could differ
+  from the proposal generated after assignment. `web.estimate.estimate_for(opp, conn=,
+  project_id=, qual=)` is now the only path — eleven call sites across `app.py`,
+  `public.py` and `seed.py` route through it, and a test fails if a web module calls
+  `build_estimate` directly or if the fallback idiom spreads back out.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

@@ -734,6 +734,34 @@ move to the client in the same change. Composer agreements (ADR-0024) must conve
 master and grant the sync licence while leaving the writers' and publisher's shares
 intact; that instrument is outside this repo and should be checked against this ADR.
 
+### ADR-0033 — One estimate call path: `web.estimate.estimate_for`
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` finding 9 ·
+`web/estimate.py`, `web/app.py`, `web/public.py`, `web/seed.py`
+**Decision.** The web layer turns an opportunity into an estimate through exactly one
+function — `web.estimate.estimate_for(opp, *, conn=None, project_id=None, qual=None)`.
+It owns the discipline fallback, the team shape, and the assigned-rate lookup. No module
+outside `web/estimate.py` calls `build_estimate` directly. `estimation.build_estimate`
+remains the intelligence-layer engine and is unchanged; this ADR governs how the web
+layer *reaches* it.
+**Why.** The four lines that resolve a discipline, derive a team shape, fetch rate
+overrides and call the engine were copy-pasted at **nine** call sites — in **three**
+versions. Seven applied a qualified-fallback (price an unqualified deal as
+`COMPOSITION`); two — the dashboard KPI's `_suggested_price` and the project estimate —
+used `qual.discipline` raw. Because `NON_CRAFT` carries an *empty* team shape, the same
+disqualified opportunity priced at **$7,810 on the dashboard and $8,350 on its own
+estimate page**. Separately, only the project estimate resolved
+`assigned_rate_overrides`, so the number a client approved could differ from the proposal
+generated after assignment. Nine copies of a rule is nine places for it to drift, and it
+had already drifted twice before anyone was looking.
+**Consequences.** New pricing surfaces call `estimate_for`; pass `conn=` + `project_id=`
+whenever a project exists so assigned rates apply, and pass `qual=` when you already hold
+one. `tests/test_one_estimate_path.py` fails if any web module calls `build_estimate`
+directly, if the fallback idiom spreads back across the layer, or if the dashboard and
+the estimate page price the same deal differently. The discipline fallback may still
+appear once more — in `_ensure_project_for_opp`, which uses it to derive project *roles*,
+not a price. Changing the fallback (e.g. to refuse to price a disqualified deal at all)
+is now a one-line change in one file, which is the point.
+
 ---
 
 ## Adding a new ADR

@@ -22,8 +22,7 @@ from fastapi.templating import Jinja2Templates
 from ..models import MusicDiscipline, Opportunity
 from ..talent import Talent, normalize_url
 from . import db
-from .estimate import build_estimate
-from .evaluate import evaluate
+from .estimate import estimate_for
 from .filters import displayurl, money, pct, slug
 from .showcase import get_showcase
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
@@ -93,9 +92,7 @@ def public_price_band(project_type: str, description: str):
         client="(prospect)", need=project_type or "Music commission",
         description=description or "",
     )
-    qual, _ = evaluate(opp)
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp)
     # Convert the estimator's COST band into a client PRICE band using the same
     # margin ratio the estimate itself carries (no separate pricing rule here).
     if est.estimated_cost <= 0:

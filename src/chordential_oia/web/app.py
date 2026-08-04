@@ -69,7 +69,7 @@ from . import (
     scheduler, seed, signals, simulator, sources, triage, webpush, workspace,
 )
 from .buyer_intel import assess_relationship, days_since
-from .estimate import build_estimate
+from .estimate import estimate_for
 from .evaluate import evaluate
 from .filters import displayurl, money, pct, slug
 from .public import router as public_router
@@ -1336,9 +1336,7 @@ def admin_logout():
 def _suggested_price(opp) -> float:
     """Suggested price for one opportunity, via the same engines as the estimate
     page (qualify → discipline/team → estimate). Deterministic and LLM-free."""
-    qual, _ = evaluate(opp)
-    team = qual.team_shape or qual.discipline.team_shape
-    return build_estimate(opp, team, qual.discipline).suggested_price
+    return estimate_for(opp).suggested_price
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -3064,8 +3062,7 @@ def _build_review_for_opp(conn, opp_id, version=1):
     if row is None:
         return None, None
     qual, _scored = ev
-    disc = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or disc.team_shape, disc)
+    est = estimate_for(opp, qual=qual)
     ci_view, met = _brief_ci_context(conn, row)
     overrides = db.get_doc_overrides(conn, opp_id).get("commercial") or {}
     review = commercial.build_commercial_review(opp, qual, est, ci_view, met=met,
@@ -3478,8 +3475,7 @@ def estimate_page(request: Request, opp_id: int):
     finally:
         conn.close()
     qual, scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
     return render(
         request, "estimate.html", nav="inbox", row=row, opp=opp, qual=qual, est=est
     )
@@ -3491,8 +3487,7 @@ def _brief_for(conn, opp_id: int):
     if row is None:
         return None, None, None
     qual, scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
     strategic = assess_strategic_value(opp)
     brief = build_pursuit_brief(opp, qual, scored, est, strategic)
     return row, opp, brief
@@ -3558,8 +3553,7 @@ def _outreach_for(conn, opp_id: int):
     if row is None:
         return None, None, None
     qual, scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
     strategic = assess_strategic_value(opp)
     plan = build_outreach_plan(
         opp, qual, scored, est, strategic, contact_name=row["contact_name"]
@@ -3738,8 +3732,7 @@ def compose_send(opp_id: int):
         ci_view, met = _brief_ci_context(conn, row)
         overrides = db.get_doc_overrides(conn, opp_id)
         qual, _scored = evaluate(opp)
-        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-        est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+        est = estimate_for(opp, qual=qual)
         doc = build_capabilities_doc(
             opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
             call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
@@ -4186,8 +4179,7 @@ def _live_brief_ctx(conn, opp_id):
     if row is None:
         return None
     qual, _scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
     overrides = db.get_doc_overrides(conn, opp_id)
     ci_view, met = _brief_ci_context(conn, row)
     toggles = default_toggles(row["status"])
@@ -4281,8 +4273,7 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
         conn.close()
     request_url = f"/opportunity/{opp_id}/request?k={brief_token}"
     qual, scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
 
     toggles = default_toggles(row["status"])
     qp = request.query_params
@@ -5535,8 +5526,7 @@ def _ensure_proposal_from_review(conn, opp_row, project_id, review_row) -> None:
     if row is None:
         return
     qual, _scored = ev
-    discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-    est = build_estimate(opp, qual.team_shape or discipline.team_shape, discipline)
+    est = estimate_for(opp, qual=qual)
     proposal = build_proposal(opp, qual, est)
     # Override the estimator's numbers with exactly what the client approved.
     total_mid = int(round(((review.fee_low or 0) + (review.fee_high or 0)) / 2))
@@ -5934,10 +5924,7 @@ def _project_estimate(conn, row):
     if opp_row is None:
         return None
     opp = db.opportunity_from_row(opp_row)
-    qual, _ = evaluate(opp)
-    team = list(qual.team_shape or qual.discipline.team_shape)
-    overrides = db.assigned_rate_overrides(conn, row["id"])
-    return build_estimate(opp, team, qual.discipline, rate_overrides=overrides)
+    return estimate_for(opp, conn=conn, project_id=row["id"])
 
 
 def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = False):
@@ -8351,13 +8338,9 @@ def project_generate_proposal(project_id: int):
             return RedirectResponse(f"/project/{project_id}", status_code=303)
         row, opp, ev = _load(conn, opp_id)
         qual, scored = ev
-        discipline = qual.discipline if qual.qualified else MusicDiscipline.COMPOSITION
-        # An assigned talent's own rate overrides the global role default for
-        # that line, so the client-facing proposal reflects real assigned cost.
-        rate_overrides = db.assigned_rate_overrides(conn, project_id)
-        est = build_estimate(
-            opp, qual.team_shape or discipline.team_shape, discipline, rate_overrides
-        )
+        # ``project_id`` pulls in the assigned talent's own rates, so the
+        # client-facing proposal reflects real assigned cost — not role defaults.
+        est = estimate_for(opp, conn=conn, project_id=project_id, qual=qual)
         proposal = build_proposal(opp, qual, est)
         db.insert_proposal(conn, project_id, opp_id, proposal)
         db.add_update(conn, project_id, "Proposal generated.", "proposal")

@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List
 
 from ..delivery import build_delivery_zip, version_label, version_name
-from ..estimation import build_estimate
+from .estimate import estimate_for
 from ..intake import parse_email_path
 from ..models import MusicDiscipline, Opportunity
 from ..sources import AVAILABLE_SOURCES
@@ -130,11 +130,9 @@ def ingest_talent_prospects(conn: sqlite3.Connection) -> int:
 
 
 def _suggested_price(opp: Opportunity) -> float:
-    """Suggested price via the standard engines (qualify → discipline/team → estimate)."""
-    q, _ = evaluate(opp)
-    return build_estimate(
-        opp, q.team_shape or q.discipline.team_shape, q.discipline
-    ).suggested_price
+    """Suggested price via the one estimate path (ADR-0033), so a seeded deal's
+    recorded value matches what the estimate page shows for the same deal."""
+    return estimate_for(opp).suggested_price
 
 
 def seed_demo_pipeline(conn: sqlite3.Connection) -> bool:
@@ -169,9 +167,7 @@ def seed_demo_pipeline(conn: sqlite3.Connection) -> bool:
     # 2) Won — a closed deal spun up into a project with assigned crew.
     won_opp = db.opportunity_from_row(won_row)
     q, _ = evaluate(won_opp)
-    won_price = build_estimate(
-        won_opp, q.team_shape or q.discipline.team_shape, q.discipline
-    ).suggested_price
+    won_price = estimate_for(won_opp, qual=q).suggested_price
     db.update_status(conn, won_row["id"], "Won", round(won_price))
     roles = q.team_shape or ["Composer", "Mixer"]
     pid = db.insert_project(
