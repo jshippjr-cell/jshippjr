@@ -285,6 +285,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   been written to from this code (no credentials in the build environment). Copy
   `/var/data/uploads` into the bucket, flip the env, confirm the boot line, verify a real
   upload/download, and only then remove the disk.
+- **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
+  routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
+  `render`, `public_base`) — created there, still decorated in `app.py` — which is what
+  breaks the import cycle that made any extraction impossible. `/agencies` moved first on
+  measurement: 26 routes (10%) touching only four `app.py` helpers, versus 23 and 29 for
+  `/opportunity` and `/project`, with no route-pattern collision. **app.py: 9,133 → 8,545
+  lines; 225 routes remain.** The pattern and its guard-rail tests are in place for the
+  next slices; `/opportunity` and `/project` need their shared helpers relocated first.
 - **The front door is the Commission** (2026-08-03): `/` serves `public/commission.html`
   — the live score, the note on a cue, the planning band, the certificate, the packing.
   The World film that landed here (it opened on a brush drawing on paper) and the older

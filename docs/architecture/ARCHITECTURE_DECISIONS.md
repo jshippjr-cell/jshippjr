@@ -1112,6 +1112,38 @@ storage active"*, verify a real upload and a real download, and only then remove
 disk. The existing files are not migrated by this change; the seam is the prerequisite,
 not the migration.
 
+### ADR-0044 — `app.py` comes apart one measured slice at a time
+**Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
+into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`
+**Decision.** Route groups move out of `app.py` into `*_routes.py` modules as
+`APIRouter`s, **one group per pass**, each pass ending with the full suite green.
+`shell.py` holds the few genuinely shared web primitives — the Jinja environment,
+`render`, `public_base` — and knows nothing about routes or domain engines. The
+environment is **created** in `shell.py` and still **decorated** in `app.py`: every
+`templates.env.filters[...] = ...` line stays put, operating on the same object.
+Dependencies point one way only: `app.py` → route module → `shell.py`.
+**Why.** `app.py` reached **9,133 lines and 251 routes**. The blocker for moving *any*
+route was that `render` and the template environment lived in `app.py`, so a router
+importing them and `app.py` importing the router was a cycle. `/agencies` went first on
+measurement, not taste: **26 routes (10% of the file) referencing only four `app.py`
+helpers**, against 23 for `/opportunity` and 29 for `/project`; no route-pattern
+collision with any other group; and only one route (`/relationships`) interleaved in its
+span, so the block could move without changing which handler answers any URL. The two
+helpers used only here moved with it, and `_profile_from_row` — shared with one
+`/sources` route — now lives in the router with `app.py` importing it back, which is the
+allowed direction.
+**Consequences.** `tests/test_app_structure.py` fails if a route module imports `app.py`,
+if `shell.py` grows a route or reaches into an engine, if a moved group is still declared
+in `app.py`, if `app.py` grows past 8,600 lines, or — the failure this pass actually hit —
+**if a moved module uses a name it neither defines nor imports.** Two module-level
+constants stayed behind, so the module imported cleanly and raised `NameError` on the
+first request: import success is not evidence that a move is complete, and that test is
+the evidence. **225 routes remain in `app.py`** (8,545 lines). `/opportunity` (58) and
+`/project` (57) are the large, tightly-coupled pair and want their shared helpers
+(`_load`, `_brief_for`, `_outreach_for`, `_quote_band_for`) relocated before their routes
+follow — that is a later pass, not an afterthought to this one.
+
+
 
 ---
 
