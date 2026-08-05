@@ -118,6 +118,44 @@ def test_the_waveform_never_captures_audio_it_cannot_play(client):
         "the play handler taps the element directly again")
 
 
+def test_the_waveform_is_told_when_media_comes_from_another_origin(client, monkeypatch):
+    """The second, worse way the waveform silenced the product — and the one that
+    actually did it.
+
+    A `MediaElementAudioSourceNode` fed by cross-origin media that is not CORS-approved
+    must output SILENCE by spec, so the analyser cannot be used to read bytes across
+    origins. Not an error — silence, while the element reports it is playing. Measured on
+    one page with two elements and identical code: same-origin peak 222 / energy 8564;
+    cross-origin peak 0 / energy 0.
+
+    `/uploads/{name}` 307s to a presigned bucket URL whenever a durable store is active,
+    so on such an instance EVERY client cut is cross-origin. Switching the bucket on
+    silenced the whole review portal — including mp3s uploaded months earlier — and
+    nothing reported it, because nothing was broken. A redirect cannot be seen from the
+    browser (the element keeps the requested URL in `currentSrc`), so the server says so.
+    """
+    from chordential_oia.storage import STORAGE_ENV
+    from chordential_oia.storage import s3 as s3_mod
+
+    page = client.get("/opportunity/1/capabilities").text
+    assert "offsite=0" in page, "a local-disk instance should still get the waveform"
+
+    monkeypatch.setattr(s3_mod, "_SDK_PRESENT", True)
+    monkeypatch.setenv(STORAGE_ENV, "s3")
+    monkeypatch.setenv("CHORDENTIAL_S3_BUCKET", "b")
+    monkeypatch.setenv("CHORDENTIAL_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("CHORDENTIAL_S3_SECRET_KEY", "s")
+    page = client.get("/opportunity/1/capabilities").text
+    assert "offsite=1" in page, (
+        "with a bucket active, /uploads redirects off-origin and the tap must be refused")
+
+    js = client.get("/static/wave-live.js").text
+    # Fails CLOSED: only an explicit offsite=0 may open the tap, so a template that
+    # forgets the flag costs a still waveform rather than a silent client.
+    assert 'offsite=0' in js and 'location.protocol === "file:"' in js
+    assert "mayBeCrossOrigin(audio)" in js, "the tap is not gated on the media's origin"
+
+
 def _won_project(client):
     import re
     client.post("/opportunity/1/status", data={"status": "Won"},

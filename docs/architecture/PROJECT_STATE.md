@@ -336,6 +336,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   "running": a still waveform is a decoration we can lose, silence is not. Verified both
   ways in a real browser (suspended → element plays untouched; running → the wave still
   animates). The portal player also reports load failures now instead of doing nothing.
+  **The cause underneath that was CORS.** A `MediaElementAudioSourceNode` fed
+  cross-origin media without CORS approval must emit silence by spec; `/uploads` 307s to
+  a presigned bucket URL on a durable-store instance, so **turning the bucket on silenced
+  every review player at once** — including files uploaded months earlier. Measured:
+  same-origin energy 8564, cross-origin 0, both "playing". The server now stamps
+  `wave-live.js?…&offsite=`, and the tap fails closed. Waveform on a bucket instance would
+  need CORS on the bucket + `crossorigin="anonymous"`; deliberately not done, since a
+  missing CORS rule would fail the media outright.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what

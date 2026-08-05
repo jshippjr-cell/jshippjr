@@ -1043,7 +1043,7 @@
 })();
 </script>
 
-<script src="/static/wave-live.js?v={{ static_v }}" defer></script>
+<script src="/static/wave-live.js?v={{ static_v }}&offsite={{ 1 if media_offsite() else 0 }}" defer></script>
 <div class="wrap"><div id="session-room"
   data-project="{{ project['id'] }}" data-role="client"
   data-name="{{ reviewer.name if reviewer else 'Client' }}"

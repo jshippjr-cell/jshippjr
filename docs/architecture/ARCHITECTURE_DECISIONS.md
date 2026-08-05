@@ -1212,6 +1212,30 @@ motion may never sit between the client and the sound. The context is built and 
 from the **click**, and nothing is tapped unless `ctx.state` is genuinely `"running"` — not
 resuming, not a promise of running. A still waveform is a decoration we can lose.
 
+**And that was still not the whole of it — the cause was CORS.** The suspended-context
+path above is real but needs unlucky timing. The one that actually silenced production
+needs nothing: a `MediaElementAudioSourceNode` fed by **cross-origin** media that is not
+CORS-approved **must output silence by spec**, so the analyser cannot be turned into a way
+to read bytes across origins. Measured on one page, two elements, identical code:
+same-origin peak 222 / energy 8564; cross-origin peak **0** / energy **0** — both
+reporting `playing`, `currentTime` advancing, `error` null.
+
+`/uploads/{name}` 307s to a presigned bucket URL whenever a durable store is active. So
+**switching the bucket on silenced every client's review player at once**, including files
+uploaded months earlier — which is exactly what was reported and exactly why chasing the
+newest upload found nothing: the newest upload was never the variable. The redirect cannot
+be detected from the browser (the element keeps the requested URL in `currentSrc`), so the
+server stamps the script tag (`wave-live.js?…&offsite=`) and the tap is refused for any
+`/uploads` element on such an instance. It **fails closed**: only an explicit `offsite=0`
+opens the tap, so a template that forgets the flag costs a still waveform, never a silent
+client. Verified under the production shape — a real cross-origin 307 with the real script:
+`offsite=1` → never tapped, element plays; `offsite=0` → tapped, waveform works.
+
+The durable fix, when someone wants the waveform back on a bucket instance, is CORS on the
+bucket plus `crossorigin="anonymous"` on the element — deliberately NOT done here, because
+a bucket without the CORS rule would then fail the media outright instead of merely
+dropping the decoration.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`

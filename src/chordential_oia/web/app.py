@@ -70,6 +70,22 @@ def _static_version() -> str:
     return str(int(latest))
 
 
+def _media_offsite() -> bool:
+    """Does `/uploads/{name}` hand the browser a URL on ANOTHER ORIGIN?
+
+    True whenever a durable object store is active, because `serve_upload` then 307s to a
+    presigned bucket URL. The templates pass this to `wave-live.js`, which must not tap
+    such an element: cross-origin media that is not CORS-approved makes a
+    `MediaElementAudioSourceNode` emit SILENCE by spec — no error, element still
+    "playing". Switching the bucket on silenced every client's review player, including
+    files uploaded long before, and nothing reported it because nothing was broken.
+
+    Callable, not a frozen value: the tests flip `CHORDENTIAL_STORAGE` on a live app.
+    """
+    return bool(storage_status(UPLOAD_DIR)["durable"])
+
+
+templates.env.globals["media_offsite"] = _media_offsite
 templates.env.globals["static_v"] = _static_version()
 templates.env.filters["fromjson"] = json.loads
 # The sitewide machine beacon (base.html) breathes only when the autonomous

@@ -35,7 +35,22 @@
    * inside the user-gesture window — Chrome then starts it suspended, `resume()` is a
    * promise nobody awaited, and the audio is already captured by then. So: build and
    * resume it on the real click, and TAP NOTHING until the context is actually running.
-   * A still waveform is a decoration we can live without. Silence is not. */
+   * A still waveform is a decoration we can live without. Silence is not.
+   *
+   * THE SECOND WAY IT SILENCED THE PRODUCT, which is worse because it needs no unlucky
+   * timing at all. A `MediaElementAudioSourceNode` fed by CROSS-ORIGIN media that is not
+   * CORS-approved is required by spec to output SILENCE — the analyser must not become a
+   * way to read bytes across origins. Not an error: silence, while the element reports it
+   * is playing. Measured, one page, two elements, identical code: same-origin peak 222 /
+   * energy 8564; cross-origin peak 0 / energy 0.
+   *
+   * `/uploads/{name}` redirects to a presigned bucket URL whenever a durable object store
+   * is configured, so on such an instance EVERY client cut is cross-origin and every one
+   * of them plays silent through this graph. That is exactly what happened: the day the
+   * bucket was switched on, every version in the review portal went silent — including
+   * mp3s uploaded long before — and nothing anywhere reported it, because nothing was
+   * broken. A redirect cannot be detected from here (the element keeps the requested URL
+   * in `currentSrc`), so the server says so instead. Default is DON'T TAP. */
 
   function upgrade(player) {
     var audio = player.querySelector("audio");
@@ -97,9 +112,11 @@
     }
     draw();                                    // paint the still wave once
 
-    /* Only ever called with a RUNNING context — see the note at the top. */
+    /* Only ever called with a RUNNING context, and never on media that may be served
+       from another origin — see the note at the top. */
     function tap() {
       if (failed || analyser || !ctx || ctx.state !== "running") return;
+      if (mayBeCrossOrigin(audio)) { failed = true; cv.remove(); return; }
       try {
         var src = ctx.createMediaElementSource(audio);
         analyser = ctx.createAnalyser();
@@ -126,6 +143,37 @@
       if (!analyser) tap();
       if (!raf) draw();
     });
+  }
+
+  /* Is this element's audio liable to come from another origin?
+   *
+   * `/uploads/{name}` 307s to a presigned bucket URL whenever the instance has a durable
+   * object store, and the element keeps the REQUESTED url in `currentSrc`, so a redirect
+   * is invisible from here. The server therefore stamps the script tag
+   * (`wave-live.js?...&offsite=1`) and every /uploads element is off limits on such an
+   * instance. Anything already on another origin is refused outright.
+   *
+   * Fails CLOSED. If the flag cannot be read for any reason, we assume off-site and skip
+   * the tap: the cost of being wrong that way is a still waveform, and the cost of being
+   * wrong the other way is a client hearing nothing with no error to show for it. */
+  var OFFSITE = true;
+  try {
+    var me = document.currentScript ||
+             document.querySelector('script[src*="wave-live.js"]');
+    // ONLY an explicit offsite=0 opens the tap. A template that forgets the flag, a
+    // script tag we cannot find, or a file:// bundle all leave it closed — the failure
+    // we are guarding against is inaudible, so the default has to be the safe one.
+    OFFSITE = location.protocol === "file:" || !me ||
+              !/[?&]offsite=0(&|$)/.test(me.getAttribute("src") || "");
+  } catch (e) { OFFSITE = true; }
+
+  function mayBeCrossOrigin(audio) {
+    var src = audio.getAttribute("src") || audio.currentSrc || "";
+    try {
+      var u = new URL(src, location.href);
+      if (u.origin !== location.origin) return true;      // already elsewhere
+      return OFFSITE && u.pathname.indexOf("/uploads/") === 0;
+    } catch (e) { return true; }
   }
 
   /* Build and resume the shared context from inside a real user gesture. Nothing here
