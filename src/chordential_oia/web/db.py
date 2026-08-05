@@ -1391,7 +1391,106 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    _ensure_indexes(conn)
     conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Indexes
+# --------------------------------------------------------------------------- #
+# There were none. Not "a few missing" — `CREATE INDEX` appeared **zero** times
+# across 53 tables, so every lookup that was not by primary key read the whole
+# table. Measured on a seeded database with EXPLAIN QUERY PLAN, 13 of 16 hot
+# queries full-scanned, including both client-facing token lookups; the three that
+# did not were covered by accident, through autoindexes SQLite creates for UNIQUE
+# constraints, which is not a design.
+#
+# SQLite over a local file hid this: a scan of 200 rows in page cache is free, and
+# the row counts here are small. Postgres over a network is a different machine —
+# the scan is the same shape but every page of it crosses a socket, and it happens
+# on a connection that was itself just opened. This is why the cutover is the
+# moment it starts to matter, and why it belongs in front of the cutover.
+#
+# The set is DECLARED, not scattered: one list, so what is indexed can be read in
+# one place and a new access path is a visible addition rather than a habit. Every
+# entry is a real access path in the code, not a guess about future queries — an
+# index nothing reads is pure write cost.
+_INDEXES = (
+    # Client-facing token lookups. Every review-portal and first-touch page load
+    # begins with one of these, and they are the two most exposed queries we have.
+    ("idx_projects_share_token", "projects(share_token)"),
+    ("idx_opportunities_share_token", "opportunities(share_token)"),
+
+    # Parent → children. These back the detail pages: open one project and the
+    # console fans out into every one of these tables.
+    ("idx_projects_opp", "projects(opp_id)"),
+    ("idx_proposals_project", "proposals(project_id)"),
+    ("idx_proposals_opp", "proposals(opp_id)"),
+    ("idx_assignments_project", "assignments(project_id)"),
+    ("idx_assignments_talent", "assignments(talent_id)"),
+    ("idx_review_comments_project", "review_comments(project_id)"),
+    ("idx_invoices_project", "invoices(project_id)"),
+    ("idx_milestones_project", "milestones(project_id)"),
+    ("idx_project_events_project", "project_events(project_id)"),
+    ("idx_project_updates_project", "project_updates(project_id)"),
+    ("idx_talent_payouts_talent", "talent_payouts(talent_id)"),
+    ("idx_outreach_events_opp", "outreach_events(opp_id)"),
+    ("idx_meetings_opp", "meetings(opp_id)"),
+    ("idx_discovery_requests_opp", "discovery_requests(opp_id)"),
+    ("idx_meeting_proposals_opp", "meeting_proposals(opp_id)"),
+    ("idx_procurement_event_opp", "procurement_event(opp_id)"),
+    ("idx_procurement_requirement_opp", "procurement_requirement(opp_id)"),
+    ("idx_brief_progress_opp", "brief_progress(opp_id)"),
+    ("idx_brief_snapshots_opp", "brief_snapshots(opp_id)"),
+    ("idx_commercial_reviews_opp", "commercial_reviews(opp_id)"),
+    ("idx_commercial_approvals_opp", "commercial_approvals(opp_id)"),
+    ("idx_agency_outreach_agency", "agency_outreach(agency_id)"),
+    ("idx_agency_memory_agency", "agency_memory(agency_id)"),
+    ("idx_agency_tasks_agency", "agency_tasks(agency_id)"),
+    ("idx_agency_documents_agency", "agency_documents(agency_id)"),
+    ("idx_relationships_agency", "relationships(agency_id)"),
+    ("idx_opportunity_signals_agency", "opportunity_signals(agency_id)"),
+    ("idx_campaigns_project", "campaigns(project_id)"),
+    ("idx_campaigns_opp", "campaigns(opp_id)"),
+    ("idx_campaign_direction_campaign", "campaign_direction(campaign_id)"),
+    ("idx_campaign_intelligence_opp", "campaign_intelligence(opp_id)"),
+    ("idx_campaign_intelligence_campaign", "campaign_intelligence(campaign_id)"),
+    ("idx_captures_ci", "captures(ci_id)"),
+    ("idx_ci_event_ci", "campaign_intelligence_event(ci_id)"),
+    ("idx_producer_learning_ci", "producer_learning_event(ci_id)"),
+
+    # List filters. These drive the pipeline, the queue and the money pages, which
+    # are the screens the operator lives on.
+    ("idx_opportunities_status", "opportunities(status)"),
+    ("idx_opportunities_qualified", "opportunities(qualified)"),
+    ("idx_opportunities_action", "opportunities(action)"),
+    ("idx_opportunities_agency", "opportunities(agency_id)"),
+    ("idx_projects_status", "projects(status)"),
+    ("idx_invoices_status", "invoices(status)"),
+    ("idx_proposals_status", "proposals(status)"),
+    ("idx_signals_status", "signals(status)"),
+    ("idx_signals_type", "signals(signal_type)"),
+    ("idx_signals_linked_opp", "signals(linked_opp_id)"),
+    ("idx_inbound_leads_status", "inbound_leads(status)"),
+    ("idx_crawl_targets_status", "crawl_targets(status)"),
+    ("idx_talent_review_status", "talent(review_status)"),
+    ("idx_agency_tasks_status", "agency_tasks(status)"),
+)
+
+
+def _ensure_indexes(conn) -> None:
+    """Create every declared index, idempotently, on both backends.
+
+    Best-effort per index: a table that does not exist on some older database must
+    not stop the other forty from being created, and an index is never worth failing
+    a boot over.
+    """
+    for name, target in _INDEXES:
+        try:
+            conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {target}")
+        except Exception:                   # noqa: BLE001 — see docstring
+            try: conn.rollback()
+            except Exception: pass
 
 
 # --------------------------------------------------------------------------- #

@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The two cutover preconditions are done** (ADR-0046, ADR-0047, 2026-08-05).
+  **One scheduler across instances:** `run_loop` holds a `scheduler_lease` row and does
+  nothing without it — blue-green runs two instances *on purpose*, and both were running
+  the engines, which means outreach sent twice and meeting bots were polled twice with
+  nothing anywhere reporting it. A lease, not `pg_try_advisory_lock`: advisory locks are
+  session-scoped and this codebase opens a connection per call across 254 sites, so such a
+  lock would release microseconds after it was taken — and would leave SQLite, which is
+  what production runs today, with nothing. **Indexes:** there were none at all, and 13 of
+  16 hot queries full-scanned, including both client-facing token lookups; now 0 of 16,
+  from a declared list of 51. Both verified against a real Postgres 16, not only SQLite —
+  they exist for the cutover, so a SQLite-only pass proves the wrong thing.
+
 - **Launch review — Phase 2, first pass: one pricing voice** (ADR-0028, 2026-08-04). The
   same brief was quoted four ways — $9–18k on the site, $4,847 by the engine, ≈$3.1–6.6k on
   the client proposal, ~$8,694 in the outreach cadence. Three structural faults, all fixed:

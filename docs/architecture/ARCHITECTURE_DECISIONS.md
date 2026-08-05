@@ -1603,6 +1603,37 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0047 — Declared indexes, because there were none
+**Status:** Accepted (2026-08-05) · Source: `docs/launch-review.md` Phase 3 (indexes —
+"there are none"), a cutover precondition · `web/db.py`
+**Decision.** One declared list, `db._INDEXES`, applied by `_ensure_indexes` from
+`_ensure_schema` — so existing databases get them on the next boot, not only fresh ones.
+`CREATE INDEX IF NOT EXISTS` on both backends, best-effort per index (one bad entry must
+not stop the other fifty, and an index is never worth failing a boot over). Every entry is
+a real access path in the code; an index nothing reads is pure write cost.
+**Why.** `CREATE INDEX` appeared **zero times across 53 tables**. Measured on a seeded
+database with `EXPLAIN QUERY PLAN`, **13 of 16 hot queries full-scanned**, including both
+client-facing token lookups — the query that begins every review-portal and first-touch
+page load. The three that did not scan were fast by accident: SQLite builds an autoindex
+for a UNIQUE constraint, so a few access paths were covered for a reason nobody chose.
+After: **0 of 16**, with 51 indexes created.
+**Why it is a cutover precondition.** SQLite over a local file hides this completely — a
+scan of a few hundred rows already in page cache is free, and these tables are small.
+Postgres over a network is a different machine: the same scan crosses a socket page by
+page, on a connection that was itself just opened (see the connection-per-call note in
+ADR-0046). The cost does not appear gradually as data grows; it appears the day the
+database moves, on every screen at once.
+**Consequences.** `tests/test_indexes.py` asserts the ACCESS PATHS, not the index names —
+an index that exists but that the planner declines to use is not a fix, and a test reading
+`sqlite_master` alone would pass on one. It also fails if a declared index was not created
+(creation is best-effort, which is exactly how one could silently vanish), if a name is
+declared twice (IF NOT EXISTS would accept the second while it indexed something else), if
+an entry names a column that has since been renamed, and if the migration path stops
+applying them to a database that already exists — the one database that matters.
+`tests/test_postgres_dialect.py` repeats it on a real server with `enable_seqscan = off`,
+because on a seeded table Postgres correctly prefers a sequential scan regardless, so
+"which plan is cheapest today" would answer the wrong question.
+
 ### ADR-0046 — One scheduler across instances, by lease and not by advisory lock
 **Status:** Accepted (2026-08-05) · Source: `docs/launch-review.md` Phase 3 (scheduler
 advisory locks, a cutover precondition) · `web/db.py`, `web/scheduler.py`, `web/app.py`

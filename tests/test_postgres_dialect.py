@@ -270,3 +270,39 @@ def test_the_scheduler_lease_elects_one_instance_on_real_postgres(monkeypatch):
         assert db_mod.lease_holder(conn, "scheduler") is None
     finally:
         conn.close()
+
+
+@live
+def test_the_indexes_exist_and_are_usable_on_real_postgres(monkeypatch):
+    """SQLite's `EXPLAIN QUERY PLAN` proves the access path on SQLite. Postgres is the
+    backend the indexes exist FOR, and `CREATE INDEX IF NOT EXISTS` going through the
+    dialect shim is not something to assume.
+
+    `enable_seqscan = off` is deliberate: on a seeded table of a few dozen rows Postgres
+    will correctly prefer a sequential scan no matter what indexes exist, so asking
+    "which plan is cheapest today" would tell us nothing. Forcing the planner's hand
+    answers the question actually being asked — is the index there, and can it be used.
+    """
+    dsn = _fresh_db()
+    monkeypatch.setenv("CHORDENTIAL_DB", dsn)
+    import importlib
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    try:
+        made = {r["indexname"] for r in conn.execute(
+            "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'idx_%'")}
+        missing = sorted({n for n, _ in db_mod._INDEXES} - made)
+        assert missing == [], f"declared but not created on Postgres: {missing}"
+
+        conn.execute("SET enable_seqscan = off")
+        conn.commit()
+        for sql in ("SELECT * FROM projects WHERE share_token = 'x'",
+                    "SELECT * FROM opportunities WHERE status = 'Active'",
+                    "SELECT * FROM review_comments WHERE project_id = 1"):
+            plan = " ".join(str(r[0]) for r in conn.execute("EXPLAIN " + sql))
+            assert "idx_" in plan, f"planner cannot use an index for: {sql}\n{plan}"
+    finally:
+        conn.close()
