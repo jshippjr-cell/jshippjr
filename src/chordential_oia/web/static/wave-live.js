@@ -19,6 +19,24 @@
   var dpr = Math.min(window.devicePixelRatio || 1, 2);
   var BARS = 40;
 
+  /* THE RULE THIS FILE BROKE, AND WHY THE GUARD BELOW IS NOT OPTIONAL.
+   *
+   * `createMediaElementSource(audio)` does not observe the element — it CAPTURES it.
+   * The moment it is called, the element stops feeding the speakers and its only route
+   * to them is through this graph. So if the AudioContext is suspended, the client hears
+   * nothing, `audio.paused` is still false, no MediaError fires, and no error handler
+   * anywhere can see it: the file is fine, the network is fine, the player says it is
+   * playing. Measured in a browser — element playing, `ctx.state` suspended, the graph's
+   * clock frozen at 0, not one visible signal. A client sat in front of exactly that and
+   * reported "silence", and it cost several rounds to find because every other layer was
+   * healthy and said so.
+   *
+   * The context was being built inside the `play` event handler, which is not reliably
+   * inside the user-gesture window — Chrome then starts it suspended, `resume()` is a
+   * promise nobody awaited, and the audio is already captured by then. So: build and
+   * resume it on the real click, and TAP NOTHING until the context is actually running.
+   * A still waveform is a decoration we can live without. Silence is not. */
+
   function upgrade(player) {
     var audio = player.querySelector("audio");
     var body = player.querySelector(".cap-audio-body");
@@ -79,24 +97,46 @@
     }
     draw();                                    // paint the still wave once
 
-    audio.addEventListener("play", function () {
-      if (!failed && !analyser) {
-        try {
-          ctx = ctx || new AC();
-          if (ctx.state === "suspended") ctx.resume();
-          var src = ctx.createMediaElementSource(audio);
-          analyser = ctx.createAnalyser();
-          analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.72;
-          freq = new Uint8Array(analyser.frequencyBinCount);
-          src.connect(analyser); analyser.connect(ctx.destination);
-        } catch (e) {                          // tap failed: remove the canvas,
-          failed = true; cv.remove(); return;  // the original bar still works
-        }
+    /* Only ever called with a RUNNING context — see the note at the top. */
+    function tap() {
+      if (failed || analyser || !ctx || ctx.state !== "running") return;
+      try {
+        var src = ctx.createMediaElementSource(audio);
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.72;
+        freq = new Uint8Array(analyser.frequencyBinCount);
+        src.connect(analyser); analyser.connect(ctx.destination);
+      } catch (e) {                            // tap failed: remove the canvas,
+        failed = true; analyser = null; cv.remove();   // the original bar still works
       }
+    }
+
+    /* The click is the user gesture; the `play` event is not reliably inside it. Capture
+       phase so this runs before the handler that calls play(). */
+    player.addEventListener("click", gestureContext, true);
+
+    audio.addEventListener("play", function () {
+      tap();                                   // no-op unless the context is running
       if (!raf) raf = requestAnimationFrame(draw);
     });
     audio.addEventListener("pause", function () { setTimeout(draw, 50); });
-    audio.addEventListener("timeupdate", function () { if (!raf) draw(); });
+    audio.addEventListener("timeupdate", function () {
+      // A context resumed a moment after play started can still be tapped — but only
+      // once it is genuinely running, never on the promise of it.
+      if (!analyser) tap();
+      if (!raf) draw();
+    });
+  }
+
+  /* Build and resume the shared context from inside a real user gesture. Nothing here
+     touches the audio element: a context that never reaches "running" must leave the
+     player exactly as it found it. */
+  function gestureContext() {
+    try { ctx = ctx || new AC(); } catch (e) { return; }
+    if (ctx.state === "suspended" && ctx.resume) {
+      var pr = ctx.resume();
+      if (pr && pr.catch) pr.catch(function () {});
+    }
   }
 
   function init() {

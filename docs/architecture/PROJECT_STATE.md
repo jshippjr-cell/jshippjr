@@ -322,6 +322,20 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   mirror fallback, which is exactly where `persist_upload` puts the bytes when a bucket
   write fails. Now the redirect requires a confirmed object, and a mirror-only key serves
   and repairs itself into the bucket.
+  **And none of that was the silence.** The cause was the waveform:
+  `wave-live.js` called `createMediaElementSource(audio)`, which does not observe an
+  element but CAPTURES it — once called, the element's only route to the speakers is
+  through the Web Audio graph. The context was built inside the `play` event handler,
+  which is not reliably inside the user-gesture window, so Chrome started it suspended;
+  `resume()` was a promise nobody awaited, and the audio was already captured. Measured
+  in a browser: element playing, `audio.paused` false, no MediaError, `ctx.state`
+  suspended, the graph's clock frozen at 0, `currentTime` stuck at 0 — and not one
+  visible signal, on any surface, that anything was wrong. Every other layer was healthy
+  and said so, which is why it took several rounds to find. Now the context is built and
+  resumed from the CLICK, and nothing is tapped unless `ctx.state` is genuinely
+  "running": a still waveform is a decoration we can lose, silence is not. Verified both
+  ways in a real browser (suspended → element plays untouched; running → the wave still
+  animates). The portal player also reports load failures now instead of doing nothing.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what

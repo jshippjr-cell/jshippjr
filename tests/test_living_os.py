@@ -87,6 +87,37 @@ def test_alive_waveform_layer_on_client_audio_surfaces(client):
     assert "cap-audio" in page or "relevant_uploads" not in page  # markup intact
 
 
+def test_the_waveform_never_captures_audio_it_cannot_play(client):
+    """The waveform silenced the product for a real client, and nothing reported it.
+
+    `createMediaElementSource(audio)` does not observe an element — it CAPTURES it. Once
+    called, the element's only route to the speakers is through the graph, so a suspended
+    AudioContext means the client hears nothing while `audio.paused` stays false, no
+    MediaError fires, and every other layer — file, bucket, read path, player — is
+    healthy and says so. Measured in a browser before the fix: element playing, context
+    suspended, graph clock frozen at 0, `currentTime` stuck at 0, no visible signal
+    anywhere. After: the element plays untouched (`currentTime` 2.95 over 3s) because a
+    context that is not running is never allowed to take the audio.
+
+    Two invariants hold that line, and both are asserted because losing either brings the
+    silence back:
+      1. the context is built and resumed from the CLICK — the `play` event is not
+         reliably inside the user-gesture window, and a context created outside it starts
+         suspended;
+      2. nothing is tapped unless `ctx.state` is genuinely "running" — not resuming, not
+         a promise of running.
+    """
+    js = client.get("/static/wave-live.js").text
+    assert 'ctx.state !== "running"' in js, (
+        "the tap is not gated on a running context — a suspended one silences the player")
+    assert 'player.addEventListener("click", gestureContext, true)' in js, (
+        "the context is not built from the user gesture, so it will start suspended")
+    # The capture must not sit in the play handler, which is where it was.
+    play_handler = js.split('audio.addEventListener("play"')[1].split("});")[0]
+    assert "createMediaElementSource" not in play_handler, (
+        "the play handler taps the element directly again")
+
+
 def _won_project(client):
     import re
     client.post("/opportunity/1/status", data={"status": "Won"},

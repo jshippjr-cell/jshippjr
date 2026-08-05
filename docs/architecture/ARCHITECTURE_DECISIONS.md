@@ -1191,6 +1191,27 @@ were not lost; they were unplayable, while every existence check said fine. The 
 is now offered only for an object the store confirms it has (one HEAD), and a mirror-only
 key serves from the mirror and repairs itself into the bucket on the way past.
 
+**Amended 2026-08-05 (third) — and the silence was none of the above.** Every fix above is
+real and every one of them was found by chasing a client's report of "I press play and hear
+nothing". None of them was the cause. The cause was the waveform: `wave-live.js` called
+`ctx.createMediaElementSource(audio)`, which does not *observe* an element — it **captures**
+it. From that call on, the element's only route to the speakers is through the Web Audio
+graph. The context was built inside the `play` event handler, which is not reliably inside
+the user-gesture window, so Chrome started it suspended; `resume()` returned a promise
+nobody awaited, and by then the audio had already been taken. Measured in a browser:
+element playing, `audio.paused` false, no `MediaError`, `ctx.state` suspended, the graph's
+clock frozen at 0, `currentTime` stuck at 0 — and **not one visible signal on any surface**.
+
+The lesson is not about Web Audio. A **decoration was allowed to sit in the signal path of
+the product's core act** — a client listening to the work — and its failure mode was
+indistinguishable from a healthy system. Every honest instrument we built (the store audit,
+the size check, the read-path guard, the player's error handler) correctly reported that
+everything was fine, because everything *was* fine everywhere they could see. The Living OS
+rule already said motion must communicate state and never decorate; it now also says
+motion may never sit between the client and the sound. The context is built and resumed
+from the **click**, and nothing is tapped unless `ctx.state` is genuinely `"running"` — not
+resuming, not a promise of running. A still waveform is a decoration we can lose.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`
