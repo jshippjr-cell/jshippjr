@@ -49,26 +49,63 @@ mirror cap have **no other copy anywhere**. Postgres does not carry them. Removi
 disk first destroys them irrecoverably.
 
 ### 1a — create the bucket and an S3 credential
+
 Cloudflare R2 is the intended target: no egress fees, and the delivery package is all
-egress.
+egress. Click by click, from a browser (nothing here can be done from the Render shell).
 
-1. Cloudflare dashboard → **R2** → **Create bucket**. Name it `chordential-media`.
-   Location: pick the hint nearest your Render region.
-2. **Keep the bucket private.** Do not enable public access or the `r2.dev` domain. The
-   app serves media by **presigned GET** (`storage/s3.py::url`, 1-hour expiry) minted
-   only after the payment/token gate has already passed — a public bucket would make
-   every client master readable by anyone who can guess a key.
-3. R2 → **Manage R2 API Tokens** → **Create API token** → permission **Object Read &
-   Write**, scoped to *this bucket only*. Copy the **Access Key ID** and **Secret Access
-   Key** — the secret is shown once.
+> Labels move — Cloudflare reorganises this dashboard. The landmarks below are what to
+> look for; if a button is worded differently, the shape of the flow is still the same.
 
-> ⚠️ R2 issues two different things and only one of them works here. You need the
-> **R2 API token**, which yields an S3-style Access Key ID + Secret Access Key. A
-> general **Cloudflare API token** (the `wrangler` kind) is not an S3 credential and
-> `boto3` cannot use it.
+**Create the bucket**
 
-4. The endpoint is `https://<account-id>.r2.cloudflarestorage.com` — the account ID is
-   in the R2 overview page's sidebar.
+1. Sign in at **dash.cloudflare.com**.
+2. Left sidebar → **R2** (sometimes shown as *R2 Object Storage*).
+3. **First time only:** R2 asks you to add a payment method before it will enable, even
+   on the free tier. This is expected; you will not be charged at our volume.
+4. **Create bucket**.
+5. Name it exactly `chordential-media`. Location: **Automatic**, or the hint nearest your
+   Render region.
+6. **Create bucket**. Leave every other setting alone.
+
+**Keep it private** — there is nothing to switch on. Do **not** open Settings → Public
+access, and do **not** enable the `r2.dev` subdomain. The app serves media by presigned
+GET (`storage/s3.py::url`, 1-hour expiry) minted only after the payment/token gate has
+passed. A public bucket would make every client master readable by anyone who can guess
+a filename.
+
+**Create the S3 credential**
+
+7. Back on the **R2** page (not inside the bucket), find **Manage R2 API Tokens** — it
+   sits in the right-hand sidebar or as an *API* link near the top right.
+8. **Create API token**.
+9. **Token name**: `chordential-render` (anything; it is only a label for you).
+10. **Permissions**: choose **Object Read & Write**. Not *Admin Read & Write* — the app
+    only ever puts, gets, heads and deletes objects, and a narrower token is a smaller
+    blast radius if Render is ever compromised.
+11. **Specify bucket(s)** → *Apply to specific buckets* → tick `chordential-media`.
+    Leaving it account-wide would let this one credential reach every future bucket.
+12. **TTL**: leave as-is (no expiry). An expiring token means client media silently stops
+    loading on a date nobody has written down.
+13. Skip client IP filtering — Render's egress IPs are not stable.
+14. **Create API Token**.
+
+**The result page is shown once.** Copy all three before leaving it:
+
+| The page shows | Goes into |
+|---|---|
+| **Access Key ID** | `CHORDENTIAL_S3_ACCESS_KEY` |
+| **Secret Access Key** | `CHORDENTIAL_S3_SECRET_KEY` |
+| **Use jurisdiction-specific endpoints for S3 clients** → the `https://…r2.cloudflarestorage.com` URL | `CHORDENTIAL_S3_ENDPOINT` |
+
+> ⚠️ **Two different credentials, one of which does not work here.** This flow — R2 →
+> Manage R2 API Tokens — issues an **S3** credential: an Access Key ID and a Secret
+> Access Key. A general **Cloudflare API token** (My Profile → API Tokens, the kind
+> `wrangler` uses) is a single opaque string, is *not* an S3 credential, and `boto3`
+> cannot use it. If what you copied is one long token and no key/secret pair, you are in
+> the wrong place.
+
+If you lose the secret, you cannot recover it — delete that token and create another.
+Nothing else needs redoing.
 
 ### 1b — set the five variables, in the Render dashboard
 ```
