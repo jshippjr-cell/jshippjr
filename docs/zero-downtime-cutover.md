@@ -48,10 +48,27 @@ every client picture cut, master, stem and built delivery ZIP. Files above the 6
 mirror cap have **no other copy anywhere**. Postgres does not carry them. Removing the
 disk first destroys them irrecoverably.
 
-### 1a — create the bucket
-Cloudflare R2 (the intended target — no egress fees, and the delivery package is all
-egress). Create a bucket, then an **API token** with Object Read & Write scoped to it.
-Note the account endpoint: `https://<account-id>.r2.cloudflarestorage.com`.
+### 1a — create the bucket and an S3 credential
+Cloudflare R2 is the intended target: no egress fees, and the delivery package is all
+egress.
+
+1. Cloudflare dashboard → **R2** → **Create bucket**. Name it `chordential-media`.
+   Location: pick the hint nearest your Render region.
+2. **Keep the bucket private.** Do not enable public access or the `r2.dev` domain. The
+   app serves media by **presigned GET** (`storage/s3.py::url`, 1-hour expiry) minted
+   only after the payment/token gate has already passed — a public bucket would make
+   every client master readable by anyone who can guess a key.
+3. R2 → **Manage R2 API Tokens** → **Create API token** → permission **Object Read &
+   Write**, scoped to *this bucket only*. Copy the **Access Key ID** and **Secret Access
+   Key** — the secret is shown once.
+
+> ⚠️ R2 issues two different things and only one of them works here. You need the
+> **R2 API token**, which yields an S3-style Access Key ID + Secret Access Key. A
+> general **Cloudflare API token** (the `wrangler` kind) is not an S3 credential and
+> `boto3` cannot use it.
+
+4. The endpoint is `https://<account-id>.r2.cloudflarestorage.com` — the account ID is
+   in the R2 overview page's sidebar.
 
 ### 1b — set the five variables, in the Render dashboard
 ```
@@ -62,6 +79,11 @@ CHORDENTIAL_S3_ACCESS_KEY = <token id>
 CHORDENTIAL_S3_SECRET_KEY = <token secret>
 CHORDENTIAL_S3_REGION   = auto        # R2 wants exactly this
 ```
+Set them all, then save once — Render restarts the service on the last change.
+
+If media playback later fails with a CORS error in the browser console, add a CORS rule
+on the bucket allowing `GET` from `https://chordential.com`. Plain `<audio>`/`<video>`
+playback does not need it; a fetch-based waveform read would.
 
 > **The build must already carry `boto3`.** `render.yaml` installs the **`s3` extra** for
 > exactly this reason, and it must be deployed *before* you flip the switch. Without the
