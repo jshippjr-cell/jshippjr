@@ -195,6 +195,32 @@ def test_in_review_default_view_shows_comment_and_change_request(client):
     assert "Love the energy out of the gate" in earlier.text
 
 
+def test_the_portal_player_says_so_when_a_file_will_not_load(client):
+    """Silence was the whole response to a broken file.
+
+    A client pressing play on a version whose object is missing or truncated got
+    nothing: no message, no error state, and the button did not even change — so they
+    could not tell a broken file from their own speakers being muted. Diagnosed the hard
+    way, over several rounds, because the product itself reported nothing.
+
+    This asserts the wiring is shipped, which is as far as a server-side test can see;
+    the behaviour was verified in a real browser against both a missing object (media
+    error 4, the failed state and the message appear) and a healthy one (still plays).
+    """
+    from chordential_oia.web import db as db_mod
+    conn = db_mod.connect()
+    vance = _by_client(conn, "Vance Athletic")
+    token = conn.execute("SELECT share_token FROM projects WHERE id = ?",
+                         (vance["id"],)).fetchone()["share_token"]
+    body = client.get(f"/project/{vance['id']}/delivery-portal?k={token}").text
+    assert "addEventListener('error'" in body, "the player ignores load failures"
+    assert "cap-audio-err" in body
+    assert "Nothing is wrong with your speakers" in body
+    # The failed state must survive the `pause` event that follows `error`, or the ▶
+    # comes straight back and the only signal the listener gets is undone.
+    assert "if (!failed) btn.textContent = '▶';" in body
+
+
 def test_just_briefed_campaign_has_brief_no_comments(tmp_path, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "uploads"))
     (tmp_path / "uploads").mkdir()

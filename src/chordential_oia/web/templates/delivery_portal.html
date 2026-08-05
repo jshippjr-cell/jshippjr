@@ -69,6 +69,11 @@
   .cap-audio-bar{position:relative;height:5px;border-radius:999px;background:rgba(228,103,31,.18);cursor:pointer}
   .cap-audio-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:var(--orange)}
   .cap-audio-time{flex:0 0 auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+  /* A file that will not load must SAY so. Silence is the one response that tells the
+     listener nothing — they cannot tell it from their own speakers being muted. */
+  .cap-audio.failed{background:#fbe9e4;border-color:#e8c4b6}
+  .cap-audio.failed .cap-audio-btn{background:#a53a17;cursor:not-allowed}
+  .cap-audio-err{color:#8f3315;font-size:12.5px;margin:6px 0 0;max-width:60ch}
   .foot{text-align:center;color:var(--muted);font-size:11px;margin-top:34px;letter-spacing:.04em}
   /* review portal */
   .rc{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
@@ -862,14 +867,50 @@
         fill = p.querySelector('.cap-audio-fill'), bar = p.querySelector('.cap-audio-bar'),
         time = p.querySelector('.cap-audio-time');
     if (!audio) return;
+    // A file that cannot be loaded must say so. Until now the failure was completely
+    // silent: no message, no error state, the button did not even change — so a client
+    // pressing play on a missing or truncated object heard nothing and had no way to
+    // tell that from their own speakers. The four MediaError codes are reported plainly
+    // because they distinguish the two real cases: 4 = the bytes could not be fetched,
+    // 3 = they were fetched and are not decodable audio (a truncated upload).
+    var failed = false;
+    function fail(why) {
+      if (failed) return;
+      failed = true;
+      p.classList.add('failed');
+      btn.textContent = '!'; btn.setAttribute('aria-label', 'Unavailable');
+      time.textContent = '—';
+      var note = document.createElement('p');
+      note.className = 'cap-audio-err';
+      note.textContent = 'This file did not load, so there is nothing to play — ' + why +
+        ' Nothing is wrong with your speakers. Please tell us and we will re-send it.';
+      if (p.parentNode) p.parentNode.insertBefore(note, p.nextSibling);
+      if (window.console) console.error('[audio] ' + audio.currentSrc + ' — ' + why);
+    }
+    audio.addEventListener('error', function () {
+      var c = audio.error ? audio.error.code : 0;
+      fail(c === 3 ? 'the file was received but is not playable audio (media error 3), '
+                     + 'which usually means the upload did not finish.'
+                   : c === 2 ? 'it could not be reached over the network (media error 2).'
+                   : c === 4 ? 'it could not be fetched from storage (media error 4).'
+                   : 'the player reported error code ' + c + '.');
+    });
     btn.addEventListener('click', function () {
+      if (failed) return;
       if (audio.paused) {
         document.querySelectorAll('.cap-audio audio').forEach(function (a) { if (a !== audio) a.pause(); });
-        audio.play();
+        var pr = audio.play();
+        if (pr && pr.catch) pr.catch(function (e) {
+          // NotAllowedError is the browser's autoplay policy, not a broken file.
+          if (e && e.name === 'NotAllowedError') return;
+          fail('the browser refused to start it (' + (e && e.name) + ').');
+        });
       } else { audio.pause(); }
     });
-    audio.addEventListener('play', function(){ btn.textContent = '❚❚'; });
-    audio.addEventListener('pause', function(){ btn.textContent = '▶'; });
+    // Guarded: a failed load fires `pause` straight after `error`, which would put the
+    // ▶ back and undo the only signal the listener gets.
+    audio.addEventListener('play', function(){ if (!failed) btn.textContent = '❚❚'; });
+    audio.addEventListener('pause', function(){ if (!failed) btn.textContent = '▶'; });
     audio.addEventListener('timeupdate', function(){
       if (audio.duration) { fill.style.width = (100*audio.currentTime/audio.duration) + '%'; }
       time.textContent = fmt(audio.currentTime);
