@@ -139,8 +139,29 @@ asks for it, but the build command only comes from the blueprint if Blueprint sy
 python -c "import boto3, sys; print('boto3', boto3.__version__)"
 ```
 
-If that fails, fix the build command in the dashboard to
-`pip install '.[web,gmail,ai,stripe,postgres,s3]'` and redeploy **before** going further.
+**Observed in the field, 2026-08-05:** it *did* fail. `render.yaml` had the `s3` extra
+and the change had deployed, yet `boto3` was still missing — Render builds from the
+service's **stored** settings and only re-reads `render.yaml` on an explicit Blueprint
+sync, so the dashboard's copy wins. Editing the blueprint is not enough.
+
+Fix it where Render actually reads it: **service → Settings → Build & Deploy → Build
+Command** → `pip install '.[web,gmail,ai,stripe,postgres,s3]'` → Save → **Manual Deploy
+→ Deploy latest commit**. Then re-run the check before going further.
+
+What this looked like when it was wrong — and why it was safe:
+
+```
+boto3     : MISSING
+requested : s3          <- the env vars were right
+active    : local       <- it fell back to the disk
+durable   : False
+VERDICT   : NOT READY - do not migrate yet
+```
+
+`requested: s3` with `active: local` is the seam refusing to pretend. Uploads kept
+landing on the disk **with the SQLite mirror on**, so nothing was lost. Before the
+SDK check existed this same state reported `active: s3, durable: True` and dropped
+every upload into nowhere.
 
 Then redeploy and read the **first line of the log**:
 
