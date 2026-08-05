@@ -13,7 +13,10 @@ services:
     runtime: python
     plan: starter
     branch: claude/admiring-mayer-u241h5
-    buildCommand: "pip install '.[web,gmail,ai,stripe,postgres]'"
+    # The s3 extra (boto3) MUST be here even while CHORDENTIAL_STORAGE=local: without
+    # it, flipping the switch reports "durable" and silently drops every upload —
+    # the store cannot write, and `durable` is what turns the SQLite mirror off.
+    buildCommand: "pip install '.[web,gmail,ai,stripe,postgres,s3]'"
     startCommand: "uvicorn chordential_oia.web.app:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
     # Render switches traffic to a new instance only after this returns 200. Once

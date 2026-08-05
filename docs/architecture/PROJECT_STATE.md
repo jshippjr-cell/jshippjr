@@ -282,9 +282,12 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `CHORDENTIAL_STORAGE=s3`); the SQLite mirror is written only when the store isn't
   durable; a remote store serves by presigned redirect; a half-configured switch falls
   back to disk and says so at boot. **The migration itself is not done** — no bucket has
-  been written to from this code (no credentials in the build environment). Copy
-  `/var/data/uploads` into the bucket, flip the env, confirm the boot line, verify a real
-  upload/download, and only then remove the disk.
+  been written to from this code (no credentials in the build environment). The runbook
+  is now complete and ordered: `docs/zero-downtime-cutover.md` Step 1 moves the media
+  (`scripts/migrate_uploads_to_object_store.py`, SHA-256 verified, idempotent) and the
+  database copy comes last. **Found while writing it:** the production build omitted the
+  `s3` extra, so flipping the switch would have reported durability, dropped every
+  upload, and turned off the mirror — zero copies. Fixed and pinned.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what

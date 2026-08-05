@@ -1126,6 +1126,30 @@ storage active"*, verify a real upload and a real download, and only then remove
 disk. The existing files are not migrated by this change; the seam is the prerequisite,
 not the migration.
 
+**Amended 2026-08-05 — the seam was only as durable as the image, and the image was
+missing the SDK.** `render.yaml` installed `.[web,gmail,ai,stripe,postgres]` — **no `s3`
+extra**, so production had no `boto3`. With the four credentials set, `S3ObjectStore`
+reported `configured` → `durable = True`, every `put()` returned False because the client
+could not be built, and `durable` is precisely what tells `persist_upload` to skip the
+SQLite mirror. Reproduced end to end: an uploaded master ended up with **zero copies** —
+not in the bucket, not on disk, not in the mirror — while the boot line printed *"object
+storage active — uploads are durable."* Following the cutover runbook as written would
+have hit this at the exact moment the operator believed durability had been turned on.
+
+Two fixes: `configured` now requires the SDK as well as the credentials (no SDK →
+half-configured → falls back to the disk and says so loudly), and the build installs the
+`s3` extra **while still on local**, so the package is present before anyone can flip the
+switch. Both are pinned by tests, one of which asserts on `render.yaml` itself.
+
+The runbook also gained the step it never had: `scripts/migrate_uploads_to_object_store.py`
+reads **both** the upload directory and the `media_blob` mirror — after a redeploy some
+keys exist only in the mirror, and a `cp -r` would leave them behind — writes each object,
+then **reads every one back and compares SHA-256**, because `put()` returning True is not
+evidence. It is idempotent and exits non-zero on any mismatch. The uploads migration is now
+**Step 1**, ahead of the database copy: it is independent, it carries the irrecoverable
+failure mode, and the database copy is a snapshot that should happen immediately before the
+flip rather than hours before it.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`

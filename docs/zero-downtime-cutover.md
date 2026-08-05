@@ -41,11 +41,75 @@ The compatibility layer (`web/db.py`) shipped with this change. The app is still
 on SQLite-on-disk exactly as before — no behavior change. ✅ Verify the live site works
 normally before continuing.
 
-## Step 1 — create the Render Postgres database
+## Step 1 — move the uploads to the bucket ⛔ **do not skip**
+
+**The disk holds more than the database.** `CHORDENTIAL_UPLOAD_DIR` is `/var/data/uploads`:
+every client picture cut, master, stem and built delivery ZIP. Files above the 64 MB
+mirror cap have **no other copy anywhere**. Postgres does not carry them. Removing the
+disk first destroys them irrecoverably.
+
+### 1a — create the bucket
+Cloudflare R2 (the intended target — no egress fees, and the delivery package is all
+egress). Create a bucket, then an **API token** with Object Read & Write scoped to it.
+Note the account endpoint: `https://<account-id>.r2.cloudflarestorage.com`.
+
+### 1b — set the five variables, in the Render dashboard
+```
+CHORDENTIAL_STORAGE     = s3
+CHORDENTIAL_S3_BUCKET   = chordential-media
+CHORDENTIAL_S3_ENDPOINT = https://<account-id>.r2.cloudflarestorage.com
+CHORDENTIAL_S3_ACCESS_KEY = <token id>
+CHORDENTIAL_S3_SECRET_KEY = <token secret>
+CHORDENTIAL_S3_REGION   = auto        # R2 wants exactly this
+```
+
+> **The build must already carry `boto3`.** `render.yaml` installs the **`s3` extra** for
+> exactly this reason, and it must be deployed *before* you flip the switch. Without the
+> SDK, a store with valid credentials used to report `durable = True`, fail every write,
+> **and** turn off the SQLite mirror — an uploaded master ended up with **zero** copies
+> while the log said "object storage active — uploads are durable." That is now
+> impossible: no SDK means half-configured, which falls back to the disk and says so.
+
+### 1c — confirm the app agrees, before moving anything
+Redeploy and read the **first line of the log**:
+
+| Line | Meaning |
+|---|---|
+| `[storage] object storage active — uploads are durable.` | ✅ go on |
+| `[storage] WARNING: … falling back to the LOCAL disk` | ✗ a variable is wrong or the SDK is missing — fix before continuing |
+| `[storage] local disk at … — not durable` | ✗ `CHORDENTIAL_STORAGE` is not `s3` |
+
+### 1d — copy the media, then verify it
+In the Render **Shell**:
+```
+python scripts/migrate_uploads_to_object_store.py --dry-run   # read-only; writes nothing
+python scripts/migrate_uploads_to_object_store.py
+```
+It reads **two** sources — the upload directory *and* the `media_blob` mirror, because
+after any redeploy some keys exist only in the mirror and a directory copy would leave
+them behind — writes each object, then **reads every one back and compares SHA-256**.
+`put()` returning True is not evidence. It prints `moved=N skipped=N failed=N`; **it must
+say `failed=0`**, and it exits non-zero otherwise. It is idempotent, so re-run it freely
+after fixing anything.
+
+### 1e — prove it with the product, not the script
+1. Open a delivery portal and **play a master** — it now streams from the bucket.
+2. **Download the delivery ZIP.**
+3. **Upload a new version** through the console, publish it, play it back.
+
+Only when all three work is the disk safe to remove.
+
+> **Why this is first, not last.** It is independent of Postgres, it is the step with the
+> irrecoverable failure mode, and it can take as long as it takes. The database copy
+> (Step 3) is a *snapshot* — every hour between that copy and the flip is an hour of new
+> leads, notes and invoices sitting only in SQLite. So do the slow, risky, independent
+> work first, and copy the database last, immediately before the switch.
+
+## Step 2 — create the Render Postgres database
 Render dashboard → **New → PostgreSQL** (same region as the web service). Note its
 **Internal Database URL** (`postgresql://…`). A `basic-256mb` plan is plenty to start.
 
-## Step 2 — migrate the data (run ON Render, where both DBs are reachable)
+## Step 3 — migrate the data (run ON Render, where both DBs are reachable)
 Open the web service's **Shell** tab in Render (the disk's SQLite file and the new
 Postgres are both reachable from there) and run:
 
@@ -55,23 +119,20 @@ python scripts/migrate_sqlite_to_postgres.py /var/data/chordential.db "<INTERNAL
 
 It creates the schema, copies every table, and prints `sqlite=N postgres=N` per table.
 **Confirm every row shows `ok` and counts match** before continuing. (Run it once, on the
-fresh empty Postgres.)
+fresh empty Postgres.) **Do this immediately before Step 4** — it is a snapshot, and
+anything written to SQLite afterwards is not in it.
 
-## Step 3 — flip to Postgres + remove the disk (the last deploy with downtime)
+## Step 4 — flip to Postgres + remove the disk (the last deploy with downtime)
 
-> ⛔ **BLOCKER — the disk holds more than the database.** `CHORDENTIAL_UPLOAD_DIR` is
-> `/var/data/uploads`: every client picture cut, master, stem and built delivery ZIP
-> lives there. Files above the 64 MB mirror cap (`_CUT_MIRROR_BYTES`) have **no other
-> copy anywhere** — not in Postgres, not on the mirror. Migrating the database does not
-> migrate them. Removing the disk before uploaded media is on object storage (S3/R2)
-> destroys it irrecoverably. Wire the storage seam and move the files **first**, then
-> come back to this step.
+> ⛔ Do not start this until **Step 1 reported `failed=0`** and you have played a master
+> and downloaded a ZIP from the bucket.
 
 Edit the service config (Blueprint sync of `render.yaml`, or the dashboard):
 
 1. Set **`CHORDENTIAL_DB`** to the Postgres URL (or use a `fromDatabase` reference).
 2. **Remove the `disk:` block** and the old `/var/data` `CHORDENTIAL_DB` value — only
-   after the uploads migration above.
+   after Step 1. Leave `CHORDENTIAL_UPLOAD_DIR` set or unset as you like: with
+   `CHORDENTIAL_STORAGE=s3` it is only the local fallback root, and nothing writes there.
 
 `render.yaml` at cutover looks like:
 
@@ -96,7 +157,7 @@ databases:
 
 Deploy. **This one deploy still has the ~2-min blip** (last time the disk detaches).
 
-## Step 4 — verify zero-downtime
+## Step 5 — verify zero-downtime
 1. Confirm the site loads and the data is all there (opportunities, signals, invoices),
    and a create→read works (e.g., add a note, see it persist).
 2. Prove it: in a terminal, run a 1-second health loop **while you trigger another deploy**:
@@ -110,12 +171,12 @@ From here, every push deploys with zero downtime.
 ---
 
 ## Notes / safety
-- **Back up first:** before Step 3, keep a copy of `/var/data/chordential.db` (download it
+- **Back up first:** before Step 4, keep a copy of `/var/data/chordential.db` (download it
   via the Shell) in case you need to re-run the migration.
 - The migration script is **not** idempotent — run it once against the empty Postgres. To
   redo it, drop/recreate the Postgres schema first.
 - Local dev + the test suite are unaffected — they stay on SQLite (no `postgresql://` URL).
-- Rollback before Step 3 is trivial (nothing changed in prod yet). After Step 3, rollback
+- Rollback before Step 4 is trivial (nothing changed in prod yet). After Step 4, rollback
   means pointing `CHORDENTIAL_DB` back at the disk path and re-attaching the disk.
 - Validation already done in the sandbox: the full app boots on Postgres, all routes 200,
   the demo seed (hundreds of rows) loads, and the migration preserves every row

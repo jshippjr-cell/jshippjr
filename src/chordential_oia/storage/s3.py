@@ -25,8 +25,20 @@ not to a 500 on the client's portal.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from typing import Optional
+
+_SDK_PRESENT: Optional[bool] = None
+
+
+def sdk_available() -> bool:
+    """Is ``boto3`` importable? Memoised — a deploy cannot gain a package without a
+    restart, and this is on the per-request path."""
+    global _SDK_PRESENT
+    if _SDK_PRESENT is None:
+        _SDK_PRESENT = importlib.util.find_spec("boto3") is not None
+    return _SDK_PRESENT
 
 
 class S3ObjectStore:
@@ -42,7 +54,21 @@ class S3ObjectStore:
 
     @property
     def configured(self) -> bool:
-        return bool(self.bucket and self._key and self._secret)
+        """Credentials **and** the SDK.
+
+        The SDK check is not belt-and-braces; without it this class reports
+        ``durable = True`` while being unable to move a byte, and `durable` is what
+        tells `uploads.persist_upload` to SKIP the SQLite mirror. Measured: with
+        credentials set and `boto3` missing, an uploaded master ended up with **zero**
+        copies — not in the bucket, not on disk, not in the mirror — while the boot
+        line announced "object storage active — uploads are durable." Reporting
+        half-configured instead falls back to the disk, which is loud and lossless.
+
+        The gap was real, not hypothetical: `render.yaml` installed
+        ``.[web,gmail,ai,stripe,postgres]`` — no ``s3`` extra — so following the
+        cutover runbook would have hit exactly this.
+        """
+        return bool(self.bucket and self._key and self._secret and sdk_available())
 
     def _c(self):
         """The boto3 client, built once. None when unusable — the caller falls back."""

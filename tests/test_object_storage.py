@@ -89,7 +89,15 @@ def test_selecting_s3_without_credentials_falls_back_loudly(tmp_path, monkeypatc
 def test_a_fully_configured_s3_reports_durable(tmp_path, monkeypatch):
     """Configuration only — no network. Proves the selector hands back the remote
     backend and that it declares itself durable, which is what turns the SQLite
-    mirror off."""
+    mirror off.
+
+    The SDK is stubbed present rather than required: `boto3` is an optional extra, and
+    a test that only passes on a runner which happens to have it installed is a test
+    that lies elsewhere. The SDK half of `configured` is covered by
+    `test_credentials_without_the_sdk_are_half_configured_not_durable`.
+    """
+    from chordential_oia.storage import s3 as s3_mod
+    monkeypatch.setattr(s3_mod, "_SDK_PRESENT", True)
     monkeypatch.setenv(STORAGE_ENV, "s3")
     monkeypatch.setenv("CHORDENTIAL_S3_BUCKET", "chordential-media")
     monkeypatch.setenv("CHORDENTIAL_S3_ACCESS_KEY", "k")
@@ -116,6 +124,141 @@ def test_the_s3_backend_never_raises_without_boto3(tmp_path, monkeypatch):
     assert s.delete("a") is False
     assert s.url("a") is None
     assert s.local_path("a") is None
+
+
+
+def test_credentials_without_the_sdk_are_half_configured_not_durable(tmp_path, monkeypatch):
+    """The cutover's live trap, reproduced.
+
+    `render.yaml` installed `.[web,gmail,ai,stripe,postgres]` — no `s3` extra — so the
+    production image had no `boto3`. With the four credentials set, `S3ObjectStore`
+    still reported `durable = True`; `put()` returned False because the client could
+    not be built; and `durable` is exactly what tells `persist_upload` to skip the
+    SQLite mirror. Measured end to end at the time: an uploaded master ended up with
+    **zero** copies, while the boot line printed "object storage active — uploads are
+    durable."
+
+    Falling back to the disk is the honest failure: loud at boot, and lossless.
+    """
+    import builtins
+
+    from chordential_oia.storage import s3 as s3_mod
+
+    real_import = builtins.__import__
+
+    def _no_boto3(name, *a, **k):
+        if name.split(".")[0] in ("boto3", "botocore"):
+            raise ModuleNotFoundError(f"No module named {name!r}")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", _no_boto3)
+    monkeypatch.setattr(s3_mod, "_SDK_PRESENT", False)      # the memo, as a prod image sees it
+    monkeypatch.setenv(STORAGE_ENV, "s3")
+    monkeypatch.setenv("CHORDENTIAL_S3_BUCKET", "chordential-media")
+    monkeypatch.setenv("CHORDENTIAL_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("CHORDENTIAL_S3_SECRET_KEY", "s")
+
+    assert s3_mod.S3ObjectStore().configured is False
+    status = storage_status(str(tmp_path))
+    assert status["active"] == "local" and status["durable"] is False
+    assert status["misconfigured"] is True, (
+        "credentials without the SDK must report half-configured — otherwise the "
+        "mirror is skipped for a store that cannot write")
+    assert isinstance(get_object_store(str(tmp_path)), LocalObjectStore)
+
+
+def test_the_deploy_installs_the_sdk_it_needs_to_be_durable():
+    """The seam is only as durable as the image. `CHORDENTIAL_STORAGE` can be flipped
+    in the dashboard without a rebuild, so the extra has to be installed BEFORE it is
+    ever needed — not at the moment someone turns it on."""
+    import re
+    from pathlib import Path as _P
+
+    blueprint = _P(__file__).resolve().parents[1] / "render.yaml"
+    build = re.search(r"buildCommand:\s*\"([^\"]+)\"", blueprint.read_text(encoding="utf-8"))
+    assert build, "no buildCommand in render.yaml"
+    extras = re.search(r"\[([^\]]+)\]", build.group(1))
+    assert extras and "s3" in [e.strip() for e in extras.group(1).split(",")], (
+        f"render.yaml does not install the s3 extra: {build.group(1)}")
+
+
+
+# --------------------------------------------------------------------------- #
+# Moving the existing media (the step the cutover runbook was missing)
+# --------------------------------------------------------------------------- #
+def _run_migration(store, monkeypatch, dry_run=False):
+    import importlib.util
+    import sys
+    from pathlib import Path as _P
+
+    script = _P(__file__).resolve().parents[1] / "scripts" / "migrate_uploads_to_object_store.py"
+    spec = importlib.util.spec_from_file_location("mig_under_test", script)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+    mig.get_object_store = lambda root="": store
+    mig.storage_status = lambda root="": {
+        "requested": "s3", "active": "s3", "durable": True, "misconfigured": False}
+    monkeypatch.setattr(sys, "argv", ["mig"] + (["--dry-run"] if dry_run else []))
+    return mig.main()
+
+
+class _Bucket:
+    durable = True
+
+    def __init__(self): self.items = {}
+    def put(self, k, d, ct=""): self.items[k] = d; return True
+    def get(self, k): return self.items.get(k)
+    def exists(self, k): return k in self.items
+    def delete(self, k): return bool(self.items.pop(k, None))
+    def local_path(self, k): return None
+    def url(self, k, *, expires=3600): return f"https://bucket.example/{k}"
+
+
+def test_the_migration_carries_files_that_exist_only_in_the_mirror(app_mod, monkeypatch):
+    """A `cp -r` of the upload directory is not enough, and that is the whole point.
+
+    After a redeploy wipes the ephemeral disk, a key can exist ONLY in the durable
+    `media_blob` mirror. Copying the directory would leave it behind — and the disk is
+    about to be removed, so "left behind" means gone.
+    """
+    from chordential_oia.web import db
+
+    conn = db.connect()
+    try:
+        db.save_media_blob(conn, "proj9-wiped.mp3", b"ID3" + b"W" * 500, "audio/mpeg")
+    finally:
+        conn.close()
+    on_disk = Path(os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    on_disk.mkdir(parents=True, exist_ok=True)
+    (on_disk / "proj9-live.mp3").write_bytes(b"ID3" + b"L" * 400)
+
+    bucket = _Bucket()
+    assert _run_migration(bucket, monkeypatch) == 0
+    assert "proj9-live.mp3" in bucket.items, "a file on disk did not reach the bucket"
+    assert "proj9-wiped.mp3" in bucket.items, (
+        "a mirror-only key was left behind — this is exactly what a directory copy misses")
+
+
+def test_the_migration_refuses_to_report_success_on_a_wedged_bucket(app_mod, monkeypatch):
+    """`put()` returning True is not evidence. The script reads every object back and
+    compares SHA-256, because the day this matters is the day the disk is removed."""
+    class Wedged(_Bucket):
+        def put(self, k, d, ct=""): return True      # accepts, keeps nothing
+        def get(self, k): return None
+
+    on_disk = Path(os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    on_disk.mkdir(parents=True, exist_ok=True)
+    (on_disk / "master.wav").write_bytes(b"RIFF" + b"x" * 100)
+    assert _run_migration(Wedged(), monkeypatch) == 1
+
+
+def test_the_migration_writes_nothing_on_a_dry_run(app_mod, monkeypatch):
+    on_disk = Path(os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    on_disk.mkdir(parents=True, exist_ok=True)
+    (on_disk / "take.mp3").write_bytes(b"ID3" + b"y" * 100)
+    bucket = _Bucket()
+    assert _run_migration(bucket, monkeypatch, dry_run=True) == 0
+    assert bucket.items == {}, "a dry run wrote to the bucket"
 
 
 # --------------------------------------------------------------------------- #
