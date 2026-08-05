@@ -508,3 +508,96 @@ def test_the_cli_and_the_console_share_one_implementation():
     body = script.read_text(encoding="utf-8")
     assert "hashlib" not in body, "the script re-implements the digest check"
 
+
+# --------------------------------------------------------------------------- #
+# A write that did not land must never leave zero copies
+# --------------------------------------------------------------------------- #
+def test_a_failed_remote_write_keeps_the_bytes_in_the_mirror(app_mod, monkeypatch):
+    """Reported live: the first upload after the R2 switch played back as SILENCE.
+
+    `persist_upload` discarded `put()`'s return value, and `durable` then skipped the
+    mirror — so a remote write that did not land left the file with **zero copies**,
+    while the version row was still created pointing at the missing key. The client's
+    player fetched a nonexistent object and played nothing.
+
+    A failed write must fall back to the mirror. Losing a master is not an acceptable
+    outcome of a best-effort seam.
+    """
+    from chordential_oia.web import db, uploads as uploads_mod
+
+    class Refusing:
+        durable = True
+        def put(self, k, d, ct=""): return False
+        def get(self, k): return None
+        def exists(self, k): return False
+        def delete(self, k): return False
+        def local_path(self, k): return None
+        def url(self, k, *, expires=3600): return None
+
+    monkeypatch.setattr(uploads_mod, "get_object_store", lambda root="": Refusing())
+    conn = db.connect()
+    try:
+        ok = uploads_mod._persist_upload(conn, "lost-master.mp3", b"ID3" + b"M" * 500,
+                                         "audio/mpeg")
+        blob = db.get_media_blob(conn, "lost-master.mp3")
+    finally:
+        conn.close()
+    assert ok is False, "a failed write must report itself"
+    assert blob is not None and blob[0] == b"ID3" + b"M" * 500, (
+        "the bytes were lost — this is the silence the operator heard")
+
+
+def test_a_write_that_reports_success_but_did_not_land_is_caught(app_mod, monkeypatch):
+    """The nastier shape: `put()` returns True and the object is not retrievable. Trust
+    the read-back, never the return value — the same rule the migration follows."""
+    from chordential_oia.web import db, uploads as uploads_mod
+
+    class Lying:
+        durable = True
+        def put(self, k, d, ct=""): return True      # claims success
+        def get(self, k): return None
+        def exists(self, k): return False            # ...but nothing is there
+        def delete(self, k): return False
+        def local_path(self, k): return None
+        def url(self, k, *, expires=3600): return None
+
+    monkeypatch.setattr(uploads_mod, "get_object_store", lambda root="": Lying())
+    conn = db.connect()
+    try:
+        ok = uploads_mod._persist_upload(conn, "phantom.mp3", b"ID3" + b"P" * 300,
+                                         "audio/mpeg")
+        blob = db.get_media_blob(conn, "phantom.mp3")
+    finally:
+        conn.close()
+    assert ok is False
+    assert blob is not None, "a lying store still must not cost us the bytes"
+
+
+def test_a_healthy_durable_store_still_skips_the_mirror(app_mod, monkeypatch):
+    """The fix must not undo ADR-0043's point: with a working bucket the mirror stays
+    off, or every master doubles into the database for no benefit."""
+    from chordential_oia.web import db, uploads as uploads_mod
+
+    class Working:
+        durable = True
+        def __init__(self): self.items = {}
+        def put(self, k, d, ct=""): self.items[k] = d; return True
+        def get(self, k): return self.items.get(k)
+        def exists(self, k): return k in self.items
+        def delete(self, k): return bool(self.items.pop(k, None))
+        def local_path(self, k): return None
+        def url(self, k, *, expires=3600): return f"https://bucket.example/{k}"
+
+    store = Working()
+    monkeypatch.setattr(uploads_mod, "get_object_store", lambda root="": store)
+    conn = db.connect()
+    try:
+        ok = uploads_mod._persist_upload(conn, "healthy.mp3", b"ID3" + b"H" * 200,
+                                         "audio/mpeg")
+        blob = db.get_media_blob(conn, "healthy.mp3")
+    finally:
+        conn.close()
+    assert ok is True
+    assert store.items.get("healthy.mp3") is not None
+    assert blob is None, "a durable store must not also mirror — that is the bloat"
+

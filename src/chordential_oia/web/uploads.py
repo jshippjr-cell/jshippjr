@@ -39,7 +39,7 @@ _CUT_MIRROR_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MIRROR_MB", "64")) * 102
 
 
 def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
-                    mirror: bool = True) -> None:
+                    mirror: bool = True) -> bool:
     """THE place client media is written (ADR-0043). Every upload route goes through
     here; none may open a file under ``upload_dir()`` itself.
 
@@ -64,10 +64,33 @@ def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
         content_type = mimetypes.guess_type(name)[0] or ""
     key = os.path.basename(name)
     store = get_object_store(upload_dir())
-    store.put(key, data, content_type)
-    if not mirror or getattr(store, "durable", False):
-        return
+    durable = bool(getattr(store, "durable", False))
+
+    # The write is CONFIRMED, not assumed. `put()` returning False — or returning True
+    # for bytes that are not actually retrievable — used to be invisible here: the
+    # return value was discarded, and `durable` then skipped the mirror, so a failed
+    # remote write left the file with ZERO copies while the version row was created
+    # pointing at it. The client's player fetched a missing object and played silence.
+    # Reported live, 2026-08-05, on the first upload after the R2 switch.
+    ok = bool(store.put(key, data, content_type))
+    if ok and durable:
+        # One HEAD against a bucket we have just written to is nothing next to the
+        # upload itself, and it is the difference between "we sent it" and "it is there".
+        ok = bool(store.exists(key))
+    if not ok:
+        # Never lose the bytes to a seam that is meant to be best-effort. The mirror is
+        # the net; a remote write that did not land is exactly when it must catch.
+        print(f"[storage] WARNING: the object store did not accept {key!r} — keeping the "
+              f"bytes in the database mirror instead. Client media is NOT on the bucket; "
+              f"re-run the migration from /settings/storage once the store is healthy.",
+              flush=True)
+        db.save_media_blob(conn, key, data, content_type)
+        return False
+
+    if not mirror or durable:
+        return True
     db.save_media_blob(conn, key, data, content_type)
+    return True
 
 
 def _store_pending_submission(conn, project_id: int, data: bytes,
