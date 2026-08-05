@@ -344,6 +344,12 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `wave-live.js?…&offsite=`, and the tap fails closed. Waveform on a bucket instance would
   need CORS on the bucket + `crossorigin="anonymous"`; deliberately not done, since a
   missing CORS rule would fail the media outright.
+  **The wave is back on (2026-08-05), on condition.** Each player proves the bytes are
+  CORS-readable with a one-byte `Range` GET before it sets `crossorigin` or taps anything,
+  and recovers — attribute off, reload, resume, no wave — if the media fails regardless.
+  Verified across four bucket configurations; a misconfigured bucket costs the animation
+  and never the audio. To light it up on an instance: add a CORS rule to the bucket
+  allowing GET/HEAD with the `range` header from the site origin. Nothing to deploy.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what

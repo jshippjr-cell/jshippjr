@@ -50,7 +50,19 @@
    * bucket was switched on, every version in the review portal went silent — including
    * mp3s uploaded long before — and nothing anywhere reported it, because nothing was
    * broken. A redirect cannot be detected from here (the element keeps the requested URL
-   * in `currentSrc`), so the server says so instead. Default is DON'T TAP. */
+   * in `currentSrc`), so the server says so instead. Default is DON'T TAP.
+   *
+   * GETTING THE WAVE BACK ON A BUCKET, WITHOUT BETTING THE AUDIO ON IT. Cross-origin media
+   * CAN be tapped — if the bucket returns CORS headers and the element carries
+   * `crossorigin="anonymous"`. The trap is that setting that attribute against a bucket
+   * with no CORS rule does not degrade to a silent wave, it makes the media fail to load
+   * outright: the client loses playback entirely to buy a decoration. So the attribute is
+   * never set on faith. Each player PROVES the bytes are CORS-readable first, with a
+   * one-byte `Range` fetch shaped exactly like the request the media element will make,
+   * fired at page load while `preload="none"` means nothing has loaded yet. Only on a
+   * proven-readable response does the element get `crossorigin` and the tap. And if the
+   * media still fails afterwards, the element drops the attribute, reloads, resumes, and
+   * gives up on the wave for good — playback is the thing that must survive. */
 
   function upgrade(player) {
     var audio = player.querySelector("audio");
@@ -82,6 +94,24 @@
     }
     var smooth = still.slice(), analyser = null, freq = null, raf = null, failed = false;
 
+    /* Same-origin media is readable by definition. Cross-origin media is not tapped until
+       a probe proves otherwise, and `loading` records whether the element has already
+       started fetching — past that point the `crossorigin` attribute cannot be added
+       without a reload, so we let this session play un-analysed rather than interrupt it. */
+    var canTap = !mayBeCrossOrigin(audio), loading = false;
+    audio.addEventListener("loadstart", function () { loading = true; });
+
+    if (!canTap) proveReadable(audio, function () {
+      if (loading) return;                     // too late to switch the element safely
+      audio.crossOrigin = "anonymous";         // preload="none": nothing fetched yet
+      // Handshake with the player's own error handler: while this is set, a load failure
+      // belongs to US and we are going to undo it, so the player must not tell the client
+      // the file is broken — it is about to play.
+      audio.dataset.waveCors = "1";
+      canTap = true;
+      recoverIfMediaFails(player, audio, cv, function () { canTap = false; failed = true; });
+    });
+
     function band(i) {
       if (!analyser) return 0;
       var n = freq.length;
@@ -112,11 +142,11 @@
     }
     draw();                                    // paint the still wave once
 
-    /* Only ever called with a RUNNING context, and never on media that may be served
-       from another origin — see the note at the top. */
+    /* Only ever called with a RUNNING context, and only on audio this player has proven
+       it is allowed to read — see the note at the top. */
     function tap() {
       if (failed || analyser || !ctx || ctx.state !== "running") return;
-      if (mayBeCrossOrigin(audio)) { failed = true; cv.remove(); return; }
+      if (!canTap) { failed = true; cv.remove(); return; }
       try {
         var src = ctx.createMediaElementSource(audio);
         analyser = ctx.createAnalyser();
@@ -174,6 +204,48 @@
       if (u.origin !== location.origin) return true;      // already elsewhere
       return OFFSITE && u.pathname.indexOf("/uploads/") === 0;
     } catch (e) { return true; }
+  }
+
+  /* Can this media be read across origins? Asked with the SAME request the media element
+     will make — a GET with a one-byte Range — because a CORS rule that allows a bare GET
+     but not the `range` header would pass a lazier probe and then fail the real load.
+     `no-store` so the answer is never a cached response from before the rule existed. */
+  function proveReadable(audio, ok) {
+    var src = audio.getAttribute("src") || "";
+    if (!src || !window.fetch) return;
+    try {
+      fetch(src, { method: "GET", mode: "cors", cache: "no-store",
+                   headers: { Range: "bytes=0-0" } })
+        .then(function (r) { if (r.ok || r.status === 206) ok(); })
+        .catch(function () { /* no CORS rule: the wave stays still, the audio plays */ });
+    } catch (e) { /* same */ }
+  }
+
+  /* Last line of defence. If the media fails AFTER we added `crossorigin` — a rule that
+     covers HEAD but not GET, an origin list that misses this host, a rule removed later —
+     take the attribute back off, reload, and carry on WITHOUT the wave. The client keeps
+     the audio; we lose a decoration. Also clears the player's failure banner, which by
+     then is telling the listener something that is about to stop being true. */
+  function recoverIfMediaFails(player, audio, cv, giveUp) {
+    audio.addEventListener("error", function onErr() {
+      if (!audio.crossOrigin) return;
+      audio.removeEventListener("error", onErr);
+      var at = audio.currentTime || 0;
+      giveUp();
+      try { cv.remove(); } catch (e) {}
+      audio.removeAttribute("crossorigin");
+      delete audio.dataset.waveCors;           // a LATER failure is genuine; let it show
+      audio.load();
+      if (at) { try { audio.currentTime = at; } catch (e) {} }
+      player.classList.remove("failed");
+      var note = player.parentNode && player.parentNode.querySelector(".cap-audio-err");
+      if (note) note.remove();
+      var btn = player.querySelector(".cap-audio-btn");
+      if (btn) { btn.textContent = "▶"; btn.setAttribute("aria-label", "Play"); }
+      var t = player.querySelector(".cap-audio-time");
+      if (t) t.textContent = "0:00";
+      var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {});
+    });
   }
 
   /* Build and resume the shared context from inside a real user gesture. Nothing here

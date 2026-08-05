@@ -888,6 +888,10 @@
       if (window.console) console.error('[audio] ' + audio.currentSrc + ' — ' + why);
     }
     audio.addEventListener('error', function () {
+      // The waveform layer sets this while it is testing a CORS-readable load of the same
+      // file. A failure there is ITS failure and it undoes it immediately — telling the
+      // client the file is broken would be wrong, and wrong for about 200ms.
+      if (audio.dataset.waveCors) return;
       var c = audio.error ? audio.error.code : 0;
       fail(c === 3 ? 'the file was received but is not playable audio (media error 3), '
                      + 'which usually means the upload did not finish.'

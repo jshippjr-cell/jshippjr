@@ -156,6 +156,44 @@ def test_the_waveform_is_told_when_media_comes_from_another_origin(client, monke
     assert "mayBeCrossOrigin(audio)" in js, "the tap is not gated on the media's origin"
 
 
+def test_the_waveform_earns_cross_origin_audio_instead_of_assuming_it(client):
+    """Getting the wave back on a bucket, without betting the audio on it.
+
+    Cross-origin media CAN be analysed — with a CORS rule on the bucket and
+    `crossorigin="anonymous"` on the element. The trap is the failure mode: setting that
+    attribute against a bucket with no rule does not degrade to a still wave, it makes the
+    media fail to load outright. The client would lose playback to buy a decoration — the
+    same trade that caused this whole incident, made deliberately.
+
+    So each player proves the bytes are readable first, with a one-byte `Range` GET shaped
+    exactly like the request the element will make (a rule allowing a bare GET but not the
+    `range` header would pass a lazier probe and fail the real load). And if the media
+    still fails, the element drops the attribute, reloads and resumes without the wave.
+
+    Verified in a browser across four bucket configurations — rule present: tapped,
+    playing, signal peak 211; no rule: untapped, playing; same-origin: tapped, peak 216;
+    rule present but broken for the real load: recovered, untapped, playing.
+    """
+    js = client.get("/static/wave-live.js").text
+    assert "proveReadable" in js and 'Range: "bytes=0-0"' in js, (
+        "crossorigin is being set without proving the bytes are readable first")
+    assert 'mode: "cors"' in js and 'cache: "no-store"' in js
+    assert "recoverIfMediaFails" in js and 'removeAttribute("crossorigin")' in js, (
+        "a bad CORS rule would cost the client playback with no way back")
+    # The handshake that stops the player crying broken during a recovery it is about to
+    # undo. BOTH halves must exist: the flag set here and honoured in the portal's own
+    # error handler — and cleared afterwards, or a LATER genuine failure stays silent.
+    assert 'audio.dataset.waveCors = "1"' in js
+    assert "delete audio.dataset.waveCors" in js, (
+        "the flag is never cleared, so a genuine failure later would be swallowed")
+    from pathlib import Path
+    import chordential_oia.web.app as app_mod
+    portal = (Path(app_mod.__file__).parent / "templates" / "delivery_portal.html"
+              ).read_text(encoding="utf-8")
+    assert "if (audio.dataset.waveCors) return;" in portal, (
+        "the player would report a broken file during a recovery that is about to succeed")
+
+
 def _won_project(client):
     import re
     client.post("/opportunity/1/status", data={"status": "Won"},

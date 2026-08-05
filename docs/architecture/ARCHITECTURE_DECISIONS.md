@@ -1236,6 +1236,31 @@ bucket plus `crossorigin="anonymous"` on the element — deliberately NOT done h
 a bucket without the CORS rule would then fail the media outright instead of merely
 dropping the decoration.
 
+**Amended 2026-08-05 (fourth) — the wave is back, and it has to EARN the audio.** Operator
+asked for the animation back. Cross-origin media can be analysed with a CORS rule on the
+bucket plus `crossorigin="anonymous"` on the element, but that attribute is exactly the
+trap described above: set against a bucket with no rule it does not degrade to a still
+wave, it makes the media fail to load outright — trading the client's playback for a
+decoration, which is the mistake this whole incident was, made deliberately.
+
+So nothing is assumed. Each player PROVES the bytes are CORS-readable before touching the
+element: a one-byte `Range` GET shaped exactly like the request the media element will
+make (a rule that allows a bare GET but not the `range` header would pass a lazier probe
+and then fail the real load), `no-store` so the answer is never a response cached from
+before the rule existed, fired at page load while `preload="none"` means nothing has
+loaded yet and the attribute can still be added without a reload. Only a proven-readable
+response earns `crossorigin` and the tap. If the media fails anyway, the element drops the
+attribute, reloads, resumes, and gives up the wave permanently — and a `data-wave-cors`
+handshake stops the player reporting "this file did not load" during a recovery that is
+about to succeed.
+
+Verified in a browser across four bucket configurations: rule present → tapped, playing,
+signal peak 211; no rule → untapped, playing; same-origin → tapped, peak 216; rule present
+but broken for the real load → recovered, untapped, playing at 1.15s. **A misconfigured
+bucket costs the animation and never the audio.** Turning the wave on for an instance is
+therefore an ops action with no downside: add the CORS rule to the bucket and the players
+pick it up by themselves.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`
