@@ -601,7 +601,15 @@ def serve_upload(name: str):
         return FileResponse(path, headers=_headers, filename=os.path.basename(name),
                             media_type="application/octet-stream",
                             content_disposition_type="attachment")
-    if _key and _key == name and getattr(_store, "durable", False):
+    # The redirect is only offered for an object that is ACTUALLY THERE. `url()` signs a
+    # key without asking the bucket anything, so a missing object used to be answered with
+    # a 307 to a presigned URL that R2 replies to with a 404 — which an <audio> element
+    # renders as silence, with no error anywhere. Worse, returning here skipped the DB
+    # mirror fallback below, so a key that exists ONLY in the mirror (which is exactly what
+    # `persist_upload` leaves behind when a bucket write fails) was unplayable while every
+    # existence check said it was fine. One HEAD, and a mirror-only key now serves AND
+    # repairs itself into the bucket on the way past.
+    if _key and _key == name and getattr(_store, "durable", False) and _store.exists(_key):
         signed = _store.url(_key)
         if signed:
             return RedirectResponse(signed, status_code=307)

@@ -1180,6 +1180,17 @@ indistinguishable from a missing file to whoever pressed play, and its opposite 
 reading a checkmark. Every audited row now carries its size and where it would be served
 from, and an empty file is reported as broken rather than fine.
 
+**The read path was the last one.** `/uploads/{name}` handed a durable store the redirect
+unconditionally, and `url()` signs a key without asking the bucket anything — so a missing
+object was answered with a 307 to a presigned URL the bucket replies to with a 404, which
+an `<audio>` element renders as **silence, with no error anywhere**. Returning there also
+skipped the DB-mirror fallback below it, so a key existing only in the mirror was
+unreachable — and that is precisely the state `persist_upload` leaves behind when a bucket
+write fails, having logged a warning and saved the bytes so they would not be lost. They
+were not lost; they were unplayable, while every existence check said fine. The redirect
+is now offered only for an object the store confirms it has (one HEAD), and a mirror-only
+key serves from the mirror and repairs itself into the bucket on the way past.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`

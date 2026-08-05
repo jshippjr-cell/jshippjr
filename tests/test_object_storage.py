@@ -403,6 +403,48 @@ def test_a_remote_store_serves_by_redirect_not_by_streaming(app_mod, monkeypatch
     assert r.headers["location"].startswith("https://bucket.example/anything.mp3")
 
 
+def test_a_mirror_only_key_is_served_and_repaired_not_redirected_into_a_404(
+        app_mod, monkeypatch):
+    """The silence that started this. A durable store used to be handed the redirect
+    unconditionally: `url()` signs a key without asking the bucket anything, so a missing
+    object was answered with a 307 to a presigned URL that the bucket replies to with a
+    404 — which an `<audio>` element renders as silence, with no error anywhere.
+
+    And returning there skipped the mirror fallback below it, so a key that exists ONLY in
+    the mirror was unplayable. That is not a hypothetical state: it is precisely what
+    `persist_upload` leaves behind when a bucket write fails, having logged a warning and
+    saved the bytes so they would not be lost. They were not lost. They were unreachable.
+    """
+    class EmptyBucket:
+        durable = True
+        def __init__(self): self.items = {}
+        def put(self, k, d, ct=""): self.items[k] = d; return True
+        def get(self, k): return self.items.get(k)
+        def exists(self, k): return k in self.items
+        def size(self, k): return len(self.items[k]) if k in self.items else None
+        def delete(self, k): return bool(self.items.pop(k, None))
+        def local_path(self, k): return None
+        def url(self, k, *, expires=3600): return f"https://bucket.example/{k}?sig=x"
+
+    from chordential_oia.web import db
+
+    body = b"ID3" + b"R" * 900
+    conn = db.connect()
+    try:
+        db.save_media_blob(conn, "proj-mirror-only.mp3", body, "audio/mpeg")
+    finally:
+        conn.close()
+
+    bucket = EmptyBucket()
+    monkeypatch.setattr(app_mod, "get_object_store", lambda *a, **k: bucket)
+    with TestClient(app_mod.app) as c:
+        r = c.get("/uploads/proj-mirror-only.mp3", follow_redirects=False)
+    assert r.status_code == 200, "a mirror-only key was redirected at an object that is not there"
+    assert r.content == body
+    assert bucket.items.get("proj-mirror-only.mp3") == body, (
+        "serving from the mirror should also repair the bucket")
+
+
 def test_the_zip_is_still_never_served_from_uploads(app_mod, monkeypatch):
     """A payment-gated deliverable must not become reachable just because the store
     changed. The .zip block predates this work and has to survive it."""

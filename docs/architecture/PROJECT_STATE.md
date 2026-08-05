@@ -315,6 +315,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   bucket configured **the one artefact the client pays for never reached the bucket**.
   The seam gained `size()`, because existence is not playability — a zero-byte object is
   present, passes `exists()`, survives a SHA-verified migration, and plays as silence.
+  **And the read path was the last write-door bug in disguise:** `/uploads/{name}` handed
+  a durable store the redirect without asking the bucket whether the object was there
+  (`url()` signs a key blind), so a missing object became a 307 at a presigned URL that
+  answers 404 — silence in an `<audio>` element, no error anywhere — *and* skipped the
+  mirror fallback, which is exactly where `persist_upload` puts the bytes when a bucket
+  write fails. Now the redirect requires a confirmed object, and a mirror-only key serves
+  and repairs itself into the bucket.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what
