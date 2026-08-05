@@ -1321,6 +1321,39 @@ attribute), unlike slice 6's `_notify_operator_review`, where the name still exi
 `app` as a re-export and the patch silently stopped affecting the route. **A re-export is
 what makes a stale patch site quiet** — worth knowing for the remaining slices.
 
+**Slice 8 (2026-08-05) — the campaign workspace.** `/campaign` (7 routes) →
+`campaign_routes.py`. One contiguous span (L1836–1985), zero interleaved routes, one
+exclusive helper (`_campaign_view`), zero shared, zero collisions against the other 263
+routes. Every route is behind `campaigns.workspace_enabled()`, so with the flag off the
+whole module answers 404 and can move without touching any other surface.
+
+Equivalence again needed real data before it meant anything: the seeded book has **no
+campaigns**, so the first comparison run agreed on 404s and 400s. Creating an identical
+campaign on both trees gave the real check — Campaign Home renders **byte-identical at
+28,630 bytes**, three writes (direction, phase, agency) return identical status and
+identical byte counts, the phase advances to `Direction` on both, and the direction text
+appears twice in the rendered page on both. **That is now the second slice running where a
+green first pass proved nothing; the seeded dataset does not cover every surface, so
+"identical error pages" has to be recognised as a non-result.**
+
+**Dead imports, cleaned and counted.** Comparing against a *stale* pyflakes baseline had
+been hiding what earlier slices left behind: `app.py` carried **39 unused imports**. 17
+were genuinely dead — five `..delivery` engine names, `Opportunity`, `Talent`,
+`normalize_url`, `_profile_from_row`, `File`, `UploadFile`, `Jinja2Templates`, `List`,
+`_AUDIO_EXTS`, `_CUT_MIRROR_BYTES`, `directory_crawl`, `outreach_engine`, `campaign_intake`
+— and are gone. **22 remain, deliberately, and they are a finding rather than a tidy
+result:** 15 are helper re-exports pinned by `test_a_moved_helper_is_defined_once_and_still_reachable`,
+and 7 are engine modules (`decision_makers`, `directory_parsers`, `enrichment`,
+`intelligence`, `music_opportunity`, `opportunity_signals`, `signals`) that only *tests*
+reach through `app_mod`. Both groups exist so tests can use `app.py` as a namespace for
+the package — the exact pattern slice 5 corrected for `procurement` and
+`producer_learning`. The re-exports were justified when `app.py` still held 186 routes and
+editing no handler was the point; with 58 routes left, that justification has expired.
+Closing it means repointing the test sites, which is its own pass.
+
+**app.py: 2,326 → 2,128 lines; 58 routes remain** — from 9,133 and 251, so **77% of the
+file and 77% of the routes have moved.** Suite 1,376 → 1,380.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

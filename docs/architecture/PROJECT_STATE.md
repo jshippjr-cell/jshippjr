@@ -325,9 +325,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   contiguous block, zero interleaved routes, zero shared helpers, because slices 4 and 6
   had already lifted everything it shared. **app.py is now 2,326 lines / 65 routes** —
   from 9,133 / 251, so 75% of the file and 74% of the routes have moved.
-  **Open finding:** `_append_version_from_bytes` (40 lines) has no callers anywhere and is
-  kept alive only by a `test_naming.py` source inspection — the naming scheme it guards is
-  therefore not guarded on the live path.
+  **Slice 8:** the campaign workspace (`/campaign`, 7 routes) → `campaign_routes.py`, plus
+  17 genuinely dead imports removed from `app.py`. **app.py is now 2,128 lines / 58
+  routes** — from 9,133 / 251, so 77% of both has moved.
+  **Open findings:** (1) `_append_version_from_bytes` (40 lines) has no callers anywhere
+  and is kept alive only by a `test_naming.py` source inspection — the naming scheme it
+  guards is therefore not guarded on the live path. (2) `app.py` still carries **22 imports
+  it does not use** — 15 helper re-exports and 7 engine modules — kept only so tests can
+  reach them through `app_mod`. That justification expired when the routes left; closing it
+  means repointing those test sites.
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

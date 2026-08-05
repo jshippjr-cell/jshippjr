@@ -110,7 +110,10 @@ def test_dispositions_record_events_and_feed_the_prompt(tmp_path, monkeypatch):
     priors = producer_learning.priors_summary(conn)
     conn.close()
     assert "campaign_type" in priors
-    prompt = app_mod.campaign_intake._build_extraction_prompt(
+    # Reached directly: ADR-0044 moved the /campaign routes out of app.py and with
+    # them app.py's need to import this engine.
+    from chordential_oia.web import campaign_intake
+    prompt = campaign_intake._build_extraction_prompt(
         "some transcript", "objective", priors=priors)
     assert "WHAT THIS PRODUCER CONSISTENTLY VALUES" in prompt
     assert "campaign_type" in prompt
