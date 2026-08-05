@@ -1380,6 +1380,35 @@ another green-but-empty result, caught by checking that a session row actually a
 file and 80% of the routes have moved.** `.simulator` left `app.py`'s import list
 entirely: no test reached it through `app_mod`. Suite 1,380 → 1,385.
 
+**Slice 10 (2026-08-05) — the client workspace.** `/workspace` (5 routes) →
+`workspace_routes.py`: the durable token-gated URL (ADR-0018), the client's scope
+confirmation, the court-state poll and the two approval doors. One contiguous span, zero
+interleaved routes, three exclusive helpers (121 lines), zero shared, zero collisions
+against the other 265 routes.
+
+**This is the surface where the client's own action drives state** — approving the
+Commercial Review is the award trigger that creates the project — so the equivalence run
+had to reach that write, and the first attempt did not. With no released review the
+approve route is a no-op: 200 and byte-identical on both trees, and empty as evidence,
+exactly the pattern of the last three slices. Releasing an identical review on both made
+it real: **opp → Won, review → approved, project id 5 created with the same client, need
+and inherited share token, workspace re-rendering byte-identical at 11,679 bytes, and
+matching court signatures (`Won:proj:approved:sc::0:`).**
+
+The workspace was also compared at three lifecycle phases by minting deterministic tokens
+on both trees — New (6,476 bytes), Submitted (6,485), Won-with-project (5,782) — all
+byte-identical, with `court.json` matching down to the signature string, an unknown token
+404ing on both, and ten neighbouring pages identical.
+
+**app.py: 2,004 → 1,574 lines; 46 routes remain** — from 9,133 and 251, so **83% of the
+file and 82% of the routes have moved, and `app.py` is under 2,000 lines for the first
+time.** `commercial` and `workspace` left its import list entirely. Suite 1,385 → 1,389,
+with no test needing a change — the first slice of the series where nothing was reaching
+through `app_mod` into what moved.
+
+What is left is the application object (lifespan, middleware, the admin gate, the PWA
+endpoints) and 46 routes across 30 tiny groups, none larger than three.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

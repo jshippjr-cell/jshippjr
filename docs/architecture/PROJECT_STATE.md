@@ -329,8 +329,12 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   17 genuinely dead imports removed from `app.py`. **Slice 9:** the objection simulator
   (`/simulator`, 7 routes) → `simulator_routes.py` — no helpers at all, and a new test pins
   the one place declaration order is load-bearing (`/simulator/library` must stay ahead of
-  `/simulator/{session_id}`). **app.py is now 2,004 lines / 51 routes** — from 9,133 / 251,
-  so 78% of the file and 80% of the routes have moved.
+  `/simulator/{session_id}`). **Slice 10:** the client workspace (`/workspace`, 5 routes) →
+  `workspace_routes.py`, including the award trigger — verified by releasing an identical
+  commercial review on both trees and confirming the approval created the same project.
+  **app.py is now 1,574 lines / 46 routes** — from 9,133 / 251, so 83% of the file and 82%
+  of the routes have moved, and what remains is the application object plus 46 routes
+  across 30 groups, none larger than three.
   **Open findings:** (1) `_append_version_from_bytes` (40 lines) has no callers anywhere
   and is kept alive only by a `test_naming.py` source inspection — the naming scheme it
   guards is therefore not guarded on the live path. (2) `app.py` still carries **22 imports
