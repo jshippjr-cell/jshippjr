@@ -63,7 +63,7 @@ def inventory(conn, root: str = "") -> dict:
         "root": root,
         "on_disk": len(disk),
         "in_mirror": len(mirror),
-        "keys": len(keys),
+        "total_keys": len(keys),
         "mirror_only": sorted(set(mirror) - set(disk)),
         "bytes": sum(len(disk.get(k) or mirror.get(k) or b"") for k in keys),
     }
@@ -139,4 +139,53 @@ def migrate(conn, root: str = "", *, dry_run: bool = False) -> dict:
             "mirror_only": sorted(set(mirror) - set(disk))}
 
 
-__all__ = ["inventory", "migrate", "verify_round_trip", "read_sources"]
+def audit_referenced_media(conn, root: str = "") -> dict:
+    """Every media key the DATABASE references, and whether the bytes actually exist.
+
+    The inventory above answers "what is on this machine". This answers the question the
+    operator actually has when a client presses play and hears nothing: *the portal is
+    asking for a file — is it there?* A version row can happily reference a key that no
+    store holds, and until you play it, nothing says so.
+    """
+    from ..web import db
+
+    store = get_object_store(root)
+    rows, missing = [], 0
+    for prow in conn.execute("SELECT id, client, need FROM projects ORDER BY id").fetchall():
+        pid = prow["id"] if hasattr(prow, "keys") else prow[0]
+        delivery = db.get_delivery(conn, pid) or {}
+        refs = []
+        for v in (delivery.get("versions") or []):
+            refs.append(("version " + str(v.get("n") or "?"), v.get("filename") or ""))
+        pv = delivery.get("pending_version") or {}
+        if pv.get("filename"):
+            refs.append(("pending", pv["filename"]))
+        for a in (delivery.get("assets") or []):
+            if a.get("filename"):
+                refs.append((a.get("label") or "asset", a["filename"]))
+        pic = delivery.get("picture") or {}
+        if pic.get("filename"):
+            refs.append(("picture", pic["filename"]))
+        zp = delivery.get("delivery_zip") or {}
+        if zp.get("filename"):
+            refs.append(("delivery zip", zp["filename"]))
+        for what, filename in refs:
+            key = os.path.basename(filename)
+            if not key:
+                continue
+            in_store = bool(store.exists(key))
+            in_mirror = db.get_media_blob(conn, key) is not None
+            if not in_store and not in_mirror:
+                missing += 1
+            rows.append({
+                "project_id": pid,
+                "project": (prow["need"] if hasattr(prow, "keys") else prow[2]) or "",
+                "what": what, "key": key,
+                "in_store": in_store, "in_mirror": in_mirror,
+                "ok": in_store or in_mirror,
+            })
+    return {"rows": rows, "missing": missing, "checked": len(rows)}
+
+
+__all__ = ["inventory", "migrate", "verify_round_trip", "read_sources",
+           "audit_referenced_media"]

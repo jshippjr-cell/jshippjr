@@ -53,7 +53,7 @@ def main() -> int:
     try:
         inv = inventory(conn, root)
         print(f"[source] {inv['on_disk']} on disk, {inv['in_mirror']} in the mirror, "
-              f"{inv['keys']} distinct keys")
+              f"{inv['total_keys']} distinct keys")
         if inv["mirror_only"]:
             shown = inv["mirror_only"][:5]
             print(f"[source] {len(inv['mirror_only'])} exist ONLY in the mirror "

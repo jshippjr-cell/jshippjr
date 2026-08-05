@@ -13,6 +13,7 @@ else.
 from __future__ import annotations
 
 import json
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Form, Request
@@ -385,17 +386,19 @@ def inbox(
 @router.get("/settings/storage", response_class=HTMLResponse)
 def storage_page(request: Request, ran: str = ""):
     from chordential_oia.storage import storage_status
-    from chordential_oia.storage.migrate import inventory
+    from chordential_oia.storage.migrate import audit_referenced_media, inventory
     from .uploads import upload_dir
 
     root = upload_dir()
     conn = db.connect()
     try:
         inv = inventory(conn, root)
+        audit = audit_referenced_media(conn, root)
     finally:
         conn.close()
     return render(request, "storage.html", nav="pipeline",
-                  status=storage_status(root), inv=inv, root=root, result=None, ran=ran)
+                  status=storage_status(root), inv=inv, root=root, result=None, ran=ran,
+                  audit=audit, upload_dir_env=os.environ.get("CHORDENTIAL_UPLOAD_DIR", ""))
 
 
 @router.post("/settings/storage/verify", response_class=HTMLResponse)

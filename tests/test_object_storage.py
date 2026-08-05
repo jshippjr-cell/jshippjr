@@ -601,3 +601,42 @@ def test_a_healthy_durable_store_still_skips_the_mirror(app_mod, monkeypatch):
     assert store.items.get("healthy.mp3") is not None
     assert blob is None, "a durable store must not also mirror — that is the bloat"
 
+
+def test_the_console_names_a_file_that_exists_nowhere(app_mod):
+    """The question the operator actually has when a client hears silence: the portal is
+    asking for a file — is it there?
+
+    A version row can reference a key no store holds, and nothing says so until someone
+    presses play. Reported live: an upload published, appeared in the portal, and played
+    back as nothing; three round trips of log-reading later we still could not name the
+    file. Now the page does.
+    """
+    from chordential_oia.web import db
+
+    conn = db.connect()
+    try:
+        pid = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()["id"]
+        delivery = db.get_delivery(conn, pid)
+        versions = list(delivery.get("versions") or [])
+        versions.append({"n": 99, "label": "v99 Ghost", "url": "/uploads/proj-ghost.mp3",
+                         "filename": "proj-ghost.mp3", "name": "GHOST"})
+        db.update_delivery(conn, pid, "versions", versions)
+    finally:
+        conn.close()
+
+    with TestClient(app_mod.app) as c:
+        r = c.get("/settings/storage")
+    assert r.status_code == 200
+    assert "cannot be found" in r.text
+    assert "proj-ghost.mp3" in r.text, "the missing file must be named, not just counted"
+
+
+def test_the_page_never_renders_a_python_method_repr(app_mod):
+    """`inv.keys` resolved to the dict's `.keys` METHOD in Jinja, so the page showed
+    `<built-in method keys of dict object at 0x…>` where a count belonged. Shipped, and
+    the operator saw it."""
+    with TestClient(app_mod.app) as c:
+        r = c.get("/settings/storage")
+    assert "built-in method" not in r.text
+    assert "object at 0x" not in r.text
+

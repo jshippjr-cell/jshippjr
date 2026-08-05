@@ -67,6 +67,15 @@
     <dt>Active</dt><dd>{{ status.active }}</dd>
     <dt>Upload directory</dt><dd><code>{{ root }}</code></dd>
   </dl>
+  {% if not upload_dir_env %}
+    <p class="st-note">
+      <strong>CHORDENTIAL_UPLOAD_DIR is not set on this instance</strong>, so the local
+      root above is the package directory <em>inside the build</em> — destroyed on every
+      deploy. It only matters while the local store is active (the bucket ignores it), but
+      it is why files ended up existing only in the database mirror. Setting it in the
+      Render dashboard is what render.yaml intended; Render does not read that file.
+    </p>
+  {% endif %}
 </div>
 
 {# ── what is here to move ─────────────────────────────────────────────────── #}
@@ -75,7 +84,7 @@
   <dl class="st-kv">
     <dt>Files on disk</dt><dd>{{ inv.on_disk }}</dd>
     <dt>In the database mirror</dt><dd>{{ inv.in_mirror }}</dd>
-    <dt>Distinct keys to move</dt><dd><strong>{{ inv.keys }}</strong></dd>
+    <dt>Distinct keys to move</dt><dd><strong>{{ inv.total_keys }}</strong></dd>
     <dt>Mirror only</dt>
     <dd>
       {{ inv.mirror_only|length }}
@@ -90,6 +99,44 @@
     </p>
   {% endif %}
 </div>
+
+{# ── does every referenced file actually exist? ───────────────────────────── #}
+{% if audit is defined and audit %}
+<div class="st-card">
+  <div class="st-state">
+    <span class="st-dot {{ 'warn' if audit.missing else 'ok' }}"></span>
+    <h3>
+      {%- if audit.missing -%}{{ audit.missing }} referenced file{{ '' if audit.missing == 1 else 's' }} cannot be found
+      {%- else -%}All {{ audit.checked }} referenced files are accounted for{%- endif -%}
+    </h3>
+  </div>
+  <p class="st-sub">
+    Every version, asset, picture and package the database points at — checked against the
+    bucket and the mirror. A row can reference a file no store holds; until someone presses
+    play, nothing says so.
+  </p>
+  {% if audit.missing %}
+    <div class="st-res">
+      <table>
+        <thead><tr><th>Project</th><th>What</th><th>File</th><th>Bucket</th><th>Mirror</th></tr></thead>
+        <tbody>
+          {% for r in audit.rows if not r.ok %}
+          <tr>
+            <td>{{ r.project }}</td>
+            <td>{{ r.what }}</td>
+            <td><code>{{ r.key }}</code></td>
+            <td><span class="st-tag failed">missing</span></td>
+            <td><span class="st-tag failed">missing</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="st-note">These are the files that play back as silence. The bytes are not in
+      the bucket and not in the mirror — the upload never landed anywhere.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 {# ── the two buttons ──────────────────────────────────────────────────────── #}
 <div class="st-card">
@@ -108,7 +155,7 @@
       <button type="submit">2 · Dry run</button>
     </form>
     <form method="post" action="/settings/storage/migrate" style="display:inline"
-          data-confirm="Copy {{ inv.keys }} file{{ '' if inv.keys == 1 else 's' }} to the bucket now?">
+          data-confirm="Copy {{ inv.total_keys }} file{{ '' if inv.total_keys == 1 else 's' }} to the bucket now?">
       <input type="hidden" name="mode" value="live">
       <button type="submit" class="primary" {{ 'disabled' if not status.durable }}>3 · Copy for real</button>
     </form>
