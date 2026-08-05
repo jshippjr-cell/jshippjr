@@ -195,9 +195,16 @@ def _run_migration(store, monkeypatch, dry_run=False):
     spec = importlib.util.spec_from_file_location("mig_under_test", script)
     mig = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mig)
-    mig.get_object_store = lambda root="": store
-    mig.storage_status = lambda root="": {
-        "requested": "s3", "active": "s3", "durable": True, "misconfigured": False}
+    # Patch the SHARED module, not the script: the script is a thin CLI over
+    # `storage.migrate` now, so patching its own globals would no longer reach the
+    # logic. That the patch target moved is the point — see
+    # `test_the_cli_and_the_console_share_one_implementation`.
+    from chordential_oia.storage import migrate as shared
+    monkeypatch.setattr(shared, "get_object_store", lambda root="": store)
+    monkeypatch.setattr(shared, "storage_status", lambda root="": {
+        "requested": "s3", "active": "s3", "durable": True, "misconfigured": False})
+    monkeypatch.setattr(mig, "storage_status", lambda root="": {
+        "requested": "s3", "active": "s3", "durable": True, "misconfigured": False})
     monkeypatch.setattr(sys, "argv", ["mig"] + (["--dry-run"] if dry_run else []))
     return mig.main()
 
@@ -425,3 +432,79 @@ def test_uploads_still_serve_off_disk_by_default(app_mod):
         r = c.get(f"/uploads/{conn_names[0]}")
     assert r.status_code == 200
     assert r.content.startswith(b"ID3")
+
+
+# --------------------------------------------------------------------------- #
+# The operator's door: a page, not a shell
+# --------------------------------------------------------------------------- #
+def test_the_console_reports_the_store_without_reading_a_log(app_mod):
+    """Until this page existed, the only signal was a line printed at boot. If a
+    credential is revoked six months from now, uploads start failing and nothing
+    surfaces it until someone scrolls back through deploy logs."""
+    with TestClient(app_mod.app) as c:
+        r = c.get("/settings/storage")
+    assert r.status_code == 200
+    assert "Local disk" in r.text                      # this instance is on the disk
+    assert "Files on disk" in r.text                   # and it counts what is waiting
+
+
+def test_the_console_refuses_to_copy_onto_the_disk_it_is_replacing(app_mod):
+    """Copying onto the disk we are about to remove is not a migration. The button is
+    disabled in the page AND the call refuses server-side — a disabled attribute is a
+    hint, not a control."""
+    with TestClient(app_mod.app) as c:
+        page = c.get("/settings/storage")
+        assert "disabled" in page.text
+        r = c.post("/settings/storage/migrate", data={"mode": "live"})
+    assert r.status_code == 200
+    assert "Refused" in r.text
+
+
+def test_the_console_copies_and_shows_every_file(app_mod, monkeypatch):
+    """The button does the same work as the script, including carrying the mirror-only
+    keys a folder copy would lose."""
+    from chordential_oia.storage import local as local_mod
+    from chordential_oia.storage import migrate as mig
+    from chordential_oia.web import db
+
+    class Bucket(local_mod.LocalObjectStore):
+        durable = True
+
+    bucket = Bucket(os.environ["CHORDENTIAL_UPLOAD_DIR"] + "-bucket")
+    monkeypatch.setattr(mig, "get_object_store", lambda root="": bucket)
+    monkeypatch.setattr(mig, "storage_status", lambda root="": {
+        "requested": "s3", "active": "s3", "durable": True, "misconfigured": False})
+
+    on_disk = Path(os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    on_disk.mkdir(parents=True, exist_ok=True)
+    (on_disk / "proj7-v1.mp3").write_bytes(b"ID3" + b"m" * 300)
+    conn = db.connect()
+    try:
+        db.save_media_blob(conn, "proj7-wiped.mp3", b"ID3" + b"w" * 200, "audio/mpeg")
+    finally:
+        conn.close()
+
+    with TestClient(app_mod.app) as c:
+        r = c.post("/settings/storage/migrate", data={"mode": "live"})
+    assert r.status_code == 200
+    assert "Done" in r.text and "copied" in r.text
+    assert bucket.get("proj7-v1.mp3") is not None
+    assert bucket.get("proj7-wiped.mp3") is not None, "the mirror-only key was left behind"
+
+
+def test_the_cli_and_the_console_share_one_implementation():
+    """I told the operator these cannot drift. That is only true if the script imports
+    the module rather than carrying its own copy of the logic."""
+    import ast
+    from pathlib import Path as _P
+
+    script = _P(__file__).resolve().parents[1] / "scripts" / "migrate_uploads_to_object_store.py"
+    tree = ast.parse(script.read_text(encoding="utf-8"))
+    imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+                for a in n.names if (n.module or "").endswith("storage.migrate")}
+    assert {"migrate", "inventory", "verify_round_trip"} <= imported, (
+        "the script no longer imports the shared implementation — it has its own copy, "
+        "and the button and the command can now disagree")
+    body = script.read_text(encoding="utf-8")
+    assert "hashlib" not in body, "the script re-implements the digest check"
+

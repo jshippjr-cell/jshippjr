@@ -370,6 +370,76 @@ def inbox(
     )
 
 
+# --------------------------------------------------------------------------- #
+# Storage — the cutover surface (ADR-0043)
+# --------------------------------------------------------------------------- #
+# The operator needs to see where client media is going, and move it, WITHOUT a
+# terminal. Until this page existed the only signal was a line printed at boot: if
+# a credential is revoked six months from now, uploads start failing and nothing
+# surfaces it until someone scrolls back through deploy logs. And the migration
+# itself lived only in a script, so it needed a working web shell — which is not a
+# thing you can count on at the moment you need it.
+#
+# "The machine proposes, Jon disposes": nothing here runs on its own. The page
+# reports; the buttons are pressed by a human.
+@router.get("/settings/storage", response_class=HTMLResponse)
+def storage_page(request: Request, ran: str = ""):
+    from chordential_oia.storage import storage_status
+    from chordential_oia.storage.migrate import inventory
+    from .uploads import upload_dir
+
+    root = upload_dir()
+    conn = db.connect()
+    try:
+        inv = inventory(conn, root)
+    finally:
+        conn.close()
+    return render(request, "storage.html", nav="pipeline",
+                  status=storage_status(root), inv=inv, root=root, result=None, ran=ran)
+
+
+@router.post("/settings/storage/verify", response_class=HTMLResponse)
+def storage_verify(request: Request):
+    """Round-trip one throwaway object. `durable=True` only says the credentials and
+    the SDK are present — nothing in it makes a network call."""
+    from chordential_oia.storage import storage_status
+    from chordential_oia.storage.migrate import inventory, verify_round_trip
+    from .uploads import upload_dir
+
+    root = upload_dir()
+    probe = verify_round_trip(root)
+    conn = db.connect()
+    try:
+        inv = inventory(conn, root)
+    finally:
+        conn.close()
+    return render(request, "storage.html", nav="pipeline", status=storage_status(root),
+                  inv=inv, root=root, result=None, probe=probe, ran="verify")
+
+
+@router.post("/settings/storage/migrate", response_class=HTMLResponse)
+def storage_migrate(request: Request, mode: str = Form("dry")):
+    """Copy the media onto the bucket. `mode=dry` reports and writes nothing.
+
+    Refuses unless the active store is durable — copying onto the disk we are about
+    to remove is not a migration. Idempotent, and every object is verified by
+    SHA-256 read-back rather than by trusting `put()`.
+    """
+    from chordential_oia.storage import storage_status
+    from chordential_oia.storage.migrate import inventory, migrate as run_migrate
+    from .uploads import upload_dir
+
+    root = upload_dir()
+    conn = db.connect()
+    try:
+        result = run_migrate(conn, root, dry_run=(mode != "live"))
+        inv = inventory(conn, root)
+    finally:
+        conn.close()
+    return render(request, "storage.html", nav="pipeline", status=storage_status(root),
+                  inv=inv, root=root, result=result, ran=mode)
+
+
 @router.get("/settings/company-profile", response_class=HTMLResponse)
 def company_profile_page(request: Request):
     """The Company Profile — entered ONCE, the source for every generated procurement

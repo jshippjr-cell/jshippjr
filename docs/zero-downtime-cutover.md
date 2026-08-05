@@ -171,6 +171,21 @@ Then redeploy and read the **first line of the log**:
 | `[storage] WARNING: … falling back to the LOCAL disk` | ✗ a variable is wrong or the SDK is missing — fix before continuing |
 | `[storage] local disk at … — not durable` | ✗ `CHORDENTIAL_STORAGE` is not `s3` |
 
+### 1c-bis — or skip the shell entirely: **/settings/storage**
+
+The console has a page for all of this — the operator should not need a terminal at the
+moment a terminal is least likely to cooperate. Open **/settings/storage** and it shows
+which store is live, how many files are waiting, how many exist only in the database
+mirror, and gives three buttons: *test the bucket*, *dry run*, *copy for real* — with
+per-file results and the SHA of each object copied.
+
+It calls the same functions as the script (`chordential_oia.storage.migrate`), so the
+button and the command cannot drift; a test asserts the script still imports them rather
+than carrying its own copy. The copy button is disabled, **and the call refuses
+server-side**, while the active store is the local disk.
+
+Everything below still works from the shell if you prefer it.
+
 ### 1d — prove the bucket actually works, before touching real media
 
 `durable: True` means the credentials and the SDK are present. It does **not** mean a

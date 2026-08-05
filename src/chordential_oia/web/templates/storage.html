@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Storage{% endblock %}
+{% block heading %}Client media storage{% endblock %}
+{% block head %}
+<style>
+  .st-intro{color:var(--muted,#7a746d);max-width:70ch;margin:0 0 20px}
+  .st-card{border:1px solid var(--line,#efe9e0);border-radius:12px;padding:16px 18px;margin:0 0 18px}
+  .st-state{display:flex;align-items:center;gap:12px;margin:0 0 6px}
+  .st-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+  .st-dot.ok{background:#2f8f5b}.st-dot.warn{background:#c8552b}.st-dot.idle{background:#b8b2a8}
+  .st-state h3{margin:0;font-size:15px}
+  .st-sub{color:var(--muted,#8a8580);font-size:13px;margin:2px 0 0}
+  .st-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;margin:12px 0 0}
+  .st-kv dt{color:var(--muted,#8a8580)}
+  .st-kv dd{margin:0;font-variant-numeric:tabular-nums}
+  .st-actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
+  .st-actions button{font:inherit;border-radius:8px;padding:9px 14px;cursor:pointer;border:1px solid var(--border,#e7e1d8);background:#fff}
+  .st-actions button.primary{background:var(--accent,#c8552b);border-color:var(--accent,#c8552b);color:#fff}
+  .st-actions button[disabled]{opacity:.45;cursor:not-allowed}
+  .st-res{margin:18px 0 0;font-size:13px}
+  .st-res table{width:100%;border-collapse:collapse}
+  .st-res th,.st-res td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line,#f2ede5)}
+  .st-res th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)}
+  .st-tag{font-size:11px;padding:2px 7px;border-radius:99px;white-space:nowrap}
+  .st-tag.moved{background:#e8f4ec;color:#1f6b42}
+  .st-tag.skipped{background:#f1efea;color:#6d6760}
+  .st-tag.would{background:#eef2f8;color:#3a5a86}
+  .st-tag.failed{background:#fbe9e4;color:#a53a17}
+  .st-tag.mirror{background:#fdf3e3;color:#8a5a10}
+  .st-note{border-left:3px solid var(--accent,#c8552b);padding:8px 0 8px 12px;margin:14px 0 0;font-size:13px;color:var(--muted,#6f6a63)}
+  code{background:#f6f3ee;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+{% endblock %}
+{% block content %}
+
+<p class="st-intro">
+  Where client cuts, masters, stems and delivery packages are written. The Render disk is
+  removed at the Postgres cutover, so everything here has to be on the bucket
+  <strong>before</strong> that happens — Postgres does not carry uploaded files.
+</p>
+
+{# ── where media is going right now ───────────────────────────────────────── #}
+<div class="st-card">
+  <div class="st-state">
+    <span class="st-dot {{ 'ok' if status.durable else ('warn' if status.misconfigured else 'idle') }}"></span>
+    <h3>
+      {%- if status.durable -%}Object storage active — uploads are durable
+      {%- elif status.misconfigured -%}Half-configured — falling back to the local disk
+      {%- else -%}Local disk — not durable across the cutover{%- endif -%}
+    </h3>
+  </div>
+  <p class="st-sub">
+    {% if status.misconfigured %}
+      <code>CHORDENTIAL_STORAGE={{ status.requested }}</code> was requested but the bucket is
+      not fully configured, so writes are going to the disk. Uploads are <em>not</em> being
+      lost — the database mirror is still on — but the disk cannot be removed in this state.
+    {% elif not status.durable %}
+      Set <code>CHORDENTIAL_STORAGE=s3</code> and the four <code>CHORDENTIAL_S3_*</code>
+      variables to move client media off this machine.
+    {% else %}
+      New uploads go straight to the bucket. Existing files still need copying across — that
+      is what the buttons below do.
+    {% endif %}
+  </p>
+  <dl class="st-kv">
+    <dt>Requested</dt><dd>{{ status.requested }}</dd>
+    <dt>Active</dt><dd>{{ status.active }}</dd>
+    <dt>Upload directory</dt><dd><code>{{ root }}</code></dd>
+  </dl>
+</div>
+
+{# ── what is here to move ─────────────────────────────────────────────────── #}
+<div class="st-card">
+  <div class="st-state"><h3>What is on this machine</h3></div>
+  <dl class="st-kv">
+    <dt>Files on disk</dt><dd>{{ inv.on_disk }}</dd>
+    <dt>In the database mirror</dt><dd>{{ inv.in_mirror }}</dd>
+    <dt>Distinct keys to move</dt><dd><strong>{{ inv.keys }}</strong></dd>
+    <dt>Mirror only</dt>
+    <dd>
+      {{ inv.mirror_only|length }}
+      {%- if inv.mirror_only %} <span class="st-tag mirror">a folder copy would lose these</span>{% endif %}
+    </dd>
+  </dl>
+  {% if inv.mirror_only %}
+    <p class="st-note">
+      {{ inv.mirror_only|length }} file{{ '' if inv.mirror_only|length == 1 else 's' }} exist
+      only in the database mirror — the disk copy was wiped by a redeploy. They are carried
+      across too; copying the folder by hand would have left them behind.
+    </p>
+  {% endif %}
+</div>
+
+{# ── the two buttons ──────────────────────────────────────────────────────── #}
+<div class="st-card">
+  <div class="st-state"><h3>Move the media</h3></div>
+  <p class="st-sub">
+    Every object is written, read back, and compared by SHA-256 —
+    <code>put()</code> returning success is not evidence. Re-running is safe: anything
+    already there with a matching digest is skipped.
+  </p>
+  <div class="st-actions">
+    <form method="post" action="/settings/storage/verify" style="display:inline">
+      <button type="submit">1 · Test the bucket</button>
+    </form>
+    <form method="post" action="/settings/storage/migrate" style="display:inline">
+      <input type="hidden" name="mode" value="dry">
+      <button type="submit">2 · Dry run</button>
+    </form>
+    <form method="post" action="/settings/storage/migrate" style="display:inline"
+          data-confirm="Copy {{ inv.keys }} file{{ '' if inv.keys == 1 else 's' }} to the bucket now?">
+      <input type="hidden" name="mode" value="live">
+      <button type="submit" class="primary" {{ 'disabled' if not status.durable }}>3 · Copy for real</button>
+    </form>
+  </div>
+  {% if not status.durable %}
+    <p class="st-note">The copy is disabled while the active store is the local disk —
+      copying onto the disk we are about to remove is not a migration.</p>
+  {% endif %}
+</div>
+
+{# ── results ──────────────────────────────────────────────────────────────── #}
+{% if probe is defined and probe %}
+<div class="st-card">
+  <div class="st-state">
+    <span class="st-dot {{ 'ok' if probe.ok else 'warn' }}"></span>
+    <h3>{{ 'The bucket works' if probe.ok else 'The bucket did not answer' }}</h3>
+  </div>
+  <dl class="st-kv">
+    <dt>Wrote a test object</dt><dd>{{ 'yes' if probe.put else 'no' }}</dd>
+    <dt>Read it back intact</dt><dd>{{ 'yes' if probe.read_back else 'no' }}</dd>
+    <dt>Cleaned it up</dt><dd>{{ 'yes' if probe.cleaned_up else 'no' }}</dd>
+  </dl>
+  {% if not probe.ok %}
+    <p class="st-note">The key, secret, endpoint or bucket name is wrong. Fix it before
+      moving real media.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if result %}
+<div class="st-card">
+  <div class="st-state">
+    <span class="st-dot {{ 'warn' if (result.refused or result.failed) else 'ok' }}"></span>
+    <h3>
+      {%- if result.refused -%}Refused
+      {%- elif result.dry_run -%}Dry run — nothing was written
+      {%- elif result.failed -%}Finished with failures
+      {%- else -%}Done — every file is readable back from the bucket{%- endif -%}
+    </h3>
+  </div>
+  {% if result.refused %}
+    <p class="st-sub">{{ result.reason }}</p>
+  {% else %}
+    <dl class="st-kv">
+      <dt>{{ 'Would move' if result.dry_run else 'Moved' }}</dt><dd>{{ result.moved }}</dd>
+      <dt>Skipped (already there)</dt><dd>{{ result.skipped }}</dd>
+      <dt>Failed</dt><dd>{{ result.failed }}</dd>
+    </dl>
+    {% if result.failed %}
+      <p class="st-note">Do not remove the disk. Fix the failures and press the button
+        again — it only re-copies what is missing or mismatched.</p>
+    {% elif not result.dry_run and result.moved %}
+      <p class="st-note">Now prove it in the product before anything else: play a master in
+        a delivery portal, download a delivery package, and upload + publish a new version.</p>
+    {% endif %}
+    <div class="st-res">
+      <table>
+        <thead><tr><th>File</th><th>Size</th><th>Source</th><th>Result</th></tr></thead>
+        <tbody>
+          {% for r in result.results %}
+          <tr>
+            <td><code>{{ r.key }}</code></td>
+            <td>{{ '{:,}'.format(r.bytes) }}</td>
+            <td>{% if r.source == 'mirror-only' %}<span class="st-tag mirror">mirror only</span>{% else %}disk{% endif %}</td>
+            <td>
+              {% if r.state == 'moved' %}<span class="st-tag moved">copied · sha {{ r.sha }}</span>
+              {% elif r.state == 'skipped' %}<span class="st-tag skipped">already there</span>
+              {% elif r.state == 'would-move' %}<span class="st-tag would">would copy</span>
+              {% else %}<span class="st-tag failed">FAILED</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
