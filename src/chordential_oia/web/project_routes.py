@@ -70,44 +70,6 @@ from .uploads import (
 router = APIRouter(tags=["project"])
 
 
-def _append_version_from_bytes(conn, project_id: int, data: bytes, src_filename: str) -> tuple:
-    """Write uploaded audio bytes as the next version in a project's delivery ladder.
-
-    Shared by the admin Assets agent and the composer portal so both produce
-    identically-named versions, advance ``version_state``, and reopen an
-    already-approved delivery to review (a new master supersedes prior sign-off).
-    Returns ``(label, campaign)`` for the caller's notification."""
-    from datetime import datetime as _dt, timezone as _tz
-    delivery = db.get_delivery(conn, project_id)
-    versions = versions_list(delivery)
-    ext = os.path.splitext(src_filename or "")[1].lower()
-    safe_ext = ext if ext in _AUDIO_EXTS else ".mp3"
-    n, label = _next_version_label(delivery)
-    row = db.get_project(conn, project_id)
-    campaign = (row["need"] if row is not None else "") or "Campaign"
-    stem = _master_stem(conn, project_id, row, n, label)
-    safe_name = f"proj{project_id}-v{n}{safe_ext}"
-    bump = 1
-    while os.path.exists(os.path.join(upload_dir(), safe_name)):
-        safe_name = f"proj{project_id}-v{n}-{bump}{safe_ext}"
-        bump += 1
-    _persist_upload(conn, safe_name, data)
-    versions.append({
-        "n": n,
-        "label": label,
-        "url": f"/uploads/{safe_name}",
-        "filename": safe_name,
-        "name": stem,
-        "created_at": _dt.now(_tz.utc).isoformat(),
-    })
-    db.update_delivery(conn, project_id, "versions", versions)
-    db.update_delivery(conn, project_id, "version_state", label)
-    # A new version supersedes any prior approval/delivery — reopen to review.
-    if (delivery.get("state") or "") in ("Approved", "Delivered"):
-        db.update_delivery(conn, project_id, "state", "In review")
-    return label, campaign
-
-
 # --------------------------------------------------------------------------- #
 # Session Room (Living OS P5) — the live layer over the delivery surfaces.
 # One event bus (project_events), role-filtered SERVER-SIDE; presence is
@@ -1279,8 +1241,13 @@ def _next_version_label(delivery: dict, *, final: bool = False) -> tuple:
 def _master_stem(conn, project_id: int, row, n: int, label: str) -> str:
     """The deterministic filename stem for a project's master version (ADR-0037).
 
-    Both upload paths — the admin Assets agent and the composer portal — go through
-    here so they cannot drift, and so neither invents a token. Previously both called
+    THE one place a version is named. Both upload doors — the operator's console and
+    the composer's portal — park a file as a pending submission, and
+    ``_publish_pending_submission`` names it here on publish, so a version cannot be
+    named differently depending on who uploaded it. (This docstring used to say the two
+    paths "go through here", which was aspirational: the second path was
+    ``_append_version_from_bytes``, a function with no callers since the first commit,
+    deleted 2026-08-05.) Previously the namer called
     ``version_name(campaign, "Master", 60, "Master", n, f"v{n}")``, which produced
     e.g. ``SUMMER_Master_60_MASTER_v1_V1``: a hardcoded :60 on a brief that never said
     :60, the word Master twice (once filling the CUE slot), and the version number

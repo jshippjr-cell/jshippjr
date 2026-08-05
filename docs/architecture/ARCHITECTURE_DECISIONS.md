@@ -897,8 +897,9 @@ system) · `estimation.py`, `delivery.py`, `web/app.py`, `web/seed.py`
 added: **every token is optional and a blank one is skipped** (no placeholder is ever
 substituted), and **the length token comes from `estimation.stated_length()`** — the
 duration the brief actually says — and is omitted when the brief says none. `_infer_duration`
-keeps assuming `:30` for pricing; naming may not. Both upload paths (the admin Assets
-agent, the composer portal) go through one helper, `app._master_stem()`; the manifest
+keeps assuming `:30` for pricing; naming may not. Both upload doors (the operator's console, the
+composer's portal) park a file as a **pending submission**, and one function names it on
+publish — `project_routes._publish_pending_submission` via `_master_stem()`; the manifest
 renders the stem a version was **written with** rather than recomputing one.
 **Why.** Both upload paths called
 `version_name(campaign, "Master", 60, "Master", n, f"v{n}")`, producing
@@ -914,7 +915,20 @@ the package does not contain. A delivery filename is the most-copied artefact we
 duration nobody measured is the honesty rule applied to the smallest surface we own.
 **Consequences.** `tests/test_naming.py` fails if a stem names a length its brief never
 stated, if a stem repeats `MASTER` or ends `_vN_VN`, if a blank token is substituted, or
-if the two upload paths call `version_name` directly instead of sharing `_master_stem`.
+if the namer calls `version_name` directly instead of going through `_master_stem`.
+
+**Amended 2026-08-05 — the guard was half-fictional.** The "two upload paths sharing one
+helper" was asserted by reading the source of two functions, and **one of them had no
+callers anywhere, since the repository's first commit**: `_append_version_from_bytes`,
+whose own docstring claimed to be "shared by the admin Assets agent and the composer
+portal". So half the contract was pinned on unreachable code while the live path was
+checked only indirectly. The function is deleted (36 lines) and the guard is now two
+tests that cannot be satisfied by dead code: one walks the whole `web` package and fails
+unless **exactly one** function writes a `name` into the version ladder, and one is
+**behavioural** — it uploads through the operator's console and through the composer's
+portal, publishes each, and compares the stems the client actually receives
+(`SUMMER_30_MASTER_v1` from both). Reintroducing the original defect makes the
+behavioural test print the historical filename verbatim: `SUMMER_Master_60_MASTER_v1_V1`.
 Note the deliberate asymmetry: pricing MUST put a number on an unstated brief (a quote
 needs one), so `_infer_duration` still assumes and still treats "anthem" as :60; naming
 abstains, and "anthem" alone is not a duration. When a length genuinely is stated it does
@@ -1268,8 +1282,10 @@ Two measurement bugs surfaced and both are worth keeping:
   collector that only understood `ast.Assign` never saw it, and the module would have
   raised `NameError` on the first session-room poll.
 
-**A finding, reported rather than acted on.** `_append_version_from_bytes` (40 lines) has
-**no callers anywhere** — not before this slice either. Its docstring claims it is "shared
+**A finding, reported rather than acted on** *(closed 2026-08-05 — see the amendment to
+ADR-0037; the function is deleted and the naming contract is now guarded behaviourally).*
+`_append_version_from_bytes` (40 lines) has **no callers anywhere** — not before this slice
+either. Its docstring claims it is "shared
 by the admin Assets agent and the composer portal"; both call sites were rewritten at some
 point and this was left behind. `tests/test_naming.py` inspects its *source* to assert the
 master-naming scheme, so a test is keeping dead code alive while the live write path goes

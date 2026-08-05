@@ -340,12 +340,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   the routes have moved. What is left is only the application object: the admin gate and
   its allowlist, `/healthz`, `HEAD /`, the PWA and Web Push endpoints, the three admin
   doors, and `/uploads/{name}`. Route declarations across the package: 252, unchanged.
-  **Open findings:** (1) `_append_version_from_bytes` (40 lines) has no callers anywhere
-  and is kept alive only by a `test_naming.py` source inspection — the naming scheme it
-  guards is therefore not guarded on the live path. (2) `app.py` still carries **22 imports
-  it does not use** — 15 helper re-exports and 7 engine modules — kept only so tests can
-  reach them through `app_mod`. That justification expired when the routes left; closing it
-  means repointing those test sites.
+  **Closed 2026-08-05:** `_append_version_from_bytes` is deleted. It had no callers since
+  the first commit, and `test_naming.py` read its source to assert half the ADR-0037
+  naming contract — so that half was pinned on unreachable code. The guard is now
+  behavioural (upload through both doors, publish, compare the stems the client receives)
+  plus a package-wide check that exactly one function names a version.
+  **Also closed 2026-08-05 (slice 11):** the unused-import finding. `app.py` had grown to
+  **55 imports it does not use**, every one a re-export kept so a test could reach it
+  through `app_mod`; all are gone, 104 test references now point at the owning module, and
+  `test_app_py_imports_only_what_it_uses` fails the build if one comes back.
 - **The Postgres path is actually tested** (ADR-0045, 2026-08-04). The cutover shim was a
   regex SQL translator that had **never met a Postgres** — `psycopg` wasn't installed.
   Running PostgreSQL 16 against it found three defects that each fail *during* the

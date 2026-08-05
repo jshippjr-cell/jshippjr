@@ -159,15 +159,96 @@ def test_no_master_stem_repeats_itself(app_mod):
             f"project {proj['id']} says MASTER more than once: {stem}")
 
 
-def test_both_upload_paths_write_the_same_stem(app_mod):
-    """The admin Assets agent and the composer portal share one helper so a version
-    cannot be named differently depending on who uploaded it."""
-    import inspect
+def test_only_one_place_names_a_version(app_mod):
+    """This replaced a source inspection of two functions, one of which was DEAD.
 
-    src = inspect.getsource(project_routes._append_version_from_bytes)
-    pub = inspect.getsource(project_routes._publish_pending_submission)
-    assert "_master_stem(" in src and "_master_stem(" in pub
-    assert "version_name(" not in src and "version_name(" not in pub
+    `_append_version_from_bytes` had no callers anywhere — not since the repository's
+    first commit — yet its docstring claimed to be "shared by the admin Assets agent and
+    the composer portal", and a test read its source to assert the naming contract. So
+    the contract was half-guarded on a function nobody called.
+
+    The real shape is simpler and stronger than the claim: **both upload doors park the
+    file as a pending submission, and exactly one function names it on publish.** The
+    operator's console (`/delivery/version`) and the composer's portal
+    (`/creator/{token}/.../version`) both call `uploads.store_pending_submission`;
+    `_publish_pending_submission` is the only place a `name` is written into the version
+    ladder. That is the invariant worth pinning.
+    """
+    import ast
+    from pathlib import Path as _P
+
+    web = _P(project_routes.__file__).parent
+    namers = []
+    for path in sorted(web.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            src = ast.get_source_segment(path.read_text(encoding="utf-8"), fn) or ""
+            # writes a stem into a version dict
+            if re.search(r'"name":\s*stem\b', src):
+                namers.append(f"{path.name}:{fn.name}")
+    assert namers == ["project_routes.py:_publish_pending_submission"], (
+        f"a version's name is written in more than one place: {namers}")
+
+    pub = ast.get_source_segment(
+        (web / "project_routes.py").read_text(encoding="utf-8"),
+        next(n for n in ast.parse((web / "project_routes.py").read_text(encoding="utf-8")).body
+             if getattr(n, "name", None) == "_publish_pending_submission"))
+    assert "_master_stem(" in pub, "the namer stopped going through _master_stem"
+    assert "version_name(" not in pub, (
+        "the namer calls version_name directly again — that is how "
+        "SUMMER_Master_60_MASTER_v1_V1 happened (ADR-0037)")
+
+
+def test_both_upload_doors_produce_the_same_stem_end_to_end(app_mod):
+    """Behavioural, not by source inspection: upload through the operator's console and
+    through the composer's portal, publish each, and compare the stems the client
+    actually receives. The old test could not have caught a divergence here — it read
+    two function bodies, one of them unreachable."""
+    from chordential_oia.talent import InviteStatus, ReviewStatus, Talent
+    from chordential_oia.web import db
+
+    audio = b"ID3\x03\x00\x00\x00" + b"\xff\xfb\x90\x00" * 200
+
+    def _stem_after(upload):
+        conn = db.connect()
+        pid = db.insert_project(conn, opp_id=None, client="Vance Athletic",
+                                need="Summer Launch :30 anthem", budget_min=0,
+                                budget_max=0, roles=["Composer"])
+        tid = db.insert_talent(conn, Talent(
+            name="Devin Park", email="devin@example.com", credits="c",
+            review_status=ReviewStatus.APPROVED, invite_status=InviteStatus.JOINED,
+            rate=90.0))
+        db.set_talent_agreement(conn, tid, "2026-07-18", "test")
+        db.add_assignment(conn, pid, "Composer", tid)
+        tok = db.ensure_talent_portal_token(conn, tid)
+        conn.close()
+        with TestClient(app_mod.app) as c:
+            upload(c, pid, tok)
+            c.post(f"/project/{pid}/delivery/publish", follow_redirects=False)
+        conn = db.connect()
+        try:
+            versions = (db.get_delivery(conn, pid).get("versions") or [])
+        finally:
+            conn.close()
+        assert versions, "publishing produced no version"
+        return versions[-1]["name"]
+
+    console = _stem_after(lambda c, pid, tok: c.post(
+        f"/project/{pid}/delivery/version",
+        files={"file": ("take.mp3", audio, "audio/mpeg")}, follow_redirects=False))
+    portal = _stem_after(lambda c, pid, tok: c.post(
+        f"/creator/{tok}/project/{pid}/version",
+        files={"file": ("take.mp3", audio, "audio/mpeg")}, follow_redirects=False))
+
+    assert console == portal, (
+        f"the same work is named differently depending on who uploaded it: "
+        f"console={console!r} portal={portal!r}")
+    # and it honours ADR-0037 on the way through
+    # ADR-0037 in one string: the campaign, the length the brief STATES, the role,
+    # the version — and nothing invented. No :60, no doubled MASTER, no _v1_V1.
+    assert console == "SUMMER_30_MASTER_v1", console
 
 
 # --------------------------------------------------------------------------- #
