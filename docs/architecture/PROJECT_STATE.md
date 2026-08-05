@@ -282,6 +282,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `CHORDENTIAL_STORAGE=s3`); the SQLite mirror is written only when the store isn't
   durable; a remote store serves by presigned redirect; a half-configured switch falls
   back to disk and says so at boot. **The migration itself is not done** — no bucket has
+  **The media migration RAN on 2026-08-05 and it is the strongest evidence ADR-0043 has
+  produced: 12 files moved, 0 failed — and ALL TWELVE were tagged `mirror only`.** The
+  upload directory was empty; the disk had already lost every master and both delivery
+  ZIPs (11 MB and 12 MB), and the SQLite `media_blob` mirror was the sole surviving copy
+  of the entire media library. A `cp -r /var/data/uploads` would have copied nothing,
+  reported success, and been followed by removing the disk. The two-source read was not
+  belt-and-braces; it was the whole migration.
+  *(Note for the cutover: with a durable store active, `persist_upload` now skips the
+  mirror by design, so the bucket is the single copy for NEW uploads — which is the point,
+  and is why the Postgres copy must still carry the existing `media_blob` rows across.)*
   been written to from this code (no credentials in the build environment). The runbook
   is now complete and ordered: `docs/zero-downtime-cutover.md` Step 1 moves the media
   (`scripts/migrate_uploads_to_object_store.py`, SHA-256 verified, idempotent) and the
