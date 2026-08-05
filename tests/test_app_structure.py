@@ -30,7 +30,7 @@ WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py", "opportunity_routes.py",
            "project_routes.py", "creator_routes.py",
-           "campaign_routes.py"]                         # grows with each slice
+           "campaign_routes.py", "simulator_routes.py"]  # grows with each slice
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
@@ -167,6 +167,7 @@ def test_every_moved_route_still_answers():
     ("/project", "project_routes.py"),
     ("/creator", "creator_routes.py"),
     ("/campaign", "campaign_routes.py"),
+    ("/simulator", "simulator_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
@@ -194,7 +195,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 2200, (
+    assert n < 2050, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -213,6 +214,7 @@ def test_the_router_carries_the_whole_group():
     ("project_routes.py", "/project", 57),
     ("creator_routes.py", "/creator", 6),
     ("campaign_routes.py", "/campaign", 7),
+    ("simulator_routes.py", "/simulator", 7),
 ])
 def test_a_router_carries_its_whole_group_and_nothing_else(module, prefix, count):
     """A route module holds one group. A stray path from somewhere else means a
@@ -336,3 +338,27 @@ def test_the_upload_directory_still_follows_the_environment(monkeypatch, tmp_pat
     finally:
         monkeypatch.undo()
         importlib.reload(app_mod)
+
+
+def test_a_literal_path_is_still_declared_before_the_parameter_that_shadows_it():
+    """Declaration order is load-bearing in exactly one place, and moving a group is
+    exactly when it gets lost.
+
+    `GET /simulator/library` and `GET /simulator/{session_id}` both match the URL
+    /simulator/library. Starlette takes the first match, so the literal only wins
+    because it is registered first. Reorder them and the library page silently becomes
+    a session lookup for a session named "library" — a 404 or, worse, a rendered page
+    for the wrong thing. Nothing else in the app has this shape; this test exists so
+    that if a later pass reshuffles the module, it fails here rather than in the UI.
+    """
+    paths = [p for m, p in _module_paths("simulator_routes.py") if m == "get"]
+    assert "/simulator/library" in paths and "/simulator/{session_id}" in paths
+    assert paths.index("/simulator/library") < paths.index("/simulator/{session_id}"), (
+        "/simulator/{session_id} is declared before /simulator/library and now shadows it")
+
+    with TestClient(app_mod.app) as c:
+        r = c.get("/simulator/library", follow_redirects=False)
+        assert r.status_code == 200
+        # the library page, not a session view rendered for a session called "library"
+        assert "objection" in r.text.lower()
+

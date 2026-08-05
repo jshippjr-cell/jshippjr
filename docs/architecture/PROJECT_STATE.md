@@ -326,8 +326,11 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   had already lifted everything it shared. **app.py is now 2,326 lines / 65 routes** —
   from 9,133 / 251, so 75% of the file and 74% of the routes have moved.
   **Slice 8:** the campaign workspace (`/campaign`, 7 routes) → `campaign_routes.py`, plus
-  17 genuinely dead imports removed from `app.py`. **app.py is now 2,128 lines / 58
-  routes** — from 9,133 / 251, so 77% of both has moved.
+  17 genuinely dead imports removed from `app.py`. **Slice 9:** the objection simulator
+  (`/simulator`, 7 routes) → `simulator_routes.py` — no helpers at all, and a new test pins
+  the one place declaration order is load-bearing (`/simulator/library` must stay ahead of
+  `/simulator/{session_id}`). **app.py is now 2,004 lines / 51 routes** — from 9,133 / 251,
+  so 78% of the file and 80% of the routes have moved.
   **Open findings:** (1) `_append_version_from_bytes` (40 lines) has no callers anywhere
   and is kept alive only by a `test_naming.py` source inspection — the naming scheme it
   guards is therefore not guarded on the live path. (2) `app.py` still carries **22 imports

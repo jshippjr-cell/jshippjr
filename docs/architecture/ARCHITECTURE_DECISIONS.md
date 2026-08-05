@@ -1354,6 +1354,32 @@ Closing it means repointing the test sites, which is its own pass.
 **app.py: 2,326 → 2,128 lines; 58 routes remain** — from 9,133 and 251, so **77% of the
 file and 77% of the routes have moved.** Suite 1,376 → 1,380.
 
+**Slice 9 (2026-08-05) — the objection simulator.** `/simulator` (7 routes) →
+`simulator_routes.py`. **No helpers at all** — the whole surface delegates to
+`web/simulator.py`, so the module is the thinnest of the series: open a connection, call
+the engine, render. One contiguous span, zero interleaved routes, zero collisions against
+the other 263.
+
+**Declaration order is load-bearing here and nowhere else in the breakup.**
+`GET /simulator/library` and `GET /simulator/{session_id}` both match the URL
+`/simulator/library`; the literal wins only because it is registered first. The extraction
+preserved source order for exactly that reason, and a new test pins it — verified by
+swapping the two declarations, which fails the test, and confirmed live on both trees
+(the library page renders at 30,131 bytes with objection content on each). Reorder them
+in a later pass and the library silently becomes a session lookup for a session named
+"library".
+
+Equivalence was proved through the whole flow rather than the landing page: start a
+session (identical id 1 on both), GET it (16,664 bytes each), say a line (16,940 each),
+end it (16,330 each), and re-read — with the stored transcript matching on persona, mode,
+status and turn count. A library status write stored `'confirmed'` on both. The first
+attempt used an invalid persona and silently redirected to the home page on both trees —
+another green-but-empty result, caught by checking that a session row actually appeared.
+
+**app.py: 2,128 → 2,004 lines; 51 routes remain** — from 9,133 and 251, so **78% of the
+file and 80% of the routes have moved.** `.simulator` left `app.py`'s import list
+entirely: no test reached it through `app_mod`. Suite 1,380 → 1,385.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,
