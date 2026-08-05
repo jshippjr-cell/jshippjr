@@ -11,6 +11,10 @@ import pytest
 from chordential_oia import recruiting
 from chordential_oia.talent import Talent
 from chordential_oia.models import MusicDiscipline
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
 
 
 def test_invite_personalizes_with_credit():
@@ -111,8 +115,8 @@ def test_send_invite_emails_and_advances(ctx, monkeypatch):
         sent.update(to=to, subject=subject, text=text, html=html)
         return "sent"
 
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email", fake_send)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email", fake_send)
     conn = db_mod.connect()
     tid = db_mod.insert_talent(conn, Talent(
         name="Mara Velez", email="mara@example.com",
@@ -169,9 +173,9 @@ def test_talent_review_route_emails_on_a_real_transition_to_approved(ctx, monkey
     client, db_mod = ctx
     from chordential_oia.web import app as app_mod
     sent = {}
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     monkeypatch.setattr(
-        app_mod.mailer, "send_email",
+        mailer, "send_email",
         lambda to, subject, text, html=None: sent.update(
             to=to, subject=subject, text=text, html=html) or "sent",
     )
@@ -195,9 +199,9 @@ def test_talent_review_route_does_not_resend_on_a_repeat_click(ctx, monkeypatch)
     client, db_mod = ctx
     from chordential_oia.web import app as app_mod
     calls = []
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     monkeypatch.setattr(
-        app_mod.mailer, "send_email",
+        mailer, "send_email",
         lambda to, subject, text, html=None: calls.append(to) or "sent",
     )
     conn = db_mod.connect()
@@ -261,9 +265,9 @@ def test_project_assign_route_emails_the_signed_creator(ctx, monkeypatch):
     client, db_mod = ctx
     from chordential_oia.web import app as app_mod
     sent = {}
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     monkeypatch.setattr(
-        app_mod.mailer, "send_email",
+        mailer, "send_email",
         lambda to, subject, text, html=None: sent.update(
             to=to, subject=subject, text=text, html=html) or "sent",
     )

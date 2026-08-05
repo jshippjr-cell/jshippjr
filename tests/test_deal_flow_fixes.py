@@ -25,8 +25,8 @@ def _opp(app_mod, conn, budget="$30,000"):
     conn.execute("UPDATE opportunities SET contact_email=?, contact_name=? WHERE id=?",
                  ("buyer@medtech.com", "Freddy", oid)); conn.commit()
     row = app_mod.db.get_opportunity(conn, oid)
-    cid = app_mod.campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
-    app_mod.campaign_intelligence.edit_or_create(conn, cid, "engagement", "budget_band",
+    cid = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
+    campaign_intelligence.edit_or_create(conn, cid, "engagement", "budget_band",
                                                  "fact", budget, actor="operator")
     return oid
 
@@ -34,6 +34,10 @@ def _opp(app_mod, conn, budget="$30,000"):
 # `_build_review_for_opp` is an /opportunity-only helper and travelled with those
 # routes when ADR-0044 moved them out of app.py.
 from chordential_oia.web import opportunity_routes  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def test_commercial_pricing_follows_discovered_budget(tmp_path, monkeypatch):

@@ -34,16 +34,19 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - **Web app:** `src/chordential_oia/web/` — FastAPI + Jinja templates (`templates/`),
   SQLite via stdlib `sqlite3` (`db.py`). `app.py` is the route layer; `seed.py` seeds
   demo data; `public.py` is the public front-of-house site.
-- **`app.py` is being taken apart** (ADR-0044) — it was 9,133 lines and is now 1,574. Below it sit
+- **`app.py` has been taken apart** (ADR-0044) — it was 9,133 lines and 251 routes; it is
+  now **655 lines and 15 routes**, and holds only the application object (lifespan,
+  middleware, the admin gate, PWA + Web Push, `/uploads`). Below it sit
   `shell.py` (Jinja env, `render`, `safe_local`, admin auth), the route modules
-  (`agencies_routes.py`, `discovery_routes.py`, `talent_routes.py`,
-  `opportunity_routes.py`, `project_routes.py`, `creator_routes.py`,
-  `campaign_routes.py`, `simulator_routes.py`, `workspace_routes.py`) and the
-  helper layer
+  (`agencies_`, `discovery_`, `talent_`, `opportunity_`, `project_`, `creator_`,
+  `campaign_`, `simulator_`, `workspace_`, `console_`, `billing_`, `meetings_routes.py`)
+  and the helper layer
   (`uploads.py`, `billing.py`, `delivery_ops.py`, `opportunity_ops.py`). **Imports flow one
   way: `app.py` → routes → helpers → `shell.py`.** Never import `app.py` from any of them;
-  `tests/test_app_structure.py` fails the build if you do. Put new work in the module it
-  belongs to, not in `app.py`.
+  `tests/test_app_structure.py` fails the build if you do — and it also fails if `app.py`
+  imports a name it does not use, because that is how the package ended up reachable
+  through `app.py` as a namespace. Reach a helper on the module that owns it. Put new work
+  in the module it belongs to, not in `app.py`.
 - **Delivery OS** (supply/delivery side): `delivery.py` + the `delivery_*`/`review_*`
   routes + `delivery_console.html`/`delivery_portal.html`/`delivery_package.html`. Five
   "agents": Rights, Revisions, Metadata, Approvals, Assets. See
@@ -63,7 +66,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,389 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,405 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.

@@ -27,6 +27,11 @@ from chordential_oia.web.evaluate import evaluate
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web.delivery_ops import _project_estimate  # noqa: E402
+from chordential_oia.web.console_routes import _suggested_price  # noqa: E402
 
 # A deal the qualification engine hard-fails (DJ booking + playlist curation).
 # Disqualified is the case that exposed the divergence: NON_CRAFT carries an
@@ -85,7 +90,7 @@ def test_the_dashboard_kpi_prices_a_deal_the_way_its_estimate_page_does():
     """``_suggested_price`` was variant (a). Same opportunity, two numbers."""
     from chordential_oia.web import app as app_mod
 
-    assert app_mod._suggested_price(DISQUALIFIED) == estimate_for(DISQUALIFIED).suggested_price
+    assert _suggested_price(DISQUALIFIED) == estimate_for(DISQUALIFIED).suggested_price
 
 
 def test_the_public_price_band_prices_it_the_same_way_too():
@@ -146,7 +151,7 @@ def test_the_project_estimate_still_honours_assigned_rates(app_mod):
         assert overrides, "the demo project has no assigned rates — test proves nothing"
 
         opp = db.opportunity_from_row(db.get_opportunity(conn, prow["opp_id"]))
-        with_project = app_mod._project_estimate(conn, prow)
+        with_project = _project_estimate(conn, prow)
         without = estimate_for(opp)
     finally:
         conn.close()

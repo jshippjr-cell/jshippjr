@@ -332,9 +332,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   `/simulator/{session_id}`). **Slice 10:** the client workspace (`/workspace`, 5 routes) →
   `workspace_routes.py`, including the award trigger — verified by releasing an identical
   commercial review on both trees and confirming the approval created the same project.
-  **app.py is now 1,574 lines / 46 routes** — from 9,133 / 251, so 83% of the file and 82%
-  of the routes have moved, and what remains is the application object plus 46 routes
-  across 30 groups, none larger than three.
+  **Slice 11 (the last):** the remaining 31 routes → `console_routes.py` (19),
+  `billing_routes.py` (7), `meetings_routes.py` (5), and the re-export debt paid — `app.py`
+  was importing **55 names it does not use**, all so tests could reach them through
+  `app_mod`; 104 references across 28 files now point at the owning module.
+  **app.py is now 655 lines / 15 routes** — from 9,133 / 251, so 93% of the file and 94% of
+  the routes have moved. What is left is only the application object: the admin gate and
+  its allowlist, `/healthz`, `HEAD /`, the PWA and Web Push endpoints, the three admin
+  doors, and `/uploads/{name}`. Route declarations across the package: 252, unchanged.
   **Open findings:** (1) `_append_version_from_bytes` (40 lines) has no callers anywhere
   and is kept alive only by a `test_naming.py` source inspection — the naming scheme it
   guards is therefore not guarded on the live path. (2) `app.py` still carries **22 imports

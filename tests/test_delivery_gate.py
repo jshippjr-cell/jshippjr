@@ -3,6 +3,10 @@ the full download unlocks only when every deliverable is uploaded + signed off; 
 reversible (reopen).
 """
 import importlib
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import production  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -182,7 +186,7 @@ def test_operator_can_reopen_delivered_project_from_console(tmp_path, monkeypatc
           "name": "a", "created_at": "2026-07-08T00:00:00"}])
     app_mod.db.update_delivery(conn, pid, "state", "Delivered")
     app_mod.db.update_delivery(conn, pid, "download_unlocked", True)
-    app_mod.production.set_creative_lock(conn, app_mod.db, pid, version_n=2, by="Sarah")
+    production.set_creative_lock(conn, app_mod.db, pid, version_n=2, by="Sarah")
     conn.close()
     with TestClient(app_mod.app) as c:
         # tokenless operator reopen (the console button posts with no k/r)

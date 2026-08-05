@@ -2,6 +2,11 @@
 uploaded media is mirrored into the DB and served from there when the disk copy is gone.
 """
 import importlib, os
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web.delivery_ops import _build_delivery_package  # noqa: E402
+from chordential_oia.web.uploads import _persist_upload  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -18,7 +23,7 @@ def test_upload_survives_disk_wipe(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     audio = b"ID3\x03\x00\x00\x00" + b"\xff\xfb\x90\x00" * 500
-    app_mod._persist_upload(conn, "proj9-v1.mp3", audio)
+    _persist_upload(conn, "proj9-v1.mp3", audio)
     # the bytes are mirrored into the durable DB
     blob = app_mod.db.get_media_blob(conn, "proj9-v1.mp3")
     conn.close()
@@ -38,7 +43,7 @@ def test_zip_never_served_from_uploads(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
-    app_mod._persist_upload(conn, "bundle.zip", b"PK\x03\x04zip")
+    _persist_upload(conn, "bundle.zip", b"PK\x03\x04zip")
     conn.close()
     with TestClient(app_mod.app) as c:
         # the payment-gated ZIP backdoor stays closed even with a DB mirror present
@@ -60,12 +65,12 @@ def test_delivery_zip_download_survives_disk_wipe(tmp_path, monkeypatch):
         music_requirement=MusicRequirement.ORIGINAL, budget_min=0, budget_max=0))
     pid = app_mod.db.insert_project(conn, oid, "X", "Campaign", 0, 0, ["Composer"])
     ptok = app_mod.db.ensure_project_share_token(conn, pid)
-    app_mod._persist_upload(conn, f"proj{pid}-a.mp3", b"ID3audio-master", "audio/mpeg")
+    _persist_upload(conn, f"proj{pid}-a.mp3", b"ID3audio-master", "audio/mpeg")
     app_mod.db.update_delivery(conn, pid, "assets",
         [{"label": "Final master", "filename": f"proj{pid}-a.mp3",
           "url": f"/uploads/proj{pid}-a.mp3", "kind": "audio"}])
     app_mod.db.update_delivery(conn, pid, "download_unlocked", True)
-    pkg = app_mod._build_delivery_package(conn, pid)
+    pkg = _build_delivery_package(conn, pid)
     zipname = os.path.basename(pkg["filename"])
     assert app_mod.db.get_media_blob(conn, zipname) is not None     # mirrored at build
     conn.close()

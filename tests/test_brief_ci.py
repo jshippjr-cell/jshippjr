@@ -14,6 +14,11 @@ from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -39,7 +44,7 @@ def _opp(dbm, conn):
 
 def _seed_ci(app_mod, conn, opp_id):
     """Confirmed intelligence, as a discovery call would leave it."""
-    ci = app_mod.campaign_intelligence
+    ci = campaign_intelligence
     row = app_mod.db.get_opportunity(conn, opp_id)
     ci_id = ci.ensure_for_opportunity(conn, row)["id"]
     facts = [("direction", "campaign_objective", "A holiday anthem that owns Q4 retail"),
@@ -167,8 +172,8 @@ def test_send_freezes_snapshot_and_link_renders_it_verbatim(tmp_path, monkeypatc
     opp_id = _opp(app_mod.db, conn)
     ci_id = _seed_ci(app_mod, conn, opp_id); conn.close()
     sent = []
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, sub, body, html=None: sent.append(body) or "sent")
     with TestClient(app_mod.app) as c:
         c.post(f"/opportunity/{opp_id}/compose/send")
@@ -182,7 +187,7 @@ def test_send_freezes_snapshot_and_link_renders_it_verbatim(tmp_path, monkeypatc
         assert snap is not None
         # intelligence changes AFTER the send…
         conn = app_mod.db.connect()
-        app_mod.campaign_intelligence.edit_or_create(
+        campaign_intelligence.edit_or_create(
             conn, ci_id, "direction", "emotional_arc", "fact", "Something new entirely")
         conn.close()
         # …the live brief (what the workspace shows) moves; the frozen snapshot does not —

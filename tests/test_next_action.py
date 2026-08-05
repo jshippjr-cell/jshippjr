@@ -7,6 +7,12 @@ release proposal → waiting-approval → assign composer → start production �
 import importlib
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
+from chordential_oia.web import next_action  # noqa: E402
+from chordential_oia.web import production  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -24,7 +30,7 @@ def _next(app_mod, opp_id):
     conn = app_mod.db.connect()
     opp = app_mod.db.get_opportunity(conn, opp_id)
     project = app_mod.db.project_for_opp(conn, opp_id)
-    out = app_mod.next_action.compute(conn, app_mod.db, opp, project)
+    out = next_action.compute(conn, app_mod.db, opp, project)
     conn.close()
     return out
 
@@ -50,7 +56,7 @@ def test_next_action_walks_the_whole_ladder(tmp_path, monkeypatch):
     conn = app_mod.db.connect()
     app_mod.db.create_meeting(conn, opp_id=oid, start_at="2026-07-01T14:00:00+00:00",
                               status="ingested")
-    ci = app_mod.campaign_intelligence
+    ci = campaign_intelligence
     row = app_mod.db.get_opportunity(conn, oid)
     ci_id = ci.ensure_for_opportunity(conn, row)["id"]
     ci.edit_or_create(conn, ci_id, "direction", "campaign_objective", "fact",
@@ -131,7 +137,7 @@ def test_next_action_walks_the_whole_ladder(tmp_path, monkeypatch):
         # 9.5 — client approved the MASTER (creative locked) but the derivative
         # deliverables aren't uploaded yet → the move is FINISHING delivery, NOT invoicing.
         conn = app_mod.db.connect()
-        app_mod.production.set_creative_lock(conn, app_mod.db, pid, version_n=1, by="Sarah")
+        production.set_creative_lock(conn, app_mod.db, pid, version_n=1, by="Sarah")
         app_mod.db.update_delivery(conn, pid, "state", "Approved"); conn.close()
         a = _next(app_mod, oid)
         assert a["court"] == "team" and "remaining deliverables" in a["label"]

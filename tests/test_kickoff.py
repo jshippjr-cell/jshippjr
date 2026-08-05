@@ -11,6 +11,10 @@ import pytest
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 from chordential_oia.web import workspace as ws
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -37,7 +41,7 @@ def _opp(dbm, conn):
 def _to_approved(app_mod, c, conn_factory, opp_id):
     """Drive an opp through discovery→release→approval so it lands in Kickoff."""
     conn = conn_factory()
-    ci = app_mod.campaign_intelligence
+    ci = campaign_intelligence
     row = app_mod.db.get_opportunity(conn, opp_id)
     ci_id = ci.ensure_for_opportunity(conn, row)["id"]
     for f, k, v in [("direction", "campaign_objective", "Own Q4 retail"),

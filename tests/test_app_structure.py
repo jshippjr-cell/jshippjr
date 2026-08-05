@@ -31,7 +31,8 @@ ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py", "opportunity_routes.py",
            "project_routes.py", "creator_routes.py",
            "campaign_routes.py", "simulator_routes.py",
-           "workspace_routes.py"]                        # grows with each slice
+           "workspace_routes.py", "console_routes.py",
+           "billing_routes.py", "meetings_routes.py"]    # the whole route layer
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
@@ -170,6 +171,13 @@ def test_every_moved_route_still_answers():
     ("/campaign", "campaign_routes.py"),
     ("/simulator", "simulator_routes.py"),
     ("/workspace", "workspace_routes.py"),
+    ("/dashboard", "console_routes.py"),
+    ("/matchboard", "console_routes.py"),
+    ("/revenue", "console_routes.py"),
+    ("/invoice", "billing_routes.py"),
+    ("/proposal", "billing_routes.py"),
+    ("/meet", "meetings_routes.py"),
+    ("/meeting", "meetings_routes.py"),
 ])
 def test_a_moved_group_is_declared_in_exactly_one_place(prefix, module):
     """Declared in both files would register duplicates: the first wins and the
@@ -197,7 +205,7 @@ def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
     if a slice is put back or a new surface is grown in the wrong file."""
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 1650, (
+    assert n < 750, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -293,31 +301,87 @@ def test_the_helper_layer_flows_one_way():
             f"{name} imports a route module — helpers sit below routes, not beside them")
 
 
-MOVED_HELPERS = [
-    "_admin_authed", "_apply_invoice_payment", "_approve_version_core",
-    "_brief_ci_context", "_build_delivery_package", "_buyer_context", "_campaign_label",
-    "_client_portal_url", "_ensure_project_for_opp", "_gate_banner",
-    "_invoice_from_proposal_row", "_load", "_maybe_finalize_delivery",
-    "_notify_assigned_creators", "_notify_operator_review", "_persist_upload",
-    "_proposal_from_row", "_quote_band_for", "_reconcile_opp_status",
-    "_read_capped", "_send_invoice_pay_link", "_store_pending_submission",
-    "_project_estimate", "_sync_role_milestones", "_to_utc_iso",
-]
+# name -> the module that OWNS it. This replaced a list of names asserted to be
+# reachable as `app.<name>`, which was right while `app.py` still held 186 routes and
+# the point was that no handler had to be edited. With the route layer fully moved that
+# premise expired: `app.py` was left importing 55 names it does not use, purely so tests
+# could reach them through it. The invariant that survives is the useful one — each
+# helper is defined exactly once, in the module that owns it, and not in `app.py`.
+MOVED_HELPERS = {
+    # shell.py exports the public spelling; app.py imports it as `_admin_authed`.
+    "admin_authed": "shell",
+    "_apply_invoice_payment": "billing",
+    "_client_portal_url": "billing",
+    "_ensure_final_invoice_issued": "billing",
+    "_invoice_from_proposal_row": "billing",
+    "_proposal_from_row": "billing",
+    "_send_invoice_pay_link": "billing",
+    "_approve_version_core": "delivery_ops",
+    "_build_delivery_package": "delivery_ops",
+    "_campaign_label": "delivery_ops",
+    "_current_version_tag": "delivery_ops",
+    "_gate_banner": "delivery_ops",
+    "_maybe_finalize_delivery": "delivery_ops",
+    "_notify_assigned_creators": "delivery_ops",
+    "_notify_operator_review": "delivery_ops",
+    "_project_estimate": "delivery_ops",
+    "_sync_role_milestones": "delivery_ops",
+    "_brief_ci_context": "opportunity_ops",
+    "_buyer_context": "opportunity_ops",
+    "_ensure_project_for_opp": "opportunity_ops",
+    "_load": "opportunity_ops",
+    "_quote_band_for": "opportunity_ops",
+    "_reconcile_opp_status": "opportunity_ops",
+    "_to_utc_iso": "opportunity_ops",
+    "_persist_upload": "uploads",
+    "_read_capped": "uploads",
+    "_store_pending_submission": "uploads",
+}
 
 
-@pytest.mark.parametrize("helper", MOVED_HELPERS)
-def test_a_moved_helper_is_defined_once_and_still_reachable(helper):
-    """Two things at once, because the move is only safe if both hold: the definition
-    is gone from `app.py` (otherwise the copy in the helper module is dead weight that
-    still looks maintained), and the name still resolves on `app` — 186 routes and a
-    dozen test modules call these by their old names, and the whole point of importing
-    them back is that no handler had to be edited."""
+@pytest.mark.parametrize("helper,owner", sorted(MOVED_HELPERS.items()))
+def test_a_moved_helper_lives_in_exactly_one_place(helper, owner):
+    """Defined once, in the module that owns it, and NOT in `app.py`.
+
+    The second half matters as much as the first: a copy left behind in `app.py` would
+    be dead weight that still looks maintained, and — worse — a test patching the
+    `app.py` copy would silently stop affecting the route that reads the real one.
+    """
+    import importlib
+
     tree = ast.parse((WEB / "app.py").read_text(encoding="utf-8"))
     defined = {n.name for n in tree.body
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
     assert helper not in defined, f"{helper} is still defined in app.py"
-    assert callable(getattr(app_mod, helper, None)), (
-        f"{helper} is no longer reachable as app.{helper}")
+    # Whether `app.py` also *imports* it is not asserted here — the gate middleware
+    # legitimately uses `_admin_authed`. `test_app_py_imports_only_what_it_uses` is the
+    # instrument for re-exports, and it is exact: an unused import IS a re-export.
+    mod = importlib.import_module(f"chordential_oia.web.{owner}")
+    assert callable(getattr(mod, helper, None)), f"{helper} is not in web.{owner}"
+
+
+def test_app_py_imports_only_what_it_uses():
+    """The count that made the re-export problem visible: 55 unused imports in a
+    655-line file, every one of them there so a test could use `app.py` as a namespace.
+    Pyflakes is not available everywhere, so this is an AST check."""
+    import builtins
+
+    src = (WEB / "app.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    imported = {}
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                if a.name != "*":
+                    imported[(a.asname or a.name).split(".")[0]] = n.lineno
+    used = {x.id for x in ast.walk(tree) if isinstance(x, ast.Name)}
+    used |= {x.attr for x in ast.walk(tree) if isinstance(x, ast.Attribute)}
+    for x in ast.walk(tree):
+        if isinstance(x, ast.Attribute) and isinstance(x.value, ast.Name):
+            used.add(x.value.id)
+    unused = sorted(n for n in imported
+                    if n not in used and n not in dir(builtins) and n != "annotations")
+    assert unused == [], f"app.py imports names it does not use: {unused}"
 
 
 def test_the_upload_directory_still_follows_the_environment(monkeypatch, tmp_path):

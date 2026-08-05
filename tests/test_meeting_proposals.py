@@ -15,6 +15,10 @@ from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import meeting_scheduler  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -55,7 +59,7 @@ def _propose(c, opp_id, **extra):
 # --------------------------------------------------------------------------- #
 def test_fmt_et_renders_eastern_with_honest_label(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    ms = app_mod.meeting_scheduler
+    ms = meeting_scheduler
     # July → EDT; 14:00 UTC == 10:00 AM EDT
     assert ms.fmt_et("2026-07-14T14:00:00+00:00", long=True) == "Tuesday · July 14 · 10:00 AM EDT"
     # January → EST; 15:00 UTC == 10:00 AM EST
@@ -64,7 +68,7 @@ def test_fmt_et_renders_eastern_with_honest_label(tmp_path, monkeypatch):
 
 def test_et_to_utc_round_trips(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    ms = app_mod.meeting_scheduler
+    ms = meeting_scheduler
     iso = ms.et_to_utc_iso("2026-07-14", "10:00")
     assert iso.startswith("2026-07-14T14:00:00")          # EDT = UTC-4
     assert ms.fmt_et(iso, long=True).endswith("10:00 AM EDT")
@@ -100,7 +104,7 @@ def test_send_marks_sent_and_emails_the_options(tmp_path, monkeypatch):
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     sent = []
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
     with TestClient(app_mod.app) as c:
         loc = _propose(c, opp_id).headers["location"]
@@ -124,7 +128,7 @@ def test_client_pick_books_expires_others_and_records_timeline(tmp_path, monkeyp
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda *a, **k: None)
     with TestClient(app_mod.app) as c:
         loc = _propose(c, opp_id).headers["location"]
@@ -162,7 +166,7 @@ def test_first_pick_wins_second_pick_sees_booked_page(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda *a, **k: None)
     with TestClient(app_mod.app) as c:
         loc = _propose(c, opp_id).headers["location"]
@@ -206,7 +210,7 @@ def test_direct_mode_books_immediately_in_eastern(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda *a, **k: None)
     with TestClient(app_mod.app) as c:
         r = _propose(c, opp_id, mode="direct", date2="", time2="", date3="", time3="")
@@ -235,9 +239,9 @@ def test_confirmation_emails_speak_eastern_not_utc(tmp_path, monkeypatch):
     opp_id = _opp(app_mod.db, conn)
     opp = app_mod.db.get_opportunity(conn, opp_id)
     sent = []
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
-    app_mod.meeting_scheduler.schedule(
+    meeting_scheduler.schedule(
         conn, opp, start_at="2026-07-14T14:00:00+00:00",
         client_email="sarah@halcyon.com", client_name="Sarah Chen")
     conn.close()
@@ -272,7 +276,7 @@ def test_edited_body_is_persisted_and_sent_verbatim(tmp_path, monkeypatch):
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     sent = []
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
     custom = "Hi Ena,\n\nHand-written note about Kid audiobooks.\nOption 1 — pick here: link"
     with TestClient(app_mod.app) as c:
@@ -293,7 +297,7 @@ def test_send_uses_the_current_box_even_without_a_separate_save(tmp_path, monkey
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     opp_id = _opp(app_mod.db, conn); conn.close()
     sent = []
-    monkeypatch.setattr(app_mod.meeting_scheduler.mailer, "send_email",
+    monkeypatch.setattr(meeting_scheduler.mailer, "send_email",
                         lambda to, sub, body, html=None, ics=None: sent.append((to, sub, body)))
     with TestClient(app_mod.app) as c:
         pid = _pid(c, opp_id)

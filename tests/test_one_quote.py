@@ -34,6 +34,12 @@ from chordential_oia.web.evaluate import evaluate
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web.opportunity_ops import _brief_ci_context  # noqa: E402
+from chordential_oia.web.opportunity_ops import _load  # noqa: E402
+from chordential_oia.web.opportunity_ops import _quote_band_for  # noqa: E402
 
 
 def _opp(**kw):
@@ -128,14 +134,14 @@ def test_all_four_surfaces_quote_the_same_number(app_mod):
         assert len(rows) >= 3, "not enough seeded deals to prove agreement"
         for row in rows:
             oid = row["id"]
-            _r, opp, ev = app_mod._load(conn, oid)
+            _r, opp, ev = _load(conn, oid)
             qual, _scored = ev
             est = estimate_for(opp, qual=qual)
-            expected = app_mod._quote_band_for(conn, row, opp, est)
+            expected = _quote_band_for(conn, row, opp, est)
             assert expected[0], f"opp {oid} resolved no quote"
             want = _band_text(*expected)
 
-            ci_view, met = app_mod._brief_ci_context(conn, row)
+            ci_view, met = _brief_ci_context(conn, row)
             toggles = default_toggles(row["status"])
             toggles.update({"cost": True})
             doc = build_capabilities_doc(
@@ -172,7 +178,7 @@ def test_the_operators_surfaces_never_quote_our_cost(app_mod):
             "SELECT * FROM opportunities WHERE qualified = 1 LIMIT 8").fetchall()
         for row in rows:
             oid = row["id"]
-            _r, opp, ev = app_mod._load(conn, oid)
+            _r, opp, ev = _load(conn, oid)
             est = estimate_for(opp, qual=ev[0])
             _r3, _o3, brief = opportunity_routes._brief_for(conn, oid)
             _r2, _o2, plan = opportunity_routes._outreach_for(conn, oid)
@@ -252,10 +258,10 @@ def test_the_generated_proposal_and_the_review_agree_on_the_deposit(app_mod):
             "SELECT * FROM projects WHERE opp_id IS NOT NULL ORDER BY id").fetchone()
         assert prow is not None
         oid = prow["opp_id"]
-        row, opp, ev = app_mod._load(conn, oid)
+        row, opp, ev = _load(conn, oid)
         qual, _scored = ev
         est = estimate_for(opp, conn=conn, project_id=prow["id"], qual=qual)
-        band = app_mod._quote_band_for(conn, row, opp, est)
+        band = _quote_band_for(conn, row, opp, est)
         proposal = build_proposal(opp, qual, est, quote_band=band)
         _rr, review = opportunity_routes._build_review_for_opp(conn, oid)
     finally:
@@ -283,9 +289,9 @@ def test_the_briefs_pay_deposit_sits_under_the_band_it_shows(app_mod):
             "AND status IN ('Submitted','Won')"
         ).fetchall()
         for row in rows:
-            _r, opp, ev = app_mod._load(conn, row["id"])
+            _r, opp, ev = _load(conn, row["id"])
             est = estimate_for(opp, qual=ev[0])
-            lo, hi = app_mod._quote_band_for(conn, row, opp, est)
+            lo, hi = _quote_band_for(conn, row, opp, est)
             expected[row["id"]] = (lo, hi, round(((lo + hi) / 2) * DEFAULT_DEPOSIT_PCT))
     finally:
         conn.close()

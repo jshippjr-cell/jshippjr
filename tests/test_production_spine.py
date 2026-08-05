@@ -7,6 +7,10 @@ import pytest
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 from chordential_oia.web import production as P
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import production  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -183,7 +187,7 @@ def test_publish_moves_ball_to_client_and_workspace_approve(tmp_path, monkeypatc
         c.post(f"/project/{pid}/delivery/publish", data={"action": "publish"})
         conn = app_mod.db.connect()
         d = app_mod.db.get_delivery(conn, pid)
-        court = app_mod.production.court_state(app_mod.db.get_project(conn, pid), d)
+        court = production.court_state(app_mod.db.get_project(conn, pid), d)
         conn.close()
         assert d["state"] == "In review"
         assert court["court"] == "client" and court["what"] == "version_ready"
@@ -198,7 +202,7 @@ def test_publish_moves_ball_to_client_and_workspace_approve(tmp_path, monkeypatc
         c.post(f"/workspace/{token}/approve-version", data={"approver_name": "Sarah Chen"})
     conn = app_mod.db.connect()
     d = app_mod.db.get_delivery(conn, pid)
-    lock = app_mod.production.creative_lock(d)
+    lock = production.creative_lock(d)
     conn.close()
     assert d["state"] in ("Delivered", "Approved")       # approval drove delivery
     assert lock and lock["by"] == "Sarah Chen"           # creative lock recorded, attributed

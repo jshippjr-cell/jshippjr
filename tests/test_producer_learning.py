@@ -7,6 +7,10 @@ from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 # Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes
 # out of app.py and with them app.py's need to import this engine.
 from chordential_oia.web import producer_learning
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -79,10 +83,10 @@ def test_dispositions_record_events_and_feed_the_prompt(tmp_path, monkeypatch):
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     oid = _opp(app_mod.db, conn)
     row = app_mod.db.get_opportunity(conn, oid)
-    ci_row = app_mod.campaign_intelligence.ensure_for_opportunity(conn, row)
+    ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
     ci_id = ci_row["id"]
     # a machine-proposed fact needing review (as extraction would land it)
-    fid = app_mod.campaign_intelligence.contribute(
+    fid = campaign_intelligence.contribute(
         conn, ci_id, "engagement", "deliverables", "stems", kind="fact",
         source="discovery_call", confidence=60)
     conn.close()
@@ -131,11 +135,11 @@ def test_observed_facts_bucket_and_render(tmp_path, monkeypatch):
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     oid = _opp(app_mod.db, conn)
     row = app_mod.db.get_opportunity(conn, oid)
-    ci_row = app_mod.campaign_intelligence.ensure_for_opportunity(conn, row)
-    app_mod.campaign_intelligence.contribute(
+    ci_row = campaign_intelligence.ensure_for_opportunity(conn, row)
+    campaign_intelligence.contribute(
         conn, ci_row["id"], "observed", "festival_premiere",
         "Plans a film-festival premiere", kind="fact", source="discovery_call", confidence=70)
-    view = app_mod.campaign_intelligence.fields_view(conn, ci_row["id"])
+    view = campaign_intelligence.fields_view(conn, ci_row["id"])
     conn.close()
     assert any(it["value"] == "Plans a film-festival premiere" for it in view["observed"])
     # observed facts must NOT leak into the canonical sections or producer_read

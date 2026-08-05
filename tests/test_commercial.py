@@ -11,6 +11,10 @@ import pytest
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 from chordential_oia.web import commercial as C
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -35,7 +39,7 @@ def _opp(dbm, conn):
 
 
 def _seed_ci_and_met(app_mod, conn, opp_id):
-    ci = app_mod.campaign_intelligence
+    ci = campaign_intelligence
     row = app_mod.db.get_opportunity(conn, opp_id)
     ci_id = ci.ensure_for_opportunity(conn, row)["id"]
     for facet, key, val in [
@@ -95,7 +99,7 @@ def test_release_freezes_and_versions(tmp_path, monkeypatch):
         conn.close()
         # CI changes AFTER release …
         conn = app_mod.db.connect()
-        app_mod.campaign_intelligence.edit_or_create(
+        campaign_intelligence.edit_or_create(
             conn, ci_id, "direction", "campaign_objective", "fact", "Totally different now")
         conn.close()
         # … the released offer does NOT move (frozen)

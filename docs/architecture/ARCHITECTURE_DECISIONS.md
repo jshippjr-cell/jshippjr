@@ -1409,6 +1409,49 @@ through `app_mod` into what moved.
 What is left is the application object (lifespan, middleware, the admin gate, the PWA
 endpoints) and 46 routes across 30 tiny groups, none larger than three.
 
+**Slice 11 (2026-08-05) — the remainder, and the end of the breakup.** The last 31
+routes left `app.py` in three modules, chosen by what they are rather than by size:
+`console_routes.py` (19 — the dashboard, both inboxes, the buyer directory and profile,
+the Match Board, the project index, revenue, the queue, the company profile, the triage
+and chips triggers), `billing_routes.py` (7 — proposal price, invoice status, checkout,
+the pay return and the Stripe webhook), and `meetings_routes.py` (5 — the client's pick
+page, the operator's manage view, the capture hook). Zero shared helpers between the
+three; three helpers travelled with the console and nothing else moved.
+
+**`app.py` is now 655 lines and 15 route declarations, and every one of them belongs to
+the application object:** the admin-gate middleware and its public-path allowlist,
+`/healthz`, `HEAD /`, the four PWA endpoints, the three Web Push endpoints, the three
+admin doors, and `/uploads/{name}`. From **9,133 lines and 251 routes** — 93% of the file
+and 94% of the routes have moved, into a shell, nine route modules, three more, and a
+four-module helper layer.
+
+**The re-export debt is paid, and it was larger than it looked.** With the routes gone,
+`app.py` was importing **55 names it does not use** — every one there so a test could
+reach it through `app_mod`. 35 were pure dead weight and 20 were reached by tests, 104
+references across 28 files, all now pointed at the module that owns the code.
+`test_a_moved_helper_is_defined_once_and_still_reachable` was replaced by
+`test_a_moved_helper_lives_in_exactly_one_place` (a name → owning-module map) plus
+`test_app_py_imports_only_what_it_uses`, which is the exact instrument: **an unused import
+IS a re-export.**
+
+**The re-export debt was also hiding two dead tests.** `test_client_payment` patched
+`app_mod.get_payment_provider` and then posted to `/webhooks/stripe` — a route that had
+just moved. Both tests failed loudly once the re-export went, which is the good case;
+the point is that they were only ever one re-export away from passing while testing
+nothing. Every remaining `monkeypatch` through `app_mod` was checked: the rest mutate a
+module *object* (`app_mod.mailer.send_email`), which works regardless of who imported it.
+
+Equivalence: all 31 routes identical against a worktree at the previous commit, and the
+writes exercised with real records — a buyer website set, a Match Board assign creating
+the same project id 5 and the same assignment row on both, the matching unassign, and a
+meeting cancelled through its manage token (`scheduled → canceled` on both, wrong token
+404 on both). Ten neighbouring pages identical. **Route declarations across the whole web
+package: 252, distinct 252 — the same number this ADR started with.** Suite 1,389 → 1,405.
+
+One process note worth keeping: the scripted import insertion put a line **inside a
+parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
+of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

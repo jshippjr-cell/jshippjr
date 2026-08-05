@@ -8,6 +8,10 @@ import importlib
 from chordential_oia.web import db as dbm
 from chordential_oia.web import enrichment as en
 from chordential_oia.web import intelligence as intel
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import intelligence  # noqa: E402
 
 
 def _seed(tmp_path, *, profile=None, enrich_status="complete", dms=None,
@@ -171,7 +175,7 @@ def test_detail_page_renders_intelligence(tmp_path, monkeypatch):
     app_mod.db.save_agency_enrichment(conn, aid, {
         "status": "complete", "profile": _RICH.to_dict()})
     conn.commit()
-    app_mod.intelligence.generate_intelligence(conn, aid)
+    intelligence.generate_intelligence(conn, aid)
     conn.close()
 
     with TestClient(app_mod.app) as c:

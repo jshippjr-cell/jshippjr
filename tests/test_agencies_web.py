@@ -11,6 +11,11 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import directory_parsers  # noqa: E402
+from chordential_oia.web import enrichment  # noqa: E402
 
 
 # A tiny site with deliberately odd page names, served by the fake fetcher.
@@ -88,13 +93,13 @@ def test_agency_detail_before_enrichment(app_db):
 
 def test_enrich_action_runs_live_and_shows_profile(app_db, monkeypatch):
     client, app_mod = app_db
-    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
-    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    monkeypatch.setattr(enrichment, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(enrichment, "_default_fetch", _fake_fetch)
     aid = _agency_id(app_mod, "Acme")
     # The route is fire-and-forget (it fetches the live site, too slow to do inline),
     # so drive the engine synchronously here, then check the profile renders.
     conn = app_mod.db.connect()
-    app_mod.enrichment.enrich_agency(conn, aid)
+    enrichment.enrich_agency(conn, aid)
     conn.close()
     r = client.get(f"/agencies/{aid}")
     assert "Brand Strategy" in r.text and "Web Design" in r.text
@@ -241,13 +246,13 @@ def _designrush_page(names, total_pages):
 
 def test_live_crawl_button_paginates_and_resumes(app_db, monkeypatch):
     client, app_mod = app_db
-    monkeypatch.setattr(app_mod.directory_parsers, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(directory_parsers, "scrape_enabled", lambda: True)
     pages = {1: ["Alpha", "Beta"], 2: ["Gamma"]}
 
     def fake_fetch(url, timeout=15.0):
         pg = 2 if "page=2" in url else 1
         return (_designrush_page(pages[pg], 2), True)
-    monkeypatch.setattr(app_mod.directory_parsers, "_fetch", fake_fetch)
+    monkeypatch.setattr(directory_parsers, "_fetch", fake_fetch)
 
     # One click walks up to PAGES_PER_CRAWL_CLICK pages; this tiny site (2 pages)
     # finishes in a single click.
@@ -266,8 +271,8 @@ def test_live_crawl_reports_error_when_fetch_blocked(app_db, monkeypatch):
     # Scraping on, but the directory refuses (simulating a bot block): the engine
     # records an error rather than inventing rows.
     client, app_mod = app_db
-    monkeypatch.setattr(app_mod.directory_parsers, "scrape_enabled", lambda: True)
-    monkeypatch.setattr(app_mod.directory_parsers, "_fetch",
+    monkeypatch.setattr(directory_parsers, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(directory_parsers, "_fetch",
                         lambda url, timeout=15.0: ("", False))
     r = client.post("/agencies/crawl", data={"source": "adforum"},
                     follow_redirects=True)
@@ -328,11 +333,11 @@ def test_manual_enrich_pending_route_fires_background_pass(app_db, monkeypatch):
 
 def test_accordion_shows_enriched_profile_inline(app_db, monkeypatch):
     client, app_mod = app_db
-    monkeypatch.setattr(app_mod.enrichment, "scrape_enabled", lambda: True)
-    monkeypatch.setattr(app_mod.enrichment, "_default_fetch", _fake_fetch)
+    monkeypatch.setattr(enrichment, "scrape_enabled", lambda: True)
+    monkeypatch.setattr(enrichment, "_default_fetch", _fake_fetch)
     # drive the engine synchronously (the route fires it in the background)
     conn = app_mod.db.connect()
-    app_mod.enrichment.enrich_batch(conn, limit=10)
+    enrichment.enrich_batch(conn, limit=10)
     conn.close()
     r = client.get("/agencies")
     # the enriched facts render inside the accordion row, not just on the detail page

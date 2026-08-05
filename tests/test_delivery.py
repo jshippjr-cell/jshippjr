@@ -37,6 +37,10 @@ from chordential_oia.delivery import (  # noqa: E402
     version_label,
     version_name,
 )
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
 
 
 def _fake_project(client="AURORA Outdoor Co.", need="Find Your Horizon", opp_id=None):
@@ -815,7 +819,7 @@ def test_new_version_emails_each_reviewer_with_email(client, monkeypatch):
 
     calls = []
     from chordential_oia.web import app as app_mod
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, subject, text, html=None: calls.append((to, subject, text)) or "sent")
 
     r = _upload_version(client, pid, "v1.mp3")
@@ -842,7 +846,7 @@ def test_new_version_upload_unaffected_when_mailer_raises(client, monkeypatch):
         raise RuntimeError("mail server down")
 
     from chordential_oia.web import app as app_mod
-    monkeypatch.setattr(app_mod.mailer, "send_email", _boom)
+    monkeypatch.setattr(mailer, "send_email", _boom)
 
     files = {"file": ("v1.mp3", b"ID3fakeaudio-version", "audio/mpeg")}
     r = client.post(f"/project/{pid}/delivery/version",
@@ -868,16 +872,16 @@ def test_invite_sends_link_only_when_mail_configured(client, monkeypatch):
     from chordential_oia.web import app as app_mod
 
     calls = []
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, subject, text, html=None: calls.append(to) or "sent")
 
     # Default (null) → mail_configured False → no auto-send on invite.
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: False)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: False)
     _add_reviewer(client, pid, name="Dana", email="dana@agency.com")
     assert calls == []
 
     # Configured → invite auto-sends the reviewer their link.
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     _add_reviewer(client, pid, name="Sam", email="sam@agency.com")
     assert "sam@agency.com" in calls
 
@@ -887,11 +891,11 @@ def test_reviewers_card_shows_email_status(client, monkeypatch):
     pid = _win_and_make_project(client, 1)
     from chordential_oia.web import app as app_mod
 
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: False)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: False)
     page = client.get(f"/project/{pid}/delivery").text
     assert "Email notifications: off" in page
 
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     page = client.get(f"/project/{pid}/delivery").text
     assert "Email notifications: on" in page
 

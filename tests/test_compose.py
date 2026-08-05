@@ -8,6 +8,10 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
 
 
 def _preview_body(html: str) -> str:
@@ -123,8 +127,8 @@ def test_compose_send_actually_sends_when_mail_configured(client, monkeypatch):
         sent.update(to=to, subject=subject, text=text, html=html)
         return "sent"
 
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email", fake_send)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email", fake_send)
 
     page = client.get("/opportunity/3/compose").text
     assert "Send now to buyer@brand.com" in page

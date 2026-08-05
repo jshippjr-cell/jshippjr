@@ -9,6 +9,11 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
+from chordential_oia.web.billing import _invoice_from_proposal_row  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -38,7 +43,7 @@ def _project_with_final_invoice(app_mod, conn):
     est = build_estimate(opp, qual.team_shape or qual.discipline.team_shape, qual.discipline)
     db.insert_proposal(conn, pid, oid, build_proposal(opp, qual, est))
     invid = db.insert_invoice(conn, pid, db.proposal_for_project(conn, pid)["id"],
-                              app_mod._invoice_from_proposal_row(
+                              _invoice_from_proposal_row(
                                   db.get_project(conn, pid),
                                   db.proposal_for_project(conn, pid), "Final"))
     return pid, invid
@@ -47,8 +52,8 @@ def _project_with_final_invoice(app_mod, conn):
 def test_send_pay_link_emails_the_client_with_a_portal_link(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     sent = {}
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, subject, text, html=None: sent.update(
                             to=to, subject=subject, text=text) or "sent")
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
@@ -66,7 +71,7 @@ def test_send_pay_link_emails_the_client_with_a_portal_link(tmp_path, monkeypatc
 
 def test_send_pay_link_reports_a_missing_client_email(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     pid, invid = _project_with_final_invoice(app_mod, conn)
     conn.execute("UPDATE opportunities SET contact_email='' WHERE id="

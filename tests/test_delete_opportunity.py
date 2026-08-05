@@ -2,6 +2,10 @@
 import importlib
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -26,8 +30,8 @@ def test_delete_opportunity_cascades_and_confirms(tmp_path, monkeypatch):
         buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL,
         budget_min=0, budget_max=0))
     row = db.get_opportunity(conn, oid)
-    cid = app_mod.campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
-    app_mod.campaign_intelligence.contribute(conn, cid, "commercial",
+    cid = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
+    campaign_intelligence.contribute(conn, cid, "commercial",
         "procurement_requirements", "We need a W-9.", kind="fact", source="discovery_call")
     db.create_meeting(conn, opp_id=oid, start_at="2026-07-01T14:00:00+00:00", status="ingested")
     # Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes

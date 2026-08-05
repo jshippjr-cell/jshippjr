@@ -8,6 +8,10 @@ import json
 
 from chordential_oia.web import db as dbm
 from chordential_oia.web import decision_makers as dm
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import decision_makers  # noqa: E402
 
 
 # A small agency site: a team page with two heading cards (one with a LinkedIn +
@@ -343,7 +347,7 @@ def test_agency_detail_shows_decision_makers(tmp_path, monkeypatch):
     conn.commit()
     aid = app_mod.db.list_agencies(conn)[0]["id"]
     # discover synchronously (the route fires the same engine live)
-    app_mod.decision_makers.discover_decision_makers(conn, aid, fetch=fake_fetch)
+    decision_makers.discover_decision_makers(conn, aid, fetch=fake_fetch)
     conn.close()
 
     with TestClient(app_mod.app) as c:

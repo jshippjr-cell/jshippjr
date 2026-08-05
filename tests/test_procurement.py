@@ -7,6 +7,11 @@ from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
 # Reached directly, not through `app_mod`: ADR-0044 moved the /opportunity routes
 # out of app.py and with them app.py's need to import this engine.
 from chordential_oia.web import procurement
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import campaign_intelligence  # noqa: E402
+from chordential_oia.web import kickoff  # noqa: E402
 
 
 def _app(tmp_path, monkeypatch):
@@ -27,10 +32,10 @@ def _opp_with_procurement(app_mod, conn, client="Vance Athletic", text=None):
         buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL,
         budget_min=0, budget_max=0))
     row = app_mod.db.get_opportunity(conn, oid)
-    cid = app_mod.campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
+    cid = campaign_intelligence.ensure_for_opportunity(conn, row)["id"]
     text = text or ("We'll need your W-9 before issuing the PO, plus a COI, and you'll "
                     "register in our vendor portal. We pay Net 60.")
-    app_mod.campaign_intelligence.contribute(
+    campaign_intelligence.contribute(
         conn, cid, "commercial", "procurement_requirements", text,
         kind="fact", source="discovery_call", confidence=95)
     return oid
@@ -144,14 +149,14 @@ def test_kickoff_procurement_line_is_real(tmp_path, monkeypatch):
     # a client with real procurement needs
     oid = _opp_with_procurement(app_mod, conn)
     opp = app_mod.db.get_opportunity(conn, oid)
-    line = app_mod.kickoff._procurement_line(conn, app_mod.db, opp)
+    line = kickoff._procurement_line(conn, app_mod.db, opp)
     assert line["state"] == "pending" and "portal onboarding" in line["na_note"]
     # a client that mentioned nothing → honestly "Nothing required"
     oid2 = app_mod.db.insert_opportunity(conn, Opportunity(
         client="Quiet Co", need="Jingle", description="x",
         buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL,
         budget_min=0, budget_max=0))
-    app_mod.campaign_intelligence.ensure_for_opportunity(conn, app_mod.db.get_opportunity(conn, oid2))
-    line2 = app_mod.kickoff._procurement_line(conn, app_mod.db, app_mod.db.get_opportunity(conn, oid2))
+    campaign_intelligence.ensure_for_opportunity(conn, app_mod.db.get_opportunity(conn, oid2))
+    line2 = kickoff._procurement_line(conn, app_mod.db, app_mod.db.get_opportunity(conn, oid2))
     conn.close()
     assert line2["state"] == "na" and line2["na_note"] == "Nothing required"

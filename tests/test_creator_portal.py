@@ -13,6 +13,12 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia import mailer  # noqa: E402
+from chordential_oia.web import production  # noqa: E402
+from chordential_oia.web import signals  # noqa: E402
 
 
 @pytest.fixture()
@@ -134,10 +140,10 @@ def test_publish_moves_pending_into_ladder_and_notifies_client(ctx, monkeypatch)
     client.post(f"/creator/{tok}/project/{pid}/version",
                 files={"file": ("v1.mp3", b"ID3fake", "audio/mpeg")})
     sent = []
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, s, t, html=None: sent.append(to) or "sent")
-    monkeypatch.setattr(app_mod.signals, "fire_and_forget",
+    monkeypatch.setattr(signals, "fire_and_forget",
                         lambda fn, *a, **k: fn(*a, **k))
     r = client.post(f"/project/{pid}/delivery/publish",
                     data={"action": "publish"}, follow_redirects=False)
@@ -214,11 +220,11 @@ def test_review_changes_notifies_the_assigned_creator(ctx, monkeypatch):
     _publish(client, pid)
 
     sent = []
-    monkeypatch.setattr(app_mod.mailer, "mail_configured", lambda: True)
-    monkeypatch.setattr(app_mod.mailer, "send_email",
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
                         lambda to, s, t, html=None: sent.append((to, s, t)) or "sent")
     # Run the fire-and-forget notification inline so the assertion is deterministic.
-    monkeypatch.setattr(app_mod.signals, "fire_and_forget",
+    monkeypatch.setattr(signals, "fire_and_forget",
                         lambda fn, *a, **k: fn(*a, **k))
     client.post(f"/project/{pid}/review/changes",
                 data={"k": share, "author": "Client", "email": "c@brand.com",
@@ -272,7 +278,7 @@ def test_composer_delivers_derivatives_after_master_approved(ctx):
     db_mod.update_delivery(conn, pid, "versions",
         [{"n": 1, "label": "v1", "url": "/uploads/m.mp3", "filename": "m.mp3",
           "name": "master", "created_at": "2026-07-08T00:00:00"}])
-    app_mod.production.set_creative_lock(conn, db_mod, pid, version_n=1, by="Client")
+    production.set_creative_lock(conn, db_mod, pid, version_n=1, by="Client")
     conn.close()
     # the portal now asks for derivatives, not a new master
     page = client.get(f"/creator/{tok}").text

@@ -12,6 +12,12 @@ from chordential_oia.web import intelligence as intel
 from chordential_oia.web import opportunity_signals as osig
 from chordential_oia.web import music_opportunity as mo
 from chordential_oia.web import outreach_engine as oe
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web import intelligence  # noqa: E402
+from chordential_oia.web import music_opportunity  # noqa: E402
+from chordential_oia.web import opportunity_signals  # noqa: E402
 
 
 _PROFILE = en.AgencyProfile(
@@ -163,9 +169,9 @@ def test_outreach_section_renders_and_log_as_sent(tmp_path, monkeypatch):
     app_mod.db.save_agency_enrichment(conn, aid, {"status": "complete", "profile": _PROFILE.to_dict()})
     app_mod.db.upsert_decision_maker(conn, aid, _DM)
     conn.commit()
-    app_mod.intelligence.generate_intelligence(conn, aid)
-    app_mod.opportunity_signals.detect_signals(conn, aid)
-    app_mod.music_opportunity.score_agency(conn, aid)
+    intelligence.generate_intelligence(conn, aid)
+    opportunity_signals.detect_signals(conn, aid)
+    music_opportunity.score_agency(conn, aid)
     conn.close()
 
     with TestClient(app_mod.app) as c:

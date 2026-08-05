@@ -32,6 +32,10 @@ from chordential_oia.storage import (
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
+# ADR-0044: reached where they live. `app.py` is the application object now and
+# imports none of these; using it as a namespace for the package is what kept 55
+# dead imports alive in it.
+from chordential_oia.web.uploads import _persist_upload  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -220,7 +224,7 @@ def test_the_mirror_is_skipped_when_the_store_is_durable(app_mod, monkeypatch, t
     conn = db.connect()
     try:
         before = {r["name"] for r in conn.execute("SELECT name FROM media_blob")}
-        app_mod._persist_upload(conn, "durable-master.mp3", b"ID3" + b"C" * 100, "audio/mpeg")
+        _persist_upload(conn, "durable-master.mp3", b"ID3" + b"C" * 100, "audio/mpeg")
         after = {r["name"] for r in conn.execute("SELECT name FROM media_blob")}
     finally:
         conn.close()
