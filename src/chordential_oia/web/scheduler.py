@@ -42,6 +42,87 @@ _status = {
 
 _FALSEY = {"0", "false", "no", "off", ""}
 
+# --------------------------------------------------------------------------- #
+# Only ONE instance runs the engines
+# --------------------------------------------------------------------------- #
+# Everything below coordinates in-process — `_heavy_lock` and the module-level
+# timers — which is exactly right for one instance and worth nothing across two.
+# The blue-green cutover runs two ON PURPOSE for a few minutes, and in that window
+# both loops fire: outreach sends twice, meeting bots are polled twice, two
+# enrichment batches fight for one CPU. Nothing would report it; the second copy of
+# an email is not an error anywhere in this system.
+#
+# So the loop holds a DB lease and does nothing without it. The lease is renewed
+# every tick and expires on its own, so an instance that is killed hands the engines
+# over rather than taking them to the grave. Cycles invoked by hand from the console
+# are deliberately NOT gated — an operator pressing a button should get work on the
+# instance that served the request, whoever holds the lease.
+_LEASE_NAME = "scheduler"
+_OWNER = "%s:%d:%s" % (os.environ.get("RENDER_INSTANCE_ID", "local"), os.getpid(),
+                       os.urandom(4).hex())
+_lease_state = {"held": False, "owner": _OWNER, "holder": None, "checked_at": None}
+
+
+def _lease_ttl_seconds() -> int:
+    """Long enough to survive a slow tick, short enough that a dead instance is
+    replaced quickly. Three ticks, floored at 90s."""
+    return max(90, _base_tick_seconds() * 3)
+
+
+def lease_enabled() -> bool:
+    return os.environ.get("CHORDENTIAL_SCHEDULER_LEASE", "1").strip().lower() not in _FALSEY
+
+
+def _claim_lease() -> bool:
+    """Try to hold the engines for this process. Never raises; a DB that cannot be
+    reached means we do NOT run, which is the safe direction — a second instance
+    running everything twice is worse than neither running for one tick."""
+    if not lease_enabled():
+        _lease_state.update(held=True, holder={"owner": "(lease disabled)"})
+        return True
+    conn = None
+    try:
+        conn = db.connect()
+        held = db.acquire_lease(conn, _LEASE_NAME, _OWNER, _lease_ttl_seconds())
+        holder = db.lease_holder(conn, _LEASE_NAME)
+    except Exception:                        # noqa: BLE001
+        held, holder = False, None
+    finally:
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
+    was = _lease_state["held"]
+    _lease_state.update(held=held, holder=holder,
+                        checked_at=datetime.now(timezone.utc).isoformat())
+    if held != was:                          # a handover is worth a line in the log
+        print("[scheduler] %s the engine lease (owner %s)"
+              % ("acquired" if held else "lost", _OWNER), flush=True)
+    return held
+
+
+def _drop_lease() -> None:
+    """Hand the engines over at shutdown instead of making the next instance wait
+    out the TTL — the difference between a seconds-long and a minutes-long gap."""
+    if not lease_enabled() or not _lease_state["held"]:
+        return
+    conn = None
+    try:
+        conn = db.connect()
+        db.release_lease(conn, _LEASE_NAME, _OWNER)
+    except Exception:                        # noqa: BLE001
+        pass
+    finally:
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
+    _lease_state["held"] = False
+
+
+def lease_status() -> dict:
+    """What the console shows. "This instance is not running the engines" has to be
+    a state you can SEE — an invisible one is how a silent stop goes unnoticed."""
+    return dict(_lease_state, enabled=lease_enabled(), ttl=_lease_ttl_seconds())
+
 # ONE shared lock across every heavy background cycle (enrich, re-enrich, decision
 # makers, intelligence, signals, scoring). Only one heavy job runs at a time — auto
 # OR manual — so a small instance is never hit by several batches at once (the
@@ -1091,6 +1172,12 @@ async def run_loop() -> None:
     _last_score_mono = _stagger(_score_interval_seconds(), 420)
     _last_reenrich_mono = base                       # first re-enrich after a full interval
     while True:
+        # Nothing below runs without the lease. Checked EVERY tick, not once at boot:
+        # leadership is not a property of startup order, and the instance that wins it
+        # at 09:00 may be the one being drained at 09:02.
+        if not _claim_lease():
+            await asyncio.sleep(_base_tick_seconds())
+            continue
         now_mono = time.monotonic()
 
         def due(last: float, interval: int) -> bool:

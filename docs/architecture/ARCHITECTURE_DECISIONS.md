@@ -1603,6 +1603,45 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0046 — One scheduler across instances, by lease and not by advisory lock
+**Status:** Accepted (2026-08-05) · Source: `docs/launch-review.md` Phase 3 (scheduler
+advisory locks, a cutover precondition) · `web/db.py`, `web/scheduler.py`, `web/app.py`
+**Decision.** `run_loop` holds a row in `scheduler_lease` and does nothing without it.
+The holder renews every base tick; the lease carries an expiry (3 ticks, floored at 90s)
+so a killed instance hands the engines on by itself, and shutdown releases explicitly so
+a handover costs seconds rather than a full TTL. Checked EVERY tick, never once at boot —
+leadership is not a property of startup order, and the instance that wins at 09:00 may be
+the one being drained at 09:02. A DB it cannot reach counts as NOT held: two instances
+running everything is worse than neither running for one tick. Manual cycles from the
+console are deliberately ungated — an operator pressing a button should get work on the
+instance that served the request. Kill switch `CHORDENTIAL_SCHEDULER_LEASE=0`.
+**Why a lease and not `pg_try_advisory_lock`**, which is what the review asked for. An
+advisory lock is held by a SESSION, and this codebase opens a connection per call and
+closes it — **254 `db.connect()` sites** — so a lock taken that way releases microseconds
+later. Holding one would need a dedicated long-lived connection, and would still leave
+SQLite, which is what production runs *today* and what every test runs, with no protection
+at all. A lease row is decided by one atomic UPDATE, works identically on both backends,
+and survives `SIGKILL` — which an advisory lock also does, but only because the session
+dies with it, and that is exactly the property we cannot rely on here.
+**Why it is a cutover precondition, not a follow-up.** Every coordination primitive in
+`scheduler.py` is in-process — a `threading.Lock` and module-level monotonic timers — on
+the documented assumption of a single instance. Blue-green breaks that assumption *on
+purpose*: for the minutes the two services overlap, both loops run. Outreach sends twice,
+meeting bots are polled twice, two enrichment batches contend for one CPU. None of it
+raises, and **a second copy of an email is not an error anywhere in this system** — it is
+a client receiving the same message twice from a studio that is meant to look precise.
+**Consequences.** `tests/test_scheduler_lease.py` fails if two owners can both hold it, if
+a holder cannot renew (which would stop the engines after one TTL and never restart them),
+if an expired lease is not taken over, if a non-holder can release, if the loop does any
+work without the lease — and, as the control, if it does no work *with* it. The expiry
+format is asserted fixed-width, because the comparison is string-wise in SQL and
+`isoformat()` drops microseconds on the exact-zero tick. `tests/test_postgres_dialect.py`
+covers it on a real server, including that the LOSER's connection is still usable: Postgres
+aborts a transaction on a constraint violation, so a missing rollback would turn the loser
+into `InFailedSqlTransaction` and take the instance down instead of standing by. The
+Discovery console shows when this instance is standing by, because "the engines are
+elsewhere" and "the engines are stopped" look identical otherwise and only one is a fault.
+
 ### ADR-0045 — The Postgres path is verified against a real Postgres
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (Postgres in
 CI for the dialect shim) · `web/db.py`, `scripts/migrate_sqlite_to_postgres.py`,

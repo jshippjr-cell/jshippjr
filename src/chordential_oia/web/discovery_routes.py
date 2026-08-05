@@ -281,6 +281,11 @@ def signals_radar(request: Request, push: str = "", triage: str = "", poll: str 
         triage_result=triage, triage_configured=triage_mod.is_configured(),
         triage_status=triage_mod.last_run(), triage_auto=scheduler.triage_status(),
         poll_result=poll, poll_status=scheduler.last_poll(),
+        # Which instance is actually running the engines. On one instance this is
+        # always "this one" and reads as noise; during a cutover it is the difference
+        # between "the engines are stopped" and "the engines are elsewhere", and only
+        # one of those is a problem.
+        engine_lease=scheduler.lease_status(),
     )
 
 

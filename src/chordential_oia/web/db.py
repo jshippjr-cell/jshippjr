@@ -1165,6 +1165,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    # One scheduler across every instance (see `acquire_lease`). The blue-green cutover
+    # deliberately runs two of them for a few minutes; without this, both run the engines.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS scheduler_lease (
+            name TEXT PRIMARY KEY, owner TEXT, expires_at TEXT, acquired_at TEXT
+        )"""
+    )
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -4677,6 +4684,97 @@ def get_client_procurement_history(conn, client: str) -> dict:
         return json.loads(row["data"])
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+# --------------------------------------------------------------------------- #
+# One scheduler at a time
+# --------------------------------------------------------------------------- #
+# The background engines coordinate entirely in-process today — a `threading.Lock`
+# and module-level timers — on the stated assumption of a single instance. The
+# blue-green cutover breaks that assumption ON PURPOSE: for the minutes the old and
+# new services overlap, BOTH run the loop, so outreach sends twice, meeting bots are
+# polled twice, and two enrichment batches fight for one CPU. Nothing in the system
+# would report it.
+#
+# NOT `pg_try_advisory_lock`, despite the review calling it that. Advisory locks live
+# on a SESSION, and this codebase opens a connection per call and closes it (254 call
+# sites) — a lock taken that way is released microseconds later. Holding one would
+# need a dedicated long-lived connection, and would still leave SQLite (which is what
+# production runs today, and every test) with no protection at all.
+#
+# A lease row is the portable primitive: one atomic UPDATE decides the winner, the
+# holder renews it every tick, and an expiry means a killed process hands over by
+# itself rather than deadlocking the engines forever.
+_LEASE_TS = "%Y-%m-%dT%H:%M:%SZ"       # FIXED width — these are compared as strings
+
+
+def _lease_now() -> str:
+    return datetime.now(timezone.utc).strftime(_LEASE_TS)
+
+
+def _lease_at(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime(_LEASE_TS)
+
+
+def acquire_lease(conn, name: str, owner: str, ttl_seconds: int = 90) -> bool:
+    """Claim or renew the named lease for ``owner``. True if this process holds it.
+
+    Two statements, each atomic on its own, and in this order: renew-or-steal first
+    (the common path, once a holder exists), then a first-time insert. A racing
+    insert loses on the primary key and is reported as "not ours" rather than raised.
+    """
+    now, expires = _lease_now(), _lease_at(ttl_seconds)
+    try:
+        cur = conn.execute(
+            "UPDATE scheduler_lease SET owner = ?, expires_at = ?, "
+            "acquired_at = CASE WHEN owner = ? THEN acquired_at ELSE ? END "
+            "WHERE name = ? AND (owner = ? OR expires_at <= ?)",
+            (owner, expires, owner, now, name, owner, now))
+        if cur.rowcount:
+            conn.commit()
+            return True
+    except Exception:                       # noqa: BLE001 — never take the loop down
+        try: conn.rollback()
+        except Exception: pass
+        return False
+    try:
+        conn.execute(
+            "INSERT INTO scheduler_lease (name, owner, expires_at, acquired_at) "
+            "VALUES (?,?,?,?)", (name, owner, expires, now))
+        conn.commit()
+        return True
+    except Exception:                       # noqa: BLE001 — another instance got there
+        try: conn.rollback()
+        except Exception: pass
+        return False
+
+
+def release_lease(conn, name: str, owner: str) -> None:
+    """Give the lease up at shutdown so the incoming instance starts in seconds
+    instead of waiting out the TTL. Only the holder can release it."""
+    try:
+        conn.execute("DELETE FROM scheduler_lease WHERE name = ? AND owner = ?",
+                     (name, owner))
+        conn.commit()
+    except Exception:                       # noqa: BLE001
+        try: conn.rollback()
+        except Exception: pass
+
+
+def lease_holder(conn, name: str):
+    """``{owner, expires_at, acquired_at, expired}`` or None — so "this instance is
+    not running the engines" is a visible state rather than an invisible one."""
+    try:
+        row = conn.execute(
+            "SELECT owner, expires_at, acquired_at FROM scheduler_lease WHERE name = ?",
+            (name,)).fetchone()
+    except Exception:                       # noqa: BLE001
+        return None
+    if row is None:
+        return None
+    return {"owner": row["owner"], "expires_at": row["expires_at"],
+            "acquired_at": row["acquired_at"],
+            "expired": str(row["expires_at"]) <= _lease_now()}
 
 
 def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> None:

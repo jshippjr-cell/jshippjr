@@ -231,3 +231,42 @@ def test_writes_work_on_real_postgres(monkeypatch, tmp_path):
         conn.close()
     assert row["status"] == "Won"
     assert float(row["outcome_value"]) == 12000.0
+
+
+@live
+def test_the_scheduler_lease_elects_one_instance_on_real_postgres(monkeypatch):
+    """The lease exists FOR the cutover, so SQLite passing it proves the wrong thing.
+
+    Its correctness rests on two things the dialect shim has to get right: `rowcount`
+    on an UPDATE (how the winner is decided) and a failed INSERT leaving the
+    transaction usable (how the loser is told). Postgres aborts a transaction on a
+    constraint violation — a missing rollback would turn every subsequent statement
+    on that connection into `InFailedSqlTransaction`, and the loser would take the
+    whole instance down instead of standing by.
+    """
+    dsn = _fresh_db()
+    monkeypatch.setenv("CHORDENTIAL_DB", dsn)
+    import importlib
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    try:
+        assert db_mod.acquire_lease(conn, "scheduler", "instance-A", 90) is True
+        assert db_mod.acquire_lease(conn, "scheduler", "instance-B", 90) is False
+        # The loser's connection must still be usable — this is the assertion that
+        # would have caught a missing rollback.
+        assert conn.execute("SELECT 1 AS ok").fetchone()["ok"] == 1
+        assert db_mod.acquire_lease(conn, "scheduler", "instance-A", 90) is True
+
+        conn.execute("UPDATE scheduler_lease SET expires_at = ? WHERE name = ?",
+                     ("2000-01-01T00:00:00Z", "scheduler"))
+        conn.commit()
+        assert db_mod.acquire_lease(conn, "scheduler", "instance-B", 90) is True
+        assert db_mod.lease_holder(conn, "scheduler")["owner"] == "instance-B"
+
+        db_mod.release_lease(conn, "scheduler", "instance-B")
+        assert db_mod.lease_holder(conn, "scheduler") is None
+    finally:
+        conn.close()

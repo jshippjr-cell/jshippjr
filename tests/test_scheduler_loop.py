@@ -29,6 +29,9 @@ def test_loop_fires_enrichment_on_its_own_each_tick(monkeypatch):
     for off in ("dm_enabled", "autofetch_enabled", "signals_active",
                 "reddit_enabled", "triage_enabled"):
         monkeypatch.setattr(sch, off, lambda: False)
+    # This test is about PACING, not leadership: hold the engine lease outright so
+    # the cadence is what is under test. `test_scheduler_lease.py` owns the gate.
+    monkeypatch.setattr(sch, "_claim_lease", lambda: True)
     monkeypatch.setattr(sch, "_enrich_interval_seconds", lambda: 0)
     monkeypatch.setattr(sch, "run_enrich_cycle",
                         lambda: calls.__setitem__("enrich", calls["enrich"] + 1) or 0)
@@ -62,6 +65,9 @@ def test_autonomy_off_by_default_so_loop_skips_heavy_cycles(monkeypatch):
     for off in ("dm_enabled", "autofetch_enabled", "signals_active",
                 "reddit_enabled", "triage_enabled"):
         monkeypatch.setattr(sch, off, lambda: False)
+    # This test is about PACING, not leadership: hold the engine lease outright so
+    # the cadence is what is under test. `test_scheduler_lease.py` owns the gate.
+    monkeypatch.setattr(sch, "_claim_lease", lambda: True)
     monkeypatch.setattr(sch, "_enrich_interval_seconds", lambda: 0)
     monkeypatch.setattr(sch, "run_enrich_cycle",
                         lambda: calls.__setitem__("enrich", calls["enrich"] + 1) or 0)
@@ -353,6 +359,9 @@ def test_a_slow_task_does_not_block_a_fast_one(monkeypatch):
     monkeypatch.setattr(sch, "autofetch_enabled", lambda: True)
     for off in ("dm_enabled", "signals_active", "reddit_enabled", "triage_enabled"):
         monkeypatch.setattr(sch, off, lambda: False)
+    # This test is about PACING, not leadership: hold the engine lease outright so
+    # the cadence is what is under test. `test_scheduler_lease.py` owns the gate.
+    monkeypatch.setattr(sch, "_claim_lease", lambda: True)
     monkeypatch.setattr(sch, "_enrich_interval_seconds", lambda: 0)
     monkeypatch.setattr(sch, "_interval_seconds", lambda: 10_000)   # autofetch ~never
     monkeypatch.setattr(sch, "run_enrich_cycle",

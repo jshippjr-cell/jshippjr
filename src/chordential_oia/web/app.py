@@ -177,6 +177,10 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         autofetch_task.cancel()
+        # Hand the engine lease over on the way out. Without this the incoming
+        # instance waits out the TTL before anything runs — which is the whole
+        # length of a blue-green handover spent with the engines stopped.
+        scheduler._drop_lease()
 
 
 class SelectiveGZip:
