@@ -94,14 +94,37 @@
     }
     var smooth = still.slice(), analyser = null, freq = null, raf = null, failed = false;
 
-    /* Same-origin media is readable by definition. Cross-origin media is not tapped until
-       a probe proves otherwise, and `loading` records whether the element has already
-       started fetching — past that point the `crossorigin` attribute cannot be added
-       without a reload, so we let this session play un-analysed rather than interrupt it. */
-    var canTap = !mayBeCrossOrigin(audio), loading = false;
+    /* THREE states, not two. Same-origin media is readable by definition (true). Media a
+       probe has refused is not (false). And in between there is NOT YET KNOWN (null) —
+       which is not the same as "no", and treating it as one is what kept the wave off a
+       correctly configured bucket: `tap()` fired on the first play, read "not true",
+       latched `failed` and deleted the canvas before the probe had answered. `preload=
+       "none"` guarantees that race exists, because nothing loads until the click.
+
+       `loading` records whether the element has started fetching; past that point the
+       `crossorigin` attribute cannot be added without a reload, and interrupting a cut the
+       client is already listening to is not worth a decoration. */
+    var canTap = mayBeCrossOrigin(audio) ? null : true, loading = false;
     audio.addEventListener("loadstart", function () { loading = true; });
 
-    if (!canTap) proveReadable(audio, function () {
+    /* And a permission to tap is still not a licence to tap YET.
+     *
+     * `createMediaElementSource` is IRREVERSIBLE — there is no untap. So a bucket whose
+     * rule satisfies the probe but not the real media load (a rule covering the probe's
+     * `bytes=0-0` but not the player's `bytes=0-`, say) would let us capture the element
+     * and only then fail, leaving the recovery below able to restore the audio's SOURCE
+     * but not its route to the speakers: measured at signal peak 0, playing, silent. The
+     * original bug, reintroduced through the back door.
+     *
+     * So the tap waits for proof that the CORS-enabled load actually SUCCEEDED. If it
+     * fails instead, `error` fires first, the recovery runs, and the element was never
+     * touched. Same-origin media needs no such proof and is ready immediately. */
+    var loadProven = (canTap === true);
+    audio.addEventListener("loadeddata", function () {
+      if (audio.crossOrigin) loadProven = true;
+    });
+
+    function allow() {
       if (loading) return;                     // too late to switch the element safely
       audio.crossOrigin = "anonymous";         // preload="none": nothing fetched yet
       // Handshake with the player's own error handler: while this is set, a load failure
@@ -109,8 +132,21 @@
       // the file is broken — it is about to play.
       audio.dataset.waveCors = "1";
       canTap = true;
-      recoverIfMediaFails(player, audio, cv, function () { canTap = false; failed = true; });
-    });
+      recoverIfMediaFails(player, audio, cv, function () {
+        remember(false); canTap = false; failed = true;
+      });
+    }
+
+    if (canTap === null) {
+      // A remembered YES is applied SYNCHRONOUSLY, before anything can be clicked, which
+      // is the only way to be sure of beating the click. The first page view of a session
+      // may still lose the race and play un-analysed; every one after it will not.
+      if (remembered() === true) allow();
+      else proveReadable(audio, function (ok) {
+        remember(ok);
+        if (ok) allow(); else canTap = false;
+      });
+    }
 
     function band(i) {
       if (!analyser) return 0;
@@ -146,7 +182,13 @@
        it is allowed to read — see the note at the top. */
     function tap() {
       if (failed || analyser || !ctx || ctx.state !== "running") return;
-      if (!canTap) { failed = true; cv.remove(); return; }
+      if (canTap !== true || !loadProven) {
+        // Only a definitive NO retires the canvas. While the answer is still unknown — or
+        // the CORS-enabled load has not yet proven itself — the still wave simply stays
+        // still, and `timeupdate` tries again.
+        if (canTap === false) { failed = true; cv.remove(); }
+        return;
+      }
       try {
         var src = ctx.createMediaElementSource(audio);
         analyser = ctx.createAnalyser();
@@ -210,15 +252,28 @@
      will make — a GET with a one-byte Range — because a CORS rule that allows a bare GET
      but not the `range` header would pass a lazier probe and then fail the real load.
      `no-store` so the answer is never a cached response from before the rule existed. */
-  function proveReadable(audio, ok) {
+  function proveReadable(audio, done) {
     var src = audio.getAttribute("src") || "";
-    if (!src || !window.fetch) return;
+    if (!src || !window.fetch) return done(false);
     try {
       fetch(src, { method: "GET", mode: "cors", cache: "no-store",
                    headers: { Range: "bytes=0-0" } })
-        .then(function (r) { if (r.ok || r.status === 206) ok(); })
-        .catch(function () { /* no CORS rule: the wave stays still, the audio plays */ });
-    } catch (e) { /* same */ }
+        .then(function (r) { done(r.ok || r.status === 206); })
+        .catch(function () { done(false); });   // no CORS rule: still wave, audio plays
+    } catch (e) { done(false); }
+  }
+
+  /* The answer is a property of this origin and its bucket, not of one file or one page,
+     so it is worth remembering for the session: a remembered YES can be applied before the
+     first click instead of racing it. Best-effort — private modes and blocked storage throw
+     here, and the only cost of not remembering is losing the race again. */
+  var MEM = "chordential-media-cors";
+  function remembered() {
+    try { var v = sessionStorage.getItem(MEM); return v === null ? null : v === "1"; }
+    catch (e) { return null; }
+  }
+  function remember(ok) {
+    try { sessionStorage.setItem(MEM, ok ? "1" : "0"); } catch (e) {}
   }
 
   /* Last line of defence. If the media fails AFTER we added `crossorigin` — a rule that

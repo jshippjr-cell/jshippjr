@@ -177,6 +177,18 @@ def test_the_waveform_earns_cross_origin_audio_instead_of_assuming_it(client):
     js = client.get("/static/wave-live.js").text
     assert "proveReadable" in js and 'Range: "bytes=0-0"' in js, (
         "crossorigin is being set without proving the bytes are readable first")
+    # A permission is not a licence to tap YET. `createMediaElementSource` is
+    # irreversible, so a bucket whose rule satisfies the probe but not the real load would
+    # let us capture the element and only then fail — recovery can restore the audio's
+    # source but never its route to the speakers. Measured at signal peak 0, playing,
+    # silent: the original bug through the back door. The tap waits for `loadeddata`.
+    assert "loadProven" in js and 'addEventListener("loadeddata"' in js, (
+        "the tap does not wait for the CORS-enabled load to actually succeed")
+    # Three states, not two: not-yet-known must not be read as refused, or the first click
+    # latches failure and deletes the canvas before the probe has answered.
+    assert "canTap !== true" in js and "canTap === false" in js
+    assert "sessionStorage" in js, (
+        "without remembering the answer, every page view races the click afresh")
     assert 'mode: "cors"' in js and 'cache: "no-store"' in js
     assert "recoverIfMediaFails" in js and 'removeAttribute("crossorigin")' in js, (
         "a bad CORS rule would cost the client playback with no way back")
