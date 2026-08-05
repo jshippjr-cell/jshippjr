@@ -71,7 +71,19 @@ CHORDENTIAL_S3_REGION   = auto        # R2 wants exactly this
 > impossible: no SDK means half-configured, which falls back to the disk and says so.
 
 ### 1c — confirm the app agrees, before moving anything
-Redeploy and read the **first line of the log**:
+
+First, in the Render **Shell**, confirm the SDK is actually in the image. `render.yaml`
+asks for it, but the build command only comes from the blueprint if Blueprint sync is on
+— otherwise it is whatever the dashboard says, and it may still be the old one:
+
+```
+python -c "import boto3, sys; print('boto3', boto3.__version__)"
+```
+
+If that fails, fix the build command in the dashboard to
+`pip install '.[web,gmail,ai,stripe,postgres,s3]'` and redeploy **before** going further.
+
+Then redeploy and read the **first line of the log**:
 
 | Line | Meaning |
 |---|---|
