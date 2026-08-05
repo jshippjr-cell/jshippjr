@@ -171,7 +171,35 @@ Then redeploy and read the **first line of the log**:
 | `[storage] WARNING: … falling back to the LOCAL disk` | ✗ a variable is wrong or the SDK is missing — fix before continuing |
 | `[storage] local disk at … — not durable` | ✗ `CHORDENTIAL_STORAGE` is not `s3` |
 
-### 1d — copy the media, then verify it
+### 1d — prove the bucket actually works, before touching real media
+
+`durable: True` means the credentials and the SDK are present. It does **not** mean a
+byte has ever reached the bucket — nothing in that check makes a network call. And a
+`--dry-run` will not catch a bad credential either: a failed `get()` returns None, which
+looks exactly like "not uploaded yet".
+
+So round-trip one throwaway object first:
+
+```
+python -c "
+import os
+from chordential_oia.storage import get_object_store
+s = get_object_store(os.environ.get('CHORDENTIAL_UPLOAD_DIR',''))
+k, body = '_probe-delete-me.txt', b'chordential round trip'
+ok_put = s.put(k, body, 'text/plain')
+back   = s.get(k)
+ok_del = s.delete(k)
+print('put       :', ok_put)
+print('read back :', back == body)
+print('cleaned up:', ok_del)
+print('VERDICT   :', 'BUCKET WORKS' if (back == body and ok_del) else 'BUCKET NOT WORKING - stop')
+"
+```
+
+Anything other than `BUCKET WORKS` means the key, secret, endpoint or bucket name is
+wrong — fix it before going near the media. The probe deletes itself.
+
+### 1e — copy the media, then verify it
 In the Render **Shell**:
 ```
 python scripts/migrate_uploads_to_object_store.py --dry-run   # read-only; writes nothing
@@ -184,7 +212,7 @@ them behind — writes each object, then **reads every one back and compares SHA
 say `failed=0`**, and it exits non-zero otherwise. It is idempotent, so re-run it freely
 after fixing anything.
 
-### 1e — prove it with the product, not the script
+### 1f — prove it with the product, not the script
 1. Open a delivery portal and **play a master** — it now streams from the bucket.
 2. **Download the delivery ZIP.**
 3. **Upload a new version** through the console, publish it, play it back.
@@ -216,7 +244,7 @@ anything written to SQLite afterwards is not in it.
 
 ## Step 4 — flip to Postgres + remove the disk (the last deploy with downtime)
 
-> ⛔ Do not start this until **Step 1 reported `failed=0`** and you have played a master
+> ⛔ Do not start this until **Step 1e reported `failed=0`** and you have played a master
 > and downloaded a ZIP from the bucket.
 
 Edit the service config (Blueprint sync of `render.yaml`, or the dashboard):
