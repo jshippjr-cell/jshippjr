@@ -298,6 +298,23 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   database copy comes last. **Found while writing it:** the production build omitted the
   `s3` extra, so flipping the switch would have reported durability, dropped every
   upload, and turned off the mirror — zero copies. Fixed and pinned.
+  **The audit that followed (2026-08-05) found the claim still wasn't true.** After the
+  migration a client version played back as silence, and no amount of reading counters
+  off a page could name the file. `/settings/storage` now audits every media key the
+  DATABASE references — versions, pending submissions, assets, pictures, delivery
+  packages — against the bucket and the mirror, **with sizes**, and names what it cannot
+  find. In production it named two files, and neither was uploaded by a person: the
+  seeded demo master and the demo's delivery ZIP, both written by `seed.py` outside the
+  write door (one `shutil.copyfile`, one direct `store.put`), so neither reached the
+  mirror. Seeding is idempotent; the first redeploy wiped the disk and the demo
+  campaign's ":60 master" and "Download everything" have been dead since. The guard test
+  only matched `open(…, "wb")` — two doors out of four — and is replaced by a
+  behavioural one (seed, delete the directory, assert the audit is clean) that fails on
+  the pre-fix tree naming exactly those two files. Same class of bug in
+  `_build_delivery_package`: it wrote the ZIP to disk and mirrored it directly, so with a
+  bucket configured **the one artefact the client pays for never reached the bucket**.
+  The seam gained `size()`, because existence is not playability — a zero-byte object is
+  present, passes `exists()`, survives a SHA-verified migration, and plays as silence.
 - **`app.py` starts coming apart** (ADR-0044, 2026-08-04). It hit **9,133 lines / 251
   routes**. `shell.py` now holds the shared web primitives (the Jinja environment,
   `render`, `public_base`) — created there, still decorated in `app.py` — which is what

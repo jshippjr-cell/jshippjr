@@ -218,10 +218,17 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     assignments = db.list_assignments(conn, project_id)
     delivery = db.get_delivery(conn, project_id)
     pkg = build_delivery_zip(row, assignments, delivery, upload_dir())
-    # Mirror the built ZIP for durability (the same DB blob store uploads use).
+    # The built ZIP goes through the write door (ADR-0043), not straight into the DB
+    # mirror. It used to call `db.save_media_blob` directly, which meant that with a
+    # bucket configured the delivery package — the single artefact the client pays for —
+    # was the one piece of client media that never reached the bucket: it sat on the
+    # ephemeral disk plus a SQLite blob, which is exactly the bloat the Postgres cutover
+    # is meant to end.
     try:
+        from .uploads import _persist_upload
         with open(os.path.join(upload_dir(), os.path.basename(pkg["filename"])), "rb") as fh:
-            db.save_media_blob(conn, os.path.basename(pkg["filename"]), fh.read(), "application/zip")
+            _persist_upload(conn, os.path.basename(pkg["filename"]), fh.read(),
+                            "application/zip")
     except (OSError, KeyError):
         pass
     db.update_delivery(conn, project_id, "delivery_zip", {

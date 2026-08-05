@@ -223,24 +223,32 @@ def _demo_audio(i: int) -> str:
     return _DEMO_AUDIO[i % len(_DEMO_AUDIO)] if _DEMO_AUDIO else ""
 
 
-def _stage_bundled_master(upload_dir: str, filename: str) -> bool:
+def _stage_bundled_master(conn, upload_dir: str, filename: str) -> bool:
     """Copy the committed demo master into ``upload_dir`` under ``filename``.
 
     Lets ``build_delivery_zip`` bundle a REAL local audio file (it only packages
     on-disk files with a real ``filename``). Returns True on success. Fail-soft:
     a missing source or a copy error returns False and never raises, so seeding
-    never crashes if the bundle is absent."""
+    never crashes if the bundle is absent.
+
+    Goes through ``_persist_upload`` — the write door — rather than calling the store
+    directly. Calling the store directly is what broke this in production: the demo
+    master landed on the ephemeral disk and in whatever store was active *at seed time*,
+    never in the SQLite mirror. Seeding is idempotent, so it never ran again; the first
+    redeploy wiped the disk and the demo campaign's ":60 master" and "Download
+    everything" have been dead ever since. Found by the /settings/storage audit, which
+    named this file and the ZIP built from it as the only two the database references
+    and no store holds.
+    """
     try:
         if not os.path.isfile(_BUNDLED_DEMO_AUDIO):
             return False
-        # ADR-0043: through the store, so a demo instance with a bucket configured
-        # doesn't stage audio onto a disk the read path no longer looks at. It also
-        # keeps a local copy either way, because build_delivery_zip packages files
-        # off the filesystem.
         with open(_BUNDLED_DEMO_AUDIO, "rb") as fh:
             data = fh.read()
-        from ..storage import get_object_store
-        get_object_store(upload_dir).put(filename, data, "audio/mpeg")
+        from .uploads import _persist_upload
+        _persist_upload(conn, filename, data, "audio/mpeg")
+        # The local copy is separate from durability: build_delivery_zip packages
+        # files off the filesystem, so it needs one whatever the active store is.
         import shutil
         os.makedirs(upload_dir, exist_ok=True)
         shutil.copyfile(_BUNDLED_DEMO_AUDIO, os.path.join(upload_dir, filename))
@@ -456,7 +464,7 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
         upload_dir = (os.environ.get("CHORDENTIAL_UPLOAD_DIR")
                       or os.path.join(os.path.dirname(__file__), "uploads"))
         master_filename = "demo-northwind-master.mp3"
-        staged = _stage_bundled_master(upload_dir, master_filename)
+        staged = _stage_bundled_master(conn, upload_dir, master_filename)
 
         assets_c = [
             {"label": "Anthem :30 cutdown", "url": _demo_audio(3),
@@ -527,13 +535,15 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
                 project_c, assignments_c, db.get_delivery(conn, pid_c), upload_dir,
                 generated_at=_iso(7),
             )
-            # ADR-0043: the built ZIP goes through the store too, so the demo's
-            # "Download everything" works whichever backend is configured.
+            # ADR-0043: the built ZIP goes through the write door, so the demo's
+            # "Download everything" works whichever backend is configured AND keeps a
+            # second copy. It used to call the store directly and skip the mirror —
+            # same bug as the master above, and the audit found them together.
             try:
-                from ..storage import get_object_store
+                from .uploads import _persist_upload
                 with open(os.path.join(upload_dir, os.path.basename(pkg["filename"])), "rb") as fh:
-                    get_object_store(upload_dir).put(
-                        os.path.basename(pkg["filename"]), fh.read(), "application/zip")
+                    _persist_upload(conn, os.path.basename(pkg["filename"]), fh.read(),
+                                    "application/zip")
             except OSError:
                 pass
             db.update_delivery(conn, pid_c, "delivery_zip", {

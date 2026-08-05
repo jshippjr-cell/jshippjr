@@ -146,11 +146,17 @@ def audit_referenced_media(conn, root: str = "") -> dict:
     operator actually has when a client presses play and hears nothing: *the portal is
     asking for a file — is it there?* A version row can happily reference a key that no
     store holds, and until you play it, nothing says so.
+
+    Existence alone is not the answer, which is why every row also carries its SIZE. A
+    zero-byte object is present in the bucket, passes ``exists``, is reported by a
+    naive audit as fine, and plays as silence — indistinguishable from a missing file
+    to the person pressing play, and the opposite of it to anyone reading a checkmark.
+    An empty row is flagged as ``empty``, not as ``ok``.
     """
     from ..web import db
 
     store = get_object_store(root)
-    rows, missing = [], 0
+    rows, missing, empty = [], 0, 0
     for prow in conn.execute("SELECT id, client, need FROM projects ORDER BY id").fetchall():
         pid = prow["id"] if hasattr(prow, "keys") else prow[0]
         delivery = db.get_delivery(conn, pid) or {}
@@ -174,17 +180,40 @@ def audit_referenced_media(conn, root: str = "") -> dict:
             if not key:
                 continue
             in_store = bool(store.exists(key))
-            in_mirror = db.get_media_blob(conn, key) is not None
+            # `size` is the newest verb on the seam; a backend that predates it falls
+            # back to reading the object rather than raising inside a page render —
+            # the seam's rule is that losing the store degrades, never 500s.
+            store_bytes = None
+            if in_store:
+                sizer = getattr(store, "size", None)
+                if callable(sizer):
+                    store_bytes = sizer(key)
+                else:
+                    got = store.get(key)
+                    store_bytes = len(got) if got is not None else None
+            blob = db.get_media_blob(conn, key)
+            in_mirror = blob is not None
+            mirror_bytes = len(blob[0]) if blob is not None else None
+            # The size that matters is the one the read path would serve: the store
+            # answers first, the mirror is the fallback (see `serve_upload`).
+            served = store_bytes if in_store else mirror_bytes
             if not in_store and not in_mirror:
                 missing += 1
+            elif not served:
+                empty += 1
             rows.append({
                 "project_id": pid,
                 "project": (prow["need"] if hasattr(prow, "keys") else prow[2]) or "",
                 "what": what, "key": key,
                 "in_store": in_store, "in_mirror": in_mirror,
-                "ok": in_store or in_mirror,
+                "store_bytes": store_bytes, "mirror_bytes": mirror_bytes,
+                "bytes": served or 0,
+                "where": ("bucket" if in_store else ("mirror" if in_mirror else "")),
+                "empty": bool((in_store or in_mirror) and not served),
+                "ok": bool(served),
             })
-    return {"rows": rows, "missing": missing, "checked": len(rows)}
+    return {"rows": rows, "missing": missing, "empty": empty, "checked": len(rows),
+            "bad": missing + empty}
 
 
 __all__ = ["inventory", "migrate", "verify_round_trip", "read_sources",

@@ -1150,6 +1150,36 @@ evidence. It is idempotent and exits non-zero on any mismatch. The uploads migra
 failure mode, and the database copy is a snapshot that should happen immediately before the
 flip rather than hours before it.
 
+**Amended 2026-08-05 (second) — "every write goes through the door" was still not true,
+and "the file exists" was never the question.** The live migration moved 12 objects and
+verified every one; a client version then played back as silence, and three rounds of
+reading counters off a page could not name the file. The page now audits what the
+**database references** — every version, pending submission, asset, picture and delivery
+package — against the bucket and the mirror, and names what it cannot find. Run against
+production it named two files, and neither had been uploaded by anyone: the seeded demo
+master and the demo's delivery ZIP.
+
+Both were written by `seed.py` — one with `shutil.copyfile`, one by calling
+`store.put()` directly — so neither ever reached the SQLite mirror. Seeding is
+idempotent, so it never ran again; the first redeploy wiped the ephemeral disk and the
+demo campaign's *":60 master"* and *"Download everything"* had been dead ever since. The
+guard test that was supposed to make this impossible only matched `open(…, "wb")`, so it
+watched two doors out of four. A text scan cannot enforce this claim; the replacement is
+behavioural — seed an instance, delete the upload directory, assert the audit finds
+nothing missing — and it fails on the pre-fix tree naming exactly the two production
+files. The delivery-package builder had the mirror-image bug: it wrote the ZIP to disk
+and called `db.save_media_blob` directly, so with a bucket configured the one artefact
+the client pays for was the one piece of media that never reached the bucket — it sat in
+a SQLite blob, which is the bloat the Postgres cutover exists to end, on the largest file
+in the system.
+
+The seam also gained a fifth verb, `size()`. Existence and playability are different
+claims and the audit was only checking one: a **zero-byte object is present**, answers
+`exists()` with True, survives a SHA-verified migration, and plays as silence —
+indistinguishable from a missing file to whoever pressed play, and its opposite to anyone
+reading a checkmark. Every audited row now carries its size and where it would be served
+from, and an empty file is reported as broken rather than fine.
+
 ### ADR-0044 — `app.py` comes apart one measured slice at a time
 **Status:** Accepted (2026-08-04) · Source: `docs/launch-review.md` Phase 3 (`app.py`
 into modules) · `web/shell.py`, `web/agencies_routes.py`, `web/app.py`

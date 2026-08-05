@@ -216,6 +216,7 @@ class _Bucket:
     def put(self, k, d, ct=""): self.items[k] = d; return True
     def get(self, k): return self.items.get(k)
     def exists(self, k): return k in self.items
+    def size(self, k): return len(self.items[k]) if k in self.items else None
     def delete(self, k): return bool(self.items.pop(k, None))
     def local_path(self, k): return None
     def url(self, k, *, expires=3600): return f"https://bucket.example/{k}"
@@ -627,7 +628,8 @@ def test_the_console_names_a_file_that_exists_nowhere(app_mod):
     with TestClient(app_mod.app) as c:
         r = c.get("/settings/storage")
     assert r.status_code == 200
-    assert "cannot be found" in r.text
+    assert "will not play" in r.text
+    assert "missing everywhere" in r.text
     assert "proj-ghost.mp3" in r.text, "the missing file must be named, not just counted"
 
 
@@ -639,4 +641,127 @@ def test_the_page_never_renders_a_python_method_repr(app_mod):
         r = c.get("/settings/storage")
     assert "built-in method" not in r.text
     assert "object at 0x" not in r.text
+
+
+# --------------------------------------------------------------------------- #
+# Present is not playable
+# --------------------------------------------------------------------------- #
+def test_a_present_but_empty_file_is_reported_as_unplayable(app_mod):
+    """Existence and playability are different claims, and only one of them was checked.
+
+    A zero-byte object is in the bucket. It answers `exists()` with True, it survives a
+    SHA-verified migration, and it plays as silence — indistinguishable to the person
+    pressing play from a file that was never uploaded, and the exact opposite of it to
+    anyone reading a green checkmark. The audit reports the SIZE for every referenced
+    file so the two questions stop sharing one answer.
+    """
+    from chordential_oia.web import db
+
+    conn = db.connect()
+    try:
+        pid = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()["id"]
+        db.save_media_blob(conn, "proj-hollow.mp3", b"", "audio/mpeg")
+        delivery = db.get_delivery(conn, pid)
+        versions = list(delivery.get("versions") or [])
+        versions.append({"n": 98, "label": "v98 Hollow", "url": "/uploads/proj-hollow.mp3",
+                         "filename": "proj-hollow.mp3", "name": "HOLLOW"})
+        db.update_delivery(conn, pid, "versions", versions)
+    finally:
+        conn.close()
+
+    from chordential_oia.storage.migrate import audit_referenced_media
+    conn = db.connect()
+    try:
+        audit = audit_referenced_media(conn, os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    finally:
+        conn.close()
+    row = next(r for r in audit["rows"] if r["key"] == "proj-hollow.mp3")
+    assert row["empty"] is True
+    assert row["ok"] is False, "a zero-byte file must not be reported as fine"
+    assert audit["empty"] == 1
+
+    with TestClient(app_mod.app) as c:
+        r = c.get("/settings/storage")
+    assert "empty — 0 bytes" in r.text
+    assert "proj-hollow.mp3" in r.text
+
+
+def test_every_referenced_file_reports_its_size(app_mod):
+    """Not just the broken ones. The operator's question is "is the file the portal is
+    asking for a real file", and a table that only lists failures cannot answer it for
+    the row they came to look at."""
+    from chordential_oia.web import db
+    from chordential_oia.storage.migrate import audit_referenced_media
+
+    conn = db.connect()
+    try:
+        audit = audit_referenced_media(conn, os.environ["CHORDENTIAL_UPLOAD_DIR"])
+    finally:
+        conn.close()
+    assert audit["checked"] > 0, "the seeded demo references no media at all"
+    for row in audit["rows"]:
+        assert "bytes" in row and isinstance(row["bytes"], int)
+        if row["ok"]:
+            assert row["bytes"] > 0 and row["where"] in ("bucket", "mirror")
+
+
+# --------------------------------------------------------------------------- #
+# The seeded demo is media too
+# --------------------------------------------------------------------------- #
+def test_seeded_demo_media_survives_the_disk_being_wiped(app_mod):
+    """Found in production by the audit above, which named exactly two files no store
+    held — and both were seeded, not uploaded.
+
+    The seed staged the demo master with `shutil.copyfile` and pushed the built ZIP
+    straight at the store, both bypassing the write door, so neither ever reached the
+    SQLite mirror. Seeding is idempotent and never ran again; the first redeploy wiped
+    the ephemeral disk and the demo campaign's ":60 master" and "Download everything"
+    have been dead ever since. The guard test for this only matched `open(…, "wb")`
+    spellings, so it watched two doors and there were four.
+    """
+    import shutil
+
+    from chordential_oia.web import db
+    from chordential_oia.storage.migrate import audit_referenced_media
+
+    root = os.environ["CHORDENTIAL_UPLOAD_DIR"]
+    shutil.rmtree(root, ignore_errors=True)          # the redeploy
+
+    conn = db.connect()
+    try:
+        audit = audit_referenced_media(conn, root)
+    finally:
+        conn.close()
+    broken = [r for r in audit["rows"] if not r["ok"]]
+    assert broken == [], (
+        "seeded media the demo portal points at did not survive a disk wipe: "
+        + ", ".join(f"{r['what']} ({r['key']})" for r in broken))
+
+
+def test_a_built_delivery_package_reaches_the_bucket(app_mod, monkeypatch):
+    """The one artefact the client pays for was the one that never went to the bucket.
+
+    `_build_delivery_package` wrote the ZIP to the disk and then called
+    `db.save_media_blob` directly, so with a bucket configured the package sat on the
+    ephemeral disk plus a SQLite blob — the mirror bloat the Postgres cutover exists to
+    end, on the largest file in the system.
+    """
+    from chordential_oia.web import db, delivery_ops
+
+    bucket = _Bucket()
+    monkeypatch.setattr("chordential_oia.storage.get_object_store",
+                        lambda *a, **k: bucket)
+    import chordential_oia.web.uploads as uploads_mod
+    monkeypatch.setattr(uploads_mod, "get_object_store", lambda *a, **k: bucket)
+
+    conn = db.connect()
+    try:
+        pid = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()["id"]
+        pkg = delivery_ops._build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg is not None
+    key = os.path.basename(pkg["filename"])
+    assert key in bucket.items, "the delivery package never reached the bucket"
+    assert len(bucket.items[key]) > 0
 

@@ -406,7 +406,8 @@ def storage_verify(request: Request):
     """Round-trip one throwaway object. `durable=True` only says the credentials and
     the SDK are present — nothing in it makes a network call."""
     from chordential_oia.storage import storage_status
-    from chordential_oia.storage.migrate import inventory, verify_round_trip
+    from chordential_oia.storage.migrate import (audit_referenced_media, inventory,
+                                                 verify_round_trip)
     from .uploads import upload_dir
 
     root = upload_dir()
@@ -414,10 +415,12 @@ def storage_verify(request: Request):
     conn = db.connect()
     try:
         inv = inventory(conn, root)
+        audit = audit_referenced_media(conn, root)
     finally:
         conn.close()
     return render(request, "storage.html", nav="pipeline", status=storage_status(root),
-                  inv=inv, root=root, result=None, probe=probe, ran="verify")
+                  inv=inv, root=root, result=None, probe=probe, ran="verify", audit=audit,
+                  upload_dir_env=os.environ.get("CHORDENTIAL_UPLOAD_DIR", ""))
 
 
 @router.post("/settings/storage/migrate", response_class=HTMLResponse)
@@ -429,7 +432,8 @@ def storage_migrate(request: Request, mode: str = Form("dry")):
     SHA-256 read-back rather than by trusting `put()`.
     """
     from chordential_oia.storage import storage_status
-    from chordential_oia.storage.migrate import inventory, migrate as run_migrate
+    from chordential_oia.storage.migrate import (audit_referenced_media, inventory,
+                                                 migrate as run_migrate)
     from .uploads import upload_dir
 
     root = upload_dir()
@@ -437,10 +441,15 @@ def storage_migrate(request: Request, mode: str = Form("dry")):
     try:
         result = run_migrate(conn, root, dry_run=(mode != "live"))
         inv = inventory(conn, root)
+        # Re-audited AFTER the copy: "moved=12, failed=0" answers what the migration
+        # did, not whether the portal can now find what it asks for. Those are
+        # different questions and only the second one is the operator's.
+        audit = audit_referenced_media(conn, root)
     finally:
         conn.close()
     return render(request, "storage.html", nav="pipeline", status=storage_status(root),
-                  inv=inv, root=root, result=result, ran=mode)
+                  inv=inv, root=root, result=result, ran=mode, audit=audit,
+                  upload_dir_env=os.environ.get("CHORDENTIAL_UPLOAD_DIR", ""))
 
 
 @router.get("/settings/company-profile", response_class=HTMLResponse)

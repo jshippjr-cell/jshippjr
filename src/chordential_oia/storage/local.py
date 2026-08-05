@@ -68,6 +68,15 @@ class LocalObjectStore:
         path = self._path(key)
         return bool(path and os.path.exists(path))
 
+    def size(self, key: str) -> Optional[int]:
+        path = self._path(key)
+        if path is None:
+            return None
+        try:
+            return os.path.getsize(path)
+        except OSError:
+            return None
+
     def delete(self, key: str) -> bool:
         path = self._path(key)
         if path is None:

@@ -104,36 +104,49 @@
 {% if audit is defined and audit %}
 <div class="st-card">
   <div class="st-state">
-    <span class="st-dot {{ 'warn' if audit.missing else 'ok' }}"></span>
+    <span class="st-dot {{ 'warn' if audit.bad else 'ok' }}"></span>
     <h3>
-      {%- if audit.missing -%}{{ audit.missing }} referenced file{{ '' if audit.missing == 1 else 's' }} cannot be found
-      {%- else -%}All {{ audit.checked }} referenced files are accounted for{%- endif -%}
+      {%- if audit.bad -%}{{ audit.bad }} referenced file{{ '' if audit.bad == 1 else 's' }} will not play
+      {%- else -%}All {{ audit.checked }} referenced files are there and non-empty{%- endif -%}
     </h3>
   </div>
   <p class="st-sub">
     Every version, asset, picture and package the database points at — checked against the
-    bucket and the mirror. A row can reference a file no store holds; until someone presses
-    play, nothing says so.
+    bucket and the mirror, <strong>with its size</strong>. A row can reference a file no
+    store holds, or one that is present and zero bytes; both play as silence, and until
+    someone presses play nothing says so.
   </p>
+  <div class="st-res">
+    <table>
+      <thead><tr><th>Project</th><th>What</th><th>File</th><th>Size</th><th>Where</th><th>State</th></tr></thead>
+      <tbody>
+        {% for r in audit.rows|sort(attribute='ok') %}
+        <tr>
+          <td>{{ r.project }}</td>
+          <td>{{ r.what }}</td>
+          <td><code>{{ r.key }}</code></td>
+          <td>{{ '{:,}'.format(r.bytes) }}</td>
+          <td>{{ r.where or '—' }}</td>
+          <td>
+            {% if r.empty %}<span class="st-tag failed">empty — 0 bytes</span>
+            {% elif not r.ok %}<span class="st-tag failed">missing everywhere</span>
+            {% else %}<span class="st-tag moved">plays</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% if audit.missing %}
-    <div class="st-res">
-      <table>
-        <thead><tr><th>Project</th><th>What</th><th>File</th><th>Bucket</th><th>Mirror</th></tr></thead>
-        <tbody>
-          {% for r in audit.rows if not r.ok %}
-          <tr>
-            <td>{{ r.project }}</td>
-            <td>{{ r.what }}</td>
-            <td><code>{{ r.key }}</code></td>
-            <td><span class="st-tag failed">missing</span></td>
-            <td><span class="st-tag failed">missing</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="st-note">These are the files that play back as silence. The bytes are not in
-      the bucket and not in the mirror — the upload never landed anywhere.</p>
+    <p class="st-note">{{ audit.missing }} file{{ '' if audit.missing == 1 else 's' }} the
+      database points at {{ 'is' if audit.missing == 1 else 'are' }} in neither the bucket
+      nor the mirror — the bytes never landed anywhere.</p>
+  {% endif %}
+  {% if audit.empty %}
+    <p class="st-note">{{ audit.empty }} file{{ '' if audit.empty == 1 else 's' }}
+      exist{{ 's' if audit.empty == 1 else '' }} but hold zero bytes. The write reached the
+      store with nothing in it — an existence check calls that success and the player calls
+      it silence.</p>
   {% endif %}
 </div>
 {% endif %}

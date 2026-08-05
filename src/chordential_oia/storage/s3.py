@@ -127,6 +127,17 @@ class S3ObjectStore:
         except Exception:
             return False
 
+    def size(self, key: str) -> Optional[int]:
+        """The object's Content-Length. Same HEAD ``exists`` makes, one field further
+        in — so asking "is it a real file" costs no more than asking "is it there"."""
+        c = self._c()
+        if c is None:
+            return None
+        try:
+            return int(c.head_object(Bucket=self.bucket, Key=key)["ContentLength"])
+        except Exception:
+            return None
+
     def delete(self, key: str) -> bool:
         c = self._c()
         if c is None:

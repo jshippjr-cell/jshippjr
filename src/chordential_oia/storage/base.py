@@ -1,6 +1,6 @@
 """What a place to keep client media has to be able to do.
 
-Deliberately four verbs. Uploads are written once and read many times; anything
+Deliberately few verbs. Uploads are written once and read many times; anything
 richer (listing, copying, lifecycle rules) belongs to whoever administers the
 bucket, not to the app.
 """
@@ -27,6 +27,17 @@ class ObjectStore(Protocol):
         ...
 
     def exists(self, key: str) -> bool:
+        ...
+
+    def size(self, key: str) -> Optional[int]:
+        """Bytes stored under ``key``, or None when it isn't there.
+
+        Separate from ``exists`` because existence is not playability: a zero-byte
+        object is present, passes every existence check, and plays as silence. The
+        audit on /settings/storage reports this so "the file is there" and "the file
+        is a file" stop being the same claim. Cheap on every backend — a stat, or the
+        Content-Length a HEAD already returns.
+        """
         ...
 
     def delete(self, key: str) -> bool:
