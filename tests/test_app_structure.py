@@ -248,8 +248,9 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     register two handlers for one URL — the first wins silently and the second becomes
     dead code that still looks maintained.
 
-    255 is pinned deliberately: 251 when the breakup began, +1 for share-token
-    rotation, +3 for the storage console (`/settings/storage` and its two buttons).
+    256 is pinned deliberately: 251 when the breakup began, +1 for share-token
+    rotation, +3 for the storage console (`/settings/storage` and its two buttons),
+    +1 for the CORS probe that asks the bucket what it returns to a browser.
     Change this number only when you mean to add or remove a URL, never to make a
     refactor pass."""
     decls = []
@@ -258,8 +259,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 255, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 252 — "
+    assert len(decls) == 256, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 256 — "
         f"a slice lost or gained a URL")
 
 

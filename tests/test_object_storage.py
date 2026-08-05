@@ -675,6 +675,40 @@ def test_the_console_names_a_file_that_exists_nowhere(app_mod):
     assert "proj-ghost.mp3" in r.text, "the missing file must be named, not just counted"
 
 
+def test_the_page_can_test_cors_from_the_operators_own_browser(app_mod, monkeypatch):
+    """Why the waveform is off is a question only the operator's browser can answer.
+
+    Whether a bucket lets this page READ the bytes is not visible from the server: the
+    server can fetch its own objects all day and learn nothing about what a browser is
+    allowed to do with them. So the check runs client-side, against a real file, with the
+    review player's exact request — and reports the two failures separately, because "the
+    object did not come back" and "the object came back but this page may not read it"
+    look identical from a player and need completely different fixes.
+
+    Only shown on a durable store: with media on the local disk it is same-origin and the
+    question does not arise.
+    """
+    from chordential_oia.storage import STORAGE_ENV
+    from chordential_oia.storage import s3 as s3_mod
+
+    with TestClient(app_mod.app) as c:
+        assert "Can the review player read the bucket?" not in c.get("/settings/storage").text
+
+        monkeypatch.setattr(s3_mod, "_SDK_PRESENT", True)
+        monkeypatch.setenv(STORAGE_ENV, "s3")
+        monkeypatch.setenv("CHORDENTIAL_S3_BUCKET", "b")
+        monkeypatch.setenv("CHORDENTIAL_S3_ACCESS_KEY", "k")
+        monkeypatch.setenv("CHORDENTIAL_S3_SECRET_KEY", "s")
+        page = c.get("/settings/storage").text
+
+    assert "Can the review player read the bucket?" in page
+    assert "Audio plays whatever the answer is" in page, (
+        "the card must not imply that a CORS failure costs the client playback")
+    assert "mode: 'no-cors'" in page and "mode: 'cors'" in page, (
+        "reachability and readability must be tested separately or the advice is a guess")
+    assert "Range: 'bytes=0-0'" in page
+
+
 def test_the_page_never_renders_a_python_method_repr(app_mod):
     """`inv.keys` resolved to the dict's `.keys` METHOD in Jinja, so the page showed
     `<built-in method keys of dict object at 0x…>` where a count belonged. Shipped, and

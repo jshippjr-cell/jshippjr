@@ -423,6 +423,37 @@ def storage_verify(request: Request):
                   upload_dir_env=os.environ.get("CHORDENTIAL_UPLOAD_DIR", ""))
 
 
+@router.post("/settings/storage/cors", response_class=HTMLResponse)
+def storage_cors(request: Request):
+    """What does the bucket actually return for a browser request?
+
+    The animated waveform turns on one response header, and neither side could see it:
+    the server fetches its own objects happily and learns nothing about what a browser may
+    do with them, and a browser that is refused cannot read the headers explaining why.
+    This signs a URL exactly as the read path does and asks with a review player's own
+    `Origin` and `Range`.
+    """
+    from chordential_oia.storage import storage_status
+    from chordential_oia.storage.migrate import (audit_referenced_media, inventory,
+                                                 probe_cors)
+    from .uploads import upload_dir
+
+    root = upload_dir()
+    conn = db.connect()
+    try:
+        inv = inventory(conn, root)
+        audit = audit_referenced_media(conn, root)
+    finally:
+        conn.close()
+    key = next((r["key"] for r in audit["rows"] if r.get("in_store")), "")
+    origin = os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com").rstrip("/")
+    cors = probe_cors(root, origin, key)
+    cors["key"] = key
+    return render(request, "storage.html", nav="pipeline", status=storage_status(root),
+                  inv=inv, root=root, result=None, ran="cors", audit=audit, cors=cors,
+                  upload_dir_env=os.environ.get("CHORDENTIAL_UPLOAD_DIR", ""))
+
+
 @router.post("/settings/storage/migrate", response_class=HTMLResponse)
 def storage_migrate(request: Request, mode: str = Form("dry")):
     """Copy the media onto the bucket. `mode=dry` reports and writes nothing.

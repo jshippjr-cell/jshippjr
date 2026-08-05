@@ -139,6 +139,54 @@ def migrate(conn, root: str = "", *, dry_run: bool = False) -> dict:
             "mirror_only": sorted(set(mirror) - set(disk))}
 
 
+def probe_cors(root: str = "", origin: str = "", key: str = "") -> dict:
+    """Ask the bucket, in as many words, what it returns for a browser request.
+
+    Whether the review player may ANALYSE a cut (the animated waveform) turns entirely on
+    one response header, and nothing in the app could see it: the server fetches its own
+    objects happily and learns nothing about what a browser is allowed to do with them,
+    and a browser that is refused cannot read the headers explaining why. So this mints a
+    presigned URL exactly as the read path does, fetches it with the `Origin` and `Range`
+    a review player sends, and reports what came back — including the absence of
+    `Access-Control-Allow-Origin`, which is the whole question.
+
+    Best-effort like the rest of the seam: any failure is reported, never raised.
+    """
+    import urllib.error
+    import urllib.request
+
+    store = get_object_store(root)
+    if not getattr(store, "durable", False):
+        return {"ok": False, "reason": "the active store is the local disk — media is "
+                                       "same-origin and CORS does not apply"}
+    url = store.url(key) if key else None
+    if not url:
+        return {"ok": False, "reason": "could not sign a URL for %r" % (key or "")}
+
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Origin", origin)
+    req.add_header("Range", "bytes=0-0")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            status, headers = r.status, dict(r.headers)
+    except urllib.error.HTTPError as e:                  # a 4xx/5xx still answers us
+        status, headers = e.code, dict(e.headers or {})
+    except Exception as e:                               # noqa: BLE001 — network, DNS, TLS
+        return {"ok": False, "reason": "the request never completed: %s" % e}
+
+    lower = {k.lower(): v for k, v in headers.items()}
+    allow = lower.get("access-control-allow-origin", "")
+    return {
+        "ok": bool(allow) and (allow == "*" or allow.rstrip("/") == origin.rstrip("/")),
+        "status": status,
+        "sent_origin": origin,
+        "allow_origin": allow,
+        "expose_headers": lower.get("access-control-expose-headers", ""),
+        "vary": lower.get("vary", ""),
+        "reachable": status in (200, 206),
+    }
+
+
 def audit_referenced_media(conn, root: str = "") -> dict:
     """Every media key the DATABASE references, and whether the bytes actually exist.
 
@@ -217,4 +265,4 @@ def audit_referenced_media(conn, root: str = "") -> dict:
 
 
 __all__ = ["inventory", "migrate", "verify_round_trip", "read_sources",
-           "audit_referenced_media"]
+           "audit_referenced_media", "probe_cors"]

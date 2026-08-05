@@ -151,6 +151,113 @@
 </div>
 {% endif %}
 
+{# ── can the browser READ the bucket? (the waveform's precondition) ────────── #}
+{% if status.durable %}
+{% set probe_key = (audit.rows | selectattr('ok') | map(attribute='key') | first)
+                   if audit is defined and audit else '' %}
+<div class="st-card">
+  <div class="st-state"><span class="st-dot idle" id="cors-dot"></span>
+    <h3>Can the review player read the bucket?</h3></div>
+  <p class="st-sub">
+    Audio plays whatever the answer is. This decides only whether the <em>animated
+    waveform</em> can run: analysing audio the browser fetched from another origin needs a
+    CORS rule on the bucket, and without one the player leaves the sound alone and shows a
+    still bar. This test runs from <strong>this browser</strong>, against a real file,
+    using exactly the request the review player makes.
+  </p>
+  <dl class="st-kv">
+    <dt>This page's origin</dt><dd><code id="cors-origin"></code></dd>
+    <dt>File tested</dt><dd><code>{{ probe_key or '— no media to test —' }}</code></dd>
+  </dl>
+  <div class="st-actions">
+    <button type="button" id="cors-run" {{ 'disabled' if not probe_key }}>Test from this browser</button>
+    <form method="post" action="/settings/storage/cors" style="display:inline">
+      <button type="submit">Ask the bucket directly</button>
+    </form>
+  </div>
+  <div id="cors-out"></div>
+
+  {% if cors is defined and cors %}
+    <div class="st-res" style="margin-top:16px">
+      {% if cors.reason %}
+        <p class="st-note">{{ cors.reason }}</p>
+      {% else %}
+        <dl class="st-kv">
+          <dt>Object asked for</dt><dd><code>{{ cors.key }}</code></dd>
+          <dt>Origin we sent</dt><dd><code>{{ cors.sent_origin }}</code></dd>
+          <dt>Bucket answered</dt><dd>HTTP {{ cors.status }}{{ ' — the bytes came back' if cors.reachable else '' }}</dd>
+          <dt>Access-Control-Allow-Origin</dt>
+          <dd>{% if cors.allow_origin %}<code>{{ cors.allow_origin }}</code>
+              {% else %}<span class="st-tag failed">not returned</span>{% endif %}</dd>
+          <dt>Access-Control-Expose-Headers</dt>
+          <dd>{{ cors.expose_headers or '—' }}</dd>
+          <dt>Vary</dt><dd>{{ cors.vary or '—' }}</dd>
+        </dl>
+        {% if cors.ok %}
+          <p class="st-note">The bucket allows this origin. Hard-reload a review link
+            (⌘⇧R) and the waveform will animate.</p>
+        {% elif cors.reachable %}
+          <p class="st-note">The bytes come back, but <strong>without a
+            <code>Access-Control-Allow-Origin</code> this page accepts</strong> — so the
+            browser will not let the player analyse them, and the waveform stays still.
+            Audio is unaffected. Either the bucket's CORS rule does not cover
+            <code>{{ cors.sent_origin }}</code>, or it is not being applied to presigned
+            URLs on the S3 endpoint. A rule of <code>"*"</code> settles which.</p>
+        {% else %}
+          <p class="st-note">The object itself did not come back (HTTP {{ cors.status }}).
+            That is a storage problem, not a CORS one — fix it before reading anything
+            into the header above.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var key = {{ (probe_key or '') | tojson }};
+  var btn = document.getElementById('cors-run'), out = document.getElementById('cors-out'),
+      dot = document.getElementById('cors-dot');
+  document.getElementById('cors-origin').textContent = location.origin;
+  if (!btn) return;
+  function say(cls, html) { dot.className = 'st-dot ' + cls; out.innerHTML = html; }
+  btn.addEventListener('click', function () {
+    btn.disabled = true; say('idle', '<p class="st-sub">Asking the bucket…</p>');
+    var url = '/uploads/' + encodeURIComponent(key);
+    // First: are the bytes reachable at all? `no-cors` never fails on a CORS rule, so a
+    // failure here means the object or the redirect is broken, not the CORS policy —
+    // two very different problems that look identical from a player.
+    fetch(url, { mode: 'no-cors', cache: 'no-store' }).then(function () {
+      // Then the real question, with the review player's exact request.
+      return fetch(url, { mode: 'cors', cache: 'no-store', headers: { Range: 'bytes=0-0' } })
+        .then(function (r) {
+          if (r.ok || r.status === 206) {
+            say('ok', '<p class="st-note"><strong>The bucket allows it.</strong> The waveform ' +
+              'will animate — hard-reload a review link (⌘⇧R) to pick it up.</p>');
+          } else {
+            say('warn', '<p class="st-note">The bucket answered <b>HTTP ' + r.status +
+              '</b>. That is not a CORS problem — the object itself did not come back.</p>');
+          }
+        })
+        .catch(function () {
+          say('warn',
+            '<p class="st-note"><strong>The bucket refused to let this page read the bytes.</strong> ' +
+            'It served them (the first request worked), but returned no ' +
+            '<code>Access-Control-Allow-Origin</code> this page accepts. Audio is unaffected; ' +
+            'only the waveform is off.</p>' +
+            '<p class="st-sub">In the R2 bucket → Settings → CORS Policy, the rule must allow ' +
+            'this exact origin — <code>' + location.origin + '</code> — or <code>"*"</code>, ' +
+            'and <code>AllowedHeaders</code> must include <code>range</code>. R2 can take a ' +
+            'minute to apply a saved rule.</p>');
+        });
+    }).catch(function () {
+      say('warn', '<p class="st-note">The file could not be fetched at all, with CORS out of ' +
+        'the picture. That is a storage or redirect problem, not a CORS one.</p>');
+    }).then(function () { btn.disabled = false; });
+  });
+})();
+</script>
+{% endif %}
+
 {# ── the two buttons ──────────────────────────────────────────────────────── #}
 <div class="st-card">
   <div class="st-state"><h3>Move the media</h3></div>
