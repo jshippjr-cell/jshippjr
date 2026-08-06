@@ -69,10 +69,22 @@ def identify(request) -> dict:
                 "ref": _fingerprint(reviewer or share)}
 
     try:
+        # A real account (ADR-0054) is the only thing that can put a NAME here. This is
+        # the seam ADR-0053 was built against: the log gained names without a single
+        # call site changing.
+        from .shell import signed_in_user
+        user = signed_in_user(request)
+        if user is not None:
+            label = (user["name"] or "").strip() or user["email"]
+            return {"kind": OPERATOR, "label": label, "ref": f"user:{user['id']}"}
+    except Exception:                      # noqa: BLE001
+        pass
+    try:
         if admin_authed(request):
-            # ONE shared passphrase today, so this is a role and says so. It becomes a
-            # name the day accounts exist, and nothing that reads this has to change.
-            return {"kind": OPERATOR, "label": "the operator", "ref": ""}
+            # The shared passphrase: still a ROLE, because it genuinely is one. Naming a
+            # human on the strength of a shared secret would be a lie in an audit trail.
+            return {"kind": OPERATOR, "label": "the operator (shared passphrase)",
+                    "ref": ""}
     except Exception:                      # noqa: BLE001
         pass
     return {"kind": PUBLIC, "label": "public", "ref": ""}

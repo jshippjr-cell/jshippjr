@@ -94,6 +94,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Accounts and sessions** (ADR-0054, 2026-08-06). Sign in with email + password and the
+  decision log stops saying "the operator" and says **who** — the seam ADR-0053 was built
+  for, filled without changing a call site. **The shared passphrase still works and always
+  will**: it is break-glass, not legacy, and a change that could lock the operator out
+  mid-deploy is not worth any tidiness. scrypt from the stdlib (no new dependency), session
+  tokens stored as digests, revocation and expiry checked on every request, sign-out
+  revokes server-side. First account bootstraps from the environment, once, and never
+  overwrites. **Next: roles** — the column exists and nothing enforces it yet.
+
 - **Phase 4 started: every state change is attributable** (ADR-0053, 2026-08-06). The
   first slice of "multi-user auth with actor identity", done deliberately BEFORE any login
   change because it is additive and cannot lock anyone out. Dozens of decision routes

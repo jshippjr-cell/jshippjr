@@ -1330,6 +1330,31 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             name TEXT PRIMARY KEY, owner TEXT, expires_at TEXT, acquired_at TEXT
         )"""
     )
+    # Real accounts and real sessions (ADR-0054), ADDITIVELY — the shared passphrase
+    # keeps working as break-glass, because a change that can lock the operator out of
+    # the system running their business is not worth any amount of tidiness.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS user_account (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT, name TEXT,
+            password_hash TEXT,       -- scrypt$n$r$p$salt$hash — parameters travel with it
+            role TEXT DEFAULT 'operator',
+            created_at TEXT, last_login_at TEXT, disabled_at TEXT
+        )"""
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_account_email "
+                 "ON user_account(email)")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS user_session (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT,          -- SHA-256 of the cookie; the token is never stored
+            user_id INTEGER,
+            created_at TEXT, expires_at TEXT, last_seen_at TEXT, revoked_at TEXT,
+            user_agent TEXT
+        )"""
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_session_token "
+                 "ON user_session(token_hash)")
     # WHO did this (ADR-0053). Every state change, attributed. Today there is one
     # operator and a shared passphrase, so the actor is a ROLE rather than a name — and
     # recording a name we do not have would be a lie in an audit trail. What the system
@@ -1689,6 +1714,7 @@ _INDEXES = (
     # decision ever made.
     ("idx_decision_log_subject", "decision_log(subject_type, subject_id)"),
     ("idx_decision_log_at", "decision_log(at)"),
+    ("idx_user_session_user", "user_session(user_id)"),
 )
 
 

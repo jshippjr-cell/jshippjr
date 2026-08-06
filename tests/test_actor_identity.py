@@ -149,7 +149,9 @@ def test_the_operator_is_a_role_because_that_is_all_we_know(monkeypatch):
     monkeypatch.setattr("chordential_oia.web.shell.admin_authed", lambda r: True)
     who = actor.identify(Req())
     assert who["kind"] == actor.OPERATOR
-    assert who["label"] == "the operator"
+    # Now that accounts exist (ADR-0054) the label says WHICH kind of operator, because
+    # "the operator" alone would read as a person once some sessions really are people.
+    assert who["label"] == "the operator (shared passphrase)"
     assert "Jon" not in who["label"], "a name we do not have must not be asserted"
 
 

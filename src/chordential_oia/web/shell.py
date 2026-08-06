@@ -98,7 +98,41 @@ def admin_cookie_value(token: str) -> str:
     return hashlib.sha256(f"cdl|{token}".encode()).hexdigest()
 
 
+def signed_in_user(request: Request):
+    """The account behind this request, or None (ADR-0054).
+
+    A real account is the only thing that can give the decision log a NAME. Checked on
+    every request rather than trusted from the cookie, because a session that cannot be
+    revoked is not a session — it is a password you cannot change.
+    """
+    from . import accounts
+
+    token = request.cookies.get(accounts.SESSION_COOKIE) or ""
+    if not token:
+        return None
+    conn = None
+    try:
+        conn = db.connect()
+        return accounts.session_user(conn, token)
+    except Exception:                       # noqa: BLE001 — never 500 the gate
+        return None
+    finally:
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
+
+
 def admin_authed(request: Request) -> bool:
+    """Signed in with an account, OR holding the shared passphrase.
+
+    Both, deliberately and indefinitely. The passphrase is BREAK-GLASS: accounts are an
+    addition, and a deploy that could lock the operator out of the system running their
+    business — at the exact moment they need to get in and fix it — is not a trade worth
+    making for tidiness. Retiring it is a decision to take later, on purpose, with an
+    account already proven to work.
+    """
+    if signed_in_user(request) is not None:
+        return True
     token = admin_secret()
     if not token:
         return True  # gate disabled
@@ -107,4 +141,5 @@ def admin_authed(request: Request) -> bool:
 
 
 __all__ = ["templates", "render", "public_base", "safe_local",
-           "ADMIN_COOKIE", "admin_secret", "admin_cookie_value", "admin_authed"]
+           "ADMIN_COOKIE", "admin_secret", "admin_cookie_value", "admin_authed",
+           "signed_in_user"]

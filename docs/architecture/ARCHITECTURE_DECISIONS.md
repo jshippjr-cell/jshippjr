@@ -1603,6 +1603,44 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0054 — Accounts and sessions, added beside the passphrase and never instead of it
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
+auth) · `web/accounts.py`, `web/auth_routes.py`, `web/shell.py`, `web/actor.py`
+**Decision.** Real accounts (`user_account`) and real sessions (`user_session`).
+`admin_authed` accepts EITHER a valid session OR the shared passphrase, and
+`actor.identify` now returns the signed-in person's NAME — which is what ADR-0053 was
+built as a seam for: the decision log gained names without one call site changing.
+**THE INVARIANT: the passphrase keeps working, always.** It is break-glass, not legacy. A
+change that could lock the operator out of the system running their business is not worth
+any amount of tidiness, and the failure would arrive mid-deploy with no way back in.
+Retiring it is a decision to take later, deliberately, with an account already proven —
+and a test asserts it still works both with and without accounts present, and even when
+session lookup raises.
+**Security choices, and why each one.** `hashlib.scrypt` from the stdlib: memory-hard, and
+NO new dependency, because this repo has twice shipped a declared dependency production
+never installed (ADR-0043 amended, ADR-0048). The hash carries its own parameters, so the
+cost can be raised later without invalidating existing passwords. Session tokens are stored
+as SHA-256 digests — a session table full of live tokens is a table full of credentials,
+readable from any backup. Revocation and expiry are checked on EVERY request, because a
+session you cannot revoke is not a session, it is a password you cannot change; that is
+also what makes disabling an account take effect immediately rather than in thirty days.
+Sign-out revokes server-side rather than clearing a cookie. Authentication hashes even for
+an unknown address, so response time does not enumerate who has an account.
+**The first account comes from the environment.** A public sign-up page on an internal
+console is an open door; a seeded default password is a published one. Env vars are set by
+whoever already controls the deploy, so they prove nothing new — the right bar for a
+bootstrap. It runs once and never resets an existing password, so leaving the variables set
+cannot hand the account to whoever last edited the environment.
+**Consequences.** Adding this pushed `app.py` to 799 lines against the 750-line guard, so
+the auth routes moved into `auth_routes.py` — the guard did exactly its job, and raising the
+limit instead is how a 9,133-line file happens a few lines at a time. `tests/
+test_accounts_sessions.py` covers the lock-out cases first and the rest after: the
+passphrase with and without accounts, a broken session lookup, a named actor in the log, a
+passphrase actor that still admits it is shared, revocation, expiry, disabled accounts,
+salting, a corrupt hash failing closed, and a bootstrap that never overwrites.
+**Still to come:** roles (the column exists and nothing enforces it yet), and per-account
+password change / invite.
+
 ### ADR-0053 — Every state change is attributable, before anyone can log in
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
 auth with actor identity on every decision) — the FIRST slice · `web/actor.py`,

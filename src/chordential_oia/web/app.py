@@ -14,25 +14,20 @@ Run it::
 
 from __future__ import annotations
 
-import hmac
 import json
 import os
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import (
-    HTMLResponse, PlainTextResponse, RedirectResponse, Response)
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from ..storage import get_object_store, storage_status
-from . import actor, campaigns, db, discovery, scheduler, seed, uploads, webpush
+from . import accounts, actor, campaigns, db, discovery, scheduler, seed, uploads, webpush
 from .filters import displayurl, money, pct, slug
-from .shell import (
-    ADMIN_COOKIE, admin_authed as _admin_authed, admin_cookie_value as _admin_cookie_value,
-    admin_secret as _admin_secret,
-)
+from .shell import admin_authed as _admin_authed, admin_secret as _admin_secret
 from .agencies_routes import router as agencies_router
 from .discovery_routes import router as discovery_router
 from .talent_routes import router as talent_router
@@ -45,13 +40,14 @@ from .workspace_routes import router as workspace_router
 from .console_routes import router as console_router
 from .billing_routes import router as billing_router
 from .meetings_routes import router as meetings_router
+from .auth_routes import router as auth_router
 from .public import router as public_router
 
 _HERE = os.path.dirname(__file__)
 # ADR-0044: created in shell.py so a route module can import it without importing
 # app.py (which imports the route modules). Everything below still decorates THIS
 # object — the filters and globals did not move.
-from .shell import render, safe_local as _safe_local, templates  # noqa: E402
+from .shell import templates  # noqa: E402
 
 
 def _static_version() -> str:
@@ -171,6 +167,18 @@ async def lifespan(app: FastAPI):
 
     conn = db.connect()
     db.init_db(conn)
+    # The first account, from the environment, once (ADR-0054). A public sign-up page on
+    # an internal console is an open door and a seeded default password is a published
+    # one; env vars are set by whoever already controls the deploy, so they prove nothing
+    # new — the right bar for a bootstrap, and no lower.
+    try:
+        _uid = accounts.bootstrap_from_env(conn)
+        if _uid:
+            print(f"[auth] created the first account (#{_uid}) from "
+                  f"CHORDENTIAL_FIRST_USER — those variables can be removed now.",
+                  flush=True)
+    except Exception as _e:                      # noqa: BLE001 — never block a boot
+        print(f"[auth] first-account bootstrap skipped: {_e}", flush=True)
     # One buyer across every surface (ADR-0050). Idempotent and self-limiting: rows
     # already linked, and rows that carry no email and never can be, are excluded by the
     # query, so this costs a scan on the first boot and nothing on the ones after.
@@ -272,6 +280,7 @@ app.include_router(workspace_router)
 app.include_router(console_router)
 app.include_router(billing_router)
 app.include_router(meetings_router)
+app.include_router(auth_router)
 app.include_router(public_router)
 
 
@@ -586,71 +595,6 @@ def push_test():
     else:
         state = "error"
     return RedirectResponse(f"/signals?push={state}", status_code=303)
-
-
-# --------------------------------------------------------------------------- #
-# Admin sign-in (only meaningful when CHORDENTIAL_ADMIN_TOKEN is set)
-# --------------------------------------------------------------------------- #
-@app.get("/admin/login", response_class=HTMLResponse)
-def admin_login_page(request: Request, next: str = "/dashboard"):
-    if _admin_authed(request):
-        return RedirectResponse(_safe_local(next, "/dashboard"), status_code=303)
-    return render(
-        request, "admin_login.html", next=_safe_local(next, "/dashboard"), error=False
-    )
-
-
-@app.post("/admin/login")
-def admin_login(request: Request, password: str = Form(""), next: str = Form("/dashboard")):
-    token = _admin_secret()
-    if not token:
-        return RedirectResponse("/dashboard", status_code=303)
-    if hmac.compare_digest(password.strip(), token):
-        resp = RedirectResponse(_safe_local(next, "/dashboard"), status_code=303)
-        resp.set_cookie(
-            ADMIN_COOKIE, _admin_cookie_value(token),
-            httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
-        )
-        return resp
-    return render(
-        request, "admin_login.html", next=_safe_local(next, "/dashboard"), error=True
-    )
-
-
-@app.get("/admin/logout")
-def admin_logout():
-    resp = RedirectResponse("/admin/login", status_code=303)
-    resp.delete_cookie(ADMIN_COOKIE)
-    return resp
-
-
-# The /lanes kanban was deleted (ADR-0035). It rendered the SAME rows as /inbox —
-# measured identical on the seeded book — and its one unique control, a "Won"
-# button, POSTed status=Won with no outcome_value, booking a won deal at $0 and
-# contradicting the rule documented above at _NEXT_STATUS. /inbox is the deal list
-# (search + six filters + the same advance); the dashboard is the daily read.
-
-
-# --------------------------------------------------------------------------- #
-# Discovery scheduling (ADR-0014 §4/§6) — the meeting is tied to the opportunity
-# before it begins. Manual today (log the time + link); the Zoom + Recall auto-flow
-# lights up behind the same routes when the provider seams are configured.
-# --------------------------------------------------------------------------- #
-
-
-# --------------------------------------------------------------------------- #
-# Relevant-work audio uploads — the founder uploads samples from their machine.
-#
-# The persistence caveat that used to sit here ("these land on the LOCAL disk...
-# durable storage needs object storage (S3/R2). Acceptable for now") is answered:
-# ADR-0043 put every write and read behind `storage.get_object_store()`. Set
-# CHORDENTIAL_STORAGE=s3 and the bytes stop depending on this machine. Left unset,
-# behaviour is exactly what it was.
-#
-# `_safe_upload_path` lived here and is gone: its traversal guard now belongs to
-# LocalObjectStore._path, so the check travels with the store that needs it rather
-# than sitting beside one of several callers.
-# --------------------------------------------------------------------------- #
 
 
 @app.get("/uploads/{name}")

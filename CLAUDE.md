@@ -43,7 +43,8 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   middleware, the admin gate, PWA + Web Push, `/uploads`). Below it sit
   `shell.py` (Jinja env, `render`, `safe_local`, admin auth), the route modules
   (`agencies_`, `discovery_`, `talent_`, `opportunity_`, `project_`, `creator_`,
-  `campaign_`, `simulator_`, `workspace_`, `console_`, `billing_`, `meetings_routes.py`)
+  `campaign_`, `simulator_`, `workspace_`, `console_`, `billing_`, `meetings_routes.py`,
+  `auth_routes.py`)
   and the helper layer
   (`uploads.py`, `billing.py`, `delivery_ops.py`, `opportunity_ops.py`). **Imports flow one
   way: `app.py` → routes → helpers → `shell.py`.** Never import `app.py` from any of them;
@@ -70,7 +71,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,539 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,562 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
@@ -90,8 +91,12 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `docs/zero-downtime-cutover.md`.
 - `CHORDENTIAL_SEED_DEMO=1` — seed the demo dataset (off in prod by default → prod shows
   real data only). **Demo campaigns / pipeline only appear with this on.**
-- `CHORDENTIAL_ADMIN_TOKEN` — admin passphrase; unset = gate disabled. Public surfaces
-  (front-of-house, `/healthz`, token-gated portals) bypass the gate.
+- `CHORDENTIAL_ADMIN_TOKEN` — the shared passphrase. **Still works, always** — it is the
+  break-glass beside real accounts (ADR-0054), not a legacy path. Unset = gate disabled.
+- **Accounts** (ADR-0054): sign in with email + password for a NAMED actor on every
+  decision. Bootstrap the first one with `CHORDENTIAL_FIRST_USER` /
+  `CHORDENTIAL_FIRST_PASSWORD` / `CHORDENTIAL_FIRST_NAME` — created once at boot, never
+  overwritten, and the variables can be removed afterwards.
 - `CHORDENTIAL_PUBLIC_DOMAIN` (default `https://chordential.com`) — absolute links
   (first-touch page, reviewer links, Stripe redirects).
 - **Provider seams (null by default, real when configured):** payments —

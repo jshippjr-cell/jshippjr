@@ -11,12 +11,22 @@
   <div class="card admin-login-card">
     <img class="admin-login-logo" src="/static/public/wordmark-dark.png" alt="Chordential">
     <div class="admin-login-tag">Procurement OS — internal</div>
-    {% if error %}<div class="admin-login-error">Incorrect passphrase. Try again.</div>{% endif %}
+    {% if error %}<div class="admin-login-error">That didn\u2019t match. Try again.</div>{% endif %}
+    {# An email signs in an ACCOUNT and puts a NAME on every decision that follows.
+       Leaving it blank falls back to the shared passphrase, which still works and
+       always will \u2014 it is the way back in if anything about accounts goes wrong
+       (ADR-0054). #}
     <form method="post" action="/admin/login" class="admin-login-form">
       <input type="hidden" name="next" value="{{ next }}">
-      <input type="password" name="password" placeholder="Passphrase" autofocus required>
+      <input type="email" name="email" placeholder="Email (optional)" autocomplete="username">
+      <input type="password" name="password" placeholder="Password or passphrase"
+             autocomplete="current-password" autofocus required>
       <button class="btn primary" type="submit">Sign in</button>
     </form>
+    <div class="admin-login-foot muted small" style="margin-top:10px">
+      With an email you sign in as <em>you</em>, and your name goes on every decision you
+      make. Without one, the shared passphrase still works.
+    </div>
     <div class="admin-login-foot muted small">This is a private workspace. The public site is at <a class="link" href="/">chordential.com</a>.</div>
   </div>
 </div>

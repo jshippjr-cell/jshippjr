@@ -32,7 +32,8 @@ ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "project_routes.py", "creator_routes.py",
            "campaign_routes.py", "simulator_routes.py",
            "workspace_routes.py", "console_routes.py",
-           "billing_routes.py", "meetings_routes.py"]    # the whole route layer
+           "billing_routes.py", "meetings_routes.py",
+           "auth_routes.py"]                             # the whole route layer
 
 # The helper layer (ADR-0044). Measured, not chosen: of the 46 helpers `/opportunity`
 # and `/project` reach for, 16 are called by two or more route groups, and the
