@@ -94,6 +94,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **An upload now says what happened** (2026-08-06). The byte-progress bar was honest
+  about the upload and then said nothing about the RESULT: on success the handler called
+  `window.location.reload()`, throwing away the redirect the server had just issued —
+  anchor and all — and dropping the operator wherever they happened to be. On the delivery
+  console that is **three full screens** from the card the upload produces (measured in a
+  browser: form at y=3080, card at y=288, 800px viewport). Reported verbatim in a live
+  session: *"I uploaded a new version twice, it went nowhere, I don't know where to go to
+  play it back."* The upload had worked both times. Now every `data-upload` form declares
+  where its result lands and what it means, the page returns to that card and haloes it,
+  and a dismissing banner names the file — for a version, saying plainly that **nothing has
+  gone to the client yet**, because every upload waits for an explicit publish and an
+  acknowledgement that implied otherwise would be worse than the silence it replaced.
+
 - **`delivery_json` stopped losing writes** (ADR-0049, 2026-08-06). Merging one key was a
   read-modify-write in Python, so two overlapping writers meant the later one carried a
   document read before the earlier — the earlier change gone, nothing raised, both callers

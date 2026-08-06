@@ -243,6 +243,74 @@
     return mb >= 10 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
   }
 
+  /* ---- What happens AFTER the bytes arrive. --------------------------------
+   * The bar was honest about the upload and then said nothing about the result:
+   * `window.location.reload()`, which throws away the redirect the server just
+   * issued — anchor and all — and drops the operator wherever they happened to be.
+   * On the delivery console the "Log a new version" form is at line 634 and the card
+   * it produces is at line 99: five hundred lines up, off-screen. Reported verbatim
+   * during a live session — *"I uploaded a new version twice, it went nowhere, I
+   * don't know where to go to play it back."* The upload had worked both times.
+   *
+   * So: remember what landed, go to the anchor the form declares, and SAY what
+   * happened when the page comes back. The note is per-form and states the real
+   * consequence, which for a version is that nothing has gone to the client yet —
+   * every upload waits for an explicit publish ("the machine proposes, Jon
+   * disposes"), and an acknowledgement that let someone believe otherwise would be
+   * worse than the silence it replaces. */
+  var ACK = "chordential-upload-ack";
+
+  function landed(form, filename) {
+    var after = form.getAttribute("data-after") || "";
+    try {
+      sessionStorage.setItem(ACK, JSON.stringify({
+        name: filename || "",
+        note: form.getAttribute("data-note") || "",
+        target: after,
+      }));
+    } catch (e) { /* private mode: the reload still lands on the anchor */ }
+    if (after) {
+      try { window.location.hash = after; } catch (e) {}
+    }
+    window.location.reload();
+  }
+
+  /* Shown once, on the page the upload produced. */
+  function showAck() {
+    var raw;
+    try { raw = sessionStorage.getItem(ACK); sessionStorage.removeItem(ACK); }
+    catch (e) { return; }
+    if (!raw) return;
+    var ack;
+    try { ack = JSON.parse(raw); } catch (e) { return; }
+
+    var el = document.createElement("div");
+    el.className = "lv-ack";
+    el.setAttribute("role", "status");          // announced, not just drawn
+    var what = ack.name ? "“" + ack.name + "” uploaded." : "Uploaded.";
+    el.innerHTML = '<b></b> <span></span><button type="button" aria-label="Dismiss">×</button>';
+    el.querySelector("b").textContent = what;
+    el.querySelector("span").textContent = ack.note || "";
+    function dismiss() {
+      el.classList.remove("go");
+      setTimeout(function () { el.remove(); }, 260);
+    }
+    el.querySelector("button").addEventListener("click", dismiss);
+    document.body.appendChild(el);
+    setTimeout(function () { el.classList.add("go"); }, 20);
+    // It sits over the page, so it leaves on its own. Long enough to read twice;
+    // the card it points at is the durable record, this is only the pointer to it.
+    setTimeout(dismiss, 9000);
+
+    // Halo the thing that just arrived, so the eye lands on it rather than hunting.
+    var target = ack.target && document.querySelector(ack.target);
+    if (target && window.Live && Live.halo) Live.halo(target);
+  }
+
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", showAck);
+  else showAck();
+
   /* The progress element is created on demand so no template has to carry
      markup for a state it may never enter. */
   function rail(form) {
@@ -293,7 +361,7 @@
       note.textContent = "Uploaded — filing it…";
     });
     xhr.addEventListener("load", function () {
-      if (xhr.status < 400) { window.location.reload(); return; }
+      if (xhr.status < 400) { landed(form, input.files[0].name); return; }
       el.classList.add("failed");
       note.textContent = "Upload failed (" + xhr.status + ") — the file is still chosen, try again";
       if (btn) { btn.disabled = false; btn.textContent = label; }

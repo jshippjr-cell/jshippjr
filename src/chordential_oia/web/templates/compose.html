@@ -92,7 +92,7 @@
   <p class="muted small">No tracks yet — the page shows “a tailored example is available on request” until you add one.</p>
   {% endif %}
 
-  <form class="stack" method="post" enctype="multipart/form-data" data-upload action="/opportunity/{{ row['id'] }}/doc/upload" style="margin-top:10px">
+  <form class="stack" method="post" enctype="multipart/form-data" data-upload data-note="Attached to this document." action="/opportunity/{{ row['id'] }}/doc/upload" style="margin-top:10px">
     <input type="hidden" name="action" value="add">
     <input type="hidden" name="return_to" value="/opportunity/{{ row['id'] }}/compose">
     <label>Track label</label>

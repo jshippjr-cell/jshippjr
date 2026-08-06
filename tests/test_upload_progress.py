@@ -72,10 +72,28 @@ def test_progress_is_driven_by_real_bytes():
 
 
 def test_no_indeterminate_animation_stands_in_for_progress():
-    block = LIVE_JS.split("data-upload")[1]
+    """The Living OS rule, guarded at the BAR rather than the file.
+
+    This used to ban timers everywhere after the first mention of `data-upload`, which
+    was a fine proxy while the only thing down there was the bar. It stopped being one
+    when the success acknowledgement arrived: that banner fades in and dismisses itself
+    on a clock, and correctly so — it reports a finished fact, it does not animate an
+    unfinished one. Rather than punch a hole in the rule, the scope narrows to the
+    region that actually draws progress, and gains the assertion that matters more —
+    the bar's width can only ever come from bytes.
+    """
+    bar_region = LIVE_JS.split('xhr.upload.addEventListener("progress"')[1] \
+                        .split('xhr.upload.addEventListener("load"')[0]
     for banned in ("setInterval", "setTimeout", "Math.random"):
-        assert banned not in block, (
-            f"{banned} in the upload path — progress must come from bytes, not a clock")
+        assert banned not in bar_region, (
+            f"{banned} while the bar is being drawn — progress must come from bytes")
+
+    # Every width the bar is ever given, and where each one comes from.
+    widths = re.findall(r"fill\.style\.width\s*=\s*([^;]+);", LIVE_JS)
+    assert widths, "the bar is never given a width — has it been renamed?"
+    for w in widths:
+        assert "pct" in w or "100%" in w, (
+            f"the bar's width comes from {w.strip()!r}, which is not a byte count")
 
 
 def test_a_failure_says_so_and_keeps_the_file():
@@ -130,3 +148,72 @@ def test_the_other_large_file_attachments_are_covered_too(template):
     assert audio_forms, f"{template} no longer has a file upload — was it moved?"
     assert any("data-upload" in f for f in audio_forms), (
         f"{template} posts an audio attachment with no progress")
+
+
+# --------------------------------------------------------------------------- #
+# …and then say what HAPPENED
+# --------------------------------------------------------------------------- #
+def test_every_upload_form_says_what_landed():
+    """The bar was honest about the bytes and then said nothing about the result.
+
+    On success the handler called `window.location.reload()`, which throws away the
+    redirect the server just issued — anchor and all — and drops the operator wherever
+    they happened to be. On the delivery console that is three full screens from the
+    card the upload produces (measured in a browser: form at y=2858, card at y=288,
+    800px viewport). Reported verbatim during a live session: *"I uploaded a new
+    version twice, it went nowhere, I don't know where to go to play it back."* The
+    upload had worked both times.
+
+    Every `data-upload` form must therefore declare what to say. A silent success is
+    the failure this fixes, and a new form that forgets is the same bug again.
+    """
+    silent = []
+    for path in sorted(TPL.rglob("*.html")):
+        html = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"<form[^>]*\bdata-upload\b[^>]*>", html, re.S):
+            if "data-note=" not in m.group(0):
+                silent.append(f"{path.name}: {m.group(0)[:90]}…")
+    assert silent == [], (
+        "these uploads succeed without telling the operator anything:\n  "
+        + "\n  ".join(silent))
+
+
+def test_the_console_uploads_point_at_the_card_they_produce():
+    """`data-after` is the anchor the operator is taken to. It has to name a section
+    that actually exists, or the reload lands nowhere and we are back to hunting."""
+    missing = []
+    for m in re.finditer(r"<form[^>]*\bdata-upload\b[^>]*>", CONSOLE, re.S):
+        tag = m.group(0)
+        after = re.search(r'data-after="#([\w-]+)"', tag)
+        if not after:
+            missing.append(f"no data-after: {tag[:80]}…")
+        elif f'id="{after.group(1)}"' not in CONSOLE:
+            missing.append(f'data-after="#{after.group(1)}" but no such id in the page')
+    assert missing == [], "\n  ".join(missing)
+
+
+def test_the_version_upload_does_not_claim_the_client_has_it():
+    """Every upload lands as a PENDING submission and waits for an explicit publish
+    ("the machine proposes, Jon disposes"). An acknowledgement that let the operator
+    believe the client already had it would be worse than the silence it replaces."""
+    form = re.search(r'<form[^>]*/delivery/version"[^>]*>', CONSOLE, re.S).group(0)
+    note = re.search(r'data-note="([^"]*)"', form).group(1)
+    assert "nothing has gone to the client" in note.lower(), note
+
+
+def test_the_acknowledgement_survives_the_reload_and_then_leaves():
+    """It is written before the reload and read after it, because the page the
+    operator needs to be told about is the one that has not loaded yet. And it sits
+    over the page, so it dismisses itself — the card it points at is the durable
+    record; this is only the pointer."""
+    assert "sessionStorage.setItem(ACK" in LIVE_JS
+    assert "sessionStorage.getItem(ACK)" in LIVE_JS
+    assert "sessionStorage.removeItem(ACK)" in LIVE_JS, "it would fire on every later page"
+    assert "setTimeout(dismiss," in LIVE_JS, "a banner that never leaves covers the page"
+    assert 'role", "status"' in LIVE_JS, "an acknowledgement nobody announces is half of one"
+
+
+def test_the_bare_reload_is_gone():
+    """The regression is literally one line coming back."""
+    assert "window.location.reload(); return;" not in LIVE_JS
+    assert "landed(form, input.files[0].name)" in LIVE_JS

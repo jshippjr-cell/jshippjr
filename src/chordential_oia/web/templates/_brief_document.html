@@ -255,7 +255,7 @@
       {% endif %}
 
       {% if edit %}
-      <form class="capdoc-edit no-print" method="post" enctype="multipart/form-data" data-upload
+      <form class="capdoc-edit no-print" method="post" enctype="multipart/form-data" data-upload data-note="Attached to the brief."
             action="/opportunity/{{ row['id'] }}/doc/upload">
         <input type="hidden" name="action" value="add">
         <div class="capdoc-rail-label">Upload an audio sample from your machine</div>
