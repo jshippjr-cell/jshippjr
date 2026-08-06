@@ -152,6 +152,23 @@ async def lifespan(app: FastAPI):
               flush=True)
     else:
         print("[storage] object storage active — uploads are durable.", flush=True)
+    # The same honesty the storage line owes: on Postgres, say whether connections are
+    # actually pooled. `psycopg_pool` is an optional package, and a declared dependency
+    # that production never installed is exactly how uploads once landed with zero copies
+    # while the boot line announced durability (ADR-0043, amended). "We thought pooling
+    # was on" must not be a thing anyone can believe by default.
+    _pool = db.pool_status()
+    if _pool["applicable"] and not _pool["requested"]:
+        print("[db] connection pooling is DISABLED by CHORDENTIAL_DB_POOL — every call "
+              "opens a new Postgres connection.", flush=True)
+    elif _pool["applicable"] and not _pool["available"]:
+        print("[db] WARNING: psycopg_pool is NOT installed, so every call opens a new "
+              "Postgres connection (TCP + TLS + auth, several per page). Install the "
+              "`postgres` extra — and check the BUILD COMMAND in the Render dashboard, "
+              "which is what actually runs.", flush=True)
+    elif _pool["applicable"]:
+        print(f"[db] Postgres connection pool: {_pool['min']}–{_pool['max']}.", flush=True)
+
     conn = db.connect()
     db.init_db(conn)
     discovery.sync_catalog(conn)
@@ -181,6 +198,10 @@ async def lifespan(app: FastAPI):
         # instance waits out the TTL before anything runs — which is the whole
         # length of a blue-green handover spent with the engines stopped.
         scheduler._drop_lease()
+        # Release the pooled connections too, so a draining instance is not still
+        # holding a slice of a capped Postgres connection limit that the incoming
+        # instance is at that moment trying to claim.
+        db.close_pool()
 
 
 class SelectiveGZip:

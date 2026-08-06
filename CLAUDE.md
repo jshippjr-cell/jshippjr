@@ -66,7 +66,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,453 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,463 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.

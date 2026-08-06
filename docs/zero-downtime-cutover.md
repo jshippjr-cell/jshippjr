@@ -262,7 +262,38 @@ anything written to SQLite afterwards is not in it.
 > ⛔ Do not start this until **Step 1e reported `failed=0`** and you have played a master
 > and downloaded a ZIP from the bucket.
 
-Edit the service config (Blueprint sync of `render.yaml`, or the dashboard):
+#### First: confirm the connection pool is really in the image
+
+Same trap as `boto3`, same fix. `connect()` is called **254 times across the web layer**
+— several per page — and on Postgres each one without the pool is a TCP connect, a TLS
+handshake and an auth round trip before a single row is read. Measured on a real server
+over loopback (the *friendliest* case, no TLS, same machine):
+
+| | server backends for 25 calls | per connect |
+|---|---|---|
+| pool off | 25 | 3.95 ms |
+| pool on | 2 | 0.38 ms |
+
+`psycopg_pool` ships with the `postgres` extra (`psycopg[binary,pool]`). It is optional,
+and a missing pool degrades silently to the old behaviour — so check, in the Render
+**Shell**:
+
+```
+python -c "import psycopg_pool, sys; print('psycopg_pool', psycopg_pool.__version__)"
+```
+
+If that fails, fix it where Render actually reads it — **service → Settings → Build &
+Deploy → Build Command** — and redeploy. The boot log is the second check: on Postgres it
+prints either `[db] Postgres connection pool: 1–10.` or a **WARNING** that every call is
+opening a new connection. Nothing here fails the cutover; it just makes every page slower
+than it needs to be, permanently and invisibly, which is the failure mode worth one
+command up front.
+
+Bounds are `CHORDENTIAL_DB_POOL_MIN` / `_MAX` (default 1–10) and the kill switch is
+`CHORDENTIAL_DB_POOL=0`. Keep the max under the plan's connection limit: the scheduler
+shares this pool with the web workers.
+
+#### Then: edit the service config (Blueprint sync of `render.yaml`, or the dashboard)
 
 1. Set **`CHORDENTIAL_DB`** to the Postgres URL (or use a `fromDatabase` reference).
 2. **Remove the `disk:` block** and the old `/var/data` `CHORDENTIAL_DB` value — only

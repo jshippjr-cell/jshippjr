@@ -12,11 +12,13 @@ service; the schema maps cleanly onto Postgres/Supabase later.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
 import secrets
 import sqlite3
+import threading
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -552,15 +554,21 @@ class _PgCursor:
 
 
 class _PgConn:
-    """Adapts a psycopg connection to the sqlite3.Connection API the app uses."""
+    """Adapts a psycopg connection to the sqlite3.Connection API the app uses.
+
+    ``pool`` is set when the connection was borrowed rather than opened; ``close()``
+    then hands it back instead of tearing down a TCP session the next call will only
+    have to rebuild.
+    """
 
     # Tables whose PK column is `id` — an INSERT into one needs `RETURNING id` so
     # the shim can expose `cursor.lastrowid` (psycopg has none). Derived once from
     # the live catalog (covers tables created in _SCHEMA *and* _ensure_schema).
     _id_tables_cache = None
 
-    def __init__(self, conn):
+    def __init__(self, conn, pool=None):
         self._conn = conn
+        self._pool = pool
 
     def _id_tables(self):
         if _PgConn._id_tables_cache is None:
@@ -609,7 +617,24 @@ class _PgConn:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        """Hand the connection back, or shut it if it was never borrowed.
+
+        The rollback is not belt-and-braces. Today `close()` on an uncommitted
+        connection discards the work — every caller commits explicitly — and a pooled
+        connection must reach the next borrower in exactly that state, not carrying an
+        open snapshot and whatever locks came with it. So the semantics are preserved
+        by making them explicit rather than by trusting the pool to guess.
+        """
+        pool, self._pool = self._pool, None        # never return the same one twice
+        if pool is None:
+            self._conn.close()
+            return
+        try:
+            self._conn.rollback()
+            pool.putconn(self._conn)
+        except Exception:                          # noqa: BLE001 — a poisoned connection
+            try: self._conn.close()                # must not poison the pool with it
+            except Exception: pass
 
     def __enter__(self):
         return self
@@ -619,10 +644,127 @@ class _PgConn:
         return False
 
 
+# --------------------------------------------------------------------------- #
+# The connection pool
+# --------------------------------------------------------------------------- #
+# `connect()` is called 254 times across the web layer — a connection per handler,
+# several per page — and each one is closed immediately. On SQLite that is a file
+# open and genuinely cheap. On Postgres it is a TCP connect, a TLS handshake and an
+# auth round trip, to a host across the network, before a single row is read. The
+# cutover turns the cheapest operation in the system into one of the most expensive
+# without changing a line of calling code.
+#
+# So the pool goes BEHIND `connect()`, not in front of it: every existing call site
+# keeps working unchanged, `close()` returns the connection instead of dropping it,
+# and SQLite is untouched (its connections are cheap, and sharing one across threads
+# is a hazard, not an optimisation).
+#
+# `psycopg_pool` is an optional package, and this repo has already lost data to a
+# declared dependency that production never installed — `render.yaml` carried the
+# `s3` extra while Render built from its stored dashboard command, so uploads landed
+# with zero copies while the boot line announced durability (ADR-0043, amended). The
+# lesson is applied here: a missing pool degrades to exactly today's behaviour, and
+# SAYS SO at boot. It must never be possible to believe pooling is on when it isn't.
+_POOL = None
+_POOL_URL = ""
+_POOL_LOCK = threading.Lock()
+_POOL_SPEC = None
+
+
+def pool_available() -> bool:
+    """Is `psycopg_pool` importable? Memoised — a deploy cannot gain a package
+    without a restart, and this sits on the per-connection path."""
+    global _POOL_SPEC
+    if _POOL_SPEC is None:
+        _POOL_SPEC = importlib.util.find_spec("psycopg_pool") is not None
+    return _POOL_SPEC
+
+
+def pool_enabled() -> bool:
+    return os.environ.get("CHORDENTIAL_DB_POOL", "1").strip().lower() not in (
+        "0", "false", "no", "off")
+
+
+def _pool_size() -> tuple:
+    def _int(name, default):
+        try:
+            return max(0, int(os.environ.get(name, default)))
+        except ValueError:
+            return default
+    # Modest by default. Render's managed Postgres caps connections, the scheduler
+    # shares this pool with the web workers, and a pool larger than the server allows
+    # fails at the worst possible moment rather than the most obvious one.
+    return _int("CHORDENTIAL_DB_POOL_MIN", 1), _int("CHORDENTIAL_DB_POOL_MAX", 10)
+
+
+def _get_pool(url: str):
+    """The process-wide pool for ``url``, or None if pooling is off/unavailable."""
+    global _POOL, _POOL_URL
+    if not (pool_enabled() and pool_available()):
+        return None
+    if _POOL is not None and _POOL_URL == url:
+        return _POOL
+    with _POOL_LOCK:
+        if _POOL is not None and _POOL_URL == url:
+            return _POOL
+        if _POOL is not None:                      # the DSN changed (tests do this)
+            try: _POOL.close()
+            except Exception: pass
+            _POOL = None
+        try:
+            from psycopg_pool import ConnectionPool
+            lo, hi = _pool_size()
+            _POOL = ConnectionPool(
+                url, min_size=lo, max_size=hi, open=True, timeout=10,
+                # A connection idle for hours behind a load balancer is often already
+                # dead; recycling bounds how stale a borrowed one can be.
+                max_idle=300, max_lifetime=1800,
+                kwargs={"autocommit": False, "row_factory": _pg_row_factory},
+            )
+            _POOL_URL = url
+        except Exception:                          # noqa: BLE001 — degrade, never fail
+            _POOL = None
+            _POOL_URL = ""
+    return _POOL
+
+
+def close_pool() -> None:
+    """Drop the pool at shutdown so a draining instance releases its connections
+    instead of holding them until the server times them out."""
+    global _POOL, _POOL_URL
+    with _POOL_LOCK:
+        if _POOL is not None:
+            try: _POOL.close()
+            except Exception: pass
+        _POOL, _POOL_URL = None, ""
+
+
+def pool_status(db_path: str = "") -> dict:
+    """What is actually happening, for the boot line and the console. "We thought
+    pooling was on" is precisely the belief this repo has been burned by before."""
+    path = db_path or os.environ.get("CHORDENTIAL_DB", DEFAULT_DB_PATH)
+    pg = _is_pg_url(path)
+    lo, hi = _pool_size()
+    return {
+        "backend": "postgres" if pg else "sqlite",
+        "requested": pool_enabled(),
+        "available": pool_available(),
+        "active": bool(pg and pool_enabled() and pool_available() and _POOL is not None),
+        "applicable": pg,
+        "min": lo, "max": hi,
+    }
+
+
 def connect(db_path: str = DEFAULT_DB_PATH):
     if _is_pg_url(db_path):
         import psycopg  # lazy: only production/Postgres needs the driver
         url = db_path.replace("postgres://", "postgresql://", 1)
+        pool = _get_pool(url)
+        if pool is not None:
+            try:
+                return _PgConn(pool.getconn(), pool=pool)
+            except Exception:              # noqa: BLE001 — an exhausted or wedged pool
+                pass                       # must degrade to a direct connection, not 500
         return _PgConn(psycopg.connect(url, autocommit=False, row_factory=_pg_row_factory))
     # SQLite (dev + tests). Ensure the parent dir exists for a mounted-disk path.
     parent = os.path.dirname(db_path)

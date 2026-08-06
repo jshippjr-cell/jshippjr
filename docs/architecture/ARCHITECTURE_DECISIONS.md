@@ -1603,6 +1603,46 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0048 — Pooled Postgres connections, behind the one door
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (request-scoped
+connections / pooling), a cutover precondition · `web/db.py`, `web/app.py`, `pyproject.toml`
+**Decision.** A process-wide `psycopg_pool.ConnectionPool` sits **behind** `db.connect()`,
+not in front of it: every one of the 254 existing call sites is unchanged, `close()` hands
+the connection back instead of tearing it down, and SQLite is untouched. Bounds are
+`CHORDENTIAL_DB_POOL_MIN`/`_MAX` (1–10), kill switch `CHORDENTIAL_DB_POOL=0`, and the pool
+is closed at shutdown so a draining instance stops holding a slice of a capped connection
+limit the incoming one is trying to claim.
+**Why.** `connect()` is called 254 times across the web layer, several per page, each
+closed immediately. On SQLite that is a file open and genuinely cheap — which is exactly
+why nobody noticed. On Postgres it is TCP + TLS + auth to another host before a single row
+is read. Measured on a real Postgres 16 over loopback (the friendliest possible case),
+25 connect/close cycles: **25 distinct server backends and 3.95 ms per connect without the
+pool; 2 backends and 0.38 ms with it.**
+**Why not request-scoped connections instead.** That was the review's phrasing, and it
+would mean a contextvar plus touching every call site, for a benefit the pool already
+delivers — and it would still open a real connection per request. Pooling is the change
+that makes the connection *cheap*; scoping only makes it *rarer*. Scoping can follow later
+on top of a pool, and is worth nothing without one.
+**Why SQLite keeps its own path.** Its connections are cheap, and a pooled SQLite
+connection shared across the handler threadpool is a hazard rather than an optimisation.
+**On the optional dependency.** `psycopg_pool` arrives with the `postgres` extra
+(`psycopg[binary,pool]`). It is optional, and this repo has already lost uploads to a
+declared dependency production never installed — `render.yaml` carried the `s3` extra while
+Render built from its **stored dashboard command**, so writes landed with zero copies while
+the boot line announced durability (ADR-0043, amended). So a missing pool degrades to
+exactly today's behaviour **and says so at boot**, and the cutover runbook checks for it in
+the shell before the flip. It must not be possible to believe pooling is on when it is not.
+**Consequences.** `tests/test_db_pool.py` asserts reuse against the SERVER's own
+`pg_backend_pid()` — a pool that quietly reconnects cannot pass by claiming otherwise —
+and covers what matters more than the speed: a borrowed connection never carries the
+previous borrower's open transaction (with a committed-work control, because a pool that
+rolled everything back would pass the isolation test and lose every write in the product),
+eight threads borrowing at once, a wedged pool degrading to a direct connection rather than
+a 500 on a client's review portal, and `close_pool()` actually releasing the server's
+connections. `close()` rolls back before returning: `close()` on an uncommitted connection
+already discarded the work, and preserving that explicitly is what keeps a pooled
+connection from carrying a snapshot and its locks into the next request.
+
 ### ADR-0047 — Declared indexes, because there were none
 **Status:** Accepted (2026-08-05) · Source: `docs/launch-review.md` Phase 3 (indexes —
 "there are none"), a cutover precondition · `web/db.py`

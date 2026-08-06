@@ -105,6 +105,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   16 hot queries full-scanned, including both client-facing token lookups; now 0 of 16,
   from a declared list of 51. Both verified against a real Postgres 16, not only SQLite —
   they exist for the cutover, so a SQLite-only pass proves the wrong thing.
+- **Postgres connections are pooled** (ADR-0048, 2026-08-06). `connect()` is called 254
+  times across the web layer, several per page, each closed at once — a file open on
+  SQLite, a TCP + TLS + auth round trip to another host on Postgres. The pool sits behind
+  `connect()` so no call site changed and SQLite is untouched. Measured on a real server
+  over loopback: **25 server backends / 3.95 ms per connect without it, 2 / 0.38 ms with**.
+  `psycopg_pool` is optional and a missing one degrades to the old behaviour **and says so
+  at boot** — the runbook now checks for it in the shell before the flip, because the
+  build-command trap that cost the uploads applies here identically.
 
 - **Launch review — Phase 2, first pass: one pricing voice** (ADR-0028, 2026-08-04). The
   same brief was quoted four ways — $9–18k on the site, $4,847 by the engine, ≈$3.1–6.6k on
