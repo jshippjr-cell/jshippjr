@@ -161,6 +161,12 @@
            Blank is fine — the sheet leaves the cell empty rather than guessing. #}
         <label>PRO affiliation <span class="muted small">— for cue sheets; blank if unknown</span></label>
         <input type="text" name="pro" value="{{ t.pro or '' }}" placeholder="ASCAP · BMI · SESAC · PRS …">
+        {# ADR-0061 — publishing is split 50/50 with writers, but a writer's half can
+           only be PAID to an entity registered at a PRO. Blank means the house holds
+           their share and owes it to them; the cue sheet says so rather than writing
+           a publisher line nobody can collect on. #}
+        <label>Publishing entity <span class="muted small">— their half of publishing is held by the house until this is filled in</span></label>
+        <input type="text" name="publisher" value="{{ t.publisher if t.publisher is defined and t.publisher else '' }}" placeholder="e.g. Whitfield Music (BMI)">
         <label>Notes</label>
         <textarea name="notes" rows="2">{{ t.notes }}</textarea>
         <button class="btn primary" type="submit">Save profile</button>

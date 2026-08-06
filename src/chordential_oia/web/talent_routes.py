@@ -207,6 +207,7 @@ def talent_edit(
     rate: str = Form(""),
     rate_unit: str = Form("hourly"),
     pro: str = Form(""),
+    publisher: str = Form(""),
 ):
     conn = db.connect()
     try:
@@ -214,7 +215,7 @@ def talent_edit(
             conn, talent_id, name.strip(), email, disciplines, credits.strip(),
             location, normalize_url(demo_reel_url) or "", notes.strip(),
             rate=_parse_rate(rate), rate_unit=_clean_rate_unit(rate_unit),
-            pro=pro,
+            pro=pro, publisher=publisher,
         )
     finally:
         conn.close()

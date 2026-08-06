@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from . import compensation
 from .capabilities import _RIGHTS_SUMMARY, _deliverables_for, Deliverable
 
 PUBLISHER = "Chordential Music"
@@ -213,7 +214,8 @@ def _contributors(assignments) -> List["Contributor"]:
             continue
         seen.add(key)
         out.append(Contributor(role=role or "Contributor", name=name,
-                               pro=(_val(a, "talent_pro") or "").strip()))
+                               pro=(_val(a, "talent_pro") or "").strip(),
+                               publisher=(_val(a, "talent_publisher") or "").strip()))
     return out
 
 
@@ -364,6 +366,11 @@ class Contributor:
     # PRO affiliation, carried per writer. Blank is honest — the coordinator fills
     # it or asks; asserting one PRO for everybody is worse than leaving it empty.
     pro: str = ""
+    # Their own publishing entity (ADR-0061). Publishing is split 50/50 with writers,
+    # but a writer's half can only be PAID to an entity registered at a PRO — so blank
+    # leaves the share with the house, owed and named, rather than written to a
+    # publisher line nobody can collect on.
+    publisher: str = ""
 
     @property
     def is_writer(self) -> bool:
@@ -539,6 +546,15 @@ def build_cue_sheet(project, assignments, deliverables=None,
     # is the publisher's. These were one "100%" column, which reads as either an
     # impossible 100% writer share per writer or a conflation of the two sides.
     writer_share = f"{100.0 / len(writers):.0f}%" if writers else "100%"
+    # ADR-0061 — the publisher side is split 50/50 with the writers, but only where we
+    # know the entity their half would be paid to. A writer with no registered
+    # publishing entity leaves their share with the house: an unclaimed share on a
+    # filed cue sheet pays nobody and tells them, falsely, that they are covered.
+    pub_rows = compensation.publisher_rows(
+        [{"name": c.name, "publisher": c.publisher, "pro": c.pro} for c in writers])
+    payable = [r for r in pub_rows if r.share > 0]
+    publisher_names = ", ".join(r.name for r in payable) or PUBLISHER
+    publisher_share = ", ".join(r.share_label for r in payable) or "100%"
     usage = _infer_usage(project)
     cutdowns_cue = f"{campaign} — cutdowns"
     m_main = _cue_meta(delivery, campaign)
@@ -547,16 +563,16 @@ def build_cue_sheet(project, assignments, deliverables=None,
         CueRow(
             cue=campaign, usage=(m_main.get("usage") or usage).strip(),
             duration=(m_main.get("duration") or "").strip(),
-            composers=composers, publisher=PUBLISHER, pro=pro,
-            writer_share=writer_share, publisher_share="100%",
+            composers=composers, publisher=publisher_names, pro=pro,
+            writer_share=writer_share, publisher_share=publisher_share,
             isrc=(m_main.get("isrc") or "").strip(),
             iswc=(m_main.get("iswc") or "").strip(),
         ),
         CueRow(
             cue=cutdowns_cue, usage=(m_cut.get("usage") or usage).strip(),
             duration=(m_cut.get("duration") or "").strip(),
-            composers=composers, publisher=PUBLISHER, pro=pro,
-            writer_share=writer_share, publisher_share="100%",
+            composers=composers, publisher=publisher_names, pro=pro,
+            writer_share=writer_share, publisher_share=publisher_share,
             isrc=(m_cut.get("isrc") or "").strip(),
             iswc=(m_cut.get("iswc") or "").strip(),
         ),

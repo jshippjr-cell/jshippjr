@@ -19,7 +19,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from . import compensation
+from .compensation import WriterFee
 from .models import MusicDiscipline, Opportunity
+
+# Which team-shape roles author the work, for splitting the writer fee. Mirrors
+# `delivery.WRITER_ROLES` — a mixer is not a writer and does not share the fee.
+_WRITER_ROLE_NAMES = frozenset({
+    "composer", "co-composer", "arranger", "orchestrator", "topline", "topliner",
+    "songwriter", "lyricist",
+})
 
 # Base role hours for ONE campaign cue carried end to end — brief and spotting,
 # demo directions, the revision rounds, the final, stems and the deliverable
@@ -196,6 +205,10 @@ class Estimate:
     # whether the brief said so. None on the campaign path, where a cue is one session.
     session: Optional["Session"] = None
     session_dates: int = 0
+    # What the writer(s) are paid for this job (ADR-0061). Carried ON the estimate so
+    # the price quoted to a client and the fee promised to a composer are the same
+    # arithmetic — before this, the `Composer` line was a flat $3,000 whatever the job.
+    writer_fee: Optional["WriterFee"] = None
 
     @property
     def cost_range(self) -> str:
@@ -695,6 +708,18 @@ def build_estimate(
         session_label=SESSION_PACKAGES[session_key]["label"],
         band_spread_pct=BAND_SPREAD * 100.0,
         scope=scope if scope.is_scored else None,
+        # The writer's fee follows the PRICE, so it is computed from the number the
+        # client is actually quoted, net of the session money that passes through to
+        # players and the room (ADR-0061).
+        writer_fee=compensation.writer_fee(
+            suggested_price, session_cost,
+            writers=max(1, sum(1 for r in roles if r.lower() in _WRITER_ROLE_NAMES)),
+            # The uplift is for ORCHESTRATING — scoring out the parts — which is a
+            # second job whether those parts are played by people or by samples.
+            # `live_session` only decides what the fee is called; claiming a composer
+            # produced a session that never happened is a false reason for a real fee.
+            orchestrates=(scope.is_scored and session_key == "orchestral"),
+            live_session=bool(session is not None and session.live)),
         session=session,
         session_dates=session_dates,
         assumptions=_assumptions(scope, session, session_key),

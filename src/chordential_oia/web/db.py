@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from ..invoicing import INVOICE_STATES, Invoice
 from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
 from ..proposals import PROPOSAL_STATES, Proposal
-from .. import reviewers
+from .. import compensation, reviewers
 from ..strategic import assess_strategic_value
 from ..talent import InviteStatus, ReviewStatus, Talent, normalize_url
 from .evaluate import evaluate
@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS talent (
     source TEXT,                 -- 'manual' | 'applicant' | source key
     source_url TEXT,
     rate REAL,                   -- founder-set pay rate (NULL = no rate set)
-    rate_unit TEXT DEFAULT 'hourly'  -- 'hourly' | 'day' | 'project'
+    rate_unit TEXT DEFAULT 'hourly',  -- 'hourly' | 'day' | 'project'
+    publisher TEXT               -- their publishing entity (ADR-0061); blank = house holds their share
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -411,6 +412,11 @@ _TALENT_COLUMNS = {
     "source_url": "TEXT",
     "rate": "REAL",
     "rate_unit": "TEXT DEFAULT 'hourly'",
+    # ADR-0061 — the writer's own publishing entity. Publishing is split 50/50 with
+    # writers, and a writer's half can only be PAID to an entity registered at a PRO.
+    # Blank means the house holds their share and owes it to them, which is a debt the
+    # console names rather than a silent forfeit.
+    "publisher": "TEXT",
     # Per-creator unguessable token that gates the composer portal (/creator/<token>)
     # — a qualified creator's only credential, mirroring projects.share_token. No
     # password: the token IS the access control (validated in the route).
@@ -4274,6 +4280,35 @@ def invoice_balance(conn: sqlite3.Connection, project_id: int) -> dict:
 PAYOUT_STATES = ("Owed", "Paid")
 
 
+def _writer_fee_per_head(conn: sqlite3.Connection, project_id: int, writers: int) -> float:
+    """Each writer's share of the fee policy for this project, or 0.0 when it cannot
+    be computed (no linked opportunity, nothing priced yet).
+
+    Goes through `estimate_for` — the ONE quote authority (ADR-0033) — so the fee owed
+    to a composer is derived from the same arithmetic as the price quoted to the client.
+    Imported lazily because the estimate layer sits above this one; returns 0.0 rather
+    than raising, since a missing estimate must never block a payout run.
+    """
+    if writers <= 0:
+        return 0.0
+    try:
+        from .estimate import estimate_for                 # lazy: avoids a cycle
+        row = get_project(conn, project_id)
+        opp_id = row["opp_id"] if row is not None else None
+        if opp_id is None:
+            return 0.0
+        opp_row = get_opportunity(conn, opp_id)
+        if opp_row is None:
+            return 0.0
+        est = estimate_for(opportunity_from_row(opp_row), conn=conn,
+                           project_id=project_id)
+        fee = compensation.writer_fee(
+            est.suggested_price, est.session_cost, writers=writers)
+        return fee.per_writer
+    except Exception:                        # noqa: BLE001 — never block a payout run
+        return 0.0
+
+
 def ensure_project_payouts(conn: sqlite3.Connection, project_id: int) -> int:
     """Generate Owed payout rows for a project's crew — idempotent.
 
@@ -4282,13 +4317,26 @@ def ensure_project_payouts(conn: sqlite3.Connection, project_id: int) -> int:
     second invoice never double-creates). Amount is seeded from the talent's rate
     (qty defaults to 1 — Jon adjusts hours/days), or 0 when no rate is on file.
     Returns how many new payouts were created."""
+    assignments = list_assignments(conn, project_id)
+    # ADR-0061 — what a WRITER is owed comes from the fee policy, computed off the same
+    # price the client was quoted, unless a rate was negotiated for them specifically.
+    # Before this a writer with no rate on file was seeded at $0.00 and the number a
+    # composer had been promised lived only in the conversation where it was said.
+    writer_keys = {(a["talent_id"], (a["role"] or "").strip().lower())
+                   for a in assignments if a["talent_id"] is not None
+                   and (a["role"] or "").strip().lower() in compensation.WRITER_ROLE_NAMES}
+    policy_each = _writer_fee_per_head(conn, project_id, len(writer_keys))
+
     created = 0
-    for a in list_assignments(conn, project_id):
+    for a in assignments:
         if a["talent_id"] is None:
             continue
         rate = a["talent_rate"] if "talent_rate" in a.keys() else None
         unit = (a["talent_rate_unit"] if "talent_rate_unit" in a.keys() else None) or "hourly"
         amount = float(rate) if rate is not None else 0.0
+        is_writer = (a["talent_id"], (a["role"] or "").strip().lower()) in writer_keys
+        if rate is None and is_writer and policy_each > 0:
+            amount, unit = policy_each, "project"
         cur = conn.execute(
             """INSERT OR IGNORE INTO talent_payouts
                (project_id, talent_id, role, rate, rate_unit, qty, amount, status, created_at)
@@ -4529,15 +4577,18 @@ def update_talent_profile(
     rate: Optional[float] = None,
     rate_unit: str = "hourly",
     pro: str = "",
+    publisher: str = "",
 ) -> None:
     valid = [d for d in disciplines if d in {m.value for m in MusicDiscipline}]
     conn.execute(
         """UPDATE talent SET name=?, email=?, disciplines=?, credits=?, location=?,
-           demo_reel_url=?, notes=?, rate=?, rate_unit=?, pro=? WHERE id=?""",
+           demo_reel_url=?, notes=?, rate=?, rate_unit=?, pro=?, publisher=?
+           WHERE id=?""",
         (
             name, email or None, json.dumps(valid), credits, location or None,
             demo_reel_url or None, notes, rate, (rate_unit or "hourly"),
-            (pro or "").strip() or None, talent_id,
+            (pro or "").strip() or None,
+            (publisher or "").strip() or None, talent_id,
         ),
     )
     conn.commit()
@@ -7069,7 +7120,7 @@ def list_assignments(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.
     return conn.execute(
         """SELECT a.*, t.name AS talent_name, t.email AS talent_email,
                   t.rate AS talent_rate, t.rate_unit AS talent_rate_unit,
-                  t.pro AS talent_pro
+                  t.pro AS talent_pro, t.publisher AS talent_publisher
            FROM assignments a LEFT JOIN talent t ON a.talent_id = t.id
            WHERE a.project_id = ? ORDER BY a.role, a.created_at""",
         (project_id,),

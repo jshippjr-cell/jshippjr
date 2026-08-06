@@ -1603,6 +1603,50 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0061 — A writer's fee is a share of net, and their publishing is only theirs if it can be paid
+**Status:** Accepted (2026-08-06) · Source: operator decision on supply-side terms ·
+`compensation.py`, `estimation.py`, `delivery.py`, `web/db.py`
+**Decision.** A writer is paid **30% of net creative revenue** (price − pass-through
+session costs), **40%** when they also orchestrate. Un-awarded demo submissions are paid
+a flat **$400**. **Publishing is split 50/50 with the writers**; the writer's share stays
+100% to writers. The estimate carries the fee (`Estimate.writer_fee`), the payout ledger
+seeds a writer with no negotiated rate from the same policy, and the cue sheet renders
+the publishing split — so the price quoted to a client, the number promised to a
+composer, and the money the ledger owes are one arithmetic.
+**Why a share of NET, not price.** On a $76,191 orchestral anthem, $32,125 is players and
+a room — money that passes through the studio. A share of gross would pay a writer more
+because an orchestra was booked, which is not a fact about their work.
+**Why 30%.** Calibration, not invention: 30% of net on a national :30 is **$2,980**
+against the **$3,000** the estimator already modelled for that job. The two agree because
+they were made to agree, and the percentage then carries sensibly to jobs the old flat
+line priced absurdly — that `Composer` line was a flat 20h × $150 **regardless of scope**,
+which is 26.9% of an $11,133 spot and **3.9% of the $76,191 anthem**, the same money for
+the harder brief.
+**Why publishing is 50/50, and why now.** Backend costs the studio nothing today — there
+is no aired work, so the publisher's share is worth zero this year — while cash is the
+scarce thing. Trading the free asset for the scarce one is the correct trade for a studio
+with no catalogue, and unlike a promise about future volume it is checkable on the cue
+sheet the composer receives.
+**Why a writer's publishing half is NOT written onto the sheet by default.** A composer
+who has never registered as a publisher with a PRO cannot collect on a publisher line.
+Putting their personal name there pays them nothing, creates an unclaimed share on a
+filed legal document, and tells them falsely that they are covered. So an unknown entity
+leaves the share with the house, marked `held_for` that writer and reported by
+`unassigned_publishing` — a debt the console can chase, not a silent forfeit. This is
+ADR-0050's rule ("a missing link is a gap; a wrong link is a lie") applied to money.
+**A false reason is worse than a low rate.** The first wiring gave the 40% uplift for
+"producing the session" on a **sampled** score that had no session. The rate was
+arguable; the stated reason was untrue. The uplift is now for ORCHESTRATING — a second
+job whether the parts are played by people or samples — and `live_session` only decides
+what the fee is called.
+**Consequences.** `tests/test_compensation.py` fails if the fee is taken on gross, if it
+stops agreeing with the estimator's own number for a :30, if it does not scale with the
+job, if the uplift claims a session that did not happen, if publisher shares do not total
+100%, if a writer with no entity is written onto a cue sheet or their debt goes
+unreported, if a mixer is seeded a writer's fee, if a writer with no rate is seeded at
+zero, or if a negotiated rate stops beating the policy. `talent.publisher` is the new
+column; blank is the honest default.
+
 ### ADR-0060 — A link has a life, and a delegate is weaker than the person who invited them
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (token
 lifecycle and delegated client access) · `reviewers.py`, `web/db.py`,
