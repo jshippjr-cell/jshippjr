@@ -1398,7 +1398,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             client_name TEXT, client_email TEXT,
             calendar_event_id TEXT,              -- the calendar event (for reschedule/cancel)
             manage_token TEXT,                   -- unguessable token for client reschedule/cancel
-            initiated_by TEXT DEFAULT 'operator' -- client_request | operator
+            initiated_by TEXT DEFAULT 'operator', -- client_request | operator
+            poll_attempts INTEGER DEFAULT 0,     -- transcript polls made (backoff + give-up)
+            last_polled_at TEXT
         )"""
     )
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
@@ -1406,7 +1408,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     for name, decl in {"meeting_type": "TEXT DEFAULT 'zoom'", "request_id": "INTEGER",
                        "client_name": "TEXT", "client_email": "TEXT",
                        "calendar_event_id": "TEXT", "manage_token": "TEXT",
-                       "initiated_by": "TEXT DEFAULT 'operator'"}.items():
+                       "initiated_by": "TEXT DEFAULT 'operator'",
+                       # Poll bookkeeping: without it the transcript poller has no way to
+                       # back off or to stop, and a bot that finishes without a transcript
+                       # is re-asked every 30s forever (see `poll_and_ingest`).
+                       "poll_attempts": "INTEGER DEFAULT 0",
+                       "last_polled_at": "TEXT"}.items():
         if name not in mtg_cols:
             conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {decl}")
     # A Discovery Request is the client's ASK (ADR-0016) — it schedules nothing; the operator
@@ -5365,10 +5372,20 @@ def meetings_by_status(conn: sqlite3.Connection, status: str) -> List[sqlite3.Ro
 
 
 def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
-    """Patch a meeting (start_at, join_url, status, bot_id, transcript_capture_id, …)."""
+    """Patch a meeting (start_at, join_url, status, bot_id, transcript_capture_id, …).
+
+    An unknown field RAISES. It used to be dropped in silence, which is a trap the
+    poller walked straight into: `poll_attempts` was not on this list, so the backoff
+    wrote nothing, every meeting stayed on attempt 0, and the fix would have shipped
+    looking correct while changing nothing at all. A caller naming a column that does
+    not exist has a bug either way; the only question is whether they find out.
+    """
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",
                "notetaker_provider", "bot_id", "external_meeting_id",
-               "transcript_capture_id", "error"}
+               "transcript_capture_id", "error", "poll_attempts", "last_polled_at"}
+    unknown = sorted(set(fields) - allowed)
+    if unknown:
+        raise ValueError(f"update_meeting: no such meeting field(s): {unknown}")
     sets, vals = [], []
     for k, v in fields.items():
         if k in allowed:

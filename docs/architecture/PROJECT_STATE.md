@@ -94,6 +94,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The transcript poller backs off, and stops** (2026-08-06). `poll_and_ingest` asked the
+  capture provider about every un-ingested bot on every ~30s tick, for as long as the row
+  existed — a bot that finishes without a transcript was re-asked **~2,880 times a day, for
+  ever**, logging a WARNING each pass. The API calls were not the real cost: **a failed
+  capture was invisible.** The call's notes never arrived, the meeting sat in
+  `transcript_ready` looking like it was still working, and the tile on the opportunity read
+  "◐ Transcript pending" indefinitely — so the failure looked like patience. Now a schedule
+  that is dense early and decays to 30-minute checks, a give-up after ~8 hours that writes
+  `failed` **with the reason in it**, and a tile that says "✕ No transcript — add the notes
+  by hand". Giving up decides nothing about the campaign; it hands the job back to a human.
+  Found on the way: `update_meeting` silently DROPPED unknown fields, so the new bookkeeping
+  wrote nothing and the fix nearly shipped doing nothing at all. It raises now.
+
 - **An upload now says what happened** (2026-08-06). The byte-progress bar was honest
   about the upload and then said nothing about the RESULT: on success the handler called
   `window.location.reload()`, throwing away the redirect the server had just issued —

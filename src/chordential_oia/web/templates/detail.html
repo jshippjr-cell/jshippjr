@@ -193,6 +193,9 @@
     <div class="mtg-chips">
       {% if meeting['notetaker_provider'] %}<span class="mtg-chip ok">● Notetaker connected</span>{% else %}<span class="mtg-chip off">○ Notetaker off</span>{% endif %}
       {% if meeting['transcript_capture_id'] %}<span class="mtg-chip ok">● Transcript ready</span>
+      {# The poller gives up after ~8h (meetings_service). Before it did, this chip read
+         "pending" for ever and the operator went looking for notes that were never coming. #}
+      {% elif meeting['status'] == 'failed' %}<span class="mtg-chip fail" title="{{ meeting['error'] or '' }}">✕ No transcript — add the notes by hand</span>
       {% elif meeting['notetaker_provider'] %}<span class="mtg-chip pend">◐ Transcript pending</span>
       {% else %}<span class="mtg-chip off">○ Transcript — paste when ready</span>{% endif %}
     </div>
