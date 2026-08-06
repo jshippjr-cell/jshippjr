@@ -36,6 +36,28 @@ the data migration must happen before the disk is removed, or live data is lost.
 
 ---
 
+> ### 2026-08-06 — RUN. The cutover is done.
+> The disk is gone and production is on managed Postgres. What the live run added to
+> what the rehearsal already knew:
+>
+> * **Every table copied clean** — 53 tables, all `ok`, counts matching. Real volume:
+>   `agencies` 11,905 · `opportunity_signals` 85,699 · `decision_makers` 38,924 ·
+>   `title_taxonomy` 17,587 · `media_blob` 12.
+> * **Do Step 4 in two deploys, not one** (the doc below still describes one). Change
+>   `CHORDENTIAL_DB` first and leave the disk mounted: that deploy is fully reversible by
+>   putting the old path back. Delete the disk only once the new database is proven. The
+>   rollback disappears the moment the disk goes.
+> * **The menu item is "Postgres", not "PostgreSQL"** — see Step 2.
+> * **`psycopg` and `psycopg_pool` were already in the image**, so the build-command trap
+>   that cost the uploads did not repeat. Check anyway; it costs one line.
+> * **A cosmetic traceback appeared right after `Migration complete.`** —
+>   `PythonFinalizationError: cannot join thread at interpreter shutdown`, from the new
+>   connection pool's `__del__` running during interpreter teardown on Python 3.14.
+>   Nothing was lost. Fixed by closing the pool from `atexit`; if you see it on an older
+>   build, ignore it — read the line above it.
+> * The migration copies the live `scheduler_lease` row, so for up to 90s after the flip
+>   the new instance may report the engines are "on another instance". It self-heals.
+
 ## Step 0 — the code is already deployed (safe)
 The compatibility layer (`web/db.py`) shipped with this change. The app is still running
 on SQLite-on-disk exactly as before — no behavior change. ✅ Verify the live site works
@@ -241,8 +263,16 @@ Only when all three work is the disk safe to remove.
 > work first, and copy the database last, immediately before the switch.
 
 ## Step 2 — create the Render Postgres database
-Render dashboard → **New → PostgreSQL** (same region as the web service). Note its
-**Internal Database URL** (`postgresql://…`). A `basic-256mb` plan is plenty to start.
+Render dashboard → **New → Postgres** — the menu item is labelled just **Postgres**, not
+"PostgreSQL"; it sits between *Cron Job* and *Key Value*. (Run live 2026-08-06: the doc said
+"PostgreSQL", the menu says "Postgres", and that cost real time while staring at the open
+menu.) Same **region** as the web service, or every query crosses the public internet.
+Instance type **Basic 256 MB** is plenty — measured on the live database afterwards, the
+whole thing was ~0.2 GB.
+
+When it reads *Available*, copy **Connections → Internal Database URL**. Internal means the
+hostname looks like `dpg-xxxxxxxx-a` with no domain suffix: reachable only from inside your
+Render network, which is what you want.
 
 ## Step 3 — migrate the data (run ON Render, where both DBs are reachable)
 Open the web service's **Shell** tab in Render (the disk's SQLite file and the new

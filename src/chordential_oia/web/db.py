@@ -12,6 +12,7 @@ service; the schema maps cleanly onto Postgres/Supabase later.
 
 from __future__ import annotations
 
+import atexit
 import importlib.util
 import json
 import os
@@ -730,13 +731,28 @@ def _get_pool(url: str):
 
 def close_pool() -> None:
     """Drop the pool at shutdown so a draining instance releases its connections
-    instead of holding them until the server times them out."""
+    instead of holding them until the server times them out.
+
+    Also registered with `atexit` below, which is not tidiness. Left to the garbage
+    collector, `ConnectionPool.__del__` runs during interpreter finalization and tries
+    to join its worker thread — which Python 3.14 refuses, printing a `Exception
+    ignored … PythonFinalizationError` traceback. Observed on the live cutover, in the
+    Render shell, immediately after `Migration complete.`: nothing was wrong, nothing
+    was lost, and it looked exactly like a crash at the one moment an operator is
+    deciding whether to trust a migration they cannot undo. `atexit` runs BEFORE
+    finalization, where joining a thread is still legal, so the pool is already closed
+    by the time `__del__` would have tried.
+    """
     global _POOL, _POOL_URL
     with _POOL_LOCK:
         if _POOL is not None:
             try: _POOL.close()
             except Exception: pass
         _POOL, _POOL_URL = None, ""
+
+
+# Close the pool while joining threads is still legal — see `close_pool`.
+atexit.register(close_pool)
 
 
 def pool_status(db_path: str = "") -> dict:

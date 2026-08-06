@@ -31,9 +31,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `Opportunity`, …), `qualification.py`, `scoring.py`, `strategic.py`, `estimation.py`,
   `proposals.py`, `outreach.py`, `capabilities.py`, `delivery.py`, `mailer.py`,
   `payments/` (provider seam), `talent.py`, `matching.py`.
-- **Web app:** `src/chordential_oia/web/` — FastAPI + Jinja templates (`templates/`),
-  SQLite via stdlib `sqlite3` (`db.py`). `app.py` is the route layer; `seed.py` seeds
-  demo data; `public.py` is the public front-of-house site.
+- **Web app:** `src/chordential_oia/web/` — FastAPI + Jinja templates (`templates/`).
+  **Production runs on managed Postgres** (cut over 2026-08-06, disk removed → deploys are
+  zero-downtime); dev and tests are SQLite via stdlib `sqlite3`. One `db.py` serves both —
+  a `postgresql://` `CHORDENTIAL_DB` switches it, connections are **pooled** (ADR-0048),
+  and `tests/test_postgres_dialect.py` / `test_db_pool.py` verify the Postgres path against
+  a real server when `CHORDENTIAL_TEST_PG` is set (they SKIP without it, and skipping is
+  not passing). `seed.py` seeds demo data; `public.py` is the public front-of-house site.
 - **`app.py` has been taken apart** (ADR-0044) — it was 9,133 lines and 251 routes; it is
   now **655 lines and 15 routes**, and holds only the application object (lifespan,
   middleware, the admin gate, PWA + Web Push, `/uploads`). Below it sit
@@ -66,7 +70,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,463 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,464 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
@@ -79,8 +83,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - Only push / open PRs when asked.
 
 ## Env flags & config (all `CHORDENTIAL_*`)
-- `CHORDENTIAL_DB` — SQLite path (prod: `/var/data/chordential.db`; the DB layer is also
-  Postgres-capable — a `postgresql://` URL switches it; see `docs/zero-downtime-cutover.md`).
+- `CHORDENTIAL_DB` — **prod: the managed Postgres URL** (cut over 2026-08-06; the
+  `/var/data` disk is gone). A filesystem path still selects SQLite, which is what dev and
+  tests use. Pool dials: `CHORDENTIAL_DB_POOL` (kill switch), `_POOL_MIN`/`_POOL_MAX` (1–10).
+  Scheduler leader election: `CHORDENTIAL_SCHEDULER_LEASE` (ADR-0046). See
+  `docs/zero-downtime-cutover.md`.
 - `CHORDENTIAL_SEED_DEMO=1` — seed the demo dataset (off in prod by default → prod shows
   real data only). **Demo campaigns / pipeline only appear with this on.**
 - `CHORDENTIAL_ADMIN_TOKEN` — admin passphrase; unset = gate disabled. Public surfaces

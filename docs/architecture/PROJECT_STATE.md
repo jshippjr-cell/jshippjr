@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **THE POSTGRES CUTOVER IS DONE** (2026-08-06). Production runs on managed Postgres and
+  the Render persistent disk has been deleted — so deploys no longer stop the old instance
+  before starting the new one, and the ~2-minute 502 on every push (including docs-only
+  ones, which is how it kept interrupting live testing) is gone. Migration: 53 tables, all
+  `ok`, counts matching, on real volume — `agencies` 11,905, `opportunity_signals` 85,699,
+  `decision_makers` 38,924, `media_blob` 12. Rehearsed end to end against a local
+  PostgreSQL 16 first: pages served, an uploaded master round-tripped byte-for-byte, and
+  id sequences continued rather than colliding. Run as **two deploys, not one** — the
+  `CHORDENTIAL_DB` change is reversible while the disk is still mounted, and that rollback
+  vanishes when the disk goes; the runbook now says so. **The three preconditions
+  (ADR-0046 lease, ADR-0047 indexes, ADR-0048 pooling) were all in place first.**
+
 - **The two cutover preconditions are done** (ADR-0046, ADR-0047, 2026-08-05).
   **One scheduler across instances:** `run_loop` holds a `scheduler_lease` row and does
   nothing without it — blue-green runs two instances *on purpose*, and both were running

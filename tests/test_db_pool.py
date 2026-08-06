@@ -256,3 +256,40 @@ def test_closing_the_pool_releases_the_servers_connections(monkeypatch):
     assert backends() >= 1
     db_mod.close_pool()
     assert backends() == 0, "the pool kept server connections open after close_pool()"
+
+
+@live
+def test_a_script_using_the_pool_exits_without_a_traceback(monkeypatch, tmp_path):
+    """Observed on the live cutover, in the Render shell, immediately after
+    `Migration complete.`:
+
+        Exception ignored while calling deallocator <ConnectionPool.__del__ …>
+        PythonFinalizationError: cannot join thread at interpreter shutdown
+
+    Nothing was wrong and nothing was lost — `__del__` ran during interpreter
+    finalization and tried to join the pool's worker thread, which Python 3.14
+    refuses. But it printed a stack trace at the one moment an operator is deciding
+    whether to trust a migration they cannot undo, and that is a real cost even
+    though the bytes were fine. `atexit` closes the pool while joining is still
+    legal, so `__del__` has nothing left to do.
+
+    Asserted on a SUBPROCESS, because the failure only exists at interpreter
+    shutdown and an in-process test cannot see it.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    dsn = _fresh_db()
+    script = textwrap.dedent(f"""
+        import os
+        os.environ["CHORDENTIAL_DB"] = {dsn!r}
+        from chordential_oia.web import db
+        c = db.connect({dsn!r}); db.init_db(c); c.close()
+        print("done")
+    """)
+    r = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                       timeout=120)
+    assert r.returncode == 0, r.stderr
+    assert "done" in r.stdout
+    assert r.stderr.strip() == "", f"a script using the pool printed to stderr:\n{r.stderr}"
