@@ -166,9 +166,11 @@
   <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
     <div style="flex:1;min-width:240px">
       <strong>Relationship</strong>
-      <span class="muted small">· Stage <strong>{{ relationship.stage }}</strong> · Probability {{ relationship.probability }}
+      <span class="muted small">· Stage <strong>{{ relationship.stage_label or relationship.stage }}</strong> · Probability {{ relationship.probability }}
         · {{ relationship.interaction_count }} interaction(s) · {{ relationship.signal_count }} active signal(s)
         · Last contact {{ relationship.last_interaction or 'none' }}</span>
+      {# The deal side, which this page could not see before ADR-0057. #}
+      {% if relationship.relationship_signals %}<div class="muted small" style="margin-top:4px">{{ relationship.relationship_signals|join(' · ') }}</div>{% endif %}
       <div class="small" style="margin-top:4px"><strong>Next:</strong>
         {% if relationship.next_task %}{{ relationship.next_task.title }}{% if relationship.next_task.due_at %} <span class="muted">(due {{ relationship.next_task.due_at[:10] }})</span>{% endif %}
         {% else %}{{ relationship.recommended_action }}{% endif %}</div>

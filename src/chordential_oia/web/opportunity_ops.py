@@ -17,7 +17,7 @@ from typing import Optional
 from ..capabilities import quote_band as capabilities_quote_band
 from ..models import BuyerValue, MusicDiscipline
 from . import campaign_intelligence, campaigns, db, production
-from .buyer_intel import assess_relationship, days_since
+from .buyer_intel import relationship_for
 from .evaluate import evaluate
 
 
@@ -130,16 +130,24 @@ def _buyer_context(conn, client: str) -> Optional[dict]:
         "strategic_tier": best_tier,
         "avg_strategic": (sum(strat_vals) / len(strat_vals)) if strat_vals else None,
     }
-    rel = assess_relationship(
-        opps=len(rows), qualified=summary["qualified"],
-        won=len(won), lost=len(lost), open_pursuits=len(pursuing),
-        touches=int(touch["touches"] or 0),
-        last_contacted_days=days_since(touch["last_contacted"]),
+    # The same company's Agency Intelligence record and its outreach log — the half of
+    # the evidence this page could not see, and the reason it and /relationships used to
+    # disagree about one buyer (ADR-0057).
+    org = db.find_org(conn, client)
+    agency_id = org["agency_id"] if org is not None else None
+    rel = relationship_for(
+        deal={"opps": len(rows), "qualified": summary["qualified"],
+              "won": len(won), "lost": len(lost), "open_pursuits": len(pursuing),
+              "touches": int(touch["touches"] or 0),
+              "last_contacted": touch["last_contacted"]},
+        outreach=db.outreach_aggregate(conn, [agency_id]).get(agency_id)
+                 if agency_id else None,
         strategic_tier=best_tier,
     )
     return {
         "summary": summary, "rows": rows, "rel": rel, "contacts": contacts,
         "last_contacted": touch["last_contacted"], "company_website": website,
+        "agency_id": agency_id,
     }
 
 

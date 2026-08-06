@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ..matching import match_talent
 from ..talent import profile_completeness
 from . import db, next_action, queue as queue_mod, relationships, sources, triage
-from .buyer_intel import assess_relationship, days_since
+from .buyer_intel import STAGES, days_since, relationship_for
 from .estimate import estimate_for
 from .evaluate import evaluate
 from .delivery_ops import _gate_banner
@@ -645,19 +645,30 @@ def buyers_directory(
     conn = db.connect()
     try:
         rows = db.all_buyers(conn)
+        # The other half of the evidence, in two batched queries rather than two per
+        # row: the same companies' Agency Intelligence records, and the outreach logged
+        # against them. Without this the directory stages a buyer from `opportunities`
+        # alone and disagrees with /relationships about the same company (ADR-0057).
+        orgs = db.orgs_by_ids(conn, [r["org_id"] for r in rows])
+        agency_ids = [o["agency_id"] for o in orgs.values() if o["agency_id"]]
+        agg = db.outreach_aggregate(conn, agency_ids)
     finally:
         conn.close()
     buyers = []
     for r in rows:
         tier = _strat_tier_for_value(r["strategic_value"])
-        days = days_since(r["last_contacted"])
-        rel = assess_relationship(
-            opps=r["opps"], qualified=int(r["qualified"] or 0),
-            won=int(r["won"] or 0), lost=int(r["lost"] or 0),
-            open_pursuits=int(r["open_pursuits"] or 0), touches=int(r["touches"] or 0),
-            last_contacted_days=days, strategic_tier=tier,
+        org = orgs.get(r["org_id"])
+        # dict(row) works on both backends — sqlite3.Row and _PgRow each expose the
+        # mapping protocol (keys() + __getitem__).
+        rel = relationship_for(
+            deal=dict(r),
+            outreach=agg.get(org["agency_id"]) if org is not None else None,
+            strategic_tier=tier,
         )
-        buyers.append({"row": r, "rel": rel, "strategic_tier": tier, "days_since": days})
+        days = days_since(r["last_contacted"])
+        buyers.append({"row": r, "rel": rel, "strategic_tier": tier,
+                       "days_since": days,
+                       "agency_id": org["agency_id"] if org is not None else None})
     if stage:
         buyers = [b for b in buyers if b["rel"].stage == stage]
     # Sort keys — default ranks by relationship strength then strategic value.
@@ -669,9 +680,8 @@ def buyers_directory(
         "fit": lambda b: b["row"]["avg_alignment"] or 0,
     }
     buyers.sort(key=sorters.get(order_by, sorters["relationship"]), reverse=True)
-    stages = ["Cold", "Warming", "Engaged", "Client"]
     return render(
-        request, "buyers.html", nav="buyers", buyers=buyers, stages=stages,
+        request, "buyers.html", nav="buyers", buyers=buyers, stages=list(STAGES),
         active={"stage": stage or "", "order_by": order_by},
     )
 

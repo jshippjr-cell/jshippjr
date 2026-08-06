@@ -1389,6 +1389,26 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # Enforced, not merely intended: two rows for one email is the bug this exists to end.
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_person_email "
                  "ON buyer_person(email)")
+    # ONE organisation, across every surface that names one (ADR-0056) — the half
+    # ADR-0050 deferred. A company is `agencies.id` in Agency Intelligence and a bare
+    # name string in `opportunities.client`, `projects.client`, `companies.client` and
+    # `client_procurement_history.client`, with nothing joining them. `name_key` is the
+    # identity (see resolve_org for why, and for what that costs); `domain` corroborates
+    # and never merges; `agency_id` is how the string world reaches the integer one.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS buyer_org (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,                   -- as first written; for display
+            name_key TEXT,               -- normalised; the identity
+            domain TEXT DEFAULT '',      -- corroborating evidence, never a merge key
+            agency_id INTEGER,           -- the Agency Intelligence record, when there is one
+            first_seen_at TEXT, last_seen_at TEXT
+        )"""
+    )
+    # Enforced by the server, not by the resolver being careful: it is called from
+    # request threads and from a boot backfill at the same time.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_org_name_key "
+                 "ON buyer_org(name_key)")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -1616,6 +1636,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     _ensure_person_links(conn)      # AFTER every table above exists
+    _ensure_org_links(conn)         # likewise — several of its surfaces are created above
     _ensure_indexes(conn)
     conn.commit()
 
@@ -1715,6 +1736,12 @@ _INDEXES = (
     ("idx_decision_log_subject", "decision_log(subject_type, subject_id)"),
     ("idx_decision_log_at", "decision_log(at)"),
     ("idx_user_session_user", "user_session(user_id)"),
+    # ADR-0056 — the org link is read per surface on every relationship view, and the
+    # backfill scans for the un-linked ones on every boot.
+    ("idx_opportunities_org", "opportunities(org_id)"),
+    ("idx_projects_org", "projects(org_id)"),
+    ("idx_agencies_org", "agencies(org_id)"),
+    ("idx_buyer_org_agency", "buyer_org(agency_id)"),
 )
 
 
@@ -1732,6 +1759,21 @@ def _ensure_person_links(conn) -> None:
             continue
         if cols and "person_id" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN person_id INTEGER")
+
+
+def _ensure_org_links(conn) -> None:
+    """Stamp the canonical-organisation column on every surface that names one.
+
+    Runs at the end of the migration for the same reason `_ensure_person_links` does:
+    an ALTER against a table created further down takes the whole boot down.
+    """
+    for table, _pk, _n, _d, _l, _w in _ORG_SURFACES:
+        try:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        except Exception:                   # noqa: BLE001 — not in this database
+            continue
+        if cols and "org_id" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN org_id INTEGER")
 
 
 def _ensure_indexes(conn) -> None:
@@ -2273,11 +2315,17 @@ def buyer_opportunities(conn: sqlite3.Connection, client: str) -> List[sqlite3.R
 
 
 def all_buyers(conn: sqlite3.Connection) -> List[sqlite3.Row]:
-    """One aggregated row per buyer for the Buyer Graph directory."""
+    """One aggregated row per buyer for the Buyer Graph directory.
+
+    `org_id` rides along (ADR-0056) so the caller can reach the same company's Agency
+    Intelligence record and its outreach log — the evidence this query cannot see, and
+    the reason this page and /relationships used to disagree.
+    """
     return conn.execute(
         """
         SELECT
             o.client AS client,
+            MAX(o.org_id) AS org_id,
             MIN(o.buyer_type) AS buyer_type,
             COUNT(*) AS opps,
             SUM(o.qualified) AS qualified,
@@ -2861,6 +2909,24 @@ def upsert_relationship(conn: sqlite3.Connection, agency_id: int, **fields) -> N
         sets = ", ".join(f"{k}=?" for k in fields)
         conn.execute(f"UPDATE relationships SET {sets}, updated_at=? WHERE agency_id=?",
                      (*fields.values(), now, agency_id))
+
+
+def cache_relationship_stage(conn: sqlite3.Connection, agency_id: int, stage: str,
+                             *, exists: bool) -> None:
+    """Write the derived stage when the caller ALREADY knows whether the row is there.
+
+    `upsert_relationship` asks — a SELECT per call — which is right when you have one
+    agency and wrong on `/relationships`, where the batch has just fetched every
+    relationship row in one query and then paid for a lookup per agency anyway. Same
+    write, without re-asking a question already answered.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    if not exists:
+        conn.execute(
+            "INSERT INTO relationships (agency_id, created_at, updated_at) VALUES (?,?,?)",
+            (agency_id, now, now))
+    conn.execute("UPDATE relationships SET stage=?, updated_at=? WHERE agency_id=?",
+                 (stage, now, agency_id))
 
 
 def add_agency_task(conn: sqlite3.Connection, agency_id: int, *, title: str,
@@ -5274,6 +5340,248 @@ def people_with_history(conn, limit: int = 200) -> List[dict]:
                     "touchpoints": len(tp), "surfaces": sorted({t["what"] for t in tp}),
                     "last_seen_at": p["last_seen_at"]})
     return sorted(out, key=lambda x: x["touchpoints"], reverse=True)
+
+
+# --------------------------------------------------------------------------- #
+# One organisation, across every surface that names one
+# --------------------------------------------------------------------------- #
+# The other half of ADR-0050, which did the person and said plainly that organisations
+# were not canonical yet. They are recorded in five unlinked places, in two different
+# shapes: `agencies.id` (an integer key, what Agency Intelligence works on) and a bare
+# name string in `opportunities.client`, `projects.client`, `companies.client` and
+# `client_procurement_history.client`. Nothing joins them, which is why the product
+# grew TWO relationship systems over the same companies — the Buyer Graph (`/buyers`,
+# keyed on the string) and Relationship Management (`/relationships`, keyed on the
+# integer) — each blind to the other's evidence.
+#
+# **The identity is the normalised name.** That is a weaker rule than the person half's
+# and it is stated rather than hidden: a person has an email, which is unambiguous and
+# usually present; an organisation has a name and sometimes a website, and an
+# organisation with no website still has to be canonical or the layer is useless. It is
+# also the rule the codebase already committed to — `match_agency_by_name` has threaded
+# `agency_id` onto opportunities by exact normalised name since the lineage work — so
+# this makes an existing decision explicit instead of adding a second one.
+#
+# What it costs, said out loud: a renamed company becomes a second organisation, and so
+# does a typo. Those are gaps, and a gap is recoverable. What it must never do is MERGE
+# two different companies, which is why the match is exact-after-normalisation and never
+# fuzzy, and why a second, different domain under one name is REPORTED as a conflict
+# rather than quietly overwritten.
+def _norm_org(name: Optional[str]) -> str:
+    """The org identity key: lowercased, whitespace-collapsed. Nothing else — every
+    further 'helpful' rule (dropping Ltd, stripping punctuation) is a rule that
+    eventually merges two real companies."""
+    return " ".join((name or "").strip().lower().split())
+
+
+def _norm_domain(url: Optional[str]) -> str:
+    """The bare host from a website, for corroboration only — never a merge key."""
+    raw = (url or "").strip().lower()
+    if not raw:
+        return ""
+    raw = raw.split("://", 1)[-1].split("/", 1)[0].split("?", 1)[0]
+    return raw[4:] if raw.startswith("www.") else raw
+
+
+def resolve_org(conn, name: str = "", *, domain: str = "", agency_id: Optional[int] = None,
+                commit: bool = True) -> Optional[int]:
+    """The canonical id for this organisation, creating it on first sight.
+
+    None without a name — there is nothing to be canonical about, and inventing an
+    "Unknown" org would put every nameless row in one relationship.
+
+    ``domain`` and ``agency_id`` only ever ENRICH the row: the first non-empty value
+    wins and a later disagreement is left alone, so the org that Agency Intelligence
+    knows and the org an opportunity names converge on one record without either being
+    able to overwrite the other. ``commit=False`` is for the backfill (see link_people).
+    """
+    key = _norm_org(name)
+    if not key:
+        return None
+    now = _now()
+    host = _norm_domain(domain)
+    row = conn.execute(
+        "SELECT id, name, domain, agency_id FROM buyer_org WHERE name_key = ?",
+        (key,)).fetchone()
+    if row is not None:
+        sets, args = ["last_seen_at = ?"], [now]
+        if host and not (row["domain"] or ""):
+            sets.append("domain = ?"); args.append(host)
+        if agency_id and not row["agency_id"]:
+            sets.append("agency_id = ?"); args.append(int(agency_id))
+        args.append(row["id"])
+        conn.execute(f"UPDATE buyer_org SET {', '.join(sets)} WHERE id = ?", tuple(args))
+        if commit:
+            conn.commit()
+        return int(row["id"])
+    conn.execute(
+        "INSERT INTO buyer_org (name, name_key, domain, agency_id, first_seen_at, "
+        "last_seen_at) VALUES (?,?,?,?,?,?)",
+        ((name or "").strip(), key, host, agency_id, now, now))
+    if commit:
+        conn.commit()
+    got = conn.execute("SELECT id FROM buyer_org WHERE name_key = ?", (key,)).fetchone()
+    return int(got["id"]) if got is not None else None
+
+
+def get_org(conn, org_id: int):
+    return conn.execute("SELECT * FROM buyer_org WHERE id = ?", (org_id,)).fetchone()
+
+
+def find_org(conn, name: str):
+    key = _norm_org(name)
+    if not key:
+        return None
+    return conn.execute("SELECT * FROM buyer_org WHERE name_key = ?", (key,)).fetchone()
+
+
+def org_for_agency(conn, agency_id: int):
+    return conn.execute("SELECT * FROM buyer_org WHERE agency_id = ?",
+                        (agency_id,)).fetchone()
+
+
+# Where an organisation can appear: (table, primary key, name column, domain column or
+# None, what the appearance is called, timestamp column). Data rather than branches, so
+# a new surface is one line here instead of a new case in three functions. Two of these
+# are keyed by the client NAME rather than an integer id, which is the defect itself.
+_ORG_SURFACES = (
+    ("opportunities", "id", "client", None, "an opportunity", "created_at"),
+    ("projects", "id", "client", None, "a project", "created_at"),
+    ("agencies", "id", "company", "website", "an agency record", "created_at"),
+    ("companies", "client", "client", "website", "a company record", "updated_at"),
+    ("client_procurement_history", "client", "client", None,
+     "procurement history", "updated_at"),
+)
+
+
+def link_orgs(conn) -> dict:
+    """Give every row that names an organisation its canonical org, and report what
+    happened. Idempotent, so it runs at boot and after any import.
+
+    Rows with no name are left unlinked on purpose and counted, not hidden — the same
+    contract as `link_people`'s `no_email`. A name that carries a website contributes
+    the domain; a SECOND, different domain under one name is counted as a conflict
+    rather than overwriting the first, because that is the shape a wrong merge would
+    take and it should be visible when it happens.
+    """
+    linked, no_name, conflicts = 0, 0, 0
+    for table, pk, name_col, domain_col, _label, _when in _ORG_SURFACES:
+        cols = f"{pk} AS pk, {name_col} AS nm" + (f", {domain_col} AS dm" if domain_col else "")
+        try:
+            # Nameless rows are excluded by the QUERY: they can never be linked, and
+            # re-reading them on every boot for ever is the waste ADR-0050 called out.
+            rows = conn.execute(
+                f"SELECT {cols} FROM {table} WHERE org_id IS NULL "
+                f"AND {name_col} IS NOT NULL AND TRIM({name_col}) <> ''").fetchall()
+            no_name += conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE org_id IS NULL "
+                f"AND (({name_col} IS NULL) OR TRIM({name_col}) = '')").fetchone()["n"]
+        except Exception:                       # noqa: BLE001 — table not in this DB yet
+            continue
+        for r in rows:
+            host = _norm_domain(r["dm"]) if domain_col else ""
+            agency = int(r["pk"]) if table == "agencies" else None
+            # Read the org BEFORE resolving only when this row carries a domain to
+            # conflict with — otherwise it is a second SELECT per row for an answer
+            # that can never differ, which over tens of thousands of rows is the exact
+            # waste ADR-0050 was written about. Only `agencies` and `companies` have a
+            # domain column, and both are small.
+            before = find_org(conn, r["nm"] or "") if host else None
+            oid = resolve_org(conn, r["nm"] or "", domain=host, agency_id=agency,
+                              commit=False)
+            if oid is None:
+                continue
+            if before is not None and (before["domain"] or "") \
+                    and before["domain"] != host:
+                conflicts += 1
+            conn.execute(f"UPDATE {table} SET org_id = ? WHERE {pk} = ?", (oid, r["pk"]))
+            linked += 1
+        conn.commit()
+    total = conn.execute("SELECT COUNT(*) AS n FROM buyer_org").fetchone()["n"]
+    return {"linked": linked, "no_name": no_name, "orgs": total,
+            "domain_conflicts": conflicts}
+
+
+def orgs_for_agencies(conn, agency_ids) -> dict:
+    """{agency_id: org_row} in ONE query — how the Relationship Management side
+    reaches the deals, which live under a client NAME it never had."""
+    ids = [int(a) for a in agency_ids if a]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["agency_id"]: r for r in conn.execute(
+        f"SELECT * FROM buyer_org WHERE agency_id IN ({marks})", tuple(ids))}
+
+
+def orgs_by_ids(conn, org_ids) -> dict:
+    """{org_id: org_row} in ONE query — how the Buyer Graph side reaches the agency
+    record, and through it the outreach log it never had."""
+    ids = [int(o) for o in org_ids if o]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["id"]: r for r in conn.execute(
+        f"SELECT * FROM buyer_org WHERE id IN ({marks})", tuple(ids))}
+
+
+def org_deal_rollup(conn, org_ids) -> dict:
+    """Per-organisation deal rollup — {org_id: {opps, qualified, won, lost,
+    open_pursuits, touches, last_contacted, strategic_value}} — in ONE GROUP BY for the
+    whole set. `all_buyers` by another key: this is the same evidence, reachable from
+    the agency side, which is what the two relationship engines never had between them.
+    """
+    ids = [int(o) for o in org_ids if o]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    out: dict = {}
+    for r in conn.execute(
+            f"""SELECT o.org_id AS org_id,
+                       COUNT(*) AS opps,
+                       SUM(o.qualified) AS qualified,
+                       SUM(CASE WHEN o.status = 'Won' THEN 1 ELSE 0 END) AS won,
+                       SUM(CASE WHEN o.status = 'Lost' THEN 1 ELSE 0 END) AS lost,
+                       SUM(CASE WHEN o.status IN ('Pursuing','Submitted')
+                                THEN 1 ELSE 0 END) AS open_pursuits,
+                       MAX(o.strategic_value) AS strategic_value,
+                       MAX(o.last_contacted) AS last_contacted
+                FROM opportunities o WHERE o.org_id IN ({marks})
+                GROUP BY o.org_id""", tuple(ids)):
+        out[r["org_id"]] = {
+            "opps": r["opps"], "qualified": r["qualified"] or 0,
+            "won": r["won"] or 0, "lost": r["lost"] or 0,
+            "open_pursuits": r["open_pursuits"] or 0,
+            "strategic_value": r["strategic_value"],
+            "last_contacted": r["last_contacted"], "touches": 0,
+        }
+    for r in conn.execute(
+            f"""SELECT o.org_id AS org_id, COUNT(*) AS n, MAX(e.created_at) AS last_at
+                FROM outreach_events e JOIN opportunities o ON e.opp_id = o.id
+                WHERE o.org_id IN ({marks}) GROUP BY o.org_id""", tuple(ids)):
+        row = out.get(r["org_id"])
+        if row is not None:
+            row["touches"] = r["n"]
+            if r["last_at"] and (not row["last_contacted"]
+                                 or r["last_at"] > row["last_contacted"]):
+                row["last_contacted"] = r["last_at"]
+    return out
+
+
+def org_touchpoints(conn, org_id: int) -> List[dict]:
+    """Everything one organisation has with us, in one list, newest first — the
+    question the five tables could not answer between them."""
+    out = []
+    for table, pk, _name_col, _domain_col, label, when_col in _ORG_SURFACES:
+        try:
+            rows = conn.execute(
+                f"SELECT {pk} AS pk, {when_col} AS at FROM {table} WHERE org_id = ?",
+                (org_id,)).fetchall()
+        except Exception:                       # noqa: BLE001
+            continue
+        for r in rows:
+            out.append({"what": label, "table": table, "row_id": r["pk"],
+                        "at": r["at"] or ""})
+    return sorted(out, key=lambda x: x["at"] or "", reverse=True)
 
 
 # --------------------------------------------------------------------------- #

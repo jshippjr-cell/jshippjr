@@ -14,8 +14,10 @@
 <span class="pill sv-{{ strat_class(tier) }}">{% if tier=='Door-opener' %}🚪 {% endif %}{{ tier }}{% if value is not none %} · {{ value|round|int }}{% endif %}</span>
 {% endmacro %}
 
+{# Dormancy rides WITH the stage, never instead of it: "Client · dormant" is the fact
+   worth acting on, and "Dormant" alone throws away the half that says they paid us. #}
 {% macro rel_pill(rel) %}
-<span class="pill rel-{{ rel.stage_class }}">{{ rel.stage }} · {{ rel.score }}</span>
+<span class="pill rel-{{ rel.stage_class }}{{ ' rel-quiet' if rel.dormant }}">{{ rel.stage }} · {{ rel.score }}{% if rel.dormant %} · quiet{% endif %}</span>
 {% endmacro %}
 
 {% macro align_bar(value) %}

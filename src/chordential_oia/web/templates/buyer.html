@@ -40,7 +40,7 @@
 </div>
 
 <section class="card strat-card">
-  <div class="card-head"><h2>Relationship <span class="muted">— Buyer Graph</span></h2>{{ rel_pill(rel) }}</div>
+  <div class="card-head"><h2>Relationship {% if agency_id %}<a class="muted link" href="/agencies/{{ agency_id }}#relationship">— intelligence &amp; outreach log</a>{% else %}<span class="muted">— Buyer Graph</span>{% endif %}</h2>{{ rel_pill(rel) }}</div>
   <div class="strat-grid">
     <div class="strat-bars">
       <div class="callout"><span class="callout-ico">🎯</span> <strong>Next best action:</strong> {{ rel.next_best_action }}</div>

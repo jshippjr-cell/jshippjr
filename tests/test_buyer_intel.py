@@ -17,9 +17,9 @@ def test_cold_when_no_outreach():
     assert any("no outreach" in s.lower() for s in r.signals)
 
 
-def test_warming_when_touched_but_stale():
+def test_warm_when_touched_but_stale():
     r = _rel(touches=2, last_contacted_days=40)
-    assert r.stage == "Warming"
+    assert r.stage == "Warm"          # "Warming" before ADR-0057 merged the two vocabularies
     assert "follow up" in r.next_best_action.lower()
 
 

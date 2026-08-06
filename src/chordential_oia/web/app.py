@@ -181,17 +181,6 @@ async def lifespan(app: FastAPI):
                   flush=True)
     except Exception as _e:                      # noqa: BLE001 — never block a boot
         print(f"[auth] first-account bootstrap skipped: {_e}", flush=True)
-    # One buyer across every surface (ADR-0050). Idempotent and self-limiting: rows
-    # already linked, and rows that carry no email and never can be, are excluded by the
-    # query, so this costs a scan on the first boot and nothing on the ones after.
-    try:
-        _people = db.link_people(conn)
-        if _people["linked"]:
-            print(f"[identity] linked {_people['linked']} rows to "
-                  f"{_people['people']} buyers ({_people['no_email']} rows carry no "
-                  f"email and cannot be identified).", flush=True)
-    except Exception as _e:                      # noqa: BLE001 — never block a boot
-        print(f"[identity] buyer linking skipped: {_e}", flush=True)
     discovery.sync_catalog(conn)
     discovery.seed_all_active(conn)  # On sources get a default target → they fetch
     if seed.seed_demo_enabled():     # dev/tests: populate placeholder data
@@ -203,6 +192,28 @@ async def lifespan(app: FastAPI):
         seed.seed_delivery_demo(conn)  # P5: fictional campaigns at every stage
     else:                            # production: clean slate — real data only
         seed.purge_demo_data(conn)
+    # Canonical identity, AFTER seeding and purging — both write the very rows these
+    # passes exist to link, and running first left a fresh instance unlinked until its
+    # SECOND boot (proved by test_buyer_org.py::test_the_boot_links_organisations).
+    # Both are idempotent and self-limiting: rows already linked, and rows that carry no
+    # identifier and never can, are excluded by the query, so this costs a scan on the
+    # first boot and nothing on the ones after.
+    try:
+        _people = db.link_people(conn)           # ADR-0050 — the person
+        if _people["linked"]:
+            print(f"[identity] linked {_people['linked']} rows to "
+                  f"{_people['people']} buyers ({_people['no_email']} rows carry no "
+                  f"email and cannot be identified).", flush=True)
+    except Exception as _e:                      # noqa: BLE001 — never block a boot
+        print(f"[identity] buyer linking skipped: {_e}", flush=True)
+    try:
+        _orgs = db.link_orgs(conn)               # ADR-0056 — the organisation
+        if _orgs["linked"]:
+            print(f"[identity] linked {_orgs['linked']} rows to {_orgs['orgs']} "
+                  f"organisations ({_orgs['no_name']} rows carry no name; "
+                  f"{_orgs['domain_conflicts']} domain conflicts).", flush=True)
+    except Exception as _e:                      # noqa: BLE001 — never block a boot
+        print(f"[identity] organisation linking skipped: {_e}", flush=True)
     conn.execute("DELETE FROM signals WHERE signal_type = 'indicator'")  # feature dropped
     conn.commit()
     conn.close()

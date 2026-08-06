@@ -8,7 +8,7 @@
   <th {% if width %}style="width:{{ width }}"{% endif %}><a class="sortable {{ 'sorted' if active.order_by==col }}" href="/buyers?{% if active.stage %}stage={{ active.stage|urlencode }}&{% endif %}order_by={{ col }}">{{ label }}{% if active.order_by==col %} ↓{% endif %}</a></th>
 {% endmacro %}
 
-<p class="summary-line">Every buyer we've seen, ranked by relationship strength then strategic value — the moat asset. Stage runs Cold → Warming → Engaged → Client (won before).</p>
+<p class="summary-line">Every buyer we've seen, ranked by relationship strength then strategic value — the moat asset. Stage runs Cold → Warm → Engaged → Client (won before); <span class="muted">quiet</span> means no contact this quarter. The same stage shows on <a class="link" href="/relationships">Relationships</a> — one derivation, both pages.</p>
 
 <div class="filterbar seg-bar">
   <a class="seg {{ 'on' if not active.stage }}" href="/buyers?order_by={{ active.order_by }}">All stages</a>
@@ -31,7 +31,7 @@
     <tr>
       <td>
         <a class="strong" href="/buyer/{{ b.row['client']|urlencode }}">{{ b.row['client'] }}</a>
-        <div class="muted small">{{ b.row['buyer_type'].replace('_',' ')|title }} · {{ b.row['opps'] }} opp{{ 's' if b.row['opps'] != 1 }}{% if b.row['won'] %} · {{ b.row['won'] }} won{% endif %}</div>
+        <div class="muted small">{{ b.row['buyer_type'].replace('_',' ')|title }} · {{ b.row['opps'] }} opp{{ 's' if b.row['opps'] != 1 }}{% if b.row['won'] %} · {{ b.row['won'] }} won{% endif %}{% if b.agency_id %} · <a class="link" href="/agencies/{{ b.agency_id }}#relationship">intelligence</a>{% endif %}</div>
       </td>
       <td style="width:140px">{{ rel_pill(b.rel) }}</td>
       <td><div class="nba">🎯 {{ b.rel.next_best_action }}</div></td>

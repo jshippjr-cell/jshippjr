@@ -51,12 +51,16 @@ def _seed(tmp_path):
 # Relationship Agent — stage derivation.
 # --------------------------------------------------------------------------- #
 def test_stage_derivation():
-    assert rel.derive_stage(score=91, interactions=[], responded=False) == "Warm Prospect"
+    """ADR-0057 collapsed this module's vocabulary into `buyer_intel.STAGES`, so
+    "Warm Prospect" is "Warm", "Active" is "Engaged", and "Dormant" is a FLAG rather
+    than a stage — a company that has gone quiet has still got as far as it got."""
+    assert rel.derive_stage(score=91, interactions=[], responded=False) == "Warm"
     assert rel.derive_stage(score=30, interactions=[], responded=False) == "Cold"
     recent = [{"occurred_at": "2999-01-01T00:00:00+00:00"}]   # "today"-ish (future-safe)
-    assert rel.derive_stage(score=80, interactions=recent, responded=False) == "Active"
+    assert rel.derive_stage(score=80, interactions=recent, responded=False) == "Engaged"
     old = [{"occurred_at": "2000-01-01T00:00:00+00:00"}]
-    assert rel.derive_stage(score=80, interactions=old, responded=True) == "Dormant"
+    assert rel.derive_stage(score=80, interactions=old, responded=True) == "Warm"
+    assert rel._assess(interactions=old, responded=True, score=80, deal=None).dormant
 
 
 def test_pipeline_stages_batched_matches_per_row_derivation(tmp_path):
@@ -109,10 +113,10 @@ def test_pipeline_stages_batched_matches_per_row_derivation(tmp_path):
 
 def test_view_advances_stage_and_manual_override(tmp_path):
     conn, aid = _seed(tmp_path)
-    assert rel.relationship_view(conn, aid)["stage"] == "Warm Prospect"  # scored, no contact
+    assert rel.relationship_view(conn, aid)["stage"] == "Warm"   # scored, no contact
     dbm.log_agency_outreach(conn, aid, kind="email", contact="Sarah")
     conn.commit()
-    assert rel.relationship_view(conn, aid)["stage"] == "Active"         # auto-advanced
+    assert rel.relationship_view(conn, aid)["stage"] == "Engaged"  # auto-advanced
     # a human override pins it
     dbm.upsert_relationship(conn, aid, stage="Client", stage_overridden=1)
     conn.commit()
@@ -196,7 +200,7 @@ def test_relationships_dashboard_and_detail_render(tmp_path, monkeypatch):
         # logging outreach advances the stage + creates a follow-up
         c.post(f"/agencies/{aid}/outreach", data={"kind": "email", "contact": "Sarah"})
         detail2 = c.get(f"/agencies/{aid}").text
-        assert "Active" in detail2 and "Follow up" in detail2
+        assert "Engaged" in detail2 and "Follow up" in detail2
         # The drafts are no longer a dead-end: Copy + Open-in-mail are always offered.
         assert "cdlCopyDraft" in detail and "Open in mail client" in detail
 

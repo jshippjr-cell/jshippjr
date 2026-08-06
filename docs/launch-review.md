@@ -197,6 +197,23 @@ one Relationship Intelligence layer (the Buyer Graph and Relationship Management
 disjoint tables today) · minutes-of-music estimation so the film/TV engagement can be
 priced · real e-signature · token lifecycle and delegated client access.
 
+**Multi-user auth — done.** Actor identity on every state change (ADR-0053), accounts and
+sessions beside the shared passphrase rather than instead of it (ADR-0054), and three
+roles enforced in the gate (ADR-0055).
+
+**One Relationship Intelligence layer — done, and it was worse than "disjoint tables".**
+Organisations are canonical (ADR-0056), which then exposed the reason the two systems had
+never been reconciled: they could not both be right, and neither could see the other's
+evidence. `/buyers` staged a company from its opportunities — so it knew we had been
+**paid** and had no concept of a relationship going quiet. `/relationships` staged the
+same company from the agency outreach log — so it knew about dormancy and **could not
+return "Client" at any input**; the value sat in its `STAGES` tuple with no code path to
+it, reachable only by a human override. A company that had commissioned, paid for and
+received delivered work read "Client" on one page and "Active" — or after a quiet quarter,
+"Dormant" — on the other, on the same day, from the same database. One derivation now
+(ADR-0057), one vocabulary, and dormancy as a flag beside the stage rather than a fifth
+stage that erases it.
+
 ---
 
 ## Note on method

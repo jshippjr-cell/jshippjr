@@ -540,6 +540,9 @@ a{color:inherit;text-decoration:none}
 .pill.rel-warming{background:rgba(228,103,31,.14);color:#B5500F;border-color:rgba(228,103,31,.32)}
 .pill.rel-engaged{background:rgba(228,103,31,.2);color:#9c3f06;border-color:rgba(228,103,31,.45)}
 .pill.rel-client{background:rgba(34,110,70,.14);color:#1d6b43;border-color:rgba(34,110,70,.34)}
+/* Dormancy is drawn ON the stage, not instead of it — a quiet Client still reads as a
+   Client, which is the pair the old two-vocabulary split could not say (ADR-0057). */
+.pill.rel-quiet{opacity:.72;border-style:dashed}
 .contact-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
 .contact-list li{font-size:13px;border-left:2px solid var(--border2);padding-left:10px}
 

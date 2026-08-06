@@ -21,81 +21,96 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
-from . import db
+from . import buyer_intel, db
 
-STAGES = ("Cold", "Warm Prospect", "Active", "Client", "Dormant")
+# ONE vocabulary (ADR-0057). This module used to declare its own — Cold / Warm Prospect
+# / Active / Client / Dormant — over the same companies the Buyer Graph staged as
+# Cold / Warming / Engaged / Client. `buyer_intel.STAGES` is now the only one, and
+# dormancy is a flag beside it rather than a stage that erases "Client".
+STAGES = buyer_intel.STAGES
 _PROBABILITY = {"A": "High", "B": "Medium", "C": "Low", "D": "Low"}
 
 
-def _days_since(iso: str) -> int:
-    try:
-        dt = datetime.fromisoformat(iso)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return max(0, (datetime.now(timezone.utc) - dt).days)
-    except (ValueError, TypeError):
-        return 99999
-
-
 # --------------------------------------------------------------------------- #
-# Relationship Agent — derive the stage from what we know.
+# Relationship Agent — ONE stage, over ALL of the evidence.
 # --------------------------------------------------------------------------- #
-def derive_stage(*, score: Optional[int], interactions: List, responded: bool) -> str:
-    """The lifecycle stage, deterministically. A human can override it (stored on
-    the relationship); this is the automatic default."""
-    if interactions:
-        last_days = min(_days_since(i["occurred_at"]) for i in interactions)
-        if responded:
-            return "Active" if last_days <= 120 else "Dormant"
-        return "Active" if last_days <= 90 else "Dormant"
-    # never interacted: it's a prospect we know about, warm if it scores well
-    if score is not None and score >= 60:
-        return "Warm Prospect"
-    return "Cold"
+# This used to be a rule of its own, and it could not return "Client" — the value was
+# in its STAGES tuple and unreachable from its code, so a company that had commissioned
+# and paid for work read "Active", or after a quiet quarter "Dormant". Meanwhile
+# /buyers, looking at the same company through `opportunities`, said "Client". Both
+# pages were right about their half and neither could see the other's. The derivation
+# now lives in `buyer_intel`; this module's job is to hand it the evidence it holds.
+def _assess(*, interactions: List, responded: bool, score: Optional[int],
+            deal: Optional[dict]) -> buyer_intel.BuyerRelationship:
+    # MAX, not min: the most RECENT touch decides recency, and an ISO string sorts
+    # the same way the timestamp does.
+    last_touch = max((i["occurred_at"] for i in interactions), default=None)
+    return buyer_intel.relationship_for(
+        deal=deal, fit_score=score,
+        outreach={"count": len(interactions), "last_touch": last_touch,
+                  "responded": responded})
 
 
-def _stage_from_rollup(score: Optional[int], agg: Optional[dict]) -> str:
-    """derive_stage, computed from the batched outreach rollup ({last_touch,
-    responded, count}) instead of the full interactions list — identical logic, so
-    the pipeline view derives the same stage without loading every touch per row."""
-    if agg and agg.get("count"):
-        last_days = _days_since(agg["last_touch"])
-        if agg.get("responded"):
-            return "Active" if last_days <= 120 else "Dormant"
-        return "Active" if last_days <= 90 else "Dormant"
-    if score is not None and score >= 60:
-        return "Warm Prospect"
-    return "Cold"
+def _deal_for_agency(conn, agency_id: Optional[int]) -> Optional[dict]:
+    """The deals hanging off the same canonical organisation (ADR-0056) — invisible
+    from this side until organisations had an id."""
+    if not agency_id:
+        return None
+    org = db.orgs_for_agencies(conn, [agency_id]).get(agency_id)
+    if org is None:
+        return None
+    return db.org_deal_rollup(conn, [org["id"]]).get(org["id"])
+
+
+def derive_stage(*, score: Optional[int], interactions: List, responded: bool,
+                 deal: Optional[dict] = None) -> str:
+    """The lifecycle stage, deterministically. A human can override it (stored on the
+    relationship); this is the automatic default.
+
+    ``deal`` is the organisation's opportunity rollup. Without it this answers from the
+    outreach log alone — which is what it did before, and is still the whole truth for
+    an agency no opportunity has ever named.
+    """
+    return _assess(interactions=interactions, responded=responded, score=score,
+                   deal=deal).stage
 
 
 def pipeline_stages(conn, rows: List) -> List[dict]:
-    """Stage each scored agency in ``rows`` with O(1) queries: ONE outreach aggregate
-    + ONE relationships fetch for the whole set, deriving stages in memory and
-    persisting only the changed (non-overridden) ones in a SINGLE transaction.
+    """Stage each scored agency in ``rows`` with O(1) queries: ONE outreach aggregate,
+    ONE org lookup, ONE deal rollup and ONE relationships fetch for the whole set,
+    deriving stages in memory and persisting only the changed (non-overridden) ones in
+    a SINGLE transaction.
 
     Replaces the per-row loop that ran list_agency_outreach + get_relationship for
     every row and committed the cached stage per changed row (~150 queries + up to 50
-    fsync commits on the /relationships read path). Behaviour is unchanged: an
-    overridden stage is honored; otherwise the same deterministic stage is derived
-    and cached."""
+    fsync commits on the /relationships read path). The stage is now the unified one,
+    so this table and /buyers cannot disagree; an overridden stage is still honored."""
     ids = [r["id"] for r in rows]
     agg = db.outreach_aggregate(conn, ids)
     rels = db.relationships_by_ids(conn, ids)
+    orgs = db.orgs_for_agencies(conn, ids)
+    deals = db.org_deal_rollup(conn, [o["id"] for o in orgs.values()])
     out: List[dict] = []
     changed = False
     for r in rows:
         aid = r["id"]
-        rel = rels.get(aid)
-        if rel is not None and rel["stage_overridden"] and rel["stage"]:
-            stage = rel["stage"]
-        else:
-            stage = _stage_from_rollup(r["opportunity_score"], agg.get(aid))
-            if rel is None or rel["stage"] != stage:
-                db.upsert_relationship(conn, aid, stage=stage)   # no commit yet
-                changed = True
+        org = orgs.get(aid)
+        rel = buyer_intel.relationship_for(
+            deal=deals.get(org["id"]) if org is not None else None,
+            outreach=agg.get(aid), fit_score=r["opportunity_score"])
+        stored = rels.get(aid)
+        if stored is not None and stored["stage_overridden"] and stored["stage"]:
+            rel = buyer_intel.apply_override(rel, stored["stage"])
+        elif stored is None or stored["stage"] != rel.stage:
+            # `exists` comes from the batch we already fetched — upsert_relationship
+            # would SELECT per agency to learn what `rels` already told us.
+            db.cache_relationship_stage(conn, aid, rel.stage,
+                                        exists=stored is not None)  # no commit yet
+            changed = True
         out.append({"id": aid, "company": r["company"],
                     "score": r["opportunity_score"], "tier": r["opportunity_tier"],
-                    "stage": stage, "movement": r["score_movement"]})
+                    "stage": rel.stage, "dormant": rel.dormant, "label": rel.label,
+                    "movement": r["score_movement"]})
     if changed:
         conn.commit()                                            # ONE commit for the batch
     return out
@@ -103,15 +118,26 @@ def pipeline_stages(conn, rows: List) -> List[dict]:
 
 def current_stage(conn, agency_id: int, *, score: Optional[int],
                   interactions: List, responded: bool) -> str:
-    rel = db.get_relationship(conn, agency_id)
-    if rel and rel["stage_overridden"] and rel["stage"]:
-        return rel["stage"]
-    stage = derive_stage(score=score, interactions=interactions, responded=responded)
+    return current_relationship(conn, agency_id, score=score,
+                                interactions=interactions, responded=responded).stage
+
+
+def current_relationship(conn, agency_id: int, *, score: Optional[int],
+                         interactions: List, responded: bool
+                         ) -> buyer_intel.BuyerRelationship:
+    """The whole relationship, not just its name — the caller needs the dormancy flag
+    and the next action too, and deriving those separately is how there came to be two
+    engines in the first place."""
+    rel = _assess(interactions=interactions, responded=responded, score=score,
+                  deal=_deal_for_agency(conn, agency_id))
+    stored = db.get_relationship(conn, agency_id)
+    if stored and stored["stage_overridden"] and stored["stage"]:
+        return buyer_intel.apply_override(rel, stored["stage"])
     # cache the derived stage (without marking it overridden)
-    if not rel or rel["stage"] != stage:
-        db.upsert_relationship(conn, agency_id, stage=stage)
+    if not stored or stored["stage"] != rel.stage:
+        db.upsert_relationship(conn, agency_id, stage=rel.stage)
         conn.commit()
-    return stage
+    return rel
 
 
 # --------------------------------------------------------------------------- #
@@ -197,15 +223,16 @@ def relationship_view(conn, agency_id: int) -> Dict:
     interactions = list(db.list_agency_outreach(conn, agency_id))
     responded = any(o["responded"] for o in interactions)
     score = score_blob.get("score")
-    stage = current_stage(conn, agency_id, score=score, interactions=interactions,
-                          responded=responded)
+    rel = current_relationship(conn, agency_id, score=score, interactions=interactions,
+                               responded=responded)
     tasks = [dict(t) for t in db.list_agency_tasks(conn, agency_id, status="open")]
     last = interactions[0] if interactions else None
     return {
         "agency_id": agency_id, "company": row["company"],
         "score": score, "tier": score_blob.get("tier"),
         "confidence": score_blob.get("confidence"),
-        "stage": stage,
+        "stage": rel.stage, "dormant": rel.dormant, "stage_label": rel.label,
+        "next_best_action": rel.next_best_action, "relationship_signals": rel.signals,
         "probability": _PROBABILITY.get(score_blob.get("tier") or "", "—"),
         "primary_contact": score_blob.get("recommended_contact"),
         "recommended_action": score_blob.get("recommended_action") or "Score the agency to get a recommendation",

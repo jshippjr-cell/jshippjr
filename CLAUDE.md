@@ -126,6 +126,16 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   use a per-reviewer `?r=` token.
 - **Column migrations:** add to the `_*_COLUMNS` dict + the `ALTER TABLE` loop in `db.py`
   (`CREATE TABLE` for fresh DBs; the loop migrates existing ones).
+- **Canonical identity:** a buyer is one **person** (`buyer_person`, keyed by email —
+  ADR-0050) and one **organisation** (`buyer_org`, keyed by a normalised name —
+  ADR-0056). Surfaces carry `person_id` / `org_id`, stamped by `link_people` /
+  `link_orgs` at boot **after** seeding. Reach a company through the org, never by
+  string-matching `client` again. Evidence or nothing: no email → no person, no name →
+  no org, and the gap is *reported*, not filled with a guess.
+- **One derivation, many reporters:** the relationship stage lives only in
+  `buyer_intel` (ADR-0057), as the queue count lives only in `queue.compute_queue`
+  (ADR-0029) and the price only in `web.estimate.estimate_for` (ADR-0033). If two pages
+  answer the same question, one of them is wrong on a day nobody is looking.
 - **Provider seams:** `payments/` and `mailer.py` — null default + env-selected real
   impl, best-effort, never raise/block.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from

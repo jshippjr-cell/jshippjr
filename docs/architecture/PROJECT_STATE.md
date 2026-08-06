@@ -147,9 +147,32 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   UNIQUE index; `link_people` runs at boot and `person_touchpoints` returns one history.
   **Identity is the email and only the email** — no email means no person, because merging
   humans on a name eventually attributes one buyer's approval to another in the record a
-  client signs against. **Still open: the ORGANISATION half.** Orgs remain `agencies.id`
-  in some places and a bare `client` name string in `opportunities`, `companies` and
-  `client_procurement_history` — the same defect one level up, and a bigger migration.
+  client signs against. **The organisation half is done too** — see below.
+
+- **A buyer is one organisation now, and has one relationship** (ADR-0056 + ADR-0057,
+  2026-08-06). The half ADR-0050 deferred. A company was `agencies.id` in Agency
+  Intelligence and a bare name string in `opportunities`, `projects`, `companies` and
+  `client_procurement_history`, with nothing joining them. `buyer_org` is now canonical,
+  keyed by a **normalised name** with a UNIQUE index; `link_orgs` runs at boot and
+  `org_touchpoints` returns one history. The name is a weaker identity than the person
+  half's email and it is stated rather than hidden: an org with no website still has to
+  be canonical, and a shared domain never merges two names — a second domain under one
+  name is *counted* as a conflict.
+
+  What the join then exposed: **two relationship engines over the same companies, each
+  blind to half the evidence.** The Buyer Graph (`/buyers`) staged from opportunities, so
+  it knew we had been paid and had no concept of a relationship going quiet; Relationship
+  Management (`/relationships`) staged from the agency outreach log, so it knew about
+  dormancy and **could not return "Client" at any input** — the value was in its `STAGES`
+  tuple with no code path to it. A company that had commissioned, paid for and received
+  delivered work read "Client" on one page and "Active", or after a quiet quarter
+  "Dormant", on the other. There is now ONE derivation in `buyer_intel`, one vocabulary
+  (`Cold → Warm → Engaged → Client`), and **dormancy is a flag beside the stage rather
+  than a fifth stage** — because making it a stage is exactly what erased "Client". The
+  two pages cross-link, and `pipeline_stages` still costs a constant number of reads.
+
+  **Still open:** nothing writes `org_id` at insert time (same as `person_id`) — the boot
+  pass keeps it current, which is enough while the identity is read-only.
 
 - **The transcript poller backs off, and stops** (2026-08-06). `poll_and_ingest` asked the
   capture provider about every un-ingested bot on every ~30s tick, for as long as the row

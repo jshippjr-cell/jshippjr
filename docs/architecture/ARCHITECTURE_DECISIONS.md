@@ -1603,6 +1603,85 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0057 — One relationship stage, over both halves of the evidence
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (one
+Relationship Intelligence layer) · `web/buyer_intel.py`, `web/relationships.py`,
+`web/console_routes.py`, `web/opportunity_ops.py`
+**Decision.** `buyer_intel` is the ONLY place a relationship stage is derived.
+`relationships.STAGES` **is** `buyer_intel.STAGES` — `Cold → Warm → Engaged → Client` —
+and **dormancy is a flag beside the stage, not a fifth stage.** Both surfaces feed the
+same function: `/buyers` through `relationship_for` over `all_buyers` + the batched
+agency outreach rollup, `/relationships` through `pipeline_stages` over the outreach
+rollup + the batched deal rollup. A human override still wins, and legacy stage names
+are translated on read rather than migrated.
+**Why.** There were two relationship engines over the same companies and each was blind
+to half the evidence. The Buyer Graph staged from `opportunities` + `outreach_events`,
+so it knew we had been PAID by someone and had no concept of a relationship going quiet.
+Relationship Management staged from `agency_outreach`, so it knew about dormancy and
+**could not return "Client" at any input** — the value was in its `STAGES` tuple with no
+code path to it, reachable only by a human override. So a company that had commissioned,
+paid for and received delivered work read **"Client" on one page and "Active" — or after
+a quiet quarter, "Dormant" — on the other**, on the same day, from the same database.
+This is the same defect as ADR-0029's three answers to "what is waiting on me?", one
+level up, and it gets the same fix: one computation, everything else reports it.
+**Why dormancy is a flag.** Making it a stage is precisely what erased "Client": a
+paying customer who went quiet stopped being recorded as a customer at all. *We have
+been paid by these people and have not spoken in eight months* is the single most
+actionable pair in the layer, and neither old engine could express it.
+**Why both recency rules survive.** Fourteen days (the Buyer Graph's) and ninety —
+a hundred and twenty once they have ever replied (Relationship Management's) — were
+never in conflict. They answer different questions: *is this conversation live* and
+*is this relationship alive*. Both are kept, on the two axes.
+**Consequences.** `tests/test_one_relationship.py` fails if a second stage vocabulary
+appears, if "Dormant" becomes a stage, if a won deal does not make a Client, if a quiet
+quarter is invisible, if the two logs are not merged into one conversation, if the two
+surfaces stage one company differently, if a human override stops winning, if a legacy
+stored stage is dropped, if the override form accepts a value outside the vocabulary —
+or if `pipeline_stages` exceeds five reads for twelve agencies, because reaching the
+other half of the evidence must not reintroduce the per-row loop ADR-0029 removed.
+Writing the derived stage now goes through `db.cache_relationship_stage`, which takes
+`exists` from the batch instead of paying a `SELECT` per agency to re-learn it.
+
+### ADR-0056 — An organisation is a name, and the name is normalised
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (one
+Relationship Intelligence layer) · `web/db.py`, `web/app.py`
+**Decision.** `buyer_org` is the canonical organisation on the buying side, keyed by a
+normalised name (`name_key`) with a UNIQUE index. `resolve_org` creates or matches;
+`link_orgs` stamps `org_id` on the five surfaces that name a company — `opportunities`,
+`projects`, `agencies`, `companies`, `client_procurement_history` — and runs at boot;
+`org_touchpoints` answers what one organisation has with us across all of them.
+`domain` and `agency_id` **enrich** the row (first non-empty wins) and never decide
+identity.
+**Why.** This is the half ADR-0050 deferred and named. A company was `agencies.id` in
+Agency Intelligence and a bare name string everywhere else, with nothing joining them —
+which is why the product grew two relationship systems over the same companies (see
+ADR-0057) and why, until this existed, there was not even a join to notice it with.
+**Why the name is the identity, when ADR-0050 refused names for people.** The two cases
+are not alike, and the difference is the available evidence. A person has an email:
+unambiguous, usually present, and two people called John Smith are two rows. An
+organisation has a name and *sometimes* a website — and an organisation with no website
+still has to be canonical or the layer is useless. It is also the rule the codebase had
+already committed to: `match_agency_by_name` has threaded `agency_id` onto opportunities
+by exact normalised name since the lineage work. This makes an existing decision
+explicit rather than adding a second one.
+**What it costs, stated rather than hidden.** A renamed company becomes a second
+organisation, and so does a typo. Those are gaps, and a gap is recoverable. What it must
+never do is MERGE two companies — that merges their deal history and their clearance
+record — which is why the match is exact-after-normalisation and never fuzzy, why a
+shared domain does not merge two names, and why a second, different domain under one
+name is COUNTED as `domain_conflicts` rather than silently overwritten by write order.
+**Consequences.** `tests/test_buyer_org.py` fails if one company written four ways
+resolves to more than one org, if two different companies merge, if a nameless row
+invents an organisation, if the database accepts two rows for one name key (enforced by
+the index, not by the resolver being careful), if a shared website merges two companies,
+if the backfill is not idempotent, if nameless rows are re-read on every boot for ever,
+if a domain conflict is hidden, or if the backfill commits per row. **The boot pass now
+runs AFTER seeding and purging** — both write the very rows it exists to link, and
+running first left a fresh instance unlinked until its second boot. `link_people` moved
+with it for the same reason. As in ADR-0050, nothing writes `org_id` at insert time; the
+boot pass keeps it current, which is sufficient while the identity is read-only and is
+the first thing to change when a surface starts writing it.
+
 ### ADR-0055 — Three roles, enforced in one place, with the break-glass exempt
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
 auth) · `web/roles.py`, `web/app.py`, `web/accounts.py`

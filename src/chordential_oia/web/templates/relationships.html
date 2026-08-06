@@ -3,7 +3,7 @@
 {% block heading %}Relationship Management{% endblock %}
 {% block content %}
 
-<p class="muted small" style="margin:6px 0 14px">Consumes the intelligence — manages the lifecycle of every agency relationship. Not "accounts" and "contacts"; movements, follow-ups, and what to do next.</p>
+<p class="muted small" style="margin:6px 0 14px">Consumes the intelligence — manages the lifecycle of every agency relationship. Not "accounts" and "contacts"; movements, follow-ups, and what to do next. Stage is the same one the <a class="link" href="/buyers">Buyer Graph</a> shows — one derivation over both the deals and the outreach.</p>
 
 <!-- Today's Priorities — what to act on, derived from the engines. -->
 <div class="card" style="margin-bottom:16px">
@@ -72,7 +72,7 @@
     {% for p in pipeline %}
       <tr style="border-top:1px solid var(--border,#eee)">
         <td style="padding:8px 10px"><a href="/agencies/{{ p.id }}#relationship">{{ p.company }}</a></td>
-        <td style="padding:8px 10px">{{ p.stage }}</td>
+        <td style="padding:8px 10px">{{ p.stage }}{% if p.dormant %} <span class="muted small">· quiet</span>{% endif %}</td>
         <td style="padding:8px 10px"><strong>{{ p.score }}</strong></td>
         <td style="padding:8px 10px">{{ p.tier }}</td>
         <td style="padding:8px 10px">{% if p.movement %}<span style="color:{{ '#2e8b57' if p.movement > 0 else '#b5651d' }}">{{ '▲' if p.movement > 0 else '▼' }} {{ p.movement|abs }}</span>{% else %}—{% endif %}</td>

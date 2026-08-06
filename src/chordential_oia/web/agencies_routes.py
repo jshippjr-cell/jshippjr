@@ -538,7 +538,14 @@ def agency_send_outreach(agency_id: int, subject: str = Form(""),
 @router.post("/agencies/{agency_id}/relationship/stage")
 def agency_set_stage(agency_id: int, stage: str = Form(...)):
     """Manually override the relationship stage (the Relationship Agent's auto
-    derivation is the default; this pins it)."""
+    derivation is the default; this pins it) — "the machine proposes, Jon disposes".
+
+    Refused if it is not a stage: the override is READ BACK as the answer on two pages
+    now (ADR-0057), so a value outside the vocabulary would pin one company to a stage
+    no filter can select and no rule can ever clear.
+    """
+    if stage not in relationships.STAGES:
+        return PlainTextResponse(f"Not a relationship stage: {stage}", status_code=400)
     conn = db.connect()
     try:
         db.upsert_relationship(conn, agency_id, stage=stage, stage_overridden=1)
