@@ -94,6 +94,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Phase 4 started: every state change is attributable** (ADR-0053, 2026-08-06). The
+  first slice of "multi-user auth with actor identity", done deliberately BEFORE any login
+  change because it is additive and cannot lock anyone out. Dozens of decision routes
+  recorded the actor as a hardcoded `"Studio"`/`"ChordOS"` or nothing; every mutating
+  request now writes who/what/which-record to `decision_log`, derived in the gate
+  middleware so no route can be missed. **It records a ROLE, not a name** — one shared
+  passphrase means the system cannot know which human, and naming one anyway would be a
+  lie that looks like evidence. Tokens are fingerprinted, never stored. **Next in this
+  item: real accounts and sessions, then roles.**
+
 - **The delivery state machine moved into the engine** (ADR-0052, 2026-08-06) — the last
   Phase 3 item. It lived in the route modules as **18 bare string literals across three
   files**, and the drift that causes was already real: **`"Approved"` was written and

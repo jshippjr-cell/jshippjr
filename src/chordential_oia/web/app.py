@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from ..storage import get_object_store, storage_status
-from . import campaigns, db, discovery, scheduler, seed, uploads, webpush
+from . import actor, campaigns, db, discovery, scheduler, seed, uploads, webpush
 from .filters import displayurl, money, pct, slug
 from .shell import (
     ADMIN_COOKIE, admin_authed as _admin_authed, admin_cookie_value as _admin_cookie_value,
@@ -405,6 +405,31 @@ def _is_public_path(path: str) -> bool:
     )
 
 
+async def _log_decision(request: Request, status: int) -> None:
+    """Append to the decision log, off the event loop and never into the response.
+
+    An audit trail that can 500 a client's approval is worse than no audit trail, so
+    every failure here is swallowed — the write it was recording has already happened.
+    """
+    import asyncio
+
+    def _write():
+        conn = None
+        try:
+            conn = db.connect()
+            actor.record(conn, request, status)
+        except Exception:                       # noqa: BLE001 — see docstring
+            pass
+        finally:
+            if conn is not None:
+                try: conn.close()
+                except Exception: pass
+    try:
+        await asyncio.to_thread(_write)
+    except Exception:                           # noqa: BLE001
+        pass
+
+
 @app.middleware("http")
 async def _admin_gate(request: Request, call_next):
     if (_admin_secret() and not _is_public_path(request.url.path)
@@ -413,6 +438,13 @@ async def _admin_gate(request: Request, call_next):
             return Response(status_code=200)  # let platform health probes through
         return RedirectResponse(f"/admin/login?next={request.url.path}", status_code=303)
     response = await call_next(request)
+    # WHO did this (ADR-0053). Recorded HERE because this is the one place every state
+    # change already passes — stamping forty decision routes by hand would miss the
+    # forty-first, and the one it misses is the one someone disputes. Only mutating
+    # methods: a GET is a look, not a decision, and logging every page view would bury
+    # the record it exists to keep.
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        await _log_decision(request, response.status_code)
     # Let browsers cache static assets so a looping hero video / replayed audio
     # loads ONCE and replays from cache, instead of re-streaming from this single
     # worker on every navigation (which starves other media → stutter). Change a

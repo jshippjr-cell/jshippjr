@@ -1603,6 +1603,45 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0053 — Every state change is attributable, before anyone can log in
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
+auth with actor identity on every decision) — the FIRST slice · `web/actor.py`,
+`web/app.py`, `web/db.py`
+**Decision.** Every mutating request (`POST`/`PUT`/`PATCH`/`DELETE`) writes a row to
+`decision_log`: when, who, what, and which record. The actor is derived in the gate
+middleware from the request alone — admin cookie, `?k=`/`?r=` client token, or a
+`/creator/<token>` path. `GET` is not logged. Writing is best-effort and off the event
+loop: an audit trail that can 500 a client's approval is worse than no audit trail, and
+by the time it runs the decision it records has already happened.
+**Why this first, and why not login.** The launch review calls multi-user auth the
+precondition for a first hire. The bottom of that is not a login form — it is knowing who
+did what. Dozens of routes are decision buttons and the actor recorded on them was a
+hardcoded `"Studio"`, `"ChordOS"`, or nothing. With one operator that is untidy; with two
+it means **every past decision is unattributable and every future one ambiguous**. This
+slice is additive, cannot lock anyone out of production, and everything the account work
+will do depends on it. Doing it in the other order would mean building sessions on top of
+a system that still could not say who acted.
+**It records a ROLE, not a name — deliberately.** The admin gate is one shared
+passphrase, so the system does not know *which human* is behind it. Writing "Jon" into an
+audit trail on the strength of a shared secret would be a lie in the one record that
+exists to be trusted, and it would be a lie that looks like evidence. It records which
+door the request came through. When accounts arrive, the actor gains a name and **no call
+site changes**.
+**Recorded in the middleware, not at the routes.** Stamping forty decision routes by hand
+would miss the forty-first, and the one it misses is the one someone disputes.
+**Tokens are never written down.** A share token in a log is a credential in a log. The
+stored value is a 12-character SHA-256 fingerprint: enough to recognise the same reviewer
+across a campaign, useless to whoever reads the log.
+**Consequences.** `tests/test_actor_identity.py` fails if a decision goes unrecorded, if a
+page view is recorded (which would bury the record under traffic), if a FAILED attempt is
+not recorded — the attempt is the interesting part, and a log holding only successes
+cannot answer "who tried" — if a client on a share link is indistinguishable from the
+operator, if a raw token reaches the log, if the operator is asserted to be a named human,
+or if a broken log breaks the decision it was recording. `decision_log` is indexed by
+subject, because "what happened to this project" must not scan every decision ever made.
+**Still to come in this item:** real accounts and sessions, then roles. The actor model
+above is the seam they plug into.
+
 ### ADR-0052 — The delivery lifecycle is decided in the engine, and cannot be mistyped
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (domain
 routers with the state machines moved into the engines) · `delivery.py`, `web/db.py`,

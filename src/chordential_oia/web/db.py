@@ -1330,6 +1330,23 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             name TEXT PRIMARY KEY, owner TEXT, expires_at TEXT, acquired_at TEXT
         )"""
     )
+    # WHO did this (ADR-0053). Every state change, attributed. Today there is one
+    # operator and a shared passphrase, so the actor is a ROLE rather than a name — and
+    # recording a name we do not have would be a lie in an audit trail. What the system
+    # genuinely knows is which door the request came through, and that is what it
+    # records; when real accounts arrive the actor gains a name and nothing else moves.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS decision_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            at TEXT,
+            actor_kind TEXT,          -- operator | client | creator | public
+            actor_label TEXT,         -- the best identification we actually have
+            actor_ref TEXT,           -- token fingerprint / person id, never the token
+            method TEXT, path TEXT,   -- what was done, in the product's own URLs
+            subject_type TEXT, subject_id INTEGER,
+            status INTEGER
+        )"""
+    )
     # ONE buyer, across every surface they touch (ADR-0050). A human on the buying side
     # is currently recorded in SIX unlinked places — `decision_makers` (what enrichment
     # found), `discovery_requests` (who asked for a call), `meetings` and
@@ -1666,6 +1683,12 @@ _INDEXES = (
     ("idx_meetings_person", "meetings(person_id)"),
     ("idx_meeting_proposals_person", "meeting_proposals(person_id)"),
     ("idx_review_comments_person", "review_comments(person_id)"),
+
+    # The decision log (ADR-0053) is written on every state change and read by
+    # subject — "what happened to this project" must not be a table scan of every
+    # decision ever made.
+    ("idx_decision_log_subject", "decision_log(subject_type, subject_id)"),
+    ("idx_decision_log_at", "decision_log(at)"),
 )
 
 
