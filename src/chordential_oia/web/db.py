@@ -2009,14 +2009,13 @@ def update_doc_override(conn: sqlite3.Connection, opp_id: int, key: str, value) 
     """Merge a single override key. A blank/None value *removes* the key so the
     field falls back to the generated default ("reset to generated"). Returns the
     updated overrides dict."""
-    overrides = get_doc_overrides(conn, opp_id)
     blank = value is None or (isinstance(value, str) and not value.strip())
-    if blank:
-        overrides.pop(key, None)
-    else:
-        overrides[key] = value
-    save_doc_overrides(conn, opp_id, overrides)
-    return overrides
+    # Same one-statement merge as `update_delivery`, for the same reason: this is the
+    # client-facing document, edited field by field, and a read-modify-write drops
+    # whichever edit lost the race with no error on either side.
+    merge_json_key(conn, "opportunities", opp_id, "doc_overrides", key,
+                   None if blank else value)
+    return get_doc_overrides(conn, opp_id)
 
 
 def list_custom_chips(conn: sqlite3.Connection) -> List[sqlite3.Row]:
@@ -5463,6 +5462,104 @@ def set_ci_field(conn: sqlite3.Connection, field_id: int, *, value: Optional[str
 #   assets        : [{label, url, filename, kind}]  (kind: "audio" | "file")
 #   share_token   : the client-portal token (mirrors opportunities.share_token)
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Merging one key of a JSON column, without losing the other writer
+# --------------------------------------------------------------------------- #
+# The per-record JSON blob is a deliberate pattern here (CLAUDE.md: "mirror this for
+# new per-record editable state"), and it is a good one — `delivery_json` carries
+# state that is genuinely per-project and genuinely shapeless. What was not good was
+# how a single key got merged into it:
+#
+#     delivery = get_delivery(...)       # read the whole blob
+#     delivery[key] = value              # modify in Python
+#     save_delivery(...)                 # write the whole blob back
+#
+# Two writers overlapping in that window and the later write carries a blob read
+# BEFORE the earlier one — so the earlier change is gone. Nothing raises, both callers
+# are told they succeeded. Reproduced with two threads: a client approving an asset in
+# the portal while the operator published a version in the console. **The client's
+# approval vanished.** Not a rare interleaving either — publishing a version fires
+# several `update_delivery` calls in a row, and the review portal is open on someone
+# else's screen the whole time.
+#
+# The fix is not a lock around the read-modify-write; it is to stop doing a
+# read-modify-write. Both backends can merge one key into a JSON document in a single
+# statement, and a single statement cannot interleave with itself:
+#
+#     SQLite      json_set(doc, '$."key"', json(?))   /  json_remove(doc, '$."key"')
+#     Postgres    doc::jsonb || ?::jsonb              /  doc::jsonb - ?
+#
+# This protects EVERY key, which promoting `versions` and `asset_approvals` to their
+# own tables (the launch review's suggestion) would not have: `state`, `license`,
+# `cues`, `pending_version` and `delivery_zip` race exactly the same way, and two of
+# them decide what a client is looking at.
+def _is_pg(conn) -> bool:
+    return conn.__class__.__name__ == "_PgConn"
+
+
+def merge_json_key(conn, table: str, row_id: int, column: str, key: str, value) -> None:
+    """Set (or, with ``value=None``, remove) one key of a JSON text column, atomically.
+
+    One statement, so a concurrent merge of a DIFFERENT key cannot erase this one. A
+    concurrent merge of the SAME key is still last-write-wins, which is what "set this
+    key" means and is the behaviour every caller already expects.
+    """
+    if not key or '"' in key:              # the key is interpolated into a JSON path
+        raise ValueError(f"unsupported JSON key: {key!r}")
+    if _is_pg(conn):
+        if value is None:
+            sql = (f"UPDATE {table} SET {column} = "
+                   f"(COALESCE(NULLIF({column}, '')::jsonb, '{{}}'::jsonb) - ?)::text "
+                   f"WHERE id = ?")
+            params = (key, row_id)
+        else:
+            sql = (f"UPDATE {table} SET {column} = "
+                   f"(COALESCE(NULLIF({column}, '')::jsonb, '{{}}'::jsonb) || ?::jsonb)::text "
+                   f"WHERE id = ?")
+            params = (json.dumps({key: value}), row_id)
+    else:
+        doc = f"COALESCE(NULLIF({column}, ''), '{{}}')"
+        if value is None:
+            sql = f"UPDATE {table} SET {column} = json_remove({doc}, ?) WHERE id = ?"
+            params = (f'$."{key}"', row_id)
+        else:
+            sql = f"UPDATE {table} SET {column} = json_set({doc}, ?, json(?)) WHERE id = ?"
+            params = (f'$."{key}"', json.dumps(value), row_id)
+    try:
+        conn.execute(sql, params)
+        conn.commit()
+    except Exception:                       # noqa: BLE001
+        # The column already holds something that is not JSON. Both engines refuse to
+        # merge into that, where the old read-modify-write silently reset it — so fall
+        # back to exactly that, rather than turning a rescuable blob into a 500 on a
+        # client's page. Racy, but only for a row that is already broken.
+        try: conn.rollback()
+        except Exception: pass
+        _merge_json_key_by_rewrite(conn, table, row_id, column, key, value)
+
+
+def _merge_json_key_by_rewrite(conn, table: str, row_id: int, column: str,
+                               key: str, value) -> None:
+    """Last resort for a column whose contents are not valid JSON — see above."""
+    row = conn.execute(f"SELECT {column} AS c FROM {table} WHERE id = ?",
+                       (row_id,)).fetchone()
+    if row is None:
+        return
+    try:
+        doc = json.loads(row["c"]) if row["c"] else {}
+        if not isinstance(doc, dict):
+            doc = {}
+    except (ValueError, TypeError):
+        doc = {}
+    if value is None:
+        doc.pop(key, None)
+    else:
+        doc[key] = value
+    conn.execute(f"UPDATE {table} SET {column} = ? WHERE id = ?",
+                 (json.dumps(doc) if doc else None, row_id))
+    conn.commit()
+
+
 def get_delivery(conn: sqlite3.Connection, project_id: int) -> dict:
     """The project's Delivery OS state as a dict ({} when none/blank)."""
     row = conn.execute(
@@ -5491,13 +5588,8 @@ def save_delivery(conn: sqlite3.Connection, project_id: int, delivery: dict) -> 
 
 def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) -> dict:
     """Merge a single delivery key (None removes it). Returns the updated dict."""
-    delivery = get_delivery(conn, project_id)
-    if value is None:
-        delivery.pop(key, None)
-    else:
-        delivery[key] = value
-    save_delivery(conn, project_id, delivery)
-    return delivery
+    merge_json_key(conn, "projects", project_id, "delivery_json", key, value)
+    return get_delivery(conn, project_id)
 
 
 # --------------------------------------------------------------------------- #

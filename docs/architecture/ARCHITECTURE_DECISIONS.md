@@ -1603,6 +1603,43 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0049 — Merge one JSON key in one statement, not read-modify-write
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3
+(`delivery_json` concurrency) · `web/db.py`
+**Decision.** `update_delivery` and `update_doc_override` merge a single key through
+`db.merge_json_key`, which issues ONE statement — `json_set` / `json_remove` on SQLite,
+`jsonb || jsonb` / `jsonb - key` on Postgres. No read-modify-write in Python. A concurrent
+merge of a *different* key can no longer erase yours; a concurrent merge of the *same* key
+is still last-write-wins, which is what "set this key" means.
+**Why.** The old helper read the whole blob, set one key in Python, and wrote the whole
+blob back. Two writers overlapping in that window and the later write carries a document
+read *before* the earlier one, so the earlier change is gone — with **nothing raised and
+both callers told they succeeded**. Reproduced with two threads doing what the product
+does: a client approving an asset in the review portal while the operator published a
+version in the console. **The client's approval vanished.** This is not an exotic
+interleaving: publishing a version fires several `update_delivery` calls in a row, and the
+review portal is open on someone else's screen throughout.
+**Why not promote `versions` / `asset_approvals` to tables**, which is what the review
+proposed. It would fix those two keys and leave `state`, `license`, `cues`,
+`pending_version` and `delivery_zip` racing exactly as before — and two of those decide
+what a client is looking at. It is also a large migration through the version ladder, which
+is read almost everywhere. The one-statement merge fixes every key, including keys not
+written yet, and keeps the per-record JSON blob that CLAUDE.md names as a pattern to reuse.
+Promotion remains available later, on its own merits (queryability across projects), rather
+than as a concurrency fix it only partly performs.
+**Consequences.** `tests/test_delivery_concurrency.py` runs the losing pair **in rounds
+behind a `threading.Barrier`**, not once with a sleep: the first version of that test
+PASSED on the broken implementation whenever the interleaving happened not to occur, and a
+race test that passes intermittently on broken code is worse than no test because it is
+read as evidence. Measured 4/4 failing before the fix, 3/3 passing after. Also pinned: every
+JSON shape round-trips (a merge that stringified a list would corrupt the ladder rather
+than lose it), `None` removes exactly one key while `""` sets it (both conventions are
+load-bearing — the pending slot is cleared with `""`), a hostile key is refused rather than
+interpolated into a JSON path, and a column already holding non-JSON still merges by
+falling back to the old rewrite instead of 500ing on a client's page.
+`tests/test_postgres_dialect.py` repeats the whole thing on a real server, because the SQL
+is dialect-specific and passes through the translation shim.
+
 ### ADR-0048 — Pooled Postgres connections, behind the one door
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (request-scoped
 connections / pooling), a cutover precondition · `web/db.py`, `web/app.py`, `pyproject.toml`

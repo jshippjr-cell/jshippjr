@@ -94,6 +94,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **`delivery_json` stopped losing writes** (ADR-0049, 2026-08-06). Merging one key was a
+  read-modify-write in Python, so two overlapping writers meant the later one carried a
+  document read before the earlier — the earlier change gone, nothing raised, both callers
+  told they succeeded. Reproduced: **a client's asset approval erased by a simultaneous
+  version publish.** Now one statement per merge (`json_set` / `jsonb ||`), which protects
+  every key rather than the two the review named — `state`, `license` and `pending_version`
+  raced identically and decide what the client sees. `doc_overrides` had the same bug on
+  the document the client reads, and is fixed with it.
+
 - **THE POSTGRES CUTOVER IS DONE** (2026-08-06). Production runs on managed Postgres and
   the Render persistent disk has been deleted — so deploys no longer stop the old instance
   before starting the new one, and the ~2-minute 502 on every push (including docs-only

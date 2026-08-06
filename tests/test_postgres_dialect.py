@@ -306,3 +306,63 @@ def test_the_indexes_exist_and_are_usable_on_real_postgres(monkeypatch):
             assert "idx_" in plan, f"planner cannot use an index for: {sql}\n{plan}"
     finally:
         conn.close()
+
+
+@live
+def test_the_json_merge_is_atomic_on_real_postgres(monkeypatch):
+    """The one-key merge is dialect-specific — `jsonb || jsonb` on Postgres, `json_set`
+    on SQLite — and it goes through the translation shim on the way. SQLite passing
+    says nothing about the backend production actually runs on.
+    """
+    dsn = _fresh_db()
+    monkeypatch.setenv("CHORDENTIAL_DB", dsn)
+    import importlib
+    import threading
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    conn.execute("INSERT INTO projects (client, need) VALUES ('Acme', 'Anthem')")
+    conn.commit()
+    pid = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()["id"]
+    conn.close()
+    try:
+        # shapes round-trip
+        c = db_mod.connect()
+        shapes = {"versions": [{"n": 1}, {"n": 2}], "state": "Delivered",
+                  "revisions_used": 2, "license_confirmed": True}
+        for k, v in shapes.items():
+            db_mod.update_delivery(c, pid, k, v)
+        got = db_mod.get_delivery(c, pid)
+        assert all(got[k] == v for k, v in shapes.items()), got
+        # removal takes exactly one key
+        db_mod.update_delivery(c, pid, "versions", None)
+        got = db_mod.get_delivery(c, pid)
+        assert "versions" not in got and got["state"] == "Delivered"
+        c.close()
+
+        # and concurrent merges of different keys do not erase each other
+        losses = []
+        for r in range(10):
+            a, b = f"approval_{r}", f"version_{r}"
+            start = threading.Barrier(2)
+
+            def writer(key, value):
+                cc = db_mod.connect()
+                start.wait(timeout=10)
+                db_mod.update_delivery(cc, pid, key, value)
+                cc.close()
+
+            ts = [threading.Thread(target=writer, args=(a, {"by": "Priya"})),
+                  threading.Thread(target=writer, args=(b, [{"n": r}]))]
+            for t in ts: t.start()
+            for t in ts: t.join(timeout=30)
+            cc = db_mod.connect()
+            final = db_mod.get_delivery(cc, pid)
+            cc.close()
+            if a not in final or b not in final:
+                losses.append(r)
+        assert losses == [], f"rounds that lost a write on Postgres: {losses}"
+    finally:
+        db_mod.close_pool()

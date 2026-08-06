@@ -70,7 +70,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,464 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,475 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
@@ -108,7 +108,9 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 ## Patterns to reuse (don't reinvent)
 - **Per-record JSON state blobs:** `opportunities.doc_overrides` and `projects.delivery_json`
   — read/merge-one-key helpers (`get_/update_doc_override`, `get_/update_delivery`).
-  Mirror this for new per-record editable state.
+  Mirror this for new per-record editable state — and merge through
+  **`db.merge_json_key`** (ADR-0049), never read-modify-write in Python: one statement,
+  so a concurrent merge of a different key cannot erase yours.
 - **Token-gated client pages:** `share_token` (opps + projects) + the admin-gate
   exemption (see `_is_first_touch_path` / `_is_delivery_portal_path`). Reviewer links
   use a per-reviewer `?r=` token.
