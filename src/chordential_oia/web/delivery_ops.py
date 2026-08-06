@@ -19,8 +19,8 @@ from typing import Optional
 
 from .. import mailer
 from ..delivery import (
-    build_delivery_zip, current_version, delivery_completeness, version_label,
-    versions_list,
+    build_delivery_zip, current_version, delivery_completeness, state_on_client_approved,
+    version_label, versions_list,
 )
 from ..storage import get_object_store
 from . import db, production, signals, webpush
@@ -299,7 +299,7 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
         db.update_delivery(conn, project_id, "versions", versions)
         db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
     # Creative approved — but delivery stays LOCKED until every deliverable is signed off.
-    db.update_delivery(conn, project_id, "state", "Approved")
+    db.update_delivery(conn, project_id, "state", state_on_client_approved(delivery))
     finalized = _maybe_finalize_delivery(conn, project_id)   # ships iff complete + all approved
     db.add_project_event(conn, project_id, "approval", actor_role="client", actor_name=name,
                          body=f"Approved v{approved_n} — creative locked.")

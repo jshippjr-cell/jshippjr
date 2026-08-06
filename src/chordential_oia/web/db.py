@@ -5929,7 +5929,19 @@ def save_delivery(conn: sqlite3.Connection, project_id: int, delivery: dict) -> 
 
 
 def update_delivery(conn: sqlite3.Connection, project_id: int, key: str, value) -> dict:
-    """Merge a single delivery key (None removes it). Returns the updated dict."""
+    """Merge a single delivery key (None removes it). Returns the updated dict.
+
+    A `state` outside `DELIVERY_STATES` RAISES. The lifecycle was written as bare string
+    literals at eighteen call sites, and the declared list had already drifted out of
+    sync with them — `"Approved"` was being written and compared while not being a
+    declared state at all. A typo here produces a delivery no template branch matches
+    and no engine recognises, and nothing anywhere would say so.
+    """
+    if key == "state" and value not in (None, ""):
+        from ..delivery import DELIVERY_STATES
+        if value not in DELIVERY_STATES:
+            raise ValueError(
+                f"{value!r} is not a delivery state; expected one of {DELIVERY_STATES}")
     merge_json_key(conn, "projects", project_id, "delivery_json", key, value)
     return get_delivery(conn, project_id)
 

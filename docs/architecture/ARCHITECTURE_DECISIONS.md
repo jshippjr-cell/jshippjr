@@ -1603,6 +1603,40 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0052 — The delivery lifecycle is decided in the engine, and cannot be mistyped
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (domain
+routers with the state machines moved into the engines) · `delivery.py`, `web/db.py`,
+`web/project_routes.py`, `web/delivery_ops.py`
+**Decision.** The non-obvious delivery transitions are named functions in `delivery.py`
+— `state_on_version_published`, `state_on_client_approved`, `state_on_changes_requested`,
+`state_on_approval_reopened`, `can_release`. They are pure functions of the delivery
+record: they DECIDE, they do not write, and a human still presses the button. And
+`db.update_delivery(..., "state", X)` **raises** on a state outside `DELIVERY_STATES`.
+**Why.** The lifecycle lived in the route modules as **eighteen bare string literals
+across three files**, so "publishing a version moves the ball to the client" was
+re-decided at each call site and stated nowhere. That is not a tidiness complaint — it is
+how the engine's own list drifted: **`"Approved"` was written and compared by the routes
+while missing from `DELIVERY_STATES` entirely.** Anything iterating that list would have
+silently omitted the state a client's sign-off produces. Found by listing every state the
+code writes and diffing it against what the engine declares, which is now a test.
+**A naming error caught in the writing, and worth recording.** A client requesting changes
+and an operator reopening an approval are DIFFERENT events with different destinations —
+`"In production"` (back to the studio) versus `"In review"` (look again at work that
+exists). They were initially given one function name. Two rules behind one name is how one
+gets "corrected" into the other by someone reading only the name, so they are separate
+functions with the difference asserted.
+**What was deliberately NOT done.** `"Delivered"` and `"Released"` stay as literals at
+their call sites. `state_on_released() -> "Released"` is ceremony, not clarity; the
+transitions worth naming are the ones whose destination is not obvious from the action.
+Both are still covered by the write guard.
+**Consequences.** `tests/test_delivery_state_machine.py` fails if any state the web layer
+writes is not declared (the original defect, as a standing check), if an unknown or
+mis-cased state can be written, if a *declared* state cannot be — the control, since a
+guard that rejected a legitimate state would break the product where it claims to protect
+it — if the change-request and reopen transitions collapse into one, or if `can_release`
+stops agreeing with `license_confirmation`, which it delegates to precisely so there is
+never a second definition of "confirmed".
+
 ### ADR-0051 — Ask once per render: a read memo, and batched priming
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (batched
 dashboard context) · `web/db.py`, `web/console_routes.py`

@@ -40,6 +40,8 @@ from ..delivery import (
     merge_signatory, reconcile_brief, revision_status,
     scoped_deliverables, seed_brief, version_label, version_name, versions_list,
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, CONTENT_ID_HONEST, DELIVERY_STATES, VERSION_STATES,
+    can_release, state_on_approval_reopened, state_on_changes_requested,
+    state_on_client_approved, state_on_version_published,
 )
 from ..matching import match_talent
 from ..models import MusicDiscipline
@@ -1295,7 +1297,8 @@ def _publish_pending_submission(conn, project_id: int):
     db.update_delivery(conn, project_id, "pending_version", "")   # consumed
     # Publishing a version ALWAYS moves the ball to the client — the court is theirs now,
     # whatever it was before (fresh v1 from "In production", or a re-open after approval).
-    db.update_delivery(conn, project_id, "state", "In review")
+    db.update_delivery(conn, project_id, "state",
+                       state_on_version_published(delivery))
     return label, campaign
 
 
@@ -1384,7 +1387,8 @@ def delivery_release(project_id: int):
     conn = db.connect()
     try:
         delivery = db.get_delivery(conn, project_id)
-        if license_confirmation(delivery) is None:
+        allowed, _why = can_release(delivery)      # the rule lives in the engine
+        if not allowed:
             return RedirectResponse(
                 f"/project/{project_id}/delivery?release=needs_license#delivery",
                 status_code=303,
@@ -2014,7 +2018,8 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
             # stage — the master stays approved and every prior per-deliverable sign-off is
             # preserved; only the shipped package + the client download are undone. So the
             # operator (or client) can revisit a single deliverable without redoing the master.
-            db.update_delivery(conn, project_id, "state", "Approved")
+            db.update_delivery(conn, project_id, "state",
+                               state_on_client_approved(delivery))
             db.update_delivery(conn, project_id, "download_unlocked", False)
             db.update_delivery(conn, project_id, "delivery_zip", None)
             db.add_project_event(conn, project_id, "reopened", actor_role="operator",
@@ -2029,7 +2034,8 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
                 versions[-1]["label"] = version_label(versions[-1]["n"], final=False)
                 db.update_delivery(conn, project_id, "versions", versions)
                 db.update_delivery(conn, project_id, "version_state", versions[-1]["label"])
-            db.update_delivery(conn, project_id, "state", "In review")
+            db.update_delivery(conn, project_id, "state",
+                               state_on_approval_reopened(delivery))
             db.update_delivery(conn, project_id, "download_unlocked", False)
             db.add_project_event(conn, project_id, "reopened", actor_role="operator",
                                  actor_name="Studio", body="Approval reopened — back in review.")
@@ -2223,7 +2229,8 @@ def review_changes(
         # (post-lock rounds are stamped so scope conversations have a record to stand on).
         production.log_round(conn, db, project_id,
                              version=_current_version_tag(delivery), by=name, note=note_text)
-        db.update_delivery(conn, project_id, "state", "In production")
+        db.update_delivery(conn, project_id, "state",
+                           state_on_changes_requested(delivery))
         _notify_operator_review(
             project_id, project,
             title=f"{_campaign_label(project)} — changes requested by {name}",

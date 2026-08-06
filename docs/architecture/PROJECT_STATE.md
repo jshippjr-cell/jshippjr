@@ -94,6 +94,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The delivery state machine moved into the engine** (ADR-0052, 2026-08-06) — the last
+  Phase 3 item. It lived in the route modules as **18 bare string literals across three
+  files**, and the drift that causes was already real: **`"Approved"` was written and
+  compared by the routes while missing from `DELIVERY_STATES`**. The non-obvious
+  transitions are now named functions in `delivery.py`, and `update_delivery` **raises** on
+  a state outside the declared list. `"Delivered"`/`"Released"` stay inline on purpose —
+  naming a tautological transition is ceremony — and are still covered by the guard.
+  **Phase 3 of the launch review is complete.**
+
 - **The dashboard stopped asking the same questions** (ADR-0051, 2026-08-06). It composes
   several cards from the same rows and each aggregator fetched them itself: **71 queries
   for four projects**, `delivery_json` read nine times. A request-scoped read memo plus two

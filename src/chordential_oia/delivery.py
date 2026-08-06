@@ -73,8 +73,73 @@ LICENSE_DRAFT_NOTE = "DRAFT — pending confirmation"
 
 # Version states (Revisions agent) — the bounded v1→v2→v3 ladder.
 VERSION_STATES = ["v1 Concept", "v2 Direction-lock", "v3 FINAL"]
-# Delivery lifecycle states.
-DELIVERY_STATES = ["In production", "In review", "Delivered", "Released"]
+# Delivery lifecycle states, in order.
+#
+# "Approved" was MISSING from this list while the route modules wrote it and compared
+# against it — the declared states and the real ones had drifted apart, and anything
+# iterating this (a picker, a progress rail, a validator) would have silently omitted
+# the state a client's sign-off puts a campaign into. Found by listing what the code
+# actually writes and diffing it against what the engine claims.
+DELIVERY_STATES = ["In production", "In review", "Approved", "Delivered", "Released"]
+
+
+# --------------------------------------------------------------------------- #
+# The delivery state machine
+# --------------------------------------------------------------------------- #
+# It lived in the route modules as bare string literals — 18 of them across three
+# files — so the rule "publishing a version moves the ball to the client" was
+# re-decided at each call site and existed nowhere as a statement. That is how
+# `DELIVERY_STATES` drifted: nothing pointed at it.
+#
+# These are pure functions of the delivery record. They decide, they do not write —
+# the routes still perform the transition, and a human still presses the button ("the
+# machine proposes, Jon disposes"). What changes is that the rule is now written down
+# once, in the engine that owns the vocabulary.
+def is_delivery_state(state: str) -> bool:
+    return state in DELIVERY_STATES
+
+
+def state_on_version_published(delivery: dict) -> str:
+    """Publishing a version ALWAYS moves the ball to the client — whatever the state
+    was before. A fresh v1 out of "In production" and a re-open after an approval are
+    the same event: there is new work the client has not heard."""
+    return "In review"
+
+
+def state_on_client_approved(delivery: dict) -> str:
+    """The creative lock. Not "Delivered" — the package is assembled separately, and
+    conflating the two is how a client's sign-off used to imply a shipment."""
+    return "Approved"
+
+
+def state_on_changes_requested(delivery: dict) -> str:
+    """The CLIENT asks for changes: the ball goes back to the studio, so the campaign
+    is in production again — not "in review", which would say the client still has
+    something to listen to."""
+    return "In production"
+
+
+def state_on_approval_reopened(delivery: dict) -> str:
+    """The OPERATOR reopens an approval: the work already exists and the client is
+    being asked to look again. A different event from a change request, and a
+    different destination — naming them alike is how one gets "corrected" into the
+    other by someone reading only the function name."""
+    return "In review"
+
+
+def can_release(delivery: dict):
+    """``(allowed, reason)`` — IP3: releasing asserts the licence on the certificate,
+    so it is refused until a human has confirmed the terms.
+
+    Delegates to `license_confirmation` rather than testing `license_confirmed`
+    itself. Restating the rule here would create a SECOND definition of "confirmed"
+    that agreed with the first until the day it didn't — which is the exact defect
+    this whole pass exists to remove.
+    """
+    if license_confirmation(delivery) is None:
+        return False, ("the licence terms have not been confirmed — releasing would "
+                       "assert a grant nobody signed off")
+    return True, ""
 
 # Per-round human-readable label words (Revisions agent's v1→v2→v3 ladder). The
 # last logged version reads as FINAL once the delivery is released/approved.
