@@ -30,6 +30,57 @@
     </table>
   </section>
 
+  {# Scored media is priced by the minute, so the minute count IS the estimate. It is
+     shown before the multipliers, and it says whether the brief stated the figure or
+     we assumed it — an assumed 40 minutes must never read as a measured one. #}
+  {% if est.scope %}
+  <section class="card">
+    <div class="card-head"><h2>Scope <span class="muted">— {{ est.scope.label }}</span></h2></div>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">Finished score</div>
+        <div class="kpi-value">{{ '%g'|format(est.scope.minutes) }} min</div>
+        <div class="kpi-sub">{{ 'stated in the brief' if est.scope.minutes_stated else 'ASSUMED — confirm at spotting' }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Cues</div>
+        <div class="kpi-value">{{ est.scope.cues }}</div>
+        <div class="kpi-sub">{{ 'stated in the brief' if est.scope.cues_stated else 'ASSUMED — confirm at spotting' }}</div>
+      </div>
+      {% if est.scope.episodes %}
+      <div class="kpi"><div class="kpi-label">Episodes</div><div class="kpi-value">{{ est.scope.episodes }}</div><div class="kpi-sub">stated in the brief</div></div>
+      {% endif %}
+      {# Players are their own scope, not a side effect of the word "orchestra".
+         Orchestral WRITING and HIRING an orchestra are different purchases, and a
+         sampled orchestral score carries the first without the second. #}
+      {% if est.session and est.session.live %}
+      <div class="kpi">
+        <div class="kpi-label">Players</div>
+        <div class="kpi-value">{{ est.session.players }}</div>
+        <div class="kpi-sub">{{ 'stated in the brief' if est.session.players_stated else 'ASSUMED — confirm before quoting' }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Recording dates</div>
+        <div class="kpi-value">{{ est.session.dates }}</div>
+        <div class="kpi-sub">{{ 'stated in the brief' if est.session.dates_stated else 'ASSUMED — confirm before quoting' }}</div>
+      </div>
+      {% elif est.session %}
+      <div class="kpi">
+        <div class="kpi-label">Players</div>
+        <div class="kpi-value">none</div>
+        <div class="kpi-sub">sampled / programmed — no session</div>
+      </div>
+      {% endif %}
+    </div>
+    {% if est.session %}
+    <p class="muted small" style="margin-top:10px">Writing style is <strong>{{ est.session_label|lower }}</strong> — that is the desk cost. The players are priced separately ({{ est.session.summary }} = {{ est.session_cost | money }}), so a sampled orchestral score carries the orchestration hours and no session.</p>
+    {% endif %}
+    {% if not (est.scope.minutes_stated and est.scope.cues_stated) or (est.session and est.session.live and not est.session.players_stated) %}
+    <p class="muted small" style="margin-top:6px">The amount of music and the size of the session are the two largest drivers of this number, and part of it was assumed rather than read from the brief. Spot the picture before this becomes an offer.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="card">
     <div class="card-head"><h2>Complexity multipliers</h2></div>
     <table class="table">

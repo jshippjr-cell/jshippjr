@@ -149,6 +149,32 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   humans on a name eventually attributes one buyer's approval to another in the record a
   client signs against. **The organisation half is done too** — see below.
 
+- **Film/TV can be priced now** (ADR-0058, 2026-08-06). The engine was blind to the
+  amount of music: one cue and sixty cues both priced at **$57,446**, two minutes of
+  score and ninety minutes both priced at **$57,446**. Only format words moved the
+  number, so a **:60 commercial with two cutdowns quoted at 1.33× a 28-cue, 45-minute
+  orchestral feature score** — the product sold an engagement it could not price.
+  Scored media (a format word **and** a scoring signal, so "a series of six spots"
+  stays a campaign) is now priced per finished minute plus a per-cue allowance for
+  spotting, revisions and delivery.
+
+  Pulling that thread found a second conflation: **orchestral writing and hiring an
+  orchestra were one purchase.** The word "orchestra" bought the orchestration hours
+  *and* thirty players on every date, which is why an indie feature carried a studio's
+  budget. Players and dates are separate scope now, read from the brief, and a sampled
+  orchestral score costs the full orchestration hours and **no session** — a real
+  delivery the engine could not express. The same 45-minute feature spans **$192,582
+  sampled to $493,915 with sixty players over four dates**.
+
+  Minutes, cues, players, dates and live-vs-sampled each carry a stated/assumed flag,
+  surfaced on the estimate page and in the assumptions — the amount of music and the
+  size of the session are the two biggest drivers, and a guess must not read as a fact.
+  **Not done:** the priors (`MINUTE_HOURS`, `CUE_HOURS`, `MINUTES_PER_SESSION`) are
+  Phase-1 expert values, **not operator-ratified** the way `PUBLIC_BANDS` are, and
+  `PUBLIC_BANDS` has no film/TV entry to anchor them. Per-minute hours are linear —
+  thematic reuse should make a long score cheaper per minute and that is not modelled.
+  The campaign path is unchanged and pinned by golden values.
+
 - **A buyer is one organisation now, and has one relationship** (ADR-0056 + ADR-0057,
   2026-08-06). The half ADR-0050 deferred. A company was `agencies.id` in Agency
   Intelligence and a bare name string in `opportunities`, `projects`, `companies` and

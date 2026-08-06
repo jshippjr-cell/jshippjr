@@ -21,6 +21,8 @@ from typing import Optional
 
 from ..estimation import (  # noqa: F401
     BAND_SPREAD,
+    CUE_HOURS,
+    MINUTE_HOURS,
     ROLE_HOURS,
     ROLE_RATES,
     TARGET_MARGIN,
@@ -28,7 +30,9 @@ from ..estimation import (  # noqa: F401
     EstimationEngine,
     Multiplier,
     RoleLine,
+    Scope,
     build_estimate,
+    infer_scope,
 )
 
 def estimate_for(opp, *, conn=None, project_id: Optional[int] = None, qual=None) -> Estimate:
@@ -64,6 +68,8 @@ def estimate_for(opp, *, conn=None, project_id: Optional[int] = None, qual=None)
 __all__ = [
     "estimate_for",
     "BAND_SPREAD",
+    "CUE_HOURS",
+    "MINUTE_HOURS",
     "ROLE_HOURS",
     "ROLE_RATES",
     "TARGET_MARGIN",
@@ -71,5 +77,7 @@ __all__ = [
     "EstimationEngine",
     "Multiplier",
     "RoleLine",
+    "Scope",
     "build_estimate",
+    "infer_scope",
 ]

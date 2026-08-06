@@ -136,6 +136,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `buyer_intel` (ADR-0057), as the queue count lives only in `queue.compute_queue`
   (ADR-0029) and the price only in `web.estimate.estimate_for` (ADR-0033). If two pages
   answer the same question, one of them is wrong on a day nobody is looking.
+- **Scope carries its own evidence:** `estimation.Scope` / `estimation.Session`
+  (ADR-0058) each pair a value with whether the brief STATED it. Anything assumed is
+  named on the surface that shows the number. Mirror this for any inferred input a
+  client-facing figure rests on — a guess presented as a fact is the honesty rule
+  broken, not a rounding error.
 - **Provider seams:** `payments/` and `mailer.py` — null default + env-selected real
   impl, best-effort, never raise/block.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from

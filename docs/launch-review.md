@@ -214,6 +214,21 @@ received delivered work read "Client" on one page and "Active" — or after a qu
 (ADR-0057), one vocabulary, and dormancy as a flag beside the stage rather than a fifth
 stage that erases it.
 
+**Minutes-of-music estimation — done (ADR-0058), and the finding was sharper than
+"~1.5× a :30 spot".** The engine was blind to the amount of music: one cue and sixty
+cues both priced at **$57,446**; two minutes of score and ninety minutes both priced at
+**$57,446**. Only the format words moved the number, so **a :60 commercial with two
+cutdowns — ninety seconds of music — quoted at 1.33× a 28-cue, 45-minute orchestral
+feature score.** Scored media is now priced per finished minute plus a per-cue
+allowance. Pulling that thread found a second conflation the review had not named:
+**orchestral *writing* and *hiring* an orchestra were the same purchase**, so the word
+"orchestra" bought thirty players on every date and an indie feature carried a studio's
+budget. Players and dates are separate scope now, and a sampled orchestral score costs
+the orchestration hours and no session — the same 45-minute feature spans $192,582 to
+$493,915 depending on who actually plays, where it used to be one number. **Still open:
+the priors are not operator-ratified** the way `PUBLIC_BANDS` are, and `PUBLIC_BANDS`
+has no film/TV entry to anchor them.
+
 ---
 
 ## Note on method

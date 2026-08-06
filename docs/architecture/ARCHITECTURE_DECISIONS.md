@@ -1603,6 +1603,56 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0058 — Scored media is priced by the minute, and the players are their own scope
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4
+(minutes-of-music estimation) · `estimation.py`, `web/estimate.py`,
+`templates/estimate.html`
+**Decision.** A brief that names a scored FORMAT **and** a scoring signal is priced by
+`MINUTE_HOURS × minutes + CUE_HOURS × cues`, not by spot length. Duration and cutdown
+factors do not apply on that path — the scope has already priced the amount of music,
+and applying them would count it twice. **The recording session is separate, explicit
+scope** (`Session`: live, players, dates), with its own stated/assumed flags. The
+campaign path is untouched.
+**Why.** The engine was blind to the amount of music. Measured before the change: one
+cue and sixty cues both priced at **$57,446**; two minutes of score and ninety minutes
+both priced at **$57,446**. Only the format words moved the number, and the consequence
+was that **a :60 commercial with two cutdowns — ninety seconds of music — quoted at
+1.33× a 28-cue, 45-minute orchestral feature score.** The product sells a film/TV
+engagement it could not price. (The review recorded this as "~1.5× a :30 spot"; measured
+against a format-matched comparison it is worse, because the commercial came out
+*higher*.)
+**Why the session is split out, on the operator's call.** Orchestral *writing* and
+*hiring an orchestra* are different purchases, and the single word "orchestra" in a
+brief used to buy both — the orchestration hours AND thirty players on every date. That
+is why an indie feature carried a studio's budget. Instrumentation stays a desk factor;
+players and dates are now read from the brief, and a **sampled** orchestral score costs
+the full orchestration hours and **no session at all**, which is a real and common
+delivery the engine previously could not express. The same 45-minute orchestral feature
+now spans **$192,582 sampled to $493,915 with sixty players over four dates** — which is
+the actual spread in the market, and was a single number before.
+**What is assumed, and said so.** Minutes, cues, players, dates and live-vs-sampled each
+carry a `_stated` flag; anything guessed is named in the assumptions and on the estimate
+page. Stating a player count or a date IS answering the live question — asking twice is
+noise, and noise teaches people to stop reading the warnings that matter. Stated ranges
+("20–30 cues") are read as their **midpoint**, because quoting the top of every range
+biases every estimate high.
+**What is NOT yet true.** `MINUTE_HOURS` / `CUE_HOURS` / `MINUTES_PER_SESSION` are
+Phase-1 expert priors on the same footing as `ROLE_HOURS` — **not operator-ratified the
+way `PUBLIC_BANDS` are**, and `PUBLIC_BANDS` has no film/TV entry, so nothing anchors
+this path the way ADR-0028 anchors campaign work. Per-minute hours are **linear**:
+thematic reuse genuinely makes the ninetieth minute cheaper than the first, and a
+decline curve invented here would be a number with nothing behind it, so the discount is
+declared in the assumptions and left for calibration.
+**Consequences.** `tests/test_minutes_of_music.py` fails if more music does not cost
+more, if cue count over the same minutes does not, if a feature does not outprice a :60,
+if a format word alone routes a campaign onto the scored model, if a stated range is not
+read as its midpoint, if per-episode quantities are not multiplied out, if an assumption
+is not flagged, if a sampled score is charged for players, if a stated player count does
+not beat the style word, or if spot length is applied on top of the minutes. The campaign
+path is pinned by **golden values measured on the engine immediately before the change**
+(`$11,132.9167` / `$76,191.30` / `$22,265.8333`) rather than by a band check, which would
+pass while the number drifted inside it.
+
 ### ADR-0057 — One relationship stage, over both halves of the evidence
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (one
 Relationship Intelligence layer) · `web/buyer_intel.py`, `web/relationships.py`,
