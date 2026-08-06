@@ -1603,6 +1603,42 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0055 — Three roles, enforced in one place, with the break-glass exempt
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
+auth) · `web/roles.py`, `web/app.py`, `web/accounts.py`
+**Decision.** `owner` / `operator` / `viewer`, ranked. A `GET` needs `viewer`; any other
+method needs `operator`; a declared list of irreversible, financial and destructive paths
+needs `owner`. Enforced in the gate middleware. The first bootstrapped account is an
+**owner** — an instance whose only account cannot release a delivery is worse than one
+with no accounts at all.
+**Why three.** A business this size has three kinds of person: the founder, a hire who
+runs campaigns, and someone being shown around. More roles would be a permission system
+nobody maintains; fewer would mean the first hire can assert a licence on a certificate
+a client signs against.
+**Two invariants, both more important than the rules.** The shared passphrase keeps FULL
+access — it is the break-glass (ADR-0054), a break-glass that 403s is not one, and
+restricting it would be theatre because whoever holds it can change the environment
+variable. And an instance with **no accounts behaves exactly as before**: this must be
+invisible until someone opts in.
+**Enforced in the middleware, not at the routes**, for the reason the decision log is:
+a rule applied at forty places is a rule missing from the forty-first. The cost is that
+these are path patterns rather than domain calls; the mitigation is that the default is
+RESTRICTIVE — a route added tomorrow is covered by its METHOD, so the failure mode is
+"too strict", never "wide open". `roles.may(None, …)` returns True on purpose: an
+unsigned-in caller is the passphrase or a token-gated client, both decided elsewhere, and
+answering False would quietly turn this module into a second gate with different rules.
+**On the password minimum.** Set to 9 at the operator's instruction, from my initial 10.
+Recorded because it was a deliberate decision rather than an oversight: NIST SP 800-63B's
+floor for a user-chosen password is 8, so 9 sits above the published bar, and the work
+factor here is carried by scrypt rather than by length. It is now
+`accounts.MIN_PASSWORD`, asserted against the constant so changing it again is one edit.
+**Consequences.** `tests/test_roles.py` fails if a viewer can change anything, if an
+operator can release a delivery / confirm a licence / delete an opportunity / move money,
+if an owner cannot, if the first account is not an owner, if the passphrase loses access,
+if an instance with no accounts is affected, if an unknown route stops defaulting to
+restrictive, if the owner-only list starts matching by prefix, or if an unknown role name
+grants anything.
+
 ### ADR-0054 — Accounts and sessions, added beside the passphrase and never instead of it
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (multi-user
 auth) · `web/accounts.py`, `web/auth_routes.py`, `web/shell.py`, `web/actor.py`

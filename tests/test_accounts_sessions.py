@@ -191,11 +191,18 @@ def test_the_hash_carries_its_own_parameters():
 
 
 def test_a_short_password_is_refused_with_a_reason(app_mod):
+    """The minimum is `accounts.MIN_PASSWORD` (9, the operator's call — NIST SP 800-63B's
+    floor is 8, so it sits above the published bar). Asserted against the constant rather
+    than a literal, so changing the policy is one edit and not a scavenger hunt."""
     conn = db_mod.connect()
     with pytest.raises(ValueError) as e:
-        accounts.create_account(conn, "x@y.com", "X", "short")
+        accounts.create_account(conn, "x@y.com", "X", "a" * (accounts.MIN_PASSWORD - 1))
     conn.close()
-    assert "10 characters" in str(e.value), "the rule is not stated to the caller"
+    assert str(accounts.MIN_PASSWORD) in str(e.value), "the rule is not stated to the caller"
+    # …and one AT the minimum is accepted, or the boundary is off by one.
+    conn = db_mod.connect()
+    assert accounts.create_account(conn, "ok@y.com", "OK", "b" * accounts.MIN_PASSWORD)
+    conn.close()
 
 
 def test_a_corrupt_hash_fails_closed(app_mod):

@@ -25,9 +25,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from ..storage import get_object_store, storage_status
-from . import accounts, actor, campaigns, db, discovery, scheduler, seed, uploads, webpush
+from . import (accounts, actor, campaigns, db, discovery, roles, scheduler, seed,
+               uploads, webpush)
 from .filters import displayurl, money, pct, slug
-from .shell import admin_authed as _admin_authed, admin_secret as _admin_secret
+from .shell import (admin_authed as _admin_authed, admin_secret as _admin_secret,
+                    signed_in_user as _signed_in_user)
 from .agencies_routes import router as agencies_router
 from .discovery_routes import router as discovery_router
 from .talent_routes import router as talent_router
@@ -446,6 +448,15 @@ async def _admin_gate(request: Request, call_next):
         if request.method == "HEAD":
             return Response(status_code=200)  # let platform health probes through
         return RedirectResponse(f"/admin/login?next={request.url.path}", status_code=303)
+    # WHAT they are allowed to do (ADR-0055). Checked here, not at forty routes, for
+    # the same reason the decision log is written here. Two things it must never do:
+    # restrict the shared passphrase (that is the break-glass, and anyone holding it can
+    # change the env var anyway), or change anything on an instance with no accounts.
+    _user = _signed_in_user(request)
+    if _user is not None and not roles.may(_user, request.method, request.url.path):
+        return PlainTextResponse(
+            "Your account does not have permission for this action. "
+            "Ask the owner if you need it.", status_code=403)
     response = await call_next(request)
     # WHO did this (ADR-0053). Recorded HERE because this is the one place every state
     # change already passes — stamping forty decision routes by hand would miss the

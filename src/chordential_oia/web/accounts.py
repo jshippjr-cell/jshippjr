@@ -31,6 +31,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+MIN_PASSWORD = 9          # operator's call; NIST SP 800-63B's floor is 8
 SESSION_COOKIE = "cdl_session"
 SESSION_DAYS = 30
 
@@ -82,10 +83,18 @@ def create_account(conn, email: str, name: str, password: str,
     key = norm_email(email)
     if not key or "@" not in key or not password:
         raise ValueError("an account needs an email address and a password")
-    if len(password) < 10:
+    if len(password) < MIN_PASSWORD:
         # Short enough to brute-force is short enough to refuse. Stated as a rule the
         # caller can show the human, rather than a silent truncation or a weak hash.
-        raise ValueError("the password must be at least 10 characters")
+        #
+        # NINE, set by the operator. It was 10 — my pick, not a standard — and NIST
+        # SP 800-63B's actual floor for a user-chosen password is 8, so 9 sits above the
+        # published bar. What carries the weight here is not the length anyway: scrypt
+        # makes offline guessing expensive, and the shared passphrase is a separate
+        # secret. Raising it later costs nothing, because the hash carries its own
+        # parameters and existing passwords stay valid.
+        raise ValueError(
+            f"the password must be at least {MIN_PASSWORD} characters")
     try:
         conn.execute(
             "INSERT INTO user_account (email, name, password_hash, role, created_at) "
@@ -224,7 +233,10 @@ def bootstrap_from_env(conn) -> Optional[int]:
     if get_account(conn, email) is not None:
         return None                            # already there; never reset a password
     try:
-        return create_account(conn, email, name, password)
+        # OWNER, not the default operator: this is the founder's own account, and an
+        # instance whose only account cannot release a delivery is worse than one with
+        # no accounts at all.
+        return create_account(conn, email, name, password, role="owner")
     except ValueError as e:
         print(f"[auth] first account NOT created: {e}", flush=True)
         return None

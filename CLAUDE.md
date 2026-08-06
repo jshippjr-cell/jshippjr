@@ -71,7 +71,7 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
   ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,562 tests**, must stay green before
+  in batches of ~7 files with `-n0` instead. **1,577 tests**, must stay green before
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
@@ -95,8 +95,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   break-glass beside real accounts (ADR-0054), not a legacy path. Unset = gate disabled.
 - **Accounts** (ADR-0054): sign in with email + password for a NAMED actor on every
   decision. Bootstrap the first one with `CHORDENTIAL_FIRST_USER` /
-  `CHORDENTIAL_FIRST_PASSWORD` / `CHORDENTIAL_FIRST_NAME` — created once at boot, never
-  overwritten, and the variables can be removed afterwards.
+  `CHORDENTIAL_FIRST_PASSWORD` / `CHORDENTIAL_FIRST_NAME` — created once at boot as an
+  **owner**, never overwritten, and the variables can be removed afterwards. Minimum
+  password length is `accounts.MIN_PASSWORD` (9).
+- **Roles** (ADR-0055): `owner` / `operator` / `viewer`, enforced in the gate middleware,
+  declared in `web/roles.py`. GET needs `viewer`; any other method needs `operator`; the
+  irreversible and financial paths need `owner`. **The shared passphrase keeps full
+  access** and an instance with no accounts is unaffected.
 - `CHORDENTIAL_PUBLIC_DOMAIN` (default `https://chordential.com`) — absolute links
   (first-touch page, reviewer links, Stripe redirects).
 - **Provider seams (null by default, real when configured):** payments —

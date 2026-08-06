@@ -94,6 +94,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Roles** (ADR-0055, 2026-08-06). `owner` / `operator` / `viewer`, enforced in the gate
+  so no route can be missed. A hire can run campaigns; only an owner can release a
+  delivery, confirm a licence, move money, delete an opportunity or rotate a share link.
+  **The shared passphrase keeps full access** (break-glass) and an instance with no
+  accounts is completely unaffected. The first bootstrapped account is an **owner** —
+  otherwise the founder's only account could not release their own delivery. Default is
+  restrictive, so a route added tomorrow is covered by its method rather than by someone
+  remembering a file. **Phase 4's auth item is now complete.**
+
 - **Accounts and sessions** (ADR-0054, 2026-08-06). Sign in with email + password and the
   decision log stops saying "the operator" and says **who** — the seam ADR-0053 was built
   for, filled without changing a call site. **The shared passphrase still works and always
