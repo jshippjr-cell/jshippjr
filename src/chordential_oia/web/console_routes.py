@@ -99,7 +99,12 @@ def _suggested_price(opp) -> float:
 
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
-    conn = db.connect()
+    raw = db.connect()
+    # Read-only render that composes several views of the same rows: `next_action` and
+    # `compute_queue` each correctly re-read what this handler already read, and on the
+    # seeded demo that cost 71 queries for four projects. The memo answers the repeats
+    # from memory and is discarded with the request (ADR-0051).
+    conn = db.read_memo(raw)
     try:
         # Pipeline column 1 — top targets to pursue, each with a suggested price
         # (the estimator is deterministic and cheap, so per-row is fine here).
@@ -167,7 +172,12 @@ def dashboard(request: Request):
         # even when "waiting on you" is zero — no action, just situational awareness.
         in_flight = []
         _seen_opps = set()
-        for prow in db.list_projects(conn) if hasattr(db, "list_projects") else []:
+        _projects = db.list_projects(conn) if hasattr(db, "list_projects") else []
+        # Two queries now answer what the loop below (and `compute_queue` after it)
+        # would otherwise ask twice per project. The per-row code is unchanged — it
+        # simply never reaches the database (ADR-0051).
+        db.prime_project_reads(conn, [p["id"] for p in _projects])
+        for prow in _projects:
             d = db.get_delivery(conn, prow["id"])
             pv = d.get("pending_version")
             if pv:

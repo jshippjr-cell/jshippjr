@@ -3943,7 +3943,7 @@ def insert_invoice(
 
 def list_invoices(conn: sqlite3.Connection, project_id: int) -> List[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM invoices WHERE project_id = ? ORDER BY id", (project_id,)
+        _SQL_INVOICES_BY_PROJECT, (project_id,)
     ).fetchall()
 
 
@@ -5227,6 +5227,144 @@ def people_with_history(conn, limit: int = 200) -> List[dict]:
     return sorted(out, key=lambda x: x["touchpoints"], reverse=True)
 
 
+# --------------------------------------------------------------------------- #
+# Asking the same question twice in one render
+# --------------------------------------------------------------------------- #
+# The dashboard composes several cards from the same rows, and each card was built by
+# an aggregator that fetched them for itself. Measured on the seeded demo — FOUR
+# projects — one render cost **71 queries**, of which `SELECT delivery_json FROM
+# projects WHERE id = ?` ran nine times, the projects list four times and the invoice
+# lookup once per project. It is not a bug in any one of them: `next_action.compute`
+# and `compute_queue` are each correct alone, and each re-reads what the handler had
+# already read.
+#
+# On SQLite over a local file this was invisible. On Postgres every one of those is a
+# network round trip, and the count grows with the number of projects — four projects
+# cost 71, forty would cost hundreds, on the screen that is meant to open first.
+#
+# So: a memo, scoped to ONE request and thrown away with it, never a process-wide
+# cache with a lifetime nobody can reason about. It memoises SELECT results by
+# (sql, params) — and **any non-SELECT clears it**, so a handler that reads, writes and
+# reads again cannot be served a stale row. Only a handler that opts in gets one.
+class _MemoCursor:
+    """A cursor's worth of already-fetched rows, replayable. Necessary because a real
+    cursor is consumed by the first `fetchall`, and a memo that handed the same
+    exhausted cursor to the second caller would return nothing at all."""
+
+    __slots__ = ("_rows",)
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def __iter__(self):
+        return iter(self._rows)
+
+    @property
+    def rowcount(self):
+        return len(self._rows)
+
+
+class _ReadMemo:
+    """Wraps a connection for the life of one read-only render."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._memo = {}
+        self.hits = 0
+        self.misses = 0
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def execute(self, sql, params=()):
+        head = str(sql).lstrip()[:6].upper()
+        if head != "SELECT":
+            self._memo.clear()          # a write invalidates everything we remembered
+            return self._conn.execute(sql, params)
+        try:
+            key = (str(sql), tuple(params))
+        except TypeError:               # unhashable params — just do the query
+            return self._conn.execute(sql, params)
+        if key in self._memo:
+            self.hits += 1
+            return _MemoCursor(self._memo[key])
+        self.misses += 1
+        rows = self._conn.execute(sql, params).fetchall()
+        self._memo[key] = rows
+        return _MemoCursor(rows)
+
+
+    def remember(self, sql, params, rows) -> None:
+        """Seed an answer this render is about to ask for. Used by the priming helpers
+        so one batched query can satisfy a hundred per-row ones."""
+        try:
+            self._memo[(str(sql), tuple(params))] = rows
+        except TypeError:
+            pass
+
+
+def read_memo(conn) -> "_ReadMemo":
+    """A connection that answers a repeated SELECT from memory for this request.
+
+    For read-only handlers that compose several views of the same rows. Explicit and
+    opt-in: a cache you have to ask for cannot surprise a handler that did not.
+    """
+    return _ReadMemo(conn)
+
+
+# The two statements the dashboard asks once per project. Named so the batched
+# primer below and the per-row helper cannot drift apart into two different strings.
+_SQL_DELIVERY_BY_ID = "SELECT delivery_json FROM projects WHERE id = ?"
+_SQL_INVOICES_BY_PROJECT = "SELECT * FROM invoices WHERE project_id = ? ORDER BY id"
+
+
+def prime_project_reads(memo, project_ids) -> int:
+    """Answer, in two queries, what the render would otherwise ask twice per project.
+
+    The N+1 is not a mistake in any one function: `get_delivery` and the invoice lookup
+    are per-project by nature, and the aggregators that call them are each correct
+    alone. Rather than restructure them — which would mean threading batched data
+    through `next_action` and `compute_queue` and every future caller — the answers are
+    fetched in bulk and handed to the memo BEFORE the loop runs. The per-row code is
+    untouched and simply never reaches the database.
+
+    Returns the number of rows primed. A no-op on a plain connection.
+    """
+    ids = [int(i) for i in project_ids if i is not None]
+    if not ids or not hasattr(memo, "remember"):
+        return 0
+    marks = ",".join("?" for _ in ids)
+    primed = 0
+    rows = memo.execute(
+        f"SELECT id, delivery_json FROM projects WHERE id IN ({marks})", tuple(ids)
+    ).fetchall()
+    seen = set()
+    for r in rows:
+        memo.remember(_SQL_DELIVERY_BY_ID, (r["id"],), [r])
+        seen.add(int(r["id"]))
+        primed += 1
+    for i in ids:                       # a project with no row still must not re-ask
+        if i not in seen:
+            memo.remember(_SQL_DELIVERY_BY_ID, (i,), [])
+
+    inv = memo.execute(
+        f"SELECT * FROM invoices WHERE project_id IN ({marks}) ORDER BY id", tuple(ids)
+    ).fetchall()
+    by_project = {i: [] for i in ids}
+    for r in inv:
+        by_project.setdefault(int(r["project_id"]), []).append(r)
+        primed += 1
+    for pid, rs in by_project.items():
+        memo.remember(_SQL_INVOICES_BY_PROJECT, (pid,), rs)
+    return primed
+
+
 def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> None:
     """Mirror an uploaded file's bytes into the DB (durable across redeploys). Keyed by the
     same basename the /uploads route serves; best-effort (never blocks the upload)."""
@@ -5767,7 +5905,7 @@ def _merge_json_key_by_rewrite(conn, table: str, row_id: int, column: str,
 def get_delivery(conn: sqlite3.Connection, project_id: int) -> dict:
     """The project's Delivery OS state as a dict ({} when none/blank)."""
     row = conn.execute(
-        "SELECT delivery_json FROM projects WHERE id = ?", (project_id,)
+        _SQL_DELIVERY_BY_ID, (project_id,)
     ).fetchone()
     if row is None:
         return {}

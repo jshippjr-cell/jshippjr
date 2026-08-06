@@ -1603,6 +1603,44 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0051 — Ask once per render: a read memo, and batched priming
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (batched
+dashboard context) · `web/db.py`, `web/console_routes.py`
+**Decision.** Two mechanisms, both scoped to ONE request and discarded with it. A
+**memo** (`db.read_memo`) answers a repeated SELECT from memory and is invalidated by any
+non-SELECT, so a handler that reads, writes and reads again cannot be served a stale row.
+**Priming** (`db.prime_project_reads`) fetches in two batched queries what the render
+would otherwise ask twice per project, and hands the answers to the memo *before* the loop
+runs. Opt-in per handler: a cache you must ask for cannot surprise a handler that did not.
+**Why.** The dashboard composes several cards from the same rows and each aggregator
+fetched them for itself. Measured on the seeded demo — **four** projects — one render cost
+**71 queries**, `SELECT delivery_json FROM projects WHERE id = ?` running nine times. No
+individual function is wrong: `next_action.compute` and `compute_queue` are each correct
+alone and each re-reads what the handler already read. Invisible on SQLite over a local
+file; on Postgres every one is a network round trip, and the cost grows with the data:
+
+| projects | batched | unbatched | saved |
+|---|---|---|---|
+| 4 | 51 | 71 | 28% |
+| 12 | 99 | 215 | 53% |
+| 38 | **255** | **683** | **62%** |
+
+**Why priming rather than threading batched data through the callers.** Passing
+pre-fetched rows into `next_action`, `compute_queue` and every future caller is a much
+larger change, with the same result and more ways to be wrong. Priming leaves the per-row
+code untouched — it simply stops reaching the database — so a new aggregator gets the
+benefit without knowing this exists.
+**Consequences.** `tests/test_dashboard_batching.py` fails if the memo serves an exhausted
+cursor (a real cursor is consumed by the first `fetchall`, and handing the same one to the
+second caller returns nothing — silently wrong, and worse than the duplicate query), if it
+keys on SQL without parameters (which would hand every project the first project's
+delivery blob — data corruption dressed as a performance fix), if a write does not
+invalidate it, if a primed row still reaches the database, if a project with no row falls
+through, or — the point of the whole thing — if the query count stops beating the
+unbatched cost by a comfortable margin on the same data. And the page is asserted
+**byte-for-byte identical** with both mechanisms disabled: a faster dashboard showing
+something different is the only outcome that would make this worth reverting.
+
 ### ADR-0050 — A buyer is an email, or they are nobody
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (buyer identity
 as a canonical entity) · `web/db.py`, `web/app.py`

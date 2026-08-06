@@ -94,6 +94,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The dashboard stopped asking the same questions** (ADR-0051, 2026-08-06). It composes
+  several cards from the same rows and each aggregator fetched them itself: **71 queries
+  for four projects**, `delivery_json` read nine times. A request-scoped read memo plus two
+  batched priming queries cut it to 51 — and the saving grows with the data (12 projects:
+  99 vs 215; 38 projects: **255 vs 683, 62% fewer**), which is what matters now every query
+  is a network round trip. The page is asserted byte-for-byte identical with both
+  mechanisms off.
+
 - **A buyer is one person now** (ADR-0050, 2026-08-06). A human on the buying side was
   recorded in **five unlinked tables** — `decision_makers`, `discovery_requests`,
   `meetings`, `meeting_proposals`, `review_comments` — each with its own name/email pair,
