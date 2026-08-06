@@ -389,12 +389,23 @@
 
   {% if reviewers %}
   <table class="table compact">
-    <thead><tr><th>Reviewer</th><th>Role</th><th>Personal review link</th><th></th></tr></thead>
+    <thead><tr><th>Reviewer</th><th>Role</th><th>Access</th><th>Personal review link</th><th></th></tr></thead>
     <tbody>
       {% for rv in reviewers %}
-      <tr>
-        <td><b>{{ rv.name }}</b>{% if rv.email %}<br><span class="muted small">{{ rv.email }}</span>{% endif %}</td>
+      <tr{% if rv.state != 'active' %} style="opacity:.62"{% endif %}>
+        <td><b>{{ rv.name }}</b>{% if rv.email %}<br><span class="muted small">{{ rv.email }}</span>{% endif %}
+          {# ADR-0060 — who issued this link. A delegate is a colleague the CLIENT
+             brought in, not someone Chordential named, and the difference decides
+             what they may do. #}
+          {% if rv.invited_by %}<br><span class="muted small">invited by {{ rv.invited_by }}</span>{% endif %}</td>
         <td>{{ rv.role or '—' }}</td>
+        <td class="small">
+          {% if rv.state == 'revoked' %}<b style="color:#8a3324">Withdrawn</b>{% if rv.revoked_by %}<br><span class="muted">by {{ rv.revoked_by }}</span>{% endif %}
+          {% elif rv.state == 'expired' %}<b style="color:#8a5a00">Expired</b><br><span class="muted">{{ rv.expires_at }}</span>
+          {% else %}<b style="color:#1d6b43">Active</b><br><span class="muted">{% if rv.expires_at %}to {{ rv.expires_at }}{% else %}no expiry{% endif %}</span>{% endif %}
+          <br><span class="muted">{% if rv.last_used_at %}used {{ rv.last_used_at }}{% else %}never opened{% endif %}</span>
+          <br><span class="muted">{{ 'can sign' if rv.can_sign else 'view + comment' }}</span>
+        </td>
         <td>
           {% set rurl = '/project/' ~ project['id'] ~ '/delivery-portal?r=' ~ rv.token %}
           <input type="text" class="reviewer-link" readonly value="{{ rurl }}"
@@ -404,11 +415,24 @@
           <a class="link small" href="{{ rurl }}" target="_blank" style="margin-left:8px">Open ↗</a>
         </td>
         <td>
-          <form method="post" action="/project/{{ project['id'] }}/delivery/reviewer" class="inline">
-            <input type="hidden" name="action" value="remove">
+          {# Withdrawing KEEPS the row (ADR-0060): deleting it erased the fact that
+             access was ever granted, and with it any way to answer "who could see
+             this in March". #}
+          {% if rv.state != 'revoked' %}
+          <form method="post" action="/project/{{ project['id'] }}/delivery/reviewer/revoke" class="inline">
             <input type="hidden" name="token" value="{{ rv.token }}">
-            <button class="btn tiny" type="submit">Remove</button>
+            <button class="btn tiny" type="submit">Withdraw</button>
           </form>
+          {% endif %}
+          {% if rv.state == 'expired' %}
+          {# Extend, never delete-and-remint: that would change the URL in a thread
+             the client is already reading. #}
+          <form method="post" action="/project/{{ project['id'] }}/delivery/reviewer/extend" class="inline" style="margin-top:4px">
+            <input type="hidden" name="token" value="{{ rv.token }}">
+            <input type="hidden" name="days" value="90">
+            <button class="btn tiny" type="submit">Extend 90d</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

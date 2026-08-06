@@ -375,6 +375,12 @@ _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
 # /delivery/signature/{id}/void, which is NOT exempt: withdrawing a signature is an
 # operator act and stays owner-only behind the gate.
 _DELIVERY_SIGN_RE = re.compile(r"^/project/\d+/delivery/sign/?$")
+# A verified reviewer invites a colleague from that same portal (ADR-0060). Also not
+# admin-gated, and also doing its own stricter check: an ACTIVE reviewer holding
+# `can_delegate`, which by default means one the operator named. The two OPERATOR
+# controls over the same roster — /delivery/reviewer/revoke and /reviewer/extend — are
+# deliberately absent from this list and stay behind the gate.
+_DELIVERY_DELEGATE_RE = re.compile(r"^/project/\d+/delivery/delegate/?$")
 # The composer portal — a qualified creator's token-gated home (view assignments,
 # submit work versions). The per-creator portal token IS the access control, so it
 # bypasses the admin login gate (same exemption as the client delivery portal).
@@ -402,6 +408,7 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _REVIEW_ACTION_RE.match(path)
         or _DELIVERY_DL_RE.match(path)
         or _DELIVERY_SIGN_RE.match(path)
+        or _DELIVERY_DELEGATE_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
         or _SESSION_ROOM_RE.match(path)
         or _CLIENT_PAY_RE.match(path)

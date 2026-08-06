@@ -873,6 +873,39 @@
     </div>
   </div>
 
+  {# ADR-0060 — delegated access. Without this the client forwards their personal
+     link, so the real access model was "whoever has the URL" while the records said
+     one named person. A colleague invited here gets their own name on their comments,
+     an expiry that cannot outlive this one, and no power to sign or approve. #}
+  {% if verified and reviewer.can_delegate %}
+  <div class="card" id="team">
+    <h2>Bring in a colleague</h2>
+    <p class="sub">They get their own link — their name on their notes, not yours. They can listen and comment; sign-off and approval stay with you.</p>
+    {% if request.query_params.get('invited') %}
+    <p class="legend" style="color:#1d6b43"><b>Invited.</b> If you gave an email address, their link is on its way.</p>
+    {% endif %}
+    <form method="post" action="/project/{{ project.id }}/delivery/delegate"
+          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <input type="hidden" name="r" value="{{ reviewer_token }}">
+      <label class="legend" style="display:block">Name<br>
+        <input type="text" name="name" required style="padding:8px 10px;font-size:15px"></label>
+      <label class="legend" style="display:block">Email<br>
+        <input type="email" name="email" style="padding:8px 10px;font-size:15px"></label>
+      <label class="legend" style="display:block">Their role<br>
+        <input type="text" name="role" placeholder="e.g. Legal" style="padding:8px 10px;font-size:15px"></label>
+      <button type="submit" class="btn">Send them a link</button>
+    </form>
+    {% if reviewer.expires_at %}
+    <p class="legend" style="margin-top:8px">Your own link runs to {{ reviewer.expires_at }}; theirs cannot outlast it.</p>
+    {% endif %}
+  </div>
+  {% elif verified and reviewer.delegate %}
+  <div class="card" id="team">
+    <h2>Your access</h2>
+    <p class="sub">{{ reviewer.invited_by }} gave you access to this delivery. You can listen and comment{% if reviewer.expires_at %} until {{ reviewer.expires_at }}{% endif %}. Sign-off and approval stay with them — ask your Chordential contact if you need to sign.</p>
+  </div>
+  {% endif %}
+
   {% set ns_ap = namespace(any=false) %}
   {% for c in comments %}{% if c.kind == 'approval' %}{% set ns_ap.any = true %}{% endif %}{% endfor %}
   {% if approvals or ns_ap.any %}

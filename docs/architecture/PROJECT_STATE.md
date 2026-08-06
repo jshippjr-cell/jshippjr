@@ -149,6 +149,28 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   humans on a name eventually attributes one buyer's approval to another in the record a
   client signs against. **The organisation half is done too** — see below.
 
+- **Client links have a life, and can be shared safely** (ADR-0060, 2026-08-06). A
+  reviewer's personal link was `{token, name, email, role}` — no expiry, no record of
+  use, no revocation (only deletion, which erased that access was ever granted), no
+  record of who issued it, and **no statement of what it may do**, which became
+  load-bearing the moment signing arrived: every link could sign the certificate.
+
+  Entries now carry created/expires/last-used/revoked/invited-by and explicit
+  sign/approve/delegate capabilities. New links expire (`CHORDENTIAL_REVIEWER_LINK_DAYS`,
+  default 90; `0` = never); withdrawal keeps the row; expired and revoked links answer
+  **410 with an explanation** rather than 404 at a real client who really was invited.
+
+  **Delegated access reduces risk rather than adding it.** With no supported way to loop
+  in a colleague, clients forward the link — so the real access model was *whoever has
+  the URL* while the records named one person, and every copy could sign. A verified
+  reviewer can now invite a colleague, who gets their own named entry, an expiry capped
+  at their inviter's, and **cannot sign, approve or delegate on**. Signing and approving
+  stay with someone the operator named; the operator can promote a delegate.
+
+  **Never retroactive:** entries written before these fields exist keep full
+  capabilities and no expiry, so live client links are untouched. Use is recorded at day
+  granularity — this is the read path of a page clients leave open while a mix plays.
+
 - **The certificate is really signed now** (ADR-0059, 2026-08-06). The Clearance
   Certificate is the one thing the market pays a premium for, and nothing signed it.
   What the product called a sign-off was `{"asset": …, "approver": "Dana Whitfield,

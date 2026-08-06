@@ -222,7 +222,7 @@ def test_the_router_carries_the_whole_group():
     ("talent_routes.py", None, 15),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 58),
-    ("project_routes.py", "/project", 59),
+    ("project_routes.py", "/project", 62),
     ("creator_routes.py", "/creator", 6),
     ("campaign_routes.py", "/campaign", 7),
     ("simulator_routes.py", "/simulator", 7),
@@ -249,10 +249,11 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     register two handlers for one URL — the first wins silently and the second becomes
     dead code that still looks maintained.
 
-    258 is pinned deliberately: 251 when the breakup began, +1 for share-token
+    261 is pinned deliberately: 251 when the breakup began, +1 for share-token
     rotation, +3 for the storage console (`/settings/storage` and its two buttons),
     +1 for the CORS probe that asks the bucket what it returns to a browser, +2 for
-    signing the Clearance Certificate and voiding a signature (ADR-0059).
+    signing the Clearance Certificate and voiding a signature (ADR-0059), +3 for
+    delegated access and the two operator controls over a link's life (ADR-0060).
     Change this number only when you mean to add or remove a URL, never to make a
     refactor pass."""
     decls = []
@@ -261,8 +262,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 258, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 258 — "
+    assert len(decls) == 261, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 261 — "
         f"a slice lost or gained a URL")
 
 

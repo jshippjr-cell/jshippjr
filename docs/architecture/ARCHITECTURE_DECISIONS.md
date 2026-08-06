@@ -1603,6 +1603,52 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0060 — A link has a life, and a delegate is weaker than the person who invited them
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (token
+lifecycle and delegated client access) · `reviewers.py`, `web/db.py`,
+`web/project_routes.py`, `web/app.py`
+**Decision.** A reviewer roster entry carries `created_at`, `expires_at`,
+`last_used_at`, `revoked_at`/`revoked_by`, `invited_by`, and explicit
+`can_sign`/`can_approve`/`can_delegate`. New links expire (dial:
+`CHORDENTIAL_REVIEWER_LINK_DAYS`, default 90; `0` = never). Withdrawing **keeps** the
+entry. A verified reviewer may **delegate** access to a colleague; the delegate gets
+their own link, an expiry **capped at their inviter's**, and **cannot sign, approve, or
+delegate on**. Expired and revoked links answer **410 with an explanation**, not 404.
+**Why.** A personal link was four fields — `{token, name, email, role}`. No expiry, so
+one mailed once works for ever. No record of use, so a live link and a two-year-old
+thread look identical. No revocation, only deletion, which erases the fact access was
+ever granted. No record of who issued it. And no statement of what it may DO, which
+became load-bearing the moment ADR-0059 arrived: every link could sign the Clearance
+Certificate, because nothing said otherwise.
+**Why delegation is a REDUCTION in risk, not an increase.** A client with a colleague to
+loop in had no supported way to do it, so the link gets forwarded. The system's real
+access-control model was therefore *whoever has the URL*, while its records said one
+named person — and every forwarded copy could sign. Delegation replaces that with a
+named entry per person, their own name on their notes, a bounded expiry, and strictly
+fewer powers. It is the existing hole, made visible and bounded.
+**Why a delegate cannot sign, approve, or delegate on.** Signing and approving are the
+acts that bind the deal (ADR-0020, ADR-0059), so they stay with someone the **operator**
+named; otherwise a chain of forwarded invitations ends in a signature nobody at
+Chordential authorised. Chains are also how a link ends up somewhere nobody intended, so
+delegation does not chain. The operator can promote a delegate — "the machine proposes,
+Jon disposes" applies to who may sign, too.
+**Two things that had to be true for this to be safe.** Expiry is **never applied
+retroactively**: entries written before these fields existed have no expiry, keep full
+capabilities, and behave exactly as before — adding one would cut off live clients
+mid-review to make a refactor tidy. And use is recorded at **day granularity**, because
+per-request would be a JSON merge write on every refresh of a page clients leave open
+while a mix plays, and "is anyone still using this link" is answered as well by a day.
+**Consequences.** `tests/test_token_lifecycle.py` fails if a delegate can sign, approve
+or delegate, if a delegate outlives their inviter, if a delegate of a never-expiring link
+never expires, if a legacy entry loses its powers or gains an expiry, if revocation is
+beaten by a future expiry, if withdrawal deletes the row or can be rewritten by a later
+hand, if extending changes the URL, if a revoked link can be extended back to life, if an
+expired link 404s instead of explaining itself, if opening the portal does not record the
+link as alive, if the generic share link or an expired reviewer can invite anyone, or if
+the operator's revoke/extend controls escape the admin gate. `/delivery/delegate` is
+gate-exempt (a client act, with its own stricter check); `/delivery/reviewer/revoke` and
+`/reviewer/extend` deliberately are not.
+
 ### ADR-0059 — A signature is bound to the document, or it is decoration
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (real
 e-signature) · `signing.py`, `signing_providers/`, `web/db.py`, `web/project_routes.py`

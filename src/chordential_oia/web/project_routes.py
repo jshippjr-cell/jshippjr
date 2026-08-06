@@ -32,7 +32,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import (
     HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response)
 
-from .. import mailer, recruiting, signing
+from .. import mailer, recruiting, reviewers, signing
 from ..estimation import ROLE_RATES, stated_length
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet, build_manifest,
@@ -705,7 +705,13 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         "approvals": delivery.get("approvals") or [],
         # Verified-identity approval: the operator-invited reviewer roster — each has
         # a personal ?r= invite link (the only way to approve).
-        "reviewers": delivery.get("reviewers") or [],
+        # ADR-0060 — each roster entry carries its own lifecycle so the console can
+        # show who still has live access, when it runs out, and what it may do.
+        "reviewers": [
+            dict(rv, state=reviewers.state_of(rv),
+                 can_sign=reviewers.capabilities(rv)["sign"])
+            for rv in (delivery.get("reviewers") or []) if isinstance(rv, dict)
+        ],
         # Outbound-email status: honest indicator on the reviewers card — whether
         # invites / new-version notices go out automatically or links are copied
         # by hand (mailer is null/unconfigured until SMTP env is set).
@@ -1427,6 +1433,14 @@ def delivery_sign(
                 "This link can view the certificate but cannot sign it. Signing needs "
                 "your personal reviewer link — ask your Chordential contact to send it.",
                 status_code=403)
+        if not reviewers.capabilities(verified)["sign"]:
+            # ADR-0060: a delegate reads and comments. Signing binds the deal, so it
+            # stays with someone the OPERATOR named — otherwise a forwarded invite
+            # chain ends in a signature nobody at Chordential ever authorised.
+            return HTMLResponse(
+                "Your access was delegated by a colleague, so it can view and comment "
+                "but not sign. Ask your Chordential contact for a signing link.",
+                status_code=403)
         if not consent:
             return HTMLResponse(
                 "Please tick the consent box: an electronic signature needs your "
@@ -1457,6 +1471,88 @@ def delivery_sign(
         conn.close()
     back = f"/project/{project_id}/delivery-portal?r={r}" + (f"&k={k}" if k else "")
     return RedirectResponse(back + "&signed=1#certificate", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/delegate")
+def delivery_delegate(
+    project_id: int,
+    name: str = Form(...),
+    email: str = Form(""),
+    role: str = Form(""),
+    r: str = Form(""),
+):
+    """A verified reviewer gives a colleague their own access link (ADR-0060).
+
+    **This is not a new hole; it is the existing one, bounded.** Without it the client
+    forwards their personal link — so the real access model was "whoever has the URL"
+    while the records said one named person, and every forwarded copy could sign. The
+    delegate now gets an entry of their own: their name on their comments, an expiry
+    that cannot outlive their inviter's, and no power to sign, approve or delegate on.
+
+    Only an active reviewer with `can_delegate` may do it, which by default means
+    someone the OPERATOR invited — delegation does not chain.
+    """
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        inviter, state = resolve_reviewer(delivery, r)
+        if inviter is None or state != reviewers.ACTIVE:
+            return HTMLResponse(reviewers.access_note(state, inviter), status_code=403)
+        if not reviewers.capabilities(inviter)["delegate"]:
+            return HTMLResponse(
+                "Your access was delegated by a colleague, so it cannot be passed on "
+                "again. Ask your Chordential contact to invite them directly.",
+                status_code=403)
+        made = db.add_delivery_reviewer(
+            conn, project_id, name=name, email=email, role=role,
+            invited_by=inviter.get("name") or "a colleague",
+            inviter_expiry=inviter.get("expires_at") or "")
+        if made is None:
+            return HTMLResponse("A name is required to invite a colleague.",
+                                status_code=400)
+        proj = db.get_project(conn, project_id)
+        campaign = (proj["need"] if proj is not None else "") or "your campaign"
+        who = inviter.get("name") or "A colleague"
+    finally:
+        conn.close()
+    # Best-effort, and AFTER the connection closes: the invite is already recorded, so
+    # a mail failure must not lose it. The delegate is told who added them — an
+    # unexplained link from a studio they have never dealt with reads as phishing.
+    _email_reviewer_link(
+        project_id, made, campaign,
+        subject=f"You've been added to the review for {campaign}",
+        lead=(f"{who} has given you access to review this delivery. You can listen "
+              f"and comment; sign-off stays with them."))
+    return RedirectResponse(
+        f"/project/{project_id}/delivery-portal?r={r}&invited=1#team", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/reviewer/revoke")
+def delivery_revoke_reviewer(request: Request, project_id: int,
+                             token: str = Form(...)):
+    """Withdraw a reviewer's link, keeping the entry (ADR-0060). Deleting it erased
+    the fact that access had ever been granted, and with it any way to answer "who
+    could see this in March"."""
+    conn = db.connect()
+    try:
+        db.revoke_delivery_reviewer(
+            conn, project_id, token, by=actor.identify(request).get("label", ""))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/reviewer/extend")
+def delivery_extend_reviewer(project_id: int, token: str = Form(...),
+                             days: int = Form(90)):
+    """Push a link's expiry out. The answer to "it expired and they still need it"
+    must not be delete-and-remint: that changes the URL in a thread they are reading."""
+    conn = db.connect()
+    try:
+        db.extend_delivery_reviewer(conn, project_id, token, days=max(1, int(days)))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
 
 
 @router.post("/project/{project_id}/delivery/signature/{signature_id}/void")
@@ -1539,12 +1635,25 @@ def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
         row = db.get_project(conn, project_id)
         token = db.ensure_project_share_token(conn, project_id) if row is not None else None
         delivery = db.get_delivery(conn, project_id) if row is not None else {}
-        verified = reviewer_from_token(delivery, r)
+        verified, r_state = resolve_reviewer(delivery, r)
+        if r_state != reviewers.ACTIVE:
+            verified = None
         k_ok = bool(token and k and hmac.compare_digest(str(k), str(token)))
         # A verified reviewer token grants access on its own; otherwise the share
-        # token must match. A missing project / no valid token 404s identically.
+        # token must match. A missing project / no valid token 404s identically —
+        # EXCEPT a link that expired or was withdrawn, which belongs to a real client
+        # who really was invited and deserves to be told which (ADR-0060).
         if row is None or not (k_ok or verified is not None):
+            if row is not None and r_state in (reviewers.EXPIRED, reviewers.REVOKED):
+                rv, _ = resolve_reviewer(delivery, r)
+                return HTMLResponse(
+                    "<h1>Link no longer active</h1><p>"
+                    + reviewers.access_note(r_state, rv) + "</p>", status_code=410)
             return HTMLResponse("Not found", status_code=404)
+        # Record that the link is alive — at most one write per link per day, because
+        # clients leave this page open while a mix plays.
+        if verified is not None:
+            db.touch_delivery_reviewer(conn, project_id, r)
         view = _delivery_view(conn, project_id, selected_v=v, client_view=True)
     finally:
         conn.close()
@@ -1557,9 +1666,17 @@ def delivery_portal(request: Request, project_id: int, k: str = "", v: str = "",
         # spoofable by typing a different name) and Approve is enabled.
         view["reviewer_token"] = verified["token"]
         view["verified"] = True
+        caps = reviewers.capabilities(verified)
         view["reviewer"] = {
             "name": verified.get("name") or "", "email": verified.get("email") or "",
             "role": verified.get("role") or "", "known": True, "verified": True,
+            # ADR-0060 — a delegate reads and comments; signing and approving stay
+            # with someone the operator named.
+            "can_sign": caps["sign"], "can_approve": caps["approve"],
+            "can_delegate": caps["delegate"],
+            "delegate": reviewers.is_delegate(verified),
+            "invited_by": verified.get("invited_by") or "",
+            "expires_at": verified.get("expires_at") or "",
         }
     else:
         # Guest (share-link) mode: free-entry identity for commenting, no approve.
@@ -1580,20 +1697,34 @@ def _review_token_ok(conn, project_id: int, k: str) -> bool:
     return bool(token and k and hmac.compare_digest(str(k), str(token)))
 
 
-def reviewer_from_token(delivery: dict, r: str):
-    """Resolve a verified reviewer from their personal token (``?r=``), or None.
+def resolve_reviewer(delivery: dict, r: str):
+    """``(reviewer_or_None, state)`` for a personal token — ADR-0060.
 
-    The roster (``delivery_json['reviewers']``) is the set of named, operator-invited
-    reviewers; a matching token means the reviewer is *verified* — their name + email
-    come from the roster (not free-typed) and they may approve. Constant-time match."""
+    The state matters as much as the reviewer. An EXPIRED link belongs to a real client
+    who really was invited, and answering them with a bare "not found" sends them back
+    to their inbox to check they clicked the right thing. The caller can say what
+    actually happened. Constant-time match.
+    """
     r = (r or "").strip()
     if not r:
-        return None
+        return None, reviewers.UNKNOWN
     for rv in (delivery.get("reviewers") or []):
         tok = (rv.get("token") or "") if isinstance(rv, dict) else ""
         if tok and hmac.compare_digest(str(r), str(tok)):
-            return rv
-    return None
+            return rv, reviewers.state_of(rv)
+    return None, reviewers.UNKNOWN
+
+
+def reviewer_from_token(delivery: dict, r: str):
+    """The ACTIVE reviewer for this token, or None.
+
+    Expired and revoked links resolve to None here on purpose: every existing caller
+    treats None as "not verified", so a link that has run out loses its powers without
+    any of them having to remember to check. Callers that want to explain themselves
+    use `resolve_reviewer` instead.
+    """
+    rv, state = resolve_reviewer(delivery, r)
+    return rv if state == reviewers.ACTIVE else None
 
 
 def _access_ok(conn, project_id: int, k: str, r: str):

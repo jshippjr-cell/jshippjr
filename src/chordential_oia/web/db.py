@@ -26,6 +26,7 @@ from typing import Dict, List, Optional
 from ..invoicing import INVOICE_STATES, Invoice
 from ..models import BuyerType, BuyerValue, MusicDiscipline, MusicRequirement, Opportunity
 from ..proposals import PROPOSAL_STATES, Proposal
+from .. import reviewers
 from ..strategic import assess_strategic_value
 from ..talent import InviteStatus, ReviewStatus, Talent, normalize_url
 from .evaluate import evaluate
@@ -6818,34 +6819,64 @@ def list_delivery_reviewers(conn: sqlite3.Connection, project_id: int) -> List[d
 
 def add_delivery_reviewer(
     conn: sqlite3.Connection, project_id: int, *, name: str, email: str = "",
-    role: str = "",
+    role: str = "", invited_by: str = "", inviter_expiry: str = "",
+    days: Optional[int] = None,
 ) -> Optional[dict]:
     """Mint a verified reviewer + their personal access token, append to the roster.
 
-    Returns the new reviewer dict ``{token, name, email, role}`` (or None when the
-    project is gone or no name was given). The token gates Approve — a verified
-    reviewer link is required to lock FINAL + build the ZIP (a generic ``?k=`` share
-    link can only view + comment as a guest)."""
+    Returns the new reviewer dict (or None when the project is gone or no name was
+    given). The token gates Approve — a verified reviewer link is required to lock
+    FINAL + build the ZIP (a generic ``?k=`` share link can only view + comment as a
+    guest) — and now gates Sign too (ADR-0059).
+
+    ``invited_by`` names the CLIENT-side reviewer who delegated this access (ADR-0060).
+    The entry it produces is weaker in three ways at once — shorter, capped at the
+    inviter's expiry, and unable to sign, approve or delegate on — because access
+    handed on must not outlive or outrank the access it came from.
+    """
     name = (name or "").strip()
     if get_project(conn, project_id) is None or not name:
         return None
     roster = list_delivery_reviewers(conn, project_id)
-    reviewer = {
-        "token": secrets.token_urlsafe(9),
-        "name": name,
-        "email": (email or "").strip(),
-        "role": (role or "").strip(),
-    }
+    reviewer = reviewers.new_reviewer(
+        token=secrets.token_urlsafe(9), name=name, email=email, role=role,
+        invited_by=invited_by, inviter_expiry=inviter_expiry, days=days)
     roster.append(reviewer)
     update_delivery(conn, project_id, "reviewers", roster)
     return reviewer
 
 
+def revoke_delivery_reviewer(
+    conn: sqlite3.Connection, project_id: int, token: str, *, by: str = "",
+) -> bool:
+    """Withdraw a reviewer's link, KEEPING the roster entry (ADR-0060).
+
+    The old behaviour deleted the row, which erased the fact that access had ever been
+    granted — and with it any way to answer "who could see this in March". A revoked
+    entry stops working immediately and stays visible in the console. Refuses to
+    re-revoke, so the record cannot be rewritten with a later hand.
+    """
+    token = (token or "").strip()
+    if not token:
+        return False
+    roster = list_delivery_reviewers(conn, project_id)
+    changed = False
+    for rv in roster:
+        if (rv.get("token") or "") == token and not rv.get("revoked_at"):
+            rv["revoked_at"] = _now()
+            rv["revoked_by"] = (by or "").strip()
+            changed = True
+    if changed:
+        update_delivery(conn, project_id, "reviewers", roster)
+    return changed
+
+
 def remove_delivery_reviewer(
     conn: sqlite3.Connection, project_id: int, token: str
 ) -> bool:
-    """Drop a reviewer from the roster by their token. Returns True if one was
-    removed (their personal link stops working)."""
+    """Drop a reviewer from the roster entirely. Kept for the case where an entry was
+    created in error and should leave no trace; ``revoke_delivery_reviewer`` is the
+    right call for withdrawing access from someone who really had it."""
     token = (token or "").strip()
     if not token:
         return False
@@ -6855,6 +6886,40 @@ def remove_delivery_reviewer(
         return False
     update_delivery(conn, project_id, "reviewers", kept)
     return True
+
+
+def extend_delivery_reviewer(
+    conn: sqlite3.Connection, project_id: int, token: str, *, days: int,
+) -> bool:
+    """Push a link's expiry out from today. The operator's answer to "it expired and
+    they still need it" — which must not be "delete and remint", because that changes
+    the URL in a thread the client is already reading."""
+    token = (token or "").strip()
+    roster = list_delivery_reviewers(conn, project_id)
+    changed = False
+    for rv in roster:
+        if (rv.get("token") or "") == token and not rv.get("revoked_at"):
+            rv["expires_at"] = reviewers.expiry_after(days)
+            changed = True
+    if changed:
+        update_delivery(conn, project_id, "reviewers", roster)
+    return changed
+
+
+def touch_delivery_reviewer(
+    conn: sqlite3.Connection, project_id: int, token: str
+) -> bool:
+    """Record that a link was used today. At most ONE write per link per day — this
+    is on the read path of a page clients leave open while listening."""
+    roster = list_delivery_reviewers(conn, project_id)
+    changed = False
+    for i, rv in enumerate(roster):
+        if (rv.get("token") or "") == token:
+            roster[i], did = reviewers.touch(rv)
+            changed = changed or did
+    if changed:
+        update_delivery(conn, project_id, "reviewers", roster)
+    return changed
 
 
 # --------------------------------------------------------------------------- #

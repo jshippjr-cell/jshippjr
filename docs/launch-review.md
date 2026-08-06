@@ -242,6 +242,17 @@ signature, a vendor adds a neutral witness rather than validity, and an untested
 envelope client would read as done while being nothing. The seam is there for the day
 procurement demands one.
 
+**Token lifecycle and delegated client access — done (ADR-0060). Phase 4 is closed.** A
+reviewer's personal link was `{token, name, email, role}`: no expiry, no record of use,
+no revocation (only deletion, which erased that access was ever granted), no record of
+who issued it, and no statement of what it could do — so once signing existed, **every
+link could sign the certificate**. Links now have a life the console can see, withdrawal
+keeps the record, and an expired link is told what happened instead of being 404'd at a
+real client. Delegation turned out to *reduce* risk: with no supported way to loop in a
+colleague, clients forward the link, so the real access model was "whoever has the URL"
+while the records named one person. A delegate now gets their own named entry, an expiry
+capped at their inviter's, and cannot sign, approve or delegate on.
+
 ---
 
 ## Note on method

@@ -106,7 +106,12 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   (first-touch page, reviewer links, Stripe redirects).
 - **Provider seams (null by default, real when configured):** payments —
   `CHORDENTIAL_PAYMENT_PROVIDER=stripe` + `STRIPE_*`; email — `CHORDENTIAL_MAIL_PROVIDER=smtp`
-  + `CHORDENTIAL_SMTP_*` (HOST/FROM required). Both no-op until set.
+  + `CHORDENTIAL_SMTP_*` (HOST/FROM required). Both no-op until set. **Signing is the
+  exception** (ADR-0059): `CHORDENTIAL_SIGNATURE_PROVIDER` defaults to `inhouse`, which
+  is a REAL electronic signature, and an unknown value **raises at boot** rather than
+  degrading.
+- `CHORDENTIAL_REVIEWER_LINK_DAYS` (default 90; `0` = never) — how long a NEW client
+  review link lasts (ADR-0060). Never applied to links that already exist.
 - Others: `CHORDENTIAL_UPLOAD_DIR`, `CHORDENTIAL_ENABLE_SCRAPE`, `CHORDENTIAL_VAPID_*`,
   `CHORDENTIAL_NTFY_TOPIC`, `CHORDENTIAL_DISCOVERY_CALL_URL`.
 - **Extraction engine (ADR-0023):** with `ANTHROPIC_API_KEY` set, intake captures run the
@@ -123,7 +128,10 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   so a concurrent merge of a different key cannot erase yours.
 - **Token-gated client pages:** `share_token` (opps + projects) + the admin-gate
   exemption (see `_is_first_touch_path` / `_is_delivery_portal_path`). Reviewer links
-  use a per-reviewer `?r=` token.
+  use a per-reviewer `?r=` token whose **lifecycle and capabilities live in
+  `reviewers.py`** (ADR-0060): expiry, last-used, revoke-don't-delete, and explicit
+  sign/approve/delegate. A delegate is always strictly weaker than their inviter, and
+  a gate exemption is only ever granted to a route that does its OWN stricter check.
 - **Column migrations:** add to the `_*_COLUMNS` dict + the `ALTER TABLE` loop in `db.py`
   (`CREATE TABLE` for fresh DBs; the loop migrates existing ones).
 - **Canonical identity:** a buyer is one **person** (`buyer_person`, keyed by email —
