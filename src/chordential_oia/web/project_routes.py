@@ -32,7 +32,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import (
     HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response)
 
-from .. import mailer, recruiting
+from .. import mailer, recruiting, signing
 from ..estimation import ROLE_RATES, stated_length
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet, build_manifest,
@@ -48,7 +48,7 @@ from ..models import MusicDiscipline
 from ..payments import get_payment_provider
 from ..proposals import build_proposal
 from ..storage import get_object_store
-from . import campaigns, db, production, signals
+from . import actor, campaigns, db, production, signals
 from .billing import (
     _client_portal_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
     _proposal_from_row,
@@ -487,6 +487,16 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         certified_version=certified_version,
         certified_date=_date.today().isoformat(),
     )
+    # ADR-0059 — is the certificate signed, and does the signature still describe it?
+    # The document text is rebuilt from live data every render, so a term changed after
+    # signing shows as SUPERSEDED rather than as a signature that appears to cover it.
+    cert_text = cert.signable_text()
+    cert_sig = db.latest_signature(conn, project_id, signing.DOC_CLEARANCE)
+    cert_sig = dict(cert_sig) if cert_sig is not None else None
+    cert_sig_state = signing.verify(
+        (cert_sig or {}).get("digest", ""), cert_text if cert_sig else None)
+    cert_sig_note = signing.verdict_note(cert_sig_state, cert_sig)
+
     cues = build_cue_sheet(row, assignments, delivery=delivery)
     manifest = build_manifest(
         row, assets=delivery.get("assets") or [], versions=versions
@@ -665,6 +675,11 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # workspace render the same sentence.
         "court": production.court_state(row, delivery),
         "cert": cert,
+        # ADR-0059 — the signature and whether it still matches the document above it.
+        "cert_signature": cert_sig,
+        "cert_signature_state": cert_sig_state,
+        "cert_signature_note": cert_sig_note,
+        "cert_signable": cert_sig_state != signing.VALID,
         # The honest Content-ID sentence — the ONE source of truth (delivery.py),
         # so the browser doc and the ZIP doc can't drift on legally-material copy.
         "content_id_honest": CONTENT_ID_HONEST,
@@ -1373,6 +1388,93 @@ def delivery_approve(
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/sign")
+def delivery_sign(
+    request: Request,
+    project_id: int,
+    typed_name: str = Form(...),
+    consent: str = Form(""),
+    r: str = Form(""),
+    k: str = Form(""),
+):
+    """The client signs the Clearance Certificate (ADR-0059).
+
+    Two refusals, both deliberate:
+
+    * **Only a VERIFIED reviewer may sign.** The `?r=` token identifies a named person
+      from the roster; the generic share link does not. A signature whose signer is
+      whatever name the browser typed proves nothing, and the product already draws
+      exactly this line for Approve (ADR-0020) — signing is the stronger act, so it
+      cannot be the weaker gate.
+    * **Consent must be given, not assumed.** ESIGN/UETA wants the signer to have
+      agreed to transact electronically. A pre-ticked box is not agreement, so the
+      form ships it unticked and this refuses without it.
+
+    The signature binds to the certificate as it stands at this instant. If the
+    operator later changes a term, the digest stops matching and every surface says so.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_project(conn, project_id)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        delivery = db.get_delivery(conn, project_id)
+        verified = reviewer_from_token(delivery, r)
+        if verified is None:
+            return HTMLResponse(
+                "This link can view the certificate but cannot sign it. Signing needs "
+                "your personal reviewer link — ask your Chordential contact to send it.",
+                status_code=403)
+        if not consent:
+            return HTMLResponse(
+                "Please tick the consent box: an electronic signature needs your "
+                "agreement to sign electronically.", status_code=400)
+        view = _delivery_view(conn, project_id, client_view=True)
+        cert = view["cert"]
+        try:
+            sig = signing.build_signature(
+                doc_kind=signing.DOC_CLEARANCE,
+                project_id=project_id,
+                document_text=cert.signable_text(),
+                # Identity comes from the ROSTER, never from the form. The typed name
+                # is the mark they made; it is recorded beside their real name, not
+                # instead of it, because a mismatch is a fact a dispute would want.
+                signer_name=verified.get("name") or "",
+                signer_email=verified.get("email") or "",
+                typed_name=typed_name,
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                token=r,
+                certified_version=cert.certified_version,
+                terms_snapshot=dict(cert.license or {}),
+            )
+        except ValueError as exc:                       # empty doc / empty mark
+            return HTMLResponse(str(exc), status_code=400)
+        db.record_signature(conn, sig)
+    finally:
+        conn.close()
+    back = f"/project/{project_id}/delivery-portal?r={r}" + (f"&k={k}" if k else "")
+    return RedirectResponse(back + "&signed=1#certificate", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/signature/{signature_id}/void")
+def delivery_void_signature(
+    request: Request, project_id: int, signature_id: int, reason: str = Form(""),
+):
+    """Withdraw a signature. Owner-only (roles.py), and the row stays.
+
+    Deleting it would be the easy implementation and the wrong one: that a document was
+    signed and the signature later withdrawn, by whom and why, is itself the record.
+    """
+    conn = db.connect()
+    try:
+        who = actor.identify(request).get("label", "")
+        db.void_signature(conn, signature_id, by=who, reason=reason)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#certificate", status_code=303)
 
 
 @router.post("/project/{project_id}/delivery/release")

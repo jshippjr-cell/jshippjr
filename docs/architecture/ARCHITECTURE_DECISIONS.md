@@ -1603,6 +1603,51 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0059 — A signature is bound to the document, or it is decoration
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4 (real
+e-signature) · `signing.py`, `signing_providers/`, `web/db.py`, `web/project_routes.py`
+**Decision.** A signature stores the **SHA-256 of the exact document text** it was made
+against, plus the signer, the mark they typed, the consent verbatim, the time, and a
+fingerprinted address. `signing.verify` rebuilds the document from live data and
+compares: `VALID`, or **`SUPERSEDED`** when a term moved after signing. Signatures are
+**append-only**; withdrawing one is `void_signature`, which marks the row and keeps it.
+Only a **verified reviewer** (personal `?r=` token) may sign; consent is required and
+ships unticked. Voiding is **owner-only**.
+**Why.** The Clearance Certificate is the one thing the market pays a premium for, and
+nothing signed it. What the product called a sign-off was
+`{"asset": …, "approver": "Dana Whitfield, Aurora", "date": "2026-08-06"}` — a free-text
+name appended to a JSON list. **Reproduced on seeded data: a client signs off, the
+operator then changes the licence from perpetual / worldwide / exclusive to one year, US
+only, non-exclusive, and the approval record is byte-for-byte identical.** It survived a
+change to the very terms it was a sign-off on, because it never referred to them.
+**Why no DocuSign module.** Under ESIGN / UETA an electronic signature is valid without
+a third party: intent, consent, attribution, association with the record, retention.
+This provides all five, so the default provider is not a stub — it is the real one. What
+a vendor adds is a **neutral witness and a procurement checkbox**, not validity. Writing
+an OAuth + envelope client that has never run against a real DocuSign account would be a
+file that looks like an integration and is not one — worse than an empty seam, because
+it would read as done. `signing_providers/` is where it lands the day a buyer's
+procurement requires it, with credentials to test against; an unknown provider name
+**raises at boot** rather than quietly signing in-house under a configuration that asked
+for someone else.
+**Details that decide whether it works.** The certified DATE is excluded from
+`signable_text()` — in the digest, every signature would report itself superseded by
+tomorrow. Line endings and trailing whitespace are normalised and nothing else, so a
+browser round-trip is not tampering but a changed word is. The signer's identity comes
+from the **roster**, never the form; the typed mark is stored beside their real name,
+not instead of it, because a mismatch is a fact a dispute would want. The IP is stored
+as a 12-char digest — enough to link two signatures, not enough to make the delivery
+database a log of clients' home addresses.
+**Consequences.** `tests/test_signatures.py` fails if a changed document still verifies,
+if a CRLF counts as tampering, if an empty document or empty mark produces a record, if
+the consent is stored by reference, if the raw IP is persisted, if the typed mark
+overwrites the real name, if the certified date enters the digest, if an operative term
+is outside the signed text, if voiding deletes the row or can be repeated with a
+different story, if the generic share link can sign, if consent can be skipped, if the
+admin gate blocks a client from signing, or if an unknown provider falls back to
+in-house. `/project/{id}/delivery/sign` is exempt from the admin gate (the client is not
+an admin) and `/delivery/signature/{id}/void` deliberately is **not**.
+
 ### ADR-0058 — Scored media is priced by the minute, and the players are their own scope
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 4
 (minutes-of-music estimation) · `estimation.py`, `web/estimate.py`,

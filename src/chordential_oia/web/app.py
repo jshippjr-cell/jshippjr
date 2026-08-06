@@ -368,6 +368,13 @@ _REVIEW_ACTION_RE = re.compile(
 # Payment-gated deliverable download — opened from the token-gated portal; the route
 # itself validates the share/reviewer token AND the paid-in-full gate.
 _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")
+# The client SIGNS the Clearance Certificate from the token-gated portal (ADR-0059), so
+# this POST cannot sit behind the admin gate. The route does its own, STRICTER check: a
+# verified reviewer's personal ?r= token only — the generic share link may read the
+# certificate and may not sign it. Note the deliberate asymmetry with
+# /delivery/signature/{id}/void, which is NOT exempt: withdrawing a signature is an
+# operator act and stays owner-only behind the gate.
+_DELIVERY_SIGN_RE = re.compile(r"^/project/\d+/delivery/sign/?$")
 # The composer portal — a qualified creator's token-gated home (view assignments,
 # submit work versions). The per-creator portal token IS the access control, so it
 # bypasses the admin login gate (same exemption as the client delivery portal).
@@ -394,6 +401,7 @@ def _is_delivery_portal_path(path: str) -> bool:
         _DELIVERY_PORTAL_RE.match(path)
         or _REVIEW_ACTION_RE.match(path)
         or _DELIVERY_DL_RE.match(path)
+        or _DELIVERY_SIGN_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
         or _SESSION_ROOM_RE.match(path)
         or _CLIENT_PAY_RE.match(path)

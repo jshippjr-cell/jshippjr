@@ -398,6 +398,42 @@ class ClearanceCertificate:
         """True while the grant is unconfirmed — render it as a draft, not a grant."""
         return self.license_confirmed is None
 
+    def signable_text(self) -> str:
+        """The certificate as the plain text a signature binds to (ADR-0059).
+
+        This is the DOCUMENT, not a rendering of it: every operative term, in a fixed
+        order, with nothing that changes on its own. The certified DATE is deliberately
+        excluded — it is stamped at render time, and a document whose digest changed
+        because a day passed would report every signature as superseded by tomorrow.
+        Everything a dispute could turn on is in here, so changing any of it after
+        signing is exactly what `signing.verify` must catch.
+        """
+        rows = [
+            f"CLEARANCE CERTIFICATE",
+            f"Client: {self.client}",
+            f"Campaign: {self.campaign}",
+            f"Certified version: {self.certified_version or '—'}",
+            f"Licence status: {self.license_status}",
+            "",
+            "WARRANTY",
+            self.warranty,
+            "",
+            "CLEARANCE",
+            self.clearance_line,
+            f"Content ID: {self.content_id}",
+            "",
+            "GRANT OF RIGHTS",
+        ]
+        for key in sorted(self.license):
+            rows.append(f"{key}: {self.license[key]}")
+        rows += ["", "CHAIN OF TITLE"]
+        for c in self.contributors:
+            rows.append(f"{c.name} — {c.role}" + (f" ({c.pro})" if getattr(c, "pro", "") else ""))
+        sig = self.signatory or {}
+        rows += ["", "FOR AND ON BEHALF OF",
+                 f"{sig.get('entity', '')} — {sig.get('signer', '')}, {sig.get('title', '')}"]
+        return "\n".join(rows)
+
 
 def build_clearance_certificate(
     project, assignments, license: Optional[dict] = None,

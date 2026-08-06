@@ -56,6 +56,9 @@ _OWNER_ONLY = tuple(re.compile(p) for p in (
     # Asserts the licence grant on the certificate a client signs against.
     r"^/project/\d+/delivery/release$",
     r"^/project/\d+/delivery/license",
+    # Withdrawing a client's signature (ADR-0059). Irreversible and legal: the row is
+    # kept, but the document stops reading as signed.
+    r"^/project/\d+/delivery/signature/\d+/void$",
     # Releasing the commercial review is the moment a price becomes an offer.
     r"^/opportunity/\d+/commercial/release$",
     # Money.

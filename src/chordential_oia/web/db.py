@@ -1409,6 +1409,29 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # request threads and from a boot backfill at the same time.
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_org_name_key "
                  "ON buyer_org(name_key)")
+    # Signatures bound to what was signed (ADR-0059). A row here is EVIDENCE — it is
+    # appended and never updated, because a signature you can edit is not one. The
+    # digest is of the exact document text at signing; verification rebuilds the
+    # document and compares, so a term changed afterwards reads as superseded rather
+    # than as a signature that still appears to cover it.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS signature (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            doc_kind TEXT,
+            digest TEXT,                 -- SHA-256 of the signed document text
+            signer_name TEXT, signer_email TEXT, typed_name TEXT,
+            consent_text TEXT,           -- verbatim, not a version reference
+            signed_at TEXT,
+            actor TEXT,                  -- authenticated identity, when there is one
+            ip_fingerprint TEXT,         -- SHA-256 prefix; never the address itself
+            user_agent TEXT,
+            token_fingerprint TEXT,
+            certified_version TEXT,
+            terms_json TEXT,             -- what the document said, for legibility
+            voided_at TEXT, voided_by TEXT, void_reason TEXT
+        )"""
+    )
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -1742,6 +1765,8 @@ _INDEXES = (
     ("idx_projects_org", "projects(org_id)"),
     ("idx_agencies_org", "agencies(org_id)"),
     ("idx_buyer_org_agency", "buyer_org(agency_id)"),
+    # ADR-0059 — every delivery page asks "is this signed, and does it still match".
+    ("idx_signature_project", "signature(project_id, doc_kind)"),
 )
 
 
@@ -5565,6 +5590,64 @@ def org_deal_rollup(conn, org_ids) -> dict:
                                  or r["last_at"] > row["last_contacted"]):
                 row["last_contacted"] = r["last_at"]
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Signatures (ADR-0059) — append-only evidence
+# --------------------------------------------------------------------------- #
+def record_signature(conn, sig) -> int:
+    """Store a `signing.Signature`. Append-only: there is no update path on purpose.
+
+    A signature you can edit is not a signature. Withdrawing one is `void_signature`,
+    which marks the row and leaves it in place — the fact that something was signed and
+    later withdrawn is itself the record.
+    """
+    cur = conn.execute(
+        """INSERT INTO signature (project_id, doc_kind, digest, signer_name,
+               signer_email, typed_name, consent_text, signed_at, actor,
+               ip_fingerprint, user_agent, token_fingerprint, certified_version,
+               terms_json)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (sig.project_id, sig.doc_kind, sig.digest, sig.signer_name, sig.signer_email,
+         sig.typed_name, sig.consent_text, sig.signed_at, sig.actor,
+         sig.ip_fingerprint, sig.user_agent, sig.token_fingerprint,
+         sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True)))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_signatures(conn, project_id: int, doc_kind: str = "") -> List[sqlite3.Row]:
+    """Every signature on a project, newest first — including voided ones, which are
+    part of the history rather than an embarrassment to hide."""
+    if doc_kind:
+        return conn.execute(
+            "SELECT * FROM signature WHERE project_id = ? AND doc_kind = ? "
+            "ORDER BY signed_at DESC", (project_id, doc_kind)).fetchall()
+    return conn.execute(
+        "SELECT * FROM signature WHERE project_id = ? ORDER BY signed_at DESC",
+        (project_id,)).fetchall()
+
+
+def latest_signature(conn, project_id: int, doc_kind: str):
+    """The signature in force: newest, not voided. None when nothing is signed."""
+    return conn.execute(
+        "SELECT * FROM signature WHERE project_id = ? AND doc_kind = ? "
+        "AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1",
+        (project_id, doc_kind)).fetchone()
+
+
+def void_signature(conn, signature_id: int, *, by: str, reason: str) -> bool:
+    """Withdraw a signature, keeping the row. Refuses to void an already-void one, so
+    the audit trail cannot be rewritten by voiding twice with a different reason."""
+    row = conn.execute("SELECT voided_at FROM signature WHERE id = ?",
+                       (signature_id,)).fetchone()
+    if row is None or row["voided_at"]:
+        return False
+    conn.execute(
+        "UPDATE signature SET voided_at = ?, voided_by = ?, void_reason = ? WHERE id = ?",
+        (_now(), (by or "").strip(), (reason or "").strip(), signature_id))
+    conn.commit()
+    return True
 
 
 def org_touchpoints(conn, org_id: int) -> List[dict]:

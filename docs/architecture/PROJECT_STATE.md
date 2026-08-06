@@ -149,6 +149,29 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   humans on a name eventually attributes one buyer's approval to another in the record a
   client signs against. **The organisation half is done too** — see below.
 
+- **The certificate is really signed now** (ADR-0059, 2026-08-06). The Clearance
+  Certificate is the one thing the market pays a premium for, and nothing signed it.
+  What the product called a sign-off was `{"asset": …, "approver": "Dana Whitfield,
+  Aurora", "date": "2026-08-06"}` — a free-text name in a JSON list. **Reproduced on
+  seeded data: a client signs off, the operator then changes the licence from
+  perpetual/worldwide/exclusive to one year, US only, non-exclusive, and the approval
+  record is byte-for-byte identical.** It survived a change to the terms it was a
+  sign-off on, because it never referred to them.
+
+  A signature now stores the SHA-256 of the exact document text plus the signer, their
+  typed mark, the consent verbatim, the time and a fingerprinted address; verification
+  rebuilds the document and reports **SUPERSEDED** when a term moved. Both the console
+  and the client's portal say so. Signatures are append-only — voiding marks the row and
+  keeps it, because *that* something was signed and later withdrawn is the record. Only
+  a verified reviewer (personal `?r=` link) may sign; voiding is owner-only.
+
+  **No DocuSign module, on purpose.** Under ESIGN/UETA this is already a valid
+  electronic signature — intent, consent, attribution, association, retention. A vendor
+  adds a neutral witness and a procurement checkbox, not validity, and an OAuth/envelope
+  client nobody has run against a real account would read as done while being nothing.
+  `signing_providers/` is the seam; an unknown provider name raises at boot rather than
+  silently signing in-house.
+
 - **Film/TV can be priced now** (ADR-0058, 2026-08-06). The engine was blind to the
   amount of music: one cue and sixty cues both priced at **$57,446**, two minutes of
   score and ninety minutes both priced at **$57,446**. Only format words moved the

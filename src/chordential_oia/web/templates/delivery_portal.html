@@ -831,6 +831,46 @@
       <li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>
     </ul>
     {% endif %}
+
+    {# ADR-0059 — the client's signature, bound to this exact document. The old
+       sign-off was a typed name in a list: it survived the licence being changed
+       afterwards, because it never referred to it. #}
+    <div id="certificate" style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(0,0,0,.12)">
+      {% if cert_signature and cert_signature_state == 'valid' %}
+      <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signed</p>
+      <p class="sub" style="margin:0"><span class="tick">✓</span> {{ cert_signature_note }}</p>
+      <p class="legend" style="margin-top:6px">Signed as “{{ cert_signature.typed_name }}”{% if cert_signature.signer_email %} · {{ cert_signature.signer_email }}{% endif %} · document fingerprint <code>{{ cert_signature.digest[:16] }}</code></p>
+
+      {% elif cert_signature and cert_signature_state == 'superseded' %}
+      <p style="margin:0 0 6px;font-weight:700;color:#8a3324;font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signature no longer matches</p>
+      <p class="sub" style="margin:0">{{ cert_signature_note }}</p>
+      <p class="legend" style="margin-top:6px">Nothing you signed has been taken away — this notice exists so a changed term can never pass as one you agreed to. Ask your Chordential contact to reissue the certificate, then sign the current version.</p>
+
+      {% elif verified %}
+      <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Sign this certificate</p>
+      {% if cert.license_draft %}
+      <p class="legend" style="margin:0">The grant above is still marked <b>draft</b>. Signing opens once Chordential confirms the terms — signing a draft would bind you to something not yet settled.</p>
+      {% else %}
+      <form method="post" action="/project/{{ project.id }}/delivery/sign" style="margin:0">
+        <input type="hidden" name="r" value="{{ reviewer_token }}">
+        <input type="hidden" name="k" value="{{ share_token }}">
+        <label class="legend" style="display:block;margin:0 0 6px">Type your full name to sign</label>
+        <input type="text" name="typed_name" required placeholder="{{ reviewer.name }}"
+               style="width:100%;max-width:340px;padding:8px 10px;font-size:15px">
+        {# Unticked on purpose: a pre-ticked consent box is not consent. #}
+        <label class="legend" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 12px;max-width:520px">
+          <input type="checkbox" name="consent" value="1" required style="margin-top:3px">
+          <span>I agree to sign this document electronically. I have read it, I intend my typed name to be my signature, and I understand this electronic signature is legally binding to the same extent as a handwritten one.</span>
+        </label>
+        <button type="submit" class="btn">Sign the certificate</button>
+        <p class="legend" style="margin-top:8px">Signing records your name, the time, and a fingerprint of this exact document. If any term changes afterwards, both of us are told the signature no longer matches.</p>
+      </form>
+      {% endif %}
+
+      {% else %}
+      <p class="legend" style="margin:0">This link can view the certificate but not sign it. Signing needs your personal reviewer link — ask your Chordential contact to send it.</p>
+      {% endif %}
+    </div>
   </div>
 
   {% set ns_ap = namespace(any=false) %}

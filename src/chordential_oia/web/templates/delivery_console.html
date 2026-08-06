@@ -299,6 +299,27 @@
   {% else %}
   <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
   {% endif %}
+  {# ADR-0059 — the client's signature on the certificate, and whether it still
+     describes it. SUPERSEDED is shown loudly on purpose: it means the operator changed
+     a term after the client signed, and the client's portal is saying so too. #}
+  <div id="certificate" style="margin-top:12px">
+  {% if cert_signature and cert_signature_state == 'valid' %}
+    <p class="small" style="margin:0;color:#1d6b43"><b>✓ Certificate signed.</b> {{ cert_signature_note }}
+      <span class="muted">Mark: “{{ cert_signature.typed_name }}”{% if cert_signature.signer_email %} · {{ cert_signature.signer_email }}{% endif %} · fingerprint <code>{{ cert_signature.digest[:16] }}</code></span></p>
+  {% elif cert_signature and cert_signature_state == 'superseded' %}
+    <p class="small" style="margin:0;color:#8a3324"><b>⚠ The signed certificate has changed.</b> {{ cert_signature_note }}
+      The client's portal shows this too. Reissue and ask them to re-sign, or void the signature below.</p>
+  {% else %}
+    <p class="small muted" style="margin:0">Certificate not signed yet. A verified reviewer (personal <code>?r=</code> link) can sign it from the delivery portal once the licence is confirmed.</p>
+  {% endif %}
+  {% if cert_signature and not cert_signature.voided_at %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/signature/{{ cert_signature.id }}/void" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="text" name="reason" placeholder="Reason for withdrawing the signature" style="flex:1;min-width:240px">
+      <button class="btn btn-small" type="submit">Void signature</button>
+      <span class="small muted">The row is kept — that something was signed and later withdrawn is part of the record.</span>
+    </form>
+  {% endif %}
+  </div>
   {% if delivery_zip %}
   <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="/project/{{ project['id'] }}/dl/{{ delivery_zip.filename }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
   {% endif %}

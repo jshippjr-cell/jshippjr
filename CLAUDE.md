@@ -142,7 +142,14 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   client-facing figure rests on — a guess presented as a fact is the honesty rule
   broken, not a rounding error.
 - **Provider seams:** `payments/` and `mailer.py` — null default + env-selected real
-  impl, best-effort, never raise/block.
+  impl, best-effort, never raise/block. **`signing_providers/` is the exception that
+  proves the rule:** its default is a REAL in-house signature, not a null object, and an
+  unknown provider name **raises at boot** rather than degrading — silently signing
+  documents ourselves under a config that asked for a third-party witness is the one
+  direction a signature must never fail.
+- **Bind a signature to its document:** `signing.py` (ADR-0059) stores a SHA-256 of the
+  exact text signed and reports `SUPERSEDED` when it stops matching. Signature rows are
+  append-only; withdrawal marks, never deletes.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from
   engine data; the client doc + delivery package are editable via overrides.
 - **Living OS layer:** every page carries ≥1 living element that can't exist in print

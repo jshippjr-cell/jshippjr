@@ -229,6 +229,19 @@ $493,915 depending on who actually plays, where it used to be one number. **Stil
 the priors are not operator-ratified** the way `PUBLIC_BANDS` are, and `PUBLIC_BANDS`
 has no film/TV entry to anchor them.
 
+**Real e-signature — done (ADR-0059).** Nothing signed the Clearance Certificate, which
+is the one thing the market pays a premium for. What the product called a sign-off was a
+free-text name in a JSON list, and it was worse than thin: **a client signs off, the
+operator then changes the licence from perpetual/worldwide/exclusive to one year, US
+only, non-exclusive, and the approval record is byte-for-byte identical.** A signature
+now binds to a SHA-256 of the exact document; when a term moves afterwards, both the
+console and the client's own portal say the signature no longer matches. Only a verified
+reviewer may sign, consent ships unticked, and the record is append-only. **There is
+deliberately no DocuSign module** — under ESIGN/UETA this is already a valid electronic
+signature, a vendor adds a neutral witness rather than validity, and an untested
+envelope client would read as done while being nothing. The seam is there for the day
+procurement demands one.
+
 ---
 
 ## Note on method
