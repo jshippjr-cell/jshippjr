@@ -1330,6 +1330,23 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             name TEXT PRIMARY KEY, owner TEXT, expires_at TEXT, acquired_at TEXT
         )"""
     )
+    # ONE buyer, across every surface they touch (ADR-0050). A human on the buying side
+    # is currently recorded in SIX unlinked places — `decision_makers` (what enrichment
+    # found), `discovery_requests` (who asked for a call), `meetings` and
+    # `meeting_proposals` (who was on it), `review_comments` (who approved the work) —
+    # each with its own name/email pair and nothing joining them. The same person asks
+    # for a call, takes it, and signs off the master as three strangers.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS buyer_person (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,                  -- normalised (lowercased, trimmed); the identity
+            name TEXT,                   -- the best name seen so far; never the identity
+            first_seen_at TEXT, last_seen_at TEXT
+        )"""
+    )
+    # Enforced, not merely intended: two rows for one email is the bug this exists to end.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_person_email "
+                 "ON buyer_person(email)")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -1556,6 +1573,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    _ensure_person_links(conn)      # AFTER every table above exists
     _ensure_indexes(conn)
     conn.commit()
 
@@ -1640,7 +1658,31 @@ _INDEXES = (
     ("idx_crawl_targets_status", "crawl_targets(status)"),
     ("idx_talent_review_status", "talent(review_status)"),
     ("idx_agency_tasks_status", "agency_tasks(status)"),
+
+    # Buyer identity (ADR-0050): `person_touchpoints` asks each of these "what has this
+    # human done", which is a scan of every one of them without these.
+    ("idx_decision_makers_person", "decision_makers(person_id)"),
+    ("idx_discovery_requests_person", "discovery_requests(person_id)"),
+    ("idx_meetings_person", "meetings(person_id)"),
+    ("idx_meeting_proposals_person", "meeting_proposals(person_id)"),
+    ("idx_review_comments_person", "review_comments(person_id)"),
 )
+
+
+def _ensure_person_links(conn) -> None:
+    """Stamp the canonical-person column on every surface that names a human.
+
+    Runs at the END of the migration on purpose: several of these tables are created
+    further down `_ensure_schema` than the buyer_person table is, and an ALTER against
+    a table that does not exist yet takes the whole boot down (it did).
+    """
+    for table, _e, _n, _l, _w in _PERSON_SURFACES:
+        try:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        except Exception:                   # noqa: BLE001 — not in this database
+            continue
+        if cols and "person_id" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN person_id INTEGER")
 
 
 def _ensure_indexes(conn) -> None:
@@ -5038,6 +5080,151 @@ def lease_holder(conn, name: str):
     return {"owner": row["owner"], "expires_at": row["expires_at"],
             "acquired_at": row["acquired_at"],
             "expired": str(row["expires_at"]) <= _lease_now()}
+
+
+# --------------------------------------------------------------------------- #
+# One buyer, across every surface they touch
+# --------------------------------------------------------------------------- #
+# A human on the buying side is recorded in six unlinked places: `decision_makers`
+# (what enrichment found), `discovery_requests` (who asked for a call), `meetings` and
+# `meeting_proposals` (who was on it), `review_comments` (who approved the work). Each
+# carries its own name/email pair and nothing joins them, so the same person asks for a
+# call, takes it, and signs off a master as three strangers — and the question the
+# business actually has, "who is this and what have we done together", cannot be asked.
+#
+# THE IDENTITY IS THE EMAIL, AND ONLY THE EMAIL. Without one there is no canonical
+# person: `resolve_person` returns None rather than guess. Names are not identities —
+# two people are called John Smith, one person is Priya Okonkwo and Priya O'Konkwo and
+# "priya (Northwind)", and a CRM that merges humans on a name eventually attributes one
+# buyer's approval to another. A missing link is a gap; a wrong link is a lie in a
+# record the client signs against. So the rule is evidence or nothing.
+def _norm_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def resolve_person(conn, email: str = "", name: str = "", *, commit: bool = True) -> Optional[int]:
+    """The canonical id for this human, creating them on first sight. None without an
+    email — see above. ``name`` only ever improves the label, never decides identity.
+
+    ``commit=False`` is for the backfill: committing per row turns a one-off pass over
+    38,924 decision makers into tens of thousands of fsyncs, which is the difference
+    between a boot and an outage.
+    """
+    key = _norm_email(email)
+    if not key or "@" not in key:
+        return None
+    now = _now()
+    row = conn.execute("SELECT id, name FROM buyer_person WHERE email = ?",
+                       (key,)).fetchone()
+    if row is not None:
+        # Keep the fullest name we have seen: surfaces show "P.O." otherwise, purely
+        # because that is how one form happened to be filled in.
+        better = (name or "").strip()
+        if better and len(better) > len((row["name"] or "")):
+            conn.execute("UPDATE buyer_person SET name = ?, last_seen_at = ? WHERE id = ?",
+                         (better, now, row["id"]))
+        else:
+            conn.execute("UPDATE buyer_person SET last_seen_at = ? WHERE id = ?",
+                         (now, row["id"]))
+        if commit:
+            conn.commit()
+        return int(row["id"])
+    conn.execute("INSERT INTO buyer_person (email, name, first_seen_at, last_seen_at) "
+                 "VALUES (?,?,?,?)", (key, (name or "").strip(), now, now))
+    if commit:
+        conn.commit()
+    got = conn.execute("SELECT id FROM buyer_person WHERE email = ?", (key,)).fetchone()
+    return int(got["id"]) if got is not None else None
+
+
+def get_person(conn, person_id: int):
+    return conn.execute("SELECT * FROM buyer_person WHERE id = ?", (person_id,)).fetchone()
+
+
+def find_person(conn, email: str):
+    key = _norm_email(email)
+    if not key:
+        return None
+    return conn.execute("SELECT * FROM buyer_person WHERE email = ?", (key,)).fetchone()
+
+
+# Where a person can appear, and what each appearance is called in the product. Kept as
+# data so a new surface is one line here rather than a new branch in three functions.
+_PERSON_SURFACES = (
+    ("decision_makers", "email", "name", "known contact", "created_at"),
+    ("discovery_requests", "email", "name", "asked for a call", "created_at"),
+    ("meetings", "client_email", "client_name", "on a call", "start_at"),
+    ("meeting_proposals", "client_email", "client_name", "offered times", "created_at"),
+    ("review_comments", "email", "author", "reviewed the work", "created_at"),
+)
+
+
+def link_people(conn) -> dict:
+    """Give every row that names a human its canonical person, and report what happened.
+
+    Idempotent, so it can run at boot and after any import. Rows without an email are
+    left unlinked ON PURPOSE — they are the ones we cannot identify without guessing.
+    """
+    linked, no_email = 0, 0
+    for table, email_col, name_col, _label, _when in _PERSON_SURFACES:
+        try:
+            # Rows with no email are excluded by the QUERY, not skipped in the loop: they
+            # can never be linked, and re-reading all of them on every boot for ever is
+            # the kind of quiet waste that only shows up at 38,924 rows.
+            rows = conn.execute(
+                f"SELECT id, {email_col} AS e, {name_col} AS n FROM {table} "
+                f"WHERE person_id IS NULL AND {email_col} IS NOT NULL "
+                f"AND TRIM({email_col}) <> ''").fetchall()
+            no_email += conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE person_id IS NULL "
+                f"AND (({email_col} IS NULL) OR TRIM({email_col}) = '')").fetchone()["n"]
+        except Exception:                       # noqa: BLE001 — table not in this DB yet
+            continue
+        for r in rows:
+            pid = resolve_person(conn, r["e"] or "", r["n"] or "", commit=False)
+            if pid is None:
+                continue
+            conn.execute(f"UPDATE {table} SET person_id = ? WHERE id = ?", (pid, r["id"]))
+            linked += 1
+        conn.commit()
+    total = conn.execute("SELECT COUNT(*) AS n FROM buyer_person").fetchone()["n"]
+    return {"linked": linked, "no_email": no_email, "people": total}
+
+
+def person_touchpoints(conn, person_id: int) -> List[dict]:
+    """Everything this human has done with us, in one list, newest first.
+
+    This is the question the six tables could not answer: the buyer who approved a
+    master last month is the same buyer who requested the first call, and until now
+    nothing could say so.
+    """
+    out = []
+    for table, _email_col, _name_col, label, when_col in _PERSON_SURFACES:
+        try:
+            rows = conn.execute(
+                f"SELECT id, {when_col} AS at FROM {table} WHERE person_id = ?",
+                (person_id,)).fetchall()
+        except Exception:                       # noqa: BLE001
+            continue
+        for r in rows:
+            out.append({"what": label, "table": table, "row_id": r["id"],
+                        "at": r["at"] or ""})
+    return sorted(out, key=lambda x: x["at"] or "", reverse=True)
+
+
+def people_with_history(conn, limit: int = 200) -> List[dict]:
+    """Canonical buyers, most touchpoints first — the ones we actually have a
+    relationship with, as opposed to the ones we merely have a row for."""
+    people = conn.execute(
+        "SELECT * FROM buyer_person ORDER BY last_seen_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    out = []
+    for p in people:
+        tp = person_touchpoints(conn, p["id"])
+        out.append({"id": p["id"], "email": p["email"], "name": p["name"],
+                    "touchpoints": len(tp), "surfaces": sorted({t["what"] for t in tp}),
+                    "last_seen_at": p["last_seen_at"]})
+    return sorted(out, key=lambda x: x["touchpoints"], reverse=True)
 
 
 def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> None:

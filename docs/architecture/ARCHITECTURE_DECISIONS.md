@@ -1603,6 +1603,43 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0050 — A buyer is an email, or they are nobody
+**Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3 (buyer identity
+as a canonical entity) · `web/db.py`, `web/app.py`
+**Decision.** `buyer_person` is the canonical human on the buying side, keyed by a
+normalised email with a UNIQUE index. `resolve_person` creates or matches; `link_people`
+stamps `person_id` on the five tables that name a human and runs at boot;
+`person_touchpoints` answers what one buyer has done with us across all of them.
+**Identity is the email and only the email.** With no email, `resolve_person` returns
+None — there is no canonical person and the row stays unlinked, on purpose.
+**Why.** A buyer was recorded in five unlinked tables, each with its own name/email pair:
+`decision_makers` (what enrichment found), `discovery_requests` (who asked for a call),
+`meetings` and `meeting_proposals` (who was on it), `review_comments` (who approved the
+work). The same person asks for a call, takes it, and signs off a master as three
+strangers — and *"who is this and what have we done together"*, the question the business
+actually has, could not be asked at all. Measured on one seeded instance: four rows, four
+spellings of one name, four casings and paddings of one email.
+**Why names are never matched.** Two people are called John Smith. One person is "Priya
+Okonkwo", "P. Okonkwo" and "Priya". A CRM that merges humans on a name eventually
+attributes one buyer's approval to another — in `review_comments`, which is the record a
+client signs against. **A missing link is a gap; a wrong link is a lie.** Evidence or
+nothing, and the gap is reported (`no_email`) rather than hidden.
+**Scope, stated plainly.** This is the person half. **Organisations are NOT canonical
+yet** — they are still `agencies.id` in some places and a bare `client` name string in
+`opportunities.client`, `companies.client` and `client_procurement_history.client`, which
+is the same class of defect one level up and a larger migration. Nothing here writes
+`person_id` at insert time either; the boot pass is what keeps it current, which is
+sufficient while the identity is read-only and is the first thing to change when a
+surface starts writing it.
+**Consequences.** `tests/test_buyer_identity.py` fails if one human across five tables
+resolves to more than one buyer, if a name-only human is invented, if two people sharing a
+name are merged, if the database accepts two rows for one email (enforced by the index,
+not by the resolver being careful — it is called from request threads and a boot backfill),
+if the backfill is not idempotent, if rows that can never be linked are re-read on every
+boot for ever (38,924 decision makers make that expensive), or if the backfill commits per
+row — which turns a one-off pass into tens of thousands of fsyncs and a boot into an
+outage. Verified on real Postgres, where the duplicate is refused by the server.
+
 ### ADR-0049 — Merge one JSON key in one statement, not read-modify-write
 **Status:** Accepted (2026-08-06) · Source: `docs/launch-review.md` Phase 3
 (`delivery_json` concurrency) · `web/db.py`

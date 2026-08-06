@@ -171,6 +171,17 @@ async def lifespan(app: FastAPI):
 
     conn = db.connect()
     db.init_db(conn)
+    # One buyer across every surface (ADR-0050). Idempotent and self-limiting: rows
+    # already linked, and rows that carry no email and never can be, are excluded by the
+    # query, so this costs a scan on the first boot and nothing on the ones after.
+    try:
+        _people = db.link_people(conn)
+        if _people["linked"]:
+            print(f"[identity] linked {_people['linked']} rows to "
+                  f"{_people['people']} buyers ({_people['no_email']} rows carry no "
+                  f"email and cannot be identified).", flush=True)
+    except Exception as _e:                      # noqa: BLE001 — never block a boot
+        print(f"[identity] buyer linking skipped: {_e}", flush=True)
     discovery.sync_catalog(conn)
     discovery.seed_all_active(conn)  # On sources get a default target → they fetch
     if seed.seed_demo_enabled():     # dev/tests: populate placeholder data

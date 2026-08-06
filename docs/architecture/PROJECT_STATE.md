@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A buyer is one person now** (ADR-0050, 2026-08-06). A human on the buying side was
+  recorded in **five unlinked tables** — `decision_makers`, `discovery_requests`,
+  `meetings`, `meeting_proposals`, `review_comments` — each with its own name/email pair,
+  so the same person asked for a call, took it, and signed off a master as three
+  strangers. `buyer_person` is now the canonical human, keyed by normalised email with a
+  UNIQUE index; `link_people` runs at boot and `person_touchpoints` returns one history.
+  **Identity is the email and only the email** — no email means no person, because merging
+  humans on a name eventually attributes one buyer's approval to another in the record a
+  client signs against. **Still open: the ORGANISATION half.** Orgs remain `agencies.id`
+  in some places and a bare `client` name string in `opportunities`, `companies` and
+  `client_procurement_history` — the same defect one level up, and a bigger migration.
+
 - **The transcript poller backs off, and stops** (2026-08-06). `poll_and_ingest` asked the
   capture provider about every un-ingested bot on every ~30s tick, for as long as the row
   existed — a bot that finishes without a transcript was re-asked **~2,880 times a day, for
