@@ -40,6 +40,7 @@ def test_it_carries_the_copy_not_just_the_picture(client):
     """The words say everything the picture does — that is the no-WebGL2 promise."""
     body = client.get("/score").text
     for line in (
+        "Every note",
         "We compose original music for commercials and brand campaigns",
         "Every campaign begins with understanding.",
         "Everything arrives together.",
@@ -91,20 +92,51 @@ def test_the_score_page_and_the_front_door_are_one_page(client):
 # --------------------------------------------------------------------------- #
 
 def test_the_hero_says_what_the_company_does(client):
-    """The first screen states the business in one sentence.
+    """The headline carries the character; the line under it carries the offer.
 
-    It used to open on "Every note finds its place." over a paragraph — true to
-    the page's character and silent on what is actually being sold. A visitor
-    who reads only the first screen should come away knowing both halves of the
-    offer: the music is composed, and everything around it is organised.
+    The page used to open on "Every note finds its place." alone, which is true
+    to it and silent on what is actually being sold. A visitor who reads only
+    the first screen should come away knowing both halves: the music is
+    composed, and everything around it is organised.
     """
     body = client.get("/score").text
+    assert "Every note" in body and "finds its" in body
     assert "We compose original music for commercials and brand campaigns" in body
     for half in ("cue sheet", "rights document", "deliverable"):
         assert half in body, half
     assert "one complete production workflow" in body
-    # and it is still the page's one h1 — a statement, not a decorative line
-    assert body.count("<h1") == 1
+    assert body.count("<h1") == 1, "the page has more than one first-level heading"
+
+
+def test_a_shortened_manifest_says_that_it_is_shortened(client):
+    """On a short phone the last rows are held back. That has to be admitted.
+
+    Four rows plus a heading and a lede is all an iPhone SE can hold beside the
+    package the list describes. Holding rows back is a layout decision; holding
+    them back SILENTLY, under "everything arrives together" and above "one
+    delivery, nothing missing", is the honesty rule broken. So the page names
+    how many it is not showing and links to all of them — and the number is
+    derived from the manifest, because a typed one goes stale the first time the
+    engine's package changes.
+    """
+    from chordential_oia.web import landing
+    body = client.get("/score").text
+    rows = landing.sample_package_lines()
+    if len(rows) <= 4:                     # nothing is ever held back
+        assert "pack-rest" not in body
+        return
+    assert "pack-rest" in body, "no rows are marked as the ones held back"
+    assert body.count('class="pack-rest"') == len(rows) - 4
+    assert "and %d more" % (len(rows) - 4) in body, (
+        "the page does not say how many rows it is not showing")
+    more = body.split('class="pack-more"')[1].split("</p>")[0]
+    assert "/delivery-sample" in more, "the rest of the package is not reachable"
+    # every row still ships in the markup — this is a display cut, not a shorter
+    # package, and the words beside it promise the whole one
+    import html as _html
+    plain = _html.unescape(body)
+    for r in rows:
+        assert r["asset"] in plain
 
 
 def test_the_wordmark_is_the_mark_not_the_word(client):
