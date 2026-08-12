@@ -26,7 +26,7 @@ from .estimate import estimate_for
 from .filters import displayurl, money, pct, slug
 from ..capabilities import quote_band
 from ..intake import extract_budget
-from .showcase import get_showcase
+from .showcase import get_showcase, PLACEHOLDER_AUDIO_NOTICE
 from . import landing
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
@@ -58,6 +58,8 @@ def _asset_version() -> str:
 
 ASSET_VERSION = _asset_version()
 templates.env.globals["asset_v"] = ASSET_VERSION
+# One string, every surface that plays a demo (see showcase.py).
+templates.env.globals["placeholder_audio_notice"] = PLACEHOLDER_AUDIO_NOTICE
 
 router = APIRouter(tags=["public"])
 

@@ -111,6 +111,10 @@ a{color:var(--amber)}
    job is to get music playing — not to be another mechanism. */
 .reel{list-style:none;margin:38px 0 0;padding:0;display:grid;gap:14px;
   grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+/* The placeholder disclosure sits with the players, at reading weight. Fine
+   print would be the dishonest version of telling the truth. */
+.placeholder-note{border-left:2px solid var(--ember);padding-left:14px;
+  font-size:14.5px;line-height:1.55;color:var(--sand);max-width:46ch}
 .tk{border:1px solid var(--line);border-radius:12px;padding:16px 18px;
   background:rgba(22,10,14,.55)}
 .tkh{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
@@ -594,14 +598,19 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
   <section id="arrival"><div class="inner"><div class="col">
     <p class="eb rv">Chordential</p>
     <h1 class="rv">The music department<br>you don't have to <em>build</em>.</h1>
-    <p class="lede rv">Original score for campaigns, written and recorded in house by people —
-    never AI-generated audio. One delivery with everything in it: masters, stems, license
-    and chain of title, cleared.</p>
+    {# The human-authorship promise used to sit here, two lines above four
+       AI-generated placeholder recordings. It is true of what we DELIVER and it
+       was false of what this page PLAYS, and a visitor cannot tell those apart
+       from the hero. It moves to the commission claim below and the players
+       carry their own disclosure. #}
+    <p class="lede rv">Original score for campaigns, composed for the picture and delivered
+    in one package: masters, stems, license and chain of title, cleared.</p>
     <div class="rowbtns rv">
       <a class="btn solid" href="/start">Start a brief</a>
       {# ADR-0040: this pointed at #take, whose player is a synth demonstrating the
-         portal — so a button reading "hear the score", two lines under a promise of
-         "never AI-generated audio", played an oscillator. It now goes to recordings. #}
+         portal — so a button reading "hear the score" played an oscillator under a
+         human-authorship promise. It now goes to the recordings, which disclose
+         that they are placeholders. #}
       <a class="btn" href="#work">Hear the work</a>
     </div>
     <span class="steer rv">
@@ -612,18 +621,23 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
     </span>
   </div></div></section>
 
-  <!-- 1b · THE WORK — actual recordings (ADR-0040). The front door of a music company
-       has to let you hear music. Everything else that sounds on this page is a synth
-       demonstrating the PORTAL, and the hero promises "never AI-generated audio" two
-       lines above a button that played an oscillator. These are the real capability
-       demonstrations, the same records /samples renders — one source, one story. -->
+  {# 1b · THE WORK (ADR-0040). The front door of a music company has to let you hear
+     music, and these are the same records /samples renders — one source, one story.
+
+     They are AI-generated PLACEHOLDERS until real sessions are recorded, and every
+     file says so in its own ID3 artist tag. The hero used to promise "never
+     AI-generated audio" two lines above them; that promise is true of what we
+     DELIVER and was false of what this page PLAYS, and a visitor cannot tell those
+     apart. The promise moved to the commission claim; the players disclose
+     themselves. See showcase.PLACEHOLDER_AUDIO_NOTICE. #}
   {% if demos %}
   <section id="work"><div class="inner">
     <div class="col">
       <p class="eb rv">Listen</p>
       <h2 class="rv">{{ demos_intro.home_title or "Hear how we'd score your brief." }}</h2>
-      <p class="lede rv">Written and recorded by people. These are demonstrations — each one
-      answers a campaign brief we set ourselves, not a client's commission.</p>
+      <p class="lede rv">These are demonstrations — each one answers a campaign brief we set
+      ourselves, not a client's commission.</p>
+      <p class="lede rv placeholder-note">{{ placeholder_audio_notice }}</p>
     </div>
     <ul class="reel rv">
       {% for d in demos %}

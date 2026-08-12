@@ -26,6 +26,11 @@
     <a class="sr-gallery-link" href="/samples" data-cursor="close">&#8592; All tracks</a>
     <a class="sr-close" href="/" aria-label="Close" data-cursor="close">&#10005;</a>
 
+    {# The reel plays the placeholder recordings too, so it discloses them too.
+       A surface that plays the audio and does not say what it is, is the surface
+       a producer screenshots. #}
+    <p class="sr-placeholder">{{ placeholder_audio_notice }}</p>
+
     <!-- Centered hint (fades once playing) -->
     <div class="sr-hint">
       <p class="sr-eyebrow">Showreel</p>

@@ -85,7 +85,11 @@ def test_home_work_is_truthful_capability_demonstrations(client):
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
         assert past_claim not in r.text
-    assert "never AI-generated audio" in r.text
+    # The recordings are AI-generated placeholders (showcase.PLACEHOLDER_AUDIO_NOTICE).
+    # The human-authorship promise is true of what we deliver and was false of what
+    # this page plays; it may not sit over placeholder audio.
+    assert "never AI-generated audio" not in r.text
+    assert "AI-generated placeholders" in r.text
 
 
 def test_delivery_sample_page(client):
