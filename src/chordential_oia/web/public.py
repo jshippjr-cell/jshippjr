@@ -26,7 +26,7 @@ from .estimate import estimate_for
 from .filters import displayurl, money, pct, slug
 from ..capabilities import quote_band
 from ..intake import extract_budget
-from .showcase import get_showcase, PLACEHOLDER_AUDIO_NOTICE
+from .showcase import get_showcase, listening_rows, PLACEHOLDER_AUDIO_NOTICE
 from . import landing
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
@@ -263,7 +263,8 @@ def public_score(request: Request):
     return render(request, "public/score.html", active="",
                   manifest=landing.sample_package_lines(),
                   review_versions=landing.review_versions(),
-                  take_seconds=landing.SAMPLE_TAKE_SECONDS)
+                  take_seconds=landing.SAMPLE_TAKE_SECONDS,
+                  listening=listening_rows())
 
 
 @router.get("/delivery-sample", response_class=HTMLResponse)

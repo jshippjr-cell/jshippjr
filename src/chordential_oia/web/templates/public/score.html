@@ -92,6 +92,75 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
   ul.pack li{opacity:1;transform:none;transition:none}
 }
 
+/* ── the live notes ──────────────────────────────────────────────────────────
+   A few pieces of the score carry the ember and can be pressed. The glyph itself
+   is coloured by the renderer; this is only the target, projected onto it. */
+#livelayer{position:fixed;inset:0;z-index:2;pointer-events:none}
+.livenote{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;
+  padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;
+  pointer-events:auto;display:none}
+.livenote::after{content:"";position:absolute;inset:6px;border-radius:50%;
+  border:1px solid var(--ember);opacity:.45;transition:opacity .25s ease,inset .25s ease}
+.livenote:hover::after,.livenote:focus-visible::after{opacity:1;inset:2px}
+.livenote:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.lt-hint{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ember);
+  margin:1.5rem 0 1rem;max-width:27rem;line-height:1.7}
+
+/* the player docks bottom-right — opposite the assembly read-out, never over it */
+#player{position:fixed;right:2vw;bottom:3vh;z-index:5;width:min(23rem,92vw);
+  background:var(--paper);border:1px solid var(--ink);padding:1.1rem 1.2rem 1rem;
+  box-shadow:0 10px 40px rgba(20,16,12,.18)}
+#player[hidden]{display:none}
+#playerX{position:absolute;top:.5rem;right:.6rem;background:none;border:0;
+  font-size:1rem;line-height:1;color:var(--muted);cursor:pointer;padding:.2rem}
+#playerX:hover{color:var(--ink)}
+.pl-disc{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.6rem;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 .35rem}
+.pl-title{font-size:1.05rem;margin:0 0 .3rem;padding-right:1.2rem}
+.pl-brief{font-size:.85rem;line-height:1.5;color:var(--muted);margin:0 0 .8rem}
+#plAudio{display:block;width:100%;height:34px;color-scheme:light}
+.pl-cost{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.62rem;
+  letter-spacing:.1em;color:var(--muted);margin:.45rem 0 0}
+.pl-say{font-size:.72rem;line-height:1.45;color:var(--muted);margin:.7rem 0 0;
+  border-top:1px solid var(--rule);padding-top:.6rem}
+@media (max-width:640px){
+  #player{right:3vw;left:3vw;width:auto;bottom:2vh}
+}
+
+/* ── the listening beat (legacy rows removed) ──────────────────────────────────────────────────────
+   Rows, not cards. A card grid would import a second design system onto a page
+   whose authority comes from having one. Same rule-separated grammar as the
+   package list at beat 06. */
+ul.listen{list-style:none;margin:1.5rem 0 1.1rem;padding:0;max-width:29rem;
+  display:flex;flex-direction:column;gap:0}
+ul.listen li{padding:1rem 0;border-top:1px solid var(--rule)}
+ul.listen li:last-child{border-bottom:1px solid var(--rule)}
+.lt-head{display:flex;justify-content:space-between;align-items:baseline;gap:.9rem}
+.lt-head b{font-weight:400;font-size:1.02rem}
+.lt-head i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
+  font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  text-align:right;white-space:nowrap}
+.lt-brief{font-size:.9rem;line-height:1.5;color:var(--muted);margin:.35rem 0 .7rem;
+  max-width:27rem}
+/* the native control on a paper plinth rather than fought with — Chromium ignores
+   color-scheme on media chrome, and a ::-webkit-media-controls hack is not worth it */
+ul.listen audio{display:block;width:100%;height:34px;color-scheme:light}
+.lt-cost{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.64rem;
+  letter-spacing:.1em;color:var(--muted);margin:.45rem 0 0;font-variant-numeric:tabular-nums}
+.listen-say{max-width:29rem}
+@media (max-width:520px){
+  .lt-head{flex-direction:column;gap:.15rem}
+  .lt-head i{text-align:left}
+}
+
+.lt-fallback{list-style:none;margin:0 0 1rem;padding:0;display:flex;
+  flex-direction:column;gap:.4rem;max-width:29rem}
+.lt-fallback button{font-family:inherit;font-size:.95rem;text-align:left;
+  background:none;border:0;border-bottom:1px solid var(--rule);padding:.45rem 0;
+  width:100%;cursor:pointer;color:var(--ink)}
+.lt-fallback button:hover{color:var(--ember)}
+
 /* ── the review beat ─────────────────────────────────────────────────────────
    The timeline is the assembly gauge grown to the reading column: same hairline,
    same 7px ember dot. Nothing here is a new object, because a widget dropped into
@@ -202,6 +271,7 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
 <div id="stage"><canvas id="gl"
     data-meta="/static/public/score-scene.json?v={{ asset_v }}"
     data-bin="/static/public/score-scene.bin?v={{ asset_v }}"></canvas></div>
+<div id="livelayer" aria-hidden="false"></div>
 <div id="veil"></div>
 <div id="grain"></div>
 <div id="fail"><p>This page draws a live three-dimensional model of engraved
@@ -210,6 +280,18 @@ model is not showing — the words below still say everything the picture does.<
 
 <div id="gauge"><i></i><b>scattered</b></div>
 <div id="hint"><i></i>scroll to assemble</div>
+
+<div id="player" hidden>
+  <button type="button" id="playerX" aria-label="Close the player">&#10005;</button>
+  <p class="pl-disc" id="plDisc"></p>
+  <p class="pl-title" id="plTitle"></p>
+  <p class="pl-brief" id="plBrief"></p>
+  <audio id="plAudio" controls preload="none"></audio>
+  <p class="pl-cost" id="plCost"></p>
+  <p class="pl-say">{{ placeholder_audio_notice }}</p>
+</div>
+
+<script id="scoretracks" type="application/json">{{ listening|tojson }}</script>
 
 <main id="scroll">
 
@@ -248,18 +330,27 @@ model is not showing — the words below still say everything the picture does.<
       music.</p>
   </div></section>
 
-  <section class="beat" data-veil="1"><div class="col">
+  <section class="beat" data-veil="1" data-quiet="1"><div class="col">
     <p class="eyebrow">04 — Written for this campaign</p>
     <h2>Every decision serves the story.</h2>
     <p class="lede">Every score is composed specifically for the campaign it
       supports. No libraries. No recycled tracks. Just original music shaped around
       the picture, the audience, and the emotion you're trying to create.</p>
-    <div class="rule"></div>
+
+    {# The affordance is in the world, not in this column: a few pieces of the
+       score carry the ember and can be pressed. Interaction owns ink — a live
+       note never moves, it only stops being engraved black. The player appears
+       when one is pressed and never before, because a page that wants to make
+       noise reads as a page that will make noise unasked. #}
+    <p class="lt-hint" id="ltHint">Some of the notes are lit. Press one to hear
+      what it answers.</p>
+    <p class="rev-say listen-say">{{ placeholder_audio_notice }}</p>
+
     <p class="note">Creative judgment is still the most important instrument in the
       room.</p>
   </div></section>
 
-  <section class="beat" data-veil="1"><div class="col">
+  <section class="beat" data-veil="1" data-quiet="1"><div class="col">
     <p class="eyebrow">05 — Creative review</p>
     <h2>Every comment stays with the music.</h2>
     <p class="lede">Scrub the take, mark the moment you mean, and say what you heard.
@@ -340,6 +431,8 @@ model is not showing — the words below still say everything the picture does.<
   </div></section>
 
 </main>
+{# before the renderer: it reads __SCORE_TRACKS to know how many notes to light #}
+<script src="/static/public/score-listen.js?v={{ asset_v }}" defer></script>
 <script src="/static/public/score-gl.js?v={{ asset_v }}" defer></script>
 {# separate file on purpose: score-gl.js returns early with no WebGL2, and
    the review demonstration must survive that — it is DOM, not the scene. #}

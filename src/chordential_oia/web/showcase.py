@@ -229,6 +229,45 @@ PLACEHOLDER_AUDIO_NOTICE = (
     "that is what the clearance and the chain of title rest on."
 )
 
+def listening_rows() -> list:
+    """The landing page's listening beat: each demo joined to its 45-second cut.
+
+    The masters are 163-187 s at 192 kbps, so a press on a landing page costs up to
+    4.5 MB and a media element buffers ahead at its own discretion. The excerpts are
+    frame-boundary cuts of the same files (``scripts/build_demo_excerpts.py``) - no
+    re-encode, so this is literally the same recording, one megabyte instead of four
+    and a half.
+
+    Falls back to the master when an excerpt is missing rather than dropping the
+    track: a landing page with no music is a worse failure than a heavy one.
+    """
+    import json as _json
+    import os as _os
+    here = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         "static", "public")
+    cuts = {}
+    try:
+        with open(_os.path.join(here, "excerpts.json")) as fh:
+            cuts = {r["src"]: r for r in _json.load(fh)}
+    except Exception:
+        cuts = {}
+    rows = []
+    for d in get_showcase().demos:
+        url = (d.audio_url or "").strip()
+        if not url:
+            continue
+        cut = cuts.get(_os.path.basename(url))
+        rows.append({
+            "title": d.title,
+            "discipline": d.discipline_label,
+            "brief": d.brief,
+            "url": "/static/public/" + cut["out"] if cut else url,
+            "seconds": int(cut["seconds"]) if cut else 0,
+            "mb": round(cut["bytes"] / 1048576.0, 1) if cut else 0,
+        })
+    return rows
+
+
 DEMOS_INTRO = {
     "eyebrow": "Capability Demonstrations",
     "title": "Built to brief.",

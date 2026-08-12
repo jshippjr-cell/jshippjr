@@ -56,11 +56,13 @@ var FS = [
 "uniform vec3 uInk;",
 "uniform vec3 uBg;",
 "uniform vec2 uFog;",
+"uniform vec3 uEmber;",
 "out vec4 frag;",
 "void main(){",
 "  float f = clamp((vDepth - uFog.x) / max(1.0, uFog.y - uFog.x), 0.0, 1.0);",
 "  vec3 c = mix(uInk, uBg, f*0.30);",
-"  c = mix(c, uBg, vTone);",           // per-piece ink weight, keeps it from reading flat
+"  if (vTone < 0.0) c = mix(uInk, uEmber, -vTone);",
+"  else c = mix(c, uBg, vTone);",           // per-piece ink weight, keeps it from reading flat
 "  frag = vec4(c, 1.0);",
 "}"].join("\n");
 
@@ -77,10 +79,12 @@ var uVP  = gl.getUniformLocation(prog,"uVP");
 var uPie = gl.getUniformLocation(prog,"uPie");
 var uInk = gl.getUniformLocation(prog,"uInk");
 var uBg  = gl.getUniformLocation(prog,"uBg");
+var uEmber = gl.getUniformLocation(prog,"uEmber");
 var uFog = gl.getUniformLocation(prog,"uFog");
 gl.uniform1i(uPie, 0);
 gl.uniform3f(uInk, 0.055, 0.043, 0.036);
 gl.uniform3f(uBg,  0.878, 0.839, 0.761);
+gl.uniform3f(uEmber, 0.894, 0.404, 0.122);   // #E4671F
 
 // instance buffers (marks are pre-sorted by prototype, so each proto is one run)
 var matBuf = gl.createBuffer();
@@ -235,6 +239,63 @@ var hint = document.getElementById("hint");
 // the renderer owns which beat reads from here on; before this the hero is
 // visible by default so a slow scene fetch never shows a blank page
 document.documentElement.classList.add("lit-managed");
+// ── the live notes ────────────────────────────────────────────────────────────
+// A handful of pieces carry the ember and can be pressed. This is the page's own
+// grammar: interaction owns INK, scroll owns position — a live note never moves,
+// it only stops being engraved black. The hotspots are DOM, projected onto the
+// piece each frame, so a click target exists without picking against 7,419
+// instanced marks.
+var LIVE = (function () {
+  var want = (window.__SCORE_TRACKS || []).length;
+  if (!want) return [];
+  // Pick pieces that actually CONTAIN a clef or a notehead. Marks are grouped by
+  // prototype (META.counts, in prototype order), and PIDX maps a mark to its
+  // piece — so this asks the scene which pieces are musical rather than guessing
+  // from a bounding span. Span alone lit a stem and a barline tick: technically a
+  // piece of the score, but not a thing anyone would press.
+  var names = META.protos.map(function (x) { return x.name; });
+  var wanted = ["treble", "bass", "head"];
+  var byPiece = {};
+  var base = 0;
+  for (var pi2 = 0; pi2 < META.counts.length; pi2++) {
+    var n = META.counts[pi2];
+    if (n && wanted.indexOf(names[pi2]) >= 0) {
+      var rank = names[pi2] === "head" ? 1 : 2;      // a clef beats a notehead
+      for (var m2 = base; m2 < base + n; m2++) {
+        var owner = PIDX[m2];
+        if (!byPiece[owner] || byPiece[owner] < rank) byPiece[owner] = rank;
+      }
+    }
+    base += n;
+  }
+  var cand = Object.keys(byPiece).map(Number);
+  if (cand.length < want) return [];
+  // clefs first, then front-most, so the lit pieces are legible and unobscured
+  cand.sort(function (a, b) {
+    if (byPiece[b] !== byPiece[a]) return byPiece[b] - byPiece[a];
+    return HOME[b * 4 + 2] - HOME[a * 4 + 2];
+  });
+  var front = cand.slice(0, Math.max(want * 8, 32));
+  var picked = [];
+  for (var k = 0; k < want; k++) picked.push(front[Math.floor(k * front.length / want)]);
+  return picked;
+})();
+var liveEls = [];
+(function () {
+  var layer = document.getElementById("livelayer");
+  if (!layer) return;
+  LIVE.forEach(function (pieceIndex, k) {
+    var t = window.__SCORE_TRACKS[k];
+    var el = document.createElement("button");
+    el.type = "button";
+    el.className = "livenote";
+    el.setAttribute("aria-label", "Hear " + t.title);
+    el.dataset.track = String(k);
+    layer.appendChild(el);
+    liveEls.push(el);
+  });
+})();
+
 var beats = Array.prototype.slice.call(document.querySelectorAll(".beat"));
 var cols  = beats.map(function(b){ return b.querySelector(".col"); });
 var LABELS = ["scattered","gathering","gathering","converging","converging",
@@ -295,6 +356,14 @@ function draw(now){
     PSTATE[o2]=px; PSTATE[o2+1]=py; PSTATE[o2+2]=pz;
     PSTATE[o2+3]=TN[i]*(1-a*0.55);
   }
+  // live pieces take the ember. Negative tone is the sentinel the shader reads;
+  // the slight breathe is state, not decoration — it says "this one answers".
+  if (LIVE.length) {
+    var pulse = 0.72 + 0.28 * Math.sin(time * 1.6);
+    for (var L = 0; L < LIVE.length; L++) {
+      PSTATE[(NP * 2 + LIVE[L]) * 4 + 3] = -pulse;
+    }
+  }
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,NP,3,gl.RGBA,gl.FLOAT,PSTATE);
 
@@ -317,6 +386,27 @@ function draw(now){
   mul(VP, Pm, Vm);
   gl.uniformMatrix4fv(uVP, false, VP);
   gl.uniform2f(uFog, dist-420, dist+760);
+
+  // project each live piece into screen space with the SAME matrix the scene is
+  // drawn with, so the target sits exactly on the note however the world drifts
+  for (var q = 0; q < liveEls.length; q++) {
+    var pi = LIVE[q];
+    // the piece's CURRENT position, not its home. Until the cube closes a piece is
+    // out on its own orbit, so projecting HOME put the target on empty paper and
+    // left the lit glyph somewhere else on screen entirely.
+    var o2p = (NP*2 + pi) * 4;
+    var wx = PSTATE[o2p], wy = PSTATE[o2p+1], wz = PSTATE[o2p+2];
+    var cx4 = VP[0]*wx + VP[4]*wy + VP[8]*wz  + VP[12];
+    var cy4 = VP[1]*wx + VP[5]*wy + VP[9]*wz  + VP[13];
+    var cw4 = VP[3]*wx + VP[7]*wy + VP[11]*wz + VP[15];
+    var el = liveEls[q];
+    if (cw4 <= 0) { el.style.display = "none"; continue; }
+    var sx = (cx4 / cw4 * 0.5 + 0.5) * cv.clientWidth;
+    var sy = (1 - (cy4 / cw4 * 0.5 + 0.5)) * cv.clientHeight;
+    el.style.display = "block";
+    el.style.left = sx + "px";
+    el.style.top  = sy + "px";
+  }
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   for(var d=0; d<DRAWS.length; d++){
@@ -358,8 +448,13 @@ function draw(now){
   // the read-out has said its piece once the model is assembled. It clears on
   // the closing beat so it never sits under the call to action — keyed to the
   // beat that is actually lit, not to a guessed scroll fraction.
+  // The read-out is fixed in the copy column's own gutter, so a tall beat scrolls
+  // its last lines underneath it. On the beats where the visitor is doing something
+  // rather than reading — listening, leaving a note — it steps aside; the assembly
+  // state is not what they are attending to there.
+  var quiet = best >= 0 && beats[best].dataset.quiet === "1";
   gauge.style.opacity =
-    (progress < 0.02 || best === beats.length - 1) ? 0 : 1;
+    (progress < 0.02 || quiet || best === beats.length - 1) ? 0 : 1;
   // desktop: text left, world right — eased along the scroll itself, so the
   // world drifts out of the column instead of jumping when a section lights
   var sr = shiftRamp*shiftRamp*(3 - 2*shiftRamp);

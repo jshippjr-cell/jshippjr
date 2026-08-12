@@ -1,0 +1,30 @@
+[
+  {
+    "bytes": 1080215,
+    "out": "ex-demo-holiday-strings.mp3",
+    "seconds": 45.01,
+    "src": "demo-holiday-strings.mp3",
+    "src_sha256": "83a85653aa14d45ad43d8e36898fc0c1f633952d5f824b840ae480822b637b00"
+  },
+  {
+    "bytes": 1080215,
+    "out": "ex-demo-title-sequence.mp3",
+    "seconds": 45.01,
+    "src": "demo-title-sequence.mp3",
+    "src_sha256": "20ed63fcc236df5f2c82ec7c66e8d719f0f84ed5824614fdac5e7a42878cff1a"
+  },
+  {
+    "bytes": 1080215,
+    "out": "ex-demo-retail-anthem.mp3",
+    "seconds": 45.01,
+    "src": "demo-retail-anthem.mp3",
+    "src_sha256": "d942fee09be023bae0ce0ef0bdf3c4f92fde8fac0183a217c8fbca92781ad0b4"
+  },
+  {
+    "bytes": 1080215,
+    "out": "ex-demo-financial-theme.mp3",
+    "seconds": 45.01,
+    "src": "demo-financial-theme.mp3",
+    "src_sha256": "4fb96a86164a5748acddc10be198bd335c971da7f7444dacb9b3fbcdeeda11ca"
+  }
+]

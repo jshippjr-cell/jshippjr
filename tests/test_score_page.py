@@ -171,3 +171,123 @@ def test_it_never_claims_the_note_is_bound_to_a_recording(client):
     for overstated in ("exact recording", "tamper-proof", "immutable",
                        "locked to that recording"):
         assert overstated not in body, f"'{overstated}' overstates what the product does"
+
+
+# --------------------------------------------------------------------------- #
+# The listening beat
+# --------------------------------------------------------------------------- #
+
+def test_the_page_offers_four_distinct_recordings(client):
+    """ADR-0040: the front door of a music company has to let you hear music, and
+    this page becomes the front door. The tracks ride in a JSON payload the lit
+    notes read from — there is no player until a note is pressed, because a page
+    that wants to make noise reads as a page that will make noise unasked."""
+    import json
+    html = client.get("/score").text
+    payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
+    tracks = json.loads(payload)
+    assert len(tracks) >= 4, f"only {len(tracks)} tracks"
+    urls = [t["url"] for t in tracks]
+    assert len(set(urls)) == len(urls), "two notes point at the same recording"
+    for u in urls:
+        assert u.startswith("/static/public/"), f"{u} is not served by us"
+        assert client.get(u).status_code == 200
+
+
+def test_the_notes_are_the_affordance(client):
+    """The music is reached by pressing a lit piece of the score, not by a row of
+    controls stapled into the reading column."""
+    html = client.get("/score").text
+    for hook in ("livelayer", "score-listen.js", "plAudio"):
+        assert hook in html, f"{hook} is missing"
+
+
+def test_the_listen_script_runs_before_the_renderer(client):
+    """The renderer reads __SCORE_TRACKS to know how many notes to light. Load it
+    the other way round and the scene lights nothing."""
+    html = client.get("/score").text
+    assert html.index("score-listen.js") < html.index("score-gl.js")
+
+
+def test_the_player_never_taps_the_audio_element():
+    """ADR-0043, fourth amendment: createMediaElementSource CAPTURES the element,
+    and its failure is inaudible — playing, paused=false, no MediaError, peak 0.
+    Not on the page where audio is the pitch."""
+    import re
+    js = open(os.path.join(_STATIC, "score-listen.js")).read()
+    # strip comments: the file EXPLAINS why it does not tap, and the explanation
+    # must not be what trips the test
+    code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
+    assert "createMediaElementSource" not in code
+    assert "AudioContext" not in code
+
+
+def test_there_is_a_way_in_without_webgl2():
+    """No WebGL2 means no lit notes. The words are not a substitute for the work,
+    so the tracks stay reachable as a plain list."""
+    js = open(os.path.join(_STATIC, "score-listen.js")).read()
+    assert "lt-fallback" in js, "the music is unreachable when the scene does not draw"
+
+
+def test_the_excerpts_are_a_tenth_of_the_master(client):
+    """The masters are 163-187s at 192kbps — up to 4.5 MB a press, and a media
+    element buffers ahead at its own discretion. A landing page does not get to
+    spend a producer's cellular data like that."""
+    import json
+    rows = json.load(open(os.path.join(_STATIC, "excerpts.json")))
+    assert rows, "no excerpts were cut"
+    for r in rows:
+        out = os.path.join(_STATIC, r["out"])
+        assert os.path.exists(out), f"{r['out']} is referenced but missing"
+        assert os.path.getsize(out) < 1_500_000, f"{r['out']} is too heavy for a press"
+
+
+def test_every_excerpt_still_matches_the_master_it_was_cut_from():
+    """showcase.py says a track is 'a file swap at the path below'. When someone
+    swaps one, the excerpt silently becomes a cut of music we no longer ship —
+    nothing 404s, nothing throws, every other test stays green."""
+    import hashlib
+    import json
+    rows = json.load(open(os.path.join(_STATIC, "excerpts.json")))
+    for r in rows:
+        master = os.path.join(_STATIC, r["src"])
+        assert os.path.exists(master), f"{r['src']} is gone; its excerpt is orphaned"
+        data = open(master, "rb").read()
+        if data[:3] == b"ID3":
+            size = ((data[6] & 0x7F) << 21 | (data[7] & 0x7F) << 14
+                    | (data[8] & 0x7F) << 7 | (data[9] & 0x7F))
+            data = data[10 + size:]
+        assert hashlib.sha256(data).hexdigest() == r["src_sha256"], (
+            f"{r['src']} changed but {r['out']} was not re-cut — "
+            f"run scripts/build_demo_excerpts.py")
+
+
+def test_the_excerpt_does_not_inherit_the_masters_length():
+    """A Xing/Info header declares the frame count of the file it came from. Copied
+    into a 45-second cut, every player reports the master's 3:06 — the control lies
+    about what it is holding."""
+    import json
+    for r in json.load(open(os.path.join(_STATIC, "excerpts.json"))):
+        head = open(os.path.join(_STATIC, r["out"]), "rb").read(4000)
+        assert b"Xing" not in head and b"Info" not in head, (
+            f"{r['out']} carries a VBR header from its master")
+
+
+def test_the_placeholder_disclosure_rides_inside_the_player(client):
+    """The tracks are AI-generated placeholders and say so in their own ID3 tag, so
+    the page says it first. Inside the player's own frame, because a disclosure
+    elsewhere on the page does not survive a screenshot of the player."""
+    from chordential_oia.web.showcase import PLACEHOLDER_AUDIO_NOTICE
+    html = client.get("/score").text
+    player = html.split('id="player"')[1].split("</div>")[0]
+    assert PLACEHOLDER_AUDIO_NOTICE in player, "the player does not disclose itself"
+
+
+def test_no_audio_bytes_move_before_a_press(client):
+    """The player has no src until a note is pressed and preloads nothing. A visitor
+    who never presses anything pays for no audio at all."""
+    import re
+    for tag in re.findall(r"<audio[^>]*>", client.get("/score").text):
+        assert 'preload="none"' in tag, "the player preloads before anyone asked"
+        assert "src=" not in tag, "the player has a track before anyone chose one"
