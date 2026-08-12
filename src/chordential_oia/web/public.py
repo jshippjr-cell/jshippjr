@@ -27,6 +27,7 @@ from .filters import displayurl, money, pct, slug
 from ..capabilities import quote_band
 from ..intake import extract_budget
 from .showcase import get_showcase
+from . import landing
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
 # Disciplines offered on the public applicant form (exclude the disqualified bucket).
@@ -262,9 +263,17 @@ def public_score(request: Request):
 
 @router.get("/delivery-sample", response_class=HTMLResponse)
 def public_delivery_sample(request: Request):
-    """Sample agency delivery package — proves the premium delivery experience.
-    Self-contained branded page (8 documents) with a Download-PDF action."""
-    return render(request, "public/delivery_sample.html", active="")
+    """Sample agency delivery package — the artifact a producer forwards to
+    business affairs, and the reason it must be right.
+
+    Its cue sheet and rights block are RENDERED by the same builders that assemble
+    a real client's ZIP (see :mod:`chordential_oia.web.landing`), over an invented
+    campaign. Hand-typed, this page had drifted into filing usage code VV on a
+    campaign bed — a claim that performers appear on camera, which nothing in this
+    system knows. A document that exists to be believed cannot be maintained by
+    hand beside the engine it depicts."""
+    return render(request, "public/delivery_sample.html", active="",
+                  **landing.sample_context())
 
 
 # --------------------------------------------------------------------------- #

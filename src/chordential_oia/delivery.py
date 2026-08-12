@@ -589,8 +589,30 @@ def _infer_usage(project) -> str:
     ``delivery_json['cue_meta'][cue]['usage']``.
     """
     text = " ".join(str(_val(project, k) or "") for k in ("need", "description")).lower()
-    return USAGE_BACKGROUND_VOCAL if any(h in text for h in _VOCAL_HINTS) \
+    return USAGE_BACKGROUND_VOCAL if any(_says_vocal(text, h) for h in _VOCAL_HINTS) \
         else USAGE_BACKGROUND_INSTRUMENTAL
+
+
+# A brief that rules a vocal OUT contains the word too. Plain substring matching
+# read "no vocal" as a vocal and filed BV — the same species of defect as the
+# hardcoded VV this function replaced: a claim about the recording that the brief
+# actually denies. Only the negation immediately before the hint is considered;
+# anything cleverer would be guessing, and guessing is what we are removing.
+_NEGATIONS = ("no", "not", "without", "non", "never", "zero", "excluding", "minus")
+
+
+def _says_vocal(text: str, hint: str) -> bool:
+    """Is ``hint`` present in ``text`` and NOT immediately negated?"""
+    start = 0
+    while True:
+        i = text.find(hint, start)
+        if i < 0:
+            return False
+        before = re.split(r"[^a-z]+", text[max(0, i - 24):i])
+        before = [w for w in before if w]
+        if not (before and before[-1] in _NEGATIONS):
+            return True
+        start = i + len(hint)
 
 
 # --------------------------------------------------------------------------- #

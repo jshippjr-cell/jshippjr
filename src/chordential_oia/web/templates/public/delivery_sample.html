@@ -264,25 +264,34 @@
     <p class="doc-kicker">Document 04</p>
     <h1 class="doc">Rights &amp; Ownership Certificate</h1>
     <p class="doc-sub">Cue sheet, publishing splits, and grant of rights — cleared on delivery.</p>
+    {# Every row below comes from delivery.build_cue_sheet over the invented
+       campaign in web/landing.py — the same builder a real client's ZIP uses.
+       Hand-typed, this table filed usage code VV on a campaign bed, conflated the
+       writer and publisher shares into one 100%, and hardcoded BMI for a writer
+       whose PRO the engine tracks per person. It cannot drift again. #}
     <table style="margin-bottom:16px">
-      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
+      <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Writer %</th><th>Publisher</th><th>Pub. %</th><th>PRO</th></tr></thead>
       <tbody>
-        <tr><td>Find Your Horizon (Anthem)</td><td>VV</td><td>0:60</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
-        <tr><td>— :30 / :15 / :06 cutdowns</td><td>BI</td><td>var.</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
-        <tr><td>AURORA Mnemonic</td><td>Logo</td><td>0:03</td><td>J. Shipp</td><td>Chordential Music</td><td>BMI</td><td>100%</td></tr>
+        {% for c in cues %}
+        <tr><td>{{ c.cue }}</td><td>{{ c.usage }}</td><td>{{ c.duration or "—" }}</td>
+            <td class="mono">{{ c.isrc or "—" }}</td><td class="mono">{{ c.iswc or "—" }}</td>
+            <td>{{ c.composers }}</td><td>{{ c.writer_share }}</td>
+            <td>{{ c.publisher }}</td><td>{{ c.publisher_share }}</td><td>{{ c.pro or "—" }}</td></tr>
+        {% endfor %}
       </tbody>
     </table>
     <div class="two">
       <div class="panel">
         <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights</p>
+        {# The grant is the certificate's own license dict, not marketing prose. The
+           two halves — master bought out, composition publishing retained — appear
+           together or not at all; dropping the second makes the first a full-buyout
+           claim we do not make and could not honour while filing the cue sheet. #}
         <ul class="clean">
-          <li><b>Type:</b> Original work — buyout of master + perpetual sync licence</li>
-          <li><b>Publishing:</b> Composition publishing retained by Chordential Music</li>
-          <li><b>Territory:</b> Worldwide</li>
-          <li><b>Term:</b> Perpetuity</li>
-          <li><b>Media:</b> All campaign media (broadcast, digital, social, OOH, in-store)</li>
-          <li><b>Exclusivity:</b> Exclusive to AURORA for the campaign category</li>
-          <li><b>Clearances:</b> No samples, no third-party masters — 100% original &amp; clear</li>
+          {% for k, v in cert.license.items() %}
+          <li><b>{{ k|replace("_"," ")|title }}:</b> {{ v }}</li>
+          {% endfor %}
+          <li><b>Clearances:</b> {{ cert.clearance_line }}</li>
         </ul>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
@@ -291,7 +300,8 @@
           Chordential certifies the above cues are original and free to use as granted — no samples, no third-party masters, nothing to clear but ours.</p>
       </div>
     </div>
-    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental · Logo Brand mnemonic. Shares total 100% per cue.</p>
+    <p class="legend" style="margin-top:14px">Usage codes — BI Background Instrumental · BV Background Vocal. We never file a visual code: nothing in this system knows whether a performer appears on camera. Writer and publisher shares are accounted separately, as a PRO accounts them.</p>
+    <p class="legend" style="margin-top:8px">Chain of title — {% for c in cert.contributors %}{{ c.name }} ({{ c.role }}{% if c.pro %}, {{ c.pro }}{% endif %}){% if not loop.last %} · {% endif %}{% endfor %}. Certified against {{ cert.certified_version }} on {{ cert.certified_date }}.</p>
   </div>
   <div class="foot"><span>CHD-2026-0417 · Find Your Horizon</span><span>Prepared by Chordential · Page 5 / 8</span></div>
 </section>
