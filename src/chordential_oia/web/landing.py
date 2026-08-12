@@ -91,6 +91,22 @@ CUE_META: Dict[str, Dict[str, str]] = {
 }
 
 
+# The take the review beat scrubs. Part of the same invented campaign as everything
+# else in this module — a demonstration needs a length, and an undeclared one is a
+# number that drifts the first time somebody adjusts the timeline by eye.
+SAMPLE_TAKE_SECONDS = 45
+
+
+def review_versions() -> List[Dict[str, Any]]:
+    """The version ladder the review beat switches between, newest last.
+
+    Derived from VERSIONS, never typed into the template: a hand-written version
+    label on a pin is the same trap as a hand-written version count, and the pin
+    is the one place on this page where the version has to be exactly right.
+    """
+    return [{"n": v["n"], "label": v.get("label") or f"v{v['n']}"} for v in VERSIONS]
+
+
 def _project() -> Dict[str, Any]:
     return dict(PROJECT)
 

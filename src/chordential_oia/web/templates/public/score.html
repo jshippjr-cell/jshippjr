@@ -92,6 +92,72 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
   ul.pack li{opacity:1;transform:none;transition:none}
 }
 
+/* ── the review beat ─────────────────────────────────────────────────────────
+   The timeline is the assembly gauge grown to the reading column: same hairline,
+   same 7px ember dot. Nothing here is a new object, because a widget dropped into
+   an engraved page reads as a widget however it is styled. */
+.rev{margin:1.6rem 0 1.3rem;max-width:29rem;padding:1.1rem 1.2rem 1rem;
+  border:1px solid var(--rule);background:rgba(255,255,255,.28)}
+.rev-top{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem}
+.rev-time{font-variant-numeric:tabular-nums;color:var(--ink)}
+.rev-rail{position:relative;height:1px;background:var(--rule);margin:1.5rem 0 1.4rem;
+  cursor:pointer;touch-action:none}
+.rev-rail:focus-visible{outline:2px solid var(--ember);outline-offset:8px}
+.rev-head{position:absolute;top:50%;left:0;width:7px;height:7px;border-radius:50%;
+  background:var(--ember);transform:translate(-50%,-50%);pointer-events:none}
+/* a landed note: the same dot, hollow, sitting on the second it was made at */
+.rev-pin{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;
+  background:var(--cream);border:1.5px solid var(--ink);
+  transform:translate(-50%,-50%);padding:0;cursor:pointer}
+.rev-pin:hover,.rev-pin:focus-visible{border-color:var(--ember)}
+
+.rev-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+  flex-wrap:wrap}
+.rev-btn{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.7rem;
+  letter-spacing:.13em;text-transform:uppercase;padding:.55rem 1rem;cursor:pointer;
+  border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:2px;
+  transition:background .2s ease,color .2s ease}
+.rev-btn:hover{background:var(--ink);color:var(--paper)}
+.rev-vers{display:flex;gap:.35rem}
+.rev-v{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.66rem;
+  letter-spacing:.1em;padding:.4rem .6rem;cursor:pointer;border:1px solid var(--rule);
+  background:transparent;color:var(--muted);border-radius:2px}
+.rev-v.on{border-color:var(--ink);color:var(--ink)}
+
+.rev-form{display:flex;gap:.5rem;margin-top:1rem}
+.rev-form[hidden]{display:none}
+.rev-form input{flex:1;min-width:0;font-family:inherit;font-size:.95rem;
+  padding:.5rem .6rem;border:1px solid var(--ink);background:var(--paper);
+  color:var(--ink);border-radius:2px}
+.rev-form input:focus-visible{outline:2px solid var(--ember);outline-offset:1px}
+
+.rev-list{list-style:none;margin:1rem 0 0;padding:0;display:flex;
+  flex-direction:column;gap:0}
+.rev-list li{display:flex;justify-content:space-between;align-items:baseline;
+  gap:.9rem;padding:.5rem 0;border-top:1px solid var(--rule)}
+.rev-list b{font-weight:400;font-size:.95rem;min-width:0;overflow-wrap:anywhere}
+.rev-list button{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
+  letter-spacing:.06em;color:var(--muted);background:none;border:0;padding:0;
+  cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rev-list button:hover{color:var(--ember)}
+.rev-none,.rev-say{font-size:.82rem;line-height:1.5;color:var(--muted);margin:.9rem 0 0}
+.rev-none[hidden]{display:none}
+/* the disclosure sits INSIDE the frame, at reading weight — it has to survive
+   being cropped out of a screenshot of the interaction */
+.rev-say{border-top:1px solid var(--rule);padding-top:.8rem;margin-top:1rem}
+
+@media (max-width:900px){
+  /* the field goes above the rail: a software keyboard covers the bottom half of
+     the screen, and a visitor who cannot see their own pin land learns nothing */
+  .rev{display:flex;flex-direction:column}
+  .rev-form{order:-1;margin:0 0 1rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .rev-btn{transition:none}
+}
+
 .cta{display:inline-block;margin-top:1.9rem;padding:.85rem 1.6rem;
   border:1px solid var(--ink);border-radius:2px;color:var(--ink);text-decoration:none;
   font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.76rem;letter-spacing:.15em;
@@ -196,10 +262,46 @@ model is not showing — the words below still say everything the picture does.<
   <section class="beat" data-veil="1"><div class="col">
     <p class="eyebrow">05 — Creative review</p>
     <h2>Every comment stays with the music.</h2>
-    <p class="lede">Listen, comment, approve, and review every version in one shared
-      workspace. Feedback stays attached to the exact moment it was given, so every
-      decision has context and every revision has a clear purpose.</p>
-    <div class="rule"></div>
+    <p class="lede">Scrub the take, mark the moment you mean, and say what you heard.
+      The note is written down with the second it was made at and the version it was
+      made against — so nobody has to argue about which take you meant.</p>
+
+    {# The mechanism, not a paragraph about the mechanism. Versions come from
+       landing.review_versions() — a hand-typed version label on a pin is the same
+       trap as a hand-typed version count, and the pin is the one place on this page
+       where the version has to be exactly right. #}
+    <div class="rev" id="rev" data-seconds="{{ take_seconds }}">
+      <div class="rev-top">
+        <span class="rev-take">Find Your Horizon — anthem</span>
+        <span class="rev-time" id="revTime">0:00 / 0:45</span>
+      </div>
+      <div class="rev-rail" id="revRail" tabindex="0" role="slider"
+           aria-label="Position in the take" aria-valuemin="0"
+           aria-valuemax="{{ take_seconds }}" aria-valuenow="0" aria-valuetext="0:00">
+        <i class="rev-head" id="revHead"></i>
+      </div>
+      <div class="rev-row">
+        <button type="button" class="rev-btn" id="revMark">Note at 0:00</button>
+        <span class="rev-vers" id="revVers">
+          {% for v in review_versions %}
+          <button type="button" class="rev-v{% if loop.last %} on{% endif %}"
+                  data-v="{{ v.label }}">{{ v.label }}</button>
+          {% endfor %}
+        </span>
+      </div>
+      <form class="rev-form" id="revForm" hidden>
+        <input id="revText" type="text" maxlength="140" autocomplete="off"
+               placeholder="what you heard" aria-label="Your note">
+        <button type="submit" class="rev-btn">Leave it</button>
+      </form>
+      <ul class="rev-list" id="revList"></ul>
+      <p class="rev-none" id="revNone">No notes on this version yet — scrub the take
+        and drop the first one.</p>
+      <p class="rev-say">Nothing here is sent and nothing leaves this browser. On a
+        real campaign the note lands on the version under review and the composer
+        answers it in the portal.</p>
+    </div>
+
     <p class="note">Creative conversations should move the work forward—not create
       more work.</p>
   </div></section>
@@ -239,3 +341,6 @@ model is not showing — the words below still say everything the picture does.<
 
 </main>
 <script src="/static/public/score-gl.js?v={{ asset_v }}" defer></script>
+{# separate file on purpose: score-gl.js returns early with no WebGL2, and
+   the review demonstration must survive that — it is DOM, not the scene. #}
+<script src="/static/public/score-note.js?v={{ asset_v }}" defer></script>

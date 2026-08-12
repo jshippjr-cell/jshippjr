@@ -112,3 +112,62 @@ def test_the_delivery_beat_hands_off_to_the_package(client):
     """The scroll is the doorway; the document lives at its own address because it
     is the thing a producer forwards."""
     assert "/delivery-sample" in client.get("/score").text
+
+
+# --------------------------------------------------------------------------- #
+# The review beat: the mechanism, not a paragraph about the mechanism
+# --------------------------------------------------------------------------- #
+
+def test_the_review_beat_is_interactive_not_a_screenshot(client):
+    """The claim is about a mechanism, and a mechanism is demonstrated by working."""
+    body = client.get("/score").text
+    for hook in ("revRail", "revMark", "revForm", "revList", "score-note.js"):
+        assert hook in body, f"{hook} is missing — the beat is inert"
+
+
+def test_the_versions_come_from_the_ladder_not_the_template(client):
+    """A hand-typed version label on a pin is the same trap as a hand-typed version
+    count: the pin is the one place on this page the version must be exactly right."""
+    from chordential_oia.web import landing
+    body = client.get("/score").text
+    for v in landing.review_versions():
+        assert f'data-v="{v["label"]}"' in body, f"{v['label']} is not offered"
+
+
+def test_the_demo_says_nothing_is_sent(client):
+    """A public text box that mimes a submit is the thing we do not build. The
+    disclosure sits inside the component's own frame so it survives a screenshot
+    cropped to the interaction — a footnote does not travel with a Slack paste."""
+    body = client.get("/score").text
+    frame = body.split('class="rev"')[1].split("</div>")[0] + body.split('id="rev"')[1][:4000]
+    assert "Nothing here is sent" in frame
+    assert "nothing leaves this browser" in frame
+
+
+def test_the_review_demo_stores_nothing_on_the_server(client):
+    """Anonymous public traffic must never reach review_comments — that table is the
+    approval record, carries `verified`, and is joined by person_id. No route, no
+    form action, no identity fields."""
+    js = open(os.path.join(_STATIC, "score-note.js")).read()
+    assert "sessionStorage" in js
+    assert "fetch(" not in js and "XMLHttpRequest" not in js
+    for field in ('name="email"', 'name="name"', "action="):
+        assert field not in client.get("/score").text.split('id="rev"')[1][:4000]
+
+
+def test_the_review_demo_survives_no_webgl2():
+    """score-gl.js returns early with no WebGL2. The claim this beat makes may not
+    die with the scene, so the interaction lives in its own file and touches no
+    renderer state."""
+    js = open(os.path.join(_STATIC, "score-note.js")).read()
+    for renderer_thing in ("webgl2", "getContext", "PSTATE", "requestAnimationFrame"):
+        assert renderer_thing not in js, f"the review demo reaches into the renderer ({renderer_thing})"
+
+
+def test_it_never_claims_the_note_is_bound_to_a_recording(client):
+    """Nothing hashes the audio. The binding is to a VERSION in the ladder, and a
+    version's file can be removed while its comments survive. Say version."""
+    body = client.get("/score").text.lower()
+    for overstated in ("exact recording", "tamper-proof", "immutable",
+                       "locked to that recording"):
+        assert overstated not in body, f"'{overstated}' overstates what the product does"
