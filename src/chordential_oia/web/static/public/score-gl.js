@@ -232,6 +232,9 @@ var gaugeLab = document.querySelector("#gauge b");
 var veil = document.getElementById("veil");
 var gauge = document.getElementById("gauge");
 var hint = document.getElementById("hint");
+// the renderer owns which beat reads from here on; before this the hero is
+// visible by default so a slow scene fetch never shows a blank page
+document.documentElement.classList.add("lit-managed");
 var beats = Array.prototype.slice.call(document.querySelectorAll(".beat"));
 var cols  = beats.map(function(b){ return b.querySelector(".col"); });
 var LABELS = ["scattered","gathering","gathering","converging","converging",

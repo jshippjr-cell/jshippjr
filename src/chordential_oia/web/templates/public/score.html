@@ -42,6 +42,15 @@ body{margin:0;background:var(--cream);color:var(--ink);
 .beat .col{max-width:31rem;opacity:0;transform:translateY(22px);
   transition:opacity .6s ease,transform .6s ease;pointer-events:auto}
 .beat.lit .col{opacity:1;transform:none}
+/* The hero reads at FIRST PAINT. The scene is two fetched assets (~450 KB), and
+   the lit-beat logic only starts once they land — so on a slow connection this
+   used to be a blank cream rectangle for the whole download, with the headline
+   sitting at opacity 0. A slow fetch is not a failed one; nothing was catching
+   it. The renderer stamps `lit-managed` on <html> when it takes over, and until
+   then the first beat is simply visible. */
+.beat:first-child .col{opacity:1;transform:none}
+html.lit-managed .beat:first-child .col{opacity:0;transform:translateY(22px)}
+html.lit-managed .beat:first-child.lit .col{opacity:1;transform:none}
 
 .eyebrow{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
   letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:0 0 1.1rem}
