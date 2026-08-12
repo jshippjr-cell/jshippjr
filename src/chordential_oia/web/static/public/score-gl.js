@@ -197,6 +197,12 @@ for(var i2=0;i2<NP;i2++){
 // go first, bottom rail to open flap, and the ones that are contents follow,
 // lowest layer first. Without this the whole model turns over simultaneously
 // and the middle of the fold reads as an explosion rather than as packing.
+//
+// The tail of this is the fold's REAL length: a piece staggered to 0.75 has not
+// begun to move when the fold is three quarters done, so the model was still
+// coming together long after the section it belongs to was on screen. The
+// ordering is what reads as packing; the spread just has to stay tight enough
+// that the box is finished while the manifest beside it is being read.
 var PST = new Float32Array(NP);
 if(PACK){
   var eLo=1e9,eHi=-1e9,cLo=1e9,cHi=-1e9;
@@ -208,8 +214,8 @@ if(PACK){
   for(var i4=0;i4<NP;i4++){
     var z4 = PACK[i4*8+2];
     PST[i4] = PACK[i4*8+3] >= 0.40
-      ? 0.34 * ((z4-eLo)/Math.max(1e-3, eHi-eLo))          // the carton, upward
-      : 0.30 + 0.45 * ((z4-cLo)/Math.max(1e-3, cHi-cLo));  // then what is in it
+      ? 0.30 * ((z4-eLo)/Math.max(1e-3, eHi-eLo))          // the carton, upward
+      : 0.26 + 0.34 * ((z4-cLo)/Math.max(1e-3, cHi-cLo));  // then what is in it
   }
 }
 // where to look once it is a package: the middle of what the package actually
@@ -498,12 +504,14 @@ var LABELS = ["scattered","gathering","gathering","converging","converging",
 //   …0.55  the cube closes, before the review section comes up
 //   0.60   the notes ignite one after another, ON the review beat, and are all
 //          lit by 0.663 — inside beat 05 on a phone as well as a desktop
-//   0.775  the cube folds down into the delivery package, ON the handoff beat
-//   0.875  the carton stands complete and open, with its manifest written
+//   0.770  the cube folds down into the delivery package, AS the handoff beat
+//          arrives — fast, because the middle of a fold is a transitional cloud
+//          and the words beside it say "everything arrives together"
+//   0.820  the carton stands complete and open, with its manifest written
 //   0.92   the lid folds shut…
 //   0.99   …and it is sealed, as the call to action reads
 var ASSEMBLE_AT = 0.55;
-var PACK_FROM = 0.775, PACK_TO = 0.875;
+var PACK_FROM = 0.770, PACK_TO = 0.820;
 var SEAL_FROM = 0.92, SEAL_TO = 0.99;
 
 var progress = 0, target = 0, shiftRamp = 0;
@@ -752,7 +760,7 @@ function draw(now){
   for(var b3=0;b3<beats.length;b3++){
     if(beats[b3].querySelector(".pack"))
       beats[b3].classList.toggle("packed",
-        mk > 0.10 && beats[b3].classList.contains("lit"));
+        mk > 0.55 && beats[b3].classList.contains("lit"));
   }
   // the read-out has said its piece once the model is assembled. It clears on
   // the closing beat so it never sits under the call to action — keyed to the

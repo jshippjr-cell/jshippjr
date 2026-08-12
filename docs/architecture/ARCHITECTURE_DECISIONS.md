@@ -1714,8 +1714,17 @@ different stretch of the scroll on a phone than on a desktop — beat 05 runs 0.
 on one and 0.525–0.705 on the other — so each act is fitted to the NARROWER of the pair,
 which is the only way one set of constants reads correctly on both. The cube closes at
 0.55, the notes ignite across beat 05 (0.600–0.663, "creative review"), the carton builds
-across beat 06 (0.775–0.875, "one complete handoff") and its lid folds shut last
-(0.92–0.99), as the call to action reads. `test_score_page.py` holds each act inside its
+as beat 06 arrives (0.770–0.820, "one complete handoff") and its lid folds shut last
+(0.92–0.99), as the call to action reads. The fold has to FINISH early in its beat, not
+at the end of it: the middle of a fold is a transitional cloud, and it is standing beside
+a manifest of what is in the box under the words "everything arrives together" — a fold
+still running while that is being read is the picture contradicting the sentence for the
+whole time anyone looks at it. The real length of the fold is the stagger's tail, not the
+window: a piece staggered to 0.75 has not begun to move when the fold is three quarters
+done, which is how the model came to be still assembling long after its section was on
+screen. The manifest itself waits for something to describe (it reveals past halfway),
+and the line "One delivery. Nothing missing." waits for the manifest, because it is a
+claim about that list. `test_score_page.py` holds each act inside its
 own beat window rather than checking bare numbers, because a nudge to any one constant is
 exactly how a picture drifts off the sentence it was drawn for. The lid is a genuine
 rotation: the flaps' hinges are recovered at boot from the open and shut states alone —

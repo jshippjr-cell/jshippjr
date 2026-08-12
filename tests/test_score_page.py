@@ -342,6 +342,37 @@ def test_each_act_lands_on_the_beat_it_belongs_to(client):
         "the lid shuts while the handoff beat is still reading — it should be "
         "an open, complete carton for the whole of that section")
 
+    # …and it has to FINISH early in that beat, not at the end of it. The middle
+    # of the fold is a transitional cloud, and the words beside it say
+    # "everything arrives together" over a manifest of what is in the box. A
+    # fold still running when the section is being read is the picture
+    # contradicting the sentence for the whole time anyone looks at it.
+    early = handoff[0] + (handoff[1] - handoff[0]) * 0.65
+    assert num("PACK_TO") <= early, (
+        f"the carton is not finished until {num('PACK_TO')}, most of the way "
+        f"through the beat that describes it — it should be complete by {early:.3f}")
+
+
+def test_the_manifest_waits_for_a_package_to_describe(client):
+    """The list of what is in the box appears once there is a box.
+
+    It is written from the engine's real manifest, and it is a claim about a
+    finished package — so it reveals against the SAME assembly scalar the model
+    moves on (ADR-0029: one derivation, many reporters), late enough that the
+    thing it describes exists.
+    """
+    import re
+    js = open(os.path.join(_STATIC, "score-gl.js")).read()
+    m = re.search(r"mk > ([0-9.]+) && beats\[b3\]\.classList\.contains", js)
+    assert m, "the manifest is no longer gated on the assembly scalar"
+    assert float(m.group(1)) >= 0.5, (
+        f"the manifest writes in at {m.group(1)} of the fold, while the package "
+        "is still a cloud of parts")
+    html = client.get("/score").text
+    assert "pack-note" in html, (
+        "'One delivery. Nothing missing.' is a claim about the list above it; "
+        "it must not appear before that list does")
+
 
 def test_the_lit_notes_sit_above_the_copy_column(client):
     """#livelayer and #scroll at the same z-index means the copy column wins on DOM

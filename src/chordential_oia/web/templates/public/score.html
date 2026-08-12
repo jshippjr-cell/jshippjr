@@ -80,6 +80,10 @@ ul.pack li{display:flex;justify-content:space-between;align-items:baseline;gap:1
   transition:opacity .45s ease,transform .45s ease;
   transition-delay:calc(var(--i) * 90ms)}
 .beat.packed ul.pack li{opacity:1;transform:none}
+/* the closing line is a claim ABOUT the list, so it waits for it — otherwise it
+   reads alone, above an empty space, while the package is still being built */
+p.pack-note{opacity:0;transition:opacity .55s ease}
+.beat.packed p.pack-note{opacity:1}
 ul.pack b{font-weight:400;font-size:1rem}
 ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
   font-size:.7rem;letter-spacing:.06em;color:var(--muted);text-align:right;
@@ -90,6 +94,7 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
 }
 @media (prefers-reduced-motion:reduce){
   ul.pack li{opacity:1;transform:none;transition:none}
+  p.pack-note{opacity:1;transition:none}
 }
 
 /* ── the live notes ──────────────────────────────────────────────────────────
@@ -479,7 +484,7 @@ model is not showing — the words below still say everything the picture does.<
       <li style="--i:{{ loop.index0 }}"><b>{{ row.asset }}</b><i>{{ row.spec }}</i></li>
       {% endfor %}
     </ul>
-    <p class="note">One delivery. Nothing missing.</p>
+    <p class="note pack-note">One delivery. Nothing missing.</p>
     <a class="cta" href="/delivery-sample">Open the package</a>
   </div></section>
 
