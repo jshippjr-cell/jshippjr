@@ -80,3 +80,35 @@ def test_the_score_page_is_not_the_front_door(client):
     home = client.get("/").text
     assert "every part in the air" not in home
     assert "<audio" in home, "the front door lost its music"
+
+
+# --------------------------------------------------------------------------- #
+# The delivery beat lists the package the engine actually assembles
+# --------------------------------------------------------------------------- #
+
+def test_the_delivery_beat_lists_engine_derived_rows(client):
+    """The beat must not describe a package build_manifest would not assemble."""
+    import html as _html
+    from chordential_oia.web import landing
+    # unescaped: Jinja turns "Cue sheet & rights certificate" into "&amp;"
+    body = _html.unescape(client.get("/score").text)
+    lines = landing.sample_package_lines()
+    assert lines, "the package list is empty"
+    for line in lines:
+        assert line["asset"] in body, f"{line['asset']!r} is not on the page"
+        assert line["spec"] in body
+
+
+def test_the_version_summary_is_derived_not_typed(client):
+    """The count and the current label come from the same rows the package page
+    renders — a hand-typed '3 versions' is a number that can go stale silently."""
+    from chordential_oia.web import landing
+    summary = landing.sample_package_lines()[-1]["spec"]
+    assert str(len(landing.VERSIONS)) in summary
+    assert (landing.VERSIONS[-1]["label"]) in summary
+
+
+def test_the_delivery_beat_hands_off_to_the_package(client):
+    """The scroll is the doorway; the document lives at its own address because it
+    is the thing a producer forwards."""
+    assert "/delivery-sample" in client.get("/score").text

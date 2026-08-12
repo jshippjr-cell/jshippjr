@@ -121,6 +121,24 @@ def sample_certificate() -> delivery.ClearanceCertificate:
     )
 
 
+def sample_package_lines() -> List[Dict[str, str]]:
+    """What the landing beat lists: what is in the package, at a glance.
+
+    The deliverable rows come straight from ``build_manifest``. The version ladder
+    does not — three raw filenames crowd out the six things a buyer is actually
+    scanning for, so it collapses to one line whose count and current label are
+    *derived* from the same rows, never typed. Nothing here is invented; the full
+    ladder is on the package page, which is where a producer goes to read it.
+    """
+    lines = [{"asset": r.asset, "spec": r.spec}
+             for r in sample_manifest() if r.group != "Versions"]
+    if VERSIONS:
+        current = VERSIONS[-1].get("label") or f"v{len(VERSIONS)}"
+        lines.append({"asset": "Version history, with the approvals attached",
+                      "spec": f"{len(VERSIONS)} versions · {current}"})
+    return lines
+
+
 def sample_context() -> Dict[str, Any]:
     """Everything the public sample template renders, all of it engine-derived."""
     cert = sample_certificate()

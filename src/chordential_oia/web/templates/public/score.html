@@ -60,6 +60,29 @@ p.note{font-size:.94rem;line-height:1.6;color:var(--muted);margin:0;max-width:27
 .meta span{color:var(--ink)}
 .meta i{font-style:normal}
 
+/* the manifest: what is actually in the package, written by the engine. Each row
+   arrives as the cube closes — the line is a reader of the assembly scalar, not a
+   decoration with a timeline of its own. */
+ul.pack{list-style:none;margin:1.4rem 0 1.2rem;padding:0;max-width:29rem;
+  display:flex;flex-direction:column;gap:0}
+ul.pack li{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;
+  padding:.5rem 0;border-bottom:1px solid var(--rule);
+  opacity:0;transform:translateY(6px);
+  transition:opacity .45s ease,transform .45s ease;
+  transition-delay:calc(var(--i) * 90ms)}
+.beat.packed ul.pack li{opacity:1;transform:none}
+ul.pack b{font-weight:400;font-size:1rem}
+ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
+  font-size:.7rem;letter-spacing:.06em;color:var(--muted);text-align:right;
+  white-space:nowrap}
+@media (max-width:520px){
+  ul.pack li{flex-direction:column;gap:.15rem}
+  ul.pack i{text-align:left}
+}
+@media (prefers-reduced-motion:reduce){
+  ul.pack li{opacity:1;transform:none;transition:none}
+}
+
 .cta{display:inline-block;margin-top:1.9rem;padding:.85rem 1.6rem;
   border:1px solid var(--ink);border-radius:2px;color:var(--ink);text-decoration:none;
   font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.76rem;letter-spacing:.15em;
@@ -177,9 +200,20 @@ model is not showing — the words below still say everything the picture does.<
     <h2>Everything arrives together.</h2>
     <p class="lede">Every file, document, approval, and supporting asset is assembled
       into one organized package that's ready for post-production, legal review,
-      broadcast, and archive.</p>
-    <div class="rule"></div>
+      and archive.</p>
+    {# The manifest is not written here. These rows come from delivery.build_manifest
+       over the same invented campaign the published sample renders, so the page
+       cannot describe a package the engine would not assemble. They write in one at
+       a time against the assembly scalar — the cube's own progress, not a second
+       timeline (the gauge and this list answer the same question, so they read the
+       same number). #}
+    <ul class="pack" aria-label="What is in the package">
+      {% for row in manifest %}
+      <li style="--i:{{ loop.index0 }}"><b>{{ row.asset }}</b><i>{{ row.spec }}</i></li>
+      {% endfor %}
+    </ul>
     <p class="note">One delivery. Nothing missing.</p>
+    <a class="cta" href="/delivery-sample">Open the package</a>
   </div></section>
 
   <section class="beat" data-veil="1"><div class="col">

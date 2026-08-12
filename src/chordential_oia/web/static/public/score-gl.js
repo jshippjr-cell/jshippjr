@@ -344,6 +344,14 @@ function draw(now){
     if(on && beats[b2].dataset.veil === "1") want = 1;
   }
   veil.classList.toggle("on", !!want);
+  // The package list is a third reporter of the assembly scalar, beside the cube
+  // and the gauge — it writes itself as the model closes rather than running a
+  // timeline of its own. Two surfaces answering "is it delivered?" is how they
+  // come to disagree on a day nobody is looking.
+  for(var b3=0;b3<beats.length;b3++){
+    if(beats[b3].querySelector(".pack"))
+      beats[b3].classList.toggle("packed", p > 0.92 && beats[b3].classList.contains("lit"));
+  }
   // the read-out has said its piece once the model is assembled. It clears on
   // the closing beat so it never sits under the call to action — keyed to the
   // beat that is actually lit, not to a guessed scroll fraction.

@@ -258,7 +258,8 @@ def public_score(request: Request):
 
     Not at /world: that address is retired (the World film), and
     test_public_site asserts it stays a 404. Different page, different name."""
-    return render(request, "public/score.html", active="")
+    return render(request, "public/score.html", active="",
+                  manifest=landing.sample_package_lines())
 
 
 @router.get("/delivery-sample", response_class=HTMLResponse)
