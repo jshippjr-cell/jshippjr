@@ -303,6 +303,7 @@ app.include_router(public_router)
 _PUBLIC_PATHS = frozenset({
     "/", "/capabilities", "/samples", "/start", "/book", "/thanks", "/apply",
     "/delivery-sample", "/refer", "/for-artists", "/showreel", "/reel", "/stills",
+    "/score",
     # Added late: both are front-of-house pages that were left out of this set when
     # their routes were written, so in production (where the token is set) they
     # answered 303 -> /admin/login. A sales page nobody outside the login can open

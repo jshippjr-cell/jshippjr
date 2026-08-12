@@ -245,6 +245,21 @@ def public_showreel(request: Request):
     )
 
 
+@router.get("/score", response_class=HTMLResponse)
+def public_score(request: Request):
+    """The notation world: 728 pieces of real engraved notation, scattered on
+    individual orbits, converging into the assembled cube as the copy reads. The
+    scroll is the mission spine — brief, discovery, composition, review, delivery.
+
+    It is NOT the front door. The front door plays music (ADR-0040) and this page
+    has no audio yet; swapping it onto `/` would regress that decision and the
+    tests behind it. It lives here until the listening beat is built.
+
+    Not at /world: that address is retired (the World film), and
+    test_public_site asserts it stays a 404. Different page, different name."""
+    return render(request, "public/score.html", active="")
+
+
 @router.get("/delivery-sample", response_class=HTMLResponse)
 def public_delivery_sample(request: Request):
     """Sample agency delivery package — proves the premium delivery experience.

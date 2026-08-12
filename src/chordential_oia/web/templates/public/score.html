@@ -1,0 +1,198 @@
+{# The notation world: 728 engraved pieces, scattered, converging into the cube
+   as the copy reads. Standalone like the Commission — it carries no marketing
+   chrome. The renderer is static/public/world-gl.js and the scene itself is two
+   cacheable static assets, never inlined. #}
+<title>Chordential — every part in the air</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Original music for campaigns, cleared and delivered. A live model of engraved notation assembles as you read: every version, approval, cue sheet and rights document arrives in one organised package.">
+<style>
+:root{
+  --cream:#E0D6C2; --paper:#EFE8DB; --ink:#14100C; --muted:#6B6055;
+  --ember:#E4671F; --rule:rgba(20,16,12,.16);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{margin:0;background:var(--cream);color:var(--ink);
+  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  -webkit-font-smoothing:antialiased}
+
+#stage{position:fixed;inset:0;z-index:0;background:var(--cream)}
+#gl{display:block;width:100%;height:100%}
+
+/* the reading field — clears the notation out from behind the words */
+#grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.35;
+  background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")}
+#veil{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(90deg,
+    rgba(224,214,194,.985) 0%, rgba(224,214,194,.975) 28%,
+    rgba(224,214,194,.86) 42%, rgba(224,214,194,.42) 54%,
+    rgba(224,214,194,0) 66%);
+  opacity:.80;transition:opacity .5s ease}
+#veil.on{opacity:1}
+
+#fail{position:fixed;inset:0;z-index:3;display:none;place-items:center;padding:8vh 6vw;
+  background:var(--cream)}
+#fail p{max-width:34rem;font-size:1.05rem;line-height:1.6;color:var(--muted)}
+
+/* ── scroll copy ─────────────────────────────────────────────────────────── */
+#scroll{position:relative;z-index:2}
+/* a beat is shorter than the viewport: the copy keeps arriving instead of
+   leaving a screen of nothing between one section and the next */
+.beat{min-height:76vh;display:flex;align-items:center;padding:0 6vw;pointer-events:none}
+.beat .col{max-width:31rem;opacity:0;transform:translateY(22px);
+  transition:opacity .6s ease,transform .6s ease;pointer-events:auto}
+.beat.lit .col{opacity:1;transform:none}
+
+.eyebrow{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:0 0 1.1rem}
+.eyebrow b{color:var(--ember);font-weight:600}
+h1{font-size:clamp(2.6rem,6.4vw,5rem);line-height:.98;letter-spacing:-.022em;
+  font-weight:400;margin:0 0 1.4rem}
+h1 em{font-style:italic;color:var(--ember)}
+h2{font-size:clamp(1.75rem,3.4vw,2.7rem);line-height:1.06;letter-spacing:-.018em;
+  font-weight:400;margin:0 0 1rem}
+p.lede{font-size:1.12rem;line-height:1.62;color:#3B332B;margin:0 0 1.1rem;max-width:29rem}
+p.note{font-size:.94rem;line-height:1.6;color:var(--muted);margin:0;max-width:27rem}
+
+.rule{height:1px;background:var(--rule);margin:1.6rem 0 1.3rem;max-width:9rem}
+.meta{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.72rem;
+  letter-spacing:.1em;color:var(--muted);margin:1.4rem 0 0}
+.meta span{color:var(--ink)}
+.meta i{font-style:normal}
+
+.cta{display:inline-block;margin-top:1.9rem;padding:.85rem 1.6rem;
+  border:1px solid var(--ink);border-radius:2px;color:var(--ink);text-decoration:none;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.76rem;letter-spacing:.15em;
+  text-transform:uppercase;transition:background .25s ease,color .25s ease}
+.cta:hover{background:var(--ink);color:var(--paper)}
+
+/* scroll hint on the hero only */
+#hint{position:fixed;left:6vw;bottom:4.2vh;z-index:2;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.66rem;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);transition:opacity .4s ease}
+#hint i{display:inline-block;width:2.4rem;height:1px;background:var(--rule);
+  vertical-align:middle;margin-right:.7rem}
+
+/* the assembly read-out — a living element, driven by real state */
+#gauge{position:fixed;left:6vw;bottom:4.2vh;z-index:2;width:13rem;height:1px;
+  background:var(--rule);opacity:0;transition:opacity .4s ease}
+#gauge i{position:absolute;top:50%;left:0;width:7px;height:7px;border-radius:50%;
+  background:var(--ember);transform:translate(-50%,-50%)}
+#gauge b{position:absolute;left:0;top:.9rem;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.62rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted);font-weight:400;white-space:nowrap}
+
+@media (max-width:900px){
+  #veil{background:linear-gradient(180deg,rgba(224,214,194,0) 0%,
+    rgba(224,214,194,.42) 30%,rgba(224,214,194,.97) 44%,rgba(224,214,194,.99) 100%)}
+  /* the copy parks in the cream half and stays there — sticky needs travel
+     room, so the sections are taller than the viewport on portrait */
+  .beat{min-height:112vh;padding:0 7vw;align-items:flex-start}
+  .beat .col{position:sticky;top:44vh}
+  #gauge{bottom:2.4vh;width:9rem}
+  #hint{bottom:2.4vh}
+  /* the copy column is the priority on portrait — the read-out keeps the
+     count, and drops the descriptor rather than wrapping into the hint */
+  .meta i{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  #stage{opacity:.28}
+  .beat .col{opacity:1;transform:none;transition:none}
+}
+</style>
+
+<div id="stage"><canvas id="gl"
+    data-meta="/static/public/score-scene.json?v={{ asset_v }}"
+    data-bin="/static/public/score-scene.bin?v={{ asset_v }}"></canvas></div>
+<div id="veil"></div>
+<div id="grain"></div>
+<div id="fail"><p>This page draws a live three-dimensional model of engraved
+notation, which needs WebGL2. Your browser or device has it switched off, so the
+model is not showing — the words below still say everything the picture does.</p></div>
+
+<div id="gauge"><i></i><b>scattered</b></div>
+<div id="hint"><i></i>scroll to assemble</div>
+
+<main id="scroll">
+
+  <section class="beat" data-veil="0"><div class="col">
+    <p class="eyebrow">Original music <b>•</b> Cleared <b>•</b> Delivered</p>
+    <h1>Every note<br>finds its <em>place</em>.</h1>
+    <p class="lede">From the first conversation to the final master, every version,
+      approval, cue sheet, rights document, and deliverable arrives organized and
+      ready for campaign.</p>
+    <div class="rule"></div>
+    <p class="note">Original composition is only part of the job. We make sure
+      everything around the music is as thoughtfully crafted as the score itself.</p>
+    <p class="meta"><span>728</span> pieces &nbsp;·&nbsp; <span>7,419</span> marks<i>
+      &nbsp;·&nbsp; real engraving, drawn live</i></p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">02 — Start with the story</p>
+    <h2>Every campaign begins with understanding.</h2>
+    <p class="lede">Tell us about the film, the brand, the audience, and the feeling
+      you're trying to create. We read everything before we meet, so our first
+      conversation starts with creative direction—not introductions.</p>
+    <div class="rule"></div>
+    <p class="note">The strongest music begins long before the first note is
+      written.</p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">03 — Clarity before creation</p>
+    <h2>Every conversation becomes momentum.</h2>
+    <p class="lede">A discovery call isn't just notes. Objectives, deliverables,
+      timelines, references, budgets, stakeholders, and decisions are captured,
+      organized, and carried forward automatically.</p>
+    <div class="rule"></div>
+    <p class="note">Nothing important gets lost between the meeting and the
+      music.</p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">04 — Written for this campaign</p>
+    <h2>Every decision serves the story.</h2>
+    <p class="lede">Every score is composed specifically for the campaign it
+      supports. No libraries. No recycled tracks. Just original music shaped around
+      the picture, the audience, and the emotion you're trying to create.</p>
+    <div class="rule"></div>
+    <p class="note">Creative judgment is still the most important instrument in the
+      room.</p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">05 — Creative review</p>
+    <h2>Every comment stays with the music.</h2>
+    <p class="lede">Listen, comment, approve, and review every version in one shared
+      workspace. Feedback stays attached to the exact moment it was given, so every
+      decision has context and every revision has a clear purpose.</p>
+    <div class="rule"></div>
+    <p class="note">Creative conversations should move the work forward—not create
+      more work.</p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">06 — One complete handoff</p>
+    <h2>Everything arrives together.</h2>
+    <p class="lede">Every file, document, approval, and supporting asset is assembled
+      into one organized package that's ready for post-production, legal review,
+      broadcast, and archive.</p>
+    <div class="rule"></div>
+    <p class="note">One delivery. Nothing missing.</p>
+  </div></section>
+
+  <section class="beat" data-veil="1"><div class="col">
+    <p class="eyebrow">Let's build something that lasts</p>
+    <h2>Great campaigns deserve more than great music.</h2>
+    <p class="lede">They deserve a partner who understands the work before the first
+      note is written—and delivers everything needed long after the final mix is
+      approved.</p>
+    <a class="cta" href="/start">Start with a brief</a>
+    <p class="note" style="margin-top:1.4rem">We'll take it from there.</p>
+    <p class="meta" style="margin-top:2.2rem">Demo brands shown throughout this site
+      are invented. We do not display client work we have not been cleared to show.</p>
+  </div></section>
+
+</main>
+<script src="/static/public/score-gl.js?v={{ asset_v }}" defer></script>

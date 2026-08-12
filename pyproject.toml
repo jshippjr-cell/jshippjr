@@ -77,6 +77,11 @@ where = ["src"]
     "static/public/*.mp3",
     "static/public/*.wav",
     "static/public/*.pdf",
+    # The notation world ships its scene as data beside the renderer rather than
+    # inlined in the page: 65 KB of JSON offsets and the raw float buffer. Without
+    # these two the page renders a blank cream rectangle that looks deliberate.
+    "static/public/*.json",
+    "static/public/*.bin",
     "static/public/img/*.jpg",
     "static/public/img/*.png",
     # These globs are setuptools', not shell: * stops at a directory separator, so
