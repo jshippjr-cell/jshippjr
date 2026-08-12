@@ -34,6 +34,8 @@
   var none = document.getElementById("revNone");
   var vers = document.getElementById("revVers");
 
+  var audio = document.getElementById("revAudio");
+  var playBtn = document.getElementById("revPlay");
   var pos = 0;            // where the visitor is in the take, in seconds
   var held = null;        // the second a pending note was marked at — latched
   var notes = [];
@@ -60,8 +62,13 @@
   }
 
   // ── the rail ──────────────────────────────────────────────────────────────
-  function setPos(s, fromPointer) {
+  function setPos(s, fromPointer, fromAudio) {
     pos = Math.max(0, Math.min(DUR, s));
+    // currentTime is the authority for anything that binds to the music; the rail
+    // writes to it, and only reads back when the element itself moved the playhead
+    if (audio && !fromAudio && isFinite(audio.duration) && audio.duration > 0) {
+      try { audio.currentTime = pos; } catch (e) {}
+    }
     head.style.left = (pos / DUR * 100) + "%";
     time.textContent = clock(pos) + " / " + clock(DUR);
     rail.setAttribute("aria-valuenow", pos.toFixed(1));
@@ -196,6 +203,32 @@
           + " made against — a note does not follow you to a different take."
         : "No notes on this version yet — scrub the take and drop the first one.";
     }
+  }
+
+  if (audio) {
+    audio.addEventListener("loadedmetadata", function () {
+      if (isFinite(audio.duration) && audio.duration > 0) { DUR = audio.duration; }
+      setPos(pos, false, true);
+    });
+    audio.addEventListener("timeupdate", function () {
+      if (!audio.paused) setPos(audio.currentTime, false, true);
+    });
+    audio.addEventListener("ended", function () {
+      playBtn.innerHTML = "&#9654;";
+      playBtn.setAttribute("aria-label", "Play the take");
+    });
+    playBtn.addEventListener("click", function () {
+      if (audio.paused) {
+        audio.play().then(function () {
+          playBtn.innerHTML = "&#10073;&#10073;";
+          playBtn.setAttribute("aria-label", "Pause the take");
+        }).catch(function () { /* the visitor can press again */ });
+      } else {
+        audio.pause();
+        playBtn.innerHTML = "&#9654;";
+        playBtn.setAttribute("aria-label", "Play the take");
+      }
+    });
   }
 
   load();

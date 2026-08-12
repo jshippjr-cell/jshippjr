@@ -95,7 +95,9 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
 /* ── the live notes ──────────────────────────────────────────────────────────
    A few pieces of the score carry the ember and can be pressed. The glyph itself
    is coloured by the renderer; this is only the target, projected onto it. */
-#livelayer{position:fixed;inset:0;z-index:2;pointer-events:none}
+/* above #scroll (z-index 2). At the same level the copy column wins on DOM order
+   and silently eats every click on a lit note. */
+#livelayer{position:fixed;inset:0;z-index:4;pointer-events:none}
 .livenote{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;
   padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;
   pointer-events:auto;display:none}
@@ -180,7 +182,12 @@ ul.listen audio{display:block;width:100%;height:34px;color-scheme:light}
 .rev-top{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;
   font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
   letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem}
-.rev-time{font-variant-numeric:tabular-nums;color:var(--ink)}
+.rev-time{font-variant-numeric:tabular-nums;color:var(--ink);margin-left:auto}
+.rev-play{font-family:inherit;font-size:.7rem;line-height:1;padding:.4rem .55rem;
+  border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;
+  border-radius:2px;margin-right:.6rem}
+.rev-play:hover{background:var(--ink);color:var(--paper)}
+#revAudio{display:none}
 .rev-rail{position:relative;height:1px;background:var(--rule);margin:1.5rem 0 1.4rem;
   cursor:pointer;touch-action:none}
 .rev-rail:focus-visible{outline:2px solid var(--ember);outline-offset:8px}
@@ -298,7 +305,6 @@ model is not showing — the words below still say everything the picture does.<
   <p class="pl-brief" id="plBrief"></p>
   <audio id="plAudio" controls preload="none"></audio>
   <p class="pl-cost" id="plCost"></p>
-  <p class="pl-say">{{ placeholder_audio_notice }}</p>
 </div>
 
 <script id="scoretracks" type="application/json">{{ listening|tojson }}</script>
@@ -352,9 +358,6 @@ model is not showing — the words below still say everything the picture does.<
        note never moves, it only stops being engraved black. The player appears
        when one is pressed and never before, because a page that wants to make
        noise reads as a page that will make noise unasked. #}
-    <p class="lt-hint" id="ltHint">Some of the notes are lit. Press one to hear
-      what it answers.</p>
-    <p class="rev-say listen-say">{{ placeholder_audio_notice }}</p>
 
     <p class="note">Creative judgment is still the most important instrument in the
       room.</p>
@@ -373,9 +376,12 @@ model is not showing — the words below still say everything the picture does.<
        where the version has to be exactly right. #}
     <div class="rev" id="rev" data-seconds="{{ take_seconds }}">
       <div class="rev-top">
-        <span class="rev-take">Find Your Horizon — anthem</span>
+        <button type="button" class="rev-play" id="revPlay" aria-label="Play the take">
+          &#9654;</button>
+        <span class="rev-take" id="revTake">{{ review_track.title }}</span>
         <span class="rev-time" id="revTime">0:00 / 0:45</span>
       </div>
+      <audio id="revAudio" preload="none" src="{{ review_track.url }}?v={{ asset_v }}"></audio>
       <div class="rev-rail" id="revRail" tabindex="0" role="slider"
            aria-label="Position in the take" aria-valuemin="0"
            aria-valuemax="{{ take_seconds }}" aria-valuenow="0" aria-valuetext="0:00">

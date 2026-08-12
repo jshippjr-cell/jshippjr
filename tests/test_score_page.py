@@ -274,20 +274,33 @@ def test_the_excerpt_does_not_inherit_the_masters_length():
             f"{r['out']} carries a VBR header from its master")
 
 
-def test_the_placeholder_disclosure_rides_inside_the_player(client):
-    """The tracks are AI-generated placeholders and say so in their own ID3 tag, so
-    the page says it first. Inside the player's own frame, because a disclosure
-    elsewhere on the page does not survive a screenshot of the player."""
-    from chordential_oia.web.showcase import PLACEHOLDER_AUDIO_NOTICE
+def test_the_notes_only_wake_after_the_cube_closes(client):
+    """Lit from the hero they competed with the convergence the page is built
+    around. The renderer holds them until the model is assembled."""
+    js = open(os.path.join(_STATIC, "score-gl.js")).read()
+    assert "liveOn" in js, "the lit notes are not gated on assembly"
+    assert "p >= 0.995" in js
+
+
+def test_the_lit_notes_sit_above_the_copy_column(client):
+    """#livelayer and #scroll at the same z-index means the copy column wins on DOM
+    order and silently eats every click on a lit note."""
     html = client.get("/score").text
-    player = html.split('id="player"')[1].split("</div>")[0]
-    assert PLACEHOLDER_AUDIO_NOTICE in player, "the player does not disclose itself"
+    assert "#livelayer{position:fixed;inset:0;z-index:4" in html
+
+
+def test_the_review_rail_scrubs_a_real_take(client):
+    """The rail drives an audio element; scrubbing seeks it and playback moves the
+    head. currentTime is the authority for anything that binds to the music."""
+    html = client.get("/score").text
+    assert 'id="revAudio"' in html and 'id="revPlay"' in html
+    js = open(os.path.join(_STATIC, "score-note.js")).read()
+    assert "audio.currentTime = pos" in js, "the rail does not seek the take"
+    assert "timeupdate" in js, "playback does not move the head"
 
 
 def test_no_audio_bytes_move_before_a_press(client):
-    """The player has no src until a note is pressed and preloads nothing. A visitor
-    who never presses anything pays for no audio at all."""
+    """Nothing preloads. A visitor who presses nothing pays for no audio at all."""
     import re
     for tag in re.findall(r"<audio[^>]*>", client.get("/score").text):
-        assert 'preload="none"' in tag, "the player preloads before anyone asked"
-        assert "src=" not in tag, "the player has a track before anyone chose one"
+        assert 'preload="none"' in tag, "an element preloads before anyone asked"

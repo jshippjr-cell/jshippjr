@@ -371,9 +371,11 @@ function draw(now){
   }
   // live pieces take the ember. Negative tone is the sentinel the shader reads;
   // the slight breathe is state, not decoration — it says "this one answers".
-  if (LIVE.length) {
-    // full ember, breathing only in the top 8% — a lit note that fades to 72% is
-    // a lit note nobody notices
+  // The notes wake AFTER the cube closes. Lit from the hero they competed with
+  // the convergence the whole page is built around; lit at the end they are the
+  // reward for having watched it land.
+  var liveOn = p >= 0.995;
+  if (LIVE.length && liveOn) {
     var pulse = 0.92 + 0.08 * Math.sin(time * 1.8);
     for (var L = 0; L < LIVE.length; L++) {
       var li = LIVE[L];
@@ -410,6 +412,7 @@ function draw(now){
   // project each live piece into screen space with the SAME matrix the scene is
   // drawn with, so the target sits exactly on the note however the world drifts
   for (var q = 0; q < liveEls.length; q++) {
+    if (!liveOn) { liveEls[q].style.display = "none"; continue; }
     var pi = LIVE[q];
     // the piece's CURRENT position, not its home. Until the cube closes a piece is
     // out on its own orbit, so projecting HOME put the target on empty paper and
