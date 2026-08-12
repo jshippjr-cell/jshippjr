@@ -275,9 +275,22 @@ var LIVE = (function () {
     if (byPiece[b] !== byPiece[a]) return byPiece[b] - byPiece[a];
     return HOME[b * 4 + 2] - HOME[a * 4 + 2];
   });
-  var front = cand.slice(0, Math.max(want * 8, 32));
+  // Depth was the wrong axis. It put every lit note in the densest part of the
+  // cloud, where an ember glyph reads as a smudge among 700 grey neighbours.
+  // Burst radius is the right one: the outer pieces sit alone against cream at the
+  // hero, which is where something asking to be pressed has to be.
+  cand.sort(function (a, b) { return BR[b] - BR[a]; });
+  // Not the outermost — those orbit clean off the frame at the hero and the note
+  // is unreachable. A band below the extreme: clear of the dense core, still
+  // inside the picture.
+  var lo = Math.floor(cand.length * 0.22), hi = Math.floor(cand.length * 0.55);
+  var outer = cand.slice(lo, Math.max(hi, lo + want * 4));
+  // then spread them around the ring so they do not stack in one vertical line
+  outer.sort(function (a, b) {
+    return Math.atan2(BD[a*3+1], BD[a*3]) - Math.atan2(BD[b*3+1], BD[b*3]);
+  });
   var picked = [];
-  for (var k = 0; k < want; k++) picked.push(front[Math.floor(k * front.length / want)]);
+  for (var k = 0; k < want; k++) picked.push(outer[Math.floor(k * outer.length / want)]);
   return picked;
 })();
 var liveEls = [];
@@ -359,9 +372,16 @@ function draw(now){
   // live pieces take the ember. Negative tone is the sentinel the shader reads;
   // the slight breathe is state, not decoration — it says "this one answers".
   if (LIVE.length) {
-    var pulse = 0.72 + 0.28 * Math.sin(time * 1.6);
+    // full ember, breathing only in the top 8% — a lit note that fades to 72% is
+    // a lit note nobody notices
+    var pulse = 0.92 + 0.08 * Math.sin(time * 1.8);
     for (var L = 0; L < LIVE.length; L++) {
-      PSTATE[(NP * 2 + LIVE[L]) * 4 + 3] = -pulse;
+      var li = LIVE[L];
+      PSTATE[(NP * 2 + li) * 4 + 3] = -pulse;
+      // and bigger than their neighbours while scattered, easing back to true size
+      // as the cube closes — the same rule the whole scene follows
+      var la = ease(ST[li] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[li]) / (1 - ST[li]))));
+      PSTATE[li * 4 + 3] = (1 + KS[li] * (1 - la)) * (1 + 1.4 * (1 - la));
     }
   }
   gl.bindTexture(gl.TEXTURE_2D, tex);
