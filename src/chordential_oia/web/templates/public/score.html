@@ -361,17 +361,36 @@ ul.listen audio{display:block;width:100%;height:34px;color-scheme:light}
    in whatever top band the screen can actually hold and guarantees the text is
    never read off raw notation. On a taller phone the original band survives
    intact, which is why this is scoped by HEIGHT and not by width. */
+/* THE HANDOFF BEAT ON A PHONE.
+   The model has to stay in view for the whole of this section — it is the
+   package the words are describing, and watching it get covered by the list of
+   what is in it is the one thing this beat must not do.
+
+   The copy is held low by `position:sticky`, and sticky only holds while its
+   container still has room: an element of height C at offset T stays pinned for
+   (H - C - T) of scrolling. At 112vh, with seven rows and a 44vh offset, that
+   came to MINUS 121px — so the column released almost at once and rode to 17%
+   ABOVE the top of the screen, straight over the carton.
+
+   Every term gives. The manifest shows four rows (the rest named and linked,
+   because a list that quietly stops at four under the words "nothing missing"
+   is the honesty rule broken, not a layout tweak), the beat grows to 172vh, and
+   the offset drops to 40vh — which buys most of a screen of real pinning, the
+   whole of this beat as it is actually read. It costs scroll length, and the
+   acts of the world are pinned to fractions measured off this column's own
+   midpoint, so the beat windows were measured again afterwards and the timing
+   re-fitted to them. */
+@media (max-width:900px){
+  .beat-pack{min-height:172vh}
+  .beat-pack .col{top:40vh}
+  ul.pack li.pack-rest{display:none}
+  p.pack-more{display:block}
+}
 @media (max-width:900px) and (max-height:760px){
   #veil{background:linear-gradient(180deg,rgba(224,214,194,0) 0%,
     rgba(224,214,194,.42) 20%,rgba(224,214,194,.95) 33%,rgba(224,214,194,.99) 100%)}
   .beat .col{top:34vh}
-  /* …and the manifest itself gives. Even tightened, seven rows plus a heading
-     and a lede is 89% of an iPhone SE, and no arrangement fits that AND the
-     package it describes on one screen. Four rows fit, so four are shown and
-     the rest are named and linked — a list that quietly stops at four under the
-     words "nothing missing" is the honesty rule broken. */
-  ul.pack li.pack-rest{display:none}
-  p.pack-more{display:block}
+  .beat-pack .col{top:30vh}
   #gauge{bottom:2.4vh;width:9rem}
   #hint{bottom:2.4vh}
   /* the copy column is the priority on portrait — the read-out keeps the
@@ -517,7 +536,7 @@ model is not showing — the words below still say everything the picture does.<
       more work.</p>
   </div></section>
 
-  <section class="beat" data-veil="1"><div class="col">
+  <section class="beat beat-pack" data-veil="1"><div class="col">
     <p class="eyebrow">06 — One complete handoff</p>
     <h2>Everything arrives together.</h2>
     <p class="lede">Every file, document, approval, and supporting asset is assembled

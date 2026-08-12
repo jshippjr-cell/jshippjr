@@ -1709,13 +1709,21 @@ ADR-0040 still holds through the fold — the four ember notes ride their own pi
 the package and take its four corners, so the front door is still playing music at the
 point where it asks for the brief.
 
-**Every act is pinned to the beat it illustrates, on both layouts.** A beat occupies a
-different stretch of the scroll on a phone than on a desktop — beat 05 runs 0.594–0.770
-on one and 0.525–0.705 on the other — so each act is fitted to the NARROWER of the pair,
-which is the only way one set of constants reads correctly on both. The cube closes at
-0.55, the notes ignite across beat 05 (0.600–0.663, "creative review"), the carton builds
-as beat 06 arrives (0.770–0.820, "one complete handoff") and its lid folds shut last
-(0.92–0.99), as the call to action reads. The fold has to FINISH early in its beat, not
+**Every act is MEASURED from the beat it illustrates, not written down.** A beat occupies
+a different stretch of the scroll on a phone than on a desktop, so a single set of
+constants can only ever be a compromise between them. They were hand-fitted to measured
+windows three times before this; the third time — making the handoff beat tall enough to
+hold its model in view on a phone — left the two layouts sharing a window of 0.039 for
+four notes to light in. That is not a number worth tuning, it is a sign the number should
+not exist. `pinActs()` now measures the beats at boot and on resize and derives each act
+from the one it belongs to: the cube closes just before the review beat, the notes light
+across its first two thirds, the carton builds as the handoff beat rises and is finished
+early in it, the lid shuts as that beat gives way to the last. A phone and a desktop
+derive different fractions from the same rule, and re-laying out a section re-pins its act
+instead of quietly dragging the beat out from under it. The beats are found by what they
+CONTAIN, never by index, and the orderings the acts depend on are clamped, because derived
+numbers come from whatever the layout turns out to be. This is ADR-0029's rule reaching
+the last place on the page that still had a second copy of an answer. The fold has to FINISH early in its beat, not
 at the end of it: the middle of a fold is a transitional cloud, and it is standing beside
 a manifest of what is in the box under the words "everything arrives together" — a fold
 still running while that is being read is the picture contradicting the sentence for the

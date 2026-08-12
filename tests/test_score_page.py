@@ -341,87 +341,70 @@ def test_the_excerpt_does_not_inherit_the_masters_length():
             f"{r['out']} carries a VBR header from its master")
 
 
-def test_the_notes_only_wake_after_the_cube_closes(client):
-    """Lit from the hero they competed with the convergence the page is built
-    around. The renderer holds them until the model is assembled."""
-    import re
-    js = open(os.path.join(_STATIC, "score-gl.js")).read()
-    assert "liveOn" in js, "the lit notes are not gated on assembly"
-    # the invariant, not a literal: ignition may not begin before the cube lands
-    assemble = float(re.search(r"ASSEMBLE_AT\s*=\s*([0-9.]+)", js).group(1))
-    ign = float(re.search(r"IGN_FROM\s*=\s*([0-9.]+)", js).group(1))
-    span = float(re.search(r"IGN_SPAN\s*=\s*([0-9.]+)", js).group(1))
-    stagger = float(re.search(r"IGN_STAGGER\s*=\s*([0-9.]+)", js).group(1))
-    assert ign >= assemble - 0.01, (
-        f"notes start lighting at {ign} but the cube only lands at {assemble}")
-    # and the last one must finish before the visitor runs out of page: a note still
-    # at 44% when you hit the bottom reads as unfinished, not as arriving
-    last_done = ign + 3 * stagger + span
-    assert last_done <= 0.99, f"the fourth note is not lit until {last_done}"
-    # The world has a third act now — the cube folds into the delivery package.
-    # The notes have to have arrived on a finished cube before it starts moving
-    # again, or they ignite in the middle of a fold and read as debris.
-    pack_from = float(re.search(r"PACK_FROM\s*=\s*([0-9.]+)", js).group(1))
-    pack_to = float(re.search(r"PACK_TO\s*=\s*([0-9.]+)", js).group(1))
-    assert last_done <= pack_from, (
-        f"the notes are still lighting at {last_done} when the package starts "
-        f"folding at {pack_from}")
-    assert pack_from > assemble, "the package folds before the cube has closed"
-    assert pack_to <= 0.99, (
-        f"the package is not sealed until {pack_to} — the visitor runs out of "
-        "page before the last thing the page says finishes happening")
-    # and the lid shuts last, on a carton that has finished standing itself up
-    seal_from = float(re.search(r"SEAL_FROM = ([0-9.]+)", js).group(1))
-    seal_to = float(re.search(r"SEAL_TO = ([0-9.]+)", js).group(1))
-    assert seal_from > pack_to, (
-        f"the lid starts closing at {seal_from} but the carton is not finished "
-        f"until {pack_to} — it would shut on a box still building itself")
-    assert seal_to <= 0.995, f"the lid is never fully shut ({seal_to})"
+def test_the_acts_are_measured_from_the_beats_not_written_down(client):
+    """Where each act happens is derived from the beat it illustrates.
 
+    These were constants once, hand-fitted to measured beat windows, and they
+    were re-fitted three times: a beat covers a different stretch of scroll on a
+    phone than on a desktop, and every change to the copy moves it again. The
+    last one left the two layouts sharing a window of 0.039 for four notes to
+    light in — not a number worth tuning, but a sign the number should not be
+    written down at all.
 
-def test_each_act_lands_on_the_beat_it_belongs_to(client):
-    """The world's acts are pinned to the copy they illustrate.
-
-    These windows were measured in a browser at 1440x900 and 390x844 — a beat
-    occupies a different stretch of the scroll on a phone than on a desktop, so
-    each act has to fit inside the NARROWER of the pair or it reads against the
-    wrong words on one of them. Encoded here because a later nudge to any one
-    constant is exactly how a picture drifts off its own sentence.
+    So this asserts the DERIVATION, which is the thing that must not regress.
+    The fractions themselves are checked in a browser, on real viewports.
     """
-    import re
+    import re as _re
     js = open(os.path.join(_STATIC, "score-gl.js")).read()
-    num = lambda n: float(re.search(n + r" = ([0-9.]+)", js).group(1))
-    review = (0.594, 0.705)      # beat 05, "creative review", both layouts
-    handoff = (0.770, 0.856)     # beat 06, "one complete handoff", both layouts
+    assert "function pinActs()" in js, "the acts are no longer measured"
+    assert "\npinActs();" in js, "pinActs is never run at boot"
+    assert 'addEventListener("resize", pinActs)' in js, (
+        "the acts are measured once and never again — a rotated phone re-lays "
+        "every beat out and would leave each act on the wrong words")
 
-    ign = num("IGN_FROM")
-    last = ign + 3 * num("IGN_STAGGER") + num("IGN_SPAN")
-    assert review[0] <= ign and last <= review[1], (
-        f"the notes light over {ign:.3f}–{last:.3f}, outside the review beat "
-        f"{review[0]}–{review[1]}")
-    assert num("ASSEMBLE_AT") <= review[0], "the cube is still closing at beat 05"
-    # The fold is squeezed from both ends: it cannot start while the notes are
-    # still lighting on beat 05, and it has to be FINISHED before beat 06 is
-    # read. That leaves it beginning as the handoff section rises into view —
-    # earlier than the point where that beat becomes the lit one — because a
-    # fold with no room to happen in reads as a snap.
-    assert num("PACK_FROM") > last, (
-        "the cube starts folding while the notes are still lighting on beat 05")
-    assert num("PACK_FROM") <= handoff[0], (
-        "the fold has not begun by the time the handoff beat is lit")
-    assert num("SEAL_FROM") >= handoff[1], (
-        "the lid shuts while the handoff beat is still reading — it should be "
-        "an open, complete carton for the whole of that section")
+    body = js[js.index("function pinActs()"):]
+    body = body[:body.index("\npinActs();")]
+    # ignition and the closing cube belong to the review beat, the carton and its
+    # lid to the handoff beat. Reading the wrong window is the whole bug this
+    # replaced, and it is invisible until someone looks at a phone.
+    for name, want in (("ASSEMBLE_AT", "rv"), ("IGN_FROM", "rv"),
+                       ("IGN_STAGGER", "L5"), ("IGN_SPAN", "L5"),
+                       ("PACK_FROM", "hd"), ("PACK_TO", "hd"),
+                       ("SEAL_FROM", "hd"), ("SEAL_TO", "hd")):
+        line = _re.search(name + r"\s*=\s*([^;\n]+)", body)
+        assert line, name + " is no longer derived"
+        assert want in line.group(1), (
+            "%s is derived from %r, not from the beat it belongs to (%s)"
+            % (name, line.group(1).strip(), want))
 
-    # …and it has to FINISH early in that beat, not at the end of it. The middle
-    # of the fold is a transitional cloud, and the words beside it say
-    # "everything arrives together" over a manifest of what is in the box. A
-    # fold still running when the section is being read is the picture
-    # contradicting the sentence for the whole time anyone looks at it.
-    early = handoff[0] + (handoff[1] - handoff[0]) * 0.70
-    assert num("PACK_TO") <= early, (
-        f"the carton is not finished until {num('PACK_TO')}, most of the way "
-        f"through the beat that describes it — it should be complete by {early:.3f}")
+
+def test_the_acts_find_their_beats_by_what_is_in_them(client):
+    """Inserting a section must not silently re-point an act at other words."""
+    import re as _re
+    js = open(os.path.join(_STATIC, "score-gl.js")).read()
+    for var, marker in (("REVIEW_BEAT", "rev"), ("PACK_BEAT", "pack")):
+        m = _re.search(var + r"\s*=\s*[^;]+?querySelector\(([^)]+)\)", js, _re.S)
+        assert m, var + " is not located by content"
+        assert marker in m.group(1), (
+            "%s looks for %s, which is not the beat it means" % (var, m.group(1)))
+        assert not _re.search(var + r"\s*=\s*\d", js), var + " is a hard-coded index"
+
+
+def test_the_order_of_the_acts_survives_any_layout(client):
+    """The acts overlap in ways that read as broken, so the order is enforced.
+
+    Derived numbers come from whatever the page's layout turns out to be, and a
+    tall enough section could hand back a window that puts the fold on top of
+    notes still lighting. These clamps are what stop a copy edit from producing
+    a picture that contradicts itself.
+    """
+    js = open(os.path.join(_STATIC, "score-gl.js")).read()
+    body = js[js.index("function pinActs()"):]
+    body = body[:body.index("\npinActs();")]
+    assert "lastLit" in body, "nothing checks the notes have finished lighting"
+    for guard in ("PACK_FROM <= lastLit", "PACK_TO <= PACK_FROM",
+                  "SEAL_FROM <= PACK_TO", "SEAL_TO <= SEAL_FROM"):
+        assert guard in body, "the ordering guard %r is gone" % guard
 
 
 def test_the_manifest_waits_for_a_package_to_describe(client):

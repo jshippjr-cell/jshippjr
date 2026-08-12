@@ -60,9 +60,10 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   world of 7,419 engraved marks in 728 pieces, drawn by a hand-written WebGL2 renderer
   (`static/public/score-gl.js`, no library). The pieces scatter, reassemble into a cube,
   then fold into a delivery carton whose outline is staff paper and whose lid shuts
-  at the end. Each act is pinned to the beat it illustrates, on BOTH layouts — a beat
-  covers a different stretch of scroll on a phone — so the timing constants are fitted
-  to the narrower window of each pair and `test_score_page.py` holds them there.
+  at the end. Each act is MEASURED from the beat it illustrates (`pinActs()`, at boot and on
+  resize) rather than written down — a beat covers a different stretch of scroll on a
+  phone, so a fixed set of fractions can only be a compromise; they were re-fitted three
+  times before this.
   **The model is described once** (ADR-0062) in `scripts/score_scene/recipe.py` and reported to a
   recorder: `scripts/build_score_scene.py` ships `score-scene.{json,bin}` to the browser,
   `scripts/blender_score_cube.py` builds real geometry in Blender for the offline render.

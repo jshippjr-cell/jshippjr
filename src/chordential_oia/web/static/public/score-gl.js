@@ -460,33 +460,73 @@ var cols  = beats.map(function(b){ return b.querySelector(".col"); });
 var LABELS = ["scattered","gathering","gathering","converging","converging",
               "closing","closing","assembled"];
 
-// The arc of the world, in scroll fraction. Every number here is measured
-// against where the beats actually sit, not chosen to look tidy — and against
-// BOTH layouts, because a beat occupies a different stretch of the scroll on a
-// phone than on a desktop:
+// ── the arc of the world ────────────────────────────────────────────────────
+// Every act is pinned to the beat it illustrates. These used to be constants,
+// fitted by hand to measured beat windows, and they were re-fitted three times
+// — because a beat covers a different stretch of scroll on a phone than on a
+// desktop, and because any change to the copy moves them again. The last one
+// (making the handoff beat tall enough to hold its model in view) left the two
+// layouts with a shared window of 0.039 for the notes to light in. That is not
+// a number worth tuning; it is a sign the number should not be written down.
 //
-//                    desktop        portrait      both
-//   04 written    0.418–0.594    0.344–0.525
-//   05 review     0.594–0.770    0.525–0.705   0.594–0.705
-//   06 handoff    0.770–0.945    0.705–0.856   0.770–0.856
+// So they are MEASURED, from the beats themselves, at boot and on resize:
 //
-// So the acts are pinned to the narrower window of each pair, which is the only
-// way one set of constants can read correctly on both:
+//   the cube closes           just before the review beat arrives
+//   the notes light           across the first two thirds of the review beat
+//   the carton builds         as the handoff beat rises, done early in it
+//   the lid shuts             as the handoff beat gives way to the last one
 //
-//   …0.55  the cube closes, before the review section comes up
-//   0.60   the notes ignite one after another, ON the review beat, and are all
-//          lit by 0.663 — inside beat 05 on a phone as well as a desktop
-//   0.730  the cube folds down into the delivery package. It begins as the
-//          handoff section comes up from the bottom of the screen rather than
-//          when that section becomes the lit beat — the fold needs room, and
-//          the only room available is before the words arrive, since it has to
-//          be FINISHED before they are read
-//   0.825  the carton stands complete and open, with its manifest written
-//   0.92   the lid folds shut…
-//   0.99   …and it is sealed, as the call to action reads
-var ASSEMBLE_AT = 0.55;
-var PACK_FROM = 0.730, PACK_TO = 0.825;
-var SEAL_FROM = 0.92, SEAL_TO = 0.99;
+// which is what the acts actually mean, said once. A phone and a desktop now
+// derive different fractions from the same rule instead of sharing one set that
+// can only be a compromise between them — and re-laying out a section re-pins
+// its act instead of quietly dragging the beat out from under it.
+var ASSEMBLE_AT = 0.55, PACK_FROM = 0.77, PACK_TO = 0.82,
+    SEAL_FROM = 0.92, SEAL_TO = 0.99,
+    IGN_FROM = 0.60, IGN_SPAN = 0.030, IGN_STAGGER = 0.011;
+
+// the two beats the last acts belong to, found by what they CONTAIN rather than
+// by their index — inserting a section should not silently re-point an act
+var REVIEW_BEAT = Math.max(0, beats.findIndex(function(b){
+      return b.querySelector("#rev, .rev"); }));
+var PACK_BEAT = Math.max(0, beats.findIndex(function(b){
+      return b.querySelector(".pack"); }));
+
+function pinActs(){
+  var vh = window.innerHeight;
+  var max = Math.max(1, document.documentElement.scrollHeight - vh);
+  var anchor = vh * ((window.innerWidth/Math.max(1,vh)) >= 0.95 ? 0.50 : 0.66);
+  // a beat's own extent, not its column's: the column is sticky on portrait, so
+  // where it is rendered depends on where you already are, and measuring the
+  // page with something that moves as you read it is how this drifts
+  var f = beats.map(function(b){
+    return (b.offsetTop + b.offsetHeight/2 - anchor)/max; });
+  function win(i){
+    return [i > 0 ? (f[i-1]+f[i])/2 : 0,
+            i+1 < f.length ? (f[i]+f[i+1])/2 : 1];
+  }
+  var rv = win(REVIEW_BEAT), hd = win(PACK_BEAT);
+  var L5 = Math.max(0.02, rv[1]-rv[0]), L6 = Math.max(0.02, hd[1]-hd[0]);
+
+  ASSEMBLE_AT = Math.max(0.15, rv[0] - 0.02);
+  IGN_FROM    = rv[0] + 0.05*L5;
+  IGN_STAGGER = 0.09*L5;
+  IGN_SPAN    = 0.30*L5;                       // last note lit by rv[0] + 0.62*L5
+  // the fold starts as the handoff section rises into view rather than when it
+  // becomes the lit beat: it has to be FINISHED before the manifest is read, and
+  // the room for it is only available before the words arrive
+  PACK_FROM   = hd[0] - 0.22*L6;
+  PACK_TO     = hd[0] + 0.32*L6;
+  SEAL_FROM   = hd[1] - 0.10*L6;
+  SEAL_TO     = Math.min(0.995, hd[1] + 0.25*L6);
+  // guard the ordering the acts depend on, whatever the layout throws up
+  var lastLit = IGN_FROM + 3*IGN_STAGGER + IGN_SPAN;
+  if(PACK_FROM <= lastLit) PACK_FROM = lastLit + 0.01;
+  if(PACK_TO <= PACK_FROM + 0.02) PACK_TO = PACK_FROM + 0.02;
+  if(SEAL_FROM <= PACK_TO + 0.01) SEAL_FROM = PACK_TO + 0.01;
+  if(SEAL_TO <= SEAL_FROM + 0.02) SEAL_TO = SEAL_FROM + 0.02;
+}
+pinActs();
+window.addEventListener("resize", pinActs);
 
 var progress = 0, target = 0, shiftRamp = 0;
 function onScroll(){
@@ -610,7 +650,6 @@ function draw(now){
   // landing at 0.55, and the fourth note is fully lit by 0.663 — still inside
   // beat 05 on a phone (which ends at 0.705) as well as on a desktop. They then
   // ride their own pieces into the carton and take its corners.
-  var IGN_FROM = 0.600, IGN_SPAN = 0.030, IGN_STAGGER = 0.011;
   function kOf(idx) {
     var a0 = IGN_FROM + idx * IGN_STAGGER;
     return Math.max(0, Math.min(1, (progress - a0) / IGN_SPAN));
