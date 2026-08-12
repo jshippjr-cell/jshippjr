@@ -133,6 +133,17 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
    Quiet enough that the page is still the page. */
 .bar{position:fixed;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;
   justify-content:space-between;padding:1rem 6vw;pointer-events:none}
+/* The page passes UNDER the chrome, so without this the copy runs straight through
+   the wordmark — the taller the mark, the longer the collision. A hard bar would be
+   chrome the page has spent seven beats avoiding, so the top edge dissolves into
+   paper instead: opaque across the mark's own band, gone by the time it reaches the
+   model. Absolutely positioned, so it is not a flex item; z-index:-1 keeps it inside
+   .bar's stacking context (above the scrolling copy at 2) but behind the two links,
+   which as static children would otherwise paint below a positioned sibling. */
+.bar::before{content:"";position:absolute;left:0;right:0;top:0;height:104px;z-index:-1;
+  background:linear-gradient(180deg,
+    rgba(224,214,194,.97) 0%, rgba(224,214,194,.95) 44%,
+    rgba(224,214,194,.58) 70%, rgba(224,214,194,0) 100%)}
 .bar-mark,.bar-cta{pointer-events:auto;text-decoration:none;
   font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.7rem;
   letter-spacing:.18em;text-transform:uppercase}
@@ -140,13 +151,14 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
 .bar-mark:hover{opacity:1}
 /* the wordmark ships with ~2% transparent margin, so its cap-height is a little
    under the box — sized off that rather than off the file */
-.bar-mark img{display:block;height:20px;width:auto}
+.bar-mark img{display:block;height:28px;width:auto}
 .bar-cta{color:var(--ink);border:1px solid var(--ink);border-radius:2px;
   padding:.5rem .9rem;transition:background .25s ease,color .25s ease}
 .bar-cta:hover{background:var(--ink);color:var(--paper)}
 @media (max-width:640px){
   .bar{padding:.7rem 5vw}
-  .bar-mark img{height:16px}
+  .bar::before{height:82px}
+  .bar-mark img{height:22px}
   .bar-cta{font-size:.62rem;padding:.42rem .7rem}
 }
 
