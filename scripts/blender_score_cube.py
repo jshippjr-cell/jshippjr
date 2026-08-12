@@ -149,6 +149,22 @@ recipe.compose(rec, seed=SEED)
 PIECES = rec.done()
 print("pieces:", len(PIECES))
 
+# The same walk, measured: bounding boxes, frames and extents, which curves and
+# meshes are the wrong shape to take a glyph's box from. Same recipe, same seed,
+# same pieces in the same order — asserted, not assumed.
+import build_score_scene as gen                                   # noqa: E402
+from score_scene import pack                                      # noqa: E402
+_rec, _alive, BOXES, FRAMES, RANGES = gen.measure(SEED)
+assert len(BOXES) == len(PIECES), \
+    "the two recorders disagree about how many pieces the recipe has: %d vs %d" \
+    % (len(BOXES), len(PIECES))
+PACKED, ON_EDGES, EDGES = pack.targets(BOXES, FRAMES, RANGES)
+print("package: %d pieces draw the outline, %d are packed inside"
+      % (ON_EDGES, len(PACKED) - ON_EDGES))
+
+FOLD = int(os.environ.get("FOLD", 0))    # 0 = the cube; >0 = frames of the fold
+piece_objs = []
+
 # ── one object per piece, origin at its own centroid ─────────────────────────
 for pi, (pbm, pglyphs) in enumerate(PIECES):
     if len(pbm.verts):
@@ -181,6 +197,35 @@ for pi, (pbm, pglyphs) in enumerate(PIECES):
         # construction, so the basis IS the world matrix and no depsgraph
         # round-trip is needed to know it.
         g.matrix_basis = gm
+    piece_objs.append((pi, ob, cen))
+
+# ── the fold: cube → delivery package ────────────────────────────────────────
+# The same targets the browser is given, keyframed, so the morph can be looked
+# at and judged here rather than only in a scroll position on a phone.
+#   FOLD=48 blender --background --python scripts/blender_score_cube.py
+if FOLD:
+    for pi, ob, cen in piece_objs:
+        t = PACKED[pi]
+        ob.keyframe_insert("location", frame=1)
+        ob.keyframe_insert("rotation_quaternion", frame=1)
+        ob.keyframe_insert("scale", frame=1)
+        ob.rotation_mode = 'QUATERNION'
+        ob.rotation_quaternion = (1, 0, 0, 0)
+        ob.keyframe_insert("rotation_quaternion", frame=1)
+        # the piece turns about its OWN centroid, which is where its origin is,
+        # so the target position is the target centroid and nothing else moves
+        ob.location = (t[0], t[1], t[2])
+        ob.scale = (t[3], t[3], t[3])
+        ob.rotation_quaternion = (t[7], t[4], t[5], t[6])     # blender is w,x,y,z
+        ob.keyframe_insert("location", frame=FOLD)
+        ob.keyframe_insert("rotation_quaternion", frame=FOLD)
+        ob.keyframe_insert("scale", frame=FOLD)
+        if ob.animation_data and ob.animation_data.action:
+            for fc in ob.animation_data.action.fcurves:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'SINE'
+                    kp.easing = 'EASE_IN_OUT'
+    scene.frame_start, scene.frame_end = 1, FOLD
 
 # ── camera + world + render ──────────────────────────────────────────────────
 cam_data = bpy.data.cameras.new("cam")
@@ -211,6 +256,10 @@ scene.render.resolution_x = int(os.environ.get("RESX", 1400))
 scene.render.resolution_y = int(os.environ.get("RESY", 2100))
 scene.render.filepath = OUT
 scene.render.image_settings.file_format = "PNG"
+if FOLD:
+    # the still is the thing the fold arrives at; frame 1 is still the cube,
+    # and the whole fold is in the .blend either way
+    scene.frame_set(FOLD)
 bpy.ops.render.render(write_still=True)
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(GLYPHS, "cube.blend"))
 print("rendered:", OUT, "| saved", os.path.join(GLYPHS, "cube.blend"))

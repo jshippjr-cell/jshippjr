@@ -19,6 +19,11 @@ var NM = META.nMarks, NP = META.nPieces;
 var MAT   = new Float32Array(BUF, META.offMarks,  NM*12);
 var PIDX  = new Uint16Array (BUF, META.offPidx,   NM);
 var HOME  = new Float32Array(BUF, META.offPieces, NP*4);   // cx,cy,cz,span
+// …and where every piece goes when the cube becomes the delivery package:
+// x,y,z, scale, then the quaternion that turns it onto its edge of the carton.
+// Guarded, so a scene built before the package existed still boots.
+var PACK  = (META.offPack != null && META.offPack + NP*32 <= BUF.byteLength)
+            ? new Float32Array(BUF, META.offPack, NP*8) : null;
 
 // ── gl program ─────────────────────────────────────────────────────────────
 var VS = [
@@ -180,6 +185,32 @@ for(var i2=0;i2<NP;i2++){
   KS[i2] = Math.max(0, Math.min(2.2, 46/(HOME[i2*4+3]+14) - 0.4));
 }
 
+// ── the order the package gets packed in ───────────────────────────────────
+// A box is built and then filled; it does not arrive all at once. Every piece
+// gets a start point in the fold, taken from where it is GOING rather than
+// from anything extra in the file: the pieces that draw the carton's outline
+// go first, bottom rail to open flap, and the ones that are contents follow,
+// lowest layer first. Without this the whole model turns over simultaneously
+// and the middle of the fold reads as an explosion rather than as packing.
+var PST = new Float32Array(NP);
+if(PACK){
+  var eLo=1e9,eHi=-1e9,cLo=1e9,cHi=-1e9;
+  for(var i3=0;i3<NP;i3++){
+    var z3 = PACK[i3*8+2];
+    if(PACK[i3*8+3] >= 0.40){ if(z3<eLo)eLo=z3; if(z3>eHi)eHi=z3; }
+    else { if(z3<cLo)cLo=z3; if(z3>cHi)cHi=z3; }
+  }
+  for(var i4=0;i4<NP;i4++){
+    var z4 = PACK[i4*8+2];
+    PST[i4] = PACK[i4*8+3] >= 0.40
+      ? 0.34 * ((z4-eLo)/Math.max(1e-3, eHi-eLo))          // the carton, upward
+      : 0.30 + 0.45 * ((z4-cLo)/Math.max(1e-3, cHi-cLo));  // then what is in it
+  }
+}
+// where to look once it is a package: the middle of what the package actually
+// occupies, read off the targets rather than written down twice
+var PACK_EYE = PACK ? (Math.min(eLo, cLo) + Math.max(eHi, cHi)) / 2 : CZ;
+
 // ── camera ─────────────────────────────────────────────────────────────────
 function perspective(out, fovy, asp, n, f){
   var t = 1/Math.tan(fovy/2);
@@ -295,10 +326,66 @@ var LIVE = (function () {
   outer.sort(function (a, b) {
     return Math.atan2(BD[a*3+1], BD[a*3]) - Math.atan2(BD[b*3+1], BD[b*3]);
   });
+  // Spread them where they END UP as well as where they start. The scattered
+  // cloud is 800 units across and the packed carton is 300, so four notes that
+  // sit comfortably apart on the cube can arrive within 20px of each other on
+  // the carton floor — and a 112px hit target on top of another one means the
+  // note underneath cannot be pressed at all. This is the last thing on the
+  // page that plays music; it does not get to be unreachable.
+  function packAt(i) {
+    return PACK ? [PACK[i*8], PACK[i*8+1], PACK[i*8+2]]
+                : [HOME[i*4], HOME[i*4+1], HOME[i*4+2]];
+  }
+  function clearOf(c, chosen, sep) {
+    var p = packAt(c);
+    for (var j = 0; j < chosen.length; j++) {
+      var q = packAt(chosen[j]);
+      if (Math.hypot(p[0]-q[0], p[1]-q[1], p[2]-q[2]) < sep) return false;
+    }
+    return true;
+  }
   var picked = [];
-  for (var k = 0; k < want; k++) picked.push(outer[Math.floor(k * outer.length / want)]);
+  for (var sep = 96; sep > 1; sep *= 0.55) {
+    picked = [];
+    for (var k = 0; k < want; k++) {
+      // the even spacing round the ring stays the intent; separation only
+      // decides which neighbour of that position gets taken
+      var start = Math.floor(k * outer.length / want);
+      for (var off = 0; off < outer.length; off++) {
+        var c = outer[(start + off) % outer.length];
+        if (picked.indexOf(c) < 0 && clearOf(c, picked, sep)) { picked.push(c); break; }
+      }
+    }
+    if (picked.length === want) break;
+  }
   return picked;
 })();
+// Where the lit notes go once it is a package. The scattered cloud is 800
+// units across and the carton is 300, so four notes that sit comfortably apart
+// on the cube arrive within 25px of each other on a phone — four 112px hit
+// targets do not fit in a box that size, and the one underneath cannot be
+// pressed at all. In the package they take its four upper corners instead: as
+// far apart as the object allows, on the silhouette where they read. This is
+// the last thing on the page that plays music and it does not get to be
+// unreachable.
+var LIVESLOT = new Int32Array(NP).fill(-1);
+var LIVEPACK = null;
+if (PACK && META.carton && LIVE.length) {
+  var cw = META.carton[0] / 2 - 34, cd = META.carton[1] / 2 - 30;
+  var ch = CZ + META.carton[2] * 0.16;
+  // Two of the four corners lie almost on top of each other from this angle —
+  // the near and far corners of a box seen three-quarters on differ in depth,
+  // which the camera mostly foreshortens away. So those two are also given
+  // different heights, which does not foreshorten at all.
+  var CORN = [[-cw, -cd, 0], [cw, -cd, -48], [cw, cd, 0], [-cw, cd, 52]];
+  LIVEPACK = LIVE.map(function (pieceIndex, l) {
+    LIVESLOT[pieceIndex] = l;
+    var c = CORN[l % 4];
+    return [c[0], c[1], ch + c[2]];
+  });
+}
+var LIVE_PACK_SCALE = 0.62;      // legible as notation, not as a speck
+
 var liveEls = [];
 (function () {
   var layer = document.getElementById("livelayer");
@@ -323,9 +410,17 @@ var cols  = beats.map(function(b){ return b.querySelector(".col"); });
 var LABELS = ["scattered","gathering","gathering","converging","converging",
               "closing","closing","assembled"];
 
-// the model is not fully closed until the handoff section reads — the last
-// pieces land exactly as "one complete handoff" comes up the screen
-var ASSEMBLE_AT = 0.88;
+// The arc of the world, in scroll fraction. Measured against where the beats
+// actually sit — beat 06, "one complete handoff", reads from about 0.77 to
+// 0.95 on desktop and 0.70 to 0.86 on portrait, so everything the last act has
+// to say happens inside the narrower of the two.
+//
+//   …0.68  the cube closes, as the handoff section comes up
+//   0.705  the notes ignite, one after another, on the closed cube
+//   0.80   the cube folds down into the delivery package
+//   0.965  sealed, as the call to action arrives
+var ASSEMBLE_AT = 0.68;
+var PACK_FROM = 0.80, PACK_TO = 0.965;
 
 var progress = 0, target = 0, shiftRamp = 0;
 function onScroll(){
@@ -348,6 +443,14 @@ function draw(now){
 
   // pieces reassemble across the scroll, landing on the handoff section
   var p = Math.min(1, progress/ASSEMBLE_AT);
+  // …and then the cube folds down into the package it has been describing.
+  // Every piece is still on screen: 80 of them lay themselves along the
+  // carton's edges, so its outline is literally staff paper, and the other 648
+  // stack flat inside it. One delivery, nothing missing — which is what the
+  // words beside this say, so the picture says it too.
+  var mk = PACK ? Math.min(1, Math.max(0,
+             (progress - PACK_FROM) / (PACK_TO - PACK_FROM))) : 0;
+  var m = ease(mk);
 
   for(var i=0;i<NP;i++){
     var e = ST[i] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[i])/(1 - ST[i])));
@@ -369,11 +472,39 @@ function draw(now){
 
     var ta = SP[i]*(1-a);
     var hs = Math.sin(ta/2);
+    var sc = 1 + KS[i]*(1-a);
+    var qx = AX[i*3]*hs, qy = AX[i*3+1]*hs, qz = AX[i*3+2]*hs, qw = Math.cos(ta/2);
+
+    if(mk > 0 && mk > PST[i]){
+      var b8 = i*8;
+      var mm = ease((mk - PST[i]) / (1 - PST[i]));
+      var slot = LIVESLOT[i];
+      var tx = slot >= 0 ? LIVEPACK[slot][0] : PACK[b8];
+      var ty = slot >= 0 ? LIVEPACK[slot][1] : PACK[b8+1];
+      var tz = slot >= 0 ? LIVEPACK[slot][2] : PACK[b8+2];
+      px += (tx - px) * mm;
+      py += (ty - py) * mm;
+      pz += (tz - pz) * mm;
+      sc += ((slot >= 0 ? LIVE_PACK_SCALE : PACK[b8+3]) - sc) * mm;
+      // The turn onto the carton is a real rotation, often most of a half
+      // turn, so it slerps rather than lerps — a straight blend of two
+      // quaternions crosses through the middle and the piece visibly shrinks
+      // and swells on its way round. By now the tumble has run out (the cube
+      // closed at 0.68), so this rotates from rest, and a rotation from rest
+      // is just the same axis at a fraction of the angle.
+      var th = Math.acos(Math.min(1, Math.max(-1, PACK[b8+7])));
+      var sn = Math.sin(th);
+      if(sn > 1e-5){
+        var f = Math.sin(th*mm)/sn;
+        qx = PACK[b8+4]*f; qy = PACK[b8+5]*f; qz = PACK[b8+6]*f;
+        qw = Math.cos(th*mm);
+      }
+    }
+
     PSTATE[i*4+0]=hx; PSTATE[i*4+1]=hy; PSTATE[i*4+2]=hz;
-    PSTATE[i*4+3]=1 + KS[i]*(1-a);
+    PSTATE[i*4+3]=sc;
     var o1=(NP+i)*4;
-    PSTATE[o1]=AX[i*3]*hs; PSTATE[o1+1]=AX[i*3+1]*hs; PSTATE[o1+2]=AX[i*3+2]*hs;
-    PSTATE[o1+3]=Math.cos(ta/2);
+    PSTATE[o1]=qx; PSTATE[o1+1]=qy; PSTATE[o1+2]=qz; PSTATE[o1+3]=qw;
     var o2=(NP*2+i)*4;
     PSTATE[o2]=px; PSTATE[o2+1]=py; PSTATE[o2+2]=pz;
     PSTATE[o2+3]=TN[i]*(1-a*0.55);
@@ -388,9 +519,10 @@ function draw(now){
   // switched on after it. `kOf` is that per-note ramp, 0 -> 1.
   // Tuned against the measured ramp: the last note used to still be at 44% when the
   // visitor hit the bottom of the page, which reads as unfinished rather than as
-  // arriving. Ignition starts just past the cube's landing (ASSEMBLE_AT 0.88) and
-  // the fourth note is fully lit by ~0.96, with the tail of the scroll to be seen in.
-  var IGN_FROM = 0.883, IGN_SPAN = 0.042, IGN_STAGGER = 0.011;
+  // arriving. Ignition starts just past the cube's landing and the fourth note is
+  // fully lit by ~0.76 — before the package starts folding at 0.80, so the notes
+  // arrive on a finished cube and then ride their own pieces into the carton.
+  var IGN_FROM = 0.705, IGN_SPAN = 0.032, IGN_STAGGER = 0.009;
   function kOf(idx) {
     var a0 = IGN_FROM + idx * IGN_STAGGER;
     return Math.max(0, Math.min(1, (progress - a0) / IGN_SPAN));
@@ -407,9 +539,12 @@ function draw(now){
                      (p - ST[li]) / (1 - ST[li])))) * 0.55);
       PSTATE[(NP * 2 + li) * 4 + 3] = normal * (1 - kk) + (-pulse) * kk;
       // and bigger than their neighbours while scattered, easing back to true size
-      // as the cube closes — the same rule the whole scene follows
+      // as the cube closes — the same rule the whole scene follows. This MULTIPLIES
+      // what the loop above wrote rather than replacing it, so a lit note packs
+      // into the carton with everything else instead of staying cube-sized while
+      // the world around it folds.
       var la = ease(ST[li] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[li]) / (1 - ST[li]))));
-      PSTATE[li * 4 + 3] = (1 + KS[li] * (1 - la)) * (1 + 1.4 * (1 - la));
+      PSTATE[li * 4 + 3] *= (1 + 1.4 * (1 - la));
     }
   }
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -424,13 +559,21 @@ function draw(now){
   shiftY += (wantShiftY - shiftY) * 0.07;
   var halfH = 380 + 52*p;                       // half-height of what we frame
   if(asp < 1.0) halfH = halfH/Math.max(0.62, asp);
+  // The package needs its own framing: half the cube's height, but half again
+  // as wide across its open flaps. Closing in by a fixed amount put the flaps
+  // off both sides of a phone — so the pull-in is driven by the aspect, and
+  // the wider the frame the closer the camera comes.
+  halfH += (Math.max(330, 340/Math.max(0.30, asp)) - halfH) * m;
   var fov = 2*Math.atan(halfH/dist);
   perspective(Pm, fov, asp, 60, 9000);
   Pm[8] = shiftX; Pm[9] = shiftY;                // off-axis: shifts, never skews
+  // the package is not centred where the cube was — it stands in the cube's
+  // lower half with its flaps reaching up, so the eye line rises as it folds
+  var lz = CZ + (PACK_EYE - CZ)*m;
   var ex = CX + Math.sin(az)*Math.cos(el)*dist;
   var ey = CY - Math.cos(az)*Math.cos(el)*dist;
-  var ez = CZ + Math.sin(el)*dist;
-  lookAt(Vm, ex,ey,ez, CX,CY,CZ);
+  var ez = lz + Math.sin(el)*dist;
+  lookAt(Vm, ex,ey,ez, CX,CY,lz);
   mul(VP, Pm, Vm);
   gl.uniformMatrix4fv(uVP, false, VP);
   gl.uniform2f(uFog, dist-420, dist+760);
@@ -465,10 +608,15 @@ function draw(now){
     gl.drawElementsInstanced(gl.TRIANGLES, DRAWS[d].count, gl.UNSIGNED_SHORT, 0, DRAWS[d].inst);
   }
 
-  // chrome
+  // chrome. The read-out reports the SAME two scalars the world is drawn from —
+  // the cube closing, then the package folding — rather than running a timeline
+  // of its own. Two surfaces answering "how far along is this?" is how they come
+  // to disagree on a day nobody is looking.
   var k = Math.min(1, progress/ASSEMBLE_AT);
-  gaugeDot.style.left = (k*100)+"%";
-  gaugeLab.textContent = LABELS[Math.min(LABELS.length-1, Math.floor(k*LABELS.length))];
+  gaugeDot.style.left = ((k*0.66 + mk*0.34)*100)+"%";
+  gaugeLab.textContent = mk > 0
+    ? (mk >= 0.995 ? "delivered" : "packing")
+    : LABELS[Math.min(LABELS.length-1, Math.floor(k*LABELS.length))];
   hint.style.opacity  = progress < 0.02 ? 1 : 0;
 
   // exactly one beat reads at a time: the one nearest the reading line. Two
@@ -494,7 +642,8 @@ function draw(now){
   // come to disagree on a day nobody is looking.
   for(var b3=0;b3<beats.length;b3++){
     if(beats[b3].querySelector(".pack"))
-      beats[b3].classList.toggle("packed", p > 0.92 && beats[b3].classList.contains("lit"));
+      beats[b3].classList.toggle("packed",
+        mk > 0.10 && beats[b3].classList.contains("lit"));
   }
   // the read-out has said its piece once the model is assembled. It clears on
   // the closing beat so it never sits under the call to action — keyed to the
@@ -509,8 +658,12 @@ function draw(now){
   // desktop: text left, world right — eased along the scroll itself, so the
   // world drifts out of the column instead of jumping when a section lights
   var sr = shiftRamp*shiftRamp*(3 - 2*shiftRamp);
-  wantShift  = asp >= 0.95 ? -0.46*sr : 0;
-  wantShiftY = asp <  0.95 ? -0.34 : 0;            // portrait: world above the copy
+  // …and it sits back toward the middle as it packs: at full shift the open
+  // flap on the far side ran off the right edge of a 1440 frame.
+  wantShift  = asp >= 0.95 ? -0.46*sr*(1 - 0.15*m) : 0;
+  // portrait: world above the copy — and a little higher again once it is a
+  // package, whose open flaps stand taller off its centre than the cube did
+  wantShiftY = asp <  0.95 ? -0.34 - 0.12*m : 0;
 
   requestAnimationFrame(draw);
 }

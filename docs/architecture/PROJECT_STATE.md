@@ -94,6 +94,24 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The cube is a cube, and then it is a package** (ADR-0062, 2026-08-12). The front
+  door's world had **150 of its 728 pieces finishing assembly outside the box, the worst
+  by 125 units — 42% of the cube's own width**: staves projecting through the faces,
+  fragments floating clear of the corners. The layout existed as **three copies in an
+  ephemeral scratch directory**, so the one that shipped could be wrong for weeks while
+  the Blender file the look was judged in was fine. It is now described **once**, in
+  `scripts/score_scene/recipe.py`, and reported to a recorder — the web exporter and the
+  Blender builder. The extraction was proved behaviour-preserving (regenerated scene
+  byte-identical), and comparing the two recorders immediately surfaced a second defect:
+  every glyph in the offline model sat at **double** its offset, because `matrix_world`
+  was assigned against a stale parent matrix in background mode. Both now report zero
+  pieces outside. `fit`/`seat` slide a run inward and shorten only when the box is
+  genuinely narrower, so **nothing is dropped** — same 7,419 marks, same 728 pieces.
+  On top of that the cube now **folds into an open delivery carton whose outline is staff
+  paper**: 80 pieces lay themselves along its 24 edges, 648 stack flat inside it, and the
+  four ember notes take its corners so the page is still playing music where it asks for
+  the brief. `tests/test_score_scene.py` holds containment at zero, holds the cube full,
+  holds it touching its own walls, and fails if the shipped `.bin` is stale.
 - **Roles** (ADR-0055, 2026-08-06). `owner` / `operator` / `viewer`, enforced in the gate
   so no route can be missed. A hire can run campaigns; only an owner can release a
   delivery, confirm a licence, move money, delete an opportunity or rotate a share link.

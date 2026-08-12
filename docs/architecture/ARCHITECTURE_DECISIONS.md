@@ -1664,6 +1664,51 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0062 — The world has one recipe, and everything in it stays inside the box
+**Status:** Accepted (2026-08-12) · Source: `scripts/score_scene/recipe.py`,
+`scripts/score_scene/pack.py`, `scripts/build_score_scene.py`,
+`scripts/blender_score_cube.py`, `web/static/public/score-gl.js`,
+`tests/test_score_scene.py`
+**Decision.** The front door's world — 728 pieces of engraved notation that scatter,
+reassemble into a cube, and then fold into a delivery package — is **described once**, in
+`scripts/score_scene/recipe.py`, and reported to a **recorder**. `build_score_scene.py`
+records instanced marks and ships `score-scene.{json,bin}` to the browser;
+`blender_score_cube.py` records real geometry and renders the still the look is judged
+in. Adding a surface means adding a recorder, never a second copy of the layout. Every
+run of notation is placed through `fit`/`seat`, which intersect it with the cube and
+**slide it inward**, shortening only when the box is genuinely narrower — so containment
+is a property of the placement, not of luck. The generator, its glyph sources and the
+Leland outlines live in the repo.
+**Why.** This layout existed as three divergent copies in an ephemeral scratch directory.
+They had already drifted: in the shipped web scene **150 of 728 pieces finished
+assembling outside the cube, the worst by 125 units — 42% of the cube's own width** —
+staves projecting through the faces and fragments floating clear of the corners, while
+the Blender file the model was judged in was fine and had never been changed. Nobody
+compared them because comparing them was not possible: the only artifact under version
+control was the output. Extracting the recipe made the two recorders comparable, and the
+first comparison found a second defect on the Blender side — assigning `matrix_world`
+straight after re-parenting resolves it against a stale parent matrix in background mode,
+so **every glyph in the offline model sat at exactly double its offset**.
+**Consequences.** Do not add a fourth walk of this layout. `fit` slides and only then
+shortens, and **drops nothing** — a change that achieves containment by discarding runs
+makes the cube tidy and empty, which `test_score_scene.py` fails on both counts (it also
+fails if the model stops touching its own walls, and if `score-scene.bin` is stale
+against a regenerated build). The scene is a **build artifact**: change the recipe, run
+`python3 scripts/build_score_scene.py`, commit the regenerated pair. The extraction was
+proved behaviour-preserving — the regenerated scene was byte-identical.
+
+The package is the same principle applied to the ending. `pack.py` gives every piece a
+second target (position, scale, quaternion about its own centroid — exactly the transform
+the renderer already applies, so the morph needed no new machinery). **80 of the pieces
+lay themselves along the 24 edges of an open shipping carton, so its outline is literally
+staff paper; the other 648 stack flat inside it.** Nothing is discarded and nothing is
+invented: "One delivery. Nothing missing." is the sentence beside it, and the picture has
+to be able to make the same claim. The gauge, the manifest list and the carton all report
+the same two scalars (ADR-0029's rule, applied to a picture). ADR-0040 still holds through
+the fold — the four ember notes ride their own pieces into the package and take its four
+corners, so the front door is still playing music at the point where it asks for the
+brief.
+
 ### ADR-0061 — A writer's fee is a share of net, and their publishing is only theirs if it can be paid
 **Status:** Accepted (2026-08-06) · Source: operator decision on supply-side terms ·
 `compensation.py`, `estimation.py`, `delivery.py`, `web/db.py`

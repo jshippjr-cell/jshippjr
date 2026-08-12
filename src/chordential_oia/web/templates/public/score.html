@@ -150,6 +150,15 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
   .livenote .r2,.livenote .r3{display:none}
 }
 .livenote:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+/* On a phone the four notes end up at the corners of a carton about 200px
+   across, and 112px targets on that would overlap each other. 72px still
+   clears Apple's and Google's 44px minimum by half again, and at that size no
+   two of them touch. */
+@media (max-width:560px){
+  .livenote{width:72px;height:72px;margin:-36px 0 0 -36px}
+  .livenote i{width:60px;height:60px;margin:-30px 0 0 -30px}
+  .livenote .core{width:26px;height:26px;margin:-13px 0 0 -13px}
+}
 .lt-hint{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ember);
   margin:1.5rem 0 1rem;max-width:27rem;line-height:1.7}

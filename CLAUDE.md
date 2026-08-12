@@ -53,9 +53,20 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   through `app.py` as a namespace. Reach a helper on the module that owns it. Put new work
   in the module it belongs to, not in `app.py`.
 - **Delivery OS** (supply/delivery side): `delivery.py` + the `delivery_*`/`review_*`
-  routes + `delivery_console.html`/`delivery_portal.html`/`delivery_package.html`. Five
+  routes + `delivery_portal.html`/`delivery_console.html`/`delivery_package.html`. Five
   "agents": Rights, Revisions, Metadata, Approvals, Assets. See
   `docs/delivery-os-*.md` and `docs/delivery-os-user-manual.md`.
+- **The front door** (`/` and `/score`, one renderer, `public/score.html`): a scroll
+  world of 7,419 engraved marks in 728 pieces, drawn by a hand-written WebGL2 renderer
+  (`static/public/score-gl.js`, no library). The pieces scatter, reassemble into a cube,
+  then fold into an open delivery carton whose outline is staff paper. **The model is
+  described once** (ADR-0062) in `scripts/score_scene/recipe.py` and reported to a
+  recorder: `scripts/build_score_scene.py` ships `score-scene.{json,bin}` to the browser,
+  `scripts/blender_score_cube.py` builds real geometry in Blender for the offline render.
+  `score_scene/pack.py` is where the carton lives. **The scene files are build
+  artifacts** — change the recipe, rebuild, commit the regenerated pair. Never add a
+  second copy of the layout; three of them existed once and 20% of the cube hung out of
+  its own walls for weeks because of it.
 
 ## Governing rules (the product's spine — honor in code + UX)
 - **"The machine proposes, Jon disposes."** Engines analyze + recommend; a human presses
@@ -75,6 +86,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
+- Rebuild the front door's world (after any edit to `scripts/score_scene/`):
+  `python3 scripts/build_score_scene.py` — regenerates `score-scene.{json,bin}`, reports
+  how far anything escapes the cube (must be 0), and commits as part of the change.
+  Offline render: `blender --background --python scripts/blender_score_cube.py`
+  (`FOLD=24` keyframes the fold into the package and renders that instead).
 
 ## Branch & commit discipline
 - Develop on the designated feature branch (currently **`claude/admiring-mayer-u241h5`**)
@@ -160,6 +176,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   append-only; withdrawal marks, never deletes.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from
   engine data; the client doc + delivery package are editable via overrides.
+- **One recipe, several recorders** (ADR-0062): where the front door's world goes is
+  decided in `score_scene/recipe.py` and nowhere else; a surface that needs it
+  implements `piece()/box()/glyph()` and receives it. This is the "one derivation, many
+  reporters" rule applied to a picture — and the picture is where it had already been
+  broken, three times over.
 - **Living OS layer:** every page carries ≥1 living element that can't exist in print
   (`static/live.js` + `lv-*` CSS grammar; see the bible's "Living OS principle").
   Motion communicates state/automation/intelligence only — honest liveness, never

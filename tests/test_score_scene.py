@@ -13,6 +13,7 @@ is still what the generator produces, so a stale asset cannot pass by being
 tidy in a file nobody rebuilt.
 """
 import json
+import math
 import os
 import struct
 import sys
@@ -95,7 +96,8 @@ def test_the_shipped_scene_matches_its_own_header(shipped):
     meta, blob = shipped
     assert meta["nMarks"] == sum(meta["counts"])
     assert meta["offPidx"] == meta["nMarks"] * 48          # 12 floats per mark
-    assert len(blob) == meta["offPieces"] + meta["nPieces"] * 16
+    assert meta["offPack"] == meta["offPieces"] + meta["nPieces"] * 16
+    assert len(blob) == meta["offPack"] + meta["nPieces"] * 32
 
 
 def test_the_renderer_is_told_where_the_centre_is(shipped):
@@ -103,6 +105,70 @@ def test_the_renderer_is_told_where_the_centre_is(shipped):
     meta, _ = shipped
     assert tuple(meta["center"]) == tuple(CENTER)
     assert BOTTOM < CENTER[2] < TOP
+
+
+def test_every_piece_has_somewhere_to_go_in_the_package(shipped):
+    """The cube folds into a delivery carton and takes all of itself with it.
+
+    "One delivery. Nothing missing." is the claim the words next to it make. If
+    a change ever starts dropping pieces out of the pack — collapsing them to
+    nothing, or leaving them behind at their cube position — the picture stops
+    agreeing with the sentence.
+    """
+    meta, blob = shipped
+    n = meta["nPieces"]
+    assert meta["offPack"] + n * 32 == len(blob)
+    packed = [struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+              for i in range(n)]
+    assert len(packed) == n
+    for i, t in enumerate(packed):
+        assert t[3] > 0.05, "piece %d packs to nothing" % i
+        q = math.sqrt(sum(c * c for c in t[4:]))
+        assert abs(q - 1.0) < 1e-3, "piece %d has a non-unit quaternion" % i
+        assert t[7] >= 0, "piece %d slerps the long way round" % i
+
+
+def test_the_package_is_a_carton_and_the_pieces_lie_inside_it(shipped):
+    """Nothing sticks out of the package either — that was the whole lesson.
+
+    The bound is the carton's OWN outline, worked out from the edges the packer
+    lays notation along, rather than a number written down a second time here
+    and left to drift from it.
+    """
+    from score_scene.pack import carton                  # noqa: E402
+    meta, blob = shipped
+    lo = [1e9] * 3
+    hi = [-1e9] * 3
+    for e in carton():
+        for end in (e.p0, tuple(e.p0[i] + e.u[i] * e.length for i in range(3))):
+            for i in range(3):
+                lo[i] = min(lo[i], end[i])
+                hi[i] = max(hi[i], end[i])
+    pad = 14.0                       # a run of notation is wider than its line
+    n = meta["nPieces"]
+    for i in range(n):
+        t = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+        for ax, name in enumerate(("x", "depth", "up")):
+            assert lo[ax] - pad <= t[ax] <= hi[ax] + pad, \
+                "piece %d sits outside the package on %s" % (i, name)
+
+
+def test_the_outline_is_drawn_and_the_rest_is_contents(shipped):
+    """The carton's edges are staff paper; what is left is what is in the box.
+
+    Two populations, told apart by scale, because that is exactly how
+    score-gl.js tells them apart when it decides what folds first.
+    """
+    meta, blob = shipped
+    n = meta["nPieces"]
+    packed = [struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+              for i in range(n)]
+    on_edge = [t for t in packed if t[3] >= 0.40]
+    inside = [t for t in packed if t[3] < 0.40]
+    assert len(on_edge) == meta["packOnEdges"]
+    assert 40 <= len(on_edge) <= 200, "the outline needs runs long enough to draw it"
+    assert len(inside) > len(on_edge), "a wireframe you cannot see through is a box"
+    assert len(on_edge) + len(inside) == n
 
 
 def test_the_generator_is_in_the_repo():

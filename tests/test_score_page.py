@@ -295,6 +295,18 @@ def test_the_notes_only_wake_after_the_cube_closes(client):
     # at 44% when you hit the bottom reads as unfinished, not as arriving
     last_done = ign + 3 * stagger + span
     assert last_done <= 0.99, f"the fourth note is not lit until {last_done}"
+    # The world has a third act now — the cube folds into the delivery package.
+    # The notes have to have arrived on a finished cube before it starts moving
+    # again, or they ignite in the middle of a fold and read as debris.
+    pack_from = float(re.search(r"PACK_FROM\s*=\s*([0-9.]+)", js).group(1))
+    pack_to = float(re.search(r"PACK_TO\s*=\s*([0-9.]+)", js).group(1))
+    assert last_done <= pack_from, (
+        f"the notes are still lighting at {last_done} when the package starts "
+        f"folding at {pack_from}")
+    assert pack_from > assemble, "the package folds before the cube has closed"
+    assert pack_to <= 0.99, (
+        f"the package is not sealed until {pack_to} — the visitor runs out of "
+        "page before the last thing the page says finishes happening")
 
 
 def test_the_lit_notes_sit_above_the_copy_column(client):
