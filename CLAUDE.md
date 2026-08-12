@@ -66,7 +66,8 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   **The model is described once** (ADR-0062) in `scripts/score_scene/recipe.py` and reported to a
   recorder: `scripts/build_score_scene.py` ships `score-scene.{json,bin}` to the browser,
   `scripts/blender_score_cube.py` builds real geometry in Blender for the offline render.
-  `score_scene/pack.py` is where the carton lives. **The scene files are build
+  `score_scene/pack.py` is where the carton lives — including its four lid hinges,
+  which are SHIPPED to the renderer rather than deduced there. **The scene files are build
   artifacts** — change the recipe, rebuild, commit the regenerated pair. Never add a
   second copy of the layout; three of them existed once and 20% of the cube hung out of
   its own walls for weeks because of it.

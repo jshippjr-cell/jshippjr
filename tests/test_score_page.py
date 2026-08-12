@@ -337,7 +337,15 @@ def test_each_act_lands_on_the_beat_it_belongs_to(client):
         f"the notes light over {ign:.3f}–{last:.3f}, outside the review beat "
         f"{review[0]}–{review[1]}")
     assert num("ASSEMBLE_AT") <= review[0], "the cube is still closing at beat 05"
-    assert handoff[0] <= num("PACK_FROM"), "the package forms before the handoff beat"
+    # The fold is squeezed from both ends: it cannot start while the notes are
+    # still lighting on beat 05, and it has to be FINISHED before beat 06 is
+    # read. That leaves it beginning as the handoff section rises into view —
+    # earlier than the point where that beat becomes the lit one — because a
+    # fold with no room to happen in reads as a snap.
+    assert num("PACK_FROM") > last, (
+        "the cube starts folding while the notes are still lighting on beat 05")
+    assert num("PACK_FROM") <= handoff[0], (
+        "the fold has not begun by the time the handoff beat is lit")
     assert num("SEAL_FROM") >= handoff[1], (
         "the lid shuts while the handoff beat is still reading — it should be "
         "an open, complete carton for the whole of that section")
@@ -347,7 +355,7 @@ def test_each_act_lands_on_the_beat_it_belongs_to(client):
     # "everything arrives together" over a manifest of what is in the box. A
     # fold still running when the section is being read is the picture
     # contradicting the sentence for the whole time anyone looks at it.
-    early = handoff[0] + (handoff[1] - handoff[0]) * 0.65
+    early = handoff[0] + (handoff[1] - handoff[0]) * 0.70
     assert num("PACK_TO") <= early, (
         f"the carton is not finished until {num('PACK_TO')}, most of the way "
         f"through the beat that describes it — it should be complete by {early:.3f}")

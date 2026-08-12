@@ -143,7 +143,7 @@ def build(seed=recipe.SEED):
                    max(b[3] - b[0], b[4] - b[1], b[5] - b[2])) for b in boxes]
 
     # …and where each of them goes once the cube becomes the package
-    packed, sealed, on_edges, edges = pack.targets(boxes, frames, ranges)
+    packed, sealed, flaps, on_edges, edges = pack.targets(boxes, frames, ranges)
 
     # sort marks by prototype so each proto is one contiguous instanced draw
     marks = sorted(rec.marks, key=lambda m: m[0])
@@ -167,6 +167,11 @@ def build(seed=recipe.SEED):
     sbuf = bytearray()
     for t in sealed:
         sbuf += struct.pack("<8f", *t)      # …and the same, with the lid shut
+    fbuf = bytearray()
+    for f in flaps:                         # which lid panel turns it, 255 = none
+        fbuf += struct.pack("<B", 255 if f < 0 else f)
+    while len(fbuf) % 4:
+        fbuf += b"\0"
 
     meta = {
         "protos": [{"name": n,
@@ -183,10 +188,13 @@ def build(seed=recipe.SEED):
         "offPieces": len(buf) + len(pidx),
         "offPack": len(buf) + len(pidx) + len(pbuf),
         "offSeal": len(buf) + len(pidx) + len(pbuf) + len(kbuf),
+        "offFlap": len(buf) + len(pidx) + len(pbuf) + len(kbuf) + len(sbuf),
+        "flaps": pack.hinges(),
         "packOnEdges": on_edges,
         "carton": [W_CARTON, D_CARTON, H_CARTON],
     }
-    blob = (bytes(buf) + bytes(pidx) + bytes(pbuf) + bytes(kbuf) + bytes(sbuf))
+    blob = (bytes(buf) + bytes(pidx) + bytes(pbuf) + bytes(kbuf)
+            + bytes(sbuf) + bytes(fbuf))
     return meta, blob, boxes
 
 

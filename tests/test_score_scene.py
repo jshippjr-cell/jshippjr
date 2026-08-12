@@ -98,7 +98,8 @@ def test_the_shipped_scene_matches_its_own_header(shipped):
     assert meta["offPidx"] == meta["nMarks"] * 48          # 12 floats per mark
     assert meta["offPack"] == meta["offPieces"] + meta["nPieces"] * 16
     assert meta["offSeal"] == meta["offPack"] + meta["nPieces"] * 32
-    assert len(blob) == meta["offSeal"] + meta["nPieces"] * 32
+    assert meta["offFlap"] == meta["offSeal"] + meta["nPieces"] * 32
+    assert len(blob) >= meta["offFlap"] + meta["nPieces"]
 
 
 def test_the_renderer_is_told_where_the_centre_is(shipped):
@@ -217,3 +218,139 @@ def test_the_shut_lid_is_lower_than_the_open_one(shipped):
                    for i in range(n))
     assert top_shut < top_open - 40, (
         "the lid barely drops (%.0f -> %.0f); it is not closing" % (top_open, top_shut))
+
+
+def test_the_fold_is_a_compression_not_a_dissolve(built):
+    """Each piece lands near where it already was.
+
+    Given a free choice of destination the packer sent every piece across the
+    model to somewhere unrelated, and the middle of the fold — the part you
+    actually scroll through — was an unreadable cloud: the cube dissolved and a
+    carton condensed out of it. Taking each destination from the source instead
+    (nearest edge that fits; contents keep their own footprint and their own
+    stacking order) halved the average trip and made the same fold read as the
+    cube compressing into the box.
+
+    This is a LOOK held in a number. If it regresses the picture still ends in
+    the right place, so nothing else here would notice.
+    """
+    meta, blob, boxes = built
+    n = meta["nPieces"]
+    trav = []
+    for i in range(n):
+        t = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+        b = boxes[i]
+        c = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
+        trav.append(math.dist(c, t[:3]))
+    trav.sort()
+    median = trav[len(trav) // 2]
+    assert median < 170, (
+        "the median piece travels %.0f units into the package; over about 170 "
+        "the fold stops reading as a fold and becomes a dissolve" % median)
+
+
+def test_the_contents_keep_their_own_footprint(built):
+    """What is packed inside lands under roughly where it was standing.
+
+    That is what makes the fill read as the cube settling into the box rather
+    than as 648 pieces being re-dealt, and it is the half of the fold nobody
+    sees in the finished frame — only while scrolling through it.
+    """
+    meta, blob, boxes = built
+    n = meta["nPieces"]
+    xs, us = [], []
+    for i in range(n):
+        t = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+        if t[3] >= 0.40:            # skip the outline; those go to edges
+            continue
+        b = boxes[i]
+        xs.append((b[0] + b[3]) / 2)
+        us.append(t[0])
+    assert len(xs) > 300
+    mx, mu = sum(xs) / len(xs), sum(us) / len(us)
+    cov = sum((a - mx) * (b - mu) for a, b in zip(xs, us))
+    sx = math.sqrt(sum((a - mx) ** 2 for a in xs))
+    su = math.sqrt(sum((b - mu) ** 2 for b in us))
+    r = cov / (sx * su)
+    assert r > 0.75, (
+        "where a piece ends up across the box barely relates to where it "
+        "started (r=%.2f) — the contents are being re-dealt, not packed" % r)
+
+
+def test_every_piece_that_moves_is_told_which_hinge_moves_it(shipped):
+    """The lid's four hinges ship; the renderer does not deduce them.
+
+    It used to: a rigid rotation IS determined by its endpoints, but recovering
+    it means choosing which side of the chord the centre falls on, and where
+    that choice went wrong the panel was left standing. Some of the lid folded
+    and some did not — a tent, not a closed box. Anything whose shut position
+    differs from its open one must now name the hinge that takes it there, and
+    anything that names one must actually move.
+    """
+    meta, blob = shipped
+    n = meta["nPieces"]
+    assert len(meta["flaps"]) == 4
+    for f in meta["flaps"]:
+        assert abs(math.sqrt(sum(c * c for c in f["n"])) - 1.0) < 1e-6
+        assert 0.5 < f["a"] < math.pi
+    for i in range(n):
+        p = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+        s = struct.unpack_from("<8f", blob, meta["offSeal"] + i * 32)
+        moves = max(abs(a - b) for a, b in zip(p, s)) > 1e-4
+        flap = blob[meta["offFlap"] + i]
+        assert moves == (flap < 4), (
+            "piece %d moves=%s but its hinge tag is %d" % (i, moves, flap))
+
+
+def test_each_hinge_actually_shuts_its_own_panel(shipped):
+    """Turning a piece about the hinge it names lands it on its shut position.
+
+    This is the assertion the old reconstruction could not make about itself.
+    """
+    meta, blob = shipped
+    n = meta["nPieces"]
+    worst = 0.0
+    turned = 0
+    for i in range(n):
+        flap = blob[meta["offFlap"] + i]
+        if flap >= 4:
+            continue
+        f = meta["flaps"][flap]
+        p = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)[:3]
+        want = struct.unpack_from("<8f", blob, meta["offSeal"] + i * 32)[:3]
+        nx, ny, nz = f["n"]
+        a = f["a"]
+        v = [p[j] - f["p"][j] for j in range(3)]
+        ca, sa = math.cos(a), math.sin(a)
+        d = nx * v[0] + ny * v[1] + nz * v[2]
+        got = (f["p"][0] + v[0]*ca + (ny*v[2]-nz*v[1])*sa + nx*d*(1-ca),
+               f["p"][1] + v[1]*ca + (nz*v[0]-nx*v[2])*sa + ny*d*(1-ca),
+               f["p"][2] + v[2]*ca + (nx*v[1]-ny*v[0])*sa + nz*d*(1-ca))
+        worst = max(worst, math.dist(got, want))
+        turned += 1
+    assert turned >= 20, "hardly any of the lid turns"
+    assert worst < 0.5, (
+        "a panel turned about its own hinge misses its shut position by "
+        "%.1f units — that flap folds the wrong way" % worst)
+
+
+def test_the_blender_recorder_still_calls_the_packer_correctly():
+    """The offline recorder needs Blender to run, so nothing here executes it.
+
+    That is exactly how it broke: `pack.targets` grew a return value, the web
+    recorder was updated, and the Blender one went on unpacking the old arity —
+    an immediate crash the moment anyone rendered, invisible to a green suite
+    for a whole commit. The call is checked statically instead.
+    """
+    import inspect
+    import re
+    src = open(os.path.join(ROOT, "scripts", "blender_score_cube.py")).read()
+    m = re.search(r"^([A-Z_,\s]+)=\s*pack\.targets\(", src, re.M)
+    assert m, "blender_score_cube.py no longer calls pack.targets"
+    names = [n for n in m.group(1).replace(" ", "").split(",") if n]
+    ret = re.search(r"return (out, sealed.*)$",
+                    inspect.getsource(gen.pack.targets), re.M)
+    assert ret, "pack.targets no longer returns a plain tuple"
+    assert len(names) == len(ret.group(1).split(",")), (
+        "blender_score_cube.py unpacks %d values from pack.targets, which "
+        "returns %d" % (len(names), len(ret.group(1).split(","))))

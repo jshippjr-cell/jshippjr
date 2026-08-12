@@ -158,7 +158,7 @@ _rec, _alive, BOXES, FRAMES, RANGES = gen.measure(SEED)
 assert len(BOXES) == len(PIECES), \
     "the two recorders disagree about how many pieces the recipe has: %d vs %d" \
     % (len(BOXES), len(PIECES))
-PACKED, ON_EDGES, EDGES = pack.targets(BOXES, FRAMES, RANGES)
+PACKED, SEALED, FLAPS, ON_EDGES, EDGES = pack.targets(BOXES, FRAMES, RANGES)
 print("package: %d pieces draw the outline, %d are packed inside"
       % (ON_EDGES, len(PACKED) - ON_EDGES))
 
@@ -202,8 +202,11 @@ for pi, (pbm, pglyphs) in enumerate(PIECES):
 # ── the fold: cube → delivery package ────────────────────────────────────────
 # The same targets the browser is given, keyframed, so the morph can be looked
 # at and judged here rather than only in a scroll position on a phone.
+# The lid shuts over the second half, on the same hinges the browser is given,
+# so the whole ending can be judged in the file it is modelled in.
 #   FOLD=48 blender --background --python scripts/blender_score_cube.py
 if FOLD:
+    SHUT = FOLD + max(8, FOLD // 2)
     for pi, ob, cen in piece_objs:
         t = PACKED[pi]
         ob.keyframe_insert("location", frame=1)
@@ -220,12 +223,19 @@ if FOLD:
         ob.keyframe_insert("location", frame=FOLD)
         ob.keyframe_insert("rotation_quaternion", frame=FOLD)
         ob.keyframe_insert("scale", frame=FOLD)
+        u = SEALED[pi]
+        ob.location = (u[0], u[1], u[2])
+        ob.scale = (u[3], u[3], u[3])
+        ob.rotation_quaternion = (u[7], u[4], u[5], u[6])
+        ob.keyframe_insert("location", frame=SHUT)
+        ob.keyframe_insert("rotation_quaternion", frame=SHUT)
+        ob.keyframe_insert("scale", frame=SHUT)
         if ob.animation_data and ob.animation_data.action:
             for fc in ob.animation_data.action.fcurves:
                 for kp in fc.keyframe_points:
                     kp.interpolation = 'SINE'
                     kp.easing = 'EASE_IN_OUT'
-    scene.frame_start, scene.frame_end = 1, FOLD
+    scene.frame_start, scene.frame_end = 1, SHUT
 
 # ── camera + world + render ──────────────────────────────────────────────────
 cam_data = bpy.data.cameras.new("cam")

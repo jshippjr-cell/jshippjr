@@ -1727,10 +1727,25 @@ and the line "One delivery. Nothing missing." waits for the manifest, because it
 claim about that list. `test_score_page.py` holds each act inside its
 own beat window rather than checking bare numbers, because a nudge to any one constant is
 exactly how a picture drifts off the sentence it was drawn for. The lid is a genuine
-rotation: the flaps' hinges are recovered at boot from the open and shut states alone —
-a rigid rotation is fully determined by where a piece starts, where it ends and how far it
-turns — because sliding each piece straight between the two cuts the chord of a 122-degree
-swing and the flaps visibly buckle inward instead of folding.
+rotation — sliding each piece straight between the two states cuts the chord of a
+122-degree swing and the flaps visibly buckle inward instead of folding — and its four
+hinges are **shipped, not deduced**. They were first recovered in the renderer from the
+open and shut states alone, which is sound in principle (a rigid rotation is determined by
+its endpoints) but requires choosing which side of the chord the centre of the swing falls
+on; where that choice went wrong the panel was left standing, so half the lid folded and
+half did not, which reads as a tent rather than a closed box. The packer knows every hinge
+exactly, four of them cost nothing to send, and a test now turns each piece about the
+hinge it names and checks it lands on its shut position.
+
+**The fold is a compression, not a dissolve.** Given a free choice of destination the
+packer sent every piece across the model to somewhere unrelated — nearest-free-edge for
+the outline, a random spot for the contents — so the middle of the fold, which is the part
+you actually scroll through, was an unreadable cloud: the cube dissolved and a carton
+condensed out of it. Each destination is now taken from the source (the nearest edge that
+fits; contents keep their own footprint and their own stacking order, by rank so the stack
+still fills evenly), which halves the median trip from 257 units to 110 and makes the same
+fold read as the cube settling into the box. This is a LOOK held in a number, because if
+it regresses the picture still ends in exactly the right place and nothing else notices.
 
 ### ADR-0061 — A writer's fee is a share of net, and their publishing is only theirs if it can be paid
 **Status:** Accepted (2026-08-06) · Source: operator decision on supply-side terms ·

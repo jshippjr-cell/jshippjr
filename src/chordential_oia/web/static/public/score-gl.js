@@ -222,19 +222,6 @@ if(PACK){
 // occupies, read off the targets rather than written down twice
 var PACK_EYE = PACK ? (Math.min(eLo, cLo) + Math.max(eHi, cHi)) / 2 : CZ;
 
-// ── shutting the lid ───────────────────────────────────────────────────────
-// A flap folds — it swings about the hinge it is attached to. Sliding each
-// piece straight from its open position to its shut one cuts the chord of that
-// swing, and over 122 degrees at a 147-unit radius that is a 62-unit dip: the
-// flaps would visibly buckle inward and then straighten instead of folding.
-//
-// Nothing extra is shipped for this. A rigid rotation is fully determined by
-// where a piece starts, where it ends and how much it turns — all of which are
-// already in PACK and SEAL — so the pivot and axis are recovered once, here,
-// and the fold is a real rotation about a real hinge from then on.
-var SEALC = SEAL ? new Float32Array(NP*3) : null;   // a point on the hinge
-var SEALN = SEAL ? new Float32Array(NP*3) : null;   // the hinge direction
-var SEALA = SEAL ? new Float32Array(NP)   : null;   // how far it swings
 function qmul(a,b,o){                                // a ∘ b, both (x,y,z,w)
   o[0]=a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1];
   o[1]=a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0];
@@ -242,45 +229,24 @@ function qmul(a,b,o){                                // a ∘ b, both (x,y,z,w)
   o[3]=a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2];
   return o;
 }
-if(SEAL){
-  var rq = new Float32Array(4), cq = new Float32Array(4);
-  for(var s0=0;s0<NP;s0++){
-    var o8 = s0*8;
-    var dx = SEAL[o8]-PACK[o8], dy = SEAL[o8+1]-PACK[o8+1], dz = SEAL[o8+2]-PACK[o8+2];
-    // relative rotation: SEAL ∘ conj(PACK)
-    cq[0]=-PACK[o8+4]; cq[1]=-PACK[o8+5]; cq[2]=-PACK[o8+6]; cq[3]=PACK[o8+7];
-    qmul([SEAL[o8+4],SEAL[o8+5],SEAL[o8+6],SEAL[o8+7]], cq, rq);
-    var w = Math.min(1, Math.max(-1, rq[3]));
-    var th = 2*Math.acos(w), sn = Math.sqrt(Math.max(0, 1-w*w));
-    var chord = Math.hypot(dx,dy,dz);
-    SEALA[s0] = th;
-    if(sn < 1e-4 || th < 1e-3 || chord < 1e-4){ SEALA[s0] = 0; continue; }
-    var nx = rq[0]/sn, ny = rq[1]/sn, nz = rq[2]/sn;
-    SEALN[s0*3]=nx; SEALN[s0*3+1]=ny; SEALN[s0*3+2]=nz;
-    // the swing's centre: out along the bisector of the chord, in the plane
-    var r = chord/(2*Math.sin(th/2)), h = r*Math.cos(th/2);
-    var px0 = ny*dz-nz*dy, py0 = nz*dx-nx*dz, pz0 = nx*dy-ny*dx;   // n × d
-    var pl = Math.hypot(px0,py0,pz0) || 1;
-    px0/=pl; py0/=pl; pz0/=pl;
-    var mx = (PACK[o8]+SEAL[o8])/2, my = (PACK[o8+1]+SEAL[o8+1])/2,
-        mz = (PACK[o8+2]+SEAL[o8+2])/2;
-    // n × d points to one side of the chord; the centre is on whichever side
-    // actually rotates open onto shut, so try it and keep the one that lands
-    var best = 1e9;
-    for(var sg=-1; sg<=1; sg+=2){
-      var cx0 = mx+px0*h*sg, cy0 = my+py0*h*sg, cz0 = mz+pz0*h*sg;
-      var vx = PACK[o8]-cx0, vy = PACK[o8+1]-cy0, vz = PACK[o8+2]-cz0;
-      var ct = Math.cos(th), st = Math.sin(th), dt = nx*vx+ny*vy+nz*vz;
-      var ex = vx*ct + (ny*vz-nz*vy)*st + nx*dt*(1-ct);
-      var ey = vy*ct + (nz*vx-nx*vz)*st + ny*dt*(1-ct);
-      var ez = vz*ct + (nx*vy-ny*vx)*st + nz*dt*(1-ct);
-      var err = Math.hypot(cx0+ex-SEAL[o8], cy0+ey-SEAL[o8+1], cz0+ez-SEAL[o8+2]);
-      if(err < best){ best = err;
-        SEALC[s0*3]=cx0; SEALC[s0*3+1]=cy0; SEALC[s0*3+2]=cz0; }
-    }
-    if(best > 1.0) SEALA[s0] = 0;      // not a clean rotation; leave it be
-  }
-}
+// ── shutting the lid ───────────────────────────────────────────────────────
+// A flap folds — it swings about the hinge it is attached to. Sliding each
+// piece straight from its open position to its shut one cuts the chord of that
+// swing, and over 122 degrees at a 147-unit radius that is a 62-unit dip: the
+// flaps would visibly buckle inward and then straighten instead of folding.
+//
+// The hinges are SHIPPED, not deduced. They were recovered here from the open
+// and shut states, which is sound in principle — a rigid rotation is determined
+// by its endpoints — but the reconstruction has to decide which side of the
+// chord the centre of the swing falls on, and where it decided wrong it gave up
+// and left that panel standing. Half a lid folded and half of it did not, which
+// reads as a tent. The packer knows every hinge exactly; four of them cost
+// nothing to send, and there is nothing left to get wrong.
+var FLAPS = (META.flaps || []).map(function(f){
+  return {px:f.p[0], py:f.p[1], pz:f.p[2], nx:f.n[0], ny:f.n[1], nz:f.n[2], a:f.a};
+});
+var FLAPOF = (SEAL && META.offFlap != null && META.offFlap + NP <= BUF.byteLength)
+             ? new Uint8Array(BUF, META.offFlap, NP) : null;
 var SEAL_EYE = CZ;
 if(SEAL){
   var sLo = 1e9, sHi = -1e9;
@@ -339,6 +305,12 @@ gl.disable(gl.CULL_FACE);
 gl.clearColor(0.878,0.839,0.761,1);
 
 function ease(x){ return x<0.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2; }
+// …and a gentler one for the morphs. The curve above triples the speed at its
+// midpoint, which is right for a piece arriving into place but wrong for the
+// whole model changing shape at once: it made the cube snap into a carton in
+// the middle of an already-short window. Smoothstep peaks at 1.5x instead, so
+// the fold reads as a fold at every point in it.
+function easeSoft(x){ return x*x*(3-2*x); }
 
 var gaugeDot = document.querySelector("#gauge i");
 var gaugeLab = document.querySelector("#gauge b");
@@ -504,14 +476,16 @@ var LABELS = ["scattered","gathering","gathering","converging","converging",
 //   …0.55  the cube closes, before the review section comes up
 //   0.60   the notes ignite one after another, ON the review beat, and are all
 //          lit by 0.663 — inside beat 05 on a phone as well as a desktop
-//   0.770  the cube folds down into the delivery package, AS the handoff beat
-//          arrives — fast, because the middle of a fold is a transitional cloud
-//          and the words beside it say "everything arrives together"
-//   0.820  the carton stands complete and open, with its manifest written
+//   0.730  the cube folds down into the delivery package. It begins as the
+//          handoff section comes up from the bottom of the screen rather than
+//          when that section becomes the lit beat — the fold needs room, and
+//          the only room available is before the words arrive, since it has to
+//          be FINISHED before they are read
+//   0.825  the carton stands complete and open, with its manifest written
 //   0.92   the lid folds shut…
 //   0.99   …and it is sealed, as the call to action reads
 var ASSEMBLE_AT = 0.55;
-var PACK_FROM = 0.770, PACK_TO = 0.820;
+var PACK_FROM = 0.730, PACK_TO = 0.825;
 var SEAL_FROM = 0.92, SEAL_TO = 0.99;
 
 var progress = 0, target = 0, shiftRamp = 0;
@@ -542,11 +516,11 @@ function draw(now){
   // words beside this say, so the picture says it too.
   var mk = PACK ? Math.min(1, Math.max(0,
              (progress - PACK_FROM) / (PACK_TO - PACK_FROM))) : 0;
-  var m = ease(mk);
+  var m = easeSoft(mk);
   // and then the lid folds shut over it
   var sk = SEAL ? Math.min(1, Math.max(0,
              (progress - SEAL_FROM) / (SEAL_TO - SEAL_FROM))) : 0;
-  var sm = ease(sk);
+  var sm = easeSoft(sk);
 
   for(var i=0;i<NP;i++){
     var e = ST[i] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[i])/(1 - ST[i])));
@@ -573,7 +547,7 @@ function draw(now){
 
     if(mk > 0 && mk > PST[i]){
       var b8 = i*8;
-      var mm = ease((mk - PST[i]) / (1 - PST[i]));
+      var mm = easeSoft((mk - PST[i]) / (1 - PST[i]));
       var slot = LIVESLOT[i];
       var tx = slot >= 0 ? LIVEPACK[slot][0] : PACK[b8];
       var ty = slot >= 0 ? LIVEPACK[slot][1] : PACK[b8+1];
@@ -597,21 +571,22 @@ function draw(now){
       }
     }
 
-    // the lid: a real swing about the hinge recovered at boot, so a flap folds
-    // over instead of sliding through the inside of its own box
-    if(sm > 0 && SEALA && SEALA[i] > 0 && LIVESLOT[i] < 0){
-      var ang = SEALA[i]*sm, ca2 = Math.cos(ang), sa2 = Math.sin(ang);
-      var c3 = i*3;
-      var nx2 = SEALN[c3], ny2 = SEALN[c3+1], nz2 = SEALN[c3+2];
-      var vx2 = px-SEALC[c3], vy2 = py-SEALC[c3+1], vz2 = pz-SEALC[c3+2];
-      var dt2 = nx2*vx2 + ny2*vy2 + nz2*vz2;
-      px = SEALC[c3]   + vx2*ca2 + (ny2*vz2-nz2*vy2)*sa2 + nx2*dt2*(1-ca2);
-      py = SEALC[c3+1] + vy2*ca2 + (nz2*vx2-nx2*vz2)*sa2 + ny2*dt2*(1-ca2);
-      pz = SEALC[c3+2] + vz2*ca2 + (nx2*vy2-ny2*vx2)*sa2 + nz2*dt2*(1-ca2);
-      var h2 = Math.sin(ang/2);
-      var rot = [nx2*h2, ny2*h2, nz2*h2, Math.cos(ang/2)];
-      var oq = qmul(rot, [qx,qy,qz,qw], new Float32Array(4));
-      qx=oq[0]; qy=oq[1]; qz=oq[2]; qw=oq[3];
+    // the lid: each panel swings on its own hinge, so a flap folds over
+    // instead of sliding through the inside of its own box
+    if(sm > 0 && FLAPOF && LIVESLOT[i] < 0){
+      var fi = FLAPOF[i];
+      if(fi < FLAPS.length){
+        var F = FLAPS[fi], ang = F.a*sm, ca2 = Math.cos(ang), sa2 = Math.sin(ang);
+        var vx2 = px-F.px, vy2 = py-F.py, vz2 = pz-F.pz;
+        var dt2 = F.nx*vx2 + F.ny*vy2 + F.nz*vz2;
+        px = F.px + vx2*ca2 + (F.ny*vz2-F.nz*vy2)*sa2 + F.nx*dt2*(1-ca2);
+        py = F.py + vy2*ca2 + (F.nz*vx2-F.nx*vz2)*sa2 + F.ny*dt2*(1-ca2);
+        pz = F.pz + vz2*ca2 + (F.nx*vy2-F.ny*vx2)*sa2 + F.nz*dt2*(1-ca2);
+        var h2 = Math.sin(ang/2);
+        var oq = qmul([F.nx*h2, F.ny*h2, F.nz*h2, Math.cos(ang/2)],
+                      [qx,qy,qz,qw], new Float32Array(4));
+        qx=oq[0]; qy=oq[1]; qz=oq[2]; qw=oq[3];
+      }
     }
 
     PSTATE[i*4+0]=hx; PSTATE[i*4+1]=hy; PSTATE[i*4+2]=hz;
