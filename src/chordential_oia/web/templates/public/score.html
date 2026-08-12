@@ -98,22 +98,37 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
 /* above #scroll (z-index 2). At the same level the copy column wins on DOM order
    and silently eats every click on a lit note. */
 #livelayer{position:fixed;inset:0;z-index:4;pointer-events:none}
-.livenote{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;
+.livenote{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;
   padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;
-  pointer-events:auto;display:none}
-/* a soft ember bloom so the lit note separates from the engraving behind it */
-.livenote::before{content:"";position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle,rgba(228,103,31,.28) 0%,rgba(228,103,31,0) 68%);
-  transition:opacity .3s ease}
-.livenote::after{content:"";position:absolute;inset:10px;border-radius:50%;
-  border:1.5px solid var(--ember);opacity:.85;
-  transition:opacity .25s ease,inset .25s ease}
-.livenote:hover::after,.livenote:focus-visible::after{opacity:1;inset:4px}
-.livenote:hover::before{opacity:1.6}
-@media (prefers-reduced-motion:no-preference){
-  .livenote::after{animation:lnpulse 2.4s ease-in-out infinite}
+  pointer-events:auto;display:none;opacity:0}
+
+/* A radar ping, not a blink. Three rings on one cycle, each starting a third of
+   the way through the previous one, so the note reads as something transmitting
+   rather than something flashing. The rings are decoration ONLY in the sense that
+   they carry no state — what they say is true: this piece answers when pressed. */
+.livenote i{position:absolute;left:50%;top:50%;width:88px;height:88px;
+  margin:-44px 0 0 -44px;border-radius:50%;border:1.5px solid var(--ember);
+  opacity:0;transform:scale(.18);pointer-events:none}
+.livenote .r1{animation:sonar 3.2s cubic-bezier(.15,.6,.35,1) infinite}
+.livenote .r2{animation:sonar 3.2s cubic-bezier(.15,.6,.35,1) infinite 1.06s}
+.livenote .r3{animation:sonar 3.2s cubic-bezier(.15,.6,.35,1) infinite 2.13s}
+@keyframes sonar{
+  0%   {transform:scale(.18);opacity:0}
+  12%  {opacity:.9}
+  100% {transform:scale(1);opacity:0}
 }
-@keyframes lnpulse{0%,100%{inset:10px;opacity:.85}50%{inset:6px;opacity:1}}
+/* the core sits on the glyph itself and never moves */
+.livenote .core{position:absolute;left:50%;top:50%;width:34px;height:34px;
+  margin:-17px 0 0 -17px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(228,103,31,.34) 0%,rgba(228,103,31,0) 70%)}
+.livenote:hover .core,.livenote:focus-visible .core{
+  background:radial-gradient(circle,rgba(228,103,31,.55) 0%,rgba(228,103,31,0) 74%)}
+.livenote:hover i{animation-duration:2s}
+@media (prefers-reduced-motion:reduce){
+  /* the sweep is motion; the invitation is not. Hold one steady ring. */
+  .livenote i{animation:none;opacity:.7;transform:scale(.62)}
+  .livenote .r2,.livenote .r3{display:none}
+}
 .livenote:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 .lt-hint{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.68rem;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ember);

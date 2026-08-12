@@ -277,9 +277,20 @@ def test_the_excerpt_does_not_inherit_the_masters_length():
 def test_the_notes_only_wake_after_the_cube_closes(client):
     """Lit from the hero they competed with the convergence the page is built
     around. The renderer holds them until the model is assembled."""
+    import re
     js = open(os.path.join(_STATIC, "score-gl.js")).read()
     assert "liveOn" in js, "the lit notes are not gated on assembly"
-    assert "p >= 0.995" in js
+    # the invariant, not a literal: ignition may not begin before the cube lands
+    assemble = float(re.search(r"ASSEMBLE_AT\s*=\s*([0-9.]+)", js).group(1))
+    ign = float(re.search(r"IGN_FROM\s*=\s*([0-9.]+)", js).group(1))
+    span = float(re.search(r"IGN_SPAN\s*=\s*([0-9.]+)", js).group(1))
+    stagger = float(re.search(r"IGN_STAGGER\s*=\s*([0-9.]+)", js).group(1))
+    assert ign >= assemble - 0.01, (
+        f"notes start lighting at {ign} but the cube only lands at {assemble}")
+    # and the last one must finish before the visitor runs out of page: a note still
+    # at 44% when you hit the bottom reads as unfinished, not as arriving
+    last_done = ign + 3 * stagger + span
+    assert last_done <= 0.99, f"the fourth note is not lit until {last_done}"
 
 
 def test_the_lit_notes_sit_above_the_copy_column(client):

@@ -304,6 +304,9 @@ var liveEls = [];
     el.className = "livenote";
     el.setAttribute("aria-label", "Hear " + t.title);
     el.dataset.track = String(k);
+    // three rings on one cycle, staggered: a radar sweep rather than a blink
+    el.innerHTML = '<i class="r1"></i><i class="r2"></i><i class="r3"></i>'
+                 + '<b class="core"></b>';
     layer.appendChild(el);
     liveEls.push(el);
   });
@@ -374,12 +377,29 @@ function draw(now){
   // The notes wake AFTER the cube closes. Lit from the hero they competed with
   // the convergence the whole page is built around; lit at the end they are the
   // reward for having watched it land.
-  var liveOn = p >= 0.995;
+  // Each note IGNITES rather than appearing: the ember rises as its piece settles
+  // into place, one after another, so they arrive with the cube instead of being
+  // switched on after it. `kOf` is that per-note ramp, 0 -> 1.
+  // Tuned against the measured ramp: the last note used to still be at 44% when the
+  // visitor hit the bottom of the page, which reads as unfinished rather than as
+  // arriving. Ignition starts just past the cube's landing (ASSEMBLE_AT 0.88) and
+  // the fourth note is fully lit by ~0.96, with the tail of the scroll to be seen in.
+  var IGN_FROM = 0.883, IGN_SPAN = 0.042, IGN_STAGGER = 0.011;
+  function kOf(idx) {
+    var a0 = IGN_FROM + idx * IGN_STAGGER;
+    return Math.max(0, Math.min(1, (progress - a0) / IGN_SPAN));
+  }
+  var liveOn = progress > IGN_FROM;
   if (LIVE.length && liveOn) {
     var pulse = 0.92 + 0.08 * Math.sin(time * 1.8);
     for (var L = 0; L < LIVE.length; L++) {
       var li = LIVE[L];
-      PSTATE[(NP * 2 + li) * 4 + 3] = -pulse;
+      var kk = ease(kOf(L));
+      if (kk <= 0) continue;
+      // cross the normal engraved tone into the ember rather than replacing it
+      var normal = TN[li] * (1 - ease(ST[li] >= 1 ? 1 : Math.min(1, Math.max(0,
+                     (p - ST[li]) / (1 - ST[li])))) * 0.55);
+      PSTATE[(NP * 2 + li) * 4 + 3] = normal * (1 - kk) + (-pulse) * kk;
       // and bigger than their neighbours while scattered, easing back to true size
       // as the cube closes — the same rule the whole scene follows
       var la = ease(ST[li] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[li]) / (1 - ST[li]))));
@@ -412,7 +432,9 @@ function draw(now){
   // project each live piece into screen space with the SAME matrix the scene is
   // drawn with, so the target sits exactly on the note however the world drifts
   for (var q = 0; q < liveEls.length; q++) {
-    if (!liveOn) { liveEls[q].style.display = "none"; continue; }
+    var kq = liveOn ? ease(kOf(q)) : 0;
+    if (kq <= 0.001) { liveEls[q].style.display = "none"; continue; }
+    liveEls[q].style.opacity = kq;
     var pi = LIVE[q];
     // the piece's CURRENT position, not its home. Until the cube closes a piece is
     // out on its own orbit, so projecting HOME put the target on empty paper and
