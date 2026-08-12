@@ -374,6 +374,10 @@ requestAnimationFrame(draw);
 // fetch both, then boot. A failure lands on the same no-WebGL2 path: the words
 // below still say everything the picture does.
 (function(){
+  // The artifact build inlines the scene and sets these before this file loads,
+  // because a published single-file page has no origin to fetch from. Same
+  // renderer, same scene, one less round trip.
+  if (window.__WORLD_META && window.__WORLD_BIN) { boot(); return; }
   var cv = document.getElementById("gl");
   var m = cv.getAttribute("data-meta"), b = cv.getAttribute("data-bin");
   Promise.all([
