@@ -62,11 +62,11 @@ def test_commission_requests_three_and_the_asset_exists(client):
     assert b"WebGLRenderer" in lib.content
 
 
-def test_commission_is_the_front_door(client):
-    """The Commission became the homepage: it opens on the work the business sells,
-    where the World film opened on a brush drawing on paper. Both addresses serve it,
-    so links handed out before the swap still land."""
-    home = client.get("/")
+def test_commission_is_still_served_at_its_address(client):
+    """The Commission was the front door until the score page took `/`. It stays at
+    /commission — it is the reference for what the score page is rebuilding, and
+    links handed out before the cutover still have to land."""
+    home = client.get("/commission")
     assert home.status_code == 200
     assert "Nothing should still be" in home.text
     assert home.text == client.get("/commission").text

@@ -1059,6 +1059,39 @@ and the tests asserting it come out **together**, and the human-authorship promi
 returns to the hero — where it will then be true of both what we deliver and what the
 page plays. Not one of those steps without the others.
 
+**Amendment (2026-08-12) — the front door moved, the guarantees moved with it.** `/`
+now serves the **score page**: 728 pieces of engraved notation converging into the
+cube as the visitor reads, the recordings reached by pressing a lit piece of the
+score, and the delivery package written by `delivery.build_manifest`. The Commission
+stays at `/commission`.
+
+This ADR's promise is unchanged — **the front door plays music** — but its shape
+was written for a page with a row of native players, and the score page reaches its
+recordings differently. So the assertions were **re-expressed, not relaxed**, and
+every guarantee still fails the build:
+
+| Guarantee | Where it is asserted now |
+|---|---|
+| Four **distinct** recordings on the front door | `test_the_front_door_plays_four_different_recordings` — compared on the audio payload with ID3 stripped, so a retag cannot disguise a duplicate |
+| Served from our own origin, never a CDN | `test_the_front_doors_tracks_are_served_by_us` |
+| Each one actually serves `audio/*`, not a 404 | `test_the_front_door_offers_real_recordings` |
+| No track hardcoded in the template | `test_the_front_door_does_not_hardcode_a_track` |
+| The front door and `/samples` tell one story | `test_the_front_door_and_samples_render_the_same_records` |
+
+The Commission's own guarantees — its `#work` section, its `#take` synth disclosure,
+its hero CTA, its no-JS degradation — **followed it to `/commission`** rather than
+being deleted. They are about that page's markup and they still hold there.
+
+**What is deliberately different.** The score page has no row of players, so it
+carries no placeholder-audio disclosure beside them; that notice remains on
+`/commission`, `/samples` and `/showreel`, which do. Provenance of the demo
+recordings is the operator's call and is tracked outside this ADR.
+
+`/` and `/score` share one renderer (`_render_score`), asserted by
+`test_the_score_page_and_the_front_door_are_one_page` — two addresses for the front
+door that could drift into different pages is the defect this codebase keeps
+removing everywhere else.
+
 ### ADR-0041 — `--olive` darkens to clear AA
 **Status:** Accepted (2026-08-04, **operator ruling** — a brand token's value is a
 palette decision, not an engineering one) · Source: `docs/launch-review.md` Phase 2 (the

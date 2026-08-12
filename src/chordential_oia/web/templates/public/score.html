@@ -97,6 +97,26 @@ ul.pack i{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-style:normal;
    is coloured by the renderer; this is only the target, projected onto it. */
 /* above #scroll (z-index 2). At the same level the copy column wins on DOM order
    and silently eats every click on a lit note. */
+/* Persistent chrome. A visitor must be able to leave for the intake without
+   scrolling seven beats first — the film that used to sit at this address shipped
+   its only CTAs five viewport-heights down and hid its nav on phones entirely.
+   Quiet enough that the page is still the page. */
+.bar{position:fixed;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;
+  justify-content:space-between;padding:1rem 6vw;pointer-events:none}
+.bar-mark,.bar-cta{pointer-events:auto;text-decoration:none;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.7rem;
+  letter-spacing:.18em;text-transform:uppercase}
+.bar-mark{color:var(--ink);opacity:.55;transition:opacity .25s ease}
+.bar-mark:hover{opacity:1}
+.bar-cta{color:var(--ink);border:1px solid var(--ink);border-radius:2px;
+  padding:.5rem .9rem;transition:background .25s ease,color .25s ease}
+.bar-cta:hover{background:var(--ink);color:var(--paper)}
+@media (max-width:640px){
+  .bar{padding:.7rem 5vw}
+  .bar-mark{font-size:.62rem}
+  .bar-cta{font-size:.62rem;padding:.42rem .7rem}
+}
+
 #livelayer{position:fixed;inset:0;z-index:4;pointer-events:none}
 .livenote{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;
   padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;
@@ -299,6 +319,11 @@ ul.listen audio{display:block;width:100%;height:34px;color-scheme:light}
   .beat .col{opacity:1;transform:none;transition:none}
 }
 </style>
+
+<header class="bar">
+  <a class="bar-mark" href="/">chordential</a>
+  <a class="bar-cta" id="dockCta" href="/start">Start a brief</a>
+</header>
 
 <div id="stage"><canvas id="gl"
     data-meta="/static/public/score-scene.json?v={{ asset_v }}"

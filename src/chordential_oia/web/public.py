@@ -140,16 +140,19 @@ def _validate_lead_contact(email: str, phone: str, linkedin: str):
 
 @router.get("/", response_class=HTMLResponse)
 def public_home(request: Request):
-    """The front door is the Commission — the score runs live behind the copy while
-    the visitor leaves a note on a cue, prices a planning band, watches the clearance
-    certificate issue, and sees the delivery pack itself. Standalone: it carries its
-    own header rather than the marketing chrome.
+    """The front door is the score: 728 pieces of engraved notation converging into
+    the cube as the visitor reads, with the recordings reached by pressing a lit
+    piece of the score and the delivery package written by the engine itself.
 
-    It opens on the work the business actually sells. The World film that used to land
-    here opened on a brush drawing on paper — craft, but not a scoring stage. It was
-    removed rather than parked at a second address (its 4K master is archived in
-    media/masters/, and the legs are re-cuttable from it). /start remains the intake."""
-    return _render_commission(request)
+    ADR-0040 still holds — the front door plays music — and the guarantees behind it
+    moved with the page rather than being relaxed: four distinct recordings served
+    from our own origin, no track hardcoded in the template, and the same records
+    /samples renders. `tests/test_hear_the_work.py` asserts all of it against `/`,
+    and the Commission's own guarantees followed it to /commission.
+
+    The Commission remains at /commission — it is the reference for what this page
+    is rebuilding, and links handed out before the cutover still land on it."""
+    return _render_score(request)
 
 
 @router.get("/commission", response_class=HTMLResponse)
@@ -260,6 +263,12 @@ def public_score(request: Request):
 
     Not at /world: that address is retired (the World film), and
     test_public_site asserts it stays a 404. Different page, different name."""
+    return _render_score(request)
+
+
+def _render_score(request: Request):
+    """One renderer for `/` and `/score` — the front door and its original address
+    must never be able to drift into showing different pages."""
     _rows = listening_rows()
     return render(request, "public/score.html", active="",
                   manifest=landing.sample_package_lines(),

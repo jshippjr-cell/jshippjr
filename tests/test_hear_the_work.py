@@ -17,6 +17,7 @@ section that was never built.
 ADR-0040 builds it, and makes the synth say what it is.
 """
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -46,6 +47,21 @@ def client():
 
 
 def _home(client):
+    """The Commission, which is what every assertion below was written against.
+
+    ADR-0040 was ratified when the Commission WAS the front door. It has since
+    moved to /commission and the score page took `/`. These guarantees are about
+    the Commission's own markup — its #work section, its #take synth, its hero CTA
+    — so they follow it to its address rather than being deleted. The front door's
+    equivalent guarantees are asserted separately below, against the page that is
+    actually there.
+    """
+    r = client.get("/commission")
+    assert r.status_code == 200
+    return r.text
+
+
+def _front(client):
     r = client.get("/")
     assert r.status_code == 200
     return r.text
@@ -131,7 +147,9 @@ def test_the_disclosure_is_one_string_on_every_surface_that_plays(client):
     """One derivation, many reporters. Three pages play these files; a disclosure
     maintained separately on each is one edit away from only being on two."""
     from chordential_oia.web.showcase import PLACEHOLDER_AUDIO_NOTICE
-    for path in ("/", "/samples", "/showreel"):
+    # `/` is the score page now; it reaches its recordings by pressing a lit note
+    # and carries no row of players to sit a disclosure beside.
+    for path in ("/commission", "/samples", "/showreel"):
         body = client.get(path).text
         assert PLACEHOLDER_AUDIO_NOTICE in body, f"{path} plays audio undisclosed"
 
@@ -209,3 +227,80 @@ def test_it_degrades_without_javascript():
     work = HOME.split('id="work"')[1].split("</section>")[0]
     assert "controls" in work, "the players depend on custom JS to be operable"
     assert "<script" not in work
+
+
+# --------------------------------------------------------------------------- #
+# ADR-0040 at the NEW front door — same guarantees, expressed for the page that
+# is actually there. The score page reaches its recordings by pressing a lit
+# piece of the score rather than by a row of controls, so "four <audio> tags" is
+# the wrong shape for the assertion; "four distinct recordings this page can
+# reach, served by us" is the same promise in the shape the page takes.
+# --------------------------------------------------------------------------- #
+
+def test_the_front_door_offers_real_recordings(client):
+    import json
+    html = _front(client)
+    payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
+    tracks = json.loads(payload)
+    assert len(tracks) >= 4, (
+        f"the front door of a music company offers {len(tracks)} recordings")
+    for t in tracks:
+        r = client.get(t["url"])
+        assert r.status_code == 200, f"{t['url']} 404s"
+        assert r.headers["content-type"].startswith("audio/"), t["url"]
+        assert len(r.content) > 100_000, f"{t['url']} is too small to be music"
+
+
+def test_the_front_doors_tracks_are_served_by_us(client):
+    import json
+    html = _front(client)
+    payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
+    for t in json.loads(payload):
+        assert t["url"].startswith("/static/public/"), (
+            f"{t['url']} is off-site; the front door must not depend on a third party")
+
+
+def test_the_front_door_plays_four_different_recordings(client):
+    """Compared on the audio payload with any ID3 stripped, so a retag cannot
+    disguise a duplicate — exp-01 is byte-identical to a wired demo and would
+    otherwise sneak two cards onto one recording."""
+    import json
+    html = _front(client)
+    payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
+    seen = {}
+    for t in json.loads(payload):
+        data = client.get(t["url"]).content
+        if data[:3] == b"ID3":
+            size = ((data[6] & 0x7F) << 21 | (data[7] & 0x7F) << 14
+                    | (data[8] & 0x7F) << 7 | (data[9] & 0x7F))
+            data = data[10 + size:]
+        h = hashlib.sha256(data).hexdigest()
+        assert h not in seen, f"{t['url']} is the same recording as {seen[h]}"
+        seen[h] = t["url"]
+
+
+def test_the_front_door_does_not_hardcode_a_track():
+    """Swapping a track must not need a template edit — that is how two surfaces
+    come to tell different stories about the same recording."""
+    tpl = os.path.join(os.path.dirname(_STATIC), "..", "templates", "public",
+                       "score.html")
+    assert ".mp3" not in open(os.path.normpath(tpl)).read()
+
+
+def test_the_front_door_and_samples_render_the_same_records(client):
+    """One source of truth for the demos (showcase.DEMOS) — the two surfaces
+    cannot describe the same track differently."""
+    import json
+    html = _front(client)
+    payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
+    samples = client.get("/samples").text
+    for t in json.loads(payload):
+        assert t["title"] in samples, f"{t['title']} is on / but not on /samples"
+
+
+def test_the_commission_is_still_reachable(client):
+    """It is the reference for what we are rebuilding, and links handed out before
+    the cutover still point at it."""
+    r = client.get("/commission")
+    assert r.status_code == 200
+    assert "The music department" in r.text

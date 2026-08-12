@@ -74,12 +74,16 @@ def test_the_renderer_is_served_by_us(client):
     assert "http://" not in body.split("<style>")[0]
 
 
-def test_the_score_page_is_not_the_front_door(client):
-    """ADR-0040: the front door plays music. This page has none, so it may not
-    take `/` until the listening beat exists. Delete this test when it does."""
-    home = client.get("/").text
-    assert "every part in the air" not in home
-    assert "<audio" in home, "the front door lost its music"
+def test_the_score_page_and_the_front_door_are_one_page(client):
+    """`/` and `/score` share one renderer. Two addresses for the front door that
+    could drift into showing different pages is exactly the defect this codebase
+    keeps removing everywhere else."""
+    a, b = client.get("/").text, client.get("/score").text
+    assert "scoretracks" in a and "scoretracks" in b
+    # asset-version query strings can differ between requests; compare the markup
+    import re
+    strip = lambda h: re.sub(r"\?v=\d+", "", h)
+    assert strip(a) == strip(b), "/ and /score render differently"
 
 
 # --------------------------------------------------------------------------- #

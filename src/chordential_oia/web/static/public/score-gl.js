@@ -269,6 +269,12 @@ var LIVE = (function () {
     base += n;
   }
   var cand = Object.keys(byPiece).map(Number);
+  // Keep to the UPPER half of the cube. On portrait the world sits above the copy
+  // and the copy parks sticky over the lower part of the frame, so a note near the
+  // cube's foot is behind the reading column and cannot be seen or pressed. Z is
+  // the cube's tall axis (it is twice as tall as it is wide).
+  var high = cand.filter(function (i) { return HOME[i * 4 + 2] > CZ; });
+  if (high.length >= want * 3) cand = high;
   if (cand.length < want) return [];
   // clefs first, then front-most, so the lit pieces are legible and unobscured
   cand.sort(function (a, b) {

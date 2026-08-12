@@ -26,14 +26,17 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_public_home_is_the_commission(client):
+def test_public_home_is_the_score(client):
     # The front door is the Commission — the live score, ending at the intake. The
     # World film and the Experience film that preceded it were deleted rather than
     # parked at second addresses (their masters are archived in media/masters/).
     r = client.get("/")
     assert r.status_code == 200
-    assert "The music department" in r.text
+    assert "scoretracks" in r.text, "the front door is not the score page"
     assert "/start" in r.text
+    # the Commission is the reference for what the score page rebuilds; links
+    # handed out before the cutover still have to land somewhere real
+    assert "The music department" in client.get("/commission").text
     for retired in ("/world", "/experience"):
         assert client.get(retired).status_code == 404, f"{retired} is back"
 
@@ -77,10 +80,9 @@ def test_samples_page_renders_capability_demos(client):
 
 
 def test_home_work_is_truthful_capability_demonstrations(client):
-    # The front door must not imply delivered client engagements, and the no-AI-audio
-    # rule has to be stated on it — that claim moved with the front door rather than
-    # being left behind on the page that used to carry it.
-    r = client.get("/")
+    # No public surface may imply delivered client engagements. This followed the
+    # Commission to its address; the front door is asserted separately below.
+    r = client.get("/commission")
     assert r.status_code == 200
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
@@ -90,6 +92,15 @@ def test_home_work_is_truthful_capability_demonstrations(client):
     # this page plays; it may not sit over placeholder audio.
     assert "never AI-generated audio" not in r.text
     assert "AI-generated placeholders" in r.text
+
+
+def test_the_front_door_claims_no_client_work(client):
+    """Same guarantee, expressed against the page that is actually at `/`."""
+    r = client.get("/")
+    assert r.status_code == 200
+    for past_claim in ("Recent work", "See all work", "How we solved it",
+                       "Every engagement", "Trusted by"):
+        assert past_claim not in r.text
 
 
 def test_delivery_sample_page(client):

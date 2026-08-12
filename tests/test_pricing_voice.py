@@ -58,7 +58,8 @@ def test_the_public_estimator_renders_the_engine_constants(tmp_path, monkeypatch
     importlib.reload(app_mod)
 
     with TestClient(app_mod.app) as c:
-        body = c.get("/").text
+        # the estimator lives on the Commission, which moved to /commission
+        body = c.get("/commission").text
     for kind, (low, high) in PUBLIC_BANDS.items():
         assert f'"{kind}": [{low}, {high}]' in body, f"{kind} band not rendered from the engine"
     for length, factor in PUBLIC_LENGTHS.items():
