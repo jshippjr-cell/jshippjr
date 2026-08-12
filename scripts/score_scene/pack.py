@@ -68,7 +68,7 @@ class Edge:
     than hanging off it.
     """
 
-    __slots__ = ("p0", "u", "f", "length", "used")
+    __slots__ = ("p0", "u", "f", "length", "used", "at")
 
     def __init__(self, p0, p1, f):
         self.p0 = p0
@@ -77,14 +77,23 @@ class Edge:
         self.u = _n(d)
         self.f = _n(f)
         self.used = 0.0
+        self.at = 0.0          # where the run currently being placed starts
 
     @property
     def room(self):
         return self.length - self.used
 
 
-def carton():
-    """The 24 edges: a box, and four flaps folded open off its rim."""
+def carton(tilt=FLAP_TILT):
+    """The 24 edges: a box, and four flaps hinged on its rim.
+
+    `tilt` is how far each flap leans back off horizontal. FLAP_TILT stands them
+    open; pi lays them flat and inward, which is the box shut — the flaps are
+    cut to just under half the span they cross, so folded they meet in the
+    middle the way a real carton does. Same 24 edges in the same order at any
+    angle, and the same lengths, so a piece keeps its place on its own edge
+    while the lid closes around it.
+    """
     up, dn = (0, 0, 1), (0, 0, -1)
     corners = [(-HW, -HD), (HW, -HD), (HW, HD), (-HW, HD)]
     edges = []
@@ -108,7 +117,7 @@ def carton():
         out = _n((-(hinge[1]), hinge[0], 0.0))          # away from the box
         if _dot(out, (a[0], a[1], 0)) < 0:
             out = _mul(out, -1.0)
-        lean = _add(_mul(out, math.cos(FLAP_TILT)), _mul(up, math.sin(FLAP_TILT)))
+        lean = _add(_mul(out, math.cos(tilt)), _mul(up, math.sin(tilt)))
         depth = (HD if abs(hinge[0]) > 0.5 else HW) * 0.98
         A = (a[0], a[1], Z1)
         B = (b[0], b[1], Z1)
@@ -169,18 +178,34 @@ class _Rng:
         return self.s / 4294967296.0
 
 
-def targets(boxes, frames, ranges, seed=52099):
-    """Where each piece goes in the package.
+def _on_edge(e, uh, yh, a, by):
+    """Place a run along one edge at parameter `t`, already stored in the edge."""
+    yt = _mul(e.f, -1.0)                         # lines run back into the face
+    pos = _add(e.p0, _mul(e.u, e.at - EDGE_SCALE * a),
+               _mul(e.f, EDGE_SCALE * by + EDGE_INSET))
+    return pos + (EDGE_SCALE,) + _quat(uh, yh, e.u, yt)
 
-    Returns one (x, y, z, scale, qx, qy, qz, qw) per piece, in piece order.
+
+def targets(boxes, frames, ranges, seed=52099):
+    """Where each piece goes in the package, open and then shut.
+
+    Returns (open_targets, shut_targets, on_edges, edges): one
+    (x, y, z, scale, qx, qy, qz, qw) per piece per state, in piece order.
     Longest pieces first onto the longest remaining edge, so the outline is
     drawn by the runs that can actually draw a line; everything else lies down
     inside the box.
+
+    The assignment is made ONCE, against the open carton, and then evaluated
+    against both — so closing the lid rotates each flap's own notation about its
+    own hinge instead of re-dealing the whole outline and making every piece
+    jump somewhere else.
     """
     edges = carton()
+    shut = carton(math.pi)
     order = sorted(range(len(boxes)),
                    key=lambda i: ranges[i][1] - ranges[i][0], reverse=True)
     out = [None] * len(boxes)
+    sealed = [None] * len(boxes)
     rng = _Rng(seed)
     contents = []
 
@@ -193,15 +218,14 @@ def targets(boxes, frames, ranges, seed=52099):
         by = y1 - _dot(c, yh)
         need = (u1 - u0) * EDGE_SCALE
 
-        e = max(edges, key=lambda e: e.room)
+        k = max(range(len(edges)), key=lambda k: edges[k].room)
+        e, s = edges[k], shut[k]
         gap = EDGE_GAP if e.used else 0.0
         if 1.0 < need <= e.room - gap:
-            t = e.used + gap
-            e.used = t + need
-            yt = _mul(e.f, -1.0)                 # lines run back into the face
-            pos = _add(e.p0, _mul(e.u, t - EDGE_SCALE * a),
-                       _mul(e.f, EDGE_SCALE * by + EDGE_INSET))
-            out[i] = pos + (EDGE_SCALE,) + _quat(uh, yh, e.u, yt)
+            e.at = s.at = e.used + gap
+            e.used = s.used = e.at + need
+            out[i] = _on_edge(e, uh, yh, a, by)
+            sealed[i] = _on_edge(s, uh, yh, a, by)
         else:
             contents.append(i)
 
@@ -224,6 +248,7 @@ def targets(boxes, frames, ranges, seed=52099):
         rx = max(2.0, HW - 6 - reach)
         ry = max(2.0, HD - 6 - reach)
         pos = ((rng() * 2 - 1) * rx, (rng() * 2 - 1) * ry, z)
-        out[i] = pos + (FILL_SCALE,) + _quat(uh, yh, ut, yt)
+        # the contents are inside the box; shutting the lid does not move them
+        out[i] = sealed[i] = pos + (FILL_SCALE,) + _quat(uh, yh, ut, yt)
 
-    return out, len(boxes) - len(contents), edges
+    return out, sealed, len(boxes) - len(contents), edges

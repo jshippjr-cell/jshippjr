@@ -307,6 +307,40 @@ def test_the_notes_only_wake_after_the_cube_closes(client):
     assert pack_to <= 0.99, (
         f"the package is not sealed until {pack_to} — the visitor runs out of "
         "page before the last thing the page says finishes happening")
+    # and the lid shuts last, on a carton that has finished standing itself up
+    seal_from = float(re.search(r"SEAL_FROM = ([0-9.]+)", js).group(1))
+    seal_to = float(re.search(r"SEAL_TO = ([0-9.]+)", js).group(1))
+    assert seal_from > pack_to, (
+        f"the lid starts closing at {seal_from} but the carton is not finished "
+        f"until {pack_to} — it would shut on a box still building itself")
+    assert seal_to <= 0.995, f"the lid is never fully shut ({seal_to})"
+
+
+def test_each_act_lands_on_the_beat_it_belongs_to(client):
+    """The world's acts are pinned to the copy they illustrate.
+
+    These windows were measured in a browser at 1440x900 and 390x844 — a beat
+    occupies a different stretch of the scroll on a phone than on a desktop, so
+    each act has to fit inside the NARROWER of the pair or it reads against the
+    wrong words on one of them. Encoded here because a later nudge to any one
+    constant is exactly how a picture drifts off its own sentence.
+    """
+    import re
+    js = open(os.path.join(_STATIC, "score-gl.js")).read()
+    num = lambda n: float(re.search(n + r" = ([0-9.]+)", js).group(1))
+    review = (0.594, 0.705)      # beat 05, "creative review", both layouts
+    handoff = (0.770, 0.856)     # beat 06, "one complete handoff", both layouts
+
+    ign = num("IGN_FROM")
+    last = ign + 3 * num("IGN_STAGGER") + num("IGN_SPAN")
+    assert review[0] <= ign and last <= review[1], (
+        f"the notes light over {ign:.3f}–{last:.3f}, outside the review beat "
+        f"{review[0]}–{review[1]}")
+    assert num("ASSEMBLE_AT") <= review[0], "the cube is still closing at beat 05"
+    assert handoff[0] <= num("PACK_FROM"), "the package forms before the handoff beat"
+    assert num("SEAL_FROM") >= handoff[1], (
+        "the lid shuts while the handoff beat is still reading — it should be "
+        "an open, complete carton for the whole of that section")
 
 
 def test_the_lit_notes_sit_above_the_copy_column(client):

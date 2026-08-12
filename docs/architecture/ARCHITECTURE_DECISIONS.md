@@ -1699,15 +1699,29 @@ proved behaviour-preserving — the regenerated scene was byte-identical.
 
 The package is the same principle applied to the ending. `pack.py` gives every piece a
 second target (position, scale, quaternion about its own centroid — exactly the transform
-the renderer already applies, so the morph needed no new machinery). **80 of the pieces
-lay themselves along the 24 edges of an open shipping carton, so its outline is literally
-staff paper; the other 648 stack flat inside it.** Nothing is discarded and nothing is
-invented: "One delivery. Nothing missing." is the sentence beside it, and the picture has
-to be able to make the same claim. The gauge, the manifest list and the carton all report
-the same two scalars (ADR-0029's rule, applied to a picture). ADR-0040 still holds through
-the fold — the four ember notes ride their own pieces into the package and take its four
-corners, so the front door is still playing music at the point where it asks for the
-brief.
+the renderer already applies, so the morph needed no new machinery), and then a third with
+the lid shut. **80 of the pieces lay themselves along the 24 edges of a shipping carton,
+so its outline is literally staff paper; the other 648 stack flat inside it.** Nothing is
+discarded and nothing is invented: "One delivery. Nothing missing." is the sentence beside
+it, and the picture has to be able to make the same claim. The gauge, the manifest list
+and the carton all report the same scalars (ADR-0029's rule, applied to a picture).
+ADR-0040 still holds through the fold — the four ember notes ride their own pieces into
+the package and take its four corners, so the front door is still playing music at the
+point where it asks for the brief.
+
+**Every act is pinned to the beat it illustrates, on both layouts.** A beat occupies a
+different stretch of the scroll on a phone than on a desktop — beat 05 runs 0.594–0.770
+on one and 0.525–0.705 on the other — so each act is fitted to the NARROWER of the pair,
+which is the only way one set of constants reads correctly on both. The cube closes at
+0.55, the notes ignite across beat 05 (0.600–0.663, "creative review"), the carton builds
+across beat 06 (0.775–0.875, "one complete handoff") and its lid folds shut last
+(0.92–0.99), as the call to action reads. `test_score_page.py` holds each act inside its
+own beat window rather than checking bare numbers, because a nudge to any one constant is
+exactly how a picture drifts off the sentence it was drawn for. The lid is a genuine
+rotation: the flaps' hinges are recovered at boot from the open and shut states alone —
+a rigid rotation is fully determined by where a piece starts, where it ends and how far it
+turns — because sliding each piece straight between the two cuts the chord of a 122-degree
+swing and the flaps visibly buckle inward instead of folding.
 
 ### ADR-0061 — A writer's fee is a share of net, and their publishing is only theirs if it can be paid
 **Status:** Accepted (2026-08-06) · Source: operator decision on supply-side terms ·

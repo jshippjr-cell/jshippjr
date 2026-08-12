@@ -97,7 +97,8 @@ def test_the_shipped_scene_matches_its_own_header(shipped):
     assert meta["nMarks"] == sum(meta["counts"])
     assert meta["offPidx"] == meta["nMarks"] * 48          # 12 floats per mark
     assert meta["offPack"] == meta["offPieces"] + meta["nPieces"] * 16
-    assert len(blob) == meta["offPack"] + meta["nPieces"] * 32
+    assert meta["offSeal"] == meta["offPack"] + meta["nPieces"] * 32
+    assert len(blob) == meta["offSeal"] + meta["nPieces"] * 32
 
 
 def test_the_renderer_is_told_where_the_centre_is(shipped):
@@ -117,7 +118,6 @@ def test_every_piece_has_somewhere_to_go_in_the_package(shipped):
     """
     meta, blob = shipped
     n = meta["nPieces"]
-    assert meta["offPack"] + n * 32 == len(blob)
     packed = [struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
               for i in range(n)]
     assert len(packed) == n
@@ -181,3 +181,39 @@ def test_the_generator_is_in_the_repo():
               "export_score_glyphs.py", os.path.join("score_scene", "recipe.py"),
               os.path.join("score_scene", "glyph-protos.json")):
         assert os.path.exists(os.path.join(ROOT, "scripts", p)), p
+
+
+def test_shutting_the_lid_moves_the_flaps_and_nothing_else(shipped):
+    """The lid folds; the box and its contents stay exactly where they are.
+
+    Both states ship, and the renderer recovers each flap's hinge from the pair
+    — so if a change ever made every piece differ between them, the fold would
+    stop being a fold and become the whole model sliding sideways.
+    """
+    meta, blob = shipped
+    n = meta["nPieces"]
+    moved = still = 0
+    for i in range(n):
+        p = struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)
+        s = struct.unpack_from("<8f", blob, meta["offSeal"] + i * 32)
+        if max(abs(a - b) for a, b in zip(p, s)) > 1e-4:
+            moved += 1
+        else:
+            still += 1
+    assert moved, "nothing moves when the lid closes"
+    # only the four flaps travel: a minority of the pieces that draw the outline
+    assert moved < meta["packOnEdges"], (
+        "%d pieces move but only %d are on the carton at all" % (moved, meta["packOnEdges"]))
+    assert still > n * 0.8, "far too much of the model moves for a lid closing"
+
+
+def test_the_shut_lid_is_lower_than_the_open_one(shipped):
+    """A flap folded flat sits at the rim; standing open it reaches well above."""
+    meta, blob = shipped
+    n = meta["nPieces"]
+    top_open = max(struct.unpack_from("<8f", blob, meta["offPack"] + i * 32)[2]
+                   for i in range(n))
+    top_shut = max(struct.unpack_from("<8f", blob, meta["offSeal"] + i * 32)[2]
+                   for i in range(n))
+    assert top_shut < top_open - 40, (
+        "the lid barely drops (%.0f -> %.0f); it is not closing" % (top_open, top_shut))

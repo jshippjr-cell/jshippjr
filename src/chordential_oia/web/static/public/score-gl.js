@@ -24,6 +24,11 @@ var HOME  = new Float32Array(BUF, META.offPieces, NP*4);   // cx,cy,cz,span
 // Guarded, so a scene built before the package existed still boots.
 var PACK  = (META.offPack != null && META.offPack + NP*32 <= BUF.byteLength)
             ? new Float32Array(BUF, META.offPack, NP*8) : null;
+// …and the same again with the carton's lid folded shut. Only the pieces on the
+// four flaps differ between the two; everything else is identical, which is
+// what makes the fold cost nothing to animate.
+var SEAL  = (META.offSeal != null && META.offSeal + NP*32 <= BUF.byteLength)
+            ? new Float32Array(BUF, META.offSeal, NP*8) : null;
 
 // ── gl program ─────────────────────────────────────────────────────────────
 var VS = [
@@ -210,6 +215,73 @@ if(PACK){
 // where to look once it is a package: the middle of what the package actually
 // occupies, read off the targets rather than written down twice
 var PACK_EYE = PACK ? (Math.min(eLo, cLo) + Math.max(eHi, cHi)) / 2 : CZ;
+
+// ── shutting the lid ───────────────────────────────────────────────────────
+// A flap folds — it swings about the hinge it is attached to. Sliding each
+// piece straight from its open position to its shut one cuts the chord of that
+// swing, and over 122 degrees at a 147-unit radius that is a 62-unit dip: the
+// flaps would visibly buckle inward and then straighten instead of folding.
+//
+// Nothing extra is shipped for this. A rigid rotation is fully determined by
+// where a piece starts, where it ends and how much it turns — all of which are
+// already in PACK and SEAL — so the pivot and axis are recovered once, here,
+// and the fold is a real rotation about a real hinge from then on.
+var SEALC = SEAL ? new Float32Array(NP*3) : null;   // a point on the hinge
+var SEALN = SEAL ? new Float32Array(NP*3) : null;   // the hinge direction
+var SEALA = SEAL ? new Float32Array(NP)   : null;   // how far it swings
+function qmul(a,b,o){                                // a ∘ b, both (x,y,z,w)
+  o[0]=a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1];
+  o[1]=a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0];
+  o[2]=a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3];
+  o[3]=a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2];
+  return o;
+}
+if(SEAL){
+  var rq = new Float32Array(4), cq = new Float32Array(4);
+  for(var s0=0;s0<NP;s0++){
+    var o8 = s0*8;
+    var dx = SEAL[o8]-PACK[o8], dy = SEAL[o8+1]-PACK[o8+1], dz = SEAL[o8+2]-PACK[o8+2];
+    // relative rotation: SEAL ∘ conj(PACK)
+    cq[0]=-PACK[o8+4]; cq[1]=-PACK[o8+5]; cq[2]=-PACK[o8+6]; cq[3]=PACK[o8+7];
+    qmul([SEAL[o8+4],SEAL[o8+5],SEAL[o8+6],SEAL[o8+7]], cq, rq);
+    var w = Math.min(1, Math.max(-1, rq[3]));
+    var th = 2*Math.acos(w), sn = Math.sqrt(Math.max(0, 1-w*w));
+    var chord = Math.hypot(dx,dy,dz);
+    SEALA[s0] = th;
+    if(sn < 1e-4 || th < 1e-3 || chord < 1e-4){ SEALA[s0] = 0; continue; }
+    var nx = rq[0]/sn, ny = rq[1]/sn, nz = rq[2]/sn;
+    SEALN[s0*3]=nx; SEALN[s0*3+1]=ny; SEALN[s0*3+2]=nz;
+    // the swing's centre: out along the bisector of the chord, in the plane
+    var r = chord/(2*Math.sin(th/2)), h = r*Math.cos(th/2);
+    var px0 = ny*dz-nz*dy, py0 = nz*dx-nx*dz, pz0 = nx*dy-ny*dx;   // n × d
+    var pl = Math.hypot(px0,py0,pz0) || 1;
+    px0/=pl; py0/=pl; pz0/=pl;
+    var mx = (PACK[o8]+SEAL[o8])/2, my = (PACK[o8+1]+SEAL[o8+1])/2,
+        mz = (PACK[o8+2]+SEAL[o8+2])/2;
+    // n × d points to one side of the chord; the centre is on whichever side
+    // actually rotates open onto shut, so try it and keep the one that lands
+    var best = 1e9;
+    for(var sg=-1; sg<=1; sg+=2){
+      var cx0 = mx+px0*h*sg, cy0 = my+py0*h*sg, cz0 = mz+pz0*h*sg;
+      var vx = PACK[o8]-cx0, vy = PACK[o8+1]-cy0, vz = PACK[o8+2]-cz0;
+      var ct = Math.cos(th), st = Math.sin(th), dt = nx*vx+ny*vy+nz*vz;
+      var ex = vx*ct + (ny*vz-nz*vy)*st + nx*dt*(1-ct);
+      var ey = vy*ct + (nz*vx-nx*vz)*st + ny*dt*(1-ct);
+      var ez = vz*ct + (nx*vy-ny*vx)*st + nz*dt*(1-ct);
+      var err = Math.hypot(cx0+ex-SEAL[o8], cy0+ey-SEAL[o8+1], cz0+ez-SEAL[o8+2]);
+      if(err < best){ best = err;
+        SEALC[s0*3]=cx0; SEALC[s0*3+1]=cy0; SEALC[s0*3+2]=cz0; }
+    }
+    if(best > 1.0) SEALA[s0] = 0;      // not a clean rotation; leave it be
+  }
+}
+var SEAL_EYE = CZ;
+if(SEAL){
+  var sLo = 1e9, sHi = -1e9;
+  for(var s1=0;s1<NP;s1++){ var z1 = SEAL[s1*8+2];
+    if(z1<sLo)sLo=z1; if(z1>sHi)sHi=z1; }
+  SEAL_EYE = (sLo+sHi)/2;
+}
 
 // ── camera ─────────────────────────────────────────────────────────────────
 function perspective(out, fovy, asp, n, f){
@@ -410,17 +482,29 @@ var cols  = beats.map(function(b){ return b.querySelector(".col"); });
 var LABELS = ["scattered","gathering","gathering","converging","converging",
               "closing","closing","assembled"];
 
-// The arc of the world, in scroll fraction. Measured against where the beats
-// actually sit — beat 06, "one complete handoff", reads from about 0.77 to
-// 0.95 on desktop and 0.70 to 0.86 on portrait, so everything the last act has
-// to say happens inside the narrower of the two.
+// The arc of the world, in scroll fraction. Every number here is measured
+// against where the beats actually sit, not chosen to look tidy — and against
+// BOTH layouts, because a beat occupies a different stretch of the scroll on a
+// phone than on a desktop:
 //
-//   …0.68  the cube closes, as the handoff section comes up
-//   0.705  the notes ignite, one after another, on the closed cube
-//   0.80   the cube folds down into the delivery package
-//   0.965  sealed, as the call to action arrives
-var ASSEMBLE_AT = 0.68;
-var PACK_FROM = 0.80, PACK_TO = 0.965;
+//                    desktop        portrait      both
+//   04 written    0.418–0.594    0.344–0.525
+//   05 review     0.594–0.770    0.525–0.705   0.594–0.705
+//   06 handoff    0.770–0.945    0.705–0.856   0.770–0.856
+//
+// So the acts are pinned to the narrower window of each pair, which is the only
+// way one set of constants can read correctly on both:
+//
+//   …0.55  the cube closes, before the review section comes up
+//   0.60   the notes ignite one after another, ON the review beat, and are all
+//          lit by 0.663 — inside beat 05 on a phone as well as a desktop
+//   0.775  the cube folds down into the delivery package, ON the handoff beat
+//   0.875  the carton stands complete and open, with its manifest written
+//   0.92   the lid folds shut…
+//   0.99   …and it is sealed, as the call to action reads
+var ASSEMBLE_AT = 0.55;
+var PACK_FROM = 0.775, PACK_TO = 0.875;
+var SEAL_FROM = 0.92, SEAL_TO = 0.99;
 
 var progress = 0, target = 0, shiftRamp = 0;
 function onScroll(){
@@ -451,6 +535,10 @@ function draw(now){
   var mk = PACK ? Math.min(1, Math.max(0,
              (progress - PACK_FROM) / (PACK_TO - PACK_FROM))) : 0;
   var m = ease(mk);
+  // and then the lid folds shut over it
+  var sk = SEAL ? Math.min(1, Math.max(0,
+             (progress - SEAL_FROM) / (SEAL_TO - SEAL_FROM))) : 0;
+  var sm = ease(sk);
 
   for(var i=0;i<NP;i++){
     var e = ST[i] >= 1 ? 1 : Math.min(1, Math.max(0, (p - ST[i])/(1 - ST[i])));
@@ -501,6 +589,23 @@ function draw(now){
       }
     }
 
+    // the lid: a real swing about the hinge recovered at boot, so a flap folds
+    // over instead of sliding through the inside of its own box
+    if(sm > 0 && SEALA && SEALA[i] > 0 && LIVESLOT[i] < 0){
+      var ang = SEALA[i]*sm, ca2 = Math.cos(ang), sa2 = Math.sin(ang);
+      var c3 = i*3;
+      var nx2 = SEALN[c3], ny2 = SEALN[c3+1], nz2 = SEALN[c3+2];
+      var vx2 = px-SEALC[c3], vy2 = py-SEALC[c3+1], vz2 = pz-SEALC[c3+2];
+      var dt2 = nx2*vx2 + ny2*vy2 + nz2*vz2;
+      px = SEALC[c3]   + vx2*ca2 + (ny2*vz2-nz2*vy2)*sa2 + nx2*dt2*(1-ca2);
+      py = SEALC[c3+1] + vy2*ca2 + (nz2*vx2-nx2*vz2)*sa2 + ny2*dt2*(1-ca2);
+      pz = SEALC[c3+2] + vz2*ca2 + (nx2*vy2-ny2*vx2)*sa2 + nz2*dt2*(1-ca2);
+      var h2 = Math.sin(ang/2);
+      var rot = [nx2*h2, ny2*h2, nz2*h2, Math.cos(ang/2)];
+      var oq = qmul(rot, [qx,qy,qz,qw], new Float32Array(4));
+      qx=oq[0]; qy=oq[1]; qz=oq[2]; qw=oq[3];
+    }
+
     PSTATE[i*4+0]=hx; PSTATE[i*4+1]=hy; PSTATE[i*4+2]=hz;
     PSTATE[i*4+3]=sc;
     var o1=(NP+i)*4;
@@ -517,12 +622,12 @@ function draw(now){
   // Each note IGNITES rather than appearing: the ember rises as its piece settles
   // into place, one after another, so they arrive with the cube instead of being
   // switched on after it. `kOf` is that per-note ramp, 0 -> 1.
-  // Tuned against the measured ramp: the last note used to still be at 44% when the
-  // visitor hit the bottom of the page, which reads as unfinished rather than as
-  // arriving. Ignition starts just past the cube's landing and the fourth note is
-  // fully lit by ~0.76 — before the package starts folding at 0.80, so the notes
-  // arrive on a finished cube and then ride their own pieces into the carton.
-  var IGN_FROM = 0.705, IGN_SPAN = 0.032, IGN_STAGGER = 0.009;
+  // Pinned to beat 05, "creative review", which is where the visitor is being
+  // asked to listen to something: ignition opens at 0.600, just past the cube's
+  // landing at 0.55, and the fourth note is fully lit by 0.663 — still inside
+  // beat 05 on a phone (which ends at 0.705) as well as on a desktop. They then
+  // ride their own pieces into the carton and take its corners.
+  var IGN_FROM = 0.600, IGN_SPAN = 0.030, IGN_STAGGER = 0.011;
   function kOf(idx) {
     var a0 = IGN_FROM + idx * IGN_STAGGER;
     return Math.max(0, Math.min(1, (progress - a0) / IGN_SPAN));
@@ -564,12 +669,15 @@ function draw(now){
   // off both sides of a phone — so the pull-in is driven by the aspect, and
   // the wider the frame the closer the camera comes.
   halfH += (Math.max(330, 340/Math.max(0.30, asp)) - halfH) * m;
+  // shut, the carton loses its flaps: a third shorter and a third
+  // narrower, so the camera comes in again rather than leaving it small
+  halfH += (Math.max(250, 250/Math.max(0.30, asp)) - halfH) * sm;
   var fov = 2*Math.atan(halfH/dist);
   perspective(Pm, fov, asp, 60, 9000);
   Pm[8] = shiftX; Pm[9] = shiftY;                // off-axis: shifts, never skews
   // the package is not centred where the cube was — it stands in the cube's
   // lower half with its flaps reaching up, so the eye line rises as it folds
-  var lz = CZ + (PACK_EYE - CZ)*m;
+  var lz = CZ + (PACK_EYE - CZ)*m + (SEAL_EYE - PACK_EYE)*sm;
   var ex = CX + Math.sin(az)*Math.cos(el)*dist;
   var ey = CY - Math.cos(az)*Math.cos(el)*dist;
   var ez = lz + Math.sin(el)*dist;
@@ -613,10 +721,11 @@ function draw(now){
   // of its own. Two surfaces answering "how far along is this?" is how they come
   // to disagree on a day nobody is looking.
   var k = Math.min(1, progress/ASSEMBLE_AT);
-  gaugeDot.style.left = ((k*0.66 + mk*0.34)*100)+"%";
-  gaugeLab.textContent = mk > 0
-    ? (mk >= 0.995 ? "delivered" : "packing")
-    : LABELS[Math.min(LABELS.length-1, Math.floor(k*LABELS.length))];
+  gaugeDot.style.left = ((k*0.58 + mk*0.28 + sk*0.14)*100)+"%";
+  gaugeLab.textContent = sk > 0
+    ? (sk >= 0.995 ? "sealed" : "closing the lid")
+    : (mk > 0 ? (mk >= 0.995 ? "packed" : "packing")
+              : LABELS[Math.min(LABELS.length-1, Math.floor(k*LABELS.length))]);
   hint.style.opacity  = progress < 0.02 ? 1 : 0;
 
   // exactly one beat reads at a time: the one nearest the reading line. Two

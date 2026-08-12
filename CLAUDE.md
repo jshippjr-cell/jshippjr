@@ -59,8 +59,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - **The front door** (`/` and `/score`, one renderer, `public/score.html`): a scroll
   world of 7,419 engraved marks in 728 pieces, drawn by a hand-written WebGL2 renderer
   (`static/public/score-gl.js`, no library). The pieces scatter, reassemble into a cube,
-  then fold into an open delivery carton whose outline is staff paper. **The model is
-  described once** (ADR-0062) in `scripts/score_scene/recipe.py` and reported to a
+  then fold into a delivery carton whose outline is staff paper and whose lid shuts
+  at the end. Each act is pinned to the beat it illustrates, on BOTH layouts — a beat
+  covers a different stretch of scroll on a phone — so the timing constants are fitted
+  to the narrower window of each pair and `test_score_page.py` holds them there.
+  **The model is described once** (ADR-0062) in `scripts/score_scene/recipe.py` and reported to a
   recorder: `scripts/build_score_scene.py` ships `score-scene.{json,bin}` to the browser,
   `scripts/blender_score_cube.py` builds real geometry in Blender for the offline render.
   `score_scene/pack.py` is where the carton lives. **The scene files are build
