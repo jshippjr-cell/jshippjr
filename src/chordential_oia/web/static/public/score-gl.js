@@ -753,9 +753,15 @@ function draw(now){
   // …and it sits back toward the middle as it packs: at full shift the open
   // flap on the far side ran off the right edge of a 1440 frame.
   wantShift  = asp >= 0.95 ? -0.46*sr*(1 - 0.15*m) : 0;
-  // portrait: world above the copy — and a little higher again once it is a
-  // package, whose open flaps stand taller off its centre than the cube did
-  wantShiftY = asp <  0.95 ? -0.34 - 0.12*m : 0;
+  // Portrait: world above the copy — and a good deal higher again once it is a
+  // package. The handoff beat's column is the tallest on the page (a heading, a
+  // lede and a seven-row manifest), so at the old offset the carton sat behind
+  // the words that describe it and read as a smear across them. Moving the
+  // model rather than the column is what keeps this free: every act of the
+  // world is pinned to a scroll fraction measured off the column's own
+  // midpoint, so relaying the copy on a phone would drag the beats out from
+  // under the timing and it would all have to be pinned again.
+  wantShiftY = asp <  0.95 ? -0.34 - 0.30*m : 0;
 
   requestAnimationFrame(draw);
 }

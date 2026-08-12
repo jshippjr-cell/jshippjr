@@ -40,7 +40,7 @@ def test_it_carries_the_copy_not_just_the_picture(client):
     """The words say everything the picture does — that is the no-WebGL2 promise."""
     body = client.get("/score").text
     for line in (
-        "Every note",
+        "We compose original music for commercials and brand campaigns",
         "Every campaign begins with understanding.",
         "Everything arrives together.",
         "Start with a brief",
@@ -89,6 +89,37 @@ def test_the_score_page_and_the_front_door_are_one_page(client):
 # --------------------------------------------------------------------------- #
 # The delivery beat lists the package the engine actually assembles
 # --------------------------------------------------------------------------- #
+
+def test_the_hero_says_what_the_company_does(client):
+    """The first screen states the business in one sentence.
+
+    It used to open on "Every note finds its place." over a paragraph — true to
+    the page's character and silent on what is actually being sold. A visitor
+    who reads only the first screen should come away knowing both halves of the
+    offer: the music is composed, and everything around it is organised.
+    """
+    body = client.get("/score").text
+    assert "We compose original music for commercials and brand campaigns" in body
+    for half in ("cue sheet", "rights document", "deliverable"):
+        assert half in body, half
+    assert "one complete production workflow" in body
+    # and it is still the page's one h1 — a statement, not a decorative line
+    assert body.count("<h1") == 1
+
+
+def test_the_wordmark_is_the_mark_not_the_word(client):
+    """The brand sits top left as the real logo, on every layout.
+
+    It is served from our own origin like everything else on this page, and it
+    carries its own name for anyone who cannot see it.
+    """
+    body = client.get("/score").text
+    assert "/static/public/wordmark-dark.png" in body
+    bar = body.split('<header class="bar">')[1].split("</header>")[0]
+    assert "wordmark-dark.png" in bar, "the wordmark is not in the top bar"
+    assert 'alt="Chordential"' in bar
+    assert os.path.getsize(os.path.join(_STATIC, "wordmark-dark.png")) > 0
+
 
 def test_the_delivery_beat_lists_engine_derived_rows(client):
     """The beat must not describe a package build_manifest would not assemble."""
