@@ -36,3 +36,9 @@ src/chordential_oia/web/uploads/
 .agents/
 .claude/skills/
 skills-lock.json
+
+# Blender output from scripts/blender_score_cube.py — regenerate in ~20s with
+#   blender --background --python scripts/blender_score_cube.py
+scripts/score_scene/cube.blend
+scripts/score_scene/cube.blend1
+scripts/score_scene/cube.png
