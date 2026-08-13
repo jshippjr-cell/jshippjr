@@ -195,7 +195,11 @@ def _default_llm(brief: Dict, angle: str) -> Optional[Dict]:  # pragma: no cover
     if os.environ.get("CHORDENTIAL_OUTREACH_LLM", "1").strip().lower() in (
             "0", "false", "off", "no", ""):
         return None
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    # One gate for every paid call: no key, engine off, nobody approved, or over
+    # the cap → the free deterministic path. Unattended work never spends.
+    from . import ai_budget
+    ok, why = ai_budget.may_spend("outreach drafting")
+    if not ok:
         return None
     try:
         import anthropic

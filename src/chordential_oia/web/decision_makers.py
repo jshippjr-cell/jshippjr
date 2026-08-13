@@ -260,7 +260,11 @@ def _default_llm(title: str, context: str) -> Optional[Dict]:
     if os.environ.get("CHORDENTIAL_DM_LLM", "1").strip().lower() in (
             "0", "false", "off", "no", ""):
         return None
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    # One gate for every paid call: no key, engine off, nobody approved, or over
+    # the cap → the free deterministic path. Unattended work never spends.
+    from . import ai_budget
+    ok, why = ai_budget.may_spend("decision-maker discovery")
+    if not ok:
         return None
     try:                                            # pragma: no cover - networked
         import anthropic

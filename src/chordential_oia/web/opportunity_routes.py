@@ -191,6 +191,19 @@ async def opp_intelligence_analyze(
         opp_id: int, stance: str = Form("objective"), modality: str = Form("notes"),
         lane: str = Form(""), text: str = Form(""),
         file: Optional[UploadFile] = File(None)):
+    """The ONE place a paid model run is asked for by a person.
+
+    The button shows the cost and confirms before it posts, so this scope — and only
+    this scope — is marked as approved spend. Everything outside it (every scheduler
+    tick, every background thread, every webhook) cannot reach the API at all and uses
+    the free deterministic pass instead. See web/ai_budget.py for why that is the rule
+    rather than a cap."""
+    from . import ai_budget
+    with ai_budget.approved_by("operator"):
+        return await _analyze_with_approval(opp_id, stance, modality, lane, text, file)
+
+
+async def _analyze_with_approval(opp_id, stance, modality, lane, text, file):
     """Update Intelligence: read ONLY the newly submitted capture, merge it into this
     opportunity's Campaign Intelligence (preserving provenance + the raw-evidence capture,
     never clobbering a human edit — disagreements surface as conflicts), raise follow-up

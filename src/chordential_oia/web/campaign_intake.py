@@ -255,7 +255,11 @@ def _default_llm(text: str, stance: str, priors: str = "") -> Optional[List[Dict
     if os.environ.get("CHORDENTIAL_INTAKE_LLM", "1").strip().lower() in (
             "0", "false", "off", "no", ""):
         return None
-    if not os.environ.get("ANTHROPIC_API_KEY") or not (text or "").strip():
+    if not (text or "").strip():
+        return None
+    from . import ai_budget
+    ok, _why = ai_budget.may_spend("intake extraction")
+    if not ok:
         return None
     try:
         import anthropic
@@ -422,9 +426,18 @@ def ingest_transcript(conn, meeting, transcript, *, created_by: str = "capture")
     lane = intake_lanes.LANES_BY_KEY["discovery_call"]
     text = getattr(transcript, "text", "") or ""
     meta = transcript.metadata() if hasattr(transcript, "metadata") else {}
-    summary = _apply_capture(
-        conn, ci_row["id"], lane, text, opp_id=opp["id"], metadata=meta,
-        external_ref=getattr(transcript, "external_ref", ""), created_by=created_by)
+    # APPROVED WORK, and this is the distinction that matters (web/ai_budget.py):
+    # a discovery call is scheduled by a person, attended by a person, and recorded
+    # because they asked for it to be. Reading it with the ten-agent engine is not the
+    # machine deciding to spend — it is finishing the job it was told to do, and it is
+    # the whole point of ADR-0023. What must never spend unasked is the SPECULATIVE
+    # background work: sweeping every agency for decision-makers, re-scoring the
+    # database, drafting outreach nobody requested.
+    from . import ai_budget
+    with ai_budget.approved_by("discovery call"):
+        summary = _apply_capture(
+            conn, ci_row["id"], lane, text, opp_id=opp["id"], metadata=meta,
+            external_ref=getattr(transcript, "external_ref", ""), created_by=created_by)
     db.update_meeting(conn, meeting["id"], status="ingested",
                       transcript_capture_id=summary["capture_id"])
     sync_ci_to_opportunity(conn, ci_row["id"], opp["id"])

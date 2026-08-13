@@ -60,8 +60,15 @@ services:
       # instance because every live-fetch job runs in its own KILLABLE worker
       # process with a per-agency timeout — a hostile page can't freeze the server
       # or stall the queue (it's killed, marked, and skipped). Set "0" to disable.
+      # OFF. These six engines (enrich, re-enrich, decision-makers, intelligence,
+      # signals, scoring) call the Anthropic API on a timer, unattended. This file used
+      # to set "1" against the code's own documented default of OFF, and on 2026-08-13
+      # that ran the operator's API organisation out of credit while the console meter
+      # read $0.00 — because those callers never recorded what they spent. The metering
+      # is fixed (web/ai_budget.py), and the default is now what the code always said
+      # it should be. Turn it on deliberately, on a larger instance, or not at all.
       - key: CHORDENTIAL_AUTONOMOUS
-        value: "1"
+        value: "0"
       # Campaign Workspace (Creative OS) — the campaign is the workspace root that
       # elevates a project into "one screen, one campaign, everything" (creative
       # timeline + structured creative direction; more per docs/campaign-workspace-prd.md).

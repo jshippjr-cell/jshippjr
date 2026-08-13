@@ -72,8 +72,17 @@ def is_configured() -> bool:
     return gmail_client.is_configured() and bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def _may_spend() -> bool:
+    """Triage's own paid extractor passes the same gate as everything else."""
+    from . import ai_budget
+    ok, _why = ai_budget.may_spend("inbox triage")
+    return ok
+
+
 def _llm_extract(message: dict, *, model: Optional[str] = None) -> Optional[dict]:
     """Default extractor: one structured Haiku call per candidate email."""
+    if not _may_spend():
+        return None            # unattended triage uses the free path, never the API
     import anthropic  # lazy — Render-only; tests inject a fake instead
 
     client = anthropic.Anthropic()
