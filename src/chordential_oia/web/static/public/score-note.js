@@ -201,7 +201,7 @@
           + (elsewhere === 1 ? "note is" : elsewhere + " notes are")
           + " on the version " + (elsewhere === 1 ? "it was" : "they were")
           + " made against — a note does not follow you to a different take."
-        : "No notes on this version yet — scrub the take and drop the first one.";
+        : "No notes on this version yet. Scrub the take and drop the first one.";
     }
   }
 

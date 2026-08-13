@@ -430,7 +430,7 @@ ul.listen audio{display:block;width:100%;height:34px;color-scheme:light}
 <div id="grain"></div>
 <div id="fail"><p>This page draws a live three-dimensional model of engraved
 notation, which needs WebGL2. Your browser or device has it switched off, so the
-model is not showing — the words below still say everything the picture does.</p></div>
+model is not showing. The words below still say everything the picture does.</p></div>
 
 <div id="gauge"><i></i><b>scattered</b></div>
 <div id="hint"><i></i>scroll to assemble</div>
@@ -501,8 +501,8 @@ model is not showing — the words below still say everything the picture does.<
     <p class="eyebrow">05 — Creative review</p>
     <h2>Every comment stays with the music.</h2>
     <p class="lede">Scrub the take, mark the moment you mean, and say what you heard.
-      The note is written down with the second it was made at and the version it was
-      made against — so nobody has to argue about which take you meant.</p>
+      Every comment stays attached to the exact second and version it belongs to, so
+      the conversation always stays in context.</p>
 
     {# The mechanism, not a paragraph about the mechanism. Versions come from
        landing.review_versions() — a hand-typed version label on a pin is the same
@@ -536,14 +536,14 @@ model is not showing — the words below still say everything the picture does.<
         <button type="submit" class="rev-btn">Leave it</button>
       </form>
       <ul class="rev-list" id="revList"></ul>
-      <p class="rev-none" id="revNone">No notes on this version yet — scrub the take
+      <p class="rev-none" id="revNone">No notes on this version yet. Scrub the take
         and drop the first one.</p>
       <p class="rev-say">Nothing here is sent and nothing leaves this browser. On a
         real campaign the note lands on the version under review and the composer
         answers it in the portal.</p>
     </div>
 
-    <p class="note">Creative conversations should move the work forward—not create
+    <p class="note">Creative conversations should move the work forward, not create
       more work.</p>
   </div></section>
 
@@ -571,17 +571,17 @@ model is not showing — the words below still say everything the picture does.<
     </ul>
     {% if manifest|length > 4 %}
     <p class="pack-more"><a href="/delivery-sample">and {{ manifest|length - 4 }} more
-      &mdash; see the whole package</a></p>
+      in the sample package</a></p>
     {% endif %}
     <p class="note pack-note">One delivery. Nothing missing.</p>
-    <a class="cta" href="/delivery-sample">Open the package</a>
+    <a class="cta" href="/delivery-sample">See a sample package</a>
   </div></section>
 
   <section class="beat" data-veil="1"><div class="col">
     <p class="eyebrow">Let's build something that lasts</p>
     <h2>Great campaigns deserve more than great music.</h2>
     <p class="lede">They deserve a partner who understands the work before the first
-      note is written—and delivers everything needed long after the final mix is
+      note is written, and delivers everything needed long after the final mix is
       approved.</p>
     <a class="cta" href="/start">Start with a brief</a>
     <p class="note" style="margin-top:1.4rem">We'll take it from there.</p>
