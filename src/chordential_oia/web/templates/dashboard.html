@@ -3,6 +3,20 @@
 {% block title %}Today{% endblock %}
 {% block heading %}Today{% endblock %}
 {% block content %}
+{# An outage of the background engines belongs at the top of the day, not on a page
+   you visit when you already suspect something. Nothing polls for a meeting transcript
+   while this is showing. #}
+{% if engine_lease and engine_lease.stopped %}
+<section class="card" style="border-left:3px solid var(--red,#a33)">
+  <div><strong>⛔ The background engines are not running.</strong></div>
+  <div class="muted small" style="margin-top:4px">
+    No instance holds the scheduler lease, so no meeting transcript is being polled for and
+    no engine is running.{% if engine_lease.error %}
+    <span class="mono">({{ engine_lease.error }})</span>{% endif %}
+    A deploy usually clears it; if it persists the lease cannot reach the database.
+  </div>
+</section>
+{% endif %}
 
 <div class="kpi-strip" data-arrive>
   {# ADR-0035: lands on exactly the deals this KPI counts. It used to open the

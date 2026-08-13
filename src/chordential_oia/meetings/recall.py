@@ -16,24 +16,25 @@ Config (env; the seam is null until a key is set):
   CHORDENTIAL_RECALL_REGION           — API region, default "us-east-1"
   CHORDENTIAL_RECALL_BOT_NAME         — the bot's display name in the call
   CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER — Recall transcription provider (default
-                                        recallai_streaming; meeting_captions needs the host's
-                                        captions ON and silently yields nothing when they are off)
+                                        meeting_captions, as shipped; recallai_streaming is
+                                        Recall's own ASR if the host's captions are ever off)
   CHORDENTIAL_RECALL_LANGUAGE         — transcription language, default "auto"
   CHORDENTIAL_RECALL_WEBHOOK_SECRET   — only if you opt into the webhook path
 
-WHY THE DEFAULT IS RECALL'S OWN ASR (and not the platform's captions):
-``meeting_captions`` transcribes by reading the *meeting platform's* closed captions. It is
-the cheapest option and it was this file's default — but it only works if the HOST has
-captions switched on. When they are off the bot still joins, still records, still reaches
-``done``, and simply never produces a transcript. Recall's own docs name this as the usual
-cause of "the bot didn't generate a transcript". Nothing surfaced it: no error, no failed
-state, just a discovery call whose notes never arrived.
+THE DEFAULT IS ``meeting_captions``, WHICH IS WHAT THIS HAS ALWAYS SENT. It reads the
+meeting platform's own caption stream rather than transcribing audio, so it costs nothing
+extra — and it is the shape this file has posted since the day it was written. It is left
+alone deliberately: it is not the cause of anything that changed.
 
-So the default is ``recallai_streaming`` — Recall's native speech-to-text. It needs no
-third-party key and no cooperation from the host's Zoom settings. ``fetch_transcript`` also
-REPAIRS the older case: a finished recording with no transcript artifact is asked for one
-via the async ASR endpoint, which is how a call already recorded under meeting_captions
-still gets its notes.
+Its known weakness, worth understanding rather than switching away from blind: if the HOST
+has captions off there is no caption stream to read, so the bot records and finishes and no
+transcript is produced. Set ``CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER=recallai_streaming``
+(Recall's own speech-to-text — no third-party key, no dependency on the host's settings) if
+that ever turns out to be the case.
+
+Either way ``fetch_transcript`` REPAIRS it: a recording that finished carrying no transcript
+artifact is sent for async transcription rather than polled to death, so the audio that was
+captured still becomes notes.
 """
 from __future__ import annotations
 
@@ -67,7 +68,7 @@ class RecallCaptureProvider(CaptureProvider):
                          or "Chordential Notetaker").strip()
         self.transcript_provider = (
             os.environ.get("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "")
-            or "recallai_streaming").strip()
+            or "meeting_captions").strip()
         self.language = (os.environ.get("CHORDENTIAL_RECALL_LANGUAGE", "")
                          or "auto").strip()
         self.webhook_secret = os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "").strip()
@@ -80,8 +81,8 @@ class RecallCaptureProvider(CaptureProvider):
     def invite(self, *, join_url: str, meeting_ref: str) -> str:
         """Send a Recall bot into the meeting with transcription on. Returns the bot id.
 
-        Recall's own ASR by default, because the platform-captions provider depends on a
-        setting in someone else's Zoom account (see the module docstring) and fails silent."""
+        The body is what this has always posted — the provider from config, its options
+        object, and nothing else. See the module docstring for the captions caveat."""
         if not self.configured():
             raise RuntimeError(
                 "Recall provider selected but CHORDENTIAL_RECALL_API_KEY is unset.")
@@ -91,8 +92,6 @@ class RecallCaptureProvider(CaptureProvider):
             "recording_config": {
                 "transcript": {
                     "provider": {self.transcript_provider: self._provider_options()},
-                    # who said what, when the platform gives us separate audio streams
-                    "diarization": {"use_separate_streams_when_available": True},
                 },
             },
         }
@@ -102,7 +101,8 @@ class RecallCaptureProvider(CaptureProvider):
     def _provider_options(self) -> dict:
         """The options object Recall expects INSIDE the chosen provider's key. Its shape is
         per-provider: the native ASR takes a mode + language, the platform-captions provider
-        takes nothing. An unknown provider gets an empty object rather than a guess."""
+        takes nothing — so the default path posts ``{"meeting_captions": {}}``, byte for byte
+        what shipped. An unknown provider gets an empty object rather than a guess."""
         if self.transcript_provider == "recallai_streaming":
             return {"mode": "prioritize_accuracy", "language_code": self.language}
         if self.transcript_provider == "recallai_async":

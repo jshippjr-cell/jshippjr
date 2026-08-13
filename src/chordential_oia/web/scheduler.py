@@ -60,7 +60,12 @@ _FALSEY = {"0", "false", "no", "off", ""}
 _LEASE_NAME = "scheduler"
 _OWNER = "%s:%d:%s" % (os.environ.get("RENDER_INSTANCE_ID", "local"), os.getpid(),
                        os.urandom(4).hex())
-_lease_state = {"held": False, "owner": _OWNER, "holder": None, "checked_at": None}
+# `error` is the field that makes this honest. Without it "held: False" has two very
+# different meanings — another instance is running the engines (fine), or we could not
+# reach the lease at all and NOBODY is running them (not fine) — and the console showed
+# the reassuring one for both.
+_lease_state = {"held": False, "owner": _OWNER, "holder": None, "checked_at": None,
+                "error": ""}
 
 
 def _lease_ttl_seconds() -> int:
@@ -78,25 +83,37 @@ def _claim_lease() -> bool:
     reached means we do NOT run, which is the safe direction — a second instance
     running everything twice is worse than neither running for one tick."""
     if not lease_enabled():
-        _lease_state.update(held=True, holder={"owner": "(lease disabled)"})
+        _lease_state.update(held=True, holder={"owner": "(lease disabled)"}, error="")
         return True
     conn = None
+    err = ""
     try:
         conn = db.connect()
         held = db.acquire_lease(conn, _LEASE_NAME, _OWNER, _lease_ttl_seconds())
         holder = db.lease_holder(conn, _LEASE_NAME)
-    except Exception:                        # noqa: BLE001
+    except Exception as e:                   # noqa: BLE001
         held, holder = False, None
+        err = "%s: %s" % (type(e).__name__, e)
+    else:
+        # Not an exception, but not a holder either: the lease row cannot be read back.
+        # Nothing is running the engines and nothing else would ever say so.
+        if not held and holder is None:
+            err = "the scheduler lease could not be read or claimed"
     finally:
         if conn is not None:
             try: conn.close()
             except Exception: pass
     was = _lease_state["held"]
-    _lease_state.update(held=held, holder=holder,
+    _lease_state.update(held=held, holder=holder, error=err,
                         checked_at=datetime.now(timezone.utc).isoformat())
     if held != was:                          # a handover is worth a line in the log
-        print("[scheduler] %s the engine lease (owner %s)"
-              % ("acquired" if held else "lost", _OWNER), flush=True)
+        print("[scheduler] %s the engine lease (owner %s)%s"
+              % ("acquired" if held else "lost", _OWNER,
+                 (" — " + err) if err else ""), flush=True)
+    elif err and not held:
+        # A stuck instance says so every tick. Silence here is how the engines stop
+        # for hours with nothing in the log to find.
+        print("[scheduler] engines NOT running: %s" % err, flush=True)
     return held
 
 
@@ -115,13 +132,18 @@ def _drop_lease() -> None:
         if conn is not None:
             try: conn.close()
             except Exception: pass
-    _lease_state["held"] = False
+    _lease_state.update(held=False, error="")
 
 
 def lease_status() -> dict:
-    """What the console shows. "This instance is not running the engines" has to be
-    a state you can SEE — an invisible one is how a silent stop goes unnoticed."""
-    return dict(_lease_state, enabled=lease_enabled(), ttl=_lease_ttl_seconds())
+    """What the console shows. "This instance is not running the engines" has to be a
+    state you can SEE — an invisible one is how a silent stop goes unnoticed. ``stopped``
+    is the one that matters: not held, and no other instance holding it either, which
+    means no transcript is being polled and no engine is running ANYWHERE."""
+    st = dict(_lease_state, enabled=lease_enabled(), ttl=_lease_ttl_seconds())
+    st["stopped"] = bool(st["enabled"] and not st["held"]
+                         and (st["error"] or st["holder"] is None))
+    return st
 
 # ONE shared lock across every heavy background cycle (enrich, re-enrich, decision
 # makers, intelligence, signals, scoring). Only one heavy job runs at a time — auto

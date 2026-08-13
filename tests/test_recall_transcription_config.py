@@ -1,18 +1,19 @@
 """The bot must come back with a transcript.
 
-It didn't. The bot joined, recorded, reached `done` — and no notes ever arrived, with no
-error anywhere to say why. The cause was the transcription provider: `meeting_captions`
-reads the MEETING PLATFORM's closed captions, so it only produces anything when the host
-has captions switched on. With them off it yields nothing, silently, for ever. Recall's
-own documentation names this as the usual reason a bot produces no transcript.
+It didn't: the bot joined, recorded, reached `done`, and no notes arrived. The provider
+config was NOT the cause — `meeting_captions` has been the default since this file was
+written and has never changed, so it cannot explain something that used to work. What it
+can explain is a call that stays empty for ever once it is empty, because nothing asks
+again.
 
-So two guarantees, and they are the fix:
+So two guarantees:
 
-  1. A new bot is created with Recall's OWN speech-to-text, which needs no third-party key
-     and nothing switched on in someone else's Zoom account.
-  2. A recording that already finished WITHOUT a transcript is asked to be transcribed now,
-     rather than being polled to death and written off. The audio still exists; that is what
-     rescues every call already lost this way.
+  1. The bot-create body stays EXACTLY what it has always been. That request has one
+     version in this repo's history and is not where anything changed, so it is pinned
+     rather than improved.
+  2. A recording that finished WITHOUT a transcript is asked to be transcribed now, rather
+     than being polled to death and written off. The audio still exists; that is what
+     rescues a call whose notes never arrived, whatever stopped them arriving.
 """
 import json
 
@@ -45,45 +46,38 @@ def _capture_calls(provider, monkeypatch, get_result=None):
     return posts, gets
 
 
-def test_a_new_bot_does_not_depend_on_the_host_enabling_captions(provider, monkeypatch):
-    """The regression itself. meeting_captions transcribes only if the HOST turned
-    captions on — a setting we neither control nor can see."""
+def test_the_bot_create_body_is_exactly_what_shipped(provider, monkeypatch):
+    """The bot-create request is NOT a place to improve things speculatively. This file has
+    posted one body since the day it was written, and the transcript stopping had nothing to
+    do with it; changing it would be changing the one part of this path with no history of
+    having gone wrong. Pinned byte for byte."""
     posts, _ = _capture_calls(provider, monkeypatch)
     provider.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
 
     assert len(posts) == 1
     path, payload = posts[0]
     assert path == "/bot/"
-    chosen = payload["recording_config"]["transcript"]["provider"]
-    assert "meeting_captions" not in chosen, (
-        "the platform-captions provider fails silently when the host has captions off — "
-        "it must not be the default")
-    assert "recallai_streaming" in chosen, chosen
-    # and it is configured, not an empty object that falls back to a default we didn't pick
-    assert chosen["recallai_streaming"]["language_code"] == "auto"
-    assert chosen["recallai_streaming"]["mode"] == "prioritize_accuracy"
-
-
-def test_the_payload_is_json_serialisable_and_asks_for_speaker_separation(provider, monkeypatch):
-    posts, _ = _capture_calls(provider, monkeypatch)
-    provider.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
-    payload = posts[0][1]
+    assert payload == {
+        "meeting_url": "https://zoom.example/j/1",
+        "bot_name": "Chordential Notetaker",
+        "recording_config": {"transcript": {"provider": {"meeting_captions": {}}}},
+    }
     json.dumps(payload)          # a body Recall cannot parse is the same as no bot
-    assert payload["recording_config"]["transcript"]["diarization"][
-        "use_separate_streams_when_available"] is True
 
 
-def test_an_explicit_provider_is_still_honoured_with_its_own_option_shape(monkeypatch):
-    """The env override stays — but each provider takes a DIFFERENT options object, so an
-    unknown one gets an empty object rather than options invented for it."""
+def test_the_native_asr_can_be_selected_with_its_own_option_shape(monkeypatch):
+    """The escape hatch, if the host's captions ever do turn out to be off: one env var,
+    and the options object Recall expects for THAT provider rather than an empty one."""
     monkeypatch.setenv("CHORDENTIAL_RECALL_API_KEY", "k")
-    monkeypatch.setenv("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "meeting_captions")
+    monkeypatch.setenv("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "recallai_streaming")
+    monkeypatch.delenv("CHORDENTIAL_RECALL_LANGUAGE", raising=False)
     from chordential_oia.meetings.recall import RecallCaptureProvider
     p = RecallCaptureProvider()
     posts, _ = _capture_calls(p, monkeypatch)
     p.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
     chosen = posts[0][1]["recording_config"]["transcript"]["provider"]
-    assert chosen == {"meeting_captions": {}}
+    assert chosen == {"recallai_streaming": {"mode": "prioritize_accuracy",
+                                             "language_code": "auto"}}
 
 
 def test_a_finished_recording_with_no_transcript_is_asked_to_be_transcribed(provider, monkeypatch):

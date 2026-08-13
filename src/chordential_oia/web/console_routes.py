@@ -21,7 +21,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..matching import match_talent
 from ..talent import profile_completeness
-from . import db, next_action, queue as queue_mod, relationships, sources, triage
+from . import (db, next_action, queue as queue_mod, relationships,
+               scheduler as scheduler_mod, sources, triage)
 from .buyer_intel import STAGES, days_since, relationship_for
 from .estimate import estimate_for
 from .evaluate import evaluate
@@ -287,6 +288,7 @@ def dashboard(request: Request):
         conn.close()
     return render(
         request, "dashboard.html", nav="dashboard",
+        engine_lease=scheduler_mod.lease_status(),
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
         src_health=src_health, incoming=incoming, incoming_total=incoming_total,

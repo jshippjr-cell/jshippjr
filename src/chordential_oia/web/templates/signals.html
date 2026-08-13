@@ -35,10 +35,16 @@
   {% if poll_result %}
   <p class="muted small" style="margin:8px 0 0;color:var(--ink,#1F1E1E)">🔄 {{ poll_status or 'Nothing polled.' }}</p>
   {% endif %}
-  {# Only worth a line when this instance ISN'T the one running them. On a single
-     instance that is never true; during a cutover it is the difference between "the
-     engines are stopped" and "the engines are on the other instance". #}
-  {% if engine_lease and engine_lease.enabled and not engine_lease.held %}
+  {# Two different states wore one banner. "Standing by" is fine; "stopped" is an
+     outage — no transcript polled, no engine run, anywhere. Only the second is
+     alarming, and it is the one that used to read as the first. #}
+  {% if engine_lease and engine_lease.stopped %}
+  <p class="small" style="margin:8px 0 0;color:var(--red,#a33)">
+    ⛔ <strong>The background engines are not running.</strong> No instance holds the
+    scheduler lease, so nothing is polling for meeting transcripts or running any engine.
+    {% if engine_lease.error %}<span class="mono">({{ engine_lease.error }})</span>{% endif %}
+  </p>
+  {% elif engine_lease and engine_lease.enabled and not engine_lease.held %}
   <p class="muted small" style="margin:8px 0 0;color:var(--amber,#8a5a00)">
     ⏸ The background engines are running on <strong>another instance</strong>{% if engine_lease.holder %}
     ({{ engine_lease.holder.owner }}){% endif %} — this one is standing by. Normal during a
