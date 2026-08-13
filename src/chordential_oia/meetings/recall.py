@@ -87,7 +87,7 @@ class RecallCaptureProvider(CaptureProvider):
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    def invite(self, *, join_url: str, meeting_ref: str) -> str:
+    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "") -> str:
         """Send a Recall bot into the meeting with transcription on. Returns the bot id.
 
         Recall's own ASR by default: the platform-captions provider needs the host to turn
@@ -105,8 +105,27 @@ class RecallCaptureProvider(CaptureProvider):
                 },
             },
         }
+        # WHEN the bot should turn up. Recall: "You can create ad-hoc bots by omitting the
+        # join_at or setting it to a time that is less than 10 minutes in the future." We
+        # omitted it, so every bot was ad-hoc — dispatched the moment the call was BOOKED.
+        # A call booked for next week got a bot that joined an empty room that afternoon,
+        # sat there, and was long gone by the time anyone dialled in. Only calls booked
+        # within ten minutes of starting ever worked, which is exactly the shape of a
+        # feature that looks fine in testing and fails in use.
+        if join_at:
+            payload["join_at"] = join_at
         data = self._post("/bot/", payload)
         return str((data or {}).get("id") or "")
+
+    def cancel(self, external_ref: str) -> None:
+        """Stand a scheduled bot down. Best-effort by design: a bot we fail to cancel joins
+        a meeting nobody attends, which costs a little money and breaks nothing."""
+        if not self.configured() or not external_ref:
+            return
+        try:
+            self._delete(f"/bot/{external_ref}/")
+        except Exception as e:  # noqa: BLE001
+            _log.info("Recall bot %s not cancelled: %s", external_ref, e)
 
     def _provider_options(self) -> dict:
         """The options object Recall expects INSIDE the chosen provider's key. Its shape is
@@ -252,6 +271,10 @@ class RecallCaptureProvider(CaptureProvider):
         return self._open(urllib.request.Request(
             self._base() + path, data=json.dumps(payload).encode("utf-8"),
             headers=self._headers(), method="POST"))
+
+    def _delete(self, path: str):
+        return self._open(urllib.request.Request(
+            self._base() + path, headers=self._headers(), method="DELETE"))
 
     def _download(self, url: str):
         """Fetch a signed transcript download URL (no API auth — the signature is in the URL)."""

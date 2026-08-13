@@ -108,7 +108,8 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
         if M.capture_configured() and join_url:
             try:
                 cp = M.get_capture_provider()
-                bot_id = cp.invite(join_url=join_url, meeting_ref=str(opp["id"]))
+                bot_id = cp.invite(join_url=join_url, meeting_ref=str(opp["id"]),
+                                   join_at=start_at or "")
                 if bot_id:
                     notetaker, status = cp.name, M.BOT_INVITED
             except Exception as e:  # noqa: BLE001
@@ -161,7 +162,18 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
 
 
 def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = None) -> dict:
-    """Move a scheduled call to a new time: update the calendar event + the record, re-confirm."""
+    """Move a scheduled call to a new time: the calendar event, THE NOTETAKER, the record,
+    and the confirmations.
+
+    The notetaker was the missing one, and it made the button a lie. A capture bot is
+    booked for a MOMENT — the old bot was scheduled for the old time and nothing here
+    moved it, so the operator rescheduled, joined the new call, and sat in it alone. The
+    bot is stood down and a new one booked for the new time.
+
+    The status was the second half of the same bug: this reset it to SCHEDULED, and the
+    poller only looks at BOT_INVITED / IN_PROGRESS / TRANSCRIPT_READY. So even if a
+    transcript had existed, a rescheduled call was quietly dropped from the one loop that
+    would have fetched it."""
     dur = duration_min or meeting["duration_min"] or 30
     if meeting["calendar_event_id"] and M.calendar_configured():
         try:
@@ -171,8 +183,32 @@ def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = N
                     meeting["calendar_event_id"], start=s, end=s + timedelta(minutes=dur))
         except Exception:  # noqa: BLE001
             pass
+
+    bot_id = (meeting["bot_id"] or "").strip()
+    notetaker = (meeting["notetaker_provider"] or "").strip()
+    status = M.SCHEDULED
+    join_url = (meeting["join_url"] or "").strip()
+    if notetaker and M.capture_configured() and join_url:
+        cp = M.get_capture_provider()
+        if bot_id:
+            try:
+                cp.cancel(bot_id)          # best-effort: don't leave one waiting at the old time
+            except Exception as e:  # noqa: BLE001
+                _log.info("Standing down bot %s failed (%s); booking the new one anyway",
+                          bot_id, type(e).__name__)
+        try:
+            new_bot = cp.invite(join_url=join_url, meeting_ref=str(meeting["opp_id"]),
+                                join_at=new_start or "")
+            if new_bot:
+                bot_id, notetaker, status = new_bot, cp.name, M.BOT_INVITED
+        except Exception as e:  # noqa: BLE001 — never fail the reschedule over the bot
+            _log.warning("Re-arming the notetaker for the new time failed (%s: %s); "
+                         "the call moves, but nothing will record it",
+                         type(e).__name__, e)
+            bot_id, notetaker = "", ""
     db.update_meeting(conn, meeting["id"], start_at=new_start, duration_min=dur,
-                      status=M.SCHEDULED)
+                      status=status, bot_id=bot_id, notetaker_provider=notetaker,
+                      poll_attempts=0, last_polled_at="", error="")
     row = db.get_meeting(conn, meeting["id"])
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:
