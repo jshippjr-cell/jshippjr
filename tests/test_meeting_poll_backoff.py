@@ -49,11 +49,14 @@ class _NeverReady:
 
 
 def _meeting(conn, status=None):
+    # The call is OVER. Polling only begins once it has finished (see `_call_over`):
+    # counting attempts from the booking is what marked every call failed before anyone
+    # joined it. A backoff test has to start where a real poll starts.
+    ended = datetime.now(timezone.utc) - timedelta(hours=2)
     conn.execute(
-        "INSERT INTO meetings (opp_id, provider, bot_id, status, start_at) "
-        "VALUES (?,?,?,?,?)",
-        (1, "zoom", "bot-abc", status or M.TRANSCRIPT_READY,
-         datetime.now(timezone.utc).isoformat()))
+        "INSERT INTO meetings (opp_id, provider, bot_id, status, start_at, duration_min) "
+        "VALUES (?,?,?,?,?,?)",
+        (1, "zoom", "bot-abc", status or M.TRANSCRIPT_READY, ended.isoformat(), 30))
     conn.commit()
     return conn.execute("SELECT * FROM meetings ORDER BY id DESC LIMIT 1").fetchone()
 

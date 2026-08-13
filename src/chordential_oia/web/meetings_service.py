@@ -116,6 +116,37 @@ def _poll_delay(attempts: int) -> int:
     return _POLL_BACKOFF[idx]
 
 
+def _call_over(meeting, now=None) -> bool:
+    """Has the call actually FINISHED?
+
+    The poller keyed off nothing but the meeting's status, and a meeting is `bot_invited`
+    from the instant it is booked. So a call booked for next Tuesday was polled from the
+    moment of booking — and every one of those polls spent a slice of the give-up budget
+    on a recording that could not possibly exist yet. Twenty-four attempts is ~8.6 hours,
+    so any call booked more than a day ahead was marked `failed` and never asked again
+    BEFORE ANYONE JOINED IT. That is why the bot never came back with a transcript.
+
+    A meeting with no start time is treated as over: ad-hoc captures have nothing to wait
+    for, and refusing to poll them would be the same bug pointing the other way.
+    """
+    from datetime import datetime, timedelta, timezone
+    start = (meeting["start_at"] or "") if "start_at" in meeting.keys() else ""
+    if not start:
+        return True
+    try:
+        dt = datetime.fromisoformat(str(start))
+    except (ValueError, TypeError):
+        return True                      # unparseable: do not strand it, poll it
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        mins = int(meeting["duration_min"] or 30)
+    except (ValueError, TypeError, KeyError):
+        mins = 30
+    end = dt + timedelta(minutes=max(1, mins))
+    return (now or datetime.now(timezone.utc)) >= end
+
+
 def _poll_due(meeting, now=None) -> bool:
     """Has this meeting's next attempt come round yet?"""
     from datetime import datetime, timezone
@@ -179,8 +210,10 @@ def poll_and_ingest(conn) -> int:
     been ingested yet, ask the provider whether its transcript is ready and, if so, ingest it
     through the Meeting → Campaign Intake boundary. Idempotent and fail-soft — a bot still
     recording is retried on a BACKOFF, and after ``_POLL_MAX_ATTEMPTS`` the meeting is marked
-    failed with the reason rather than asked for ever. A transient error never crashes the
-    loop. No-ops entirely with the null provider (no bots). Returns the count ingested."""
+    failed with the reason rather than asked for ever — but ONLY once the call has actually
+    finished (see ``_call_over``; counting from the booking is what lost every transcript).
+    A transient error never crashes the loop. No-ops entirely with the null provider (no
+    bots). Returns the count ingested."""
     from datetime import datetime, timezone
     cp = M.get_capture_provider()
     done = 0
@@ -190,6 +223,17 @@ def poll_and_ingest(conn) -> int:
             if meeting["id"] in seen or not (meeting["bot_id"] or "").strip():
                 continue
             seen.add(meeting["id"])
+            # Nothing to fetch until the call is over, and — the actual bug — no attempt
+            # may be SPENT before then. Anything already accrued while the meeting was
+            # still in the future is given back, so the give-up window starts when the
+            # call ends rather than when it was booked. That also repairs the rows this
+            # shipped with, which are sitting on a dozen attempts they never earned.
+            if not _call_over(meeting):
+                if (int(meeting["poll_attempts"] or 0)
+                        if "poll_attempts" in meeting.keys() else 0):
+                    db.update_meeting(conn, meeting["id"], poll_attempts=0,
+                                      last_polled_at="")
+                continue
             if not _poll_due(meeting):
                 continue
             attempts = (int(meeting["poll_attempts"] or 0)
