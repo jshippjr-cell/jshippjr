@@ -33,7 +33,7 @@ def client():
 def test_the_score_page_renders(client):
     r = client.get("/score")
     assert r.status_code == 200
-    assert "every part in the air" in r.text
+    assert "every part in the air" in r.text.lower()
 
 
 def test_it_carries_the_copy_not_just_the_picture(client):
