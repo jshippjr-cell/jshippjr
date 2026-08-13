@@ -596,6 +596,37 @@ def discovery_reschedule(opp_id: int, start_at: str = Form(""), tz_offset: str =
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
 
 
+@router.post("/opportunity/{opp_id}/capture/{capture_id}/reanalyze")
+async def opp_capture_reanalyze(opp_id: int, capture_id: int):
+    """Read a capture we already hold, again — with the engine this time.
+
+    The console has told operators to "just re-analyze" whenever the engine could not run
+    (no credit, a rejected key, a rate limit) since that message was written, and there
+    was no way to. Pasting the text again would have made a SECOND capture of the same
+    call. This re-reads the evidence on file.
+
+    A human pressed it, so the scope is approved spend (web/ai_budget.py)."""
+    from . import ai_budget, campaign_intake
+    conn = db.connect()
+    try:
+        with ai_budget.approved_by("operator"):
+            out = campaign_intake.reanalyze_capture(conn, capture_id)
+    except Exception as e:      # noqa: BLE001 — a press never ends in a 500
+        out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        conn.close()
+    if out.get("ok"):
+        msg = ("Re-read with the engine — %d fact%s." % (
+            out.get("added", 0), "" if out.get("added") == 1 else "s")
+            if out.get("engine") else
+            "Re-read, but the engine still could not run — keyword baseline again.")
+    else:
+        msg = out.get("error") or "Could not re-analyze."
+    from urllib.parse import quote
+    return RedirectResponse(f"/opportunity/{opp_id}?fetch={quote(msg[:300])}",
+                            status_code=303)
+
+
 @router.post("/opportunity/{opp_id}/discovery/{meeting_id}/fetch-transcript")
 def discovery_fetch_transcript(opp_id: int, meeting_id: int):
     """Fetch this call's transcript NOW, rather than waiting on the background poller.

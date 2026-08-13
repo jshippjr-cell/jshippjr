@@ -5058,6 +5058,25 @@ def get_capture(conn: sqlite3.Connection, capture_id: int) -> Optional[sqlite3.R
     return conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
 
 
+def update_capture(conn: sqlite3.Connection, capture_id: int, *,
+                   extraction=None, metadata=None) -> None:
+    """Re-record what a capture YIELDED, never what it said. raw_text is permanent
+    evidence and is not writable here: a re-read may change the reading, and must not be
+    able to change the thing that was read."""
+    sets, vals = [], []
+    if extraction is not None:
+        sets.append("extraction_json = ?")
+        vals.append(json.dumps(extraction))
+    if metadata is not None:
+        sets.append("metadata_json = ?")
+        vals.append(json.dumps(metadata))
+    if not sets:
+        return
+    vals.append(capture_id)
+    conn.execute(f"UPDATE captures SET {', '.join(sets)} WHERE id = ?", vals)
+    conn.commit()
+
+
 def list_captures(conn: sqlite3.Connection, ci_id: int) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM captures WHERE ci_id = ? ORDER BY created_at DESC, id DESC",

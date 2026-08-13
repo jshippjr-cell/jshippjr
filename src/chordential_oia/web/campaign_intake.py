@@ -399,6 +399,78 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
     }
 
 
+def reanalyze_capture(conn, capture_id: int, *, created_by: str = "operator") -> Dict:
+    """Read a capture we already hold, again — with the engine this time.
+
+    A capture stores its raw text permanently, so when the ten-agent engine could not run
+    (no API credit, a rejected key, a rate limit) the transcript is not lost: only the
+    READING of it is. The console has told operators to "just re-analyze" since the day
+    that error message was written, and there was no way to do it — the only route into
+    extraction created a NEW capture from pasted text, which would duplicate the evidence
+    and re-file the same call twice.
+
+    This re-reads the text on file and contributes what it finds. The capture row is the
+    same row: one call, one piece of evidence, however many times it is read.
+    """
+    cap = db.get_capture(conn, capture_id)
+    if cap is None:
+        return {"ok": False, "error": "no such capture"}
+    text = (cap["raw_text"] or "").strip()
+    if not text:
+        return {"ok": False, "error": "this capture has no text to re-read"}
+    lane = intake_lanes.LANES_BY_KEY.get(
+        cap["lane"] or "", intake_lanes.LANES_BY_KEY["meeting_notes"])
+    ci_id = int(cap["ci_id"])
+    stance = cap["stance"] or lane.stance
+    source = cap["provenance_source"] or lane.provenance_source
+
+    priors = ""
+    with db.best_effort(conn, "priors"):
+        from . import producer_learning
+        priors = producer_learning.priors_summary(conn)
+    llm = None
+    with db.best_effort(conn, "engine"):
+        from . import extraction_bridge
+        llm = extraction_bridge.for_capture(
+            conn, ci_id=ci_id, opp_id=cap["opp_id"], campaign_id=cap["campaign_id"],
+            lane=lane, metadata=_meta(cap))
+    candidates = extract(text, stance, llm=llm, priors=priors)
+
+    run_report = getattr(llm, "report", None)
+    meta = dict(_meta(cap) or {})
+    if run_report:
+        meta["extraction_run"] = run_report
+        with db.best_effort(conn, "spend"):
+            from . import extraction_bridge
+            extraction_bridge.record_spend(conn, run_report)
+    db.update_capture(conn, capture_id, extraction=candidates, metadata=meta)
+
+    for c in candidates:
+        ci.contribute(conn, ci_id, c["facet"], c["key"], c["value"],
+                      kind=c["kind"], source=source, contributed_by=created_by,
+                      confidence=c.get("confidence"), is_concern=c.get("is_concern", False),
+                      value_json=c.get("value_json"), capture_id=capture_id)
+    added_questions = []
+    for facet, key, question in gaps(conn, ci_id):
+        ci.contribute(conn, ci_id, facet, f"ask_{key}", question,
+                      kind="open_question", source="ai", contributed_by="ai",
+                      value_json={"facet": facet, "key": key}, capture_id=capture_id)
+        added_questions.append(question)
+    if cap["opp_id"]:
+        sync_ci_to_opportunity(conn, ci_id, int(cap["opp_id"]))
+    return {"ok": True, "capture_id": capture_id, "ci_id": ci_id,
+            "added": len(candidates), "questions": added_questions,
+            "engine": bool(run_report)}
+
+
+def _meta(cap) -> dict:
+    import json as _json
+    try:
+        return _json.loads(cap["metadata_json"] or "{}")
+    except Exception:      # noqa: BLE001
+        return {}
+
+
 def ingest(conn, campaign, stance: str, text: str, *, lane_key: str = "",
            modality: str = "notes", created_by: str = "operator",
            llm: Optional[LLM] = None) -> Dict:

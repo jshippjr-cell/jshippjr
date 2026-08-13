@@ -61,6 +61,16 @@
     <span>The model call failed, so this used the keyword baseline instead —
       <code>{{ it.run.model }}</code>: <b>{{ it.run.provider_error }}</b>.
       {% if it.remedy %}<br><b>Fix:</b> {{ it.remedy }}{% endif %}</span>
+    {# "just re-analyze" was advice with nothing behind it: the only way in made a
+       SECOND capture of the same call. This re-reads the evidence already on file. #}
+    {% if it.c['opp_id'] %}
+    <form method="post" style="display:inline-block;margin-top:6px"
+          action="/opportunity/{{ it.c['opp_id'] }}/capture/{{ it.c['id'] }}/reanalyze">
+      <button class="btn tiny" type="submit"
+              title="Read this same transcript again with the 10-agent engine. No new capture.">
+        Re-read with the engine</button>
+    </form>
+    {% endif %}
     {% elif it.run and it.run.facts %}
     <span class="ev-badge on">🤖 10-agent engine</span>
     <span>{{ it.run.workers|length }} specialists · {{ it.run.facts }} facts kept
