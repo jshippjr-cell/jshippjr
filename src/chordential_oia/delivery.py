@@ -21,7 +21,7 @@ IP3 (defensible rights): the certificate carries a **signatory block** (entity,
 authorized signer, title) tied to the version it certifies, and the license grant
 only reads as an asserted grant once the operator has **explicitly confirmed** it
 (``delivery_json['license_confirmed']``); until then it reads as
-"DRAFT — pending confirmation" rather than silently asserting a perpetual
+"DRAFT · pending confirmation" rather than silently asserting a perpetual
 worldwide exclusive buyout.
 """
 from __future__ import annotations
@@ -70,7 +70,7 @@ DEFAULT_SIGNATORY = {
 }
 
 # IP3 — until the license is explicitly confirmed, the grant reads as a draft.
-LICENSE_DRAFT_NOTE = "DRAFT — pending confirmation"
+LICENSE_DRAFT_NOTE = "DRAFT · pending confirmation"
 
 # Version states (Revisions agent) — the bounded v1→v2→v3 ladder.
 VERSION_STATES = ["v1 Concept", "v2 Direction-lock", "v3 FINAL"]
@@ -138,7 +138,7 @@ def can_release(delivery: dict):
     this whole pass exists to remove.
     """
     if license_confirmation(delivery) is None:
-        return False, ("the licence terms have not been confirmed — releasing would "
+        return False, ("the licence terms have not been confirmed; releasing would "
                        "assert a grant nobody signed off")
     return True, ""
 
@@ -163,7 +163,7 @@ DEFAULT_LICENSE = {
     "publishing": "Composition publishing retained by Chordential Music",
     # Media was promised in the sales copy ("all campaign media") and had nowhere to
     # live on the grant, so the certificate could not record the scope being sold.
-    "media": "All campaign media — broadcast, digital, social, OOH, in-store",
+    "media": "All campaign media: broadcast, digital, social, OOH, in-store",
     "territory": "Worldwide",
     "term": "Perpetuity",
     "exclusivity": "Exclusive to client for the campaign category",
@@ -177,7 +177,7 @@ DEFAULT_LICENSE = {
 # so there are no third-party Content-ID claims to clear, and the work is itself
 # registrable with Content ID. NOT a bare "Content-ID-safe" assertion.
 CONTENT_ID_HONEST = (
-    "Original work — no third-party masters or samples, so no third-party "
+    "Original work: no third-party masters or samples, so no third-party "
     "Content-ID claims; the recording is registrable with Content ID by the "
     "rights-holder."
 )
@@ -419,7 +419,7 @@ class ClearanceCertificate:
             f"CLEARANCE CERTIFICATE",
             f"Client: {self.client}",
             f"Campaign: {self.campaign}",
-            f"Certified version: {self.certified_version or '—'}",
+            f"Certified version: {self.certified_version or '·'}",
             f"Licence status: {self.license_status}",
             "",
             "WARRANTY",
@@ -435,10 +435,10 @@ class ClearanceCertificate:
             rows.append(f"{key}: {self.license[key]}")
         rows += ["", "CHAIN OF TITLE"]
         for c in self.contributors:
-            rows.append(f"{c.name} — {c.role}" + (f" ({c.pro})" if getattr(c, "pro", "") else ""))
+            rows.append(f"{c.name} · {c.role}" + (f" ({c.pro})" if getattr(c, "pro", "") else ""))
         sig = self.signatory or {}
         rows += ["", "FOR AND ON BEHALF OF",
-                 f"{sig.get('entity', '')} — {sig.get('signer', '')}, {sig.get('title', '')}"]
+                 f"{sig.get('entity', '')} · {sig.get('signer', '')}, {sig.get('title', '')}"]
         return "\n".join(rows)
 
 
@@ -456,7 +456,7 @@ def build_clearance_certificate(
 
     IP3: ``signatory`` ({entity, signer, title}) drives the signatory block;
     ``license_confirmed`` ({by, date}) makes the grant read as an asserted grant
-    (else it reads "DRAFT — pending confirmation"); ``certified_version`` /
+    (else it reads "DRAFT · pending confirmation"); ``certified_version`` /
     ``certified_date`` stamp the version + date the certificate attaches to."""
     client = (_val(project, "client") or "the client").strip() or "the client"
     campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
@@ -470,7 +470,7 @@ def build_clearance_certificate(
         f"in this certificate."
     )
     clearance_line = (
-        "100% original & cleared — no samples, no third-party masters, "
+        "100% original & cleared: no samples, no third-party masters, "
         "no PRO surprises."
     )
     return ClearanceCertificate(
@@ -556,7 +556,7 @@ def build_cue_sheet(project, assignments, deliverables=None,
     publisher_names = ", ".join(r.name for r in payable) or PUBLISHER
     publisher_share = ", ".join(r.share_label for r in payable) or "100%"
     usage = _infer_usage(project)
-    cutdowns_cue = f"{campaign} — cutdowns"
+    cutdowns_cue = f"{campaign} · cutdowns"
     m_main = _cue_meta(delivery, campaign)
     m_cut = _cue_meta(delivery, cutdowns_cue)
     rows = [
@@ -689,7 +689,7 @@ def build_manifest(
         )
         suffix = " · current" if i == last else ""
         rows.append(ManifestRow(
-            group="Versions", asset=f"{name} — {label}{suffix}",
+            group="Versions", asset=f"{name} · {label}{suffix}",
             spec="Audio", status="Delivered",
         ))
     for asset in assets or []:
@@ -702,7 +702,7 @@ def build_manifest(
             1, "MASTER" if kind == "audio" else "FILE",
         )
         rows.append(ManifestRow(
-            group="Uploaded assets", asset=f"{name} — {label}",
+            group="Uploaded assets", asset=f"{name} · {label}",
             spec=spec, status="Delivered",
         ))
     return rows
@@ -1119,7 +1119,7 @@ def build_timeline(project, delivery: Optional[dict] = None, comments=None) -> L
     campaign = (_val(project, "need") or "the campaign").strip() or "the campaign"
     events.append({
         "when": _ts(created), "icon": "✎", "label": "Creative brief",
-        "detail": f"Campaign opened — {campaign}.",
+        "detail": f"Campaign opened: {campaign}.",
     })
 
     # 2) Each logged version upload (the v1/v2/v3 ladder).
@@ -1164,7 +1164,7 @@ def build_timeline(project, delivery: Optional[dict] = None, comments=None) -> L
         events.append({
             "when": _ts(zip_desc.get("built_at")), "icon": "📦",
             "label": "Delivery package assembled",
-            "detail": "Organised, documented, converted, and zipped — ready to download.",
+            "detail": "Organised, documented, converted, and zipped, ready to download.",
         })
 
     # 5) Released.
@@ -1173,7 +1173,7 @@ def build_timeline(project, delivery: Optional[dict] = None, comments=None) -> L
         events.append({
             "when": _ts(released_at), "icon": "🚀",
             "label": "Released",
-            "detail": "Marked released — final hand-off complete.",
+            "detail": "Marked released. Final hand-off complete.",
         })
 
     # Sort oldest-first; events without a timestamp keep their insertion order
@@ -1276,7 +1276,7 @@ def metadata_json(project, assignments, license=None, versions=None,
             for v in versions
         ],
         "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
-        "generated_by": "Chordential Delivery OS — automated assembly",
+        "generated_by": "Chordential Delivery OS · automated assembly",
     }
     return json.dumps(doc, indent=2, ensure_ascii=False)
 
@@ -1286,14 +1286,14 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
 
     IP3 (defensible rights): states the client + campaign, the **version it
     certifies** + date, the chain of title (contributors), the original-work
-    warranty, the license grant (shown as **"DRAFT — pending confirmation"** until
+    warranty, the license grant (shown as **"DRAFT · pending confirmation"** until
     the operator explicitly confirms it, never a silent buyout-by-default), honest
     Content-ID language, the "documented & original" cleared line, and a
     **signatory block** (entity, authorized signer, title, date). Carries NO
     indemnification clause and **no indemnity mention at all** (founder scope:
     "documented & original, indemnity later"). Deterministic from the cert data."""
     lines: List[str] = []
-    lines.append("CHORDENTIAL — CLEARANCE CERTIFICATE")
+    lines.append("CHORDENTIAL · CLEARANCE CERTIFICATE")
     lines.append("=" * 52)
     lines.append("")
     lines.append(f"Client:     {cert.client}")
@@ -1307,7 +1307,7 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     lines.append("-" * 52)
     if cert.contributors:
         for c in cert.contributors:
-            lines.append(f"  • {c.name} — {c.role}")
+            lines.append(f"  • {c.name} · {c.role}")
     else:
         lines.append("  • Chordential Music")
     lines.append("")
@@ -1316,13 +1316,13 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     lines.append(cert.warranty)
     lines.append("")
     if cert.license_draft:
-        lines.append(f"GRANT OF RIGHTS / LICENSE — {LICENSE_DRAFT_NOTE}")
+        lines.append(f"GRANT OF RIGHTS / LICENSE · {LICENSE_DRAFT_NOTE}")
     else:
         lines.append("GRANT OF RIGHTS / LICENSE")
     lines.append("-" * 52)
     if cert.license_draft:
         lines.append(
-            "  Terms below are the standard template — NOT yet asserted as the "
+            "  Terms below are the standard template; NOT yet asserted as the "
             "deal grant. Confirm the license to certify these terms."
         )
     lines.append(f"  Type:        {cert.license.get('type', '')}")
@@ -1347,7 +1347,7 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     lines.append("-" * 52)
     lines.append(cert.clearance_line)
     lines.append(CONTENT_ID_HONEST)
-    lines.append("Documented & original — Chordential holds clean chain of title.")
+    lines.append("Documented & original. Chordential holds clean chain of title.")
     lines.append("")
     lines.append("SIGNATORY")
     lines.append("-" * 52)
@@ -1377,7 +1377,7 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None,
     BRIEF section reconciling each scoped brief deliverable against what was
     delivered — the contract part, recorded in the delivered package."""
     lines: List[str] = []
-    lines.append("CHORDENTIAL — DELIVERABLES MANIFEST")
+    lines.append("CHORDENTIAL · DELIVERABLES MANIFEST")
     lines.append("=" * 52)
     lines.append("")
     group = None
@@ -1388,7 +1388,7 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None,
             lines.append("-" * 52)
             group = r.group
         mark = "[✓]" if r.status == "Delivered" else "[ ]"
-        lines.append(f"  {mark} {r.asset}  ({r.spec}) — {r.status}")
+        lines.append(f"  {mark} {r.asset}  ({r.spec}) · {r.status}")
     recorded = {k: v for k, v in (asset_approvals or {}).items()
                 if isinstance(v, dict) and v.get("status")
                 and v.get("status") != "Pending"}
@@ -1399,7 +1399,7 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None,
         for key, rec in recorded.items():
             who = (rec.get("by") or "").strip()
             on = (rec.get("date") or "").strip()
-            tail = f" — {who}" if who else ""
+            tail = f" · {who}" if who else ""
             tail += f" ({on})" if on else ""
             lines.append(f"  {rec['status']}: {key}{tail}")
     items = list(brief_items or [])
@@ -1413,7 +1413,7 @@ def manifest_text(manifest, asset_approvals: Optional[dict] = None,
             mark = "[✓]" if it.get("status") == "Delivered" else "[ ]"
             matched = (it.get("matched") or "").strip()
             tail = f" → {matched}" if matched else ""
-            lines.append(f"  {mark} {it.get('item', '')} — {it.get('status', '')}{tail}")
+            lines.append(f"  {mark} {it.get('item', '')} · {it.get('status', '')}{tail}")
     lines.append("")
     return "\n".join(lines)
 
@@ -1469,7 +1469,7 @@ def manifest_html(project, manifest, *, asset_approvals: Optional[dict] = None,
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Chordential — Deliverables Manifest · {client}</title>
+<title>Deliverables Manifest · {client} · Chordential</title>
 <style>{_BRANDED_CSS}</style>
 </head>
 <body>
@@ -1478,7 +1478,7 @@ def manifest_html(project, manifest, *, asset_approvals: Optional[dict] = None,
     <div class="lh"><img class="logo" src="{logo}" alt="Chordential"><div class="lh-meta">Deliverables Manifest · {_esc(pkgid)}</div></div>
     <p class="doc-kicker">Manifest</p>
     <h1 class="doc">Deliverables Manifest</h1>
-    <p class="doc-sub">Everything scoped and delivered for {client} — {campaign}.</p>
+    <p class="doc-sub">Everything scoped and delivered for {client} · {campaign}.</p>
     <div class="accent-bar"></div>
     {body}
   </div>
@@ -1727,10 +1727,10 @@ def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
 
     draft = cert.license_draft
     seal_label = seal_label or ("IN CLEARANCE" if draft else "CLEARED")
-    grant_title = "Grant of rights" + (" — Draft, pending confirmation" if draft else "")
+    grant_title = "Grant of rights" + (" · Draft, pending confirmation" if draft else "")
     draft_note = (
         '<p style="margin:0 0 8px;font-size:10.5px;color:#7a756d">'
-        'Standard template terms — not yet confirmed as the deal grant.</p>'
+        'Standard template terms, not yet confirmed as the deal grant.</p>'
         if draft else ""
     )
     confirmed = ""
@@ -1813,7 +1813,7 @@ def clearance_certificate_html(
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Chordential — Clearance Certificate · {_esc(cert.client)}</title>
+<title>Clearance Certificate · {_esc(cert.client)} · Chordential</title>
 <style>{_BRANDED_CSS}</style>
 </head>
 <body>
@@ -1822,7 +1822,7 @@ def clearance_certificate_html(
     <div class="lh"><img class="logo" src="{logo}" alt="Chordential"><div class="lh-meta">Clearance Certificate · {_esc(pkgid)}</div></div>
     <p class="doc-kicker">Clearance</p>
     <h1 class="doc">Clearance Certificate</h1>
-    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery for {_esc(cert.client)}.</p>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights, cleared on delivery for {_esc(cert.client)}.</p>
     <div class="accent-bar"></div>
     {body}
   </div>
@@ -1879,7 +1879,7 @@ def delivery_package_html(
     <div class="rule"></div>
     <p class="doc-kicker" style="color:{_BRAND['orange']}">Delivery Package</p>
     <h1>{_esc(cert.campaign)}</h1>
-    <p class="tag">Original music — composed, produced, and cleared for {_esc(cert.client)}.</p>
+    <p class="tag">Original music, composed, produced, and cleared for {_esc(cert.client)}.</p>
     <div class="status">{status_line}</div>
     <div class="rule" style="margin:34px 0 22px"></div>
     <div class="meta">
@@ -1934,7 +1934,7 @@ def delivery_package_html(
     {lh()}
     <p class="doc-kicker">Document 02</p>
     <h1 class="doc">Clearance Certificate</h1>
-    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery.</p>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights, cleared on delivery.</p>
     <div class="accent-bar"></div>
     {_certificate_body_html(cert, pkgid)}
   </div>
@@ -1944,10 +1944,10 @@ def delivery_package_html(
     # --- Cue sheet ---------------------------------------------------------- #
     cue_rows = "".join(
         f"<tr><td>{_esc(q.cue)}</td><td>{_esc(q.usage)}</td>"
-        f"<td>{_esc(q.duration or '—')}</td><td>{_esc(q.isrc or '—')}</td>"
-        f"<td>{_esc(q.iswc or '—')}</td><td>{_esc(q.composers)}</td>"
+        f"<td>{_esc(q.duration or '·')}</td><td>{_esc(q.isrc or '·')}</td>"
+        f"<td>{_esc(q.iswc or '·')}</td><td>{_esc(q.composers)}</td>"
         f"<td>{_esc(q.writer_share)}</td><td>{_esc(q.publisher)}</td>"
-        f"<td>{_esc(q.publisher_share)}</td><td>{_esc(q.pro or '—')}</td></tr>"
+        f"<td>{_esc(q.publisher_share)}</td><td>{_esc(q.pro or '·')}</td></tr>"
         for q in (cues or [])
     )
     cue_page = f"""
@@ -1956,12 +1956,12 @@ def delivery_package_html(
     {lh()}
     <p class="doc-kicker">Document 03</p>
     <h1 class="doc">Cue Sheet</h1>
-    <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
+    <p class="doc-sub">The metadata your team files for backend (PRO) royalties. No cue sheet, no backend.</p>
     <table>
       <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Publisher</th><th>PRO</th><th>%</th></tr></thead>
       <tbody>{cue_rows}</tbody>
     </table>
-    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
+    <p class="legend" style="margin-top:14px">Usage codes: VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
   </div>
   {foot()}
 </section>"""
@@ -1984,9 +1984,9 @@ def delivery_package_html(
         else:
             url = (a.get("url") or "").strip()
             if url:
-                block.append(f'<div class="legend"><a href="{_esc(url)}">⤓ {_esc(label)}</a> — referenced (not bundled)</div>')
+                block.append(f'<div class="legend"><a href="{_esc(url)}">⤓ {_esc(label)}</a> · referenced (not bundled)</div>')
             else:
-                block.append('<div class="legend">Referenced — not bundled in this package.</div>')
+                block.append('<div class="legend">Referenced, not bundled in this package.</div>')
         block.append("</div>")
         asset_blocks.append("".join(block))
     assets_section = ""
@@ -2001,11 +2001,11 @@ def delivery_package_html(
         roll = brief_rollup(items)
         li = []
         for it in items:
-            mark = "✓" if it.get("status") == "Delivered" else "—"
+            mark = "✓" if it.get("status") == "Delivered" else "·"
             matched = (it.get("matched") or "").strip()
             tail = f" → {_esc(matched)}" if matched else ""
             li.append(
-                f'<li><span class="tick">{mark}</span> {_esc(it.get("item", ""))} — '
+                f'<li><span class="tick">{mark}</span> {_esc(it.get("item", ""))} · '
                 f'{_esc(it.get("status", ""))}{tail}</li>'
             )
         brief_section = (
@@ -2041,7 +2041,7 @@ def delivery_package_html(
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Chordential — Delivery Package · {_esc(cert.client)}</title>
+<title>Delivery Package · {_esc(cert.client)} · Chordential</title>
 <style>{_BRANDED_CSS}</style>
 </head>
 <body>
@@ -2105,12 +2105,12 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
     client = (_val(project, "client") or "").strip()
     lines: List[str] = []
     lines.append("CHORDENTIAL")
-    lines.append(f"Your delivery — {campaign}" + (f" · {client}" if client else ""))
+    lines.append(f"Your delivery · {campaign}" + (f" · {client}" if client else ""))
     lines.append("")
     lines.append("▶  START HERE")
     lines.append("   Open  Docs/Delivery-Package.html  in any web browser.")
     lines.append("   That's your complete delivery, beautifully: every track (playable),")
-    lines.append("   the clearance certificate, cue sheet, rights, and credits — one clean page.")
+    lines.append("   the clearance certificate, cue sheet, rights, and credits: one clean page.")
     lines.append("")
     lines.append("WHAT'S IN THIS PACKAGE")
     lines.append("-" * 52)
@@ -2120,7 +2120,7 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
     lines.append("   Docs/For-filing/                           cue sheet + metadata your coordinator files with the PROs")
     lines.append("")
     if completeness is not None and not completeness.get("complete"):
-        lines.append("PLEASE NOTE — PARTIAL DELIVERY")
+        lines.append("PLEASE NOTE · PARTIAL DELIVERY")
         lines.append("-" * 52)
         lines.append(f"   {completeness.get('text', '')}. These aren't in this ZIP yet:")
         for label in completeness.get("missing") or []:
@@ -2128,12 +2128,12 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
         lines.append("   We'll send them as soon as they're ready.")
         lines.append("")
     if referenced:
-        lines.append("REFERENCED, NOT BUNDLED — available by link")
+        lines.append("REFERENCED, NOT BUNDLED · available by link")
         lines.append("-" * 52)
         for a in referenced:
             label = (a.get("label") or a.get("filename") or "Asset").strip()
             url = (a.get("url") or "").strip()
-            lines.append(f"     • {label}" + (f" — {url}" if url else ""))
+            lines.append(f"     • {label}" + (f" · {url}" if url else ""))
         lines.append("")
     lines.append("Organised, documented, and cleared by Chordential.")
     lines.append("The music is your composer's original work.")
@@ -2344,9 +2344,9 @@ def build_delivery_zip(
     n_total = len(completeness.get("expected") or [])
     partial = not completeness.get("complete")
     descriptor_text = (
-        f"Partial delivery — {n_have} of {n_total} deliverable"
+        f"Partial delivery · {n_have} of {n_total} deliverable"
         f"{'s' if n_total != 1 else ''}"
-        if partial else "Complete delivery — everything uploaded"
+        if partial else "Complete delivery · everything uploaded"
     )
 
     return {

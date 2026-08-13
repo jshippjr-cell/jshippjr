@@ -28,7 +28,7 @@ from .web import showcase
 VALUE_PROP = (
     "Chordential is a procurement-grade music partner. We turn a brief into "
     "broadcast-ready original music with a vetted craft team, a fixed scope, and "
-    "dependable delivery — so brands and agencies get distinctive sound without "
+    "dependable delivery, so brands and agencies get distinctive sound without "
     "the risk of an open-ended creative process."
 )
 
@@ -210,10 +210,10 @@ def quote_phrase(band: Optional[tuple]) -> str:
     showed."""
     lo, hi = band or (None, None)
     if not lo or not hi:
-        return "TBD — no budget discovered and no operator price set"
+        return "TBD · no budget discovered and no operator price set"
     if lo == hi:
         return f"${lo:,.0f}"
-    return f"${lo:,.0f}–${hi:,.0f}"
+    return f"${lo:,.0f} to ${hi:,.0f}"
 
 
 def _relevant_examples(qual: QualificationResult) -> List[WorkExample]:
@@ -256,23 +256,23 @@ def _deliverables_for(qual: QualificationResult) -> List[Deliverable]:
 # This used to promise "full buyout / work-made-for-hire" — under which the client
 # would own the publishing too, contradicting the cue sheet we file.
 _RIGHTS_SUMMARY = [
-    "Original work — you own the master outright",
+    "Original work: you own the master outright",
     "Perpetual sync licence across every campaign medium",
     "Territory: worldwide",
     "Term: perpetuity",
     "Media: all campaign media (broadcast, digital, social, OOH, in-store)",
-    "Composition publishing retained by Chordential — we file the cue sheet",
-    "100% original & cleared — no samples, no third-party masters, nothing to clear but ours",
+    "Composition publishing retained by Chordential; we file the cue sheet",
+    "100% original & cleared: no samples, no third-party masters, nothing to clear but ours",
 ]
 
 
 def _rollout_for(qual: QualificationResult) -> List[RolloutItem]:
     """A generic-but-personalized version→channel map (the rollout standard)."""
     rollout = [
-        RolloutItem(":60", "Anthem", ["Brand film — site hero / YouTube", "Cinema pre-show"]),
+        RolloutItem(":60", "Anthem", ["Brand film · site hero / YouTube", "Cinema pre-show"]),
         RolloutItem(":30", "Cutdown", ["TV / CTV", "Radio spot"]),
-        RolloutItem(":15", "Cutdown", ["Pre-roll — YouTube / OTT", "Vertical — IG / TikTok"]),
-        RolloutItem(":06", "Bumper", ["Bumper — YouTube", "Stories / Reels"]),
+        RolloutItem(":15", "Cutdown", ["Pre-roll · YouTube / OTT", "Vertical · IG / TikTok"]),
+        RolloutItem(":06", "Bumper", ["Bumper · YouTube", "Stories / Reels"]),
     ]
     wanted = {qual.discipline, *getattr(qual, "secondary_disciplines", [])}
     if MusicDiscipline.SONIC_BRANDING in wanted:
@@ -295,41 +295,41 @@ def _rollout_for(qual: QualificationResult) -> List[RolloutItem]:
 SUPPORT_CHIPS = [
     # Craft — "what we'll make" (universal)
     {"id": "craft-original", "family": "craft", "label": "Original composition",
-     "sentence": "Original composition — written for your project from a blank page, not licensed stock.",
+     "sentence": "Original composition, written for your project from a blank page, not licensed stock.",
      "templates": None},
     {"id": "craft-score", "family": "craft", "label": "Score to picture",
-     "sentence": "Scored to your edit — music written to hit the story's beats, cue by cue.",
+     "sentence": "Scored to your edit: music written to hit the story's beats, cue by cue.",
      "templates": None},
     {"id": "craft-production", "family": "craft", "label": "Production & arrangement",
-     "sentence": "Full production and arrangement — from first sketch to a finished, mix-ready record.",
+     "sentence": "Full production and arrangement, from first sketch to a finished, mix-ready record.",
      "templates": None},
     {"id": "craft-topline", "family": "craft", "label": "Topline / song writing",
-     "sentence": "Topline and song writing — memorable melody and lyric built around your message.",
+     "sentence": "Topline and song writing: memorable melody and lyric built around your message.",
      "templates": None},
     {"id": "craft-sonic", "family": "craft", "label": "Sonic identity",
-     "sentence": "A sonic identity — a short, ownable musical signature that travels across everything you make.",
+     "sentence": "A sonic identity: a short, ownable musical signature that travels across everything you make.",
      "templates": None},
     {"id": "craft-multicut", "family": "craft", "label": "Arrangement for multiple cuts",
      "sentence": "Arranged so one piece flexes into every length and format you need.",
      "templates": None},
     # Aesthetic — "how it should feel" (universal)
     {"id": "aes-brand", "family": "aesthetic", "label": "Brand aesthetic",
-     "sentence": "Tuned to your brand's aesthetic — the sound matches the look and the voice.",
+     "sentence": "Tuned to your brand's aesthetic, so the sound matches the look and the voice.",
      "templates": None},
     {"id": "aes-cinematic", "family": "aesthetic", "label": "Cinematic / orchestral",
-     "sentence": "A cinematic, orchestral palette — scale and emotion without the stock-music sheen.",
+     "sentence": "A cinematic, orchestral palette: scale and emotion without the stock-music sheen.",
      "templates": None},
     {"id": "aes-warm", "family": "aesthetic", "label": "Warm & hopeful",
-     "sentence": "Warm, hopeful, human — music that leaves the audience feeling something.",
+     "sentence": "Warm, hopeful, human: music that leaves the audience feeling something.",
      "templates": None},
     {"id": "aes-modern", "family": "aesthetic", "label": "Modern & current",
      "sentence": "Contemporary production that sounds current, not dated on arrival.",
      "templates": None},
     {"id": "aes-gritty", "family": "aesthetic", "label": "Gritty / textural",
-     "sentence": "Gritty, textural, real — character over polish where the story calls for it.",
+     "sentence": "Gritty, textural, real: character over polish where the story calls for it.",
      "templates": None},
     {"id": "aes-minimal", "family": "aesthetic", "label": "Minimal & restrained",
-     "sentence": "Restrained and minimal — space and intention, never wall-to-wall.",
+     "sentence": "Restrained and minimal: space and intention, never wall-to-wall.",
      "templates": None},
     # Deliverable — "what you'll get" (template-scoped)
     {"id": "del-cues", "family": "deliverable", "label": "Cues to picture",
@@ -345,7 +345,7 @@ SUPPORT_CHIPS = [
      "sentence": "Broadcast-ready masters plus an instrumental/TV mix.",
      "templates": ["campaign"]},
     {"id": "del-cutdowns", "family": "deliverable", "label": "Multi-format cutdowns",
-     "sentence": "All the cutdowns you need — :30, :15, :06 — and 9:16 social verticals.",
+     "sentence": "All the cutdowns you need: :30, :15, :06, and 9:16 social verticals.",
      "templates": ["campaign"]},
     {"id": "del-logo", "family": "deliverable", "label": "Logo + variations",
      "sentence": "A primary sonic logo plus short/long variations for every placement.",
@@ -358,33 +358,33 @@ SUPPORT_CHIPS = [
      "templates": None},
     # Assurance — "why it's safe to hire us" (universal)
     {"id": "ass-cleared", "family": "assurance", "label": "Original & cleared",
-     "sentence": "100% original and cleared — no samples, no third-party masters, no PRO surprises.",
+     "sentence": "100% original and cleared: no samples, no third-party masters, no PRO surprises.",
      "templates": None},
     {"id": "ass-buyout", "family": "assurance", "label": "Yours in perpetuity",
      "sentence": "You own the recording and the right to use it forever, worldwide, "
                  "in every campaign medium.",
      "templates": None},
     {"id": "ass-fixed", "family": "assurance", "label": "Fixed scope & timeline",
-     "sentence": "A fixed scope and a dependable timeline — no open-ended creative drift.",
+     "sentence": "A fixed scope and a dependable timeline, with no open-ended creative drift.",
      "templates": None},
     {"id": "ass-vetted", "family": "assurance", "label": "Vetted craft team",
      "sentence": "Made by a vetted craft team matched to your brief, not a faceless library.",
      "templates": None},
     {"id": "ass-revisions", "family": "assurance", "label": "Revisions included",
-     "sentence": "Revision rounds built into the scope — we land it, together.",
+     "sentence": "Revision rounds built into the scope, so we land it together.",
      "templates": None},
     {"id": "ass-onepartner", "family": "assurance", "label": "One accountable partner",
      "sentence": "One accountable partner from brief to final delivery.",
      "templates": None},
     # Team / talent descriptors — "who we'd put on it" (universal)
     {"id": "team-composer", "family": "team", "label": "Composer matched to your genre",
-     "sentence": "A composer whose catalog already lives in your world — not a generalist reaching for it.",
+     "sentence": "A composer whose catalog already lives in your world, not a generalist reaching for it.",
      "templates": None},
     {"id": "team-producer", "family": "team", "label": "Hands-on producer",
      "sentence": "A producer who shapes the record end to end, not just a beat-maker.",
      "templates": None},
     {"id": "team-live", "family": "team", "label": "Live instrumentalists",
-     "sentence": "Real players where it counts — live strings, horns, guitars, not just samples.",
+     "sentence": "Real players where it counts: live strings, horns, guitars, not just samples.",
      "templates": None},
     {"id": "team-mix", "family": "team", "label": "Dedicated mix engineer",
      "sentence": "A dedicated mix engineer so the master translates everywhere, from cinema to phone.",
@@ -468,7 +468,7 @@ DELIVERY_TEMPLATES = {
         "rollout": [],   # a film doesn't get an ad rollout map
         "rights": list(_RIGHTS_SUMMARY),
         "assumptions": (
-            "Assumed engagement: feature-film score (~20–30 cues, delivered to "
+            "Assumed engagement: feature-film score (~20 to 30 cues, delivered to "
             "picture). Not right? Switch template or edit below."
         ),
     },
@@ -554,7 +554,7 @@ def build_understanding(opp: Opportunity) -> str:
     if not brief:
         return (
             "You're bringing us a music brief, and you need a partner to shape its "
-            "sound end-to-end — from first sketch to final, polished delivery."
+            "sound end-to-end, from first sketch to final, polished delivery."
         )
     # Lowercase the lead-in only when it reads as a common-noun phrase (keep proper
     # nouns/acronyms as-is) so "Original :30 brand spot" → "original :30 brand spot".
@@ -563,7 +563,7 @@ def build_understanding(opp: Opportunity) -> str:
         lead_in = lead_in[0].lower() + lead_in[1:]
     return (
         f"You're looking for {lead_in}, and you need a music partner to shape its "
-        f"sound end-to-end — from first idea to finished, ready-to-use delivery."
+        f"sound end-to-end, from first idea to finished, ready-to-use delivery."
     )
 
 
@@ -618,7 +618,7 @@ def _understanding_from_ci(opp: Opportunity, ci_fields: dict, met: bool) -> str:
 def _intro_line(met: bool) -> str:
     if met:
         return ("After meeting with your team, we've summarized our understanding of the "
-                "campaign below — the creative direction, deliverables, timeline, and "
+                "campaign below: the creative direction, deliverables, timeline, and "
                 "commercial assumptions discussed during discovery. If anything reads wrong, "
                 "one reply fixes it.")
     return ("The following reflects our current understanding of your campaign, assembled "
@@ -641,7 +641,7 @@ def _build_commercial(opp: Opportunity, estimate: Estimate, terms: List[str],
         "timeline": timeline,
         "terms": list(terms),
         "revisions": "Two structured revision rounds are included; more are scoped, never surprised.",
-        "deposit": "50% to begin, the balance on final approval — invoiced, never chased.",
+        "deposit": "50% to begin, the balance on final approval, invoiced and never chased.",
         "completion": (f"Working back from {timeline}." if timeline
                        else "Estimated completion is set at kickoff, working back from your air date."),
     }

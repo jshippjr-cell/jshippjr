@@ -212,7 +212,7 @@ class Estimate:
 
     @property
     def cost_range(self) -> str:
-        return f"${self.cost_low:,.0f}–${self.cost_high:,.0f}"
+        return f"${self.cost_low:,.0f} to ${self.cost_high:,.0f}"
 
 
 # What it costs to actually record the music, by instrumentation. None of this
@@ -356,7 +356,7 @@ class Scope:
         ep = f"{self.episodes} episodes · " if self.episodes else ""
         m = f"{self.minutes:g} min of score" + ("" if self.minutes_stated else " (assumed)")
         c = f"{self.cues} cues" + ("" if self.cues_stated else " (assumed)")
-        return f"{self.label} — {ep}{m} across {c}"
+        return f"{self.label} · {ep}{m} across {c}"
 
 
 # A format word alone is not enough. "Episode" turns up in podcast briefs, "series"
@@ -511,7 +511,7 @@ class Session:
     @property
     def summary(self) -> str:
         if not self.live:
-            return ("Sampled / programmed — no players booked"
+            return ("Sampled / programmed · no players booked"
                     + ("" if self.live_stated else " (assumed)"))
         p = f"{self.players} players" + ("" if self.players_stated else " (assumed)")
         d = f"{self.dates} date{'s' if self.dates != 1 else ''}" + (
@@ -682,12 +682,12 @@ def build_estimate(
         if suggested_price <= mid:
             delta_note = (
                 f"Suggested price ${suggested_price:,.0f} fits within the disclosed "
-                f"budget (~${mid:,.0f}) — healthy room."
+                f"budget (~${mid:,.0f}), with healthy room."
             )
         else:
             delta_note = (
                 f"Suggested price ${suggested_price:,.0f} exceeds the disclosed "
-                f"midpoint (~${mid:,.0f}) — scope down or justify the premium."
+                f"midpoint (~${mid:,.0f}); scope down or justify the premium."
             )
 
     return Estimate(
@@ -734,11 +734,11 @@ def _assumptions(scope: Scope, session: Optional[Session], session_key: str) -> 
     quote is entitled to know which figures came out of their brief.
     """
     common = [
-        "Phase 1 — expert priors only; NOT calibrated on Chordential actuals.",
+        "Phase 1: expert priors only; NOT calibrated on Chordential actuals.",
         "Session line pays players and the room; usage is a rights fee on the price, not a cost.",
-        "Rates are assumed blended $/hr — replace with AFM / SAG-AFTRA / market data (Phase 2).",
+        "Rates are assumed blended $/hr; replace with AFM / SAG-AFTRA / market data (Phase 2).",
         f"Target gross margin {TARGET_MARGIN:.0%} applied to suggested price.",
-        f"Confidence band ±{BAND_SPREAD:.0%} (uncalibrated) — narrows as actuals accrue.",
+        f"Confidence band ±{BAND_SPREAD:.0%} (uncalibrated), narrowing as actuals accrue.",
     ]
     if not scope.is_scored:
         return common[:1] + [
@@ -757,7 +757,7 @@ def _assumptions(scope: Scope, session: Optional[Session], session_key: str) -> 
     out = common[:1] + [
         f"Scope: {scope.summary}.",
         "Priced per finished minute of score plus a per-cue allowance for spotting, "
-        "revisions and delivery — not by spot length.",
+        "revisions and delivery, not by spot length.",
         f"Writing style is {SESSION_PACKAGES[session_key]['label'].lower()}; the "
         "players are costed separately, so a sampled orchestral score carries the "
         "orchestration hours and no session.",
@@ -771,7 +771,7 @@ def _assumptions(scope: Scope, session: Optional[Session], session_key: str) -> 
     if guessed:
         out.append(
             "ASSUMED, not stated in the brief: " + "; ".join(guessed)
-            + " — confirm at spotting before this becomes an offer.")
+            + ". Confirm at spotting before this becomes an offer.")
     out.append(
         "Per-minute hours are LINEAR: thematic reuse should make a long score cheaper "
         "per minute, and that discount is not modelled yet.")

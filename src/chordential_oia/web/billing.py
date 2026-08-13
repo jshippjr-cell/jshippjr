@@ -94,8 +94,8 @@ def _payment_request_email(kind: str, amount: float, client: str, need: str,
         f"  Project:      {need or 'your campaign'}\n\n"
         f"Pay securely here:\n{pay_url}\n\n"
         f"{tail}\n\n"
-        "— Jon, Chordential")
-    subject = f"{label} due ({amt}) — {need or 'your campaign'}"
+        "Jon, Chordential")
+    subject = f"{label} due ({amt}) · {need or 'your campaign'}"
     return {"subject": subject, "body": body}
 
 
@@ -154,13 +154,13 @@ def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
     amt = f"${amount:,.0f}" if amount else "your payment"
     label = (kind or "Payment").strip()
     date = (paid_at or "")[:10]
-    tail = ("Your deposit is in and we're getting production underway — you'll hear from us "
+    tail = ("Your deposit is in and we're getting production underway. You'll hear from us "
             "at your first creative milestone."
             if label.lower().startswith("dep") else
             "Your balance is settled and your final files are unlocked in your workspace.")
     body = (
         f"{greeting}\n\n"
-        f"Thank you — we've received your {label.lower()} payment. This is your receipt.\n\n"
+        f"Thank you. We've received your {label.lower()} payment. This is your receipt.\n\n"
         f"  Payment:  {label}\n"
         f"  Amount:   {amt}\n"
         f"  Project:  {need or 'your campaign'}\n"
@@ -168,9 +168,9 @@ def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
         + f"\n{tail}\n\n"
         + (f"Everything for your campaign lives in your workspace:\n{workspace_url}\n\n"
            if workspace_url else "")
-        + "— Jon, Chordential"
+        + "Jon, Chordential"
     )
-    subject = f"Receipt — {label} payment received ({amt})"
+    subject = f"Receipt · {label} payment received ({amt})"
     return {"subject": subject, "body": body}
 
 
@@ -221,7 +221,7 @@ def _apply_invoice_payment(conn, invoice_id: int, external_ref: str = "") -> boo
     if (inv["kind"] or "") == "Final":
         db.update_delivery(conn, pid, "download_unlocked", True)
     db.ensure_project_payouts(conn, pid)
-    db.add_update(conn, pid, f"{inv['kind']} invoice paid — thank you.", "invoice")
+    db.add_update(conn, pid, f"{inv['kind']} invoice paid. Thank you.", "invoice")
     # Re-read so the receipt carries the stamped paid_at.
     _notify_payment_settled(conn, db.get_invoice(conn, inv["id"]) or inv, pid)
     return True

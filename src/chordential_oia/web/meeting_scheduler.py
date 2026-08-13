@@ -102,7 +102,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                 provider, join_url = hosted.provider, hosted.join_url
                 external_meeting_id = hosted.external_meeting_id
             except Exception as e:  # noqa: BLE001 — degrade to manual, never fail the booking
-                _log.warning("Zoom create failed (%s: %s) — meeting stays manual",
+                _log.warning("Zoom create failed (%s: %s); meeting stays manual",
                              type(e).__name__, e)
         # 2) arm Recall (only for Zoom, only when configured + we have a link)
         if M.capture_configured() and join_url:
@@ -112,10 +112,10 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                 if bot_id:
                     notetaker, status = cp.name, M.BOT_INVITED
             except Exception as e:  # noqa: BLE001
-                _log.warning("Recall invite failed (%s: %s) — notetaker not armed",
+                _log.warning("Recall invite failed (%s: %s); notetaker not armed",
                              type(e).__name__, e)
         elif M.capture_configured() and not join_url:
-            _log.info("Recall is configured but no join link exists — nothing to record; "
+            _log.info("Recall is configured but no join link exists, so nothing to record; "
                       "check Zoom creation or paste a meeting link.")
 
     # 3) calendar invite (both types, if a calendar is connected)
@@ -127,14 +127,14 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             if start_dt and end_dt:
                 where = join_url if meeting_type == ZOOM else "Phone call"
                 calendar_event_id = cal.create_event(
-                    summary=f"Discovery call — {opp['client']}",
+                    summary=f"Discovery call · {opp['client']}",
                     description=(f"Discovery call for {opp['need']}.\n"
                                 + (f"Join: {join_url}" if join_url else "We'll call you.")),
                     start=start_dt, end=end_dt,
                     attendees=[e for e in (_operator_email(), client_email) if e],
                     location=where)
         except Exception as e:  # noqa: BLE001
-            _log.warning("Calendar event create failed (%s: %s) — no invite sent",
+            _log.warning("Calendar event create failed (%s: %s); no invite sent",
                          type(e).__name__, e)
 
     mid = db.create_meeting(
@@ -200,12 +200,12 @@ def cancel(conn, meeting) -> dict:
                else build_invite_ics(meeting, opp, sequence=2, cancel=True))
         if meeting["client_email"]:
             _safe_mail(meeting["client_email"],
-                       f"Discovery call canceled — {opp['client']}",
+                       f"Discovery call canceled · {opp['client']}",
                        "Your discovery call has been canceled. Reply and we'll find another time.",
                        ics=ics)
         op = _operator_email()
         if op:
-            _safe_mail(op, f"Discovery call canceled — {opp['client']}",
+            _safe_mail(op, f"Discovery call canceled · {opp['client']}",
                        f"The discovery call with {meeting['client_name'] or opp['client']} "
                        f"was canceled.", ics=ics)
     return {"ok": True}
@@ -242,21 +242,21 @@ def proposal_email(opp, proposal) -> dict:
     slots = proposal_slots(proposal)
     lines = []
     for i, s in enumerate(slots):
-        lines.append(f"  Option {i + 1} — {fmt_et(s, long=True)}\n  {pick_base}?pick={i}")
+        lines.append(f"  Option {i + 1} · {fmt_et(s, long=True)}\n  {pick_base}?pick={i}")
     how = ("a Zoom call" if proposal["meeting_type"] == ZOOM else "a phone call")
     first = (proposal["client_name"] or "").split(" ")[0] or "there"
     note = (proposal["message"] or "").strip()
     body = (
         f"Hi {first},\n\n"
         f"Let's find a time for {how} about {opp['need'] or 'your campaign'}. "
-        f"Here are a few times that work on our side — pick whichever suits you and "
+        f"Here are a few times that work on our side. Pick whichever suits you and "
         f"everything else (calendar invites, the meeting link) is handled automatically:\n\n"
         + "\n\n".join(lines)
         + (f"\n\n{note}" if note else "")
         + f"\n\nOr see every option here: {pick_base}"
         + "\n\nIf none of these work, just reply and we'll offer more times.\n\n"
-        + "— Chordential")
-    return {"subject": f"Times for our call — {opp['client'] or 'Chordential'}",
+        + "Chordential")
+    return {"subject": f"Times for our call · {opp['client'] or 'Chordential'}",
             "to": proposal["client_email"] or "", "body": body}
 
 
@@ -362,7 +362,7 @@ def build_invite_ics(meeting, opp, *, sequence: int = 0, cancel: bool = False) -
             minutes=meeting["duration_min"] or 30)).isoformat())
     uid = f"chord-meeting-{meeting['id']}@chordential.com"
     is_zoom = meeting["meeting_type"] == ZOOM
-    title = f"Discovery call — Chordential × {meeting['client_name'] or opp['client']}"
+    title = f"Discovery call · Chordential × {meeting['client_name'] or opp['client']}"
     join = meeting["join_url"] or ""
     if is_zoom and join:
         desc = f"Discovery call about {opp['need'] or 'your campaign'}.\nJoin here: {join}"
@@ -422,7 +422,7 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
         _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",
             f"Your discovery call with Chordential is {verb} {when}.\n{how}\n\n"
-            f"The calendar invite is attached — accept it to add the call to your calendar.\n\n"
+            f"The calendar invite is attached. Accept it to add the call to your calendar.\n\n"
             f"Need to change it? {manage}",
             ics=ics)
     op = _operator_email()
@@ -430,7 +430,7 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
         # The operator gets the SAME join link + the .ics so the call lands on their
         # calendar too — the earlier operator email carried neither (reported live).
         _safe_mail(
-            op, f"Discovery call {verb} {when} — {opp['client']}",
+            op, f"Discovery call {verb} {when} · {opp['client']}",
             f"{meeting['meeting_type'].title()} call {verb} {when} with "
             f"{meeting['client_name'] or opp['client']} "
             f"({meeting['client_email'] or 'no email'}).\n\n"
@@ -450,7 +450,7 @@ def _safe_mail(to: str, subject: str, text: str, ics: Optional[str] = None) -> N
 def notify_new_request(request, opp) -> None:
     """Best-effort operator ping when a client submits a Discovery Request (ntfy/email)."""
     body = (f"New discovery request from {request['name'] or 'a client'} "
-            f"({request['email'] or 'no email'}) for {opp['client']} — "
+            f"({request['email'] or 'no email'}) for {opp['client']}: "
             f"{opp['need']}. Prefers {request['preferred_type']}."
             + (f' “{request["message"]}”' if request["message"] else ""))
     topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
@@ -463,4 +463,4 @@ def notify_new_request(request, opp) -> None:
         except Exception:  # noqa: BLE001
             pass
     if _operator_email():
-        _safe_mail(_operator_email(), f"New discovery request — {opp['client']}", body)
+        _safe_mail(_operator_email(), f"New discovery request · {opp['client']}", body)

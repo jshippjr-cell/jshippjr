@@ -114,38 +114,38 @@ _DELIVERABLES = {
 # Relevant-work bullets for the message ([Project] is the human's to fill in).
 _EXAMPLE_WORK = {
     MusicDiscipline.COMPOSITION: [
-        "[Project] — Original score for a branded film",
-        "[Project] — Campaign music package with cutdowns and alternate versions",
-        "[Project] — Original composition supporting a multi-channel launch",
+        "[Project] · Original score for a branded film",
+        "[Project] · Campaign music package with cutdowns and alternate versions",
+        "[Project] · Original composition supporting a multi-channel launch",
     ],
     MusicDiscipline.SONIC_BRANDING: [
-        "[Project] — Sonic identity and brand theme development",
-        "[Project] — National campaign music package with cutdowns and alternate versions",
-        "[Project] — Original composition supporting a multi-channel brand launch",
+        "[Project] · Sonic identity and brand theme development",
+        "[Project] · National campaign music package with cutdowns and alternate versions",
+        "[Project] · Original composition supporting a multi-channel brand launch",
     ],
     MusicDiscipline.SOUND_DESIGN: [
-        "[Project] — Signature sound-design system for a product launch",
-        "[Project] — Motion and UI sound for a digital campaign",
-        "[Project] — Trailer / promo sound-design package",
+        "[Project] · Signature sound-design system for a product launch",
+        "[Project] · Motion and UI sound for a digital campaign",
+        "[Project] · Trailer / promo sound-design package",
     ],
     MusicDiscipline.ARRANGEMENT: [
-        "[Project] — Orchestral arrangement for a brand film",
-        "[Project] — Ensemble arrangement and recording",
-        "[Project] — Multi-version adaptation across channels",
+        "[Project] · Orchestral arrangement for a brand film",
+        "[Project] · Ensemble arrangement and recording",
+        "[Project] · Multi-version adaptation across channels",
     ],
     MusicDiscipline.SUPERVISION: [
-        "[Project] — Music supervision for a branded campaign",
-        "[Project] — Curated, cleared placements across channels",
-        "[Project] — Needle-drop reel for a product launch",
+        "[Project] · Music supervision for a branded campaign",
+        "[Project] · Curated, cleared placements across channels",
+        "[Project] · Needle-drop reel for a product launch",
     ],
     MusicDiscipline.LICENSING: [
-        "[Project] — Licensed music package with clearance",
-        "[Project] — Curated cleared-track selection for a campaign",
+        "[Project] · Licensed music package with clearance",
+        "[Project] · Curated cleared-track selection for a campaign",
     ],
     MusicDiscipline.MIXING: [
-        "[Project] — Mix and master for a branded campaign",
-        "[Project] — Multi-format mixes (broadcast, social, cinema)",
-        "[Project] — Stem mixing and re-versions across channels",
+        "[Project] · Mix and master for a branded campaign",
+        "[Project] · Multi-format mixes (broadcast, social, cinema)",
+        "[Project] · Stem mixing and re-versions across channels",
     ],
 }
 
@@ -180,7 +180,7 @@ def _build_first_touch(opp, qual, contact_name):
         f"{ex_lines}\n\n"
         "I also know how much outreach reaches your inbox, and that opening links "
         "from an unfamiliar sender isn't always ideal. If you'd prefer, I'm glad to "
-        "set up a short call and walk you through the examples myself — the thinking "
+        "set up a short call and walk you through the examples myself: the thinking "
         f"behind each one and how we'd approach {opp.client}'s project specifically. "
         "My aim is simply to make evaluating us as easy and comfortable as possible "
         "for your team.\n\n"
@@ -229,7 +229,7 @@ def _first_brief_line(opp) -> str:
     desc = (getattr(opp, "description", "") or "").strip()
     brief = need or desc
     if not brief:
-        return "Thanks for putting your music brief out there — it caught my eye."
+        return "Thanks for putting your music brief out there. It caught my eye."
     # Keep it short and concrete; a single clause referencing their own words.
     snippet = brief.split("\n", 1)[0].strip()
     if len(snippet) > 160:
@@ -281,7 +281,7 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
         track = "I can pull a piece from our portfolio that speaks directly to your brief."
     call_offer = (
         "I can attach a few examples, but I also know opening links from a "
-        "stranger isn't always ideal — so if it's easier, I'm happy to walk you "
+        "stranger isn't always ideal, so if it's easier, I'm happy to walk you "
         "through them on a short call."
     )
     page_url = _page_url(opp_id, share_token)
@@ -298,11 +298,11 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
         )
     else:
         page_link = (
-            "Here's our understanding of your campaign — review it, leave a note if anything "
+            "Here's our understanding of your campaign. Review it, leave a note if anything "
             "reads wrong, and if it reflects your project, confirm it right on the page:\n"
             f"{page_url}"
         )
-    signoff = "— Jon Shipp · Chordential"
+    signoff = "Jon Shipp · Chordential"
     if more:
         example_more = "A couple more, if helpful:\n" + "\n".join(f"• {e}" for e in more)
     else:
@@ -427,7 +427,7 @@ class OutreachPlan:
             "Cadence:",
         ]
         for s in self.steps:
-            lines.append(f"  {s.order}. {s.action} — {s.channel} ({s.timing})")
+            lines.append(f"  {s.order}. {s.action} · {s.channel} ({s.timing})")
             lines.append(f"     {s.talking_point}")
         if self.assumptions:
             lines.append("")
@@ -456,12 +456,12 @@ def _urgency(qual: QualificationResult, scored: ScoredOpportunity,
              strategic: StrategicValue, opp: Opportunity) -> str:
     tight = opp.turnaround_days is not None and opp.turnaround_days <= 7
     if strategic.tier == "Door-opener":
-        return "Reach out within 24h — strategic door-opener; speed wins the relationship."
+        return "Reach out within 24h: strategic door-opener, and speed wins the relationship."
     if tight:
-        return f"Reach out within 24h — tight {opp.turnaround_days}-day turnaround."
+        return f"Reach out within 24h: tight {opp.turnaround_days}-day turnaround."
     if qual.recommended_action.value == "Pursue":
-        return "Reach out within 1–2 business days — qualified, high-fit pursuit."
-    return "Reach out within 2–3 business days — warm, non-urgent."
+        return "Reach out within 1 to 2 business days: qualified, high-fit pursuit."
+    return "Reach out within 2 to 3 business days: warm, non-urgent."
 
 
 def build_outreach_plan(
@@ -494,7 +494,7 @@ def build_outreach_plan(
 
     first_touch_message = _build_first_touch(opp, qual, contact_name)
     # Subject line for the one-click mailto draft (kept short and concrete).
-    email_subject = f"{opp.need} — Chordential"
+    email_subject = f"{opp.need} · Chordential"
     recommended_examples = _for_discipline(_RECOMMENDED_EXAMPLES, discipline) if qual.qualified else []
 
     steps: List[OutreachStep] = []
@@ -502,7 +502,7 @@ def build_outreach_plan(
     if is_gov:
         steps.append(OutreachStep(
             1, "Confirm submission requirements", primary_channel,
-            "Day 0 — before pitching",
+            "Day 0 · before pitching",
             "Pull the deadline, format, and eligibility from the posting/portal; "
             "note any teaming or registration requirement.",
         ))
@@ -517,7 +517,7 @@ def build_outreach_plan(
         OutreachStep(
             0, "Value follow-up", "Email",
             "Day 3 (if no reply)",
-            "Share a 2–3 piece reel tuned to the brief; restate the fast turnaround.",
+            "Share a 2 to 3 piece reel tuned to the brief; restate the fast turnaround.",
         ),
         OutreachStep(
             0, "Offer a scoping call", call_channel,
@@ -547,13 +547,13 @@ def build_outreach_plan(
         qualified=qual.qualified,
         assumptions=[
             "Sequenced deterministically from the qualification, estimate, and "
-            "strategic-value engines — no AI generation.",
-            f"Contact ({target}) is inferred — confirm the real name/email before sending.",
-            "Recommended examples are existing portfolio pieces to attach — "
+            "strategic-value engines, with no AI generation.",
+            f"Contact ({target}) is inferred; confirm the real name/email before sending.",
+            "Recommended examples are existing portfolio pieces to attach. "
             "Chordential does not synthesize audio (human craft + Jon-reviewed reels).",
-            "LinkedIn link is an auto-built people search — for the named contact "
+            "LinkedIn link is an auto-built people search, for the named contact "
             "when you've entered one, otherwise the inferred decision-maker at this "
-            "buyer — open it to find/verify the person, then paste their profile to lock it in.",
+            "buyer. Open it to find/verify the person, then paste their profile to lock it in.",
             "Log each touch below; the outcome feeds the win/loss moat.",
         ],
     )
@@ -609,14 +609,14 @@ def respond_action(row, plan: OutreachPlan) -> dict:
                 "label": f"Message on Reddit ▸ u/{handle}",
                 "url": compose, "draft": draft, "opens_compose": True,
                 "hint": "Opens Reddit's message composer to the poster with your note "
-                        "prefilled — review and send.",
+                        "prefilled, ready to review and send.",
             }
         return {
             "channel": "Reddit",
             "label": "Reply on Reddit ▸ open post",
             "url": url or "https://www.reddit.com", "draft": draft, "opens_compose": False,
             "hint": "We don't have the poster's username, so open the post and reply/DM "
-                    "from there — your draft below is ready to paste.",
+                    "from there; your draft below is ready to paste.",
         }
 
     if "linkedin" in source and not email:
@@ -625,7 +625,7 @@ def respond_action(row, plan: OutreachPlan) -> dict:
             "channel": "LinkedIn",
             "label": "Message on LinkedIn ▸ open profile",
             "url": target, "draft": draft, "opens_compose": False,
-            "hint": "Opens the LinkedIn profile/search — paste your draft into a message.",
+            "hint": "Opens the LinkedIn profile/search; paste your draft into a message.",
         }
 
     if email or any(k in source for k in _EMAIL_SOURCES):
@@ -634,7 +634,7 @@ def respond_action(row, plan: OutreachPlan) -> dict:
             "label": ("Email ▸ " + email) if email else "Compose email",
             "url": _mailto(email, subject, draft), "draft": draft, "opens_compose": True,
             "hint": (f"Opens your mail app to {email} with the pitch prefilled." if email
-                     else "Opens your mail app with the pitch prefilled — add the recipient."),
+                     else "Opens your mail app with the pitch prefilled; add the recipient."),
         }
 
     # Fallback: open the source link if we have one, else draft an email.
@@ -643,11 +643,11 @@ def respond_action(row, plan: OutreachPlan) -> dict:
             "channel": "Open source",
             "label": "Open listing ▸ respond there",
             "url": url, "draft": draft, "opens_compose": False,
-            "hint": "Open the listing and respond through its own channel — draft ready below.",
+            "hint": "Open the listing and respond through its own channel; draft ready below.",
         }
     return {
         "channel": "Email",
         "label": "Compose email",
         "url": _mailto(email, subject, draft), "draft": draft, "opens_compose": True,
-        "hint": "Opens your mail app with the pitch prefilled — add the recipient.",
+        "hint": "Opens your mail app with the pitch prefilled; add the recipient.",
     }

@@ -43,9 +43,9 @@ class Proposal:
         rows = [
             f"  - {l.role}: {l.breakdown}"
             for l in self.lines
-        ] or ["  - —"]
+        ] or ["  - ·"]
         parts = [
-            f"PROPOSAL — {self.need}",
+            f"PROPOSAL · {self.need}",
             f"Client: {self.client}",
             f"Discipline: {self.discipline}",
             "",

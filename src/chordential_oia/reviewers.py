@@ -111,7 +111,7 @@ def access_note(state: str, rv: Optional[dict] = None) -> str:
     rv = rv or {}
     if state == EXPIRED:
         return (f"This review link expired on {rv.get('expires_at', '')}. "
-                "Ask your Chordential contact for a fresh one — nothing is lost.")
+                "Ask your Chordential contact for a fresh one. Nothing is lost.")
     if state == REVOKED:
         return ("This review link has been withdrawn. Ask your Chordential contact "
                 "if you still need access.")

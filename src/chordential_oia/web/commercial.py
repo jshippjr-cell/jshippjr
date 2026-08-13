@@ -76,7 +76,7 @@ def _producer_terms(opp: Opportunity, ci_fields: dict, rounds: int,
                   f"included; further rounds are scoped openly, never sprung on you.")},
         {"title": "Ownership",
          "body": ("Upon final payment, all agreed rights transfer to you according to the "
-                  "licensed usage outlined above — "
+                  "licensed usage outlined above: "
                   + ("original, cleared, and yours worldwide."
                      if original else "as licensed for this campaign."))},
         {"title": "Delivery",
@@ -84,7 +84,7 @@ def _producer_terms(opp: Opportunity, ci_fields: dict, rounds: int,
                   "labeled so anyone on the campaign can find them.")},
         {"title": "Creative direction",
          "body": ("Changes that materially alter the approved creative direction may call for a "
-                  "revised scope — we'll always talk it through before anything changes.")},
+                  "revised scope. We'll always talk it through before anything changes.")},
         {"title": "Payment",
          "body": (f"A {deposit_pct:.0%} deposit confirms the booking and reserves the team; the "
                   f"balance is due on final delivery. Invoiced, never chased.")},

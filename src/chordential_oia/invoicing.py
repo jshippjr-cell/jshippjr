@@ -27,7 +27,7 @@ class Invoice:
 
     def render_text(self) -> str:
         return "\n".join([
-            f"INVOICE ({self.kind}) — {self.need}",
+            f"INVOICE ({self.kind}) · {self.need}",
             f"Client: {self.client}",
             "",
             f"Amount due: ${self.amount:,.0f}",

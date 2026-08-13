@@ -48,7 +48,7 @@ PROJECT: Dict[str, Any] = {
     "client": SAMPLE_CLIENT,
     "need": SAMPLE_CAMPAIGN,
     "description": (
-        "Brand anthem for a spring outdoor campaign — a :60 hero cut for broadcast "
+        "Brand anthem for a spring outdoor campaign: a :60 hero cut for broadcast "
         "and online, with :30 / :15 / :06 cutdowns and social verticals. Warm, "
         "unhurried, acoustic-led; no vocal."
     ),
@@ -85,7 +85,7 @@ LICENSE_CONFIRMED: Dict[str, Any] = {"by": "Jon Shipp", "date": "2026-03-18"}
 CUE_META: Dict[str, Dict[str, str]] = {
     SAMPLE_CAMPAIGN: {"duration": "1:00", "isrc": "US-CHD-26-00417",
                       "iswc": "T-931.005.417-2"},
-    f"{SAMPLE_CAMPAIGN} — cutdowns": {"duration": "0:30 / 0:15 / 0:06",
+    f"{SAMPLE_CAMPAIGN} · cutdowns": {"duration": "0:30 / 0:15 / 0:06",
                                       "isrc": "US-CHD-26-00418",
                                       "iswc": "T-931.005.417-2"},
 }

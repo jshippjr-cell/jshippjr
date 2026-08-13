@@ -145,7 +145,7 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         "delivery_date": timeline or "Confirmed at kickoff",
         "scope": (review.scope_summary if review else (ci_fields.get("campaign_objective") or "")),
         "budget": (ci_fields.get("budget_band") or ""),
-        "rights": ("Original — cleared worldwide, yours on final payment"
+        "rights": ("Original, cleared worldwide, yours on final payment"
                    if "original" in str(mr).lower()
                    else "As licensed for this campaign"),
     }

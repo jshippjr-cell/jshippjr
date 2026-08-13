@@ -113,7 +113,7 @@ def _send_smtp(to: str, subject: str, text: str, html: Optional[str],
         return "error"
 
 
-def branded_html(base_url: str, body_text: str, *, footer: str = "Chordential — original, clearance-certified music.") -> str:
+def branded_html(base_url: str, body_text: str, *, footer: str = "Chordential · original, clearance-certified music.") -> str:
     """Wrap a plain-text email body in the Chordential-branded HTML shell:
     wordmark logo, brand palette, a simple card. Plain hex colors (not the
     site's oklch() custom properties) since email client CSS support is

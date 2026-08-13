@@ -34,7 +34,7 @@ from . import db
 LLM = Callable[[Dict, str], Optional[Dict]]
 
 ANGLES = ("relationship", "creative", "business")
-_VALUE = ("Chordential is a procurement-grade music studio — clearance-certified, "
+_VALUE = ("Chordential is a procurement-grade music studio: clearance-certified, "
           "human-composed original music (never AI-generated).")
 
 
@@ -80,11 +80,11 @@ def reason_to_reach_out(signals: List[Dict], intel: Dict) -> Dict:
             return {"reason": f"the news that {summ}" if summ else "you won a new account",
                     "source": src}
         if et == "Hiring":
-            return {"reason": f"you're growing the team — {_strip_prefix(summ)}", "source": src}
+            return {"reason": f"you're growing the team: {_strip_prefix(summ)}", "source": src}
         if et in ("Campaign launch", "New work"):
             return {"reason": f"your recent work, {_strip_prefix(summ)}", "source": src}
         if et == "Award":
-            return {"reason": f"your recognition — {_strip_prefix(summ)}", "source": src}
+            return {"reason": f"your recognition: {_strip_prefix(summ)}", "source": src}
     if _ival(intel.get("production_complexity")) == "High" or \
             (set(_lval(intel.get("creative_focus"))) & {"Brand Films", "Broadcast", "Commercials"}):
         return {"reason": "how well your cinematic brand work fits original music",
@@ -139,16 +139,16 @@ def build_strategy(conn, agency_id: int) -> Dict:
 
     # --- the decision: YES / WAIT / MONITOR / NO ---
     if not reachable:
-        decision, detail = "MONITOR", "No reachable contact yet — run decision-maker discovery first."
+        decision, detail = "MONITOR", "No reachable contact yet. Run decision-maker discovery first."
     elif last_out is not None and _days_since(last_out["occurred_at"]) < 30 and not responded:
         wait = 30 - _days_since(last_out["occurred_at"])
-        decision, detail = "WAIT", f"Contacted {_days_since(last_out['occurred_at'])}d ago — wait ~{wait} days."
+        decision, detail = "WAIT", f"Contacted {_days_since(last_out['occurred_at'])}d ago; wait ~{wait} days."
     elif tier in ("A", "B"):
-        decision, detail = "YES", "Strong opportunity and reachable — reach out."
+        decision, detail = "YES", "Strong opportunity and reachable. Reach out."
     elif tier == "C":
-        decision, detail = "MONITOR", "Moderate fit — wait for a stronger signal."
+        decision, detail = "MONITOR", "Moderate fit. Wait for a stronger signal."
     else:
-        decision, detail = "NO", "Low fit — not a priority."
+        decision, detail = "NO", "Low fit. Not a priority."
 
     stage_row = db.get_relationship(conn, agency_id)
     stage = (stage_row["stage"] if stage_row else "") or "Cold"
@@ -178,7 +178,7 @@ def build_strategy(conn, agency_id: int) -> Dict:
         "why_now": reason["reason"], "why_now_source": reason["source"],
         "evidence": evidence,
         "mention": mention[:3],
-        "avoid": ["Pricing details this early", "Generic claims — keep it specific to them",
+        "avoid": ["Pricing details this early", "Generic claims; keep it specific to them",
                   "Any suggestion of AI-generated music"],
         "cta": _cta(objective),
         "contact": contact, "work_mention": work_mention,
@@ -204,7 +204,7 @@ def _default_llm(brief: Dict, angle: str) -> Optional[Dict]:  # pragma: no cover
         prompt = (
             "You are drafting an outreach email as Jon, founder of Chordential (a "
             "procurement-grade music studio selling clearance-certified, human-composed "
-            "original music — never AI-generated). Write as Jon would personally write "
+            "original music, never AI-generated). Write as Jon would personally write "
             "it today: warm, concise, specific, no hype. Use ONLY these facts:\n"
             + json.dumps(brief, indent=2) +
             f"\nAngle: {angle}. Open with the reason-to-reach-out. End with the CTA. "
@@ -224,7 +224,7 @@ def _opening(brief: Dict) -> str:
     name = (brief.get("contact") or {}).get("name", "")
     hi = f"Hi {name.split()[0]}," if name else "Hi,"
     if brief["why_now"]:
-        tail = " — congratulations." if brief.get("objective") == "Congratulations" else "."
+        tail = ", congratulations." if brief.get("objective") == "Congratulations" else "."
         return f"{hi}\n\nI saw {brief['why_now']}{tail}"
     return f"{hi}\n\nI've been following {brief['agency']}'s work and wanted to reach out."
 
@@ -236,7 +236,7 @@ def _template_draft(brief: Dict, angle: str) -> Dict:
     opening = _opening(brief)
     if angle == "relationship":
         subject = "Quick hello from Chordential"
-        mid = ("I'd love to open a line between our teams — I think there's a natural "
+        mid = ("I'd love to open a line between our teams; I think there's a natural "
                "fit between your work and what we do.")
     elif angle == "creative":
         subject = f"Original scoring for {agency}'s work"
@@ -297,25 +297,25 @@ def next_best_action(conn, agency_id: int) -> Dict:
 
     if last_out is None:
         return {"action": "Send the introduction", "kind": "introduce",
-                "reason": "No outreach yet — open the relationship.", "changed": []}
+                "reason": "No outreach yet. Open the relationship.", "changed": []}
     days = _days_since(last_out["occurred_at"])
     changed = [s for s in signals if s["detected_at"] > last_out["occurred_at"]]
     if responded:
-        return {"action": "They replied — move toward a meeting", "kind": "meeting",
+        return {"action": "They replied; move toward a meeting", "kind": "meeting",
                 "reason": "A response is on file; keep the conversation going.", "changed": changed}
     if changed:
         top = max(changed, key=lambda s: s["detected_at"])
         return {"action": "Send an intelligent follow-up", "kind": "followup",
-                "reason": f"Since your last email, {_signal_phrase(top)} — reference it, "
+                "reason": f"Since your last email, {_signal_phrase(top)}; reference it, "
                           f"don't 'just check in'.", "changed": changed}
     if days < 14:
-        return {"action": f"Wait — you reached out {days}d ago", "kind": "wait",
+        return {"action": f"Wait: you reached out {days}d ago", "kind": "wait",
                 "reason": "No change yet; give it room.", "changed": []}
     if days < 45:
         return {"action": "A light, value-add check-in is reasonable", "kind": "checkin",
                 "reason": f"{days}d of quiet and no new signal.", "changed": []}
     return {"action": "Reconnect with a fresh angle", "kind": "reconnect",
-            "reason": f"{days}d of silence — re-open with something new.", "changed": []}
+            "reason": f"{days}d of silence. Re-open with something new.", "changed": []}
 
 
 # --------------------------------------------------------------------------- #
@@ -341,7 +341,7 @@ def relationship_summary(conn, agency_id: int) -> Dict:
         lines.append(f"Opportunity {score_blob['score']} (tier {score_blob.get('tier')}).")
     if interactions:
         lines.append(f"{len(interactions)} interaction(s); last {last['occurred_at'][:10]}"
-                     + (" — they responded." if responded else " — no reply yet."))
+                     + (" · they responded." if responded else " · no reply yet."))
     else:
         lines.append("No interactions yet.")
     return {"summary": " ".join(lines), "memory": memory,
