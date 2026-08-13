@@ -198,6 +198,16 @@
       {% elif meeting['status'] == 'failed' %}<span class="mtg-chip fail" title="{{ meeting['error'] or '' }}">✕ No transcript — add the notes by hand</span>
       {% elif meeting['notetaker_provider'] %}<span class="mtg-chip pend">◐ Transcript pending</span>
       {% else %}<span class="mtg-chip off">○ Transcript — paste when ready</span>{% endif %}
+      {# The hand crank. The background poller is invisible and gives up after ~8h; a
+         discovery call's notes are worth more than a loop the operator cannot reach. #}
+      {% if meeting['notetaker_provider'] and not meeting['transcript_capture_id'] %}
+      <form method="post" style="display:inline"
+            action="/opportunity/{{ row['id'] }}/discovery/{{ meeting['id'] }}/fetch-transcript">
+        <button class="btn tiny" type="submit"
+                title="Ask the notetaker for this transcript now, and file it into Campaign Intelligence">Fetch it now</button>
+      </form>
+      <span class="mono fineprint" style="opacity:.7">tried {{ meeting['poll_attempts'] or 0 }}×</span>
+      {% endif %}
     </div>
     {% endif %}
     <details class="mtg-reschedule"><summary>Reschedule</summary>

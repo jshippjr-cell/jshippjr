@@ -221,7 +221,7 @@ def test_the_router_carries_the_whole_group():
     ("agencies_routes.py", "/agencies", 26),
     ("talent_routes.py", None, 15),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
-    ("opportunity_routes.py", "/opportunity", 58),
+    ("opportunity_routes.py", "/opportunity", 59),   # +1: fetch a transcript by hand
     ("project_routes.py", "/project", 62),
     ("creator_routes.py", "/creator", 6),
     ("campaign_routes.py", "/campaign", 7),
@@ -249,12 +249,14 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     register two handlers for one URL — the first wins silently and the second becomes
     dead code that still looks maintained.
 
-    263 is pinned deliberately: 251 when the breakup began, +1 for share-token
+    264 is pinned deliberately: 251 when the breakup began, +1 for share-token
     rotation, +3 for the storage console (`/settings/storage` and its two buttons),
     +1 for the CORS probe that asks the bucket what it returns to a browser, +2 for
     signing the Clearance Certificate and voiding a signature (ADR-0059), +3 for
     delegated access and the two operator controls over a link's life (ADR-0060),
-    +2 for snoozing a Disposition Queue card and bringing them all back. Retiring
+    +2 for snoozing a Disposition Queue card and bringing them all back, +1 for
+    fetching a call's transcript by hand instead of only via the background poller.
+    Retiring
     /samples and /capabilities did NOT change it — both stayed as 301s so no indexed
     link dies. Change this number only when you mean to add or remove a URL, never to
     make a refactor pass."""
@@ -264,7 +266,7 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 263, (
+    assert len(decls) == 264, (
         f"{len(decls)} route declarations across app.py + the routers, expected 261 — "
         f"a slice lost or gained a URL")
 

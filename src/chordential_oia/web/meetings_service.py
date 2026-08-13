@@ -133,6 +133,47 @@ def _poll_due(meeting, now=None) -> bool:
     return (now - prev).total_seconds() >= _poll_delay(attempts)
 
 
+def fetch_now(conn, meeting_id: int) -> dict:
+    """Ask the capture provider for THIS meeting's transcript right now, and ingest it.
+
+    The background poller is the only thing that ever fetched a transcript, which made
+    a whole discovery call's notes hostage to a loop the operator cannot see, cannot
+    check and cannot restart. Worse, once it gives up (``_POLL_MAX_ATTEMPTS``) the
+    meeting is `failed` and is never asked again — so a transcript that lands late, or
+    a loop that was not running when it landed, is lost with no way to reach for it.
+
+    This is the hand crank. It ignores the backoff, ignores the give-up, and clears the
+    failed state so the poller will resume watching if the answer is "not yet". It
+    decides nothing about the campaign — it only asks — which is why the operator may
+    press it whenever they like.
+    """
+    meeting = db.get_meeting(conn, meeting_id)
+    if meeting is None:
+        return {"ok": False, "error": "no such meeting"}
+    if meeting["status"] == M.INGESTED or (meeting["transcript_capture_id"] or ""):
+        return {"ok": True, "already": True}
+    if not M.capture_configured():
+        return {"ok": False, "error": "No notetaker provider is configured, so there is "
+                                      "nothing to ask. Paste the notes instead."}
+    bot = (meeting["bot_id"] or "").strip()
+    if not bot:
+        return {"ok": False, "error": "No capture bot was armed for this call — there is "
+                                      "no recording to fetch. Paste the notes instead."}
+    try:
+        transcript = M.get_capture_provider().fetch_transcript(bot)
+    except Exception as e:      # noqa: BLE001 — report it, never raise into the request
+        return {"ok": False, "error": f"The capture provider errored: {type(e).__name__}"}
+    if transcript is None:
+        # Not ready is not a failure. Put it back in the poller's sights: reset the
+        # give-up so a call that was written off can still arrive.
+        db.update_meeting(conn, meeting_id, status=M.BOT_INVITED, error="",
+                          poll_attempts=0, last_polled_at="")
+        return {"ok": True, "pending": True,
+                "error": "The provider has no transcript yet. Watching for it again."}
+    summary = campaign_intake.ingest_transcript(conn, meeting, transcript)
+    return {"ok": True, "ingested": True, "capture_id": summary.get("capture_id")}
+
+
 def poll_and_ingest(conn) -> int:
     """POLLING (the webhook-free path): for every meeting with an armed capture bot that hasn't
     been ingested yet, ask the provider whether its transcript is ready and, if so, ingest it

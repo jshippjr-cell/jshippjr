@@ -583,6 +583,25 @@ def discovery_reschedule(opp_id: int, start_at: str = Form(""), tz_offset: str =
     return RedirectResponse(f"/opportunity/{opp_id}#discovery", status_code=303)
 
 
+@router.post("/opportunity/{opp_id}/discovery/{meeting_id}/fetch-transcript")
+def discovery_fetch_transcript(opp_id: int, meeting_id: int):
+    """Fetch this call's transcript NOW, rather than waiting on the background poller.
+
+    Until this existed, the only route from a recorded call to Campaign Intelligence was
+    a loop in the scheduler — invisible, uncheckable, and after ~8 hours it gave up for
+    good. A discovery call's notes are too valuable to sit behind a background job the
+    operator has no handle on."""
+    from . import meetings_service
+    conn = db.connect()
+    try:
+        result = meetings_service.fetch_now(conn, meeting_id)
+    finally:
+        conn.close()
+    flash = "transcript" if result.get("ingested") else (
+        "already" if result.get("already") else "pending" if result.get("pending") else "failed")
+    return RedirectResponse(f"/opportunity/{opp_id}?fetch={flash}#discovery", status_code=303)
+
+
 @router.post("/opportunity/{opp_id}/discovery/{meeting_id}/cancel")
 def discovery_cancel(opp_id: int, meeting_id: int):
     """Cancel a scheduled discovery call (drops the calendar event; the record is retained)."""
