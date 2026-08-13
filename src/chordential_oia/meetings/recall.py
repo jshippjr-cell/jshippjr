@@ -15,13 +15,25 @@ Config (env; the seam is null until a key is set):
   CHORDENTIAL_RECALL_API_KEY          — required to make any live call
   CHORDENTIAL_RECALL_REGION           — API region, default "us-east-1"
   CHORDENTIAL_RECALL_BOT_NAME         — the bot's display name in the call
-  CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER — Recall transcription provider (default meeting_captions)
+  CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER — Recall transcription provider (default
+                                        recallai_streaming; meeting_captions needs the host's
+                                        captions ON and silently yields nothing when they are off)
+  CHORDENTIAL_RECALL_LANGUAGE         — transcription language, default "auto"
   CHORDENTIAL_RECALL_WEBHOOK_SECRET   — only if you opt into the webhook path
 
-NOTE (honest): Recall's live docs weren't reachable from the build environment, so the exact
-bot-create transcription config and transcript field names are implemented against Recall's
-documented v1 shape and parsed DEFENSIVELY. The abstraction confines any real-world tweak to
-this one file — Campaign Intake / Campaign Intelligence never change.
+WHY THE DEFAULT IS RECALL'S OWN ASR (and not the platform's captions):
+``meeting_captions`` transcribes by reading the *meeting platform's* closed captions. It is
+the cheapest option and it was this file's default — but it only works if the HOST has
+captions switched on. When they are off the bot still joins, still records, still reaches
+``done``, and simply never produces a transcript. Recall's own docs name this as the usual
+cause of "the bot didn't generate a transcript". Nothing surfaced it: no error, no failed
+state, just a discovery call whose notes never arrived.
+
+So the default is ``recallai_streaming`` — Recall's native speech-to-text. It needs no
+third-party key and no cooperation from the host's Zoom settings. ``fetch_transcript`` also
+REPAIRS the older case: a finished recording with no transcript artifact is asked for one
+via the async ASR endpoint, which is how a call already recorded under meeting_captions
+still gets its notes.
 """
 from __future__ import annotations
 
@@ -55,7 +67,9 @@ class RecallCaptureProvider(CaptureProvider):
                          or "Chordential Notetaker").strip()
         self.transcript_provider = (
             os.environ.get("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "")
-            or "meeting_captions").strip()
+            or "recallai_streaming").strip()
+        self.language = (os.environ.get("CHORDENTIAL_RECALL_LANGUAGE", "")
+                         or "auto").strip()
         self.webhook_secret = os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "").strip()
         self.timeout = 20
 
@@ -64,9 +78,10 @@ class RecallCaptureProvider(CaptureProvider):
         return bool(self.api_key)
 
     def invite(self, *, join_url: str, meeting_ref: str) -> str:
-        """Send a Recall bot into the meeting (with transcription on). Returns the bot id.
-        Uses Recall's current ``recording_config.transcript`` shape; the provider is
-        env-overridable (default meeting_captions — the platform's own captions, cheapest)."""
+        """Send a Recall bot into the meeting with transcription on. Returns the bot id.
+
+        Recall's own ASR by default, because the platform-captions provider depends on a
+        setting in someone else's Zoom account (see the module docstring) and fails silent."""
         if not self.configured():
             raise RuntimeError(
                 "Recall provider selected but CHORDENTIAL_RECALL_API_KEY is unset.")
@@ -74,11 +89,25 @@ class RecallCaptureProvider(CaptureProvider):
             "meeting_url": join_url,
             "bot_name": self.bot_name,
             "recording_config": {
-                "transcript": {"provider": {self.transcript_provider: {}}},
+                "transcript": {
+                    "provider": {self.transcript_provider: self._provider_options()},
+                    # who said what, when the platform gives us separate audio streams
+                    "diarization": {"use_separate_streams_when_available": True},
+                },
             },
         }
         data = self._post("/bot/", payload)
         return str((data or {}).get("id") or "")
+
+    def _provider_options(self) -> dict:
+        """The options object Recall expects INSIDE the chosen provider's key. Its shape is
+        per-provider: the native ASR takes a mode + language, the platform-captions provider
+        takes nothing. An unknown provider gets an empty object rather than a guess."""
+        if self.transcript_provider == "recallai_streaming":
+            return {"mode": "prioritize_accuracy", "language_code": self.language}
+        if self.transcript_provider == "recallai_async":
+            return {"language_code": self.language}
+        return {}
 
     def fetch_transcript(self, external_ref: str) -> Optional[Transcript]:
         """POLLING: return the normalized transcript once the bot is done; None while it's still
@@ -111,6 +140,13 @@ class RecallCaptureProvider(CaptureProvider):
                 except Exception as e:  # noqa: BLE001
                     _log.warning("Recall transcript retrieve failed for %s: %s", external_ref, e)
         if not url:
+            # The recording finished and carries NO transcript artifact. That is the
+            # meeting_captions failure: the host had captions off, so nothing was ever
+            # transcribed. The audio still exists, so ask Recall's own ASR to transcribe
+            # it now — this is what rescues a call whose notes would otherwise never come.
+            rid = _recording_id(bot)
+            if rid and self._request_async_transcript(rid):
+                return None        # requested; a later poll picks up the download_url
             _log.warning("Recall bot %s done but no transcript download_url found; bot shape=%s",
                          external_ref, _summarize(bot))
             return None
@@ -124,6 +160,25 @@ class RecallCaptureProvider(CaptureProvider):
                   ("%d chars / %d speakers" % (len(t.text), len(t.speakers)))
                   if t else "downloaded but empty/unparseable (shape=%s)" % type(raw).__name__)
         return t
+
+    def _request_async_transcript(self, recording_id: str) -> bool:
+        """Ask Recall to transcribe an already-finished recording with its own ASR.
+
+        POST /recording/{id}/create_transcript/. Best-effort and idempotent in practice:
+        a second request for a recording that already has one is refused by Recall, which
+        we log and treat as "nothing more to do" rather than an error — the poller is on a
+        backoff, so this is attempted a bounded number of times."""
+        try:
+            self._post(f"/recording/{recording_id}/create_transcript/",
+                       {"provider": {"recallai_async": {"language_code": self.language}}})
+        except Exception as e:  # noqa: BLE001 — never raise into the poll loop
+            _log.info("Recall async transcript not created for recording %s: %s",
+                      recording_id, e)
+            return False
+        _log.info("Recall async transcript requested for recording %s "
+                  "(no transcript existed — likely captions were off during the call)",
+                  recording_id)
+        return True
 
     def parse_webhook(self, headers: Mapping, body: bytes) -> MeetingEvent:
         """Verify the shared secret, then normalize Recall's pushed event into a MeetingEvent.
@@ -217,6 +272,25 @@ def _transcript_download_url(bot) -> str:
                     return u
         return ""
     return walk(bot) or ""
+
+
+def _recording_id(bot) -> str:
+    """The finished recording's id — what the async-transcript endpoint is addressed by.
+    Recall has carried it as ``recordings[]`` and (older) ``recording``; take the first
+    id we find under either."""
+    if not isinstance(bot, dict):
+        return ""
+    recs = bot.get("recordings")
+    if isinstance(recs, list):
+        for r in recs:
+            if isinstance(r, dict) and r.get("id"):
+                return str(r["id"])
+    rec = bot.get("recording")
+    if isinstance(rec, dict) and rec.get("id"):
+        return str(rec["id"])
+    if isinstance(rec, str) and rec:
+        return rec
+    return ""
 
 
 def _transcript_id(bot) -> str:
