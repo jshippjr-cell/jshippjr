@@ -120,8 +120,8 @@ def _poll_delay(attempts: int) -> int:
     return _POLL_BACKOFF[idx]
 
 
-def _call_over(meeting, now=None) -> bool:
-    """Has the call actually FINISHED?
+def _call_started(meeting, now=None) -> bool:
+    """Has the call BEGUN? Below this there is nothing to ask about.
 
     The poller keyed off nothing but the meeting's status, and a meeting is `bot_invited`
     from the instant it is booked. So a call booked for next Tuesday was polled from the
@@ -130,8 +130,14 @@ def _call_over(meeting, now=None) -> bool:
     so any call booked more than a day ahead was marked `failed` and never asked again
     BEFORE ANYONE JOINED IT. That is why the bot never came back with a transcript.
 
-    A meeting with no start time is treated as over: ad-hoc captures have nothing to wait
-    for, and refusing to poll them would be the same bug pointing the other way.
+    Waiting for the scheduled END was too much. An operator books thirty minutes, talks
+    for two and hangs up — and the poller sat on its hands for the remaining twenty-eight
+    while a finished transcript was already waiting. The bot itself reports when it is
+    done, so the honest trigger is: start asking once the call has begun, and let the
+    provider say whether there is anything yet.
+
+    A meeting with no start time is treated as started: ad-hoc captures have nothing to
+    wait for, and refusing to poll them would be the same bug pointing the other way.
     """
     from datetime import datetime, timedelta, timezone
     start = (meeting["start_at"] or "") if "start_at" in meeting.keys() else ""
@@ -147,8 +153,28 @@ def _call_over(meeting, now=None) -> bool:
         mins = int(meeting["duration_min"] or 30)
     except (ValueError, TypeError, KeyError):
         mins = 30
-    end = dt + timedelta(minutes=max(1, mins))
-    return (now or datetime.now(timezone.utc)) >= end
+    return (now or datetime.now(timezone.utc)) >= dt
+
+
+def _past_scheduled_end(meeting, now=None) -> bool:
+    """Is the call past the time it was BOOKED to end? That — not the start — is when the
+    give-up budget may begin to run: a bot polled during its own call has not failed at
+    anything, and spending attempts on it is how a long call talks itself into `failed`."""
+    from datetime import datetime, timedelta, timezone
+    start = (meeting["start_at"] or "") if "start_at" in meeting.keys() else ""
+    if not start:
+        return True
+    try:
+        dt = datetime.fromisoformat(str(start))
+    except (ValueError, TypeError):
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        mins = int(meeting["duration_min"] or 30)
+    except (ValueError, TypeError, KeyError):
+        mins = 30
+    return (now or datetime.now(timezone.utc)) >= dt + timedelta(minutes=max(1, mins))
 
 
 def _poll_due(meeting, now=None) -> bool:
@@ -243,7 +269,10 @@ def poll_and_ingest(conn) -> int:
             # still in the future is given back, so the give-up window starts when the
             # call ends rather than when it was booked. That also repairs the rows this
             # shipped with, which are sitting on a dozen attempts they never earned.
-            if not _call_over(meeting):
+            # Nothing to fetch before the call begins, and no attempt may be spent
+            # then either — counting from the BOOKING is what marked calls failed
+            # before anyone joined. Anything accrued early is given back.
+            if not _call_started(meeting):
                 if (int(meeting["poll_attempts"] or 0)
                         if "poll_attempts" in meeting.keys() else 0):
                     db.update_meeting(conn, meeting["id"], poll_attempts=0,
@@ -251,8 +280,12 @@ def poll_and_ingest(conn) -> int:
                 continue
             if not _poll_due(meeting):
                 continue
+            # During the call we ask, but we do not COUNT: a transcript that is not ready
+            # while the meeting is still running is not a failure of anything. The budget
+            # starts at the booked end time.
+            counts = _past_scheduled_end(meeting)
             attempts = (int(meeting["poll_attempts"] or 0)
-                        if "poll_attempts" in meeting.keys() else 0) + 1
+                        if "poll_attempts" in meeting.keys() else 0) + (1 if counts else 0)
             db.update_meeting(conn, meeting["id"], poll_attempts=attempts,
                               last_polled_at=datetime.now(timezone.utc).isoformat())
             try:

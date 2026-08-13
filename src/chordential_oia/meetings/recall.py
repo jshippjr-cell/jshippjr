@@ -118,14 +118,18 @@ class RecallCaptureProvider(CaptureProvider):
         return str((data or {}).get("id") or "")
 
     def cancel(self, external_ref: str) -> None:
-        """Stand a scheduled bot down. Best-effort by design: a bot we fail to cancel joins
-        a meeting nobody attends, which costs a little money and breaks nothing."""
+        """Stand a bot down. Best-effort by design: one we fail to release turns up to a
+        meeting nobody attends, which costs a little and breaks nothing.
+
+        POST /bot/{id}/leave_call/ — NOT DELETE. Recall answers DELETE on that path with
+        405, which the live logs caught: ``DELETE /api/v1/bot/b2673e32-.../ 405``. It was
+        swallowed as best-effort, so the old bot was never actually released."""
         if not self.configured() or not external_ref:
             return
         try:
-            self._delete(f"/bot/{external_ref}/")
+            self._post(f"/bot/{external_ref}/leave_call/", {})
         except Exception as e:  # noqa: BLE001
-            _log.info("Recall bot %s not cancelled: %s", external_ref, e)
+            _log.info("Recall bot %s not released: %s", external_ref, e)
 
     def _provider_options(self) -> dict:
         """The options object Recall expects INSIDE the chosen provider's key. Its shape is
@@ -271,10 +275,6 @@ class RecallCaptureProvider(CaptureProvider):
         return self._open(urllib.request.Request(
             self._base() + path, data=json.dumps(payload).encode("utf-8"),
             headers=self._headers(), method="POST"))
-
-    def _delete(self, path: str):
-        return self._open(urllib.request.Request(
-            self._base() + path, headers=self._headers(), method="DELETE"))
 
     def _download(self, url: str):
         """Fetch a signed transcript download URL (no API auth — the signature is in the URL)."""

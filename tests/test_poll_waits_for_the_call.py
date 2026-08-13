@@ -110,17 +110,50 @@ def test_once_the_call_is_over_it_is_polled_normally(conn, monkeypatch):
     assert (db.get_meeting(conn, mid)["poll_attempts"] or 0) == 1
 
 
-def test_a_call_still_in_progress_is_left_alone(conn, monkeypatch):
-    """Started ten minutes ago, booked for thirty — the transcript cannot exist yet."""
+def test_a_call_in_progress_is_asked_but_not_charged_an_attempt(conn, monkeypatch):
+    """Booked for thirty minutes, talked for two, hung up.
+
+    Waiting for the SCHEDULED end left a finished transcript sitting there for the
+    remaining twenty-eight minutes. So we ask from the moment the call starts — but a
+    transcript that is not ready while the meeting is still running is not a failure, so
+    it costs nothing from the give-up budget."""
     from chordential_oia import meetings as M
     from chordential_oia.web import db, meetings_service
     p = _Provider()
     monkeypatch.setattr(M, "get_capture_provider", lambda: p)
-    _booked(db, conn, duration_min=30,
-            start_at=_iso(datetime.now(timezone.utc) - timedelta(minutes=10)))
+    mid = _booked(db, conn, duration_min=30,
+                  start_at=_iso(datetime.now(timezone.utc) - timedelta(minutes=10)))
 
     meetings_service.poll_and_ingest(conn)
-    assert p.calls == 0
+    assert p.calls == 1, "an early finish must be picked up, not waited out"
+    assert (db.get_meeting(conn, mid)["poll_attempts"] or 0) == 0, (
+        "a call still inside its booked window has not failed at anything")
+
+
+def test_a_call_that_finished_early_gets_its_transcript(conn, monkeypatch):
+    """The end-to-end of the above: hang up early, the transcript files itself."""
+    from chordential_oia import meetings as M
+    from chordential_oia.web import db, meetings_service
+
+    class _Ready:
+        text = "Budget is around $40,000, air date in March."
+        external_ref = "bot-1"
+
+        def metadata(self):
+            return {"provider": "fake"}
+
+    class _P:
+        name = "fake"
+
+        def fetch_transcript(self, bot_id):
+            return _Ready()
+
+    monkeypatch.setattr(M, "get_capture_provider", lambda: _P())
+    mid = _booked(db, conn, duration_min=30,
+                  start_at=_iso(datetime.now(timezone.utc) - timedelta(minutes=3)))
+
+    assert meetings_service.poll_and_ingest(conn) == 1
+    assert (db.get_meeting(conn, mid)["transcript_capture_id"] or "")
 
 
 def test_a_meeting_with_no_start_time_is_still_polled(conn, monkeypatch):
