@@ -12,6 +12,7 @@ package) and the webhook parser absorb every provider-specific detail.
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Mapping, Optional
 
 from . import campaign_intake, campaign_intelligence, campaigns, db
@@ -192,6 +193,57 @@ def _poll_due(meeting, now=None) -> bool:
     except (ValueError, TypeError):
         return True
     return (now - prev).total_seconds() >= _poll_delay(attempts)
+
+
+# One in-flight hand-crank fetch per meeting. Pressing the button twice must not run
+# the extraction engine twice — that is real money on the second press.
+_fetching: set = set()
+_fetch_lock = threading.Lock()
+
+
+def fetch_state(meeting_id: int) -> bool:
+    """Is a hand-crank fetch running for this meeting right now?"""
+    with _fetch_lock:
+        return meeting_id in _fetching
+
+
+def start_fetch(meeting_id: int) -> str:
+    """Kick a transcript fetch off the request thread and return AT ONCE.
+
+    Doing it inline was the wheel of death: the press went out to Recall (up to four
+    HTTP round trips) and then ran the ten-agent extraction engine, all inside the
+    browser's request. A minute of spinner, and any proxy timeout in between turns a
+    working fetch into a failed page.
+
+    Returns a message for the operator. The work carries on behind it and the answer is
+    on the meeting when they come back — which is the same contract the poller has.
+    """
+    with _fetch_lock:
+        if meeting_id in _fetching:
+            return "Already fetching this transcript — give it a moment and reload."
+        _fetching.add(meeting_id)
+
+    def _run():
+        conn = None
+        try:
+            conn = db.connect()
+            result = fetch_now(conn, meeting_id)
+            _log.info("Hand-crank fetch for meeting %s: %s", meeting_id, result)
+        except Exception:  # noqa: BLE001 — a background thread must never die loudly
+            _log.exception("Hand-crank fetch for meeting %s failed", meeting_id)
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            with _fetch_lock:
+                _fetching.discard(meeting_id)
+
+    threading.Thread(target=_run, name=f"fetch-transcript-{meeting_id}",
+                     daemon=True).start()
+    return ("Asking the notetaker now. Filing a transcript runs the extraction engine, "
+            "so give it up to a minute and reload.")
 
 
 def fetch_now(conn, meeting_id: int) -> dict:

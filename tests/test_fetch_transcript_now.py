@@ -152,6 +152,52 @@ def test_the_button_is_on_the_opportunity_while_a_transcript_is_outstanding(clie
     assert "Fetch it now" in page
 
 
+def test_the_press_returns_at_once_and_works_in_the_background(client, monkeypatch):
+    """The wheel of death: the press went out to Recall and then through the ten-agent
+    extraction engine, all inside the browser's request. A minute of spinner, and any
+    proxy timeout in between turned a working fetch into a failed page."""
+    import threading
+    import time
+
+    from chordential_oia import meetings as M
+    from chordential_oia.web import db, meetings_service
+
+    started, release = threading.Event(), threading.Event()
+
+    class _Slow:
+        name = "fake"
+
+        def fetch_transcript(self, bot_id):
+            started.set()
+            release.wait(5)          # stands in for a slow Recall + extraction run
+            return None
+
+    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "fake")
+    monkeypatch.setattr(M, "get_capture_provider", lambda: _Slow())
+    conn = db.connect()
+    try:
+        opp_id, mid = _armed_meeting(db, conn)
+    finally:
+        conn.close()
+
+    t0 = time.monotonic()
+    r = client.post(f"/opportunity/{opp_id}/discovery/{mid}/fetch-transcript",
+                    follow_redirects=False)
+    elapsed = time.monotonic() - t0
+
+    assert r.status_code == 303
+    assert elapsed < 2.0, f"the request must not wait on the work (took {elapsed:.1f}s)"
+    assert started.wait(3), "and the work must actually be running"
+
+    # a second press must not start a second run — that is real money on the engine
+    assert meetings_service.fetch_state(mid) is True
+    r2 = client.post(f"/opportunity/{opp_id}/discovery/{mid}/fetch-transcript",
+                     follow_redirects=False)
+    from urllib.parse import unquote
+    assert "already fetching" in unquote(r2.headers["location"]).lower()
+    release.set()
+
+
 def test_the_route_answers_and_returns_to_the_call(client, monkeypatch):
     from chordential_oia import meetings as M
     from chordential_oia.web import db
@@ -167,10 +213,10 @@ def test_the_route_answers_and_returns_to_the_call(client, monkeypatch):
     assert r.status_code == 303
     loc = r.headers["location"]
     assert loc.startswith(f"/opportunity/{opp_id}?fetch=") and loc.endswith("#discovery")
-    # the outcome travels as READABLE text — a bare code renders as nothing, which is how
+    # the message travels as READABLE text — a bare code renders as nothing, which is how
     # a success and a failure came to look identical (both: the page just reloaded)
     from urllib.parse import unquote
-    assert "filed" in unquote(loc).lower()
+    assert "notetaker" in unquote(loc).lower()
 
 
 def test_a_failure_is_reported_on_the_page_not_as_a_500(client, monkeypatch):
@@ -178,7 +224,7 @@ def test_a_failure_is_reported_on_the_page_not_as_a_500(client, monkeypatch):
     extraction engine, which can fail for reasons that have nothing to do with the
     recording — and that exception reached the request."""
     from chordential_oia import meetings as M
-    from chordential_oia.web import campaign_intake, db
+    from chordential_oia.web import campaign_intake, db, meetings_service
     monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "fake")
     monkeypatch.setattr(M, "get_capture_provider", lambda: _Provider(_Transcript()))
     monkeypatch.setattr(campaign_intake, "ingest_transcript",
@@ -192,5 +238,10 @@ def test_a_failure_is_reported_on_the_page_not_as_a_500(client, monkeypatch):
     r = client.post(f"/opportunity/{opp_id}/discovery/{mid}/fetch-transcript",
                     follow_redirects=False)
     assert r.status_code == 303, "a button press must never end in a 500"
-    from urllib.parse import unquote
-    assert "engine exploded" in unquote(r.headers["location"]), "and it must SAY what failed"
+    # the failure is now reported by fetch_now itself, which the background run logs
+    conn = db.connect()
+    try:
+        out = meetings_service.fetch_now(conn, mid)
+    finally:
+        conn.close()
+    assert out["ok"] is False and "engine exploded" in out["error"]

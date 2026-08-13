@@ -594,21 +594,10 @@ def discovery_fetch_transcript(opp_id: int, meeting_id: int):
     from urllib.parse import quote
 
     from . import meetings_service
-    conn = db.connect()
     try:
-        result = meetings_service.fetch_now(conn, meeting_id)
+        msg = meetings_service.start_fetch(meeting_id)
     except Exception as e:      # noqa: BLE001 — a button press never ends in a 500
-        result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-    finally:
-        conn.close()
-    if result.get("ingested"):
-        msg = "Transcript filed into Campaign Intelligence."
-    elif result.get("already"):
-        msg = "This call's transcript was already filed."
-    elif result.get("pending"):
-        msg = result.get("error") or "The provider has no transcript yet."
-    else:
-        msg = result.get("error") or "Could not fetch the transcript."
+        msg = f"Could not start the fetch: {type(e).__name__}: {e}"
     return RedirectResponse(
         f"/opportunity/{opp_id}?fetch={quote(msg[:300])}#discovery", status_code=303)
 
