@@ -165,4 +165,32 @@ def test_the_route_answers_and_returns_to_the_call(client, monkeypatch):
     r = client.post(f"/opportunity/{opp_id}/discovery/{mid}/fetch-transcript",
                     follow_redirects=False)
     assert r.status_code == 303
-    assert r.headers["location"] == f"/opportunity/{opp_id}?fetch=transcript#discovery"
+    loc = r.headers["location"]
+    assert loc.startswith(f"/opportunity/{opp_id}?fetch=") and loc.endswith("#discovery")
+    # the outcome travels as READABLE text — a bare code renders as nothing, which is how
+    # a success and a failure came to look identical (both: the page just reloaded)
+    from urllib.parse import unquote
+    assert "filed" in unquote(loc).lower()
+
+
+def test_a_failure_is_reported_on_the_page_not_as_a_500(client, monkeypatch):
+    """Pressing this button met an Internal Server Error. Filing a transcript runs the
+    extraction engine, which can fail for reasons that have nothing to do with the
+    recording — and that exception reached the request."""
+    from chordential_oia import meetings as M
+    from chordential_oia.web import campaign_intake, db
+    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "fake")
+    monkeypatch.setattr(M, "get_capture_provider", lambda: _Provider(_Transcript()))
+    monkeypatch.setattr(campaign_intake, "ingest_transcript",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("engine exploded")))
+    conn = db.connect()
+    try:
+        opp_id, mid = _armed_meeting(db, conn)
+    finally:
+        conn.close()
+
+    r = client.post(f"/opportunity/{opp_id}/discovery/{mid}/fetch-transcript",
+                    follow_redirects=False)
+    assert r.status_code == 303, "a button press must never end in a 500"
+    from urllib.parse import unquote
+    assert "engine exploded" in unquote(r.headers["location"]), "and it must SAY what failed"

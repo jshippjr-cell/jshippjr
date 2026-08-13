@@ -89,7 +89,7 @@ def opportunity_delete(opp_id: int, return_to: str = Form("/inbox")):
 
 @router.get("/opportunity/{opp_id}", response_class=HTMLResponse)
 def opportunity_detail(request: Request, opp_id: int, understood: str = "",
-                       added: str = "", asked: str = ""):
+                       added: str = "", asked: str = "", fetch: str = ""):
     conn = db.connect()
     ci = ci_view = None
     intake_sync_lanes = None
@@ -154,7 +154,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
     # Won-via-win/loss-form behaviour elsewhere.
     stepper_next = _STEPPER_NEXT.get(row["status"])
     return render(
-        request, "detail.html", nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
+        request, "detail.html", fetch_msg=fetch, nav="inbox", row=row, opp=opp, qual=qual, scored=scored,
         sv=sv, buyer_count=len(buyer_rows), buyer_values=list(BuyerValue),
         project_id=(project["id"] if project else None),
         next_status=_NEXT_STATUS.get(row["status"]),
@@ -591,15 +591,26 @@ def discovery_fetch_transcript(opp_id: int, meeting_id: int):
     a loop in the scheduler — invisible, uncheckable, and after ~8 hours it gave up for
     good. A discovery call's notes are too valuable to sit behind a background job the
     operator has no handle on."""
+    from urllib.parse import quote
+
     from . import meetings_service
     conn = db.connect()
     try:
         result = meetings_service.fetch_now(conn, meeting_id)
+    except Exception as e:      # noqa: BLE001 — a button press never ends in a 500
+        result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
     finally:
         conn.close()
-    flash = "transcript" if result.get("ingested") else (
-        "already" if result.get("already") else "pending" if result.get("pending") else "failed")
-    return RedirectResponse(f"/opportunity/{opp_id}?fetch={flash}#discovery", status_code=303)
+    if result.get("ingested"):
+        msg = "Transcript filed into Campaign Intelligence."
+    elif result.get("already"):
+        msg = "This call's transcript was already filed."
+    elif result.get("pending"):
+        msg = result.get("error") or "The provider has no transcript yet."
+    else:
+        msg = result.get("error") or "Could not fetch the transcript."
+    return RedirectResponse(
+        f"/opportunity/{opp_id}?fetch={quote(msg[:300])}#discovery", status_code=303)
 
 
 @router.post("/opportunity/{opp_id}/discovery/{meeting_id}/cancel")

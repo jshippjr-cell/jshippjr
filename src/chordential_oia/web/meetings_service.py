@@ -11,6 +11,7 @@ package) and the webhook parser absorb every provider-specific detail.
 """
 from __future__ import annotations
 
+import logging
 from typing import Mapping, Optional
 
 from . import campaign_intake, campaign_intelligence, campaigns, db
@@ -57,6 +58,9 @@ def schedule(conn, opp, *, start_at: str = "", join_url: str = "", duration_min:
         except Exception:  # noqa: BLE001 — honest: couldn't arm; stays 'not connected'
             pass
     return db.get_meeting(conn, mid)
+
+
+_log = logging.getLogger("chordential.meetings")
 
 
 def handle_capture_webhook(conn, provider_key: str, headers: Mapping, body: bytes) -> dict:
@@ -178,7 +182,10 @@ def fetch_now(conn, meeting_id: int) -> dict:
     decides nothing about the campaign — it only asks — which is why the operator may
     press it whenever they like.
     """
-    meeting = db.get_meeting(conn, meeting_id)
+    try:
+        meeting = db.get_meeting(conn, meeting_id)
+    except Exception as e:      # noqa: BLE001
+        return {"ok": False, "error": f"could not read the meeting: {type(e).__name__}"}
     if meeting is None:
         return {"ok": False, "error": "no such meeting"}
     if meeting["status"] == M.INGESTED or (meeting["transcript_capture_id"] or ""):
@@ -201,7 +208,15 @@ def fetch_now(conn, meeting_id: int) -> dict:
                           poll_attempts=0, last_polled_at="")
         return {"ok": True, "pending": True,
                 "error": "The provider has no transcript yet. Watching for it again."}
-    summary = campaign_intake.ingest_transcript(conn, meeting, transcript)
+    try:
+        summary = campaign_intake.ingest_transcript(conn, meeting, transcript)
+    except Exception as e:      # noqa: BLE001 — an operator pressing a button must never
+        # meet a 500. Filing the transcript runs extraction, which can fail for reasons
+        # that have nothing to do with the recording; SAY which, and keep the transcript
+        # reachable rather than losing the press.
+        _log.exception("ingesting transcript for meeting %s failed", meeting_id)
+        return {"ok": False,
+                "error": f"The transcript came back but filing it failed: {type(e).__name__}: {e}"}
     return {"ok": True, "ingested": True, "capture_id": summary.get("capture_id")}
 
 

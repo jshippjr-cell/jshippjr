@@ -209,6 +209,19 @@
       <span class="mono fineprint" style="opacity:.7">tried {{ meeting['poll_attempts'] or 0 }}×</span>
       {% endif %}
     </div>
+    {# What the press actually did. It used to redirect with a code nothing rendered, so a
+       success and a failure looked identical: nothing happened. #}
+    {% if fetch_msg %}
+    <p class="small" style="margin:6px 0 0">↳ {{ fetch_msg }}</p>
+    {% endif %}
+    {# The bot's id, so this call can be looked up in Recall's own dashboard when the
+       answer has to come from their side rather than ours. #}
+    {% if meeting['bot_id'] %}
+    <p class="mono fineprint" style="margin:4px 0 0;opacity:.65">
+      Recall bot <span style="user-select:all">{{ meeting['bot_id'] }}</span>
+      {% if meeting['error'] %}· <span style="color:var(--red,#a33)">{{ meeting['error'] }}</span>{% endif %}
+    </p>
+    {% endif %}
     {% endif %}
     <details class="mtg-reschedule"><summary>Reschedule</summary>
       <form class="js-localtime" method="post" action="/opportunity/{{ row['id'] }}/discovery/reschedule">

@@ -147,6 +147,13 @@ class RecallCaptureProvider(CaptureProvider):
             rid = _recording_id(bot)
             if rid and self._request_async_transcript(rid):
                 return None        # requested; a later poll picks up the download_url
+            _log.warning(
+                "Recall bot %s finished with NO transcript. If the provider is "
+                "meeting_captions this is almost certainly Zoom refusing to turn captions "
+                "on for a bot that is not the host — Recall's own log says 'Zoom failed to "
+                "enable captions for meeting, transcript will not be available'. Set "
+                "CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER=recallai_streaming to transcribe "
+                "the audio instead of reading Zoom's captions.", external_ref)
             _log.warning("Recall bot %s done but no transcript download_url found; bot shape=%s",
                          external_ref, _summarize(bot))
             return None
