@@ -249,20 +249,22 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     register two handlers for one URL — the first wins silently and the second becomes
     dead code that still looks maintained.
 
-    261 is pinned deliberately: 251 when the breakup began, +1 for share-token
+    263 is pinned deliberately: 251 when the breakup began, +1 for share-token
     rotation, +3 for the storage console (`/settings/storage` and its two buttons),
     +1 for the CORS probe that asks the bucket what it returns to a browser, +2 for
     signing the Clearance Certificate and voiding a signature (ADR-0059), +3 for
-    delegated access and the two operator controls over a link's life (ADR-0060).
-    Change this number only when you mean to add or remove a URL, never to make a
-    refactor pass."""
+    delegated access and the two operator controls over a link's life (ADR-0060),
+    +2 for snoozing a Disposition Queue card and bringing them all back. Retiring
+    /samples and /capabilities did NOT change it — both stayed as 301s so no indexed
+    link dies. Change this number only when you mean to add or remove a URL, never to
+    make a refactor pass."""
     decls = []
     for name, dec in [("app.py", "app")] + [(r, "router") for r in ROUTERS]:
         src = (WEB / name).read_text(encoding="utf-8")
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 261, (
+    assert len(decls) == 263, (
         f"{len(decls)} route declarations across app.py + the routers, expected 261 — "
         f"a slice lost or gained a URL")
 

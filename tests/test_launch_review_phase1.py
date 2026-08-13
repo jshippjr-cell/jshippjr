@@ -46,7 +46,7 @@ def test_public_nav_has_no_dead_anchors(client):
     """'Work' → /#reel and 'About' → /#about survived two homepage replacements;
     neither anchor exists on the live homepage, so both landed silently at the top
     of a film showing no work."""
-    for path in ("/start", "/book", "/capabilities", "/samples", "/thanks"):
+    for path in ("/start", "/book", "/thanks"):
         body = client.get(path).text
         assert 'href="/#reel"' not in body, f"{path} still links to the dead reel anchor"
         assert 'href="/#about"' not in body, f"{path} still links to the dead about anchor"
@@ -54,11 +54,20 @@ def test_public_nav_has_no_dead_anchors(client):
 
 def test_reel_redirect_lands_somewhere_that_shows_work(client):
     """/reel used to redirect to /?reel=1, which nothing on the current homepage
-    handles."""
+    handles. It then pointed at /samples; that page is retired too, so it now lands
+    on the front door's listening beat — the one place that actually plays the work."""
     r = client.get("/reel", follow_redirects=False)
     assert r.status_code in (301, 302, 303, 307, 308)
-    assert r.headers["location"] == "/samples"
-    assert client.get("/samples").status_code == 200
+    assert r.headers["location"] == "/#hear"
+
+
+def test_the_retired_pages_redirect_rather_than_404(client):
+    """/samples and /capabilities are gone as pages. An indexed URL or a bookmark
+    must still land on what replaced them, not on a dead end."""
+    for path in ("/samples", "/capabilities"):
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 301, f"{path} answered {r.status_code}"
+        assert r.headers["location"] == "/#hear"
 
 
 def test_homepage_carries_a_persistent_cta(client):
@@ -108,8 +117,7 @@ def test_public_pages_answer_with_the_gate_enabled(tmp_path, monkeypatch):
     importlib.reload(app_mod)
 
     with TestClient(app_mod.app) as c:
-        for path in ("/", "/commission", "/capabilities", "/samples",
-                     "/start", "/book"):
+        for path in ("/", "/commission", "/start", "/book"):
             r = c.get(path, follow_redirects=False)
             assert r.status_code == 200, (
                 f"{path} answered {r.status_code} "

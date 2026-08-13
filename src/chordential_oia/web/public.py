@@ -181,22 +181,22 @@ def _render_commission(request: Request):
     )
 
 
-@router.get("/capabilities", response_class=HTMLResponse)
-def public_capabilities(request: Request):
-    show = get_showcase()
-    return render(
-        request, "public/capabilities.html", active="capabilities",
-        capabilities=show.capabilities,
-    )
+# ── Retired pages ────────────────────────────────────────────────────────────
+# /samples and /capabilities were a second and third place the work was described.
+# The landing world now carries it: beat 04 IS the player, and its lit notes play the
+# same records /samples listed. Both are 301s rather than deletions — an indexed URL
+# or a bookmark that 404s is a worse answer than the page that replaced it.
+_RETIRED = "/#hear"
 
 
-@router.get("/samples", response_class=HTMLResponse)
-def public_samples(request: Request):
-    show = get_showcase()
-    return render(
-        request, "public/samples.html", active="samples", demos=show.demos,
-        demos_intro=show.demos_intro,
-    )
+@router.get("/capabilities")
+def public_capabilities():
+    return RedirectResponse(_RETIRED, status_code=301)
+
+
+@router.get("/samples")
+def public_samples():
+    return RedirectResponse(_RETIRED, status_code=301)
 
 
 _GALLERY_GRADIENTS = [
@@ -209,8 +209,7 @@ def public_reel():
     """Retired. The reel deep-link handler it used to target lived on a homepage that has
     since been replaced twice, so an old bookmark landed at the top of a film showing no
     work at all. Send it to the page that actually plays the tracks."""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse("/samples", status_code=307)
+    return RedirectResponse(_RETIRED, status_code=307)
 
 
 @router.get("/stills", response_class=HTMLResponse)
@@ -232,7 +231,7 @@ def public_stills(request: Request):
     for c in show.cases:
         cards.append({
             "title": c.title, "label": "Case study",
-            "href": "/capabilities", "kind": "Case",
+            "href": _RETIRED, "kind": "Case",
         })
     for i, c in enumerate(cards):
         c["gradient"] = _GALLERY_GRADIENTS[i % len(_GALLERY_GRADIENTS)]

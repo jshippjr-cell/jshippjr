@@ -16,6 +16,28 @@
   </div>
 </div>
 
+{# What is being withheld is NAMED. A queue that hides things silently is a queue
+   that reads "clear" when it is not, which is the one thing this surface must
+   never do. #}
+{% if snoozed %}
+<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <span class="muted small">{{ snoozed }} snoozed — hidden until their timer runs out,
+    then back on this list.</span>
+  <span style="display:flex;gap:8px">
+    <a class="btn tiny ghost" href="/queue?all=1">Show them</a>
+    <form method="post" action="/queue/unsnooze" style="display:inline">
+      <input type="hidden" name="next" value="/queue">
+      <button class="btn tiny ghost" type="submit">Bring all back</button>
+    </form>
+  </span>
+</div>
+{% elif showing_snoozed %}
+<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <span class="muted small">Showing snoozed cards too.</span>
+  <a class="btn tiny ghost" href="/queue">Hide them again</a>
+</div>
+{% endif %}
+
 {% if groups %}
 {% for g in groups %}
 <section class="card">
@@ -28,6 +50,15 @@
         <div class="muted small">{{ c.detail }}{% if c.evidence %} <span class="mono">· {{ c.evidence }}</span>{% endif %}</div>
       </div>
       <a class="btn tiny" href="{{ c.url }}">Open →</a>
+      {% if not showing_snoozed %}
+      <form method="post" action="/queue/snooze" style="display:inline">
+        <input type="hidden" name="key" value="{{ c.key }}">
+        <input type="hidden" name="days" value="7">
+        <input type="hidden" name="next" value="/queue">
+        <button class="btn tiny ghost" type="submit"
+                title="Hide for 7 days. It comes back if it still needs doing.">Snooze</button>
+      </form>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

@@ -1330,6 +1330,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT
         )"""
     )
+    # The Disposition Queue's snooze (the queue of ADR-0029, made clearable). A card has
+    # no row of its own — it is computed — so the snooze is keyed by the card's stable
+    # identity (kind:url) and EXPIRES. Nothing is deleted and nothing is hidden for ever:
+    # a decision that still needs making comes back, which is the only way a "waiting on
+    # you" list stays trustworthy after you have cleared it.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS queue_snooze (
+            key TEXT PRIMARY KEY, until_at TEXT, snoozed_at TEXT, actor TEXT
+        )"""
+    )
     # One scheduler across every instance (see `acquire_lease`). The blue-green cutover
     # deliberately runs two of them for a few minutes; without this, both run the engines.
     conn.execute(
@@ -5211,6 +5221,47 @@ def _lease_now() -> str:
 
 def _lease_at(seconds: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime(_LEASE_TS)
+
+
+def snooze_queue_card(conn, key: str, days: int, actor: str = "operator") -> None:
+    """Hide one Disposition Queue card until ``days`` from now. Upsert: snoozing an
+    already-snoozed card re-sets the clock rather than failing on the primary key."""
+    from datetime import datetime, timedelta, timezone
+    key = (key or "").strip()
+    if not key:
+        return
+    now = datetime.now(timezone.utc)
+    until = (now + timedelta(days=max(1, int(days or 1)))).isoformat()
+    cur = conn.execute(
+        "UPDATE queue_snooze SET until_at = ?, snoozed_at = ?, actor = ? WHERE key = ?",
+        (until, now.isoformat(), actor, key))
+    if not cur.rowcount:
+        conn.execute(
+            "INSERT INTO queue_snooze (key, until_at, snoozed_at, actor) VALUES (?,?,?,?)",
+            (key, until, now.isoformat(), actor))
+    conn.commit()
+
+
+def snoozed_queue_keys(conn) -> set:
+    """The card keys still inside their snooze window. Expired rows are dropped as we
+    read, so the table stays the size of what is actually hidden right now."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.execute("DELETE FROM queue_snooze WHERE until_at <= ?", (now,))
+        conn.commit()
+        rows = conn.execute(
+            "SELECT key FROM queue_snooze WHERE until_at > ?", (now,)).fetchall()
+    except Exception:            # noqa: BLE001 — a queue that cannot read its snoozes
+        return set()             # shows everything, which is the safe direction
+    return {r["key"] for r in rows}
+
+
+def clear_queue_snoozes(conn) -> int:
+    """Un-snooze everything (the "show all" escape hatch)."""
+    cur = conn.execute("DELETE FROM queue_snooze")
+    conn.commit()
+    return cur.rowcount or 0
 
 
 def acquire_lease(conn, name: str, owner: str, ttl_seconds: int = 90) -> bool:

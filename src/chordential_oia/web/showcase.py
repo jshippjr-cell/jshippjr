@@ -80,7 +80,7 @@ HERO = {
         "Original composition for agencies who need clarity, control, and "
         "confidence in delivery."
     ),
-    "primary_cta": {"label": "Hear the demos", "href": "/samples"},
+    "primary_cta": {"label": "Hear the work", "href": "/#hear"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
     # Hero motion source. "loop" = the animated WebP (always animates on mobile,
     # no autoplay policy, never a play button). "video" = the Cloudinary clip

@@ -35,10 +35,10 @@ def test_stills_renders_a_tile_per_track_and_case(client):
     assert r.text.count('class="stl-tile"') == n_tracks + n_cases
 
 
-def test_stills_tiles_link_to_showreel_deep_link_and_capabilities(client):
+def test_stills_tiles_link_to_showreel_deep_link_and_the_listening_beat(client):
     t = client.get("/stills").text
     assert "/showreel?t=0" in t
-    assert "/capabilities" in t
+    assert "/#hear" in t        # the case tiles now point at where the work plays
 
 
 def test_stills_reuses_the_reel_gradient_tiles_no_new_imagery(client):

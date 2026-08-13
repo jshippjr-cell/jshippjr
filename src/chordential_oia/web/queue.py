@@ -47,14 +47,21 @@ RUNGS = (
 )
 
 
+def card_key(kind: str, url: str) -> str:
+    """A card's stable identity. Cards are COMPUTED — they have no row — so the only
+    thing a snooze can be keyed by is what the card points at plus what kind of
+    decision it is. Two cards that share both are the same decision."""
+    return f"{kind}:{url}"
+
+
 def _card(urgency: int, kind: str, title: str, detail: str, url: str,
           age_key: str = "", evidence: str = "", post: bool = False) -> dict:
     return {"urgency": urgency, "kind": kind, "title": title, "detail": detail,
             "url": url, "age_key": age_key or "9999-12-31", "evidence": evidence,
-            "post": post}
+            "post": post, "key": card_key(kind, url)}
 
 
-def compute_queue(conn, db) -> List[dict]:
+def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
     """Every pending decision, ranked. Pure reads; safe to call on any request."""
     cards: List[dict] = []
 
@@ -186,15 +193,24 @@ def compute_queue(conn, db) -> List[dict]:
             f"{r['facet']}.{r['key']}", url, age_key=r["updated_at"] or ""))
 
     cards.sort(key=lambda c: (c["urgency"], c["age_key"]))
+    # Snoozed cards are withheld, not dropped: the row expires and the decision comes
+    # back. `include_snoozed` is how the surface offers to show what it is hiding.
+    if not include_snoozed:
+        hidden = db.snoozed_queue_keys(conn)
+        if hidden:
+            cards = [c for c in cards if c["key"] not in hidden]
     return cards
 
 
-def queue_view(conn, db) -> dict:
+def queue_view(conn, db, *, include_snoozed: bool = False) -> dict:
     """The template's shape: cards grouped by rung, plus honest totals."""
-    cards = compute_queue(conn, db)
+    cards = compute_queue(conn, db, include_snoozed=include_snoozed)
     groups: List[dict] = []
     for i, label in enumerate(RUNGS):
         rows = [c for c in cards if c["urgency"] == i]
         if rows:
             groups.append({"label": label, "cards": rows})
-    return {"groups": groups, "total": len(cards), "today": date.today().isoformat()}
+    # How many are being withheld right now — named on the surface, never silent.
+    snoozed = 0 if include_snoozed else len(db.snoozed_queue_keys(conn))
+    return {"groups": groups, "total": len(cards), "today": date.today().isoformat(),
+            "snoozed": snoozed, "showing_snoozed": include_snoozed}

@@ -783,15 +783,47 @@ def revenue_dashboard(request: Request):
 # Payout ledger — pay the crew. Owed rows are generated when a client invoice is
 # Paid; Jon pays off-platform and marks each Paid (W-9 must be on file first).
 # --------------------------------------------------------------------------- #
+def _safe_next(nxt: str, fallback: str) -> str:
+    """Where an action returns to. Same-site paths only — a caller-supplied absolute
+    URL would make these POST handlers an open redirect."""
+    nxt = (nxt or "").strip()
+    return nxt if nxt.startswith("/") and not nxt.startswith("//") else fallback
+
+
 @router.get("/queue", response_class=HTMLResponse)
 def disposition_queue(request: Request):
     """The Disposition Queue — every pending founder decision, one ranked surface.
     Pure aggregation (queue.py) over existing decision routes; the queue renders
     and links, the decision buttons stay where they live. Machine proposes, the
     operator disposes — here, ergonomically."""
+    show_all = (request.query_params.get("all") or "").strip() not in ("", "0", "false")
     conn = db.connect()
     try:
-        view = queue_mod.queue_view(conn, db)
+        view = queue_mod.queue_view(conn, db, include_snoozed=show_all)
     finally:
         conn.close()
     return render(request, "queue.html", nav="queue", **view)
+
+
+@router.post("/queue/snooze")
+def queue_snooze(key: str = Form(...), days: int = Form(7), next: str = Form("/queue")):
+    """Hold one card back for a while. NOT a decision and NOT a delete: the row expires
+    and the card returns if the thing still needs doing. That is what makes the list
+    clearable without making it a liar."""
+    conn = db.connect()
+    try:
+        db.snooze_queue_card(conn, key, days)
+    finally:
+        conn.close()
+    return RedirectResponse(_safe_next(next, "/queue"), status_code=303)
+
+
+@router.post("/queue/unsnooze")
+def queue_unsnooze(next: str = Form("/queue")):
+    """Bring every snoozed card back at once."""
+    conn = db.connect()
+    try:
+        db.clear_queue_snoozes(conn)
+    finally:
+        conn.close()
+    return RedirectResponse(_safe_next(next, "/queue"), status_code=303)

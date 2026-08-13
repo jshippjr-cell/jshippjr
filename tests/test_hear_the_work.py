@@ -148,8 +148,10 @@ def test_the_disclosure_is_one_string_on_every_surface_that_plays(client):
     maintained separately on each is one edit away from only being on two."""
     from chordential_oia.web.showcase import PLACEHOLDER_AUDIO_NOTICE
     # `/` is the score page now; it reaches its recordings by pressing a lit note
-    # and carries no row of players to sit a disclosure beside.
-    for path in ("/commission", "/samples", "/showreel"):
+    # and carries no row of players to sit a disclosure beside. /samples is retired —
+    # the front door's lit notes replaced it — so two surfaces remain that lay out
+    # players in the page.
+    for path in ("/commission", "/showreel"):
         body = client.get(path).text
         assert PLACEHOLDER_AUDIO_NOTICE in body, f"{path} plays audio undisclosed"
 
@@ -191,15 +193,15 @@ def test_the_synth_says_it_is_a_demonstration(client):
 # --------------------------------------------------------------------------- #
 # One source for the tracks
 # --------------------------------------------------------------------------- #
-def test_the_home_section_and_samples_render_the_same_records(client):
+def test_the_commission_renders_every_showcase_record(client):
     """Two pages describing the same track differently is the drift this session has
-    been removing everywhere else."""
+    been removing everywhere else. /samples was the second page; it is retired, so the
+    guarantee is now that the Commission renders the showcase and hardcodes nothing."""
     demos = [d for d in get_showcase().demos if d.audio_url]
     assert demos, "no demo carries audio"
-    home, samples = _home(client), client.get("/samples").text
+    home = _home(client)
     for d in demos:
-        assert d.audio_url in home, f"{d.title} is missing from the homepage"
-        assert d.audio_url in samples, f"{d.title} is missing from /samples"
+        assert d.audio_url in home, f"{d.title} is missing from the Commission"
 
 
 def test_the_homepage_does_not_hardcode_a_track():
@@ -217,8 +219,9 @@ def test_the_demos_are_framed_as_demonstrations(client):
 
 
 def test_the_section_offers_the_way_deeper(client):
+    """The way deeper is the front door's listening beat, where the lit notes play."""
     section = _home(client).split('id="work"')[1].split("</section>")[0]
-    assert 'href="/samples"' in section
+    assert 'href="/#hear"' in section
 
 
 def test_it_degrades_without_javascript():
@@ -287,15 +290,16 @@ def test_the_front_door_does_not_hardcode_a_track():
     assert ".mp3" not in open(os.path.normpath(tpl)).read()
 
 
-def test_the_front_door_and_samples_render_the_same_records(client):
-    """One source of truth for the demos (showcase.DEMOS) — the two surfaces
-    cannot describe the same track differently."""
+def test_the_front_door_and_the_commission_render_the_same_records(client):
+    """One source of truth for the demos (showcase.DEMOS) — the surfaces cannot
+    describe the same track differently. /samples used to be the second surface;
+    the Commission's work section is now the one that lists them beside the door."""
     import json
     html = _front(client)
     payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
-    samples = client.get("/samples").text
+    commission = client.get("/commission").text
     for t in json.loads(payload):
-        assert t["title"] in samples, f"{t['title']} is on / but not on /samples"
+        assert t["title"] in commission, f"{t['title']} is on / but not on /commission"
 
 
 def test_the_commission_is_still_reachable(client):
