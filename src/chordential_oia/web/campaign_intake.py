@@ -337,23 +337,25 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
     source = lane.provenance_source
     # ADR-0021: the extractor is calibrated by what this producer has consistently valued
     # across past campaigns (the learned priors), so it gets better after every deal.
-    try:
+    # Each of the three advisory blocks below runs INSIDE a savepoint. They are all
+    # "never block the capture" by intent — but on Postgres a swallowed failure aborts
+    # the whole transaction, so `never block` quietly became `always block`, and the
+    # insert at the end of this function died with InFailedSqlTransaction naming none of
+    # them. The savepoint keeps the swallow honest.
+    priors = ""
+    with db.best_effort(conn, "priors"):
         from . import producer_learning
         priors = producer_learning.priors_summary(conn)
-    except Exception:  # noqa: BLE001 — learning is advisory; never block capture
-        priors = ""
     # ADR-0023: when the orchestrated extraction engine is enabled, it becomes the seam —
     # ten specialists + validation + recall over EVERY available artifact. An explicitly
     # injected llm (tests/callers) still wins; with the engine off this is None and the
     # single-prompt seam / deterministic heuristics run exactly as before.
     if llm is None:
-        try:
+        with db.best_effort(conn, "engine"):
             from . import extraction_bridge
             llm = extraction_bridge.for_capture(
                 conn, ci_id=ci_id, opp_id=opp_id, campaign_id=campaign_id,
                 lane=lane, metadata=metadata)
-        except Exception:  # noqa: BLE001 — the engine is an upgrade, never a gate
-            llm = None
     candidates = extract(text, stance, llm=llm, priors=priors)
     # Preserve the engine's structured run report on the capture envelope (evidence of
     # HOW the extraction ran: workers, timings, recall rounds, conflicts).
@@ -363,11 +365,9 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
         metadata["extraction_run"] = run_report
         # Charge this run's estimated cost to the durable monthly ledger, so the app's
         # hard spend cap (extraction_bridge.spend_over_cap) actually bites next time.
-        try:
+        with db.best_effort(conn, "spend"):
             from . import extraction_bridge
             extraction_bridge.record_spend(conn, run_report)
-        except Exception:  # noqa: BLE001 — accounting never blocks a capture
-            pass
     cap_id = db.insert_capture(
         conn, ci_id=ci_id, campaign_id=campaign_id, opp_id=opp_id, lane=lane.key,
         stance=stance, modality=lane.modality, provenance_source=source, raw_text=text,

@@ -57,7 +57,10 @@ def schedule(conn, opp, *, start_at: str = "", join_url: str = "", duration_min:
                 db.update_meeting(conn, mid, bot_id=bot_id, notetaker_provider=cp.name,
                                   status=M.BOT_INVITED)
         except Exception:  # noqa: BLE001 — honest: couldn't arm; stays 'not connected'
-            pass
+            try:
+                conn.rollback()      # a half-written arm must not poison what follows
+            except Exception:        # noqa: BLE001
+                pass
     return db.get_meeting(conn, mid)
 
 

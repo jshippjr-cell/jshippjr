@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import atexit
 import importlib.util
+import contextlib
 import json
+import itertools
 import os
 import re
 import secrets
@@ -5228,6 +5230,49 @@ def _lease_now() -> str:
 
 def _lease_at(seconds: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime(_LEASE_TS)
+
+
+_SAVEPOINT_N = itertools.count(1)
+
+
+@contextlib.contextmanager
+def best_effort(conn, label: str = "be"):
+    """Run advisory database work that must never take its caller down.
+
+    ``except Exception: pass`` around a DB call is safe on SQLite and a live grenade on
+    Postgres: a failed statement puts the transaction in an aborted state, and EVERY
+    later command raises ``InFailedSqlTransaction`` until someone rolls back. So a
+    swallowed failure in some optional bookkeeping doesn't stay optional — it takes down
+    the write the caller actually cared about, with an error naming neither.
+
+    That is exactly how a discovery transcript came back from Recall and then failed to
+    file: three advisory blocks run before the capture is inserted, and any one of them
+    failing quietly poisoned the insert.
+
+    A SAVEPOINT makes the swallow honest. The advisory work is undone; everything the
+    caller did before it survives.
+    """
+    sp = "be_%d" % next(_SAVEPOINT_N)
+    try:
+        conn.execute("SAVEPOINT %s" % sp)
+    except Exception:                    # noqa: BLE001 — no savepoint here; swallow plainly
+        try:
+            yield
+        except Exception:                # noqa: BLE001
+            pass
+        return
+    try:
+        yield
+    except Exception:                    # noqa: BLE001 — the whole point
+        try:
+            conn.execute("ROLLBACK TO SAVEPOINT %s" % sp)
+        except Exception:                # noqa: BLE001
+            pass
+    else:
+        try:
+            conn.execute("RELEASE SAVEPOINT %s" % sp)
+        except Exception:                # noqa: BLE001
+            pass
 
 
 def snooze_queue_card(conn, key: str, days: int, actor: str = "operator") -> None:

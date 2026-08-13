@@ -155,12 +155,12 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
         db.set_discovery_request_status(conn, request_id, "scheduled", mid)
     # the Opportunity timeline records the meeting (ADR-0017)
     if ci_id:
-        try:
+        # the timeline never blocks the booking — and, inside a savepoint, never
+        # poisons it either (see db.best_effort)
+        with db.best_effort(conn, "timeline"):
             db.add_ci_event(conn, ci_id, actor=scheduled_by or "operator",
                             verb="meeting_scheduled", facet="engagement", key="discovery_call",
                             to_value=f"{meeting_type} · {fmt_et(start_at)}", source="scheduler")
-        except Exception:  # noqa: BLE001 — the timeline never blocks the booking
-            pass
     _send_confirmations(opp, db.get_meeting(conn, mid))
     return {"ok": True, "meeting": db.get_meeting(conn, mid)}
 

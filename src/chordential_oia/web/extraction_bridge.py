@@ -142,7 +142,9 @@ def record_spend(conn, run_report: Optional[dict]) -> None:
     """Add a completed engine run's estimated cost to this month's ledger (best-effort)."""
     if not run_report:
         return
-    try:
+    # Accounting is advisory, but a swallowed failure here used to abort the whole
+    # transaction on Postgres and take the capture down with it (see db.best_effort).
+    with db.best_effort(conn, "ai_spend"):
         cost = float(run_report.get("est_cost_usd") or 0)
         if cost <= 0 and not run_report.get("api_calls"):
             return
@@ -150,8 +152,6 @@ def record_spend(conn, run_report: Optional[dict]) -> None:
                         calls=int(run_report.get("api_calls") or 0),
                         in_tokens=int(run_report.get("input_tokens") or 0),
                         out_tokens=int(run_report.get("output_tokens") or 0))
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def spend_status(conn) -> dict:
