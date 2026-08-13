@@ -1,19 +1,20 @@
 """The bot must come back with a transcript.
 
-It didn't: the bot joined, recorded, reached `done`, and no notes arrived. The provider
-config was NOT the cause — `meeting_captions` has been the default since this file was
-written and has never changed, so it cannot explain something that used to work. What it
-can explain is a call that stays empty for ever once it is empty, because nothing asks
-again.
+It didn't: the bot joined, recorded, reached `done`, and no notes arrived. Recall's own
+logs named the cause on 2026-08-13 —
+
+    Zoom failed to enable captions for meeting, transcript will not be available
+
+— because the default provider, `meeting_captions`, does not transcribe audio. It reads
+Zoom's caption stream, and Zoom will not let a bot that is not the host turn captions on.
 
 So two guarantees:
 
-  1. The bot-create body stays EXACTLY what it has always been. That request has one
-     version in this repo's history and is not where anything changed, so it is pinned
-     rather than improved.
+  1. The bot is created with a provider that transcribes AUDIO, so a transcript never
+     depends on a setting in someone else's meeting.
   2. A recording that finished WITHOUT a transcript is asked to be transcribed now, rather
-     than being polled to death and written off. The audio still exists; that is what
-     rescues a call whose notes never arrived, whatever stopped them arriving.
+     than being polled to death and written off — which recovers the calls already
+     recorded under the old default.
 """
 import json
 
@@ -46,11 +47,13 @@ def _capture_calls(provider, monkeypatch, get_result=None):
     return posts, gets
 
 
-def test_the_bot_create_body_is_exactly_what_shipped(provider, monkeypatch):
-    """The bot-create request is NOT a place to improve things speculatively. This file has
-    posted one body since the day it was written, and the transcript stopping had nothing to
-    do with it; changing it would be changing the one part of this path with no history of
-    having gone wrong. Pinned byte for byte."""
+def test_the_bot_transcribes_audio_rather_than_reading_zooms_captions(provider, monkeypatch):
+    """The whole bug, in one assertion.
+
+    ``meeting_captions`` reads Zoom's caption stream instead of transcribing audio, and Zoom
+    refuses to enable captions for a bot that is not the host — so the bot attended every
+    call and produced nothing. Recall's log, verbatim: "Zoom failed to enable captions for
+    meeting, transcript will not be available"."""
     posts, _ = _capture_calls(provider, monkeypatch)
     provider.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
 
@@ -60,24 +63,31 @@ def test_the_bot_create_body_is_exactly_what_shipped(provider, monkeypatch):
     assert payload == {
         "meeting_url": "https://zoom.example/j/1",
         "bot_name": "Chordential Notetaker",
-        "recording_config": {"transcript": {"provider": {"meeting_captions": {}}}},
+        "recording_config": {"transcript": {"provider": {
+            "recallai_streaming": {"mode": "prioritize_accuracy", "language_code": "auto"}}}},
     }
     json.dumps(payload)          # a body Recall cannot parse is the same as no bot
 
 
-def test_the_native_asr_can_be_selected_with_its_own_option_shape(monkeypatch):
-    """The escape hatch, if the host's captions ever do turn out to be off: one env var,
-    and the options object Recall expects for THAT provider rather than an empty one."""
+def test_the_captions_provider_is_never_the_default(provider, monkeypatch):
+    """A regression here is silent — the bot still joins, still records, still finishes.
+    Nothing but this test would catch it going back."""
+    posts, _ = _capture_calls(provider, monkeypatch)
+    provider.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
+    assert "meeting_captions" not in posts[0][1]["recording_config"]["transcript"]["provider"]
+
+
+def test_the_captions_provider_is_still_available_to_anyone_who_wants_it(monkeypatch):
+    """It is a bad default, not a bad option: with the bot made a co-host, or captions on,
+    it works and costs less. The env var still selects it, with its own (empty) options."""
     monkeypatch.setenv("CHORDENTIAL_RECALL_API_KEY", "k")
-    monkeypatch.setenv("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "recallai_streaming")
-    monkeypatch.delenv("CHORDENTIAL_RECALL_LANGUAGE", raising=False)
+    monkeypatch.setenv("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "meeting_captions")
     from chordential_oia.meetings.recall import RecallCaptureProvider
     p = RecallCaptureProvider()
     posts, _ = _capture_calls(p, monkeypatch)
     p.invite(join_url="https://zoom.example/j/1", meeting_ref="7")
     chosen = posts[0][1]["recording_config"]["transcript"]["provider"]
-    assert chosen == {"recallai_streaming": {"mode": "prioritize_accuracy",
-                                             "language_code": "auto"}}
+    assert chosen == {"meeting_captions": {}}
 
 
 def test_a_finished_recording_with_no_transcript_is_asked_to_be_transcribed(provider, monkeypatch):

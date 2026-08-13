@@ -16,25 +16,34 @@ Config (env; the seam is null until a key is set):
   CHORDENTIAL_RECALL_REGION           — API region, default "us-east-1"
   CHORDENTIAL_RECALL_BOT_NAME         — the bot's display name in the call
   CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER — Recall transcription provider (default
-                                        meeting_captions, as shipped; recallai_streaming is
-                                        Recall's own ASR if the host's captions are ever off)
+                                        recallai_streaming, Recall's own ASR; meeting_captions
+                                        needs the host to enable Zoom captions and yields
+                                        nothing at all when they have not)
   CHORDENTIAL_RECALL_LANGUAGE         — transcription language, default "auto"
   CHORDENTIAL_RECALL_WEBHOOK_SECRET   — only if you opt into the webhook path
 
-THE DEFAULT IS ``meeting_captions``, WHICH IS WHAT THIS HAS ALWAYS SENT. It reads the
-meeting platform's own caption stream rather than transcribing audio, so it costs nothing
-extra — and it is the shape this file has posted since the day it was written. It is left
-alone deliberately: it is not the cause of anything that changed.
+THE DEFAULT IS ``recallai_streaming``, AND IT WAS CHANGED ON EVIDENCE, NOT ON A HUNCH.
 
-Its known weakness, worth understanding rather than switching away from blind: if the HOST
-has captions off there is no caption stream to read, so the bot records and finishes and no
-transcript is produced. Set ``CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER=recallai_streaming``
-(Recall's own speech-to-text — no third-party key, no dependency on the host's settings) if
-that ever turns out to be the case.
+It used to be ``meeting_captions``, which does not transcribe audio at all — it reads the
+meeting platform's own caption stream. Our bot joins as a participant, and Zoom will not let
+a non-host turn captions on. Recall's own logs, 2026-08-13:
 
-Either way ``fetch_transcript`` REPAIRS it: a recording that finished carrying no transcript
-artifact is sent for async transcription rather than polled to death, so the audio that was
-captured still becomes notes.
+    Zoom failed to enable captions for meeting, transcript will not be available
+    This Zoom meeting only allows hosts and co-hosts to share their screen. The bot is
+    joining as a participant...
+
+So the bot joined every call, recorded it, finished cleanly, and produced nothing. Nothing
+in our system was wrong and nothing surfaced it: no error, no failed state, just a discovery
+call whose notes never arrived.
+
+``recallai_streaming`` is Recall's own speech-to-text. No third-party key, and it does not
+care who is host. This is a DEFAULT rather than a setting on purpose: a transcript that
+depends on the operator remembering to enable captions before every call is a transcript
+that will go missing again.
+
+``fetch_transcript`` also REPAIRS the older recordings: one that finished carrying no
+transcript artifact is sent for async transcription rather than polled to death, so audio
+already captured under the old default can still become notes.
 """
 from __future__ import annotations
 
@@ -68,7 +77,7 @@ class RecallCaptureProvider(CaptureProvider):
                          or "Chordential Notetaker").strip()
         self.transcript_provider = (
             os.environ.get("CHORDENTIAL_RECALL_TRANSCRIPT_PROVIDER", "")
-            or "meeting_captions").strip()
+            or "recallai_streaming").strip()
         self.language = (os.environ.get("CHORDENTIAL_RECALL_LANGUAGE", "")
                          or "auto").strip()
         self.webhook_secret = os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "").strip()
@@ -81,8 +90,9 @@ class RecallCaptureProvider(CaptureProvider):
     def invite(self, *, join_url: str, meeting_ref: str) -> str:
         """Send a Recall bot into the meeting with transcription on. Returns the bot id.
 
-        The body is what this has always posted — the provider from config, its options
-        object, and nothing else. See the module docstring for the captions caveat."""
+        Recall's own ASR by default: the platform-captions provider needs the host to turn
+        Zoom captions on for a bot that is not the host, which Zoom refuses. See the module
+        docstring for the log lines that proved it."""
         if not self.configured():
             raise RuntimeError(
                 "Recall provider selected but CHORDENTIAL_RECALL_API_KEY is unset.")
