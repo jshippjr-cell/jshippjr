@@ -56,6 +56,7 @@
             <button class="btn tiny primary" type="submit" title="Create an opportunity from this">Promote</button>
           </form>
           <form method="post" action="{{ r['dismiss_url'] }}">
+            <input type="hidden" name="next" value="/incoming">
             <input type="hidden" name="status" value="Dismissed">
             <button class="btn tiny ghost" type="submit">Dismiss</button>
           </form>

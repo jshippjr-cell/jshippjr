@@ -137,14 +137,24 @@ def inbound_queue(request: Request, status: Optional[str] = None):
     )
 
 
+def _safe_next(nxt: str, fallback: str) -> str:
+    """Where an action should return to. Only a same-site path is honoured — a
+    caller-supplied absolute URL would make these POST handlers an open redirect."""
+    nxt = (nxt or "").strip()
+    return nxt if nxt.startswith("/") and not nxt.startswith("//") else fallback
+
+
 @router.post("/leads/{lead_id}/status")
-def inbound_set_status(lead_id: int, status: str = Form(...)):
+def inbound_set_status(lead_id: int, status: str = Form(...), next: str = Form("")):
     conn = db.connect()
     try:
         db.update_inbound_lead_status(conn, lead_id, status)
     finally:
         conn.close()
-    return RedirectResponse("/leads", status_code=303)
+    # Dismissing from Incoming used to land on /leads — a page the left nav does not
+    # link — so actioning one row threw away the queue you were working. The form
+    # carries where it was submitted from; the lead list stays the fallback.
+    return RedirectResponse(_safe_next(next, "/leads"), status_code=303)
 
 
 @router.post("/leads/{lead_id}/delete")
@@ -386,7 +396,7 @@ def signals_clear():
 
 
 @router.post("/signals/{signal_id}/status")
-def signal_set_status(signal_id: int, status: str = Form(...)):
+def signal_set_status(signal_id: int, status: str = Form(...), next: str = Form("")):
     conn = db.connect()
     try:
         if status.strip().lower() == "dismissed":   # B3 — a triaged gig the human rejected
@@ -396,7 +406,7 @@ def signal_set_status(signal_id: int, status: str = Form(...)):
         db.set_signal_status(conn, signal_id, status)
     finally:
         conn.close()
-    return RedirectResponse("/signals", status_code=303)
+    return RedirectResponse(_safe_next(next, "/signals"), status_code=303)
 
 
 @router.post("/discovery/lead")
