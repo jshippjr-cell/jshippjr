@@ -29,7 +29,7 @@ def _why_them(t) -> str:
         snippet = credit.rstrip(".")
         if len(snippet) > 140:
             snippet = snippet[:137].rstrip() + "…"
-        return (f"Your work caught my eye — {snippet[0].lower()}{snippet[1:]}. "
+        return (f"Your work caught my eye: {snippet[0].lower()}{snippet[1:]}. "
                 f"That's exactly the kind of craft we want on our roster.")
     if disciplines:
         craft = disciplines[0].lower()
@@ -51,19 +51,19 @@ def invite_blocks(
     return [
         {"key": "greeting", "text": f"Hi {_first_name(t.name)},"},
         {"key": "who",
-         "text": (f"I'm {from_name}, founder of Chordential — a small studio making "
+         "text": (f"I'm {from_name}, founder of Chordential, a small studio making "
                   "original, clearance-certified music for ad campaigns.")},
         {"key": "why", "text": _why_them(t)},
         {"key": "offer",
          "text": ("What I can honestly offer: real, paid briefs (never spec), clean "
                   "rights and prompt payment, and first-look when a brief fits your "
-                  "craft. I won't pretend we have a flood of work — we're early — but "
+                  "craft. I won't pretend we have a flood of work; we're early, but "
                   "you'd be chosen, not bidding against a marketplace, and we treat "
                   "creators with respect and pay fast.")},
         {"key": "cta",
          "text": (f"If that resonates, here's how we work with artists: {artists_url}\n"
                   f"And you can send your reel whenever you like: {apply_url}")},
-        {"key": "signoff", "text": f"— {from_name}, Chordential"},
+        {"key": "signoff", "text": f"{from_name}, Chordential"},
     ]
 
 
@@ -105,25 +105,25 @@ def compose_review_decision(
         if t.rate:
             unit = {"hourly": "/hr", "day": "/day", "project": "/project"}.get(
                 t.rate_unit, "")
-            rate_line = f"\n\nFor reference, our standing rate for this work is {_money(t.rate)}{unit} — we'll confirm specifics on any brief before it starts."
+            rate_line = f"\n\nFor reference, our standing rate for this work is {_money(t.rate)}{unit}. We'll confirm specifics on any brief before it starts."
         body = (
             f"Hi {name},\n\n"
-            f"Good news — I reviewed your reel and you're in. You're on the roster "
+            f"Good news: I reviewed your reel and you're in. You're on the roster "
             f"for {crafts}, first-look on real, paid briefs when one fits your "
-            f"craft (never spec, never a promise of volume — we're early, and "
+            f"craft (never spec, never a promise of volume; we're early, and "
             f"honest about that).{rate_line}\n\n"
             f"Here's how we work with artists, if you haven't already seen it: "
             f"{artists_url}\n\n"
-            f"— {from_name}, Chordential"
+            f"{from_name}, Chordential"
         )
         subject = f"You're on the roster, {name}"
     else:
         body = (
             f"Hi {name},\n\n"
-            f"Thanks for sending your reel — I gave it a real listen. It's not a "
+            f"Thanks for sending your reel. I gave it a real listen. It's not a "
             f"fit for what we're building right now, so I won't add you to the "
             f"roster. That's a read on current fit, not a judgment on the work.\n\n"
-            f"— {from_name}, Chordential"
+            f"{from_name}, Chordential"
         )
         subject = "Following up on your Chordential application"
     return {"subject": subject, "body": body}
@@ -148,14 +148,14 @@ def compose_project_assignment(
         rate_line = f"\nYour rate: {_money(t.rate)}{unit}"
     body = (
         f"Hi {name},\n\n"
-        f"You're signed on — here's the scope.\n\n"
+        f"You're signed on. Here's the scope.\n\n"
         f"Client: {client or 'Chordential'}\n"
         f"Role: {role}\n"
         f"Brief: {brief}"
         f"{deadline_line}{rate_line}\n\n"
-        f"Original, cleared work, fixed scope, clean rights — same terms as always. "
+        f"Original, cleared work, fixed scope, clean rights, same terms as always. "
         f"I'll follow up with anything else you need to get started.\n\n"
-        f"— {from_name}, Chordential"
+        f"{from_name}, Chordential"
     )
     subject = f"You're signed on: {client or 'a new project'} ({role})"
     return {"subject": subject, "body": body}
@@ -174,11 +174,11 @@ def compose_client_assignment_update(
     creator = _first_name(creator_name) or "a specialist"
     body = (
         f"{greeting}\n\n"
-        f"Good news — {creator} is on board as the {role} for {brief}. Your team is "
+        f"Good news: {creator} is on board as the {role} for {brief}. Your team is "
         f"coming together and the work is moving.\n\n"
-        f"You'll see everything — the brief, new versions as they land, and where to weigh "
-        f"in — in your workspace" + (f":\n{workspace_url}" if workspace_url else ".") + "\n\n"
-        f"— {from_name}, Chordential"
+        f"Your workspace has everything: the brief, new versions as they land, and "
+        f"where to weigh in" + (f":\n{workspace_url}" if workspace_url else ".") + "\n\n"
+        f"{from_name}, Chordential"
     )
-    subject = f"Your {role} is on board — {brief}"
+    subject = f"Your {role} is on board · {brief}"
     return {"subject": subject, "body": body}

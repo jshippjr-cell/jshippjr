@@ -471,7 +471,7 @@
       {# Top-level notes for the SELECTED version, each with its threaded replies. #}
       {% for c in comments %}{% if c.kind == 'comment' and c.parent_id is none and (selected_n == 0 or c.version|string == selected_n|string) %}{% set ns2.has = true %}
         <div class="rc{% if c.resolved %} done{% endif %}">
-          {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}{% if c.t_end is not none %}–{{ (c.t_end|int//60) }}:{{ '%02d'|format(c.t_end|int%60) }}{% endif %}</a>{% else %}<span class="rc-t">·</span>{% endif %}
+          {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}{% if c.t_end is not none %} to {{ (c.t_end|int//60) }}:{{ '%02d'|format(c.t_end|int%60) }}{% endif %}</a>{% else %}<span class="rc-t">·</span>{% endif %}
           <span class="rc-a">{{ c.author }}</span>
           <span class="rc-b">{{ c.body }}</span>
           <span class="rc-actions">

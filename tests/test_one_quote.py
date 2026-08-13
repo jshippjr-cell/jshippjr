@@ -118,7 +118,7 @@ def app_mod(tmp_path, monkeypatch):
 
 
 def _band_text(lo, hi):
-    return f"${lo:,.0f}–${hi:,.0f}"
+    return f"${lo:,.0f} to ${hi:,.0f}"
 
 
 def test_all_four_surfaces_quote_the_same_number(app_mod):

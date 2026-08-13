@@ -261,7 +261,7 @@ def test_the_manifest_renders_the_stored_stem():
     versions = [{"n": 1, "label": "v1 Concept", "name": "SUMMER_30_MASTER_v1"},
                 {"n": 2, "label": "v2 FINAL", "name": "SUMMER_30_MASTER_v2_FINAL"}]
     rows = [r for r in build_manifest(project, versions=versions) if r.group == "Versions"]
-    assert [r.asset.split(" — ")[0] for r in rows] == \
+    assert [r.asset.split(" · ")[0] for r in rows] == \
         ["SUMMER_30_MASTER_v1", "SUMMER_30_MASTER_v2_FINAL"]
 
 
@@ -271,6 +271,6 @@ def test_a_legacy_version_without_a_stored_name_still_gets_one():
     project = {"need": "Summer Launch", "client": "Vance Athletic"}
     rows = [r for r in build_manifest(project, versions=[{"n": 1, "label": "v1 Concept"}])
             if r.group == "Versions"]
-    stem = rows[0].asset.split(" — ")[0]
+    stem = rows[0].asset.split(" · ")[0]
     assert stem == "SUMMER_MASTER_v1"
     assert "60" not in stem

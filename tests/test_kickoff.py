@@ -140,7 +140,7 @@ def test_readiness_all_ready_when_no_client_actions(tmp_path, monkeypatch):
     # campaign summary is projected from CI + the approved review
     assert "Holiday anthem" in page
     assert "November 10" in page                       # target delivery from CI
-    assert "Original — cleared worldwide" in page      # rights from music requirement
+    assert "Original, cleared worldwide" in page      # rights from music requirement
 
 
 def test_readiness_surfaces_client_action_when_deposit_awaiting(tmp_path, monkeypatch):

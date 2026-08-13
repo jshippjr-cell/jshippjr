@@ -772,7 +772,7 @@
     {% else %}
     <form class="uploader sr-upload-form" method="post"
           action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data">
-      <label>{{ 'Submit an updated version — this replaces the one under review and re-notifies the team.'
+      <label>{{ 'Submit an updated version. This replaces the one under review and re-notifies the team.'
                if a.pending else 'Submit a new version of your master (WAV, AIFF, or MP3)' }}</label>
       <div class="filewrap">
         <label class="filebtn">Choose your take<input type="file" name="file" accept="audio/*" required></label>
@@ -780,7 +780,7 @@
       </div>
       <button class="btn" type="submit">Submit for review</button>
       <div class="progress"><i></i></div>
-      <p class="fineprint">Your take lands with the studio first — the client never hears unvetted work.
+      <p class="fineprint">Your take lands with the studio first; the client never hears unvetted work.
         A human always presses the approve button; we never auto-decide.</p>
     </form>
     {% endif %}
@@ -825,7 +825,7 @@
 <div class="dropveil" id="dropveil">
   <div class="drop-box">
     <div class="d1">Drop your take</div>
-    <div class="d2">WAV / AIFF / MP3 — LANDS WITH THE STUDIO FIRST</div>
+    <div class="d2">WAV / AIFF / MP3 · LANDS WITH THE STUDIO FIRST</div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -984,7 +984,7 @@
         var bb = document.createElement("button");
         bb.type = "button"; bb.className = "pin-beyond";
         bb.textContent = beyond.length + " beyond this cut";
-        bb.title = "Notes timecoded past this cut's end — likely from an earlier, longer cut";
+        bb.title = "Notes timecoded past this cut's end, likely from an earlier, longer cut";
         bb.addEventListener("click", function(e){ e.stopPropagation(); openSheet("notes"); });
         noteLane.appendChild(bb);
       }
@@ -996,7 +996,7 @@
           span.className = "note-span" + ((n.resolved || n.addressed) ? " resolved" : "");
           span.style.left = Math.max(0, n.t / D * 100) + "%";
           span.style.width = Math.max(1, (Math.min(n.t_end, D) - n.t) / D * 100) + "%";
-          span.title = "Client note over " + tcFmt(n.t) + "–" + tcFmt(n.t_end);
+          span.title = "Client note over " + tcFmt(n.t) + " to " + tcFmt(n.t_end);
           noteLane.appendChild(span);
         }
         var pin = document.createElement("button");
@@ -1056,7 +1056,7 @@
         var w = Math.max(0.6, (to - ti) / D * 100);
         reg.style.width = w + "%";
         var label = c.code + (c.name ? " · " + c.name : "");
-        reg.title = label + (c.direction ? " — " + c.direction : "") + "  [" + (c.state || "open") + "]";
+        reg.title = label + (c.direction ? " · " + c.direction : "") + "  [" + (c.state || "open") + "]";
         var codeEl = document.createElement("span");
         codeEl.className = "cue-code";
         // show the name inside the region when there's room; bare code when tight
@@ -1064,7 +1064,7 @@
         reg.appendChild(codeEl);
         reg.addEventListener("click", function(e){
           e.stopPropagation(); seek(ti);
-          whisper(label + (c.direction ? " — " + c.direction : ""));
+          whisper(label + (c.direction ? " · " + c.direction : ""));
         });
         cueLane.appendChild(reg);
         (c.hits || []).forEach(function(h){
@@ -1107,19 +1107,19 @@
     // back to the newest take the browser CAN play so pins + transport stay alive.
     audio.addEventListener("error", function(){
       var cur = root.querySelector(".sr-take.on");
-      if (cur){ cur.classList.add("dead"); cur.title = "This take can't be previewed in the browser — it's safely with the studio."; }
+      if (cur){ cur.classList.add("dead"); cur.title = "This take can't be previewed in the browser. It's safely with the studio."; }
       var alive = [];
       chips.forEach(function(c){ if (c.dataset.src && !c.classList.contains("dead")) alive.push(c); });
       if (alive.length){
         var next = alive[alive.length - 1];
         loadTake(next);
-        toast("That take can't be previewed in this browser — it's safely with the studio. Showing " + next.textContent.trim() + ".");
+        toast("That take can't be previewed in this browser. It's safely with the studio. Showing " + next.textContent.trim() + ".");
       } else {
         hasAudio = false; dur = 0;
         if (!hasPicture){ stage.classList.add("noaudio"); stage.classList.remove("playing");
                           playBtn.textContent = "▶"; }
         drawWave();
-        toast("This take can't be previewed in the browser — it's safely with the studio.");
+        toast("This take can't be previewed in the browser. It's safely with the studio.");
       }
     });
     function loop(){
@@ -1143,7 +1143,7 @@
         video.paused ? video.play() : video.pause();
         return;
       }
-      if (!hasAudio){ toast("No take loaded yet — upload your music and it plays here."); return; }
+      if (!hasAudio){ toast("No take loaded yet. Upload your music and it plays here."); return; }
       audio.paused ? audio.play() : audio.pause();
     }
     function seek(t){
@@ -1172,7 +1172,7 @@
       video.addEventListener("timeupdate", function(){ syncAudio(); update(); });
       video.addEventListener("click", toggle);
       video.addEventListener("error", function(){
-        toast("The cut can't be streamed right now — the room falls back to your music.");
+        toast("The cut can't be streamed right now; the room falls back to your music.");
         hasPicture = false; stage.classList.remove("has-picture", "playing");
         video.style.display = "none";
         // never leave a black void: restore the poster mood behind the room
@@ -1259,9 +1259,9 @@
             item.querySelector("span:last-child").textContent = d.text;
             if (list) list.insertBefore(item, list.firstChild);
             input.value = ""; toast("Kept on your shelf.");
-          } else { toast("Couldn't save — try again."); }
+          } else { toast("Couldn't save. Try again."); }
         })
-        .catch(function(){ toast("Couldn't save — check your connection."); })
+        .catch(function(){ toast("Couldn't save. Check your connection."); })
         .finally(function(){ btn.disabled = false; });
     });
     // Ask-the-studio replies thread in place (Phase 4 — composer flow): no full
@@ -1278,15 +1278,15 @@
             if (d && d.ok){
               var line = document.createElement("div");
               line.className = "reply-line";
-              line.innerHTML = "<b></b> <span class='reply-int'>to the studio</span> — <span></span>";
+              line.innerHTML = "<b></b> <span class='reply-int'>to the studio</span> · <span></span>";
               line.querySelector("b").textContent = d.author;
               line.querySelector("span:last-child").textContent = d.body;
               f.parentNode.insertBefore(line, f);
               input.value = ""; f.hidden = true;
               toast("Sent to the studio.");
-            } else { toast("Couldn't send — try again."); }
+            } else { toast("Couldn't send. Try again."); }
           })
-          .catch(function(){ toast("Couldn't send — check your connection."); })
+          .catch(function(){ toast("Couldn't send. Check your connection."); })
           .finally(function(){ btn.disabled = false; });
       });
     });
@@ -1314,7 +1314,7 @@
             var badge = root.querySelector('.lk[data-sheet="notes"] .n-open');
             if (badge) badge.textContent = openN ? "· " + openN : "";
           })
-          .catch(function(){ toast("Couldn't update the note — try again."); })
+          .catch(function(){ toast("Couldn't update the note. Try again."); })
           .finally(function(){ btn.disabled = false; });
       });
     });
@@ -1374,7 +1374,7 @@
             location.href = location.pathname + "?submitted=" + pid + "#" + root.id;
           } else {
             btn.disabled = false; btn.textContent = "Submit for review"; bar.classList.remove("on");
-            toast("Upload failed — please try again.");
+            toast("Upload failed. Please try again.");
           }
         });
         xhr.addEventListener("error", function(){
@@ -1440,8 +1440,8 @@
       // that decision gets an explicit press, never an accidental drop.
       if (gated) gated.open = true;
       toast(closed
-        ? "This project is delivered — take staged only. Press Submit if you really need to reopen it."
-        : "Take staged — press Submit for review to reopen the master.");
+        ? "This project is delivered; take staged only. Press Submit if you really need to reopen it."
+        : "Take staged. Press Submit for review to reopen the master.");
     } else {
       // spec Act 3: the drop IS the submission — but with the spec's §10.8
       // undo-over-confirm: a 5-second window where Esc cancels before anything
@@ -1456,7 +1456,7 @@
         r.upForm.dispatchEvent(new Event("submit", { cancelable: true }));
       }, 5000);
       pendingDrop = mine;
-      toast("Submitting your take in 5s — press Esc to cancel.");
+      toast("Submitting your take in 5s. Press Esc to cancel.");
     }
   });
   var pendingDrop = null;
@@ -1466,7 +1466,7 @@
     var input = pendingDrop.room.upForm.querySelector("input[type=file]");
     if (input) input.value = "";
     pendingDrop = null;
-    toast("Cancelled — nothing was sent.");
+    toast("Cancelled. Nothing was sent.");
     return true;
   }
 

@@ -233,7 +233,7 @@ async def opp_intelligence_analyze(
                 conn, ci_id=ci_row["id"], opp_id=opp_id, lane=the_lane.key,
                 stance=the_lane.stance, modality=the_lane.modality,
                 provenance_source=the_lane.provenance_source, artifact_ref=artifact_ref,
-                raw_text=(f"[{the_lane.label}: {upload_name or 'no text'} — "
+                raw_text=(f"[{the_lane.label}: {upload_name or 'no text'}, "
                           f"awaiting transcription]"),
                 extraction=[], status="received", created_by="operator")
             return RedirectResponse(
@@ -886,8 +886,8 @@ def commercial_release(opp_id: int):
             try:
                 mailer.send_email(
                     row["contact_email"].strip(),
-                    f"Your proposal is ready — {row['client']}",
-                    f"Your proposal for {row['need']} is ready in your workspace — scope, "
+                    f"Your proposal is ready · {row['client']}",
+                    f"Your proposal for {row['need']} is ready in your workspace: scope, "
                     f"timeline, investment and terms, with one approval at the end.\n\n"
                     f"{_public_base()}/workspace/{token}")
             except Exception:  # noqa: BLE001
@@ -1297,7 +1297,7 @@ def first_touch_page(request: Request, opp_id: int, k: str = ""):
     if not relevant_uploads and not relevant_links:
         from .showcase import get_showcase
         showcase_tracks = [
-            {"label": f"{d.title} — {d.discipline_label}", "url": d.audio_url}
+            {"label": f"{d.title} · {d.discipline_label}", "url": d.audio_url}
             for d in get_showcase().demos if d.audio_url
         ]
     call_url = os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip()

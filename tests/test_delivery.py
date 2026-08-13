@@ -157,7 +157,7 @@ def test_manifest_shows_deterministic_version_named_files():
     # Deterministic, version-named filenames in the manifest. ADR-0037: a non-final
     # version's stem ENDS at the version token — it used to read `_v1_V1`, repeating
     # the number because `f"v{n}"` was passed into the STATE slot (which is for FINAL).
-    stems = [r.asset.split(" — ")[0] for r in version_rows]
+    stems = [r.asset.split(" · ")[0] for r in version_rows]
     assert any(s.endswith("_v1") for s in stems), stems
     assert any(s.endswith("_v2") for s in stems), stems
     # The campaign token leads the filename.
@@ -1483,7 +1483,7 @@ def test_rights_cert_license_reads_as_draft_until_confirmed():
 
     draft = _bcc(_fake_project(), _fake_assignments())
     assert draft.license_draft is True
-    assert "DRAFT — pending confirmation" in rights_certificate_text(draft)
+    assert "DRAFT · pending confirmation" in rights_certificate_text(draft)
 
     confirmed = _bcc(
         _fake_project(), _fake_assignments(),

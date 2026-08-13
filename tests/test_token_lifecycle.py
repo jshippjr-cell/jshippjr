@@ -101,7 +101,7 @@ def test_an_expired_link_gets_an_explanation_not_a_shrug():
     """The person holding it is a real client who really was invited. "Not found"
     sends them back to their inbox to check they clicked the right thing."""
     note = reviewers.access_note(reviewers.EXPIRED, {"expires_at": "2026-01-01"})
-    assert "expired on 2026-01-01" in note and "nothing is lost" in note
+    assert "expired on 2026-01-01" in note and "nothing is lost" in note.lower()
     assert "withdrawn" in reviewers.access_note(reviewers.REVOKED).lower()
 
 

@@ -29,7 +29,7 @@ def test_engine_returns_point_and_band():
     assert est.cost_low == round(est.estimated_cost * (1 - BAND_SPREAD), 6) or \
         abs(est.cost_low - est.estimated_cost * (1 - BAND_SPREAD)) < 1e-6
     assert est.band_spread_pct == BAND_SPREAD * 100.0
-    assert "–" in est.cost_range
+    assert " to " in est.cost_range
 
 
 def test_team_derived_from_discipline_when_absent():

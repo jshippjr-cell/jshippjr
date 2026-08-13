@@ -57,7 +57,7 @@ def test_default_body_includes_on_blocks_excludes_off(client):
     assert "current understanding of the campaign" in body  # CI-derived understanding
     assert "isn't always ideal" in body                   # call offer phrase
     assert "Here's our understanding of your campaign" in body  # summary link (ADR-0020)
-    assert "— Jon Shipp · Chordential" in body            # sign-off
+    assert "Jon Shipp · Chordential" in body            # sign-off
     # Default-OFF blocks must NOT appear in the default preview body.
     assert "original and cleared, with a fixed scope" not in body   # credibility
     assert "P.S. Happy to send a couple more references" not in body  # ps
@@ -87,7 +87,7 @@ def test_open_in_mail_client_mailto_carries_body(client):
     m = re.search(r'href="(mailto:[^"]+)"', page)
     assert m, "no mailto link rendered"
     decoded = unquote(m.group(1))
-    assert "— Jon Shipp · Chordential" in decoded
+    assert "Jon Shipp · Chordential" in decoded
     assert "isn't always ideal" in decoded
 
 

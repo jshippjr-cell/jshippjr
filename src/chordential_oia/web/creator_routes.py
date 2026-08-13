@@ -290,7 +290,7 @@ async def creator_reply_note(request: Request, token: str, project_id: int,
     if who:
         await run_in_threadpool(
             _notify_operator_review, project_id, project,
-            f"Composer question — {_campaign_label(project) if project else 'campaign'}",
+            f"Composer question · {_campaign_label(project) if project else 'campaign'}",
             f"{who} replied to a client note. Review it in the delivery console.")
     # XHR (Phase 4): thread the reply in place — no full reload, so the composer
     # keeps their playhead + open sheet (the flow the composer review flagged).
@@ -351,7 +351,7 @@ async def creator_submit_version(
         _store_pending_submission(conn, project_id, data, file.filename, who)
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
-        db.add_update(conn, project_id, f"{who} submitted a new version — pending your review.")
+        db.add_update(conn, project_id, f"{who} submitted a new version. Pending your review.")
         _sync_role_milestones(conn, project_id)   # Composer deliverable → In progress
     finally:
         conn.close()
@@ -361,7 +361,7 @@ async def creator_submit_version(
     # freeze the whole site (every page, every portal, /healthz) for the send.
     await run_in_threadpool(
         _notify_operator_review,
-        project_id, None, f"New work submitted — {campaign}",
+        project_id, None, f"New work submitted · {campaign}",
         f"{who} submitted a new version. Review and publish it in the delivery console.")
     return RedirectResponse(f"/creator/{token}?submitted={project_id}#p{project_id}",
                             status_code=303)
@@ -431,13 +431,13 @@ async def creator_submit_deliverable(
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
         db.add_update(conn, project_id,
-                      f"{who} submitted '{deliverable}' — with the studio for review.")
+                      f"{who} submitted '{deliverable}' · with the studio for review.")
     finally:
         conn.close()
     if not landed:
-        return _fail("not saved — please try again", 500)
+        return _fail("not saved. Please try again", 500)
     await run_in_threadpool(
-        _notify_operator_review, project_id, None, f"Deliverable submitted — {campaign}",
+        _notify_operator_review, project_id, None, f"Deliverable submitted · {campaign}",
         f"{who} submitted a deliverable. Vet it in the delivery console, then publish.")
     if xhr:
         return JSONResponse({"ok": True, "label": deliverable, "count": count})

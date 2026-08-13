@@ -144,7 +144,7 @@ def test_range_note_shown_on_console_and_portal_with_span_cue(ctx):
                 follow_redirects=False)
     console = client.get(f"/project/{pid}/delivery").text
     portal = client.get(f"/project/{pid}/delivery-portal?k={share}").text
-    assert "0:02–0:08" in console and "0:02–0:08" in portal
+    assert "0:02–0:08" in console and "0:02 to 0:08" in portal
     assert "m01–m02" in console          # span crosses both cues
 
 

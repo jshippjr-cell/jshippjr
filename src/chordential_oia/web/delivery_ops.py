@@ -116,8 +116,8 @@ def _notify_assigned_creators(project_id: int, project, *, subject: str,
         text = f"Hi {name},\n\n{body_text}"
         tok = portal_by_talent.get(tid)
         if tok:
-            text += f"\n\nOpen your portal — the feedback and your upload box are here:\n{base}/creator/{tok}"
-        text += "\n\n— Chordential"
+            text += f"\n\nOpen your portal; the feedback and your upload box are here:\n{base}/creator/{tok}"
+        text += "\n\nChordential"
         try:
             mailer.send_email(email, subject, text, html=mailer.branded_html(base, text))
         except Exception:  # noqa: BLE001 — best-effort; one creator's failure never stops the rest
@@ -272,7 +272,7 @@ def _maybe_finalize_delivery(conn, project_id: int) -> bool:
                 pass
         db.add_project_event(conn, project_id, "delivered", actor_role="operator",
                              actor_name="ChordOS",
-                             body="All deliverables approved — delivery package assembled.")
+                             body="All deliverables approved. Delivery package assembled.")
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -289,7 +289,7 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
     approved_n = _current_version_tag(delivery)
     db.add_review_comment(
         conn, project_id, version=approved_n, author=name, email=mail,
-        body=f"Approved v{approved_n} — creative locked.", kind="approval", verified=True)
+        body=f"Approved v{approved_n} · creative locked.", kind="approval", verified=True)
     if not production.creative_lock(delivery):
         production.set_creative_lock(conn, db, project_id, version_n=int(approved_n or 0), by=name)
     versions = versions_list(delivery)
@@ -302,15 +302,15 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
     db.update_delivery(conn, project_id, "state", state_on_client_approved(delivery))
     finalized = _maybe_finalize_delivery(conn, project_id)   # ships iff complete + all approved
     db.add_project_event(conn, project_id, "approval", actor_role="client", actor_name=name,
-                         body=f"Approved v{approved_n} — creative locked.")
+                         body=f"Approved v{approved_n} · creative locked.")
     remaining = "" if finalized else " Delivery unlocks once every deliverable is uploaded and signed off."
     _notify_operator_review(
-        project_id, project, title=f"{_campaign_label(project)} — creative approved by {name}",
+        project_id, project, title=f"{_campaign_label(project)} · creative approved by {name}",
         body=f"v{approved_n} creative approved.{remaining}")
     campaign = _campaign_label(project)
     signals.fire_and_forget(
-        _notify_assigned_creators, project_id, project, subject=f"Creative approved — {campaign}",
-        body_text=(f"Good news — the client approved the creative on {campaign}. Thank you. "
+        _notify_assigned_creators, project_id, project, subject=f"Creative approved · {campaign}",
+        body_text=(f"Good news: the client approved the creative on {campaign}. Thank you. "
                    "We'll finish preparing the deliverables for sign-off."))
     return approved_n
 

@@ -262,7 +262,7 @@ def _txt(v) -> str:
 def _budget_band(bmin, bmax) -> str:
     if not (bmin or bmax):
         return ""
-    return (f"${int(bmin):,}–${int(bmax):,}" if bmin and bmax and bmin != bmax
+    return (f"${int(bmin):,} to ${int(bmax):,}" if bmin and bmax and bmin != bmax
             else f"${int(bmax or bmin):,}")
 
 

@@ -321,7 +321,7 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
         )
         body = scope["body"]
         if portal_token:
-            body += (f"\n\nYour portal — the brief, deliverables, timeline, client feedback "
+            body += (f"\n\nYour portal has the brief, deliverables, timeline, client feedback "
                      f"and your uploads all live here:\n{base}/creator/{portal_token}")
         mailer.send_email(
             t.email, scope["subject"], body,
@@ -357,7 +357,7 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
     if project is not None:
         _notify_assigned_creators(
             project_id, project,
-            subject=f"New teammate on {project['client']} — {project['need']}",
+            subject=f"New teammate on {project['client']} · {project['need']}",
             body_text=(f"{name} just joined the crew as {role}. "
                        f"The full team is now: {names}."),
             exclude_email=(t.email if t is not None else ""),
@@ -916,7 +916,7 @@ def delivery_rotate_link(project_id: int):
         if token:
             db.add_update(
                 conn, project_id,
-                "Client link rotated — the previous link no longer opens this project.",
+                "Client link rotated. The previous link no longer opens this project.",
                 "rights")
     finally:
         conn.close()
@@ -956,7 +956,7 @@ def delivery_reviewer(
     if invited and mailer.mail_configured():
         _email_reviewer_link(
             project_id, invited, campaign,
-            subject=f"Your review link — {campaign}",
+            subject=f"Your review link · {campaign}",
             lead="You've been invited to review the work.",
         )
     return RedirectResponse(f"/project/{project_id}/delivery#reviewers", status_code=303)
@@ -1431,7 +1431,7 @@ def delivery_sign(
         if verified is None:
             return HTMLResponse(
                 "This link can view the certificate but cannot sign it. Signing needs "
-                "your personal reviewer link — ask your Chordential contact to send it.",
+                "your personal reviewer link. Ask your Chordential contact to send it.",
                 status_code=403)
         if not reviewers.capabilities(verified)["sign"]:
             # ADR-0060: a delegate reads and comments. Signing binds the deal, so it
@@ -1792,8 +1792,8 @@ def _email_reviewer_link(project_id: int, reviewer: dict, campaign: str,
         f"Hi {name},\n\n{lead}\n\n"
         f"Campaign: {campaign}\n\n"
         f"Open your personal review link to listen, comment, and approve:\n{url}\n\n"
-        "This link is yours — it's how you sign off on the work.\n\n"
-        "— Chordential"
+        "This link is yours: it's how you sign off on the work.\n\n"
+        "Chordential"
     )
     try:
         return mailer.send_email(email, subject, text)
@@ -1806,7 +1806,7 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
     """Agency-direction notification: when a new version is uploaded, email each
     roster reviewer (who has an email) their personal review link. Best-effort,
     per reviewer — never blocks the upload (this was the documented TODO)."""
-    subject = f"New version ready — {campaign}"
+    subject = f"New version ready · {campaign}"
     lead = (
         f"A new version ({label}) is ready for your review."
     )
@@ -1914,7 +1914,7 @@ def review_comment(
             )
             _notify_operator_review(
                 project_id, project,
-                title=f"{_campaign_label(project)} — new note",
+                title=f"{_campaign_label(project)} · new note",
                 body=f"{name} {verb}: {body.strip()[:120]}",
             )
     finally:
@@ -2009,7 +2009,7 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Op
     db.update_delivery(conn, project_id, "picture", pic)
     db.add_update(conn, project_id,
                   f"{by} uploaded cut {pic['n']} of the picture ({file.filename})."
-                  + (" Notes from the prior cut are marked — changes it causes are"
+                  + (" Notes from the prior cut are marked, so changes it causes are"
                      " conforms, not revisions." if prior else ""))
     return pic
 
@@ -2078,12 +2078,12 @@ async def review_upload_picture(
     if pic is not None:
         await run_in_threadpool(
             _notify_operator_review, project_id, project,
-            f"Picture uploaded — {_campaign_label(project) if project else 'campaign'}",
+            f"Picture uploaded · {_campaign_label(project) if project else 'campaign'}",
             f"{pic['by']} uploaded cut {pic['n']}. The composer's room now carries it.")
         await run_in_threadpool(
             _notify_assigned_creators, project_id, project,
-            subject=f"The picture is in — cut {pic['n']}",
-            body_text=("The client's cut just landed in your session room — the picture "
+            subject=f"The picture is in · cut {pic['n']}",
+            body_text=("The client's cut just landed in your session room; the picture "
                        "is waiting for your music."))
     return _review_redirect(project_id, k, name=author, email=email, r=r)
 
@@ -2112,7 +2112,7 @@ async def review_upload_reference(
         # EP review): the operator can veto before the composer leans on it
         await run_in_threadpool(
             _notify_operator_review, project_id, project,
-            f"Client reference — {_campaign_label(project) if project else 'campaign'}",
+            f"Client reference · {_campaign_label(project) if project else 'campaign'}",
             f"{ref['by']} added '{ref['label']}'. Listen before the composer leans on it.")
     return _review_redirect(project_id, k, name=author, email=email, r=r)
 
@@ -2133,8 +2133,8 @@ async def delivery_upload_picture(project_id: int,
     if pic is not None:
         await run_in_threadpool(
             _notify_assigned_creators, project_id, project,
-            subject=f"The picture is in — cut {pic['n']}",
-            body_text=("The cut just landed in your session room — the picture is "
+            subject=f"The picture is in · cut {pic['n']}",
+            body_text=("The cut just landed in your session room; the picture is "
                        "waiting for your music."))
     return RedirectResponse(f"/project/{project_id}/delivery#picture", status_code=303)
 
@@ -2257,7 +2257,7 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
             db.update_delivery(conn, project_id, "delivery_zip", None)
             db.add_project_event(conn, project_id, "reopened", actor_role="operator",
                                  actor_name="Studio",
-                                 body="Delivery reopened — back to deliverable sign-off.")
+                                 body="Delivery reopened. Back to deliverable sign-off.")
         else:
             # Reopen the CREATIVE (master): back to review, master un-approved.
             production.clear_creative_lock(conn, db, project_id)
@@ -2271,7 +2271,7 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
                                state_on_approval_reopened(delivery))
             db.update_delivery(conn, project_id, "download_unlocked", False)
             db.add_project_event(conn, project_id, "reopened", actor_role="operator",
-                                 actor_name="Studio", body="Approval reopened — back in review.")
+                                 actor_name="Studio", body="Approval reopened. Back in review.")
     finally:
         conn.close()
     if k or r:
@@ -2355,7 +2355,7 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
                            "filename": hit.get("filename"), "kind": hit.get("kind")})
             db.update_delivery(conn, project_id, "assets", assets)
             db.add_update(conn, project_id,
-                          f"Published '{hit.get('label')}' — ready for client sign-off.")
+                          f"Published '{hit.get('label')}' · ready for client sign-off.")
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
@@ -2419,9 +2419,9 @@ def _notify_client_new_version(email: str, name: str, campaign: str, label: str,
     link = portal_url or f"{base}/workspace/{token}"
     text = (f"Hi {who},\n\n{label} of {campaign} is ready for you to hear. Open the listening "
             f"room to play it, leave timecoded notes, or approve it:\n\n"
-            f"{link}\n\n— Chordential")
+            f"{link}\n\nChordential")
     try:
-        mailer.send_email(email, f"A new version is ready — {campaign}", text,
+        mailer.send_email(email, f"A new version is ready · {campaign}", text,
                           html=mailer.branded_html(base, text))
     except Exception:  # noqa: BLE001 — best-effort
         pass
@@ -2466,7 +2466,7 @@ def review_changes(
                            state_on_changes_requested(delivery))
         _notify_operator_review(
             project_id, project,
-            title=f"{_campaign_label(project)} — changes requested by {name}",
+            title=f"{_campaign_label(project)} · changes requested by {name}",
             body=note_text[:160],
         )
     finally:
@@ -2476,7 +2476,7 @@ def review_changes(
     campaign = _campaign_label(project)
     signals.fire_and_forget(
         _notify_assigned_creators, project_id, project,
-        subject=f"Changes requested — {campaign}",
+        subject=f"Changes requested · {campaign}",
         body_text=(f"The client requested changes on {campaign}:\n\n\"{note_text}\"\n\n"
                    "Open your creator portal to see the full timecoded feedback and "
                    "submit your next version."))
@@ -2547,7 +2547,7 @@ def review_asset(
             verb = "requested changes on" if action == "changes" else "approved"
             _notify_operator_review(
                 project_id, project,
-                title=f"{_campaign_label(project)} — {label} {status.lower()}",
+                title=f"{_campaign_label(project)} · {label} {status.lower()}",
                 body=f"{name} {verb} {label}.",
             )
             db.add_project_event(conn, project_id, kind.replace("asset_", "asset-"),
