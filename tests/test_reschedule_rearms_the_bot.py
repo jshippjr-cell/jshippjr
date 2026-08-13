@@ -1,23 +1,31 @@
-"""Rescheduling a call has to move the notetaker with it.
+"""Rescheduling a call has to end with a bot at the NEW call — and buy nothing to do it.
 
-It didn't. A capture bot is booked for a MOMENT: the bot was scheduled against the old
-time, and reschedule() updated the calendar, the record and the confirmations — but
-nothing moved the bot. The operator rescheduled, joined the new call, and sat in it
-alone. Which makes the reschedule button a lie: it moves everything the client sees and
-none of what the machine needs.
+The original fault: a capture bot is booked for a MOMENT. reschedule() moved the calendar
+event, the record and the confirmations, and left the bot on the old time. The operator
+rescheduled, joined, and sat in the call alone. It also reset the status in a way that
+dropped the call out of the transcript poller.
 
-The second half of the same bug was quieter. reschedule() reset the status to SCHEDULED,
-and the poller only scans BOT_INVITED / IN_PROGRESS / TRANSCRIPT_READY — so a rescheduled
-call was silently dropped from the only loop that ever fetches a transcript.
+The fix is not "book a replacement immediately" — that pays for a bot every time a call
+moves, and a call booked days out gets an ad-hoc bot that idles in an empty room. It is:
+release the old bot, and let the arming window buy exactly one, shortly before the call.
+So these tests follow the whole path — reschedule, then the window comes round, then a
+bot is there — because that is the thing the operator actually needs to be true.
 """
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 pytest.importorskip("fastapi")
 
 
+def _iso(dt):
+    return dt.isoformat()
+
+
 @pytest.fixture()
 def conn(tmp_path, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "r.sqlite"))
+    monkeypatch.delenv("CHORDENTIAL_NOTETAKER_ARM_LEAD_MIN", raising=False)
     import importlib
     from chordential_oia.web import db as db_mod
     importlib.reload(db_mod)
@@ -30,134 +38,115 @@ def conn(tmp_path, monkeypatch):
 class _Capture:
     name = "fake"
 
-    def __init__(self, new_id="bot-2"):
-        self.new_id, self.invited, self.cancelled = new_id, [], []
+    def __init__(self):
+        self.invited, self.cancelled = [], []
 
     def invite(self, *, join_url, meeting_ref, join_at=""):
-        self.invited.append({"join_url": join_url, "join_at": join_at})
-        return self.new_id
+        self.invited.append(join_at)
+        return "bot-%d" % (len(self.invited) + 1)
 
     def cancel(self, external_ref):
         self.cancelled.append(external_ref)
 
 
-def _booked(db, conn, *, bot_id="bot-1"):
+@pytest.fixture()
+def cap(monkeypatch):
+    from chordential_oia import meetings as M
+    c = _Capture()
+    monkeypatch.setattr(M, "capture_configured", lambda: True)
+    monkeypatch.setattr(M, "get_capture_provider", lambda: c)
+    return c
+
+
+def _booked(db, conn, *, start_at, bot_id="bot-1"):
     from chordential_oia.models import Opportunity
     opp_id = db.insert_opportunity(conn, Opportunity(
         client="AURORA", need="Anthem", description=""))
     mid = db.create_meeting(
-        conn, opp_id=opp_id, ci_id=None, start_at="2026-08-20T15:00:00+00:00",
+        conn, opp_id=opp_id, ci_id=None, start_at=start_at,
         join_url="https://zoom.example/j/1", external_meeting_id="z1", duration_min=30,
         provider="zoom", notetaker_provider="fake", bot_id=bot_id,
-        status="bot_invited", meeting_type="zoom")
+        status="bot_invited", meeting_type="zoom",
+        bot_armed_at=_iso(datetime.now(timezone.utc)))
     return opp_id, mid
 
 
-def test_a_new_bot_is_booked_for_the_new_time(conn, monkeypatch):
-    """The bug the operator hit: rescheduled, joined, and no bot came."""
-    from chordential_oia import meetings as M
+def test_reschedule_then_the_bot_turns_up_at_the_new_time(conn, cap):
+    """The operator's actual complaint, end to end."""
     from chordential_oia.web import db, meeting_scheduler
-    cap = _Capture()
-    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "fake")
-    monkeypatch.setattr(M, "capture_configured", lambda: True)
-    monkeypatch.setattr(M, "get_capture_provider", lambda: cap)
-    _opp, mid = _booked(db, conn)
+    _opp, mid = _booked(db, conn,
+                        start_at=_iso(datetime.now(timezone.utc) + timedelta(hours=3)))
 
-    new_start = "2026-08-21T18:00:00+00:00"
+    new_start = _iso(datetime.now(timezone.utc) + timedelta(minutes=12))
     meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), new_start)
+    assert cap.invited == [], "moving the call must not buy anything"
 
-    assert cap.invited, "a bot must be booked for the new time"
-    assert cap.invited[0]["join_at"] == new_start, "and told WHEN the new call is"
+    meeting_scheduler.arm_due_meetings(conn)          # the window comes round
     m = db.get_meeting(conn, mid)
-    assert m["bot_id"] == "bot-2", "the meeting must carry the NEW bot"
-    assert m["start_at"] == new_start
+    assert cap.invited == [new_start], "one bot, booked for the NEW time"
+    assert m["bot_id"] and m["bot_id"] != "bot-1", "and it is a new bot, not the spent one"
+    assert m["status"] == "bot_invited"
 
 
-def test_the_old_bot_is_stood_down(conn, monkeypatch):
-    """Otherwise it turns up to the original slot and records an empty room."""
-    from chordential_oia import meetings as M
+def test_the_old_bot_is_released_at_once(conn, cap):
+    """It was booked for the old slot; left alone it turns up and records an empty room."""
     from chordential_oia.web import db, meeting_scheduler
-    cap = _Capture()
-    monkeypatch.setattr(M, "capture_configured", lambda: True)
-    monkeypatch.setattr(M, "get_capture_provider", lambda: cap)
-    _opp, mid = _booked(db, conn, bot_id="bot-1")
+    _opp, mid = _booked(db, conn, bot_id="bot-old",
+                        start_at=_iso(datetime.now(timezone.utc) + timedelta(hours=3)))
 
-    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), "2026-08-21T18:00:00+00:00")
-    assert cap.cancelled == ["bot-1"]
+    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid),
+                                 _iso(datetime.now(timezone.utc) + timedelta(days=1)))
+    assert cap.cancelled == ["bot-old"]
+    assert not (db.get_meeting(conn, mid)["bot_id"] or "")
 
 
-def test_the_call_stays_in_the_pollers_sights(conn, monkeypatch):
-    """Resetting to SCHEDULED removed it from the only loop that fetches transcripts."""
-    from chordential_oia import meetings as M
+def test_moving_a_call_repeatedly_still_buys_one_bot(conn, cap):
+    """Reschedule three times, then let the window run: one bot, for the final time."""
     from chordential_oia.web import db, meeting_scheduler
-    monkeypatch.setattr(M, "capture_configured", lambda: True)
-    monkeypatch.setattr(M, "get_capture_provider", lambda: _Capture())
-    _opp, mid = _booked(db, conn)
+    _opp, mid = _booked(db, conn,
+                        start_at=_iso(datetime.now(timezone.utc) + timedelta(days=1)))
+    for days in (2, 3):
+        meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid),
+                                     _iso(datetime.now(timezone.utc) + timedelta(days=days)))
+    final = _iso(datetime.now(timezone.utc) + timedelta(minutes=12))
+    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), final)
+    meeting_scheduler.arm_due_meetings(conn)
 
-    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), "2026-08-21T18:00:00+00:00")
-    m = db.get_meeting(conn, mid)
-    assert m["status"] == "bot_invited", "a rescheduled call must still be polled"
-    assert (m["poll_attempts"] or 0) == 0, "the new call gets a fresh give-up budget"
+    assert cap.invited == [final], "exactly one bot, for the time it settled on"
 
 
-def test_a_failure_to_re_arm_does_not_block_the_reschedule(conn, monkeypatch):
-    """Moving the call matters more than recording it — but it must not silently claim a
-    notetaker it does not have."""
+def test_a_call_with_no_notetaker_is_left_that_way(conn, cap):
+    """Rescheduling must not quietly add recording to a call that never had it."""
+    from chordential_oia.web import db, meeting_scheduler
+    from chordential_oia.models import Opportunity
+    opp_id = db.insert_opportunity(conn, Opportunity(
+        client="AURORA", need="Anthem", description=""))
+    mid = db.create_meeting(
+        conn, opp_id=opp_id, ci_id=None,
+        start_at=_iso(datetime.now(timezone.utc) + timedelta(hours=3)),
+        join_url="", external_meeting_id="", duration_min=30, provider="manual",
+        notetaker_provider="", bot_id="", status="scheduled", meeting_type="phone")
+
+    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid),
+                                 _iso(datetime.now(timezone.utc) + timedelta(minutes=12)))
+    meeting_scheduler.arm_due_meetings(conn)
+    assert not cap.invited, "a phone call with no link gets no bot"
+
+
+def test_the_call_still_moves_when_releasing_the_bot_fails(conn, monkeypatch):
+    """A provider that will not take the cancellation must not block the reschedule."""
     from chordential_oia import meetings as M
     from chordential_oia.web import db, meeting_scheduler
 
     class _Broken(_Capture):
-        def invite(self, **kw):
+        def cancel(self, external_ref):
             raise RuntimeError("recall down")
 
     monkeypatch.setattr(M, "capture_configured", lambda: True)
     monkeypatch.setattr(M, "get_capture_provider", lambda: _Broken())
-    _opp, mid = _booked(db, conn)
+    _opp, mid = _booked(db, conn,
+                        start_at=_iso(datetime.now(timezone.utc) + timedelta(hours=3)))
 
-    out = meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid),
-                                       "2026-08-21T18:00:00+00:00")
-    assert out["ok"]
-    m = db.get_meeting(conn, mid)
-    assert m["start_at"] == "2026-08-21T18:00:00+00:00", "the call still moves"
-    assert not (m["notetaker_provider"] or ""), "and does not claim a notetaker it lost"
-
-
-def test_a_call_with_no_notetaker_is_left_that_way(conn, monkeypatch):
-    """Rescheduling must not quietly add recording to a call that never had it."""
-    from chordential_oia import meetings as M
-    from chordential_oia.web import db, meeting_scheduler
-    cap = _Capture()
-    monkeypatch.setattr(M, "capture_configured", lambda: True)
-    monkeypatch.setattr(M, "get_capture_provider", lambda: cap)
-    from chordential_oia.models import Opportunity
-    opp_id = db.insert_opportunity(conn, Opportunity(
-        client="AURORA", need="Anthem", description=""))
-    mid = db.create_meeting(
-        conn, opp_id=opp_id, ci_id=None, start_at="2026-08-20T15:00:00+00:00",
-        join_url="https://zoom.example/j/1", external_meeting_id="", duration_min=30,
-        provider="zoom", notetaker_provider="", bot_id="", status="scheduled",
-        meeting_type="zoom")
-
-    meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), "2026-08-21T18:00:00+00:00")
-    assert not cap.invited
-    assert db.get_meeting(conn, mid)["status"] == "scheduled"
-
-
-def test_booking_tells_recall_when_the_call_is(conn, monkeypatch):
-    """Without join_at Recall treats the bot as ad-hoc and sends it in NOW — so a call
-    booked for next week got a bot that joined an empty room today."""
-    from chordential_oia import meetings as M
-    from chordential_oia.web import db, meeting_scheduler
-    cap = _Capture(new_id="bot-9")
-    monkeypatch.setattr(M, "capture_configured", lambda: True)
-    monkeypatch.setattr(M, "get_capture_provider", lambda: cap)
-    monkeypatch.setattr(M, "meeting_configured", lambda: True)
-    from chordential_oia.models import Opportunity
-    opp_id = db.insert_opportunity(conn, Opportunity(
-        client="AURORA", need="Anthem", description=""))
-    opp = db.get_opportunity(conn, opp_id)
-
-    start = "2026-09-01T14:00:00+00:00"
-    meeting_scheduler.schedule(conn, opp, start_at=start, duration_min=30,
-                               meeting_type="zoom", join_url="https://zoom.example/j/5")
-    assert cap.invited and cap.invited[0]["join_at"] == start
+    new_start = _iso(datetime.now(timezone.utc) + timedelta(days=1))
+    out = meeting_scheduler.reschedule(conn, db.get_meeting(conn, mid), new_start)
+    assert out["ok"] and db.get_meeting(conn, mid)["start_at"] == new_start

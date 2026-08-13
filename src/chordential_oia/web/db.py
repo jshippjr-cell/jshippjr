@@ -1519,7 +1519,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             manage_token TEXT,                   -- unguessable token for client reschedule/cancel
             initiated_by TEXT DEFAULT 'operator', -- client_request | operator
             poll_attempts INTEGER DEFAULT 0,     -- transcript polls made (backoff + give-up)
-            last_polled_at TEXT
+            last_polled_at TEXT,
+            bot_armed_at TEXT                    -- when the capture bot was booked
         )"""
     )
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
@@ -1532,7 +1533,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                        # back off or to stop, and a bot that finishes without a transcript
                        # is re-asked every 30s forever (see `poll_and_ingest`).
                        "poll_attempts": "INTEGER DEFAULT 0",
-                       "last_polled_at": "TEXT"}.items():
+                       "last_polled_at": "TEXT",
+                       # WHEN the capture bot was booked. A bot armed at booking time is
+                       # an ad-hoc bot: it joins immediately, sits in an empty room and
+                       # BILLS for the wait. This stamps the moment we armed, so a bot
+                       # armed far from its call can be recognised as one of those and
+                       # replaced instead of trusted.
+                       "bot_armed_at": "TEXT"}.items():
         if name not in mtg_cols:
             conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {decl}")
     # A Discovery Request is the client's ASK (ADR-0016) — it schedules nothing; the operator
@@ -5998,18 +6005,19 @@ def create_meeting(conn: sqlite3.Connection, *, opp_id: int, ci_id: Optional[int
                    client_name: str = "", client_email: str = "",
                    external_meeting_id: str = "", calendar_event_id: str = "",
                    manage_token: str = "", bot_id: str = "",
-                   initiated_by: str = "operator") -> int:
+                   initiated_by: str = "operator", bot_armed_at: str = "") -> int:
     now = datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         """INSERT INTO meetings
            (opp_id, ci_id, provider, join_url, external_meeting_id, start_at, duration_min,
             notetaker_provider, bot_id, status, scheduled_by, meeting_type, request_id,
             client_name, client_email, calendar_event_id, manage_token, initiated_by,
-            created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            bot_armed_at, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (opp_id, ci_id, provider, join_url, external_meeting_id, start_at, duration_min,
          notetaker_provider, bot_id, status, scheduled_by, meeting_type, request_id,
-         client_name, client_email, calendar_event_id, manage_token, initiated_by, now, now))
+         client_name, client_email, calendar_event_id, manage_token, initiated_by,
+         bot_armed_at, now, now))
     conn.commit()
     return int(cur.lastrowid)
 
@@ -6234,6 +6242,23 @@ def meeting_by_external(conn: sqlite3.Connection, bot_id: str) -> Optional[sqlit
         "SELECT * FROM meetings WHERE bot_id = ? ORDER BY id DESC LIMIT 1", (bot_id,)).fetchone()
 
 
+def meetings_awaiting_bot(conn, *, until_iso: str, now_iso: str) -> List[sqlite3.Row]:
+    """Calls starting between now and ``until_iso`` that still need a capture bot booked.
+
+    Two kinds. A call with no bot at all (the normal case now that arming is deferred),
+    and a call whose bot was armed LONG before it — one of the old ad-hoc bots, which
+    joined an empty room the day it was booked and is spent by the time the call comes
+    round. Both want a bot booked for the real start time."""
+    return conn.execute(
+        "SELECT * FROM meetings "
+        " WHERE status IN ('scheduled', 'bot_invited') "
+        "   AND COALESCE(join_url, '') <> '' "
+        "   AND COALESCE(start_at, '') <> '' "
+        "   AND start_at <= ? AND start_at >= ? "
+        "   AND (COALESCE(bot_id, '') = '' OR COALESCE(bot_armed_at, '') = '') "
+        " ORDER BY start_at", (until_iso, now_iso)).fetchall()
+
+
 def meetings_by_status(conn: sqlite3.Connection, status: str) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM meetings WHERE status = ? ORDER BY id", (status,)).fetchall()
@@ -6250,7 +6275,8 @@ def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
     """
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",
                "notetaker_provider", "bot_id", "external_meeting_id",
-               "transcript_capture_id", "error", "poll_attempts", "last_polled_at"}
+               "transcript_capture_id", "error", "poll_attempts", "last_polled_at",
+               "bot_armed_at"}
     unknown = sorted(set(fields) - allowed)
     if unknown:
         raise ValueError(f"update_meeting: no such meeting field(s): {unknown}")

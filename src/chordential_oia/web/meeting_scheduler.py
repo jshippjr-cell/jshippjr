@@ -88,7 +88,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
     manage_token = secrets.token_urlsafe(24)
 
     join_url = (join_url or "").strip()   # an operator-pasted link (used if no Zoom provider)
-    external_meeting_id = notetaker = bot_id = calendar_event_id = ""
+    external_meeting_id = notetaker = bot_id = calendar_event_id = armed_at = ""
     provider = "zoom" if join_url else "manual"
     status = M.SCHEDULED
 
@@ -104,14 +104,18 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             except Exception as e:  # noqa: BLE001 — degrade to manual, never fail the booking
                 _log.warning("Zoom create failed (%s: %s); meeting stays manual",
                              type(e).__name__, e)
-        # 2) arm Recall (only for Zoom, only when configured + we have a link)
-        if M.capture_configured() and join_url:
+        # 2) arm Recall — but ONLY if the call is already inside the arming window.
+        # Booking a bot now for a call next week is what made it ad-hoc: it joins an
+        # empty room today and bills for the wait. `arm_due_meetings` books it shortly
+        # before the call instead, so a call that never happens costs nothing.
+        if M.capture_configured() and join_url and _within_arm_window(start_at):
             try:
                 cp = M.get_capture_provider()
                 bot_id = cp.invite(join_url=join_url, meeting_ref=str(opp["id"]),
                                    join_at=start_at or "")
                 if bot_id:
                     notetaker, status = cp.name, M.BOT_INVITED
+                    armed_at = datetime.now(timezone.utc).isoformat()
             except Exception as e:  # noqa: BLE001
                 _log.warning("Recall invite failed (%s: %s); notetaker not armed",
                              type(e).__name__, e)
@@ -144,7 +148,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
         provider=(provider if meeting_type == ZOOM else "phone"),
         notetaker_provider=notetaker, bot_id=bot_id, status=status, meeting_type=meeting_type,
         request_id=request_id, client_name=client_name, client_email=client_email,
-        calendar_event_id=calendar_event_id, manage_token=manage_token,
+        calendar_event_id=calendar_event_id, manage_token=manage_token, bot_armed_at=armed_at,
         initiated_by=initiated_by, scheduled_by=scheduled_by)
 
     if request_id:
@@ -159,6 +163,90 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             pass
     _send_confirmations(opp, db.get_meeting(conn, mid))
     return {"ok": True, "meeting": db.get_meeting(conn, mid)}
+
+
+# ── When the bot is booked ────────────────────────────────────────────────────────
+# It used to be booked the moment the CALL was booked, with no join_at. Recall treats
+# that as an ad-hoc bot: it goes in immediately, joins an empty room, and sits there
+# BILLING until it times out. Every call booked in advance paid for a bot that recorded
+# nothing and was spent by the time the meeting came round.
+#
+# So the bot is booked shortly BEFORE the call instead — far enough ahead that Recall
+# schedules it properly (its ad-hoc threshold is 10 minutes, so the lead must exceed
+# that) and it waits rather than idling in the room. The consequences are all in the
+# same direction:
+#
+#   • a call that is cancelled or moved before the window costs NOTHING — no bot was
+#     ever created, so there is nothing to waste and nothing to stand down;
+#   • rescheduling is free for the same reason;
+#   • every call already in the book, pointing at one of the old spent bots, is
+#     repaired on its own as its window comes round — no sweep, no bulk spend.
+#
+# Exactly one bot per call that actually happens, and none for a call that doesn't.
+def _within_arm_window(start_at: str) -> bool:
+    """Is this call close enough that the bot should be booked right now?"""
+    if not start_at:
+        return True                       # no time given: ad-hoc capture, arm it
+    dt = M.parse_iso(start_at)
+    if dt is None:
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt <= datetime.now(timezone.utc) + timedelta(minutes=_arm_lead_minutes())
+
+
+def _arm_lead_minutes() -> int:
+    try:
+        v = int(os.environ.get("CHORDENTIAL_NOTETAKER_ARM_LEAD_MIN", "") or 15)
+    except ValueError:
+        v = 15
+    return max(11, v)          # must clear Recall's 10-minute ad-hoc threshold
+
+
+def arm_due_meetings(conn) -> int:
+    """Book a capture bot for every call whose window has come round. Returns how many.
+
+    Idempotent: a call that already has a bot armed for it (bot_armed_at set) is skipped,
+    so a tick that runs twice does not buy two bots."""
+    if not M.capture_configured():
+        return 0
+    now = datetime.now(timezone.utc)
+    until = now + timedelta(minutes=_arm_lead_minutes())
+    try:
+        rows = db.meetings_awaiting_bot(conn, until_iso=until.isoformat(),
+                                        now_iso=now.isoformat())
+    except Exception as e:  # noqa: BLE001 — never take the loop down
+        _log.warning("Could not look for calls needing a notetaker (%s)", type(e).__name__)
+        return 0
+    cp = M.get_capture_provider()
+    armed = 0
+    for m in rows:
+        if (m["meeting_type"] or "zoom") != ZOOM:
+            continue
+        old = (m["bot_id"] or "").strip()
+        if old:
+            # one of the old ad-hoc bots: spent long ago, and it must not be left
+            # holding a place in the meeting
+            try:
+                cp.cancel(old)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            bot_id = cp.invite(join_url=m["join_url"], meeting_ref=str(m["opp_id"]),
+                               join_at=m["start_at"] or "")
+        except Exception as e:  # noqa: BLE001
+            _log.warning("Arming the notetaker for meeting %s failed (%s: %s)",
+                         m["id"], type(e).__name__, e)
+            continue
+        if not bot_id:
+            continue
+        db.update_meeting(conn, m["id"], bot_id=bot_id, notetaker_provider=cp.name,
+                          status=M.BOT_INVITED, bot_armed_at=now.isoformat(),
+                          poll_attempts=0, last_polled_at="", error="")
+        armed += 1
+        _log.info("Notetaker booked for meeting %s at %s (bot %s)",
+                  m["id"], m["start_at"], bot_id)
+    return armed
 
 
 def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = None) -> dict:
@@ -184,31 +272,19 @@ def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = N
         except Exception:  # noqa: BLE001
             pass
 
-    bot_id = (meeting["bot_id"] or "").strip()
-    notetaker = (meeting["notetaker_provider"] or "").strip()
-    status = M.SCHEDULED
-    join_url = (meeting["join_url"] or "").strip()
-    if notetaker and M.capture_configured() and join_url:
-        cp = M.get_capture_provider()
-        if bot_id:
-            try:
-                cp.cancel(bot_id)          # best-effort: don't leave one waiting at the old time
-            except Exception as e:  # noqa: BLE001
-                _log.info("Standing down bot %s failed (%s); booking the new one anyway",
-                          bot_id, type(e).__name__)
+    # The old bot was booked for the OLD time and is no use at the new one. Stand it
+    # down and clear it: `arm_due_meetings` books a fresh one when the new time comes
+    # round. Nothing is bought here, so moving a call — however many times — is free.
+    old_bot = (meeting["bot_id"] or "").strip()
+    if old_bot and M.capture_configured():
         try:
-            new_bot = cp.invite(join_url=join_url, meeting_ref=str(meeting["opp_id"]),
-                                join_at=new_start or "")
-            if new_bot:
-                bot_id, notetaker, status = new_bot, cp.name, M.BOT_INVITED
-        except Exception as e:  # noqa: BLE001 — never fail the reschedule over the bot
-            _log.warning("Re-arming the notetaker for the new time failed (%s: %s); "
-                         "the call moves, but nothing will record it",
-                         type(e).__name__, e)
-            bot_id, notetaker = "", ""
+            M.get_capture_provider().cancel(old_bot)
+        except Exception as e:  # noqa: BLE001
+            _log.info("Standing down bot %s failed (%s); it will simply expire",
+                      old_bot, type(e).__name__)
     db.update_meeting(conn, meeting["id"], start_at=new_start, duration_min=dur,
-                      status=status, bot_id=bot_id, notetaker_provider=notetaker,
-                      poll_attempts=0, last_polled_at="", error="")
+                      status=M.SCHEDULED, bot_id="", notetaker_provider="",
+                      bot_armed_at="", poll_attempts=0, last_polled_at="", error="")
     row = db.get_meeting(conn, meeting["id"])
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:

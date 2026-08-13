@@ -1154,6 +1154,18 @@ def run_cycle(batch: int = 5, delay: float = 3.0) -> int:
     return found
 
 
+def _arm_due_meetings() -> None:
+    """Blocking helper (run off-loop): book a capture bot for each call whose start is
+    now close enough. Deferring the booking to here is what stops a bot being bought for
+    a call that never happens — see `meeting_scheduler.arm_due_meetings`."""
+    from . import meeting_scheduler
+    conn = db.connect()
+    try:
+        meeting_scheduler.arm_due_meetings(conn)
+    finally:
+        conn.close()
+
+
 def _ingest_ready_meetings() -> None:
     """Blocking helper (run off-loop): POLL every armed capture bot and ingest any finished
     transcript via the Meeting domain (the webhook-free path). Lazy imports avoid any import
@@ -1223,6 +1235,7 @@ async def run_loop() -> None:
         try:
             from .. import meetings as _M
             if _M.capture_configured():
+                await asyncio.to_thread(_arm_due_meetings)
                 await asyncio.to_thread(_ingest_ready_meetings)
         except Exception:
             pass
