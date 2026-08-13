@@ -15,7 +15,7 @@
   <div class="body">
     <section class="block">
       <p class="lead" style="font-style:italic">Here's what we're agreeing to, and how we'll
-        work together — everything below follows from what we discussed.{% if back_url %}
+        work together. Everything below follows from what we discussed.{% if back_url %}
         You can revisit <a href="{{ back_url }}">the Campaign Brief</a> anytime.{% endif %}</p>
     </section>
 
@@ -53,11 +53,11 @@
     {% if review.fee_low %}
     <section class="block">
       <h2 class="sec">Investment</h2>
-      <div class="price">${{ '{:,}'.format(review.fee_low) }}–${{ '{:,}'.format(review.fee_high) }}
-        <small>project fee — original music, cleared and delivered</small></div>
+      <div class="price">${{ '{:,}'.format(review.fee_low) }} to ${{ '{:,}'.format(review.fee_high) }}
+        <small>project fee for original music, cleared and delivered</small></div>
       {% if review.optional_services %}
       <div class="capdoc-subhead">Optional services</div>
-      <ul class="terms">{% for o in review.optional_services %}<li>{{ o.name }}{% if o.note %} — {{ o.note }}{% endif %}</li>{% endfor %}</ul>
+      <ul class="terms">{% for o in review.optional_services %}<li>{{ o.name }}{% if o.note %} · {{ o.note }}{% endif %}</li>{% endfor %}</ul>
       {% endif %}
     </section>
 

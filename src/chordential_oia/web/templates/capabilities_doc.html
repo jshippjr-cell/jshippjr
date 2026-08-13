@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chordential — Campaign Brief · {{ doc.client }}</title>
+  <title>Campaign Brief · {{ doc.client }} · Chordential</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
   <link rel="stylesheet" href="/static/brief.css?v={{ static_v }}">
 </head>
@@ -38,7 +38,7 @@
   {% else %}
   <form method="post" action="/opportunity/{{ row['id'] }}/delivery-sent" style="display:inline">
     <input type="hidden" name="return_to" value="/opportunity/{{ row['id'] }}/capabilities">
-    <button class="btn ghost" type="submit" title="Sent the PDF some other way (attached elsewhere, printed, etc.) — just mark it">Mark sent another way</button>
+    <button class="btn ghost" type="submit" title="Sent the PDF some other way (attached elsewhere, printed, etc.). Just mark it">Mark sent another way</button>
   </form>
   {% endif %}
   <button class="btn pdf" type="button" onclick="window.print()">⤓ Save as PDF</button>

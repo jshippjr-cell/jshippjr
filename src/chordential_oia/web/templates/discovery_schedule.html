@@ -37,15 +37,15 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
   </div>
   {% endif %}
   {% if dr %}
-  <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} — prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
+  <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} · prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>
   {% endif %}
   <form method="post" action="/opportunity/{{ row['id'] }}/schedule">
     {% if dr %}<input type="hidden" name="request_id" value="{{ dr['id'] }}">{% endif %}
     <div class="sd-mode">
       <label><input type="radio" name="mode" value="propose" checked>
-        <b>Offer times</b><span class="muted">Email up to three options — the client picks, everything books itself.</span></label>
+        <b>Offer times</b><span class="muted">Email up to three options; the client picks, everything books itself.</span></label>
       <label><input type="radio" name="mode" value="direct">
-        <b>Book directly</b><span class="muted">The time is already agreed — schedule it now.</span></label>
+        <b>Book directly</b><span class="muted">The time is already agreed, so schedule it now.</span></label>
     </div>
     <div class="sd-field"><label>Meeting type</label>
       <div class="sd-types">
@@ -53,7 +53,7 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
         <label><input type="radio" name="meeting_type" value="phone" {{ 'checked' if prefill_type == 'phone' }}> 📞 Phone</label>
       </div>
     </div>
-    <div class="sd-field"><label>Times <span class="muted">(Eastern — exactly what the client sees)</span></label>
+    <div class="sd-field"><label>Times <span class="muted">(Eastern, exactly what the client sees)</span></label>
       <div class="sd-slot"><span class="num">Option 1</span><input type="date" name="date" required><input type="time" name="time" value="10:00" required></div>
       <div class="sd-slot sd-propose-only"><span class="num">Option 2</span><input type="date" name="date2"><input type="time" name="time2" value="14:00"></div>
       <div class="sd-slot sd-propose-only"><span class="num">Option 3</span><input type="date" name="date3"><input type="time" name="time3" value="11:30"></div>
@@ -65,7 +65,7 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
     <div class="sd-row">
       <div class="sd-field"><label>Minutes</label>
         <select name="duration_min"><option>20</option><option selected>30</option><option>45</option><option>60</option></select></div>
-      <div class="sd-field"><label>Zoom / Meet link <span class="muted">(optional — paste yours if the Zoom API isn't connected)</span></label>
+      <div class="sd-field"><label>Zoom / Meet link <span class="muted">(optional; paste yours if the Zoom API isn't connected)</span></label>
         <input type="url" name="join_url" placeholder="https://zoom.us/j/…"></div>
     </div>
     <div class="sd-field sd-propose-only"><label>Note to the client <span class="muted">(optional, woven into the email)</span></label>
@@ -73,6 +73,6 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
     <button class="btn-live" type="submit">Continue <span class="live-dot"></span></button>
     <a class="btn ghost" href="/opportunity/{{ row['id'] }}">Cancel</a>
   </form>
-  <p class="muted small" style="margin-top:12px">Offer times: you review the exact email before anything sends; the client's pick locks that option, expires the rest, creates the meeting, arms the notetaker, and sends calendar invites to both sides. Book directly: same engine, immediately — Option 1 is the time.</p>
+  <p class="muted small" style="margin-top:12px">Offer times: you review the exact email before anything sends; the client's pick locks that option, expires the rest, creates the meeting, arms the notetaker, and sends calendar invites to both sides. Book directly: same engine, immediately: Option 1 is the time.</p>
 </section>
 {% endblock %}

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Chordential — Delivery Package · {{ project["client"] }}</title>
+<title>Delivery Package · {{ project["client"] }} · Chordential</title>
 <style>
   :root{
     --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
@@ -92,7 +92,7 @@
 
 <div class="toolbar">
   <a class="tb-link" href="/project/{{ project["id"] }}">← Project</a>
-  <span>Clearance-Certified delivery package — {{ project["client"] }} · {{ state }}</span>
+  <span>Clearance-Certified delivery package · {{ project["client"] }} · {{ state }}</span>
   <span class="tb-actions"><button class="tb-btn" onclick="window.print()">Save as PDF</button></span>
 </div>
 
@@ -105,7 +105,7 @@
     <div class="rule"></div>
     <p class="doc-kicker" style="color:var(--orange)">Delivery Package</p>
     <h1>{{ cert.campaign }}</h1>
-    <p class="tag">Original music — composed, produced, and cleared for {{ cert.client }}.</p>
+    <p class="tag">Original music, composed, produced, and cleared for {{ cert.client }}.</p>
     <div class="status">{{ state }}{% if version_state %} · {{ version_state }}{% endif %}</div>
     <div class="rule" style="margin:34px 0 22px"></div>
     <div class="meta">
@@ -159,7 +159,7 @@
     <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
     <p class="doc-kicker">Document 02</p>
     <h1 class="doc">Clearance Certificate</h1>
-    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights — cleared on delivery.</p>
+    <p class="doc-sub">Original-work warranty, chain of title, and grant of rights, cleared on delivery.</p>
     <div class="accent-bar"></div>
 
     <div class="panel" style="margin-bottom:18px">
@@ -180,9 +180,9 @@
 
     <div class="two">
       <div class="panel">
-        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} — Draft, pending confirmation{% endif %}</p>
+        <p style="margin:0 0 8px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} · Draft, pending confirmation{% endif %}</p>
         {% if cert.license_draft %}
-        <p style="margin:0 0 8px;font-size:10.5px;color:var(--muted)">Standard template terms — not yet confirmed as the deal grant.</p>
+        <p style="margin:0 0 8px;font-size:10.5px;color:var(--muted)">Standard template terms, not yet confirmed as the deal grant.</p>
         {% endif %}
         <ul class="clean">
           <li><b>Type:</b> {{ cert.license.type }}</li>
@@ -222,19 +222,19 @@
     <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
     <p class="doc-kicker">Document 03</p>
     <h1 class="doc">Cue Sheet</h1>
-    <p class="doc-sub">The metadata your team files for backend (PRO) royalties — no cue sheet, no backend.</p>
+    <p class="doc-sub">The metadata your team files for backend (PRO) royalties. No cue sheet, no backend.</p>
     <table>
       <thead><tr><th>Cue</th><th>Usage</th><th>Dur.</th><th>ISRC</th><th>ISWC</th><th>Composer / Writer</th><th>Writer %</th><th>Publisher</th><th>Pub. %</th><th>PRO</th></tr></thead>
       <tbody>
         {% for q in cues %}
-          <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration or '—' }}</td>
-            <td>{{ q.isrc or '—' }}</td><td>{{ q.iswc or '—' }}</td>
+          <tr><td>{{ q.cue }}</td><td>{{ q.usage }}</td><td>{{ q.duration or '·' }}</td>
+            <td>{{ q.isrc or '·' }}</td><td>{{ q.iswc or '·' }}</td>
             <td>{{ q.composers }}</td><td>{{ q.writer_share }}</td>
-            <td>{{ q.publisher }}</td><td>{{ q.publisher_share }}</td><td>{{ q.pro or '—' }}</td></tr>
+            <td>{{ q.publisher }}</td><td>{{ q.publisher_share }}</td><td>{{ q.pro or '·' }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    <p class="legend" style="margin-top:14px">Usage codes — VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
+    <p class="legend" style="margin-top:14px">Usage codes: VV Visual Vocal · BI Background Instrumental. Shares total 100% per cue. ISRC/ISWC + duration are filed per cue.</p>
   </div>
   <div class="foot"><span>{{ pkgid }} · {{ cert.campaign }}</span><span>Prepared by Chordential</span></div>
 </section>
@@ -245,7 +245,7 @@
     <div class="lh"><img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential"><div class="lh-meta">Delivery Package · {{ pkgid }}</div></div>
     <p class="doc-kicker">Document 04</p>
     <h1 class="doc">Version State &amp; Approval</h1>
-    <p class="doc-sub">Controlled variation — bounded rounds, a clean sign-off.</p>
+    <p class="doc-sub">Controlled variation: bounded rounds, a clean sign-off.</p>
     <div class="accent-bar"></div>
 
     <div class="tree">
@@ -255,7 +255,7 @@
       <div class="arr"></div>
       <div class="node {{ 'final' if version_state == 'v3 FINAL' else '' }}"><div class="v">v3</div><div class="l">FINAL</div></div>
     </div>
-    <p class="legend" style="margin-top:8px">Revision rounds — {{ revisions.used }} used of {{ revisions.scoped }} scoped · {{ revisions.remaining }} remaining. Current state: <b>{{ version_state }}</b>.</p>
+    <p class="legend" style="margin-top:8px">Revision rounds: {{ revisions.used }} used of {{ revisions.scoped }} scoped · {{ revisions.remaining }} remaining. Current state: <b>{{ version_state }}</b>.</p>
 
     {% if assets %}
     <p style="margin:22px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Delivered assets</p>

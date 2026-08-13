@@ -19,7 +19,7 @@
 <div class="cr-op">
   {% if current %}
   <div class="cr-status {{ 'approved' if current['status'] == 'approved' }}">
-    <span>{% if current['status'] == 'approved' %}✓ Approved by the client{% else %}Released v{{ current['version'] }} — awaiting the client's approval{% endif %}</span>
+    <span>{% if current['status'] == 'approved' %}✓ Approved by the client{% else %}Released v{{ current['version'] }} · awaiting the client's approval{% endif %}</span>
     <a class="ws-open" href="/workspace/{{ token }}">Open the client workspace →</a>
   </div>
   {% endif %}
@@ -27,7 +27,7 @@
     <form method="post" action="/opportunity/{{ row['id'] }}/commercial/release" style="margin:0">
       <button class="btn-live" type="submit">{{ 'Re-release a new version' if current else 'Release to client' }} <span class="live-dot"></span></button>
     </form>
-    <span class="muted small">Generated from Campaign Intelligence — pricing follows the discovered budget. Releasing <b>freezes</b> this version — the client approves exactly what's shown here.</span>
+    <span class="muted small">Generated from Campaign Intelligence: pricing follows the discovered budget. Releasing <b>freezes</b> this version, so the client approves exactly what's shown here.</span>
   </div>
 
   {# Operator edit before release — the whole agreement, not just price. Deliverables come
@@ -38,13 +38,13 @@
     <form method="post" action="/opportunity/{{ row['id'] }}/commercial/edit"
           style="margin-top:12px;background:var(--surface-2,#faf7f3);border:1px solid var(--line,#e7e1d8);border-radius:10px;padding:14px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580);margin-bottom:3px">Scope summary
-        <textarea name="scope_summary" rows="2" placeholder="What we're delivering and why — in your words" style="display:block;width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;margin-top:3px">{{ review.scope_summary or '' }}</textarea></label>
+        <textarea name="scope_summary" rows="2" placeholder="What we're delivering and why, in your words" style="display:block;width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;margin-top:3px">{{ review.scope_summary or '' }}</textarea></label>
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580);margin:12px 0 3px">Delivery deadline / timeline
         <input type="text" name="timeline" value="{{ review.timeline or '' }}" placeholder="e.g. Final delivery by Nov 14, 2026" style="display:block;width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;margin-top:3px"></label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — low
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee (low)
           <input type="text" name="fee_low" value="{{ review.fee_low or '' }}" placeholder="e.g. 28000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee — high
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Fee (high)
           <input type="text" name="fee_high" value="{{ review.fee_high or '' }}" placeholder="e.g. 32000" style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#8a8580)">Deposit %
           <input type="text" name="deposit_pct" value="{{ (review.deposit_pct * 100)|round|int }}" style="width:78px;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit"></label>

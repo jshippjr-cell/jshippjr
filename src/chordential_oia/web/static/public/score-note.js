@@ -112,7 +112,7 @@
       // latch the second NOW. Reading it at submit time would attach the note to
       // wherever the rail happened to be when they finished typing.
       held = pos;
-      mark.textContent = clock(held) + " — held";
+      mark.textContent = clock(held) + " · held";
       form.hidden = false;
       text.value = "";
       text.focus();
@@ -179,7 +179,7 @@
 
       var li = document.createElement("li");
       var b = document.createElement("b");
-      b.textContent = n.body || "(no note — just the moment)";
+      b.textContent = n.body || "(no note, just the moment)";
       var go = document.createElement("button");
       go.type = "button";
       go.textContent = clock(n.t) + " · " + n.v + " · you";
@@ -200,7 +200,7 @@
         ? "Nothing on " + version + ". Your "
           + (elsewhere === 1 ? "note is" : elsewhere + " notes are")
           + " on the version " + (elsewhere === 1 ? "it was" : "they were")
-          + " made against — a note does not follow you to a different take."
+          + " made against. A note does not follow you to a different take."
         : "No notes on this version yet. Scrub the take and drop the first one.";
     }
   }

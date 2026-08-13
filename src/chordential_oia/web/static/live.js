@@ -358,17 +358,17 @@
        rather than sit at 100% looking hung. */
     xhr.upload.addEventListener("load", function () {
       fill.style.width = "100%";
-      note.textContent = "Uploaded — filing it…";
+      note.textContent = "Uploaded. Filing it…";
     });
     xhr.addEventListener("load", function () {
       if (xhr.status < 400) { landed(form, input.files[0].name); return; }
       el.classList.add("failed");
-      note.textContent = "Upload failed (" + xhr.status + ") — the file is still chosen, try again";
+      note.textContent = "Upload failed (" + xhr.status + "). The file is still chosen, try again";
       if (btn) { btn.disabled = false; btn.textContent = label; }
     });
     xhr.addEventListener("error", function () {
       el.classList.add("failed");
-      note.textContent = "Connection lost — the file is still chosen, try again";
+      note.textContent = "Connection lost. The file is still chosen, try again";
       if (btn) { btn.disabled = false; btn.textContent = label; }
     });
     xhr.addEventListener("abort", function () {

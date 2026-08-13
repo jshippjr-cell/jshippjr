@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chordential — for {{ client }}</title>
+  <title>Chordential for {{ client }}</title>
   <link rel="icon" href="/static/public/wordmark-dark.png">
   {# SELF-CONTAINED public page: a screen-first intro (not the full capabilities
      doc, not the admin shell). Brand palette inline so it renders for an external
@@ -135,9 +135,9 @@
           </div>
         </div>
         {% endfor %}
-        <p class="none-note">A tailored example for your brief is available on request — just reply.</p>
+        <p class="none-note">A tailored example for your brief is available on request. Just reply.</p>
         {% else %}
-        <p class="none-note">A tailored example is available on request — just reply.</p>
+        <p class="none-note">A tailored example is available on request. Just reply.</p>
         {% endif %}
       {% endif %}
     </section>
@@ -147,10 +147,10 @@
       <div class="cta">
         {% if call_url %}
         <a class="btn-cta" href="{{ call_url }}" target="_blank" rel="noopener">Book a short call →</a>
-        <div class="muted">Or just reply to my email — whatever's easiest for you.</div>
+        <div class="muted">Or just reply to my email, whatever's easiest for you.</div>
         {% else %}
         <a class="btn-cta" href="mailto:{{ reply_to }}?subject=Re%3A%20{{ client | urlencode }}">Reply to start a conversation →</a>
-        <div class="muted">A quick reply is all it takes — no pressure either way.</div>
+        <div class="muted">A quick reply is all it takes, and no pressure either way.</div>
         {% endif %}
       </div>
     </section>

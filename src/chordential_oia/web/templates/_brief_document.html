@@ -46,7 +46,7 @@
     </form>
     <form class="capdoc-own" method="post" action="/chips/custom">
       <input type="hidden" name="family" value="{{ section_family.get(section, section) }}">
-      <input type="text" name="label" placeholder="Save to My chips — label" class="capdoc-in">
+      <input type="text" name="label" placeholder="Save to My chips: label" class="capdoc-in">
       <input type="text" name="sentence" placeholder="…and the sentence" class="capdoc-in capdoc-in-wide">
       <button class="capdoc-add" type="submit">Save to My chips</button>
     </form>
@@ -72,7 +72,7 @@
   </ul>
   {% if edit and hidden %}
   <div class="capdoc-restore no-print">
-    <span class="capdoc-rail-label">Removed — tap to restore</span>
+    <span class="capdoc-rail-label">Removed. Tap to restore</span>
     {% for p in hidden %}
     <form method="post" action="/opportunity/{{ row['id'] }}/doc/pill" style="margin:0">
       <input type="hidden" name="section" value="{{ section }}">
@@ -198,7 +198,7 @@
           {% endfor %}
         </tbody>
       </table>
-      {% if edit %}<p class="muted small no-print" style="margin-top:6px">These rows ARE Campaign Intelligence — saving updates the single source of truth and every artifact that reads it.</p>{% endif %}
+      {% if edit %}<p class="muted small no-print" style="margin-top:6px">These rows ARE Campaign Intelligence. Saving updates the single source of truth and every artifact that reads it.</p>{% endif %}
     </section>
     {% endif %}
 
@@ -315,7 +315,7 @@
       {# generated showcase reels — the fallback, below the hand-picked tracks #}
       {% for ex in doc.examples %}
       <div class="ex">
-        <div class="ex-title">{{ ex.title }}{% if ex.placeholder %} <span class="placeholder-note">— sample reel</span>{% endif %}</div>
+        <div class="ex-title">{{ ex.title }}{% if ex.placeholder %} <span class="placeholder-note">· sample reel</span>{% endif %}</div>
         <div class="ex-meta">{{ ex.client_type }}</div>
         <div class="ex-blurb">{{ ex.blurb }}</div>
       </div>
@@ -327,7 +327,7 @@
     <div class="delivery-head">
       <div class="delivery-kicker">Delivery Package</div>
       <div class="delivery-title">What your delivery package includes</div>
-      <div class="delivery-note">Personalized to {{ doc.client }} · {{ doc.campaign_label }} — the standard your package is built and delivered against.</div>
+      <div class="delivery-note">Personalized to {{ doc.client }} · {{ doc.campaign_label }}. The standard your package is built and delivered against.</div>
     </div>
 
     {# assumptions banner — mandatory, always rendered (§6) #}
@@ -421,7 +421,7 @@
           {% if doc.commercial.scope %}<tr><td style="width:172px"><b>Scope</b></td><td>{{ doc.commercial.scope }}</td></tr>{% endif %}
           {% if doc.commercial.deliverable_count %}<tr><td><b>Deliverables</b></td><td>{{ doc.commercial.deliverable_count }} assets, itemized in the manifest above</td></tr>{% endif %}
           {% if doc.commercial.timeline %}<tr><td><b>Timeline</b></td><td>{{ doc.commercial.timeline }}</td></tr>{% endif %}
-          {% if not doc.show_cost and doc.commercial.budget_band %}<tr><td><b>Working budget</b></td><td>{{ doc.commercial.budget_band }} — as discussed</td></tr>{% endif %}
+          {% if not doc.show_cost and doc.commercial.budget_band %}<tr><td><b>Working budget</b></td><td>{{ doc.commercial.budget_band }} (as discussed)</td></tr>{% endif %}
           <tr><td><b>Revisions</b></td><td>{{ doc.commercial.revisions }}</td></tr>
           <tr><td><b>Deposit</b></td><td>{{ doc.commercial.deposit }}</td></tr>
           <tr><td><b>Completion</b></td><td>{{ doc.commercial.completion }}</td></tr>
@@ -436,7 +436,7 @@
     <section class="block">
       <h2 class="sec">Indicative investment</h2>
       {# A client who disclosed a single figure gets that figure, not "$12,000–$12,000". #}
-      <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %}–${{ '{:,}'.format(doc.price_high) }}{% endif %} <small>ballpark — firmed up after a scoping call</small></div>
+      <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %} to ${{ '{:,}'.format(doc.price_high) }}{% endif %} <small>ballpark, firmed up after a scoping call</small></div>
     </section>
     {% endif %}
 
@@ -452,7 +452,7 @@
       <h2 class="sec">Agreement</h2>
       <div class="docusign">
         On your go-ahead, we'll send a countersignable agreement (Terms &amp; Conditions
-        attached) for e-signature on signature — no printing or scanning needed.
+        attached) for e-signature on signature. No printing or scanning needed.
       </div>
     </section>
     {% endif %}
@@ -492,7 +492,7 @@
       <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#9a5a1a">The Chordential Promise</div>
       <p style="margin:6px 0 0;font-style:italic;font-size:13px;color:#5a5550;line-height:1.55">
         This brief is our understanding of your campaign. Anything inaccurate is
-        corrected before a single note is written — your confirmation starts the music.</p>
+        corrected before a single note is written. Your confirmation starts the music.</p>
     </div>
     <div class="foot">Chordential · procurement-grade music · chordential.com</div>
   </div>

@@ -28,7 +28,7 @@
       <h1>You're booked</h1>
       <div class="when">{{ chosen_et }}</div>
       <p class="lead">{{ 'A calendar invite and the meeting link are on their way to your inbox.'
-          if prop['meeting_type'] != 'phone' else "A calendar invite is on its way — we'll call you." }}</p>
+          if prop['meeting_type'] != 'phone' else "A calendar invite is on its way. We'll call you." }}</p>
       {% if meeting and meeting['join_url'] %}
       <p><a class="mt-btn" style="display:block;text-decoration:none;text-align:center" href="{{ meeting['join_url'] }}">Join link →</a></p>
       {% endif %}
@@ -46,7 +46,7 @@
     <p class="lead">{{ 'A %d-minute Zoom call'|format(prop['duration_min']) if prop['meeting_type'] != 'phone'
         else 'A %d-minute phone call'|format(prop['duration_min']) }}
       about {{ opp['need'] if opp else 'your campaign' }}. All times Eastern.
-      Pick one — calendar invites{{ ' and the meeting link' if prop['meeting_type'] != 'phone' }} follow automatically.</p>
+      Pick one, and calendar invites{{ ' and the meeting link' if prop['meeting_type'] != 'phone' }} follow automatically.</p>
     <form method="post" action="/meet/{{ prop['token'] }}/pick">
       <div class="mt-opts">
         {% for s in slots_et %}

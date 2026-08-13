@@ -16,7 +16,7 @@
       <div class="ko-ready-check">✓</div>
       <h2>Everything is ready.</h2>
       <p>Your production team has everything it needs to begin. You'll hear from us the moment
-        your first creative milestone is ready — there's nothing you need to manage until then.</p>
+        your first creative milestone is ready. There's nothing you need to manage until then.</p>
     </section>
     {% else %}
     <section class="block ko-actions">
@@ -24,7 +24,7 @@
       <ul class="ko-todo">
         {% for a in k.client_actions %}<li>{{ a.label }}</li>{% endfor %}
       </ul>
-      <p class="muted small">Once these are in, your team begins — and there's nothing further to manage.</p>
+      <p class="muted small">Once these are in, your team begins, and there's nothing further to manage.</p>
     </section>
     {% endif %}
 
@@ -45,7 +45,7 @@
       <ul class="ko-check">
         {% for item in k.checklist %}
         <li class="s-{{ item.state }}">
-          <span class="ko-mark">{{ '✓' if item.state == 'done' else ('•' if item.state == 'pending' else '—') }}</span>
+          <span class="ko-mark">{{ '✓' if item.state == 'done' else ('•' if item.state == 'pending' else '·') }}</span>
           <span class="ko-lab">{{ item.label }}{% if item.na_note and item.state == 'na' %} <span class="muted">· {{ item.na_note }}</span>{% endif %}</span>
         </li>
         {% endfor %}

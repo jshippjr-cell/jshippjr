@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your Delivery — {{ cert.campaign }} · Chordential</title>
+<title>Your Delivery · {{ cert.campaign }} · Chordential</title>
 <style>
   :root{
     --ink:#1F1E1E; --wine:#44161E; --orange:#E4671F; --cream:#FCF7F8;
@@ -199,7 +199,7 @@
     <img class="logo" src="/static/public/wordmark-ko.png" alt="Chordential">
     <p class="kick">Your Delivery</p>
     <h1>{{ cert.campaign }}</h1>
-    <p class="tag">Original music — composed, produced, and cleared for {{ cert.client }}.</p>
+    <p class="tag">Original music, composed, produced, and cleared for {{ cert.client }}.</p>
     {% if brief and brief.objective %}<p class="tag" style="margin-top:8px">{{ brief.objective }}</p>{% endif %}
     {# ADR-0036: whose court the ball is in, in the client's words — the question the
        portal exists to answer. This slot used to read "In production · v1 Concept":
@@ -219,16 +219,16 @@
   {% set is_partial = delivery_zip.partial %}
   <div class="ready{% if is_partial %} partial{% endif %}" id="package">
     {% if is_partial %}
-    <h2>Your delivery package is ready — {{ delivery_zip.descriptor }}</h2>
+    <h2>Your delivery package is ready: {{ delivery_zip.descriptor }}</h2>
     <p class="sub"><b>This is a partial delivery.</b> We assembled and documented everything that was uploaded, but some scoped deliverables aren't in this package yet:</p>
     {% if delivery_zip.completeness and delivery_zip.completeness.missing %}
     <ul class="pack pack-missing">
-      {% for m in delivery_zip.completeness.missing %}<li><b>⧗</b> {{ m }} — not uploaded yet</li>{% endfor %}
+      {% for m in delivery_zip.completeness.missing %}<li><b>⧗</b> {{ m }} · not uploaded yet</li>{% endfor %}
     </ul>
     {% endif %}
     {% else %}
     <h2>Your delivery package is ready</h2>
-    <p class="sub">Approved — so we assembled everything, organised it into folders, and generated your paperwork. Download it all in one ZIP.</p>
+    <p class="sub">Approved, so we assembled everything, organised it into folders, and generated your paperwork. Download it all in one ZIP.</p>
     {% endif %}
     {% if delivery_checklist %}
     <ul class="pack">
@@ -241,7 +241,7 @@
        deliverable is uploaded and the package is complete. #}
     <div class="paywall">
       <p class="paywall-head">⧗ Still being assembled</p>
-      <p class="paywall-sub">Your final files aren't ready to download yet — Chordential is still
+      <p class="paywall-sub">Your final files aren't ready to download yet. Chordential is still
         preparing {{ delivery_zip.completeness.missing|length if delivery_zip.completeness and delivery_zip.completeness.missing else 'the remaining' }}
         deliverable{{ 's' if not delivery_zip.completeness or not delivery_zip.completeness.missing or delivery_zip.completeness.missing|length != 1 else '' }}.
         You can stream and review everything above now; the full download unlocks the moment the package is complete.</p>
@@ -254,10 +254,10 @@
       <p class="paywall-sub">Your delivery package is ready. To keep the files,
         {% if invoice_balance and invoice_balance.outstanding %}an invoice balance of
         <b>${{ '%.2f'|format(invoice_balance.outstanding) }}</b> is{% else %}your invoice is{% endif %}
-        due. You can keep streaming and reviewing the work above — downloads unlock the
+        due. You can keep streaming and reviewing the work above; downloads unlock the
         moment it's paid in full.</p>
       {% if request.query_params.get('pay') == 'unavailable' %}
-      <p class="paywall-sub" style="margin-top:10px;color:#ffd9c2">Online card payment isn't switched on yet — Chordential will send you a secure payment link.</p>
+      <p class="paywall-sub" style="margin-top:10px;color:#ffd9c2">Online card payment isn't switched on yet. Chordential will send you a secure payment link.</p>
       {% else %}
       <form method="post" action="/project/{{ project['id'] }}/pay" style="margin-top:12px">
         <input type="hidden" name="k" value="{{ share_token }}">
@@ -268,7 +268,7 @@
       {% endif %}
     </div>
     {% endif %}
-    <p class="honest">Organised, documented, converted, and packaged by Chordential — the music is your composer's original work.{% if is_partial %} The missing deliverables will be added once Chordential uploads them.{% endif %}</p>
+    <p class="honest">Organised, documented, converted, and packaged by Chordential; the music is your composer's original work.{% if is_partial %} The missing deliverables will be added once Chordential uploads them.{% endif %}</p>
   </div>
   {% endif %}
 
@@ -285,9 +285,9 @@
     {% if delivery.get('picture') %}
     <p class="honest" style="margin-top:4px">Cut <b>{{ delivery['picture']['n'] }}</b> is in the composer's room
       ({{ delivery['picture']['orig'] }}{% if delivery['picture']['at'] %} · {{ delivery['picture']['at'][:10] }}{% endif %}).
-      Uploading a new cut replaces it — the composer's room shows the change the moment it lands.</p>
+      Uploading a new cut replaces it; the composer's room shows the change the moment it lands.</p>
     {% else %}
-    <p class="honest" style="margin-top:4px">Drop the cut the music is written to — it lands directly in the
+    <p class="honest" style="margin-top:4px">Drop the cut the music is written to. It lands directly in the
       composer's session room, timecode and all. MP4, MOV, M4V, or WebM · up to 512&nbsp;MB.</p>
     {% endif %}
     <form method="post" action="/project/{{ project['id'] }}/review/picture" id="cut-form"
@@ -297,8 +297,8 @@
       <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
       <label id="cut-drop" style="display:block;border:2px dashed rgba(228,103,31,.45);border-radius:12px;
              padding:26px 18px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s">
-        <span id="cut-drop-line" style="font-weight:600">⇪ Drop your cut here — or click to choose the file</span>
-        <span style="display:block;font-size:11px;color:#8a8579;margin-top:4px">MP4 · MOV · M4V · WebM · up to 512 MB — real progress, no spinning tab</span>
+        <span id="cut-drop-line" style="font-weight:600">⇪ Drop your cut here, or click to choose the file</span>
+        <span style="display:block;font-size:11px;color:#8a8579;margin-top:4px">MP4 · MOV · M4V · WebM · up to 512 MB · real progress, no spinning tab</span>
         <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" required
                style="position:absolute;width:1px;height:1px;opacity:0">
       </label>
@@ -312,11 +312,11 @@
       <input type="hidden" name="k" value="{{ share_token }}">
       <input type="hidden" name="r" value="{{ reviewer_token }}">
       <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
-      <input type="text" name="label" placeholder="Reference name (e.g. 'the Bonobo track, 1:10–1:40')" style="flex:1;min-width:180px;font-size:12px;padding:7px 9px">
+      <input type="text" name="label" placeholder="Reference name (e.g. 'the Bonobo track, 1:10 to 1:40')" style="flex:1;min-width:180px;font-size:12px;padding:7px 9px">
       <input type="file" name="file" required style="font-size:12px">
       <button type="submit" class="dl-all" style="border:0;cursor:pointer">Add a reference</button>
     </form>
-    <p class="honest" style="margin-top:6px;font-size:11px">References guide tone and feel — the score you receive
+    <p class="honest" style="margin-top:6px;font-size:11px">References guide tone and feel; the score you receive
       will be original work.</p>
   </div>
   <script>
@@ -329,7 +329,7 @@
         bar = document.getElementById('cut-progress'), send = document.getElementById('cut-send'),
         input = form.querySelector('input[type=file]');
     input.addEventListener('change', function(){
-      if (input.files.length) line.textContent = '🎬 ' + input.files[0].name + ' — press send';
+      if (input.files.length) line.textContent = '🎬 ' + input.files[0].name + ' · press send';
     });
     ['dragover','dragenter'].forEach(function(ev){
       drop.addEventListener(ev, function(e){ e.preventDefault(); drop.style.borderColor = '#E4671F'; });
@@ -355,7 +355,7 @@
         if (xhr.status < 400){ bar.firstElementChild.style.width = '100%'; location.reload(); }
         else { send.disabled = false; send.textContent = 'Try again'; }
       });
-      xhr.addEventListener('error', function(){ send.disabled = false; send.textContent = 'Connection lost — try again'; });
+      xhr.addEventListener('error', function(){ send.disabled = false; send.textContent = 'Connection lost. Try again'; });
       xhr.send(new FormData(form));
     });
   })();
@@ -381,10 +381,10 @@
       {% endif %}
     </h2>
     {% if review_track %}
-    <p class="sub">{{ version_state }} — leave time-stamped notes, then approve or request changes. One link, no email.</p>
+    <p class="sub">{{ version_state }}. Leave time-stamped notes, then approve or request changes. One link, no email.</p>
     {% else %}
     <p class="sub">Your first version will appear here to stream and comment on, bar by bar.
-      Leave a note any time — we read them in the room.</p>
+      Leave a note any time; we read them in the room.</p>
     {% endif %}
 
     {# Two-phase model (Option 1): first you approve the MASTER (the piece in the player)
@@ -393,7 +393,7 @@
        derivatives — they aren't made yet. We just explain what happens next. #}
     {% if not creative_lock %}
     <p class="muted-note" style="margin:-2px 0 12px;padding:10px 12px;border:1px solid var(--line,#e7e1d8);border-radius:6px;background:#faf7f2">
-      <b>How delivery works:</b> approve the master below — that's the piece you're listening to.
+      <b>How delivery works:</b> approve the master below. That's the piece you're listening to.
       Once you approve it, Chordential produces your {{ completeness.missing|join(', ') if completeness and completeness.missing else 'remaining deliverables' }}
       and you sign off each one. Your full package downloads when every deliverable is approved.
     </p>
@@ -408,13 +408,13 @@
       <span style="display:inline-block;border:1px solid var(--wine);color:var(--wine);font-size:10px;
         letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px">✓ Verified reviewer</span>
       Reviewing as <b>{{ reviewer.name }}</b>{% if reviewer.email %} &lt;{{ reviewer.email }}&gt;{% endif %}{% if reviewer.role %} · {{ reviewer.role }}{% endif %}.
-      <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link — your name and email are locked to it, so anything you sign is recorded as yours. Keep it to yourself.</span>
+      <span class="muted-note" style="display:block;margin-top:2px">This is your personal review link: your name and email are locked to it, so anything you sign is recorded as yours. Keep it to yourself.</span>
     </p>
     {% else %}
     {# IP1: capture the GUEST's identity once (name + email), then remember it in a
        cookie so every comment is attributed and never retyped. #}
     <div class="whois" id="whois"{% if reviewer and reviewer.known %} hidden{% endif %}>
-      <p class="sub" style="margin:0 0 8px">Who's reviewing? Set your name &amp; email once — we'll remember you on this device.</p>
+      <p class="sub" style="margin:0 0 8px">Who's reviewing? Set your name &amp; email once, and we'll remember you on this device.</p>
       <div class="rc-form" style="margin-top:0">
         <input type="text" id="who-name" placeholder="Your name" class="rc-in"
                value="{{ reviewer.name if reviewer else '' }}">
@@ -425,7 +425,7 @@
     </div>
     {% if reviewer and reviewer.known %}
     <p class="sub" id="whoami" style="margin:-6px 0 10px">
-      Reviewing as <b>{{ reviewer.name }}</b> &lt;{{ reviewer.email }}&gt; —
+      Reviewing as <b>{{ reviewer.name }}</b> &lt;{{ reviewer.email }}&gt; ·
       <a href="#" id="whois-edit" style="color:var(--orange-text)">change</a>
     </p>
     {% endif %}
@@ -445,7 +445,7 @@
     </div>
     {% if selected_n|string != current_n|string and current_n != 0 %}
     <p class="muted-note" style="margin:-8px 0 12px">
-      You're viewing <b>v{{ selected_n }}</b> — an earlier round.
+      You're viewing <b>v{{ selected_n }}</b>, an earlier round.
       <a href="/project/{{ project['id'] }}/delivery-portal?{% if reviewer_token %}r={{ reviewer_token }}{% else %}k={{ share_token }}{% endif %}#review" style="color:var(--orange-text)">Back to current (v{{ current_n }})</a>
     </p>
     {% endif %}
@@ -471,7 +471,7 @@
       {# Top-level notes for the SELECTED version, each with its threaded replies. #}
       {% for c in comments %}{% if c.kind == 'comment' and c.parent_id is none and (selected_n == 0 or c.version|string == selected_n|string) %}{% set ns2.has = true %}
         <div class="rc{% if c.resolved %} done{% endif %}">
-          {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}{% if c.t_end is not none %}–{{ (c.t_end|int//60) }}:{{ '%02d'|format(c.t_end|int%60) }}{% endif %}</a>{% else %}<span class="rc-t">—</span>{% endif %}
+          {% if c.t_seconds is not none %}<a class="rc-t" href="#review" data-t="{{ c.t_seconds }}">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}{% if c.t_end is not none %}–{{ (c.t_end|int//60) }}:{{ '%02d'|format(c.t_end|int%60) }}{% endif %}</a>{% else %}<span class="rc-t">·</span>{% endif %}
           <span class="rc-a">{{ c.author }}</span>
           <span class="rc-b">{{ c.body }}</span>
           <span class="rc-actions">
@@ -518,9 +518,9 @@
       {% for c in comments %}{% if c.kind == 'change_request' and (selected_n == 0 or c.version|string == selected_n|string) %}
         <div class="rc rc-changereq">
           <span class="rc-t" style="color:var(--wine)">↻</span>
-          <span class="rc-a">{{ c.author }} — changes requested</span>
+          <span class="rc-a">{{ c.author }} · changes requested</span>
           <span class="rc-b">{{ c.body }}</span>
-          {% if c.conform %}<span class="cf-tag" title="A conform re-syncs the score to a re-cut picture — it does not use one of your revision rounds">conform · no round used</span>{% endif %}
+          {% if c.conform %}<span class="cf-tag" title="A conform re-syncs the score to a re-cut picture, and does not use one of your revision rounds">conform · no round used</span>{% endif %}
         </div>
       {% endif %}{% endfor %}
     </div>
@@ -604,7 +604,7 @@
       </div>
       {% endfor %}
       {% if not (verified or (reviewer and reviewer.known)) %}
-      <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) to approve each deliverable — no separate link needed.</p>
+      <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) to approve each deliverable. No separate link needed.</p>
       {% endif %}
     </div>
     {% endif %}
@@ -626,7 +626,7 @@
          uploads them; the full package downloads only when every deliverable is approved. #}
       {% if not creative_lock %}
       <form method="post" action="/project/{{ project['id'] }}/review/approve" class="review-act review-approve" data-need-id="1"
-            onsubmit="return confirm('Approve the master (v{{ current_n }})? This is the piece you just heard — approving delivers it and locks the creative direction. Chordential then produces your other deliverables for sign-off.');">
+            onsubmit="return confirm('Approve the master (v{{ current_n }})? This is the piece you just heard. Approving delivers it and locks the creative direction. Chordential then produces your other deliverables for sign-off.');">
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="author" class="ident-name" value="{{ reviewer.name if reviewer else '' }}">
@@ -635,7 +635,7 @@
       </form>
       {% else %}
       <p class="sub" style="margin:0 0 10px"><b style="color:var(--wine)">✓ Master approved.</b>
-        {% if scoped_rollup and scoped_rollup.total and scoped_rollup.approved == scoped_rollup.total %}All <b>{{ scoped_rollup.total }}</b> deliverables approved — Chordential is finalizing your package for release.{% elif scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b> — sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
+        {% if scoped_rollup and scoped_rollup.total and scoped_rollup.approved == scoped_rollup.total %}All <b>{{ scoped_rollup.total }}</b> deliverables approved. Chordential is finalizing your package for release.{% elif scoped_rollup %}Deliverables signed off: <b>{{ scoped_rollup.approved }} of {{ scoped_rollup.total }}</b>. Sign off the rest above as they arrive.{% else %}Chordential is producing your remaining deliverables for sign-off.{% endif %}</p>
       {% endif %}
       {% if creative_lock %}
       <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="review-act" style="display:inline"
@@ -649,7 +649,7 @@
       <div style="flex:1 1 240px">
         <button type="button" class="rc-approve" disabled onclick="var w=document.getElementById('whois'); if(w){w.hidden=false; var i=w.querySelector('input'); if(i)i.focus();}"
                 style="opacity:.6;cursor:pointer" title="Add your name to approve">✓ Approve</button>
-        <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) and you can approve right here — no separate link needed.</p>
+        <p class="muted-note" style="margin:6px 0 0">Add your name above (“Reviewing as…”) and you can approve right here. No separate link needed.</p>
       </div>
       {% endif %}
       <form method="post" action="/project/{{ project['id'] }}/review/changes" class="review-act" data-need-id="1">
@@ -672,7 +672,7 @@
   {% if brief and (brief.objective or brief.references or brief.tone or brief.deadline or brief_items) %}
   <div class="card" id="brief">
     <h2>The brief</h2>
-    <p class="sub">The agreed scope for this campaign — what we set out to make, and where it stands against what's delivered.</p>
+    <p class="sub">The agreed scope for this campaign: what we set out to make, and where it stands against what's delivered.</p>
     <dl class="brief-dl">
       {% if brief.objective %}<dt>Objective</dt><dd>{{ brief.objective }}</dd>{% endif %}
       {% if brief.references %}<dt>References</dt><dd>{{ brief.references }}</dd>{% endif %}
@@ -703,13 +703,13 @@
   {% if (state == "Delivered" or state == "Released") and comments %}
   <div class="card" id="review-history">
     <h2>Review history</h2>
-    <p class="sub">The full record of how this delivery reached FINAL — comments, change requests, and approvals.</p>
+    <p class="sub">The full record of how this delivery reached FINAL: comments, change requests, and approvals.</p>
     {% for c in comments %}
     <div class="rc">
       {% if c.kind == 'approval' %}<span class="rc-t" style="color:var(--wine)">✓</span>
       {% elif c.kind == 'change_request' %}<span class="rc-t" style="color:var(--wine)">↻</span>
       {% elif c.t_seconds is not none %}<span class="rc-t">{{ (c.t_seconds|int//60) }}:{{ '%02d'|format(c.t_seconds|int%60) }}</span>
-      {% else %}<span class="rc-t">—</span>{% endif %}
+      {% else %}<span class="rc-t">·</span>{% endif %}
       <span class="rc-a">{{ c.author }}{% if c.email %} &lt;{{ c.email }}&gt;{% endif %}</span>
       <span class="rc-b">{{ c.body }}{% if c.version %} <span class="vsep">· v{{ c.version }}</span>{% endif %}
         <span class="vsep" style="display:block;font-size:11px">{{ c.created_at[:10] }}</span></span>
@@ -745,7 +745,7 @@
   {% if assets %}
   <div class="card">
     <h2>Your files</h2>
-    <p class="sub">{% if download_unlocked %}Stream or download — yours to keep.{% else %}Stream and review now — downloads unlock once your invoice is paid in full.{% endif %}</p>
+    <p class="sub">{% if download_unlocked %}Stream or download, yours to keep.{% else %}Stream and review now; downloads unlock once your invoice is paid in full.{% endif %}</p>
     {% macro asset_badge(ap) %}
       {% set st = ap.status if ap else "Pending" %}
       {% if st == "Approved" %}<span class="aa-badge aa-approved" title="Signed off{% if ap.by %} by {{ ap.by }}{% endif %}{% if ap.date %} · {{ ap.date }}{% endif %}">✓ Approved</span>
@@ -779,9 +779,9 @@
     <p class="sub">Music your legal team can defend.</p>
     <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
       <div style="flex:1 1 320px">
-        <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} — Draft, pending confirmation{% endif %}</p>
+        <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} · Draft, pending confirmation{% endif %}</p>
         {% if cert.license_draft %}
-        <p class="legend" style="margin:0 0 8px">Standard template terms — not yet confirmed as the deal grant.</p>
+        <p class="legend" style="margin:0 0 8px">Standard template terms, not yet confirmed as the deal grant.</p>
         {% endif %}
         <ul class="clean">
           <li><b>Type:</b> {{ cert.license.type }}</li>
@@ -797,7 +797,7 @@
         </ul>
         {% if cert.license_confirmed %}<p class="legend" style="margin-top:6px">Confirmed by {{ cert.license_confirmed.by }}{% if cert.license_confirmed.date %} · {{ cert.license_confirmed.date }}{% endif %}.</p>{% endif %}
         <p class="legend" style="margin-top:8px">{{ cert.clearance_line }}</p>
-        <p class="legend" style="margin-top:6px">Original work — no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
+        <p class="legend" style="margin-top:6px">Original work: no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
       </div>
       <div style="flex:0 0 auto;text-align:center">
         {# The seal is the product's whole promise, so it may never outrun the paperwork:
@@ -818,7 +818,7 @@
        inside the paid package, where it is legally required and access is controlled. #}
     <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Created by</p>
     <ul class="clean">
-      <li>Chordential studio — {{ cert.contributors | map(attribute='role') | unique | join(', ') }}</li>
+      <li>Chordential studio · {{ cert.contributors | map(attribute='role') | unique | join(', ') }}</li>
     </ul>
     {% endif %}
     <!-- IP3 — signatory block: warranty attaches to a named signer, version + date.
@@ -827,7 +827,7 @@
     {% if cert.certified_version %}
     <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Certified by</p>
     <ul class="clean">
-      <li><b>{{ cert.signatory.entity }}</b>{% if cert.signatory.signer %} — {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}{% endif %}</li>
+      <li><b>{{ cert.signatory.entity }}</b>{% if cert.signatory.signer %} · {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}{% endif %}</li>
       <li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>
     </ul>
     {% endif %}
@@ -844,12 +844,12 @@
       {% elif cert_signature and cert_signature_state == 'superseded' %}
       <p style="margin:0 0 6px;font-weight:700;color:#8a3324;font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signature no longer matches</p>
       <p class="sub" style="margin:0">{{ cert_signature_note }}</p>
-      <p class="legend" style="margin-top:6px">Nothing you signed has been taken away — this notice exists so a changed term can never pass as one you agreed to. Ask your Chordential contact to reissue the certificate, then sign the current version.</p>
+      <p class="legend" style="margin-top:6px">Nothing you signed has been taken away. This notice exists so a changed term can never pass as one you agreed to. Ask your Chordential contact to reissue the certificate, then sign the current version.</p>
 
       {% elif verified %}
       <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Sign this certificate</p>
       {% if cert.license_draft %}
-      <p class="legend" style="margin:0">The grant above is still marked <b>draft</b>. Signing opens once Chordential confirms the terms — signing a draft would bind you to something not yet settled.</p>
+      <p class="legend" style="margin:0">The grant above is still marked <b>draft</b>. Signing opens once Chordential confirms the terms; signing a draft would bind you to something not yet settled.</p>
       {% else %}
       <form method="post" action="/project/{{ project.id }}/delivery/sign" style="margin:0">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
@@ -868,7 +868,7 @@
       {% endif %}
 
       {% else %}
-      <p class="legend" style="margin:0">This link can view the certificate but not sign it. Signing needs your personal reviewer link — ask your Chordential contact to send it.</p>
+      <p class="legend" style="margin:0">This link can view the certificate but not sign it. Signing needs your personal reviewer link. Ask your Chordential contact to send it.</p>
       {% endif %}
     </div>
   </div>
@@ -880,7 +880,7 @@
   {% if verified and reviewer.can_delegate %}
   <div class="card" id="team">
     <h2>Bring in a colleague</h2>
-    <p class="sub">They get their own link — their name on their notes, not yours. They can listen and comment; sign-off and approval stay with you.</p>
+    <p class="sub">They get their own link, with their name on their notes, not yours. They can listen and comment; sign-off and approval stay with you.</p>
     {% if request.query_params.get('invited') %}
     <p class="legend" style="color:#1d6b43"><b>Invited.</b> If you gave an email address, their link is on its way.</p>
     {% endif %}
@@ -902,7 +902,7 @@
   {% elif verified and reviewer.delegate %}
   <div class="card" id="team">
     <h2>Your access</h2>
-    <p class="sub">{{ reviewer.invited_by }} gave you access to this delivery. You can listen and comment{% if reviewer.expires_at %} until {{ reviewer.expires_at }}{% endif %}. Sign-off and approval stay with them — ask your Chordential contact if you need to sign.</p>
+    <p class="sub">{{ reviewer.invited_by }} gave you access to this delivery. You can listen and comment{% if reviewer.expires_at %} until {{ reviewer.expires_at }}{% endif %}. Sign-off and approval stay with them. Ask your Chordential contact if you need to sign.</p>
   </div>
   {% endif %}
 
@@ -952,13 +952,13 @@
       failed = true;
       p.classList.add('failed');
       btn.textContent = '!'; btn.setAttribute('aria-label', 'Unavailable');
-      time.textContent = '—';
+      time.textContent = '·';
       var note = document.createElement('p');
       note.className = 'cap-audio-err';
-      note.textContent = 'This file did not load, so there is nothing to play — ' + why +
+      note.textContent = 'This file did not load, so there is nothing to play. ' + why +
         ' Nothing is wrong with your speakers. Please tell us and we will re-send it.';
       if (p.parentNode) p.parentNode.insertBefore(note, p.nextSibling);
-      if (window.console) console.error('[audio] ' + audio.currentSrc + ' — ' + why);
+      if (window.console) console.error('[audio] ' + audio.currentSrc + ' · ' + why);
     }
     audio.addEventListener('error', function () {
       // The waveform layer sets this while it is testing a CORS-readable load of the same
@@ -1015,7 +1015,7 @@
       // start is frozen; the end tracks the playhead (only forward of the start)
       var end = Math.max(rangeStart, ra.currentTime || 0);
       if (tEnd) tEnd.value = end;
-      if (lbl) lbl.textContent = fmt(rangeStart) + '–' + fmt(end);
+      if (lbl) lbl.textContent = fmt(rangeStart) + ' to ' + fmt(end);
     }
   });
   if (rangeBtn) rangeBtn.addEventListener('click', function () {
@@ -1113,7 +1113,7 @@
         whois.hidden = false;
         if (whoami) whoami.hidden = true;
         nameIn.focus();
-        alert('Tell us who\'s reviewing first — set your name and email above.');
+        alert('Tell us who\'s reviewing first. Set your name and email above.');
       }
     });
   });

@@ -81,7 +81,7 @@
         var li = document.createElement("li");
         var b = document.createElement("button");
         b.type = "button";
-        b.textContent = t.title + " — " + t.discipline;
+        b.textContent = t.title + " · " + t.discipline;
         b.addEventListener("click", function () { open(i); });
         li.appendChild(b);
         ul.appendChild(li);
