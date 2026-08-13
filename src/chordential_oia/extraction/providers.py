@@ -23,6 +23,35 @@ class NullProvider:
         return None
 
 
+# A one-minute discovery call is ~200 words. Reading it with ten specialists on the
+# flagship model, then two recall rounds looking for what they missed, is the same
+# machinery a forty-page RFP needs — and it is why a one-minute call was estimated at
+# $0.30-0.50. The crew size is what gives coverage, so it is kept; the MODEL and the
+# recall rounds are what scale to the size of the thing being read.
+SMALL_INPUT_CHARS = 2500          # ≈ 400 words: a short call, a note, an email
+ECONOMY_MODEL = "claude-haiku-4-5-20251001"
+FLAGSHIP_MODEL = "claude-sonnet-5"
+
+
+def explicit_model() -> str:
+    """A model the operator named. Always wins — this sizing is a default, not a policy."""
+    return (os.environ.get("CHORDENTIAL_EXTRACTION_MODEL")
+            or os.environ.get("CHORDENTIAL_INTAKE_MODEL") or "").strip()
+
+
+def economy_model() -> str:
+    return (os.environ.get("CHORDENTIAL_EXTRACTION_ECONOMY_MODEL") or "").strip() \
+        or ECONOMY_MODEL
+
+
+def model_for(total_chars: int) -> str:
+    """The right model for the amount of text. Small input, small model."""
+    named = explicit_model()
+    if named:
+        return named
+    return economy_model() if total_chars < SMALL_INPUT_CHARS else FLAGSHIP_MODEL
+
+
 class AnthropicProvider:
     """The real extraction model. Lazy import (the ``ai`` extra), bounded retry with
     backoff for transient failures, and a hard never-raise guarantee."""
@@ -30,8 +59,7 @@ class AnthropicProvider:
     available = True
 
     def __init__(self, model: str = "", *, retries: int = 2, backoff_s: float = 1.5):
-        self.model = model or os.environ.get("CHORDENTIAL_EXTRACTION_MODEL") \
-            or os.environ.get("CHORDENTIAL_INTAKE_MODEL") or "claude-sonnet-5"
+        self.model = model or explicit_model() or FLAGSHIP_MODEL
         self.retries = max(1, retries)
         self.backoff_s = backoff_s
         # The last failure reason, so a silent decline can still be DIAGNOSED (surfaced on

@@ -47,13 +47,64 @@ _MONEY = re.compile(
     r"|\$\s?(\d{1,3}(?:,\d{3})+|\d+)\s?(k)?", re.I)
 _MONTHS = (r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
            r"aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?")
+# "in the next 24 days" was stated plainly on a real discovery call and this missed it:
+# the pattern demanded "in 24 days" and the two words between broke it. People do not
+# speak in the shape a regex was written in, so the connective words are optional.
 _TIMELINE = re.compile(
     r"\bby\s+(?:the\s+)?(?:end of\s+)?(?:%s)[a-z]*\.?(?:\s+\d{1,2})?(?:,?\s*\d{4})?"
-    r"|\bin\s+\d+\s+(?:days|weeks|months)\b|\bQ[1-4]\b|\b(?:%s)\s+\d{1,2}\b" % (_MONTHS, _MONTHS),
+    r"|\b(?:in|within|over|inside)\s+(?:the\s+)?(?:next\s+|coming\s+|following\s+)?"
+    r"\d+\s+(?:day|week|month)s?\b"
+    r"|\b\d+\s+(?:day|week|month)s?\s+from\s+(?:now|today)\b"
+    r"|\bby\s+(?:the\s+)?(?:end\s+of\s+)?(?:next\s+)?(?:week|month|quarter)\b"
+    r"|\bQ[1-4]\b|\b(?:%s)\s+\d{1,2}\b" % (_MONTHS, _MONTHS),
     re.I)
+# "a 60 second cut down" was also stated plainly and also missed: ":60" and "60s" were
+# listed but not the way anyone actually says it, and "cutdown" was one word while the
+# speaker used two. Spoken lengths and the spaced/hyphenated spellings now count.
 _DELIVERABLES = re.compile(
-    r"\b(:15|:30|:60|:90|15s|30s|60s|anthem|cutdown[s]?|social|stems?|sonic logo|"
+    r"\b(:15|:30|:60|:90|15s|30s|60s"
+    r"|\d{1,3}\s*-?\s*(?:second|sec)s?\b"
+    r"|anthem|cut\s*-?\s*down[s]?|social|stems?|sonic\s+logo|"
     r"sting[s]?|bed[s]?|jingle|score|vertical[s]?|9:16|broadcast)\b", re.I)
+_SPOKEN_LEN = re.compile(r"^(\d{1,3})\s*-?\s*(?:second|sec)s?$", re.I)
+
+
+def _normalise_deliverable(d: str) -> str:
+    """Say a length the way the rest of the system writes it: "60 second" -> ":60"."""
+    m = _SPOKEN_LEN.match(d.strip())
+    if m:
+        return ":%s" % m.group(1)
+    return re.sub(r"cut\s*-?\s*down", "cutdown", d.strip(), flags=re.I)
+
+
+# A budget is very often two numbers and a hedge — "roughly $10,000, we might push to
+# $12,000". Reading only the first states a ceiling the buyer did not set.
+_STRETCH = re.compile(
+    r"\b(push|stretch|up to|as high as|maybe|might|could go|max(?:imum)?)\b", re.I)
+_ONE_FIGURE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)\s?(k)?", re.I)
+
+
+_EXPLICIT_RANGE = re.compile(r"(?:[-–]|\bto\b)\s*\$?\s*\d", re.I)
+
+
+def _money_band(text: str) -> str:
+    """The stated band, when the speaker gave one.
+
+    Two ways a band is stated. Written down it is one phrase — "$18,000 to $24,000" —
+    and _MONEY already reads that; SPOKEN it arrives across a sentence break with a
+    hedge in between — "roughly $10,000… we might push that to $12,000" — and reading
+    only the first figure states a ceiling the buyer never set.
+    """
+    m = _MONEY.search(text)
+    explicit = m.group(0).strip() if m else ""
+    if explicit and _EXPLICIT_RANGE.search(explicit):
+        return explicit                      # already a band, in one phrase
+    figs = [(mm.start(), mm.group(0).strip()) for mm in _ONE_FIGURE.finditer(text)]
+    if len(figs) >= 2:
+        gap = text[figs[0][0]:figs[1][0]]
+        if len(gap) <= 160 and _STRETCH.search(gap) and figs[0][1] != figs[1][1]:
+            return "%s to %s" % (figs[0][1], figs[1][1])
+    return explicit or (figs[0][1] if figs else "")
 _DISCIPLINES = {
     "sound design": "Sound design", "sonic branding": "Sonic branding",
     "music supervision": "Music supervision", "orchestration": "Orchestration",
@@ -78,15 +129,19 @@ def _extract_objective(text: str) -> List[Dict]:
     """Pull the structured FACTS a note/transcript usually states — budget, timeline,
     deliverables, discipline, decision-maker. Conservative: only what's actually there."""
     out: List[Dict] = []
-    m = _MONEY.search(text)
-    if m:
-        out.append(_cand("engagement", "budget_band", "fact", m.group(0).strip(),
-                         confidence=70))
+    band = _money_band(text)
+    if band:
+        out.append(_cand("engagement", "budget_band", "fact", band, confidence=70))
+    else:
+        m = _MONEY.search(text)
+        if m:
+            out.append(_cand("engagement", "budget_band", "fact", m.group(0).strip(),
+                             confidence=70))
     t = _TIMELINE.search(text)
     if t:
         out.append(_cand("engagement", "deadline", "fact", t.group(0).strip(),
                          confidence=65))
-    dels = sorted({d.lower() for d in _DELIVERABLES.findall(text)})
+    dels = sorted({_normalise_deliverable(d).lower() for d in _DELIVERABLES.findall(text)})
     if dels:
         out.append(_cand("engagement", "deliverables", "fact", ", ".join(dels),
                          confidence=60))

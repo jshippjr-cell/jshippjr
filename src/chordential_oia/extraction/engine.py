@@ -71,8 +71,21 @@ def run(artifacts: List[Dict], *, priors: str = "", provider=None,
         return None
     if not any((a.get("text") or "").strip() for a in artifacts or []):
         return None
-    rounds = recall_rounds if recall_rounds is not None else max(
-        0, int(os.environ.get("CHORDENTIAL_EXTRACTION_RECALL_ROUNDS", "2") or 0))
+    # Size the run to the reading. Recall rounds exist to catch what ten specialists
+    # missed in a long document; on a one-minute call there is nothing for them to find,
+    # and they are a third of the bill.
+    total_chars = sum(len(a.get("text") or "") for a in artifacts or [])
+    small = total_chars < providers.SMALL_INPUT_CHARS
+    if rounds_from_caller_unset := (recall_rounds is None):
+        rounds = 0 if small else max(
+            0, int(os.environ.get("CHORDENTIAL_EXTRACTION_RECALL_ROUNDS", "2") or 0))
+    else:
+        rounds = recall_rounds
+    # A provider the caller built keeps its own model; otherwise pick one for the size.
+    if rounds_from_caller_unset and getattr(provider, "name", "") == "anthropic":
+        want = providers.model_for(total_chars)
+        if want and getattr(provider, "model", "") != want and not providers.explicit_model():
+            provider.model = want
     pool_size = max_workers or min(
         len(WORKERS), int(os.environ.get("CHORDENTIAL_EXTRACTION_WORKERS", "6") or 6))
 
