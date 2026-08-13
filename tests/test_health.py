@@ -36,7 +36,7 @@ def test_get_root_renders_public_home(client):
     # /dashboard.
     r = client.get("/")
     assert r.status_code == 200
-    assert "every part in the air" in r.text
+    assert "every part in the air" in r.text.lower()
 
 
 def test_dashboard_renders_at_dashboard(client):

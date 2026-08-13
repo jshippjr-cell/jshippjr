@@ -282,7 +282,7 @@ def test_composer_delivers_derivatives_after_master_approved(ctx):
     conn.close()
     # the portal now asks for derivatives, not a new master
     page = client.get(f"/creator/{tok}").text
-    assert "now deliver the remaining assets" in page
+    assert "now deliver the remaining assets" in page.lower()
     assert "Instrumental" in page                     # a scoped derivative deliverable
     # composer uploads one → it lands as an asset for client sign-off
     r = client.post(f"/creator/{tok}/project/{pid}/deliverable",

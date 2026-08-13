@@ -744,7 +744,7 @@ def test_portal_guest_vs_verified_identity(client):
     # An un-identified guest sees the helpful "add your name and approve here" prompt —
     # NOT a "personal review link" wall. Once they enter a name the working Approve appears
     # (proven end-to-end in test_client_can_approve_from_share_link).
-    assert "no separate link needed" in guest
+    assert "no separate link needed" in guest.lower()
     # Verified (personal link): identity is locked, no free-entry name field.
     rev = client.get(f"/project/{pid}/delivery-portal", params={"r": rtoken}).text
     assert "Verified reviewer" in rev

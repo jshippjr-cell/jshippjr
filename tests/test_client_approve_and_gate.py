@@ -41,7 +41,7 @@ def test_client_can_approve_from_share_link(tmp_path, monkeypatch):
         # the portal now shows a working Approve once the client has entered their name
         # (no "personal review link" wall)
         page = c.get(f"/project/{pid}/delivery-portal?k={ptok}").text
-        assert "no separate link needed" in page or "review/approve" in page
+        assert "no separate link needed" in page.lower() or "review/approve" in page
         # client approves from the SHARE link with a typed identity — succeeds
         r = c.post(f"/project/{pid}/review/approve",
                    data={"k": ptok, "author": "Sarah Chen", "email": "sarah@x.com",

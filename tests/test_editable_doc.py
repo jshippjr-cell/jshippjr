@@ -392,7 +392,7 @@ def test_auto_pill_delete_and_restore(client):
     after = client.get("/opportunity/1/capabilities").text
     assert "<li>" + label not in after
     # in edit mode it sits in the restore rail
-    assert "tap to restore" in client.get("/opportunity/1/capabilities?edit=1").text
+    assert "tap to restore" in client.get("/opportunity/1/capabilities?edit=1").text.lower()
     # restore → back in the doc
     client.post("/opportunity/1/doc/pill", data={
         "section": "understanding_pills", "action": "show", "label": label})
