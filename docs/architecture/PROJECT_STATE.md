@@ -94,6 +94,41 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The budget reached the Budget field** (ADR-0064, 2026-08-14). A live discovery call
+  stated it plainly — *"roughly 25. No, no, 30,000. And that's all in including any
+  licensing"* — and the ten-agent engine read it correctly, spoken correction and all,
+  then filed it as **`commercial/budget_band`** while the slot is
+  `(engagement, budget_band, fact)`. The field showed its placeholder with the right
+  answer in the evidence column beside it; Deliverables the same. This was the first
+  comprehension call's defect fixed for the KEY only — half an address. The facet is now
+  derived from the key, facts already stored are repaired once at boot (free, idempotent,
+  never overwriting a value a human put there), and only facts move: an open question about
+  the budget stays a question.
+- **The calendar block, all the way down** (ADR-0063 + follow-ups, 2026-08-14). Four
+  more layers under the invite format, each silent. **The operator address**: unset
+  `CHORDENTIAL_OPERATOR_EMAIL` fell back to `CHORDENTIAL_SMTP_FROM`, so an unconfigured
+  inbox looked configured and confirmations went to the app's own sending address; it is
+  now declared in `render.yaml` and flagged on the page. **The send status**: returned by
+  the mailer and dropped, so "no provider", "SMTP errored" and "sent" were one observable
+  event — now recorded per meeting and shown on the card. **Google's refusal**: caught into
+  a log line, and `str(HTTPError)` is only "HTTP Error 400: Bad Request" — the reason is in
+  the response body, unread. Now surfaced with Google's own words. **The credential**: a
+  service-account key that was SET BUT UNREADABLE returned `None`, indistinguishable from
+  absent, so `configured()` fell through to the leftover OAuth variables and silently
+  resumed the expired token the operator had already retired to escape the 7-day expiry —
+  broken no longer falls back, and a key file can be pasted in raw (its mangled newlines
+  are repaired) instead of requiring `base64` first. The last mile was not code at all:
+  Gmail's *"Add invitations to my calendar: only if the sender is known"* was declining to
+  place an invitation it had received. **Confirmed working on the operator's calendar.**
+- **A test that capped its own process** (2026-08-14). Pre-existing, invisible under
+  `-n auto`, and it stopped a serial batch dead for 900s twice. `test_oom_guards` imported
+  the enrichment worker into the pytest process; that module lowers `RLIMIT_AS` soft AND
+  hard, a lowered hard limit can never be raised again, and the restore threw straight into
+  an `except: pass`. Everything after it ran under a 256MB address-space cap and the first
+  test needing a thread stack hung in `Thread.start()` for ever — no failure, no message.
+  Now checked in a subprocess, with a second test asserting the parent is never capped.
+  That batch: 900s timeout → 70 passed in 11s.
+
 - **A booked call lands on a calendar without anyone pressing anything** (ADR-0063,
   2026-08-14). Reported live: *"I dont want to click anything."* Four defects between a
   booking and a block, each of them silent. The invitation was being **presented as a

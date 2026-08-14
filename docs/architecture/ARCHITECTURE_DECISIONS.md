@@ -1664,6 +1664,39 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0064 — A canonical key has exactly one home, so its facet is derived, never accepted
+**Status:** Accepted (2026-08-14) · Source: `web/campaign_intelligence.py` (`canonical_slot`),
+`web/campaign_intake.py` (`_canonicalise`), `web/db.py`
+(`refile_ci_fields_to_canonical_slots`), `tests/test_a_canonical_key_has_one_home.py`
+**Decision.** `canonical_slot(facet, key, kind)` snaps **both halves** of a proposed field
+onto the canonical slot it means, and every intake candidate passes through it. A canonical
+key belongs to exactly one facet — that is what makes it canonical — so the facet is
+computed from the key rather than taken from the extractor. Only **facts** are moved: an
+open question about the budget is an open question, and filing it as the value would be
+worse than losing it. A key with no canonical meaning passes through untouched, facet and
+all — the dynamic field must keep working. Facts already stored under the old behaviour are
+repaired once at boot, for free, and the repair **never** overwrites a slot that already
+holds a value.
+**Why.** Two live discovery calls failed the same way, and the second failure was the first
+fix applied to half the address. On call one the answers were filed under names of the
+model's own choosing — $45,000 into "Production Budget", the conditional launch into
+"Seasonality" — while Budget and Timeline sat empty; snapping the KEY fixed that. On call
+two the budget was read perfectly, spoken correction and all — *"the number I've been given
+is roughly 25. No, no, 30,000. And that's all in including any licensing"* — and filed as
+**`commercial/budget_band`**. The key was already canonical. The facet was not, and the slot
+is `(engagement, budget_band, fact)`, so the lookup missed by one column and the Budget
+field showed its placeholder with the correct answer visible in the evidence list beside it.
+Deliverables went the same way. The estimate, the brief and the proposal all read the
+canonical slots, so a perfect read filed next to them is worth nothing — and the operator
+had paid a ten-agent engine for that read.
+**Consequences.** Never widen `CANONICAL_FIELDS` without remembering that its key set is now
+also an address book: adding a key claims that name everywhere. Do not "fix" extraction by
+instructing the model more firmly — steering is a prior, `canonical_slot` is the guarantee,
+and the two live failures were both of a model that had been steered. Repairs of stored
+intelligence follow the same rule as this one: conservative, idempotent, free, and never
+destructive of a human's value — a collision leaves both rows visible for a person to
+settle rather than picking a winner.
+
 ### ADR-0063 — Creating an event and inviting someone to it are two different questions
 **Status:** Accepted (2026-08-14) · Source: `meetings/calendar.py`, `meetings/google.py`,
 `web/meeting_scheduler.py`, `mailer.py`, `tests/test_the_block_lands_without_a_click.py`
