@@ -47,6 +47,29 @@ _SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _log = logging.getLogger("chordential.google_calendar")
 
 
+def _reescape_newlines_inside_strings(raw: str) -> str:
+    """Put back the escaping a paste destroyed: real line breaks INSIDE a JSON string
+    become ``\\n`` again, while the line breaks between fields are left as the legal
+    whitespace they are. Scanned rather than regexed because only a scanner can tell those
+    two apart, and getting it wrong would corrupt a private key rather than repair one."""
+    out, in_string, escaped = [], False, False
+    for ch in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            if ch in "\r\n":
+                out.append("\\n" if ch == "\n" else "")
+                continue
+        elif ch == '"':
+            in_string = True
+        out.append(ch)
+    return "".join(out)
+
+
 def _load_service_account() -> Tuple[Optional[dict], str]:
     """The service-account key as ``(info, problem)``. Accepts raw JSON or base64-wrapped
     JSON (Render env vars are single-line; base64 sidesteps the newlines in the PEM private
@@ -80,6 +103,15 @@ def _load_service_account() -> Tuple[Optional[dict], str]:
         return json.loads(raw), ""
     except json.JSONDecodeError:
         pass
+    # The commonest paste, and it should simply work. A service-account key file contains a
+    # PEM private key whose newlines are ESCAPED in the JSON (\n); paste that file into a
+    # form field and many of them arrive as real line breaks instead, which is no longer
+    # valid JSON. Asking the operator to base64 the file was a workaround for this, and a
+    # workaround they had to get exactly right on the first try, in the dark.
+    try:
+        return json.loads(_reescape_newlines_inside_strings(raw)), ""
+    except json.JSONDecodeError:
+        pass
     try:
         info = json.loads(base64.b64decode(raw).decode("utf-8"))
     except Exception:  # noqa: BLE001
@@ -87,7 +119,8 @@ def _load_service_account() -> Tuple[Optional[dict], str]:
             f"{where} is set but is neither valid JSON nor base64 of valid JSON "
             f"({len(raw)} characters). The usual causes are a truncated paste and pasting "
             f"the key file raw — its private key contains newlines, which an env var drops. "
-            f"Re-do it as `base64 -w0 key.json` and paste the single line.")
+            f"Open the .json key file, copy ALL of it, and paste it in as-is; if that "
+            f"still fails, paste `base64 -w0 key.json` instead.")
     if not isinstance(info, dict) or not info.get("private_key"):
         return None, f"{where} decoded but carries no private_key — is it the right file?"
     return info, ""

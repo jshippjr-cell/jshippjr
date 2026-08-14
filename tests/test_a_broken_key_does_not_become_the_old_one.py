@@ -97,6 +97,29 @@ def test_raw_json_still_works_for_anyone_not_using_base64(clean, monkeypatch):
     assert p.auth_mode() == "service_account" and not p.config_problem()
 
 
+def test_the_key_file_pasted_straight_in_works(clean, monkeypatch):
+    """The paste anyone would try first, and the one that used to fail.
+
+    A service-account key file escapes the PEM's newlines as ``\\n``. Paste that file into
+    a dashboard field and they commonly arrive as REAL line breaks, which is no longer
+    valid JSON — so the key silently did not load. Requiring `base64 -w0` first was a
+    workaround the operator had to get right on the first attempt with no feedback."""
+    pretty = json.dumps(_GOOD_KEY, indent=2)
+    monkeypatch.setenv("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON",
+                       pretty.replace("\\n", "\n"))     # what the paste does to it
+    p = clean.GoogleCalendarProvider()
+    assert p.auth_mode() == "service_account", p.config_problem()
+    assert "BEGIN PRIVATE KEY" in p.sa_info["private_key"]
+    assert "\n" in p.sa_info["private_key"], "the PEM must come back as real lines"
+
+
+def test_repairing_a_paste_never_touches_the_json_structure(clean):
+    """Only newlines INSIDE a string are escaped. The line breaks between fields are legal
+    whitespace, and escaping those would corrupt the document rather than repair it."""
+    src = '{\n  "a": "one\ntwo",\n  "b": 2\n}'
+    assert json.loads(clean._reescape_newlines_inside_strings(src)) == {"a": "one\ntwo", "b": 2}
+
+
 def test_no_key_at_all_uses_oauth_exactly_as_before(clean, monkeypatch):
     """Absent is NOT broken. Someone deliberately on OAuth must be unaffected."""
     _oauth(monkeypatch)
