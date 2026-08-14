@@ -176,3 +176,59 @@ def test_the_sheet_costs_nothing_to_render(client, monkeypatch):
     oid = _opp_with([("engagement", "deadline", "Oct 3")])
     assert client.get(f"/opportunity/{oid}/prep").status_code == 200
     assert spent == []
+
+
+# ── the console's own ergonomics ─────────────────────────────────────────────────
+def test_disposing_a_field_returns_to_that_field_not_the_top(client):
+    """Reported live: pressing "Mark answered" threw the page back to the section
+    heading, a screen or more above the line just pressed. Ten dispositions meant ten
+    scrolls back down, losing your place each time."""
+    from chordential_oia.web import campaign_intelligence as ci
+    from chordential_oia.web import db
+    oid = _opp_with()
+    conn = db.connect()
+    try:
+        ci_id = db.ci_for_opportunity(conn, oid)["id"]
+        # NOT an `ask_*` key: those route to the gaps section, which already has an
+        # inline answer box. The questions carrying "Mark answered" are the ones in the
+        # producer's read, and those have only the dispose button.
+        fid = ci.contribute(conn, ci_id, "commercial", "stem_count",
+                            "Confirm the stem count for social.", kind="open_question",
+                            source="discovery_call")
+    finally:
+        conn.close()
+    r = client.post(f"/opportunity/{oid}/intelligence/dispose",
+                    data={"field_id": str(fid)}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith(f"#ci-{fid}"), r.headers["location"]
+
+    page = client.get(f"/opportunity/{oid}").text
+    assert f'id="ci-{fid}"' in page, "the anchor must exist on the item it points at"
+
+
+def test_the_dispose_button_says_what_it_actually_does(client):
+    """"Mark answered" reads like filing a reply. It CLOSES the question — leaves the open
+    list, stops appearing on the client brief — and saves no answer anywhere."""
+    from chordential_oia.web import campaign_intelligence as ci
+    from chordential_oia.web import db
+    oid = _opp_with()
+    conn = db.connect()
+    try:
+        ci_id = db.ci_for_opportunity(conn, oid)["id"]
+        ci.contribute(conn, ci_id, "commercial", "territory",
+                      "Where does this run?", kind="open_question", source="discovery_call")
+    finally:
+        conn.close()
+    page = client.get(f"/opportunity/{oid}").text
+    assert "It does not save an answer" in page
+    assert "stops appearing on the client brief" in page
+
+
+def test_the_section_nav_sits_with_the_title_it_navigates(client):
+    """Every other page in this group renders it on line 7. Only the Overview had it near
+    the foot, so reaching Budget estimate meant scrolling past the whole page first."""
+    oid = _opp_with()
+    page = client.get(f"/opportunity/{oid}").text
+    nav = page.index("Qualification rationale")
+    first_section = page.index('class="card')
+    assert nav < first_section, "the tabs must come before the page content, not after it"

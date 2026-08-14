@@ -363,7 +363,12 @@ def opp_intelligence_answer(opp_id: int, field_id: str = Form(...), answer: str 
 
 @router.post("/opportunity/{opp_id}/intelligence/dispose")
 def opp_intelligence_dispose(opp_id: int, field_id: str = Form(...)):
-    """The human disposition gate — confirm / acknowledge / accept / mark-answered."""
+    """The human disposition gate — confirm / acknowledge / accept / mark-answered.
+
+    Returns to the ITEM, not to the top of the section. `#intelligence` sent the page back
+    to the section heading, which on a long producer's read is a screen or more above the
+    line you just pressed — so disposing of ten items in a row meant scrolling back down
+    ten times, and losing your place each time."""
     if not campaigns.workspace_enabled():
         return HTMLResponse("Not found", status_code=404)
     conn = db.connect()
@@ -381,7 +386,8 @@ def opp_intelligence_dispose(opp_id: int, field_id: str = Form(...)):
                 campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
     finally:
         conn.close()
-    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+    anchor = f"ci-{field_id}" if str(field_id).strip().isdigit() else "intelligence"
+    return RedirectResponse(f"/opportunity/{opp_id}#{anchor}", status_code=303)
 
 
 @router.post("/opportunity/{opp_id}/intelligence/conflict")

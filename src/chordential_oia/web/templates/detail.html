@@ -75,6 +75,13 @@
   </div>
 </div>
 
+{# The section nav belongs with the title it navigates, which is where every other page
+   in this group already puts it (brief / buyer / compose / estimate all render it on
+   line 7). Only the Overview had it near the FOOT of the page, a full screen below the
+   content it switches between, so the way to reach Budget estimate from here was to
+   scroll past everything first. #}
+{{ opp_subnav(row, 'overview') }}
+
 {# ── NEXT (ADR-0020 §6): the page's ONE accented element — the deal's one obvious move. ── #}
 {% if next_act %}
 <section class="card next-hero" id="next" style="border-left:4px solid {{ '#C8552B' if next_act.court == 'you' else '#2F6A34' if next_act.court in ('client','team') else '#8a8580' }}">
@@ -471,7 +478,7 @@
     <h3>Observed facts <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">— the producer's working memory</span></h3>
     <ul class="obs-list">
       {% for it in ci_view.observed %}
-      <li class="obs-item">
+      <li class="obs-item" id="ci-{{ it.id }}">
         <span class="obs-mark">{{ '✓' if not it.open else '◍' }}</span>
         <span class="obs-body">
           <span class="obs-val">{{ it.value }}</span>
@@ -498,14 +505,19 @@
     <h3>The producer's read</h3>
     <ul class="ci-read" style="margin:0;padding:0">
       {% for it in ci_view.producer_read %}
-      <li>
+      <li id="ci-{{ it.id }}">
         <span class="ci-kind {{ it.kind }}">{{ it.kind_label }}</span>
         {% if it.is_concern %}<span class="ci-risk">⚠ risk</span>{% endif %}
         <span style="flex:1;min-width:160px">{{ it.value }}</span>
         {% if it.open %}
         <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="margin:0">
           <input type="hidden" name="field_id" value="{{ it.id }}">
-          <button class="btn tiny" type="submit">{{ it.dispose_verb }}</button>
+          {# Say the consequence. "Mark answered" reads like filing a reply somewhere; what
+             it does is CLOSE the question — it leaves your open list and stops being shown
+             to the client. It does not record an answer, and the title says so rather than
+             letting the button imply otherwise. #}
+          <button class="btn tiny" type="submit"
+                  title="{{ 'Closes this question: it leaves your open list and stops appearing on the client brief. It does not save an answer — type one into the field above if you want it kept.' if it.kind == 'open_question' else 'Marks this as dealt with, so it stops showing as open.' }}">{{ it.dispose_verb }}</button>
         </form>
         {% else %}<span class="ci-chip">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
       </li>
@@ -527,8 +539,6 @@
   {% endfor %}
 </section>
 {% endif %}
-
-{{ opp_subnav(row, 'overview') }}
 
 {% if sv.callout and row['qualified'] %}
 <div class="callout strategic"><span class="callout-ico">🚪</span> <strong>Strategic override:</strong> {{ sv.callout }}</div>
