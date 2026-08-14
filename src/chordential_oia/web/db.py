@@ -1523,7 +1523,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             poll_attempts INTEGER DEFAULT 0,     -- transcript polls made (backoff + give-up)
             last_polled_at TEXT,
             bot_armed_at TEXT,                   -- when the capture bot was booked
-            ical_sequence INTEGER DEFAULT 0      -- SEQUENCE of the invite last sent
+            ical_sequence INTEGER DEFAULT 0,     -- SEQUENCE of the invite last sent
+            confirmations_json TEXT              -- where each confirmation went, and what happened
         )"""
     )
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
@@ -1549,7 +1550,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                        # means the FIRST reschedule moves the block and no later one
                        # does — the invite is sent, accepted by the server, and silently
                        # discarded by the calendar.
-                       "ical_sequence": "INTEGER DEFAULT 0"}.items():
+                       "ical_sequence": "INTEGER DEFAULT 0",
+                       # WHERE each confirmation went and WHAT the mailer said about it.
+                       # Without this there is no answer anywhere to "did my invitation
+                       # actually go out": the send status was returned and dropped on the
+                       # floor, so a booking with no mail provider, a booking whose SMTP
+                       # errored, and a booking that worked all looked identical — a page
+                       # that simply reloaded.
+                       "confirmations_json": "TEXT"}.items():
         if name not in mtg_cols:
             conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {decl}")
     # A Discovery Request is the client's ASK (ADR-0016) — it schedules nothing; the operator
@@ -6296,6 +6304,29 @@ def get_meeting(conn: sqlite3.Connection, meeting_id: int) -> Optional[sqlite3.R
     return conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
 
 
+def record_confirmations(conn: sqlite3.Connection, meeting_id: int, entries: list) -> None:
+    """Record where this meeting's confirmations went and what the mailer said.
+
+    The whole point is that it is READABLE afterwards — "no mail provider configured"
+    and "sent, and their calendar ignored it" are different problems with different
+    fixes, and until this existed the product could not tell them apart."""
+    try:
+        conn.execute("UPDATE meetings SET confirmations_json = ?, updated_at = ? WHERE id = ?",
+                     (json.dumps(list(entries or [])),
+                      datetime.now(timezone.utc).isoformat(), meeting_id))
+        conn.commit()
+    except Exception:  # noqa: BLE001 — bookkeeping never blocks a booking
+        logger.exception("Could not record confirmations for meeting %s", meeting_id)
+
+
+def confirmations(meeting) -> list:
+    """The recorded confirmations for a meeting row, or ``[]``."""
+    try:
+        return list(json.loads(meeting["confirmations_json"] or "[]"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def bump_ical_sequence(conn: sqlite3.Connection, meeting_id: int) -> int:
     """Advance this meeting's invitation SEQUENCE and return the new value.
 
@@ -6372,7 +6403,7 @@ def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",
                "notetaker_provider", "bot_id", "external_meeting_id",
                "transcript_capture_id", "error", "poll_attempts", "last_polled_at",
-               "bot_armed_at", "ical_sequence"}
+               "bot_armed_at", "ical_sequence", "confirmations_json"}
     unknown = sorted(set(fields) - allowed)
     if unknown:
         raise ValueError(f"update_meeting: no such meeting field(s): {unknown}")

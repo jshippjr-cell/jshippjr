@@ -107,6 +107,14 @@ services:
         sync: false
       - key: CHORDENTIAL_SMTP_FROM       # verified sender, e.g. hello@chordential.com
         sync: false
+      # YOUR OWN INBOX. Every operator-side confirmation goes here — including the
+      # CALENDAR INVITATION that puts a discovery call on your calendar. This was never
+      # declared in this file, and the code falls back to CHORDENTIAL_SMTP_FROM when it is
+      # unset: an unconfigured inbox that looks configured, so the invitation went to the
+      # app's own sending address and no block ever reached the operator's calendar.
+      # Nothing failed and nothing logged. The scheduler now says so on the page; set this.
+      - key: CHORDENTIAL_OPERATOR_EMAIL  # e.g. you@gmail.com — NOT the sending address
+        sync: false
       # ── Google Calendar (auto-book the discovery call) ──────────────────────
       # RECOMMENDED: a service account — it NEVER expires (an OAuth "Testing"-mode
       # refresh token silently dies after 7 days, which is why auto-booking kept

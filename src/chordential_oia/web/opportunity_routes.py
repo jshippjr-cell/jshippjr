@@ -162,11 +162,35 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         stepper_next=stepper_next, stepper_stages=_KANBAN_STAGES,
         ci=ci, ci_view=ci_view, intake_sync_lanes=intake_sync_lanes,
         meeting=meeting, notetaker_ready=intake_lanes.get_lane("discovery_call").is_available(),
+        # Where this call's confirmations actually went, and what the mailer said. Reported
+        # because "I never got a calendar block" has several causes that look identical from
+        # the outside — no mail provider, no operator address, a send that errored, or an
+        # invitation that arrived and the calendar declined to add.
+        confirmations=(db.confirmations(meeting) if meeting is not None else []),
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
         kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
         ai_spend=_ai_spend_status(),
     )
+
+
+def _delivery_readiness(status: dict) -> dict:
+    """Add the two settings that decide whether an invitation reaches the OPERATOR.
+
+    The seam status answers "is Google connected", which is not the question that was
+    failing. A calendar invitation rides the confirmation email, so an unsent email is an
+    unbooked calendar — and both of the ways that happens are silent: the mailer is a no-op
+    until its provider is set, and `_operator_email` falls back to the app's own sending
+    address when CHORDENTIAL_OPERATOR_EMAIL is unset, which makes an unconfigured inbox
+    look configured. Reported here rather than in `meetings/` because the mail seam and the
+    operator address are the web layer's business; `meetings/` must not import upward."""
+    from .. import mailer as _mailer
+    from . import meeting_scheduler as _ms
+    out = dict(status or {})
+    out["mail"] = _mailer.mail_configured()
+    out["operator_email"] = _ms._operator_email()
+    out["operator_email_guessed"] = _ms.operator_email_is_a_guess()
+    return out
 
 
 def _ai_spend_status() -> dict:
@@ -729,7 +753,7 @@ def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
         conn.close()
     from .. import meetings as _M
     return render(request, "discovery_schedule.html", nav="inbox", row=row, dr=dr,
-                  integrations=_M.integration_status(),
+                  integrations=_delivery_readiness(_M.integration_status()),
                   prefill_name=((dr["name"] if dr else "") or row["contact_name"] or ""),
                   prefill_email=((dr["email"] if dr else "") or row["contact_email"] or ""),
                   prefill_type=((dr["preferred_type"] if dr else "") or "zoom"))

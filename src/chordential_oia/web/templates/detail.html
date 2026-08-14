@@ -209,6 +209,39 @@
       <span class="mono fineprint" style="opacity:.7">tried {{ meeting['poll_attempts'] or 0 }}×</span>
       {% endif %}
     </div>
+    {# ── Where the calendar invitation went ──────────────────────────────────────────
+       "I still don't see my calendar blocked" had at least four causes that were
+       indistinguishable from outside the machine: no mail provider configured (the mailer
+       is a silent no-op by default), no CHORDENTIAL_OPERATOR_EMAIL (so "the operator" was
+       really the app's own sending address), an SMTP error, or an invitation that arrived
+       and the calendar declined to add. The send status was being returned and dropped, so
+       none of them left a trace. Now each one names itself. #}
+    {% if confirmations %}
+    <div class="mtg-chips" style="margin-top:6px">
+      {% for c in confirmations %}
+        {% if c['status'] == 'no-address' %}
+        <span class="mtg-chip fail" title="Set CHORDENTIAL_OPERATOR_EMAIL to your own inbox">
+          ✕ No calendar invite for you — no operator address is set</span>
+        {% elif c['status'] == 'logged' %}
+        <span class="mtg-chip fail" title="mailer is a no-op until CHORDENTIAL_MAIL_PROVIDER=smtp with HOST and FROM">
+          ✕ {{ c['role']|title }} invite NOT sent — no mail provider configured</span>
+        {% elif c['status'] == 'error' %}
+        <span class="mtg-chip fail" title="the SMTP send failed; see the server log">
+          ✕ {{ c['role']|title }} invite failed to send</span>
+        {% elif c['native'] %}
+        <span class="mtg-chip ok">● Booked on your calendar by Google</span>
+        {% elif c['invite'] %}
+        <span class="mtg-chip ok" title="{{ c['to'] }}">● Invite sent to {{ c['role'] }} · {{ c['to'] }}</span>
+        {% else %}
+        <span class="mtg-chip off" title="{{ c['to'] }}">○ {{ c['role']|title }} emailed, no calendar invite</span>
+        {% endif %}
+        {% if c['guessed_address'] %}
+        <span class="mtg-chip fail" title="CHORDENTIAL_OPERATOR_EMAIL is unset, so this fell back to CHORDENTIAL_SMTP_FROM — the address the app sends FROM, not your inbox">
+          ⚠ That address is the app's sender, not your inbox — set CHORDENTIAL_OPERATOR_EMAIL</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
     {# What the press actually did. It used to redirect with a code nothing rendered, so a
        success and a failure looked identical: nothing happened. #}
     {% if fetch_msg %}

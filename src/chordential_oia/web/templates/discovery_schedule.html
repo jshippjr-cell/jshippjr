@@ -38,6 +38,26 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
        is wired up; "not connected" was read as "no calendar block", which was never true. #}
     <span class="on">📅 {% if integrations.calendar_route == 'native' %}Google invites both calendars{% elif integrations.calendar_route == 'operator' %}Google books yours, the client is invited by email{% else %}Both calendars invited by email{% endif %}</span>
   </div>
+  {# The confirmation carries the calendar invitation, so an unsent email is an unbooked
+     calendar. Both of these are silent by default and both were live: the mailer is a
+     no-op until its provider is set, and "the operator" falls back to the app's own
+     sending address when CHORDENTIAL_OPERATOR_EMAIL is unset — which render.yaml never
+     even declared, so nothing prompted for it. Say so BEFORE the call is booked. #}
+  {% if not integrations.mail %}
+  <p class="small" style="margin:6px 0 0;color:var(--red,#a33)">⚠ No mail provider is
+    configured, so no confirmation and <b>no calendar invitation</b> will be sent to anyone.
+    Set <code>CHORDENTIAL_MAIL_PROVIDER=smtp</code> with <code>_SMTP_HOST</code> and
+    <code>_SMTP_FROM</code>.</p>
+  {% elif integrations.operator_email_guessed %}
+  <p class="small" style="margin:6px 0 0;color:var(--red,#a33)">⚠ Your confirmation is going
+    to <code>{{ integrations.operator_email }}</code> — that is the address the app sends
+    <i>from</i>, not your inbox, because <code>CHORDENTIAL_OPERATOR_EMAIL</code> is unset.
+    <b>That is why no block reaches your calendar.</b></p>
+  {% elif not integrations.operator_email %}
+  <p class="small" style="margin:6px 0 0;color:var(--red,#a33)">⚠ No operator address is set,
+    so <b>you will not be told about this call at all</b>. Set
+    <code>CHORDENTIAL_OPERATOR_EMAIL</code>.</p>
+  {% endif %}
   {% endif %}
   {% if dr %}
   <div class="sd-req">📨 From <b>{{ dr['name'] or 'a client' }}</b> ({{ dr['email'] or 'no email' }}){% if dr['company'] %} · {{ dr['company'] }}{% endif %} · prefers <b>{{ dr['preferred_type'] }}</b>.{% if dr['message'] %}<br><span class="muted">“{{ dr['message'] }}”</span>{% endif %}</div>

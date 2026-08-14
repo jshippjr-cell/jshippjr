@@ -41,6 +41,24 @@ def _sender_email() -> str:
     return (os.environ.get("CHORDENTIAL_SMTP_FROM", "") or "").strip()
 
 
+def operator_email_is_a_guess() -> bool:
+    """Is the "operator" address really just the SMTP sender, because nobody set one?
+
+    `_operator_email` falls back to CHORDENTIAL_SMTP_FROM, and that fallback is a TRAP:
+    an unset operator address looks configured, so every confirmation — and every calendar
+    invitation — has been going to the app's own sending address rather than to a person's
+    inbox. Nothing failed, nothing logged, and the operator's calendar was simply never
+    touched. CHORDENTIAL_OPERATOR_EMAIL is not even declared in render.yaml, so there was
+    nothing in the dashboard to prompt for it either.
+
+    The fallback stays (removing it would send confirmations NOWHERE for anyone relying on
+    it today), but every surface that shows where a confirmation went says when the address
+    was a guess.
+    """
+    return not (os.environ.get("CHORDENTIAL_OPERATOR_EMAIL", "") or "").strip() and bool(
+        _sender_email())
+
+
 CLIENT_TZ = ZoneInfo("America/New_York")
 
 
@@ -166,7 +184,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             db.add_ci_event(conn, ci_id, actor=scheduled_by or "operator",
                             verb="meeting_scheduled", facet="engagement", key="discovery_call",
                             to_value=f"{meeting_type} · {fmt_et(start_at)}", source="scheduler")
-    _send_confirmations(opp, db.get_meeting(conn, mid))
+    _send_confirmations(opp, db.get_meeting(conn, mid), conn=conn)
     return {"ok": True, "meeting": db.get_meeting(conn, mid)}
 
 
@@ -297,7 +315,7 @@ def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = N
     row = db.get_meeting(conn, meeting["id"])
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:
-        _send_confirmations(opp, row, rescheduled=True)
+        _send_confirmations(opp, row, rescheduled=True, conn=conn)
     return {"ok": True, "meeting": row}
 
 
@@ -566,7 +584,7 @@ def _fold(line: str) -> str:
     return "\r\n".join(out)
 
 
-def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
+def _send_confirmations(opp, meeting, *, rescheduled: bool = False, conn=None) -> list:
     when = _fmt(meeting["start_at"])
     verb = "rescheduled to" if rescheduled else "confirmed for"
     manage = f"{_public_base()}/meeting/{meeting['id']}/manage?k={meeting['manage_token']}"
@@ -577,8 +595,10 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
     else:
         how = "A meeting link will follow."
     client_ics, op_ics = invites_for(meeting, opp)
+    native = _native_event(meeting)
+    log: list = []
     if meeting["client_email"]:
-        _safe_mail(
+        status = _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",
             f"Your discovery call with Chordential is {verb} {when}.\n{how}\n\n"
             # Honest about what an invitation can and cannot do: it puts the block on
@@ -588,11 +608,13 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
                "your calendar. A quick Yes confirms it.\n\n" if client_ics else "")
             + f"Need to change it? {manage}",
             ics=client_ics)
+        log.append({"role": "client", "to": meeting["client_email"], "status": status,
+                    "invite": bool(client_ics), "native": False})
     op = _operator_email()
     if op:
         # The operator gets the SAME join link + the .ics so the call lands on their
         # calendar too — the earlier operator email carried neither (reported live).
-        _safe_mail(
+        status = _safe_mail(
             op, f"Discovery call {verb} {when} · {opp['client']}",
             f"{meeting['meeting_type'].title()} call {verb} {when} with "
             f"{meeting['client_name'] or opp['client']} "
@@ -601,6 +623,16 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
             + ("The block is on your calendar; nothing to accept.\n" if op_ics else "")
             + f"Manage / reschedule: {manage}",
             ics=op_ics)
+        log.append({"role": "operator", "to": op, "status": status,
+                    "invite": bool(op_ics), "native": bool(native and not op_ics),
+                    "guessed_address": operator_email_is_a_guess()})
+    else:
+        # No operator address at all: the booking is real and NOBODY told the operator.
+        log.append({"role": "operator", "to": "", "status": "no-address",
+                    "invite": False, "native": False, "guessed_address": False})
+    if conn is not None:
+        db.record_confirmations(conn, meeting["id"], log)
+    return log
 
 
 def invites_for(meeting, opp, *, cancel: bool = False, sequence: Optional[int] = None):
@@ -651,11 +683,17 @@ def _provider_invites_attendees(meeting) -> bool:
         return False    # invitation; sending one too many beats sending none
 
 
-def _safe_mail(to: str, subject: str, text: str, ics: Optional[str] = None) -> None:
+def _safe_mail(to: str, subject: str, text: str, ics: Optional[str] = None) -> str:
+    """Send, and REPORT what happened: "sent" | "logged" | "error".
+
+    The status was being returned by the mailer and dropped here, which is why nobody
+    could answer "did my invitation go out". Still best-effort — a mail failure never
+    blocks a booking — but now it is a failure someone can see."""
     try:
-        mailer.send_email(to, subject, text, ics=ics)
+        return mailer.send_email(to, subject, text, ics=ics) or "error"
     except Exception:  # noqa: BLE001 — email is best-effort; a failure never blocks scheduling
-        pass
+        _log.exception("Confirmation to %s could not be sent", to)
+        return "error"
 
 
 def notify_new_request(request, opp) -> None:
