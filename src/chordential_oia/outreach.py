@@ -274,7 +274,19 @@ def build_compose_blocks(opp, qual, plan, overrides=None, opp_id=None,
     # ADR-0017/0021: the understanding is rendered FROM Campaign Intelligence (the source of
     # truth), never the static template. Fall back to the stock restatement only when CI is
     # genuinely bare (pre-discovery, nothing captured yet).
-    understanding = _understanding_from_ci(opp, ci_fields, met) or build_understanding(opp)
+    # The email is a LETTER, so it keeps its opening and closing lines — but it is the short
+    # version, not the record. It used to carry the field table serialized into one
+    # paragraph ("Instrumentation: … Deliverables as discussed: … Timeline: … Budget: …
+    # Approvals: …"), which is the same text the workspace shows in a table underneath, so
+    # the client read it twice on the page and once more in their inbox. It now says what
+    # the work is, how it should feel, and which areas we have written down — and hands off
+    # to the page, where a wrong value has an edit box beside it (client_voice).
+    open_q = 0
+    if ci_view:
+        from .client_voice import client_questions
+        open_q = len(client_questions(list(ci_view.get("open_questions") or []))[0])
+    understanding = (_understanding_from_ci(opp, ci_fields, met, open_question_count=open_q)
+                     or build_understanding(opp))
     if best:
         track = f"One piece I think speaks directly to your brief: {best}."
     else:

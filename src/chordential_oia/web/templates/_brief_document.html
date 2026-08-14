@@ -208,10 +208,22 @@
       <ul class="terms">{% for r in doc.risks %}<li>{{ r }}</li>{% endfor %}</ul>
     </section>
     {% endif %}
-    {% if doc.open_questions %}
+    {# OPEN QUESTIONS — the few a CLIENT can answer, not the engine's whole gap report.
+       This list used to be every unanswered open_question: our own conflict records
+       ("the source states conflicting budget band values"), our own identity
+       reconciliations, fragments truncated mid-word, and nine separate "no X was
+       mentioned" rights lines. Fourteen questions after a call is not thoroughness, and
+       the commercial ones now arrive as a proposal to react to rather than a form to
+       fill in (see client_voice). Everything held back is still on the operator's side. #}
+    {% if doc.open_questions or doc.deferred_terms_note %}
     <section class="block">
-      <h2 class="sec">Open questions</h2>
+      <h2 class="sec">{{ 'A couple of things to confirm' if doc.open_questions else 'Still to settle' }}</h2>
+      {% if doc.open_questions %}
       <ul class="terms">{% for q in doc.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if doc.deferred_terms_note %}
+      <p class="lede" style="margin:8px 0 0">{{ doc.deferred_terms_note }}</p>
+      {% endif %}
     </section>
     {% endif %}
 

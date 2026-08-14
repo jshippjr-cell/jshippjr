@@ -74,7 +74,8 @@ def test_brief_sections_inherit_from_ci(tmp_path, monkeypatch):
         page = c.get(f"/opportunity/{opp_id}/capabilities").text
     # every seeded fact appears — objective, arc, deliverables, timeline, budget, DMs
     assert "A holiday anthem that owns Q4 retail" in page
-    assert "Wonder building into confident joy" in page
+    # case-insensitive: the arc is folded into a sentence ("Tonally: wonder building…")
+    assert "wonder building into confident joy" in page.lower()
     assert ":60 anthem, :30/:15 cutdowns, full stems" in page
     assert "Final masters by November 10" in page
     assert "CMO signs off" in page
@@ -143,7 +144,11 @@ def test_blank_understanding_override_reverts_to_ci_not_stock(tmp_path, monkeypa
         # blanking the override reverts to INTELLIGENCE-derived copy, never stock template
         c.post(f"/opportunity/{opp_id}/doc/field", data={"name": "understanding", "value": ""})
         page = c.get(f"/opportunity/{opp_id}/capabilities").text
-    assert "Deliverables as discussed" in page
+    # …to INTELLIGENCE-derived copy. Asserted on the CI content itself rather than on the
+    # old serializer's "Deliverables as discussed:" boilerplate, which was the bug: the
+    # understanding was the field table joined with full stops, printed above the field
+    # table (client_voice).
+    assert "A holiday anthem that owns Q4 retail" in page
     assert "music partner to shape its sound end-to-end" not in page
 
 
@@ -212,9 +217,15 @@ def test_email_this_composer_inherits_ci(tmp_path, monkeypatch):
     with TestClient(app_mod.app) as c:
         page = c.get(f"/opportunity/{opp_id}/compose").text
     # the CI-derived understanding appears in the composed email…
-    assert "Deliverables as discussed" in page
-    assert ":60 anthem, :30/:15 cutdowns, full stems" in page
-    # …and the stock restatement does not
+    assert "A holiday anthem that owns Q4 retail" in page
+    # case-insensitive: the arc is folded into a sentence ("Tonally: wonder building…")
+    assert "wonder building into confident joy" in page.lower()
+    # …it SAYS it has the deliverables without reprinting them (the workspace has the
+    # table; an email that restates it is the same text a third time)…
+    assert "the deliverables" in page
+    assert ":60 anthem, :30/:15 cutdowns, full stems" not in page, (
+        "the email must point at the workspace, not duplicate its table")
+    # …and the stock restatement does not appear at all
     assert "shape its sound end-to-end" not in page
 
 

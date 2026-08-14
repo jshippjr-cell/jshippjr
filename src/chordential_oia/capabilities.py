@@ -113,7 +113,8 @@ class CapabilitiesDoc:
     # ADR-0017 — every section inherits from Campaign Intelligence when it exists.
     ci: dict = field(default_factory=dict)     # canonical CI values by key (brief_view fields)
     risks: List[str] = field(default_factory=list)
-    open_questions: List[str] = field(default_factory=list)
+    open_questions: List[str] = field(default_factory=list)   # the FEW a client can answer
+    deferred_terms_note: str = ""              # the commercial points the proposal will state
     met: bool = False                          # a discovery meeting happened (tone switch)
     intro: str = ""                            # the meeting-summary opening line
     commercial: dict = field(default_factory=dict)  # the commercial close (see build)
@@ -567,52 +568,20 @@ def build_understanding(opp: Opportunity) -> str:
     )
 
 
-def _understanding_from_ci(opp: Opportunity, ci_fields: dict, met: bool) -> str:
-    """The Understanding section written FROM Campaign Intelligence (ADR-0017 / ADR-0021):
-    a summary of what was actually discussed — the source of truth, never a template restart.
-    Consumes whatever CI currently knows across the EP-completeness field set; uses only fields
-    that exist and invents nothing (Founder's Advocate). Empty only when CI is truly bare."""
-    def g(*keys):
-        for k in keys:
-            v = (ci_fields.get(k) or "").strip()
-            if v:
-                return v
-        return ""
-    objective = g("campaign_objective", "business_objective")
-    ctype = g("campaign_type")
-    distribution = g("distribution")
-    arc = g("emotional_arc", "tone")
-    instrumentation = g("instrumentation")
-    dels = g("deliverables")
-    deadline = g("critical_deadline", "deadline")
-    budget = g("budget_band")
-    dm = g("decision_makers")
-    if not (objective or ctype or arc or dels):
-        return ""
-    parts = []
-    head = objective or (f"An original {ctype.lower()}" if ctype else "")
-    if head:
-        parts.append(head[0].upper() + head[1:])
-    if ctype and ctype.lower() not in head.lower():
-        parts.append(f"Campaign: {ctype}")
-    if distribution:
-        parts.append(f"Distribution: {distribution}")
-    if arc:
-        parts.append(f"The music carries {arc[0].lower()}{arc[1:]}"
-                     if arc[:1].isupper() and not arc.isupper() else f"The music carries {arc}")
-    if instrumentation:
-        parts.append(f"Instrumentation: {instrumentation}")
-    if dels:
-        parts.append(f"Deliverables as discussed: {dels}")
-    if deadline:
-        parts.append(f"Timeline: {deadline}")
-    if budget:
-        parts.append(f"Budget: {budget}")
-    if dm:
-        parts.append(f"Approvals: {dm}")
-    lead = ("Here's what we heard. " if met
-            else "This reflects our current understanding of the campaign. ")
-    return lead + ". ".join(p.rstrip(".") for p in parts if p) + "."
+def _understanding_from_ci(opp: Opportunity, ci_fields: dict, met: bool,
+                           *, lede: bool = True, closing: bool = True,
+                           open_question_count: int = 0) -> str:
+    """The short version, for a client. Delegates to `client_voice.summary_prose`.
+
+    What this used to do was walk the canonical fields and join them with full stops —
+    "Instrumentation: … Deliverables as discussed: … Timeline: … Budget: … Approvals: …" —
+    which is the field table serialized, printed directly above the field table. The client
+    read it twice on the page and a third time in the email. A summary that restates its
+    own source is not a summary; it is a second copy with worse formatting.
+    """
+    from .client_voice import summary_prose
+    return summary_prose(ci_fields or {}, met=met, lede=lede, closing=closing,
+                         open_question_count=open_question_count)
 
 
 def _intro_line(met: bool) -> str:
@@ -689,8 +658,22 @@ def build_capabilities_doc(
     # Understanding — override wins (a human wrote it); else CI-derived (what the meeting
     # said); else the conservative template restatement. Blanking an override therefore
     # reverts to intelligence, never to stock copy (ADR-0017).
+    # The questions a CLIENT should actually be asked, which is not the same list as the
+    # engine's open questions (client_voice): our conflict records, our identity
+    # reconciliations and truncated fragments are for the operator, and nine separate
+    # "no X was mentioned" rights lines are a form nobody agreed to fill in.
+    from .client_voice import client_questions
+    client_asks, deferred_terms_note = client_questions(
+        list(ci_view.get("open_questions") or []))
+    # Understanding — override wins (a human wrote it); else CI-derived (what the meeting
+    # said); else the conservative template restatement. Blanking an override therefore
+    # reverts to intelligence, never to stock copy (ADR-0017). No lede and no closing here:
+    # this page already carries a "What we heard" heading above it and an intro that ends
+    # "one reply fixes it" — printed again, one thought was stated three times before a
+    # single fact appeared.
     understanding = (overrides.get("understanding")
-                     or _understanding_from_ci(opp, ci_fields, met)
+                     or _understanding_from_ci(opp, ci_fields, met, lede=False, closing=False,
+                                               open_question_count=len(client_asks))
                      or build_understanding(opp))
 
     # Delivery template — auto-picked from the lead, override wins. The chosen
@@ -743,7 +726,13 @@ def build_capabilities_doc(
         secondary=secondary,
         show_examples=bool(toggles.get("examples")),
         examples=_relevant_examples(qual),
-        show_call=bool(toggles.get("call")),
+        # Never ask for the call you have already had. This brief IS the summary of that
+        # meeting — closing it with "Request a discovery call · Let's spend 20 minutes
+        # discussing your creative direction, timeline, campaign goals" invites a client
+        # who just spent that time to book it again, and reads as a form letter that did
+        # not notice the conversation. Pre-discovery the CTA is the whole point, so the
+        # toggle still governs there.
+        show_call=bool(toggles.get("call")) and not met,
         call_url=call_url,
         show_cost=show_cost,
         price_low=price_low,
@@ -764,7 +753,8 @@ def build_capabilities_doc(
         delivery_assumptions=delivery_assumptions,
         ci=ci_fields,
         risks=list(ci_view.get("risks") or []),
-        open_questions=list(ci_view.get("open_questions") or []),
+        open_questions=client_asks,
+        deferred_terms_note=deferred_terms_note,
         met=met,
         intro=_intro_line(met),
         commercial=commercial,

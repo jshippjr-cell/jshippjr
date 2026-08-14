@@ -51,10 +51,12 @@ def test_default_body_includes_on_blocks_excludes_off(client):
     # The assembled preview body lives in #compose-body. Assert the default-ON
     # content is present and the default-OFF blocks are not.
     assert "Hi " in body                                  # opener greeting
-    # Understanding now inherits from Campaign Intelligence (ADR-0017): opp 3 has a
-    # seeded business_objective, so the block is the CI-derived synopsis, not the
-    # generic stock restatement.
-    assert "current understanding of the campaign" in body  # CI-derived understanding
+    # Understanding inherits from Campaign Intelligence (ADR-0017): opp 3 has a seeded
+    # business_objective, so the block is the CI-derived short version, not the generic
+    # stock restatement. The old assertion matched the serializer's lead-in ("This
+    # reflects our current understanding of the campaign"), which was boilerplate wrapped
+    # around a serialized field table — exactly what client_voice replaced.
+    assert "Here's the short version" in body               # CI-derived understanding
     assert "isn't always ideal" in body                   # call offer phrase
     assert "Here's our understanding of your campaign" in body  # summary link (ADR-0020)
     assert "Jon Shipp · Chordential" in body            # sign-off
