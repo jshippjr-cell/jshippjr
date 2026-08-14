@@ -87,9 +87,17 @@ CANONICAL_FIELDS = [
 # field beside "Business objective".
 #
 # So the mapping is deterministic, and happens after extraction rather than by instruction.
+#
+# AN ALIAS IS A CLAIM THAT TWO NAMES MEAN THE SAME THING, and `production_budget` was not
+# one. It was added because call one's model called the MUSIC budget "Production Budget";
+# on call two a speaker used the words for what they normally mean — "total production on
+# the film is about nine hundred thousand" — and the alias walked that $900,000 straight
+# into the Budget field, past a value that even said "(not the music)". A distractor
+# promoted by our own map is worse than no map: an empty Budget asks a question, a Budget
+# reading $900,000 does not. Only names that can ONLY mean the music fee belong here.
 _KEY_ALIASES = {
     "budget": "budget_band", "budget_range": "budget_band", "music_budget": "budget_band",
-    "production_budget": "budget_band", "fee": "budget_band", "budget_figure": "budget_band",
+    "music_fee": "budget_band", "fee": "budget_band", "budget_figure": "budget_band",
     "timeline": "deadline", "seasonality": "deadline", "launch_timing": "deadline",
     "air_date": "deadline", "delivery_date": "deadline", "launch_window": "deadline",
     "schedule": "deadline", "timing": "deadline",
@@ -120,6 +128,17 @@ CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
                     for f, k, kind, label, ph, opp in CANONICAL_FIELDS}
 # A canonical key has exactly ONE home, so the facet is not the model's to choose.
 CANONICAL_FACET_FOR_KEY = {k: f for f, k, _kind, _l, _p, _o in CANONICAL_FIELDS}
+
+
+def arrived_by_alias(key: str) -> bool:
+    """Did this field reach its slot under its own name, or through the alias map?
+
+    The difference decides a collision. An exact key is the extractor naming the slot; an
+    alias is US deciding two words mean the same thing, which is a weaker claim and the one
+    that has been wrong."""
+    k = re.sub(r"[^a-z0-9]+", "_", (key or "").strip().lower()).strip("_")
+    return k in _KEY_ALIASES and not any(
+        k == ck for _f, ck, _kind, _l, _p, _o in CANONICAL_FIELDS)
 
 
 def canonical_slot(facet: str, key: str, kind: str = "fact"):

@@ -419,13 +419,47 @@ def _canonicalise(candidates: List[Dict]) -> List[Dict]:
     A name with no canonical meaning passes through untouched — that is the dynamic field
     working as intended, and it must keep working.
     """
-    out = []
+    out, claimed = [], {}
     for c in candidates:
         c = dict(c)
-        c["facet"], c["key"], c["kind"] = ci.canonical_slot(
-            c.get("facet", ""), c.get("key", ""), c.get("kind", "fact"))
+        original_key = c.get("key", "")
+        facet, key, kind = ci.canonical_slot(
+            c.get("facet", ""), original_key, c.get("kind", "fact"))
+        slot = (facet, key, kind)
+        if slot in ci.CANONICAL_BY_KEY:
+            by_alias = ci.arrived_by_alias(original_key)
+            rank = (1 if by_alias else 0, -int(c.get("confidence") or 0))
+            held = claimed.get(slot)
+            if held is None or rank < held["rank"]:
+                if held is not None:
+                    _evict(held)                 # the previous occupant keeps its own name
+                claimed[slot] = {"rank": rank, "cand": c, "original": original_key}
+                c["facet"], c["key"], c["kind"] = slot
+            else:
+                _evict({"cand": c, "original": original_key})
+            out.append(c)
+            continue
+        c["facet"], c["key"], c["kind"] = slot
         out.append(c)
     return out
+
+
+def _evict(entry) -> None:
+    """Put a candidate back under the name it arrived with.
+
+    ONE SLOT, ONE OCCUPANT — and the loser is never dropped, it just stops pretending to be
+    the canonical answer. Two candidates reached Budget on the live call: the music fee, and
+    "total production on the film is about nine hundred thousand" arriving through the
+    `production_budget` alias. The second write simply overwrote the first, so the field
+    showed $900,000 — a number that even carried "(not the music)" in its own text. Last
+    write winning is not a tie-break, it is a coin toss with a client-facing number on it.
+
+    An exact key outranks an alias because an exact key is the EXTRACTOR naming the slot,
+    while an alias is us asserting that two words mean the same thing — the weaker claim,
+    and the one that was wrong. Confidence breaks a remaining tie."""
+    c = entry["cand"]
+    c["key"] = (entry.get("original") or c.get("key") or "").strip() or c.get("key")
+    c["facet"] = (c.get("facet") or "observed")
 
 
 def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_id=None,

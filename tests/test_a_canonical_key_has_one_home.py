@@ -169,3 +169,67 @@ def test_the_repair_never_overwrites_a_value_a_human_already_put_there(env):
     assert fields[("engagement", "budget_band", "fact")]["value"] == "$30,000 confirmed with Maria"
     assert ("commercial", "budget_band", "fact") in fields, (
         "the loser stays visible rather than being deleted; a person decides")
+
+
+# ── one slot, one occupant ───────────────────────────────────────────────────────
+def test_the_distractor_never_takes_the_budget_slot_from_the_real_figure(env):
+    """Live call two, verbatim from the page: Budget read
+
+        "Total production budget for the overall film (not the music) is approximately
+         $900,000"
+
+    while the engine's own open question referred to "the $55k-$65k budget". Both facts
+    reached the slot and the LAST WRITE WON. Last write winning is not a tie-break, it is a
+    coin toss with a client-facing number on it — and the loser here even carried "(not the
+    music)" in its own text."""
+    _dbm, _ci, intake, _conn, _opp = env
+    out = {c["key"]: c["value"] for c in intake._canonicalise([
+        {"facet": "commercial", "key": "budget_band", "kind": "fact", "confidence": 90,
+         "value": "Music budget is $55,000-$65,000, hard ceiling, USD, license included."},
+        {"facet": "commercial", "key": "production_budget", "kind": "fact", "confidence": 95,
+         "value": "Total production budget for the overall film (not the music) is ~$900,000"},
+    ])}
+    assert "55,000" in out["budget_band"]
+    assert "900,000" not in out["budget_band"]
+    assert "900,000" in out["production_budget"], "the loser keeps its own name, not the bin"
+
+
+def test_an_exact_key_outranks_an_alias_even_at_lower_confidence(env):
+    """An exact key is the EXTRACTOR naming the slot. An alias is us asserting two words
+    mean the same thing — the weaker claim, and the one that has been wrong twice."""
+    _dbm, _ci, intake, _conn, _opp = env
+    out = {c["key"]: c["value"] for c in intake._canonicalise([
+        {"facet": "commercial", "key": "fee", "kind": "fact", "confidence": 99,
+         "value": "via an alias"},
+        {"facet": "commercial", "key": "budget_band", "kind": "fact", "confidence": 10,
+         "value": "under its own name"},
+    ])}
+    assert out["budget_band"] == "under its own name"
+    assert out["fee"] == "via an alias"
+
+
+def test_two_aliases_are_settled_by_confidence_not_by_arrival_order(env):
+    _dbm, _ci, intake, _conn, _opp = env
+    out = {c["key"]: c["value"] for c in intake._canonicalise([
+        {"facet": "x", "key": "fee", "kind": "fact", "confidence": 40, "value": "weaker"},
+        {"facet": "x", "key": "budget_range", "kind": "fact", "confidence": 95,
+         "value": "stronger"},
+    ])}
+    assert out["budget_band"] == "stronger"
+    assert out["fee"] == "weaker"
+
+
+def test_nothing_is_ever_dropped_by_the_contest(env):
+    _dbm, _ci, intake, _conn, _opp = env
+    src = [
+        {"facet": "a", "key": "budget_band", "kind": "fact", "confidence": 90, "value": "1"},
+        {"facet": "b", "key": "music_budget", "kind": "fact", "confidence": 80, "value": "2"},
+        {"facet": "c", "key": "fee", "kind": "fact", "confidence": 70, "value": "3"},
+        {"facet": "d", "key": "weekly_cadence", "kind": "fact", "confidence": 60, "value": "4"},
+    ]
+    out = intake._canonicalise(src)
+    assert len(out) == 4
+    assert {c["value"] for c in out} == {"1", "2", "3", "4"}
+    assert sum(1 for c in out if (c["facet"], c["key"], c["kind"])
+               == ("engagement", "budget_band", "fact")) == 1, "exactly one occupant"
+    assert src[1]["key"] == "music_budget", "the caller's list must not be mutated"
