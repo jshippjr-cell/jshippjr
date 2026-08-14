@@ -5283,15 +5283,21 @@ def best_effort(conn, label: str = "be"):
     try:
         yield
     except Exception:                    # noqa: BLE001 — the whole point
+        # The savepoint may be GONE: almost every db helper commits internally, and a
+        # COMMIT discards every savepoint in the transaction. Asking to roll back to one
+        # that no longer exists raises, and THAT raise aborts the transaction — the exact
+        # poisoning this helper exists to prevent. It cost a client-facing 500 on the
+        # "accept this meeting time" link before it was caught.
         try:
             conn.execute("ROLLBACK TO SAVEPOINT %s" % sp)
         except Exception:                # noqa: BLE001
-            pass
-    else:
-        try:
-            conn.execute("RELEASE SAVEPOINT %s" % sp)
-        except Exception:                # noqa: BLE001
-            pass
+            try:
+                conn.rollback()          # clear the aborted state; the inner work committed
+            except Exception:            # noqa: BLE001
+                pass
+    # No RELEASE on success, deliberately. A savepoint is released by the next COMMIT
+    # anyway, so releasing buys nothing — and if the wrapped code already committed, the
+    # RELEASE fails and poisons the transaction for everything after it.
 
 
 def snooze_queue_card(conn, key: str, days: int, actor: str = "operator") -> None:
