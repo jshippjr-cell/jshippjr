@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Call prep · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Call prep{% endblock %}
+{% block content %}
+<style>
+/* The sheet is READ WHILE TALKING, so it is sized for a glance rather than a study:
+   one line per question, the prompt in the operator's voice at full contrast, and the
+   reasoning tucked underneath at a size you only reach for if you want it. */
+.cp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin-bottom:6px}
+.cp-head h2{margin:0;font-size:20px}
+.cp-cover{font-size:13px;color:var(--muted,#7a6b67)}
+.cp-cover b{color:var(--ink,#241016)}
+.cp-note{font-size:13.5px;color:var(--muted,#7a6b67);max-width:64ch;margin:0 0 18px}
+.cp-actions{display:flex;gap:8px;margin:0 0 20px}
+
+.cp-group{margin:0 0 26px}
+.cp-group > h3{font-size:12px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ember,#b34a21);margin:0 0 2px;font-weight:700}
+.cp-group > p.cp-blurb{font-size:13px;color:var(--muted,#7a6b67);margin:0 0 10px}
+
+.cp-line{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;
+  padding:11px 12px;border:1px solid var(--line,#e7e1d8);border-radius:9px;margin-bottom:8px;
+  background:var(--surface,#fff);break-inside:avoid}
+.cp-line.have{background:var(--surface-2,#faf3ee)}
+.cp-box{width:17px;height:17px;margin-top:3px;border:2px solid var(--line,#cfc6bb);
+  border-radius:4px;cursor:pointer;background:transparent;padding:0}
+.cp-box[aria-pressed="true"]{background:var(--ember,#b34a21);border-color:var(--ember,#b34a21)}
+.cp-box[aria-pressed="true"]::after{content:"✓";color:#fff;font-size:12px;font-weight:700;
+  display:block;line-height:13px}
+.cp-line[data-done="1"] .cp-label,.cp-line[data-done="1"] .cp-prompt{opacity:.45;
+  text-decoration:line-through;text-decoration-thickness:1px}
+
+.cp-label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;
+  color:var(--muted,#7a6b67);margin:0 0 3px;display:flex;gap:8px;align-items:center}
+.cp-tag{font-size:9.5px;letter-spacing:.08em;padding:1px 6px;border-radius:99px;
+  border:1px solid currentColor;font-weight:700}
+.cp-tag.on-file{color:var(--ok,#3f6b47)}
+.cp-tag.ask{color:var(--ember,#b34a21)}
+.cp-prompt{font-size:15.5px;line-height:1.5;color:var(--ink,#241016);margin:0}
+.cp-sub{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
+.cp-sub b{color:var(--ink,#241016);font-weight:600}
+details.cp-why{margin:5px 0 0}
+details.cp-why summary{font-size:12px;color:var(--muted,#7a6b67);cursor:pointer;
+  list-style:none}
+details.cp-why summary::-webkit-details-marker{display:none}
+details.cp-why summary::before{content:"Why this matters ▾";}
+details.cp-why[open] summary::before{content:"Why this matters ▴";}
+details.cp-why p{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
+
+@media print{
+  .cp-actions,.cp-box,nav,header,.crumb{display:none !important}
+  .cp-line{grid-template-columns:1fr;border-color:#ccc;break-inside:avoid}
+  details.cp-why{display:none}
+  .cp-line::before{content:"☐  ";float:left;font-size:15px}
+  a[href]::after{content:""}
+}
+</style>
+
+<section class="card">
+  <div class="cp-head">
+    <h2>Call prep · {{ row['client'] }}</h2>
+    <span class="cp-cover"><b>{{ cover.have }}</b> of {{ cover.total }} already on file ·
+      <b>{{ cover.ask }}</b> to ask</span>
+  </div>
+  {% if meeting and meeting['start_at'] %}
+  <p class="cp-note">For the call on
+    <time data-utc-date="{{ meeting['start_at'] }}">{{ meeting['start_at'][:10] }}</time>{% if meeting['start_at']|length > 11 %}
+    at <time data-utc-time="{{ meeting['start_at'] }}">{{ meeting['start_at'][11:16] }}</time>{% endif %}.
+    Tick as you go. Nothing here is sent to the client.</p>
+  {% else %}
+  <p class="cp-note">Tick as you go. Nothing here is saved or sent to the client; it is a
+    prompt sheet, and the transcript is still what gets captured.</p>
+  {% endif %}
+
+  <div class="cp-actions">
+    <button class="btn tiny" type="button" onclick="window.print()">Print</button>
+    <button class="btn tiny" type="button" id="cp-reset">Clear ticks</button>
+  </div>
+
+  {% for g in groups %}
+  <div class="cp-group">
+    <h3>{{ g.title }}</h3>
+    <p class="cp-blurb">{{ g.blurb }}</p>
+    {% for ln in g.lines %}
+    <div class="cp-line {{ ln.state }}" data-key="{{ ln.key }}" data-done="0">
+      <button class="cp-box" type="button" aria-pressed="false"
+              aria-label="Mark {{ ln.label }} covered"></button>
+      <div>
+        <p class="cp-label">{{ ln.label }}
+          {% if ln.state == 'have' %}<span class="cp-tag on-file">On file</span>
+          {% else %}<span class="cp-tag ask">Ask</span>{% endif %}
+        </p>
+        <p class="cp-prompt">{{ ln.prompt }}</p>
+        {% if ln.state == 'have' %}
+        <p class="cp-sub"><b>If it is wrong, this is the cheap moment to find out.</b>
+          Otherwise: {{ ln.ask }}</p>
+        {% else %}
+        <p class="cp-sub"><b>If the answer is partial:</b> {{ ln.follow_up }}</p>
+        {% endif %}
+        <details class="cp-why"><summary></summary><p>{{ ln.why }}</p></details>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+
+<script>
+/* Ticks live in this tab only. Deliberately not persisted: a stale tick from a previous
+   call would read as "covered" for a conversation that never happened, and a wrong tick
+   is worse than a missing one — it manufactures confidence. */
+(function () {
+  document.querySelectorAll('.cp-box').forEach(function (box) {
+    box.addEventListener('click', function () {
+      var line = box.closest('.cp-line');
+      var done = box.getAttribute('aria-pressed') === 'true';
+      box.setAttribute('aria-pressed', done ? 'false' : 'true');
+      line.setAttribute('data-done', done ? '0' : '1');
+    });
+  });
+  var reset = document.getElementById('cp-reset');
+  if (reset) {
+    reset.addEventListener('click', function () {
+      document.querySelectorAll('.cp-box').forEach(function (b) {
+        b.setAttribute('aria-pressed', 'false');
+        b.closest('.cp-line').setAttribute('data-done', '0');
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

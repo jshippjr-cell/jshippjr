@@ -739,6 +739,37 @@ def discovery_request_submit(opp_id: int, k: str = Form(""), name: str = Form(""
 
 
 # ── Operator SCHEDULING (ADR-0016) — one engine, from a request or manually. ──────────
+@router.get("/opportunity/{opp_id}/prep", response_class=HTMLResponse)
+def discovery_prep_sheet(request: Request, opp_id: int):
+    """The call prep sheet (Phase 0 of docs/discovery-copilot-plan.md).
+
+    Every question worth asking on a discovery call, with what Campaign Intelligence
+    already holds beside it. Printable, no model call, no spend — the machine's whole
+    contribution used to arrive after everyone hung up, as a list of things it was by then
+    too late to ask. This is the same knowledge, delivered while it can still be used.
+
+    A slot we already hold becomes a READ-BACK rather than disappearing: a value captured
+    confidently and wrongly is the failure this product keeps having, and the only cheap
+    moment to catch it is while the person who knows is still on the line."""
+    from ..call_prep import coverage, prep_sheet
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        fields = {}
+        ci_row = db.ci_for_opportunity(conn, opp_id)
+        if ci_row is not None:
+            fields = dict(
+                campaign_intelligence.brief_view(conn, ci_row["id"]).get("fields") or {})
+        meeting = db.meeting_for_opp(conn, opp_id)
+    finally:
+        conn.close()
+    groups = prep_sheet(fields)
+    return render(request, "call_prep.html", nav="inbox", row=row, meeting=meeting,
+                  groups=groups, cover=coverage(groups))
+
+
 @router.get("/opportunity/{opp_id}/schedule", response_class=HTMLResponse)
 def discovery_schedule_form(request: Request, opp_id: int, req: str = ""):
     """The operator's Meeting Scheduler — type (Zoom/Phone) + date + time. Prefills from a

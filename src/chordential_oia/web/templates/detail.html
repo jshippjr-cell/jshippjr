@@ -273,6 +273,10 @@
     </details>
   </div>
   <div class="mtg-acts">
+    {# The prep sheet, next to Join, because that is the moment it is wanted. Phase 0 of
+       the Call Copilot: every question worth asking, with what we already hold beside it,
+       BEFORE the call rather than as a list of regrets after it. #}
+    <a class="btn" href="/opportunity/{{ row['id'] }}/prep" data-drawer-src>📋 Call prep</a>
     {% if meeting['join_url'] %}<a class="btn primary" href="{{ meeting['join_url'] }}" target="_blank" rel="noopener">Join →</a>{% endif %}
     <form method="post" action="/opportunity/{{ row['id'] }}/discovery/{{ meeting['id'] }}/cancel" style="margin:0">
       <button class="btn ghost tiny" type="submit">Cancel</button>

@@ -1,0 +1,178 @@
+"""The prep sheet: the questions, before the call rather than after it.
+
+Phase 0 of `docs/discovery-copilot-plan.md`. The Halden brief closed with fourteen open
+questions; every one was findable during the call, and nine were licence and rights terms
+that take forty seconds each to ask. The machine's whole contribution arrived after everyone
+had hung up, as a list of things it was by then too late to ask.
+
+No live component, no model call, no spend. If a written sheet does not make the next call
+better, no amount of real-time streaming would have, and this is the cheapest way to learn
+that.
+"""
+import importlib
+
+import pytest
+
+from chordential_oia.call_prep import coverage, prep_sheet
+from chordential_oia.client_voice import _DEFERRABLE_TOPICS
+from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+from chordential_oia.web.campaign_intelligence import CANONICAL_FIELDS
+
+pytest.importorskip("fastapi")
+
+
+# ── the bank covers what actually gets missed ────────────────────────────────────
+def test_every_canonical_slot_has_a_question():
+    """A slot with no question is a field that can only ever be filled by luck."""
+    asked = {ln.key for g in prep_sheet() for ln in g.lines}
+    for _facet, key, _kind, label, _ph, _opp in CANONICAL_FIELDS:
+        assert key in asked, f"no question on the sheet fills {label} ({key})"
+
+
+def test_every_recurring_deferred_term_has_a_question():
+    """These are the nine that ended up in the client's inbox as a form. They are on the
+    sheet precisely so they stop being asked by email.
+
+    This test earned its keep immediately: renewal had been folded into the licence-term
+    follow-up, which meant it was only ever asked when the first answer came back partial.
+    That is precisely how it was skipped on the live call. It has its own line now."""
+    sheet_text = " ".join(
+        " ".join((ln.label, ln.key, ln.ask, ln.follow_up)).lower()
+        for g in prep_sheet() for ln in g.lines)
+    for label, _needles in _DEFERRABLE_TOPICS:
+        head = label.split()[0].lower().rstrip(",")
+        assert head in sheet_text, f"the sheet never asks about {label}"
+
+
+def test_the_terms_come_last_because_they_are_what_gets_skipped():
+    groups = prep_sheet()
+    assert [g.title for g in groups][-1] == "The terms"
+    assert all(not ln.canonical for ln in groups[-1].lines), (
+        "the terms have no canonical slot yet; that is why they keep being deferred")
+
+
+def test_every_question_is_a_sentence_you_could_say_out_loud():
+    """Not a topic label. A rep reading "Budget" off a sheet asks a worse question than a
+    rep reading the sentence we wrote for them."""
+    for g in prep_sheet():
+        for ln in g.lines:
+            assert ln.ask.endswith(("?", ".")), f"{ln.key}: not a sentence"
+            assert len(ln.ask.split()) >= 5, f"{ln.key}: that is a label, not a question"
+            assert ln.follow_up, f"{ln.key}: no follow-up for a partial answer"
+            assert ln.why, f"{ln.key}: no reason a rep can weigh"
+
+
+# ── what we already hold changes the question, it does not remove it ─────────────
+def test_a_known_slot_becomes_a_read_back_rather_than_disappearing():
+    """The failure this product keeps having is a value captured confidently and WRONGLY.
+    Dropping known slots from the sheet would hide exactly that, and the only cheap moment
+    to catch it is while the person who knows is still on the line."""
+    sheet = prep_sheet({"budget_band": "$55,000-$65,000 USD, hard ceiling"})
+    line = next(ln for g in sheet for ln in g.lines if ln.key == "budget_band")
+    assert line.state == "have"
+    assert "$55,000-$65,000 USD, hard ceiling" in line.prompt
+    assert "Read it back" in line.prompt
+    assert line.ask, "and the original question is still there if the read-back is wrong"
+
+
+def test_an_unknown_slot_asks_the_written_question():
+    line = next(ln for g in prep_sheet({}) for ln in g.lines if ln.key == "budget_band")
+    assert line.state == "ask"
+    assert line.prompt == line.ask
+    assert "MUSIC number" in line.why, (
+        "the budget question must warn about the distractor that already cost us once")
+
+
+def test_either_deadline_key_satisfies_the_timeline_question():
+    """`critical_deadline` and `deadline` are the same question to a human."""
+    line = next(ln for g in prep_sheet({"critical_deadline": "Oct 3"})
+                for ln in g.lines if ln.key == "deadline")
+    assert line.state == "have" and "Oct 3" in line.prompt
+
+
+def test_coverage_counts_what_we_hold_not_what_is_true():
+    sheet = prep_sheet({"budget_band": "x", "deadline": "y"})
+    cover = coverage(sheet)
+    assert cover["have"] == 2
+    assert cover["ask"] == cover["total"] - 2
+    assert cover["total"] == sum(len(g.lines) for g in sheet)
+    assert 0 <= cover["pct"] <= 100
+    assert coverage(prep_sheet({}))["pct"] == 0
+
+
+# ── it reaches the operator where the call is ────────────────────────────────────
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "prep.db"))
+    monkeypatch.setenv("CHORDENTIAL_CAMPAIGN_WORKSPACE", "1")
+    monkeypatch.delenv("CHORDENTIAL_ADMIN_TOKEN", raising=False)
+    for m in ("db", "campaign_intelligence", "campaigns", "app"):
+        importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as c:
+        yield c
+
+
+def _opp_with(ci_facts=()):
+    from chordential_oia.web import campaign_intelligence as ci
+    from chordential_oia.web import db
+    conn = db.connect()
+    try:
+        oid = db.insert_opportunity(conn, Opportunity(
+            client="Halden", need="40th anniversary film", description="",
+            buyer_type=BuyerType.AGENCY, music_requirement=MusicRequirement.ORIGINAL))
+        row = db.get_opportunity(conn, oid)
+        ci_id = ci.ensure_for_opportunity(conn, row)["id"]
+        for facet, key, value in ci_facts:
+            ci.edit_or_create(conn, ci_id, facet, key, "fact", value, actor="operator")
+        return oid
+    finally:
+        conn.close()
+
+
+def test_the_page_serves_and_carries_the_written_questions(client):
+    oid = _opp_with()
+    page = client.get(f"/opportunity/{oid}/prep").text
+    assert "Call prep" in page
+    assert "How long do you need the usage to run?" in page
+    assert "What is the approved number for music?" in page
+    assert "Where does this run? US only, or worldwide?" in page
+
+
+def test_the_page_reads_back_what_intelligence_already_holds(client):
+    oid = _opp_with([("engagement", "budget_band", "$55,000-$65,000 USD, hard ceiling")])
+    page = client.get(f"/opportunity/{oid}/prep").text
+    assert "$55,000-$65,000 USD, hard ceiling" in page
+    assert "Read it back" in page
+    assert "On file" in page
+
+
+def test_it_is_reachable_from_the_meeting_card(client):
+    """It is worth nothing on a page nobody opens before a call."""
+    from chordential_oia.web import db
+    oid = _opp_with()
+    conn = db.connect()
+    try:
+        db.create_meeting(conn, opp_id=oid, start_at="2026-09-20T15:00:00+00:00",
+                          join_url="https://zoom.example/j/1", meeting_type="zoom")
+    finally:
+        conn.close()
+    detail = client.get(f"/opportunity/{oid}").text
+    assert f"/opportunity/{oid}/prep" in detail
+    assert "Call prep" in detail
+
+
+def test_an_unknown_opportunity_is_a_404_not_a_crash(client):
+    assert client.get("/opportunity/99999/prep").status_code == 404
+
+
+def test_the_sheet_costs_nothing_to_render(client, monkeypatch):
+    """Phase 0 spends no credit, by construction. A prep sheet that calls a model is a
+    prep sheet that costs money every time you open it before a call."""
+    from chordential_oia.web import ai_budget
+    spent = []
+    monkeypatch.setattr(ai_budget, "record", lambda *a, **k: spent.append(a))
+    oid = _opp_with([("engagement", "deadline", "Oct 3")])
+    assert client.get(f"/opportunity/{oid}/prep").status_code == 200
+    assert spent == []
