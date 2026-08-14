@@ -175,9 +175,18 @@ def test_discovery_summary_renders_from_ci_and_introduces_workspace(tmp_path, mo
     on = {b["key"] for b in blocks if b["default_on"]}
     # the understanding is rendered FROM CI — not the template default
     assert "indie feature film" in by["understanding"]["text"].lower()
-    assert "Film festival debut" in by["understanding"]["text"]        # distribution, from CI
-    assert ":15 and :30 cutdowns" in by["understanding"]["text"]       # deliverables, from CI
-    assert "Festival delivery" in by["understanding"]["text"]          # timeline, from CI
+    # …but it is the SHORT version, not the record. It used to carry every CI value it
+    # could reach ("Distribution: Film festival debut. Deliverables as discussed: … :15 and
+    # :30 cutdowns. Timeline: Festival delivery."), which is the same content the workspace
+    # shows in a table — so the client read it in the email and again on the page it links
+    # to. The email now names the areas and hands off (client_voice); a value belongs on the
+    # surface that has an edit box beside it.
+    assert "the deliverables" in by["understanding"]["text"]
+    assert "the timeline" in by["understanding"]["text"]
+    assert "your workspace" in by["understanding"]["text"]
+    for reprinted in ("Film festival debut", ":15 and :30 cutdowns", "Festival delivery"):
+        assert reprinted not in by["understanding"]["text"], (
+            f"the email restated a workspace value: {reprinted}")
     # the workspace-introduction copy + the durable workspace link
     assert "private Chordential Workspace" in by["page_link"]["text"]
     assert "correct anything we've misunderstood" in by["page_link"]["text"]
