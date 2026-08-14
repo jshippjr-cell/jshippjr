@@ -1371,6 +1371,16 @@ def compose_send(opp_id: int):
             call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
             ci_view=ci_view, met=met)
         db.create_brief_snapshot(conn, opp_id, doc_to_json(doc))
+        # Re-sending a summary the client flagged IS the fix landing. Without this the
+        # correction stays unresolved for ever and the board keeps saying "Fix the
+        # summary" after it has been fixed and re-shared — the mirror image of the bug
+        # where it said "waiting on the client" after they had already replied.
+        from datetime import datetime, timezone
+        correction = overrides.get("scope_correction") or None
+        if isinstance(correction, dict) and not correction.get("resolved"):
+            db.update_doc_override(conn, opp_id, "scope_correction",
+                                   {**correction, "resolved": True,
+                                    "resolved_at": datetime.now(timezone.utc).isoformat()})
     finally:
         conn.close()
     base = _public_base()
@@ -1647,6 +1657,13 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
 # --------------------------------------------------------------------------- #
 _DOC_FIELDS = {"client", "understanding", "delivery_template", "delivery_assumptions"}
 
+# LIST sections of the brief, edited as one line per item. These are the two the operator
+# could not touch at all: the client flags a summary, the operator opens it to fix, and the
+# only sections they could not change were the two most likely to be wrong — a machine's
+# read of what is risky and what is unresolved. Stored as a list override; blank resets to
+# the generated set, exactly like the scalar fields.
+_DOC_LIST_FIELDS = {"risks", "open_questions"}
+
 
 def _doc_redirect(opp_id: int):
     return RedirectResponse(
@@ -1665,8 +1682,22 @@ def _doc_back(opp_id: int, return_to: str = ""):
 
 @router.post("/opportunity/{opp_id}/doc/field")
 def doc_field(opp_id: int, name: str = Form(""), value: str = Form("")):
-    """Set/reset a scalar override field (client, understanding, delivery_template,
-    delivery_assumptions). A blank value resets that field to the generated default."""
+    """Set/reset an override field. A blank value resets it to the generated default.
+
+    Scalars (`client`, `understanding`, …) store the string. LIST sections (`risks`,
+    `open_questions`) arrive as a textarea, one item per line, and store a list — so the
+    operator can cut a risk that reads wrong, reword one, or add the thing the machine
+    missed, on the two sections that previously had no edit at all."""
+    if name in _DOC_LIST_FIELDS:
+        items = [ln.strip().lstrip("•-–— ").strip()
+                 for ln in (value or "").replace("\r", "").split("\n")]
+        items = [i for i in items if i]
+        conn = db.connect()
+        try:
+            db.update_doc_override(conn, opp_id, name, items)
+        finally:
+            conn.close()
+        return _doc_redirect(opp_id)
     if name in _DOC_FIELDS:
         conn = db.connect()
         try:

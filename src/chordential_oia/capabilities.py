@@ -665,6 +665,12 @@ def build_capabilities_doc(
     from .client_voice import client_questions, client_risks
     client_asks, deferred_terms_note = client_questions(
         list(ci_view.get("open_questions") or []))
+    # An operator override REPLACES the machine's selection for these two lists — the
+    # client flagged the summary, and the sections most likely to be the reason are the
+    # machine's read of what is risky and what is unresolved. A human who edits one has
+    # decided; blanking it reverts to the generated set (same contract as `understanding`).
+    if isinstance(overrides.get("open_questions"), list):
+        client_asks = [str(q).strip() for q in overrides["open_questions"] if str(q).strip()]
     # Understanding — override wins (a human wrote it); else CI-derived (what the meeting
     # said); else the conservative template restatement. Blanking an override therefore
     # reverts to intelligence, never to stock copy (ADR-0017). No lede and no closing here:
@@ -755,7 +761,9 @@ def build_capabilities_doc(
         # Through the same filter as the questions. Leaving this one unfiltered meant
         # everything removed from `open_questions` simply came out of `risks` instead
         # (client_voice.client_risks).
-        risks=client_risks(list(ci_view.get("risks") or [])),
+        risks=([str(r).strip() for r in overrides["risks"] if str(r).strip()]
+               if isinstance(overrides.get("risks"), list)
+               else client_risks(list(ci_view.get("risks") or []))),
         open_questions=client_asks,
         deferred_terms_note=deferred_terms_note,
         met=met,

@@ -22,12 +22,16 @@
     <label><input type="checkbox" name="delivery" value="1" {{ 'checked' if doc.show_delivery }}> Delivery</label>
     <button class="btn apply" type="submit">Apply</button>
   </form>
-  {% if edit %}
-  <a class="edit-on" href="/opportunity/{{ row['id'] }}/capabilities">✓ Done editing</a>
-  {% else %}
-  <a href="/opportunity/{{ row['id'] }}/capabilities?edit=1">✎ Edit</a>
-  {% endif %}
   <span class="spacer"></span>
+  {# "✎ Edit" sat between the section checkboxes and a spacer, reading as one more toggle
+     rather than the way to change what the client will read. Reported live: the operator
+     only found it by following a link in an email AFTER a client flagged the summary.
+     It now sits beside Email this, because edit-then-send is the order. #}
+  {% if edit %}
+  <a class="btn apply edit-on" href="/opportunity/{{ row['id'] }}/capabilities">✓ Done editing</a>
+  {% else %}
+  <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities?edit=1">✎ Edit this summary</a>
+  {% endif %}
   {# This page prints/downloads only — outreach compose is the one place that
      actually emails a contact, so "email this" goes there instead of a
      second, disconnected send flow. Keeps everyone's understanding, terms,

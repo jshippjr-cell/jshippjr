@@ -11,6 +11,10 @@
     <div class="kpi-label">First-touch composer</div>
     <div class="verdict-action">Build a personal email — blocks on/off</div>
     <div class="muted">Minimal by default. Toggle a block, hit Apply, and the preview updates.
+      {# The summary the client will actually read lives on the brief, and until now the
+         only way anyone found the editor was a link in the email sent AFTER a client
+         flagged it. The moment to check it is before this button is pressed. #}
+      <a class="link" href="/opportunity/{{ row['id'] }}/capabilities?edit=1">✎ Read and edit the summary they'll see →</a><br>
       {% if mail_configured %}Send now delivers it directly; Open in mail client stays as a manual option.{% else %}Send opens your own mail client — the capabilities doc's "send by email" also lands you here, since this is the one place that reaches a contact.{% endif %}</div>
   </div>
 </div>

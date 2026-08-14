@@ -74,6 +74,20 @@ def compute(conn, db, opp, project) -> dict:
             return {"court": "you", "label": "Send the Discovery Summary",
                     "detail": "One email — “here's what we heard, confirm it's right.”",
                     "url": f"/opportunity/{opp_id}/compose", "post": False, "since": ""}
+        # A CORRECTION is our move, not theirs. The client pressing "no, something's off"
+        # writes `scope_correction` and emails the operator — and the board went on saying
+        # "Waiting: client confirming the summary", so the one surface whose whole job is
+        # naming the next move was pointing at the person who had already made it. The ball
+        # had changed hands and only the inbox knew.
+        correction = overrides.get("scope_correction") or None
+        if correction and not correction.get("resolved") and not confirmed:
+            note = (correction.get("comment") or "").strip()
+            who = (correction.get("by") or "").strip()
+            return {"court": "you", "label": "Fix the summary — the client flagged it",
+                    "detail": (f"{who or 'They'} said: “{note}”" if note
+                               else f"{who or 'They'} say something in it is wrong."),
+                    "url": f"/opportunity/{opp_id}/capabilities?edit=1", "post": False,
+                    "since": correction.get("at", "")}
         if not confirmed:
             return {"court": "client", "label": "Waiting: client confirming the summary",
                     "detail": "They confirm (or correct) with one click in their workspace.",

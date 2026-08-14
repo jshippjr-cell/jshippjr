@@ -1,3 +1,22 @@
+{% macro list_editor(field, items, hint) %}
+  {# The two sections the operator could not touch. A client flags the summary, the
+     operator opens it to fix — and the only sections locked were the machine's read of
+     what is risky and what is unresolved, which are the likeliest reasons it was flagged.
+     One item per line; blank resets to the generated set, same contract as the scalars. #}
+  <form class="capdoc-inline capdoc-block no-print" method="post"
+        action="/opportunity/{{ row['id'] }}/doc/field" style="margin:8px 0 0">
+    <input type="hidden" name="name" value="{{ field }}">
+    <textarea name="value" class="capdoc-ta" rows="{{ [(items|length) + 1, 3]|max }}"
+              placeholder="{{ hint }}">{% for i in items %}{{ i }}
+{% endfor %}</textarea>
+    <div class="capdoc-inline">
+      <button class="capdoc-add" type="submit">Save</button>
+      <button class="capdoc-reset" type="submit" name="value" value="" title="Reset to generated">reset</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin-top:3px">{{ hint }}</div>
+  </form>
+{% endmacro %}
+
 {# ---- reusable chip macros (insert rail + inserted tokens) ------------------ #}
 {% macro inserted_chips(section) %}
   {% set items = doc.support_chips.get(section) if doc.support_chips else None %}
@@ -206,6 +225,7 @@
     <section class="block">
       <h2 class="sec">Risks we're tracking</h2>
       <ul class="terms">{% for r in doc.risks %}<li>{{ r }}</li>{% endfor %}</ul>
+      {% if edit %}{{ list_editor('risks', doc.risks, 'One risk per line. Blank resets to what the engine picked.') }}{% endif %}
     </section>
     {% endif %}
     {# OPEN QUESTIONS — the few a CLIENT can answer, not the engine's whole gap report.
@@ -224,6 +244,7 @@
       {% if doc.deferred_terms_note %}
       <p class="lede" style="margin:8px 0 0">{{ doc.deferred_terms_note }}</p>
       {% endif %}
+      {% if edit %}{{ list_editor('open_questions', doc.open_questions, 'One question per line. Blank resets to what the engine picked.') }}{% endif %}
     </section>
     {% endif %}
 
