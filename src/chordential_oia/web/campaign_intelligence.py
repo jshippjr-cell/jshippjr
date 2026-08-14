@@ -40,7 +40,10 @@ KIND_LABEL = {
 }
 KIND_DISPOSE_VERB = {  # the button label for disposing an open field
     "fact": "Confirm", "insight": "Acknowledge",
-    "recommendation": "Accept", "open_question": "Mark answered",
+    # "Mark answered" was a lie by label: it closed the question and kept nothing. The
+    # producer's read now has a real answer box (detail.html) that records the answer as a
+    # fact, so this verb is only ever the WITHOUT-an-answer path.
+    "recommendation": "Accept", "open_question": "Dismiss",
 }
 
 DISPOSED_STATUSES = set(KIND_DISPOSED_STATUS.values())
@@ -569,6 +572,24 @@ def fields_view(conn, ci_id: int) -> dict:
                 slots.append(it); used.add(id(it))
         sections.append({"facet": facet, "label": FACET_LABEL.get(facet, facet.title()),
                          "items": slots})
+
+    # …and every OTHER facet that holds facts. This loop used to run over
+    # CANONICAL_FACET_ORDER alone — engagement, buyer, direction — so a fact in `commercial`
+    # was written, confirmed, and rendered NOWHERE. That is where the engine files payment
+    # terms, cost concerns and usage rights, and it is where an answered question lands when
+    # the question was filed there; the answer was being stored somewhere the operator could
+    # not see it, which is nearly as useless as not storing it. `observed` keeps its own
+    # bucket (the producer's scratchpad) and is not repeated here.
+    for facet in FACETS:
+        if facet in CANONICAL_FACET_ORDER or facet == "observed":
+            continue
+        extra = [it for it in grouped.get(facet, [])
+                 if it["kind"] == "fact" and id(it) not in {id(x) for x in
+                                                            sum((s["items"] for s in sections), [])}]
+        if extra:
+            sections.append({"facet": facet,
+                             "label": FACET_LABEL.get(facet, facet.title()),
+                             "items": extra})
 
     return {"sections": sections, "producer_read": producer_read,
             "conflicts": conflicts, "gaps": gaps, "observed": observed,

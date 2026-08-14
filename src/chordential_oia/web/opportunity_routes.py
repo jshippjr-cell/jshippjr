@@ -337,7 +337,13 @@ def opp_intelligence_field(opp_id: int, value: str = Form(""), field_id: str = F
 
 @router.post("/opportunity/{opp_id}/intelligence/answer")
 def opp_intelligence_answer(opp_id: int, field_id: str = Form(...), answer: str = Form("")):
-    """Answer a follow-up open_question → a confirmed fact; reflect to the opportunity."""
+    """Answer an open question → a confirmed FACT, and close the question.
+
+    "Mark answered" used to mean only "stop showing me this": it closed the question and
+    kept nothing, so a discovery call's answer evaporated at the moment someone actually
+    knew it. Answered now means answered — the text lands in Campaign Intelligence as a
+    confirmed fact, which is what the Campaign Brief, the estimate and the proposal read,
+    and the question drops off the client-facing list because it genuinely has an answer."""
     if not campaigns.workspace_enabled():
         return HTMLResponse("Not found", status_code=404)
     answer = (answer or "").strip()
@@ -358,7 +364,8 @@ def opp_intelligence_answer(opp_id: int, field_id: str = Form(...), answer: str 
                 campaign_intake.sync_ci_to_opportunity(conn, fld["ci_id"], opp_id)
     finally:
         conn.close()
-    return RedirectResponse(f"/opportunity/{opp_id}#intelligence", status_code=303)
+    anchor = f"ci-{field_id}" if str(field_id).strip().isdigit() else "intelligence"
+    return RedirectResponse(f"/opportunity/{opp_id}#{anchor}", status_code=303)
 
 
 @router.post("/opportunity/{opp_id}/intelligence/dispose")

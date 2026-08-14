@@ -739,6 +739,11 @@ def answer_gap(conn, question_field, answer: str, *, created_by: str = "operator
         target = {}
     facet = target.get("facet") or question_field["facet"]
     key = target.get("key") or question_field["key"]
+    # Through the same door every extracted fact uses (ADR-0064). An answer to a question
+    # filed under `commercial/budget_band` is still the budget, and it belongs in the slot
+    # the estimate and the brief read — not one column away from it because of where the
+    # QUESTION happened to be filed.
+    facet, key, _kind = ci.canonical_slot(facet, key, "fact")
     ci_id = question_field["ci_id"]
     ci.contribute(conn, ci_id, facet, key, answer.strip(), kind="fact",
                   source="operator", contributed_by=created_by, confirmed=True)

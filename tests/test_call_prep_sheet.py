@@ -206,9 +206,11 @@ def test_disposing_a_field_returns_to_that_field_not_the_top(client):
     assert f'id="ci-{fid}"' in page, "the anchor must exist on the item it points at"
 
 
-def test_the_dispose_button_says_what_it_actually_does(client):
-    """"Mark answered" reads like filing a reply. It CLOSES the question — leaves the open
-    list, stops appearing on the client brief — and saves no answer anywhere."""
+def test_an_open_question_offers_an_answer_box_not_just_a_close_button(client):
+    """"Mark answered" used to close the question and keep NOTHING, so the answer
+    evaporated at the moment somebody actually knew it. Answered now means answered: the
+    text is recorded as a fact. "Dismiss" remains for questions that will never have one,
+    and says plainly that it records nothing."""
     from chordential_oia.web import campaign_intelligence as ci
     from chordential_oia.web import db
     oid = _opp_with()
@@ -220,8 +222,9 @@ def test_the_dispose_button_says_what_it_actually_does(client):
     finally:
         conn.close()
     page = client.get(f"/opportunity/{oid}").text
-    assert "It does not save an answer" in page
-    assert "stops appearing on the client brief" in page
+    assert f"/opportunity/{oid}/intelligence/answer" in page
+    assert "it's kept as a fact" in page
+    assert "Dismiss" in page and "Nothing is recorded." in page
 
 
 def test_the_section_nav_sits_with_the_title_it_navigates(client):

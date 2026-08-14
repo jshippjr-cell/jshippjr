@@ -219,3 +219,163 @@ def test_the_send_screen_points_at_the_summary_first(client):
     page = client.get(f"/opportunity/{oid}/compose").text
     assert f"/opportunity/{oid}/capabilities?edit=1" in page
     assert "edit the summary" in page.lower()
+
+
+# ── answered means answered ──────────────────────────────────────────────────────
+def _question(oid, facet, key, text):
+    from chordential_oia.web import campaign_intelligence as ci
+    from chordential_oia.web import db
+    conn = db.connect()
+    try:
+        # the CI record is created on demand, not when the opportunity is inserted
+        ci_id = ci.ensure_for_opportunity(conn, db.get_opportunity(conn, oid))["id"]
+        return ci_id, ci.contribute(conn, ci_id, facet, key, text,
+                                    kind="open_question", source="discovery_call")
+    finally:
+        conn.close()
+
+
+def test_answering_a_question_keeps_the_answer_as_a_fact(client):
+    """The whole complaint. "Mark answered" closed the question and kept nothing, so the
+    answer evaporated at the exact moment somebody knew it."""
+    from chordential_oia.web import db
+    oid, _token = _opp()
+    ci_id, fid = _question(oid, "commercial", "territory", "Where does this run?")
+
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "US and Canada, from first air."},
+                follow_redirects=False)
+
+    conn = db.connect()
+    try:
+        rows = {(f["facet"], f["key"], f["kind"]): f for f in db.list_ci_fields(conn, ci_id)}
+    finally:
+        conn.close()
+    fact = rows.get(("commercial", "territory", "fact"))
+    assert fact is not None, "the answer must be kept, not just the question closed"
+    assert fact["value"] == "US and Canada, from first air."
+    assert fact["status"] == "confirmed", "a human said it; it is not a proposal"
+    assert rows[("commercial", "territory", "open_question")]["status"] == "answered"
+
+
+def test_an_answer_lands_in_the_canonical_slot_the_brief_reads(client):
+    """A question filed under `commercial/budget_band` is still the budget. Its answer
+    belongs in the slot the estimate and the brief read, not one column away because of
+    where the QUESTION happened to be filed (ADR-0064)."""
+    from chordential_oia.web import db
+    oid, _token = _opp()
+    ci_id, fid = _question(oid, "commercial", "budget_band",
+                           "Is the $38k a ceiling or a target?")
+
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "$38,000 is a hard ceiling."},
+                follow_redirects=False)
+
+    conn = db.connect()
+    try:
+        rows = {(f["facet"], f["key"], f["kind"]): f for f in db.list_ci_fields(conn, ci_id)}
+    finally:
+        conn.close()
+    assert ("engagement", "budget_band", "fact") in rows, (
+        "the answer landed outside the Budget slot everything downstream reads")
+    assert "hard ceiling" in rows[("engagement", "budget_band", "fact")]["value"]
+
+
+def test_an_answered_question_stops_being_asked_on_the_brief(client):
+    oid, _token = _opp()
+    _ci_id, fid = _question(oid, "commercial", "territory", "Where does this run?")
+
+    before = client.get(f"/opportunity/{oid}/capabilities").text
+    assert "Where does this run?" in before, "it starts life as an open question"
+
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "US and Canada."},
+                follow_redirects=False)
+
+    after = client.get(f"/opportunity/{oid}/capabilities").text
+    assert "Where does this run?" not in after, "an answered question is not still asked"
+
+
+def test_a_canonical_answer_shows_up_on_the_brief_itself(client):
+    """The brief's table is curated to the canonical slots — that is the whole "way too
+    much information" fix — so an answer appears there when it fills one of them. A
+    non-canonical answer (territory, PRO registration) still lands in intelligence and on
+    the opportunity page; it just does not enlarge the client document."""
+    oid, _token = _opp()
+    _ci_id, fid = _question(oid, "commercial", "budget_band", "Ceiling or target?")
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "$38,000 is a hard ceiling."},
+                follow_redirects=False)
+    assert "$38,000 is a hard ceiling." in client.get(
+        f"/opportunity/{oid}/capabilities").text
+
+
+def test_a_non_canonical_answer_still_reaches_the_operators_record(client):
+    oid, _token = _opp()
+    _ci_id, fid = _question(oid, "commercial", "territory", "Where does this run?")
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "US and Canada."},
+                follow_redirects=False)
+    assert "US and Canada." in client.get(f"/opportunity/{oid}").text
+
+
+def test_answering_returns_to_the_line_you_were_on(client):
+    oid, _token = _opp()
+    _ci_id, fid = _question(oid, "commercial", "territory", "Where does this run?")
+    r = client.post(f"/opportunity/{oid}/intelligence/answer",
+                    data={"field_id": str(fid), "answer": "US."}, follow_redirects=False)
+    assert r.headers["location"].endswith(f"#ci-{fid}")
+
+
+def test_dismiss_still_exists_for_a_question_that_will_never_have_one(client):
+    """Not every question deserves an answer, and forcing one would invent facts."""
+    from chordential_oia.web import db
+    oid, _token = _opp()
+    ci_id, fid = _question(oid, "commercial", "union", "Union or non-union?")
+    client.post(f"/opportunity/{oid}/intelligence/dispose",
+                data={"field_id": str(fid)}, follow_redirects=False)
+    conn = db.connect()
+    try:
+        rows = {(f["facet"], f["key"], f["kind"]): f for f in db.list_ci_fields(conn, ci_id)}
+    finally:
+        conn.close()
+    assert rows[("commercial", "union", "open_question")]["status"] == "answered"
+    assert ("commercial", "union", "fact") not in rows, (
+        "dismissing must NOT invent a fact — it records nothing, which is the honest half")
+
+
+def test_an_empty_answer_changes_nothing(client):
+    from chordential_oia.web import db
+    oid, _token = _opp()
+    ci_id, fid = _question(oid, "commercial", "territory", "Where does this run?")
+    client.post(f"/opportunity/{oid}/intelligence/answer",
+                data={"field_id": str(fid), "answer": "   "}, follow_redirects=False)
+    conn = db.connect()
+    try:
+        rows = {(f["facet"], f["key"], f["kind"]): f for f in db.list_ci_fields(conn, ci_id)}
+    finally:
+        conn.close()
+    assert ("commercial", "territory", "fact") not in rows
+    assert rows[("commercial", "territory", "open_question")]["status"] == "open"
+
+
+def test_facts_outside_the_three_canonical_facets_are_rendered_at_all(client):
+    """A hole the answer box walked straight into. `fields_view` built sections from
+    CANONICAL_FACET_ORDER only — engagement, buyer, direction — so a fact on the
+    `commercial` facet was written, confirmed, and displayed NOWHERE. That is exactly
+    where the engine files payment terms, cost concerns and usage rights, and where an
+    answered question lands when the question was filed there."""
+    from chordential_oia.web import campaign_intelligence as ci
+    from chordential_oia.web import db
+    oid, _token = _opp()
+    conn = db.connect()
+    try:
+        ci_id = ci.ensure_for_opportunity(conn, db.get_opportunity(conn, oid))["id"]
+        ci.contribute(conn, ci_id, "commercial", "payment_terms", "Net 30, half up front.",
+                      kind="fact", source="discovery_call")
+        view = ci.fields_view(conn, ci_id)
+    finally:
+        conn.close()
+    shown = [it["value"] for s in view["sections"] for it in s["items"]]
+    assert "Net 30, half up front." in shown
+    assert "Net 30, half up front." in client.get(f"/opportunity/{oid}").text

@@ -509,15 +509,32 @@
         <span class="ci-kind {{ it.kind }}">{{ it.kind_label }}</span>
         {% if it.is_concern %}<span class="ci-risk">⚠ risk</span>{% endif %}
         <span style="flex:1;min-width:160px">{{ it.value }}</span>
-        {% if it.open %}
+        {% if it.open and it.kind == 'open_question' %}
+        {# ANSWERED NOW MEANS ANSWERED. This used to be a bare "Mark answered" that closed
+           the question and kept nothing, so a discovery call's answer evaporated at the
+           moment somebody actually knew it. Type it here and it is contributed to Campaign
+           Intelligence as a confirmed fact — which is what the Campaign Brief, the estimate
+           and the proposal read — and the question closes because it genuinely has an
+           answer. "Dismiss" stays for the ones that will never have one. #}
+        <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/answer"
+              style="margin:0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input type="hidden" name="field_id" value="{{ it.id }}">
+          <input type="text" name="answer" class="ci-answer"
+                 placeholder="Type the answer — it's kept as a fact…"
+                 style="min-width:220px;flex:1">
+          <button class="btn tiny primary" type="submit"
+                  title="Records this answer in Campaign Intelligence and closes the question">Answer</button>
+        </form>
         <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="margin:0">
           <input type="hidden" name="field_id" value="{{ it.id }}">
-          {# Say the consequence. "Mark answered" reads like filing a reply somewhere; what
-             it does is CLOSE the question — it leaves your open list and stops being shown
-             to the client. It does not record an answer, and the title says so rather than
-             letting the button imply otherwise. #}
+          <button class="btn tiny ghost" type="submit"
+                  title="Closes it without an answer: it leaves your open list and stops appearing on the client brief. Nothing is recorded.">Dismiss</button>
+        </form>
+        {% elif it.open %}
+        <form method="post" action="/opportunity/{{ row['id'] }}/intelligence/dispose" style="margin:0">
+          <input type="hidden" name="field_id" value="{{ it.id }}">
           <button class="btn tiny" type="submit"
-                  title="{{ 'Closes this question: it leaves your open list and stops appearing on the client brief. It does not save an answer — type one into the field above if you want it kept.' if it.kind == 'open_question' else 'Marks this as dealt with, so it stops showing as open.' }}">{{ it.dispose_verb }}</button>
+                  title="Marks this as dealt with, so it stops showing as open.">{{ it.dispose_verb }}</button>
         </form>
         {% else %}<span class="ci-chip">✓ {{ it.status.replace('_',' ') }}</span>{% endif %}
       </li>
