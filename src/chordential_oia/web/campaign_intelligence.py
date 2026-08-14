@@ -118,6 +118,32 @@ def canonical_key(key: str) -> str:
 
 CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
                     for f, k, kind, label, ph, opp in CANONICAL_FIELDS}
+# A canonical key has exactly ONE home, so the facet is not the model's to choose.
+CANONICAL_FACET_FOR_KEY = {k: f for f, k, _kind, _l, _p, _o in CANONICAL_FIELDS}
+
+
+def canonical_slot(facet: str, key: str, kind: str = "fact"):
+    """Snap a proposed (facet, key) onto the canonical slot it means.
+
+    Snapping the KEY alone was not enough, and the second live call proved it. The budget
+    was read perfectly — *"the number I've been given is roughly 25. No, no, 30,000, all in
+    including any licensing"* — and filed as **commercial/budget_band**. The key was already
+    canonical; the FACET was not. The Budget slot is keyed (engagement, budget_band, fact),
+    so the lookup missed by one column and the field on the page stayed empty while the
+    correct answer sat in the evidence list beside it. Deliverables went the same way.
+
+    A canonical key belongs to exactly one facet — that is what makes it canonical — so the
+    facet is derived here rather than accepted. Only facts are moved: an *open question*
+    about the budget is legitimately an open question, not a value for the slot.
+
+    A key with no canonical meaning is returned untouched, facet and all. That is the
+    dynamic field doing its job, and it must keep working.
+    """
+    k = canonical_key(key)
+    kind = (kind or "fact").strip().lower() or "fact"
+    if kind == "fact" and k in CANONICAL_FACET_FOR_KEY:
+        return CANONICAL_FACET_FOR_KEY[k], k, kind
+    return (facet or "").strip().lower(), k, kind
 CANONICAL_FACET_ORDER = ["engagement", "buyer", "direction"]
 
 

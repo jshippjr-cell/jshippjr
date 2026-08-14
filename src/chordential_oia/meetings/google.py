@@ -31,6 +31,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -168,8 +169,20 @@ class GoogleCalendarProvider(CalendarProvider):
             "refresh_token": self.refresh_token, "grant_type": "refresh_token",
         }).encode()
         req = urllib.request.Request(_TOKEN_URL, data=data, method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            return str(json.loads(r.read().decode()).get("access_token") or "")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return str(json.loads(r.read().decode()).get("access_token") or "")
+        except urllib.error.HTTPError as e:
+            # The single most likely failure on this path, and it presented as an
+            # unexplained 400: a refresh token minted while the Google app is in "Testing"
+            # publishing status is revoked after 7 days. Google says exactly that in the
+            # body — "invalid_grant: Token has been expired or revoked" — so say it.
+            raise GoogleCalendarError(
+                _http_reason(e, _TOKEN_URL)
+                + (". A refresh token from an app in Testing status expires after 7 days"
+                   " — switch to the service account (docs/discovery-setup-guide.md §3-SA),"
+                   " which never expires."
+                   if getattr(e, "code", 0) == 400 else "")) from e
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._access_token()}",
@@ -181,9 +194,49 @@ class GoogleCalendarProvider(CalendarProvider):
     def _request(self, url: str, *, method: str, payload: Optional[dict] = None):
         data = json.dumps(payload).encode() if payload is not None else None
         req = urllib.request.Request(url, data=data, headers=self._headers(), method=method)
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            raw = r.read().decode() or "{}"
-            return json.loads(raw) if raw.strip() else {}
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                raw = r.read().decode() or "{}"
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as e:
+            raise GoogleCalendarError(_http_reason(e, url)) from e
+
+
+class GoogleCalendarError(RuntimeError):
+    """A refusal from Google, carrying the reason Google actually gave."""
+
+
+def _http_reason(e, url: str = "") -> str:
+    """Google's own explanation, which `HTTPError` throws away.
+
+    `str(HTTPError)` is "HTTP Error 400: Bad Request" and nothing else — the reason is in
+    the RESPONSE BODY, which urllib does not read for you. That is how a dead OAuth refresh
+    token ("invalid_grant: Token has been expired or revoked") reached the operator's screen
+    as a generic 400 that named neither the problem nor the fix. Every field Google uses for
+    the reason is checked, because the token endpoint and the Calendar API do not answer in
+    the same shape."""
+    body = ""
+    try:
+        body = (e.read() or b"").decode("utf-8", "replace")[:600]
+    except Exception:  # noqa: BLE001 — a body we cannot read must not mask the status
+        body = ""
+    detail = ""
+    try:
+        parsed = json.loads(body) if body.strip().startswith("{") else {}
+        err = parsed.get("error")
+        if isinstance(err, dict):                       # Calendar API shape
+            detail = str(err.get("message") or "")
+            errs = err.get("errors") or []
+            if not detail and errs:
+                detail = str((errs[0] or {}).get("message") or "")
+        elif isinstance(err, str):                      # OAuth token endpoint shape
+            detail = ": ".join(x for x in (err, parsed.get("error_description")) if x)
+    except Exception:  # noqa: BLE001
+        detail = ""
+    where = "the token endpoint" if _TOKEN_URL in (url or "") else "Calendar"
+    if not detail:
+        detail = body.strip()[:200] or "no reason given"
+    return f"Google {where} refused ({getattr(e, 'code', '?')}): {detail}"
 
 
 def _iso(dt: datetime) -> str:

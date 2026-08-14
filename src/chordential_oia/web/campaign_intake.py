@@ -399,14 +399,22 @@ MODALITY_LABEL = {"notes": "Discovery notes", "transcript": "Meeting transcript"
 # differs. The Capture is the permanent raw evidence; every field it proposes cites it.
 # --------------------------------------------------------------------------- #
 def _canonicalise(candidates: List[Dict]) -> List[Dict]:
-    """Snap every proposed field name onto the canonical slot it means.
+    """Snap every proposed field onto the canonical slot it means — FACET AND KEY.
 
-    The engine is STEERED toward the canonical keys by a prompt guide, and on the live
-    comprehension call it read every trap correctly and then filed the answers under names
-    of its own: $45,000 into "Production Budget", the conditional launch into
-    "Seasonality" — while Budget and Timeline sat empty. The estimate, the brief and the
-    proposal all read the canonical slots, so a perfect read filed beside them is worth
-    nothing. Asking the model more firmly is not a fix; this is.
+    The engine is STEERED toward the canonical keys by a prompt guide, and on the first
+    live comprehension call it read every trap correctly and then filed the answers under
+    names of its own: $45,000 into "Production Budget", the conditional launch into
+    "Seasonality" — while Budget and Timeline sat empty. Snapping the key fixed that.
+
+    The SECOND live call failed the same way one column over. The budget was read exactly
+    right — *"roughly 25. No, no, 30,000. And that's all in including any licensing"* — and
+    filed as **commercial/budget_band**. The key was already canonical. The facet was not,
+    and the slot is keyed (engagement, budget_band, fact), so Budget sat empty again with
+    the right answer visible in the evidence list next to it. Deliverables the same.
+
+    The estimate, the brief and the proposal all read the canonical slots, so a perfect
+    read filed beside them is worth nothing. Asking the model more firmly is not a fix, and
+    neither is fixing half the address.
 
     A name with no canonical meaning passes through untouched — that is the dynamic field
     working as intended, and it must keep working.
@@ -414,7 +422,8 @@ def _canonicalise(candidates: List[Dict]) -> List[Dict]:
     out = []
     for c in candidates:
         c = dict(c)
-        c["key"] = ci.canonical_key(c.get("key", ""))
+        c["facet"], c["key"], c["kind"] = ci.canonical_slot(
+            c.get("facet", ""), c.get("key", ""), c.get("kind", "fact"))
         out.append(c)
     return out
 

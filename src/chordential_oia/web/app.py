@@ -214,6 +214,16 @@ async def lifespan(app: FastAPI):
                   f"{_orgs['domain_conflicts']} domain conflicts).", flush=True)
     except Exception as _e:                      # noqa: BLE001 — never block a boot
         print(f"[identity] organisation linking skipped: {_e}", flush=True)
+    try:
+        # ADR-0064 — facts read correctly and filed one column away from their canonical
+        # slot, before the facet was derived rather than accepted. Free (no model call),
+        # idempotent, and it never overwrites a slot that already holds a value.
+        _refiled = db.refile_ci_fields_to_canonical_slots(conn)
+        if _refiled:
+            print(f"[intelligence] refiled {_refiled} extracted facts onto their canonical "
+                  f"slots (Budget / Timeline / Deliverables …).", flush=True)
+    except Exception as _e:                      # noqa: BLE001 — never block a boot
+        print(f"[intelligence] canonical refile skipped: {_e}", flush=True)
     conn.execute("DELETE FROM signals WHERE signal_type = 'indicator'")  # feature dropped
     conn.commit()
     conn.close()

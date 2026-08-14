@@ -7733,3 +7733,43 @@ def ai_spend_month(conn: sqlite3.Connection, month: str) -> dict:
         return {"month": month, "est_cost": 0.0, "calls": 0, "in_tokens": 0, "out_tokens": 0}
     return {"month": month, "est_cost": row["est_cost"] or 0.0, "calls": row["calls"] or 0,
             "in_tokens": row["in_tokens"] or 0, "out_tokens": row["out_tokens"] or 0}
+
+
+def refile_ci_fields_to_canonical_slots(conn: sqlite3.Connection) -> int:
+    """Move already-captured facts onto the canonical slot their key names. Returns how many.
+
+    A repair, run once at boot, for the calls that were read correctly BEFORE the facet was
+    derived rather than accepted (ADR-0064). A live discovery call's budget — "roughly 25.
+    No, no, 30,000, all in including any licensing" — was extracted perfectly and filed as
+    `commercial/budget_band`, one column away from the `engagement/budget_band` slot the
+    Budget field, the estimate, the brief and the proposal all read. Fixing the intake only
+    helps the NEXT call; this is what puts the answer already sitting in the database into
+    the field that was empty above it.
+
+    Deliberately conservative, because a repair that loses a human's work is worse than the
+    bug: it moves a row ONLY when the canonical slot has no row of its own, so a value the
+    operator typed or confirmed is never overwritten. A collision is left alone — both rows
+    stay visible, and a person decides.
+    """
+    from . import campaign_intelligence as _ci
+    moved = 0
+    rows = conn.execute(
+        "SELECT id, ci_id, facet, key, kind FROM campaign_intelligence_field "
+        "WHERE kind = 'fact'").fetchall()
+    taken = {(r["ci_id"], r["facet"], r["key"], r["kind"]) for r in rows}
+    for r in rows:
+        want_facet, want_key, want_kind = _ci.canonical_slot(r["facet"], r["key"], r["kind"])
+        if (want_facet, want_key) == (r["facet"], r["key"]):
+            continue
+        target = (r["ci_id"], want_facet, want_key, want_kind)
+        if target in taken:
+            continue                     # a real value already lives there — leave both
+        conn.execute(
+            "UPDATE campaign_intelligence_field SET facet=?, key=?, updated_at=? WHERE id=?",
+            (want_facet, want_key, datetime.now(timezone.utc).isoformat(), r["id"]))
+        taken.discard((r["ci_id"], r["facet"], r["key"], r["kind"]))
+        taken.add(target)
+        moved += 1
+    if moved:
+        conn.commit()
+    return moved
