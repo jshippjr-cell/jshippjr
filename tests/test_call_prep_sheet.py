@@ -44,11 +44,48 @@ def test_every_recurring_deferred_term_has_a_question():
         assert head in sheet_text, f"the sheet never asks about {label}"
 
 
-def test_the_terms_come_last_because_they_are_what_gets_skipped():
-    groups = prep_sheet()
-    assert [g.title for g in groups][-1] == "The terms"
-    assert all(not ln.canonical for ln in groups[-1].lines), (
-        "the terms have no canonical slot yet; that is why they keep being deferred")
+def test_the_sheet_runs_the_arc_of_a_call_from_open_to_wrap_up():
+    """Ordered as a conversation, not as a schema. A call that starts without a frame gets
+    guarded answers to the commercial questions, and one that ends without a read-back
+    ships whatever was misheard."""
+    titles = [g.title for g in prep_sheet()]
+    assert titles == ["Open the call", "The work", "The sound", "The plan",
+                      "The people", "The terms", "Wrap up"]
+
+
+def test_the_terms_are_late_but_not_last():
+    """Late because they are what gets dropped when a call runs long; not last, because a
+    wrap-up behind them is what catches the cost of dropping them."""
+    titles = [g.title for g in prep_sheet()]
+    assert titles.index("The terms") > titles.index("The plan")
+    assert titles.index("The terms") < titles.index("Wrap up")
+
+
+def test_conversation_moves_fill_no_intelligence_slot():
+    """The opening, the terms and the wrap-up are conversation, not fields. Marking them
+    canonical would have the sheet claim it captures things it does not."""
+    groups = {g.title: g for g in prep_sheet()}
+    for title in ("Open the call", "The terms", "Wrap up"):
+        assert all(not ln.canonical for ln in groups[title].lines), title
+    for title in ("The work", "The sound", "The plan", "The people"):
+        assert all(ln.canonical for ln in groups[title].lines), title
+
+
+def test_the_call_opens_by_asking_permission_to_record():
+    """Out loud, every time. Some places require both sides to agree, and a recording
+    nobody consented to is worth less than no recording."""
+    opener = prep_sheet()[0]
+    assert any("notetaker" in ln.ask.lower() for ln in opener.lines)
+    assert any("alright with you" in ln.ask.lower() or "is that ok" in ln.ask.lower()
+               for ln in opener.lines)
+
+
+def test_the_call_closes_by_reading_it_back():
+    """The cheapest moment to catch a wrong number is while the person who knows it is
+    still on the line."""
+    closer = prep_sheet()[-1]
+    keys = {ln.key for ln in closer.lines}
+    assert {"recap", "unasked", "next_step"} <= keys
 
 
 def test_every_question_is_a_sentence_you_could_say_out_loud():

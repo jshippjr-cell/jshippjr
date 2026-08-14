@@ -65,11 +65,38 @@ class PrepGroup:
 
 
 # ── the bank ─────────────────────────────────────────────────────────────────────
-# Ordered the way a call actually goes: the work, then the sound, then the plan, then
-# the people, then the terms. The terms come last because they are the ones that get
-# skipped when a call runs long, which is exactly why they need to be visible.
+# THE ARC OF A CALL, opening to close. The middle five groups are the brief; the first
+# and last are the parts that make the middle work — a call that starts without a frame
+# gets guarded answers to commercial questions, and one that ends without a read-back
+# ships whatever was misheard.
+#
+# The terms sit LATE but not last, because they are what gets dropped when a call runs
+# long and they need a wrap-up behind them to catch what the drop cost.
+#
+# `canonical` says whether a group's questions fill Campaign Intelligence slots. The
+# opening, the terms and the wrap-up do not: they are conversation, not fields.
 _BANK = [
-    ("The work", "What is being made, and what the music has to do in it.", [
+    ("Open the call", "Frame it before you ask anything. Two minutes here buys straight "
+     "answers to the awkward questions later.", False, [
+        ("attendees", "Who's on the call",
+         "Before we start — who's with us, and how does each of you touch this project?",
+         "And who isn't here who has an opinion on the music?",
+         "The person who is missing is usually the person who sends it back. Naming them "
+         "in minute one is cheaper than meeting them in week six."),
+        ("recording_consent", "The notetaker",
+         "I've got a notetaker running so I'm listening rather than typing. Is that alright "
+         "with you?",
+         "It only takes the audio; I'll send you the written summary afterwards either way.",
+         "Ask it out loud, every time. Some places require both sides to agree, and a "
+         "recording nobody consented to is worth less than no recording."),
+        ("agenda", "The shape of the call",
+         "I'll ask about the work, the sound, the plan and then some boring commercial "
+         "questions at the end. You'll have a written summary today. Does that work?",
+         "Anything you want to make sure we cover before I start?",
+         "Flagging the commercial questions up front is what stops them feeling like an "
+         "ambush at minute forty, which is when they normally get skipped."),
+    ]),
+    ("The work", "What is being made, and what the music has to do in it.", True, [
         ("business_objective", "Business objective",
          "Before the music, what is this campaign trying to do for the business?",
          "And how will you know it worked?",
@@ -85,7 +112,7 @@ _BANK = [
          "The most common source of scope creep. Every unnamed cutdown is one you will be "
          "asked for free later."),
     ]),
-    ("The sound", "How it should feel, and what it must not be.", [
+    ("The sound", "How it should feel, and what it must not be.", True, [
         ("emotional_arc", "Emotional arc",
          "Walk me through how it should feel across the piece, start to end.",
          "Is there a turn anywhere, or does it hold one feeling throughout?",
@@ -99,7 +126,7 @@ _BANK = [
          "The second half matters more. A disavowed reference tells you what to avoid, and "
          "clients rarely volunteer it."),
     ]),
-    ("The plan", "When it has to exist, and what it can cost.", [
+    ("The plan", "When it has to exist, and what it can cost.", True, [
         ("deadline", "Timeline",
          "What is the air date, and when do you need final delivery to hit it?",
          "Are those the same date? And is anything upstream of us still moving, like the "
@@ -112,7 +139,7 @@ _BANK = [
          "Ask for the MUSIC number by name. A production budget or a media spend quoted "
          "back at you is a number that walks into a proposal."),
     ]),
-    ("The people", "Who decides, and who you are actually working with.", [
+    ("The people", "Who decides, and who you are actually working with.", True, [
         ("decision_makers", "Who signs off",
          "Who gives final approval on this, and how many times will they see it?",
          "Is anyone else in the room whose opinion changes the outcome?",
@@ -128,7 +155,7 @@ _BANK = [
          "Slow legal and slow signatures are schedule facts, and they only surface when "
          "someone asks."),
     ]),
-    ("The terms", "The ones that get skipped when a call runs long. Ask them anyway.", [
+    ("The terms", "The ones that get skipped when a call runs long. Ask them anyway.", False, [
         ("license_term", "Licence term",
          "How long do you need the usage to run?",
          "Is that from delivery or from first air?",
@@ -168,13 +195,26 @@ _BANK = [
          "It changes who we can book and what it costs, and it cannot be fixed after "
          "a session."),
     ]),
+    ("Wrap up", "The two minutes that decide whether any of the above survives contact "
+     "with the proposal.", False, [
+        ("recap", "Read it back",
+         "Let me play back what I've got, and stop me where I'm wrong.",
+         "Is there anything in that you'd say differently?",
+         "The cheapest moment to catch a wrong number is while the person who knows it is "
+         "still on the line. Everything downstream is built on this read."),
+        ("unasked", "What I didn't ask",
+         "What haven't I asked about that I should have?",
+         "Is there anything that's gone wrong on a project like this before?",
+         "The single most productive question on any discovery call, and the one that "
+         "surfaces the constraint nobody thought to mention."),
+        ("next_step", "What happens next",
+         "You'll get a written summary today. Who else should be on it?",
+         "And what's the best way to reach you if something needs a quick answer?",
+         "A summary that reaches only the person on the call gets confirmed by only the "
+         "person on the call, and the approver sees it for the first time at the end."),
+    ]),
 ]
 
-# The commercial group is the one whose questions have NO canonical slot of their own —
-# they are the recurring topics `client_voice._DEFERRABLE_TOPICS` keeps having to defer.
-# Flagged so a surface can tell "this fills a labelled field" from "this is a term we
-# should have settled", which are different kinds of missing.
-_NON_CANONICAL_GROUP = "The terms"
 
 
 def prep_sheet(ci_fields: Optional[Dict[str, str]] = None) -> List[PrepGroup]:
@@ -190,13 +230,13 @@ def prep_sheet(ci_fields: Optional[Dict[str, str]] = None) -> List[PrepGroup]:
     if not fields.get("deadline"):
         fields["deadline"] = fields.get("critical_deadline", "")
     out: List[PrepGroup] = []
-    for title, blurb, rows in _BANK:
+    for title, blurb, canonical, rows in _BANK:
         group = PrepGroup(title=title, blurb=blurb)
         for key, label, ask, follow_up, why in rows:
             group.lines.append(PrepLine(
                 key=key, label=label, ask=ask, follow_up=follow_up, why=why,
-                known=fields.get(key, ""),
-                canonical=(title != _NON_CANONICAL_GROUP),
+                known=fields.get(key, "") if canonical else "",
+                canonical=canonical,
             ))
         out.append(group)
     return out
