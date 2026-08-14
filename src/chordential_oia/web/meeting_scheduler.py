@@ -36,6 +36,11 @@ def _operator_email() -> str:
             or os.environ.get("CHORDENTIAL_SMTP_FROM", "")).strip()
 
 
+def _sender_email() -> str:
+    """The address the confirmation actually goes out FROM."""
+    return (os.environ.get("CHORDENTIAL_SMTP_FROM", "") or "").strip()
+
+
 CLIENT_TZ = ZoneInfo("America/New_York")
 
 
@@ -285,6 +290,10 @@ def reschedule(conn, meeting, new_start: str, *, duration_min: Optional[int] = N
     db.update_meeting(conn, meeting["id"], start_at=new_start, duration_min=dur,
                       status=M.SCHEDULED, bot_id="", notetaker_provider="",
                       bot_armed_at="", poll_attempts=0, last_polled_at="", error="")
+    # A calendar only accepts an update that outranks the one it holds. Advance the
+    # sequence for THIS change, so the fourth reschedule moves the block as surely as
+    # the first — a fixed number meant every move after the first was thrown away.
+    db.bump_ical_sequence(conn, meeting["id"])
     row = db.get_meeting(conn, meeting["id"])
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:
@@ -300,26 +309,27 @@ def cancel(conn, meeting) -> dict:
         except Exception:  # noqa: BLE001
             pass
     db.update_meeting(conn, meeting["id"], status=M.CANCELED)
+    seq = db.bump_ical_sequence(conn, meeting["id"])
     if meeting["request_id"]:
         db.set_discovery_request_status(conn, meeting["request_id"], "new")  # reopen the ask
     opp = db.get_opportunity(conn, meeting["opp_id"])
     if opp is not None:
-        # A CANCEL invite (same UID, method=CANCEL) removes the block from both calendars —
-        # but only when WE placed it via .ics. If the provider made a native event we already
-        # delete_event'd it above; a CANCEL .ics for a UID the client never had would be noise.
-        native_event = bool((meeting["calendar_event_id"] or "").strip())
-        ics = (None if native_event
-               else build_invite_ics(meeting, opp, sequence=2, cancel=True))
+        # A CANCEL invite (same UID, METHOD:CANCEL) removes the block from a calendar — and
+        # only from a calendar WE put it on. It goes back to exactly whoever received the
+        # REQUEST, which `invites_for` works out the same way it did then; a CANCEL for a
+        # UID that side never held is noise, and a missing one leaves a dead call in the
+        # diary of the one person whose only block came from us.
+        client_ics, op_ics = invites_for(meeting, opp, cancel=True, sequence=seq)
         if meeting["client_email"]:
             _safe_mail(meeting["client_email"],
                        f"Discovery call canceled · {opp['client']}",
                        "Your discovery call has been canceled. Reply and we'll find another time.",
-                       ics=ics)
+                       ics=client_ics)
         op = _operator_email()
         if op:
             _safe_mail(op, f"Discovery call canceled · {opp['client']}",
                        f"The discovery call with {meeting['client_name'] or opp['client']} "
-                       f"was canceled.", ics=ics)
+                       f"was canceled.", ics=op_ics)
     return {"ok": True}
 
 
@@ -488,6 +498,14 @@ def build_invite_ics(meeting, opp, *, sequence: int = 0, cancel: bool = False) -
     organizer = _operator_email() or "hello@chordential.com"
     method = "CANCEL" if cancel else "REQUEST"
     status = "CANCELLED" if cancel else "CONFIRMED"
+    # An invitation whose ORGANIZER is not the address that sent the mail looks forged, and
+    # a calendar that suspects a forgery shows the mail without booking anything. SENT-BY is
+    # the property that says "this really was sent on the organiser's behalf" (RFC 5545
+    # §3.2.18) — needed here because the mail leaves from CHORDENTIAL_SMTP_FROM while the
+    # organiser is the operator. Omitted when they are the same address, as they usually are.
+    sender = _sender_email()
+    sent_by = (f';SENT-BY="mailto:{sender}"'
+               if sender and sender.lower() != organizer.lower() else "")
     lines = [
         "BEGIN:VCALENDAR", "VERSION:2.0",
         "PRODID:-//Chordential//Meeting Scheduler//EN",
@@ -501,16 +519,51 @@ def build_invite_ics(meeting, opp, *, sequence: int = 0, cancel: bool = False) -
         f"DESCRIPTION:{_ical_escape(desc)}",
         f"LOCATION:{_ical_escape(location)}",
         f"STATUS:{status}",
-        f"ORGANIZER;CN=Chordential:mailto:{organizer}",
+        f"ORGANIZER;CN=Chordential{sent_by}:mailto:{organizer}",
     ]
+    # The client is a guest: RSVP=TRUE, NEEDS-ACTION. Their calendar shows the block and
+    # asks them to reply, which is the most an invitation can do — nobody can write to a
+    # stranger's calendar without their permission, and a system that could would be worse.
+    #
+    # The OPERATOR is the organiser, and was being listed as a guest of their own meeting:
+    # RSVP=TRUE, NEEDS-ACTION, so their own calendar greyed the block out and waited for a
+    # Yes. Marked ACCEPTED, it lands booked, with nothing to press.
+    op = _operator_email()
     for addr, cn in ((meeting["client_email"], meeting["client_name"] or opp["client"]),
-                     (_operator_email(), "Chordential")):
-        if addr:
-            lines.append(
-                f"ATTENDEE;CN={_ical_escape(cn)};RSVP=TRUE;"
-                f"PARTSTAT=NEEDS-ACTION:mailto:{addr}")
+                     (op, "Chordential")):
+        if not addr:
+            continue
+        if op and addr.lower() == op.lower():
+            lines.append(f"ATTENDEE;CN={_ical_escape(cn)};ROLE=CHAIR;RSVP=FALSE;"
+                         f"PARTSTAT=ACCEPTED:mailto:{addr}")
+        else:
+            lines.append(f"ATTENDEE;CN={_ical_escape(cn)};ROLE=REQ-PARTICIPANT;RSVP=TRUE;"
+                         f"PARTSTAT=NEEDS-ACTION:mailto:{addr}")
     lines += ["END:VEVENT", "END:VCALENDAR"]
-    return "\r\n".join(lines) + "\r\n"
+    return "\r\n".join(_fold(ln) for ln in lines) + "\r\n"
+
+
+def _fold(line: str) -> str:
+    """Fold a content line to 75 octets (RFC 5545 §3.1).
+
+    Lenient parsers ignore the limit; strict ones (Outlook among them) can reject the whole
+    VEVENT over it, and a DESCRIPTION carrying a Zoom URL clears 75 easily. Folding counts
+    OCTETS, not characters, and a multi-byte character must not be split across the fold —
+    so the split point is found on the encoded bytes and moved back to a character boundary.
+    """
+    raw = line.encode("utf-8")
+    if len(raw) <= 75:
+        return line
+    out, first = [], True
+    while raw:
+        limit = 75 if first else 74          # a continuation spends one octet on its space
+        chunk, raw = raw[:limit], raw[limit:]
+        while raw and (raw[0] & 0xC0) == 0x80:   # never cut inside a UTF-8 sequence
+            raw = chunk[-1:] + raw
+            chunk = chunk[:-1]
+        out.append(chunk.decode("utf-8") if first else " " + chunk.decode("utf-8"))
+        first = False
+    return "\r\n".join(out)
 
 
 def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
@@ -523,20 +576,18 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
         how = f"Join here: {meeting['join_url']}"
     else:
         how = "A meeting link will follow."
-    # Only attach our .ics when the calendar provider did NOT already create a native event
-    # (calendar_event_id is set): with Google connected it invites both parties itself, so a
-    # second .ics with a different UID would show up as a DUPLICATE calendar entry. When no
-    # provider is connected, the .ics is the only way a block reaches either calendar.
-    native_event = bool((meeting["calendar_event_id"] or "").strip())
-    ics = (None if native_event
-           else build_invite_ics(meeting, opp, sequence=1 if rescheduled else 0))
+    client_ics, op_ics = invites_for(meeting, opp)
     if meeting["client_email"]:
         _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",
             f"Your discovery call with Chordential is {verb} {when}.\n{how}\n\n"
-            f"The calendar invite is attached. Accept it to add the call to your calendar.\n\n"
-            f"Need to change it? {manage}",
-            ics=ics)
+            # Honest about what an invitation can and cannot do: it puts the block on
+            # their calendar if their calendar accepts invitations from us, and a Yes is
+            # what confirms it either way. We do not claim to have booked their diary.
+            + ("This email carries the calendar invitation, so the call should land on "
+               "your calendar. A quick Yes confirms it.\n\n" if client_ics else "")
+            + f"Need to change it? {manage}",
+            ics=client_ics)
     op = _operator_email()
     if op:
         # The operator gets the SAME join link + the .ics so the call lands on their
@@ -547,9 +598,57 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False) -> None:
             f"{meeting['client_name'] or opp['client']} "
             f"({meeting['client_email'] or 'no email'}).\n\n"
             f"{how}\n\n"
-            f"The calendar invite is attached.\n"
-            f"Manage / reschedule: {manage}",
-            ics=ics)
+            + ("The block is on your calendar; nothing to accept.\n" if op_ics else "")
+            + f"Manage / reschedule: {manage}",
+            ics=op_ics)
+
+
+def invites_for(meeting, opp, *, cancel: bool = False, sequence: Optional[int] = None):
+    """The invitation each side should be sent, as ``(client_ics, operator_ics)``.
+
+    Sent to WHOEVER THE PROVIDER DID NOT REACH, which is a per-recipient question and was
+    being answered once for both. It has three answers, not two:
+
+      • **No calendar connected.** Nobody was reached; both get the .ics. This is the
+        common case and the only one the original code got right.
+      • **OAuth as the operator.** Google invites both parties natively. Neither gets one;
+        a second invitation with our own UID would be a DUPLICATE entry on both calendars.
+      • **Service account.** It books the operator's calendar and invites nobody — it
+        cannot, on a consumer calendar. So the client gets the .ics (it is their only
+        route to a block, and withholding it was the bug) and the operator does NOT
+        (they already have the native event, and a second one would double-book them).
+
+    Collapsing those three onto "did an event id come back" gets one of them wrong
+    whichever way you answer it.
+    """
+    if _native_event(meeting) and _provider_invites_attendees(meeting):
+        return None, None
+    ics = build_invite_ics(meeting, opp, cancel=cancel,
+                           sequence=_ical_seq(meeting) if sequence is None else sequence)
+    return ics, (None if _native_event(meeting) else ics)
+
+
+def _native_event(meeting) -> bool:
+    """Did a connected provider create a real calendar event for this meeting?"""
+    return bool((meeting["calendar_event_id"] or "").strip()) and M.calendar_configured()
+
+
+def _ical_seq(meeting) -> int:
+    """This meeting's current invitation SEQUENCE, tolerating a row that predates it."""
+    try:
+        return max(0, int(meeting["ical_sequence"] or 0))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0
+
+
+def _provider_invites_attendees(meeting) -> bool:
+    """Did a connected calendar provider already invite this meeting's attendees itself?"""
+    if not _native_event(meeting):
+        return False
+    try:
+        return bool(M.get_calendar_provider().invites_attendees())
+    except Exception:  # noqa: BLE001 — an unanswerable seam must not cost anyone their
+        return False    # invitation; sending one too many beats sending none
 
 
 def _safe_mail(to: str, subject: str, text: str, ics: Optional[str] = None) -> None:

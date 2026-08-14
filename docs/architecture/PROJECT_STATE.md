@@ -94,6 +94,27 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A booked call lands on a calendar without anyone pressing anything** (ADR-0063,
+  2026-08-14). Reported live: *"I dont want to click anything."* Four defects between a
+  booking and a block, each of them silent. The invitation was being **presented as a
+  download** (`Content-Disposition: attachment`), so no client offered an RSVP card at
+  all — fixed first, by adding the calendar as a `multipart/alternative` part carrying
+  `method=REQUEST`. Then: the operator was listed as a **guest of their own meeting**
+  (`RSVP=TRUE; NEEDS-ACTION`), so their own calendar greyed the entry out awaiting a Yes
+  — they are the `ORGANIZER`, and their invitation now arrives `PARTSTAT=ACCEPTED`. The
+  `.ics` was suppressed whenever a **native event existed**, on the belief Google had
+  invited everybody — true only on the OAuth path, and false in exactly the
+  service-account configuration the setup guide recommends, so the **client's** invitation
+  was withheld on the strength of an invitation nobody had sent. That question is now
+  asked per recipient (`invites_for`) and answered by the seam (`invites_attendees()`) —
+  three configurations, three answers, where the code had two. And `SEQUENCE` was
+  hardcoded, so the **second** reschedule of any call was discarded by every calendar
+  client without an error anywhere; it is stored per meeting and advanced in one
+  statement. Lines are folded to 75 octets on the way out. Verified on real Postgres,
+  including the column migration against an existing database. What still cannot be
+  promised: an invitation **asks** — writing to a client's diary without their consent is
+  not something to build, and only the OAuth path has Google invite them for us.
+
 - **The cube is a cube, and then it is a package** (ADR-0062, 2026-08-12). The front
   door's world had **150 of its 728 pieces finishing assembly outside the box, the worst
   by 125 units — 42% of the cube's own width**: staves projecting through the faces,

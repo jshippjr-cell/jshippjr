@@ -116,8 +116,15 @@ meeting** link. If it stays blank, see Troubleshooting.
 
 ## 3. Google Calendar — the call lands on your calendar automatically
 
-Puts the call on your calendar the instant the client picks a time. Booking works without it
-(you'd just not get a calendar block).
+Puts the call on your calendar the instant the client picks a time — *natively*, through
+Google's API.
+
+**A block lands on both calendars whether or not you connect this.** The confirmation email
+carries a standard calendar invitation (`text/calendar; method=REQUEST`), which is how every
+calendar app has added events since long before anyone had an API key. Your own copy arrives
+already accepted, because you are the organiser and nobody accepts their own meeting. What
+connecting Google adds is a block on your calendar that does not depend on an email arriving
+at all — and, on the OAuth path only, Google inviting the client for us.
 
 > **Two ways to connect — pick 3-SA (recommended) OR 3-OAuth, not both.**
 >
@@ -200,9 +207,13 @@ Schedule a call with a client email → both of you should receive a Google Cale
 
 ## 4. Confirmation emails + your identity (OPTIONAL — you can skip the SMTP part)
 
-**You can skip this whole SMTP block.** Scheduling, Recall, and — importantly — **Google
-Calendar invites all work without it**, and a calendar invite already serves as the client's
-confirmation. Only set SMTP if you specifically want *ChordOS itself* to send emails.
+**Scheduling and Recall work without it.** So does the block on *your* calendar, once §3 is
+connected.
+
+**The client's invitation is the exception, and it matters.** On the recommended service-account
+path Google cannot invite guests on a consumer calendar, so the client's calendar invitation
+rides *our* confirmation email — no SMTP, no invitation, no block on their side. Set SMTP unless
+you are on §3-OAuth (where Google invites them itself) or you intend to send the invite by hand.
 
 **Do set these two (no email service needed):** `CHORDENTIAL_OPERATOR_EMAIL` (just your email)
 and `CHORDENTIAL_PUBLIC_DOMAIN` (your Render app URL, e.g. `https://your-app.onrender.com`).
@@ -284,6 +295,9 @@ Phone calls: choose **Phone** — a meeting record + confirmation email, no bot,
 | **The bot never joins a call booked in advance** | Recall treats a bot created without `join_at` as *ad-hoc* and sends it in immediately — so a call booked for next week got a bot that joined an empty room the day it was booked. Only calls booked within ~10 minutes of starting were ever recorded. **Fixed 2026-08-13**: the booking sends the call's start time as `join_at`. |
 | **The bot doesn't join a RESCHEDULED call** | A bot is booked for a moment, and rescheduling used to move the calendar event and the confirmations but leave the bot on the old time — and it reset the meeting's status so the transcript poller stopped watching it. **Fixed 2026-08-13**: rescheduling stands the old bot down, books a new one for the new time, and keeps the call in the poller. |
 | Transcript ingests but facts look wrong/empty | The transcript shape differed from the parser's expectation — send the raw Recall transcript JSON; the fix is one edit in `meetings/recall.py` only. |
+| **The client never got a calendar block** | On the service-account path Google invites nobody — their invitation rides our confirmation email, so it needs SMTP (§4). Check the schedule page's calendar line: it says which route a block actually takes. **Fixed 2026-08-14**: the scheduler used to suppress that email's invitation whenever a native event existed, on the assumption Google had invited everybody — true on OAuth, never true for a service account. |
+| **Their block did not move when I rescheduled it a second time** | A calendar discards an update whose `SEQUENCE` does not outrank the one it holds, and the sequence was hardcoded. **Fixed 2026-08-14**: it is stored per meeting and advanced on every change. |
+| **My own block sits greyed out asking me to accept** | You were being listed as a guest of your own meeting. **Fixed 2026-08-14**: the organiser's invitation arrives `PARTSTAT=ACCEPTED` — nothing to press. |
 | No calendar invite | `CHORDENTIAL_CALENDAR_PROVIDER=google` missing; **or the OAuth refresh token expired** (Testing-mode tokens die after 7 days — this is the usual cause of "it worked for a few days then stopped": switch to the service account, §3-SA, which never expires); or a service account isn't shared on the calendar / `CHORDENTIAL_GOOGLE_CALENDAR_ID` isn't your email; or the consent screen still restricts access (add yourself as a Test user). |
 | No confirmation emails | `CHORDENTIAL_MAIL_PROVIDER=smtp` + `CHORDENTIAL_SMTP_*` not set (they only log otherwise). |
 | Request notifications not arriving | Set `CHORDENTIAL_OPERATOR_EMAIL` (email) and/or `CHORDENTIAL_NTFY_TOPIC` (push). |

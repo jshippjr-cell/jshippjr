@@ -1522,7 +1522,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             initiated_by TEXT DEFAULT 'operator', -- client_request | operator
             poll_attempts INTEGER DEFAULT 0,     -- transcript polls made (backoff + give-up)
             last_polled_at TEXT,
-            bot_armed_at TEXT                    -- when the capture bot was booked
+            bot_armed_at TEXT,                   -- when the capture bot was booked
+            ical_sequence INTEGER DEFAULT 0      -- SEQUENCE of the invite last sent
         )"""
     )
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
@@ -1541,7 +1542,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                        # BILLS for the wait. This stamps the moment we armed, so a bot
                        # armed far from its call can be recognised as one of those and
                        # replaced instead of trusted.
-                       "bot_armed_at": "TEXT"}.items():
+                       "bot_armed_at": "TEXT",
+                       # The iCalendar SEQUENCE of the invitation we last sent for this
+                       # meeting. Every calendar client IGNORES an update whose SEQUENCE
+                       # is not higher than the one it already holds, so a fixed number
+                       # means the FIRST reschedule moves the block and no later one
+                       # does — the invite is sent, accepted by the server, and silently
+                       # discarded by the calendar.
+                       "ical_sequence": "INTEGER DEFAULT 0"}.items():
         if name not in mtg_cols:
             conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {decl}")
     # A Discovery Request is the client's ASK (ADR-0016) — it schedules nothing; the operator
@@ -6288,6 +6296,24 @@ def get_meeting(conn: sqlite3.Connection, meeting_id: int) -> Optional[sqlite3.R
     return conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
 
 
+def bump_ical_sequence(conn: sqlite3.Connection, meeting_id: int) -> int:
+    """Advance this meeting's invitation SEQUENCE and return the new value.
+
+    Incremented in ONE statement rather than read-modify-written in Python, for the same
+    reason `merge_json_key` is (ADR-0049): two updates racing must not both hand out the
+    same number. A repeated SEQUENCE is not a cosmetic collision — every calendar client
+    drops an update that does not exceed the sequence it already holds, so the second
+    change to a meeting would vanish without an error anywhere.
+    """
+    conn.execute(
+        "UPDATE meetings SET ical_sequence = COALESCE(ical_sequence, 0) + 1 WHERE id = ?",
+        (meeting_id,))
+    conn.commit()
+    row = conn.execute("SELECT ical_sequence FROM meetings WHERE id = ?",
+                       (meeting_id,)).fetchone()
+    return int((row["ical_sequence"] if row is not None else 0) or 0)
+
+
 def meeting_for_opp(conn: sqlite3.Connection, opp_id: int) -> Optional[sqlite3.Row]:
     """The opportunity's current (non-canceled) discovery meeting — what the contextual
     'Upcoming Discovery' panel renders. The most recent live one wins."""
@@ -6346,7 +6372,7 @@ def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",
                "notetaker_provider", "bot_id", "external_meeting_id",
                "transcript_capture_id", "error", "poll_attempts", "last_polled_at",
-               "bot_armed_at"}
+               "bot_armed_at", "ical_sequence"}
     unknown = sorted(set(fields) - allowed)
     if unknown:
         raise ValueError(f"update_meeting: no such meeting field(s): {unknown}")

@@ -84,18 +84,60 @@ def test_confirmations_attach_ics_to_both_and_give_operator_the_join_link(tmp_pa
     assert "/meeting/" in op_text and "k=tok123" in op_text
 
 
-def test_no_ics_when_a_native_calendar_event_already_exists(tmp_path, monkeypatch):
-    # With Google connected, the provider creates a native event (calendar_event_id set) and
-    # invites both parties itself — a second .ics would double-book the calendar. Suppress it.
+def _sent(ms, monkeypatch):
+    out = []
+    monkeypatch.setattr(ms.mailer, "send_email",
+                        lambda to, subject, text, html=None, ics=None:
+                        out.append(dict(to=to, text=text, ics=ics)) or "sent")
+    return out
+
+
+def test_no_ics_when_the_provider_really_invited_them(tmp_path, monkeypatch):
+    """OAuth-as-the-operator: Google natively invites both parties, so our own .ics would
+    put a SECOND entry on both calendars. Suppress it — this half was always right."""
     dbm, ms, conn = _mods(tmp_path, monkeypatch)
     opp = _opp(dbm, conn)
     m = _meeting(dbm, conn, opp, calendar_event_id="google-evt-abc")
-    sent = []
-    monkeypatch.setattr(ms.mailer, "send_email",
-                        lambda to, subject, text, html=None, ics=None:
-                        sent.append(dict(to=to, ics=ics)) or "sent")
+    monkeypatch.setenv("CHORDENTIAL_CALENDAR_PROVIDER", "google")
+    monkeypatch.setattr(ms.M, "get_calendar_provider",
+                        lambda: type("P", (), {"invites_attendees": lambda self: True})())
+    sent = _sent(ms, monkeypatch)
     ms._send_confirmations(opp, m)
     assert sent and all(s["ics"] is None for s in sent)   # no duplicate calendar attachment
+
+
+def test_the_ics_still_goes_when_the_provider_invited_nobody(tmp_path, monkeypatch):
+    """The service-account case, and the bug: a native event exists, so the .ics was
+    suppressed — but a service account cannot invite guests on a consumer calendar and is
+    called with no attendees at all. The operator got their block and the CLIENT got an
+    email telling them about an invitation that had been withheld."""
+    dbm, ms, conn = _mods(tmp_path, monkeypatch)
+    opp = _opp(dbm, conn)
+    m = _meeting(dbm, conn, opp, calendar_event_id="google-evt-abc")
+    monkeypatch.setenv("CHORDENTIAL_CALENDAR_PROVIDER", "google")
+    monkeypatch.setattr(ms.M, "get_calendar_provider",
+                        lambda: type("P", (), {"invites_attendees": lambda self: False})())
+    sent = _sent(ms, monkeypatch)
+    ms._send_confirmations(opp, m)
+    by_to = {s["to"]: s for s in sent}
+    assert by_to["client@aurora.com"]["ics"], "the client's only route to a calendar block"
+    assert by_to["jon@chordential.com"]["ics"] is None, (
+        "the operator already has the native event — a second invitation double-books them")
+
+
+def test_the_email_never_promises_an_invite_it_did_not_send(tmp_path, monkeypatch):
+    dbm, ms, conn = _mods(tmp_path, monkeypatch)
+    opp = _opp(dbm, conn)
+    m = _meeting(dbm, conn, opp, calendar_event_id="google-evt-abc")
+    monkeypatch.setenv("CHORDENTIAL_CALENDAR_PROVIDER", "google")
+    monkeypatch.setattr(ms.M, "get_calendar_provider",
+                        lambda: type("P", (), {"invites_attendees": lambda self: True})())
+    sent = _sent(ms, monkeypatch)
+    ms._send_confirmations(opp, m)
+    for s in sent:
+        assert s["ics"] is None
+        assert "on your calendar" not in s["text"], (
+            "the copy claimed a calendar block that this email did not carry")
 
 
 def test_reschedule_bumps_sequence_so_the_same_event_updates(tmp_path, monkeypatch):

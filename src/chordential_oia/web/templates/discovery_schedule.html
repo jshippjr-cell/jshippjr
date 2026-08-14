@@ -33,7 +33,10 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
   <div class="sd-int" title="Set each provider's *_PROVIDER switch on Render, not just the key">
     <span class="{{ 'on' if integrations.zoom else 'off' }}">🎥 Zoom {{ 'connected' if integrations.zoom else 'not connected' }}</span>
     <span class="{{ 'on' if integrations.recall else 'off' }}">🎙 Recall {{ 'connected' if integrations.recall else 'not connected' }}</span>
-    <span class="{{ 'on' if integrations.calendar else 'off' }}">📅 Calendar {{ 'connected' if integrations.calendar else 'not connected' }}</span>
+    {# A block reaches both calendars whether or not a provider is connected — the invite
+       rides the confirmation email. So say which ROUTE it takes, not just whether Google
+       is wired up; "not connected" was read as "no calendar block", which was never true. #}
+    <span class="on">📅 {% if integrations.calendar_route == 'native' %}Google invites both calendars{% elif integrations.calendar_route == 'operator' %}Google books yours, the client is invited by email{% else %}Both calendars invited by email{% endif %}</span>
   </div>
   {% endif %}
   {% if dr %}

@@ -31,6 +31,23 @@ class CalendarProvider(Protocol):
 
     def delete_event(self, event_id: str) -> None: ...
 
+    def invites_attendees(self) -> bool:
+        """Does `create_event` actually INVITE the attendees it is given?
+
+        Creating an event and inviting people to it are two different things, and the
+        scheduler used to treat them as one: if an event id came back, it suppressed its
+        own .ics on the reasoning that the provider had invited everybody. That holds
+        for OAuth-as-the-operator; it is false for a service account, which cannot invite
+        guests on a consumer calendar and so is deliberately called with no attendees at
+        all. In that configuration the block landed on the operator's calendar and the
+        CLIENT got a confirmation email announcing an invitation that was not there.
+
+        So the seam answers for itself, and a provider that cannot invite gets the .ics
+        sent to whoever it did not reach, alongside its native event rather than instead
+        of it.
+        """
+        ...
+
 
 class NullCalendarProvider(CalendarProvider):
     """No calendar connected: availability falls back to plain working hours; writes no-op."""
@@ -38,6 +55,9 @@ class NullCalendarProvider(CalendarProvider):
 
     def busy(self, start: datetime, end: datetime) -> List[Interval]:
         return []
+
+    def invites_attendees(self) -> bool:
+        return False
 
     def create_event(self, *, summary, description, start, end, attendees, location="") -> str:
         return ""

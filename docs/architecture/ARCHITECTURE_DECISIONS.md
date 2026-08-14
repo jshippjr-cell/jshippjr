@@ -1664,6 +1664,48 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0063 — Creating an event and inviting someone to it are two different questions
+**Status:** Accepted (2026-08-14) · Source: `meetings/calendar.py`, `meetings/google.py`,
+`web/meeting_scheduler.py`, `mailer.py`, `tests/test_the_block_lands_without_a_click.py`
+**Decision.** The calendar seam answers **`invites_attendees()`** — does `create_event`
+actually invite the people it is handed? — and the scheduler decides **per recipient**, in
+`invites_for`, who still needs an `.ics`: nothing connected → both; OAuth-as-the-operator →
+neither (Google invited them, ours would duplicate); service account → the client only (it
+booked the operator natively and invited nobody). Alongside that, an invitation
+is built so that nothing has to be pressed for it to take effect: the operator appears as
+`ROLE=CHAIR; PARTSTAT=ACCEPTED; RSVP=FALSE` (they are the `ORGANIZER`, not a guest of their
+own meeting), `SENT-BY` authorises a sending address that differs from the organiser, every
+change carries a **monotonically increasing `SEQUENCE`** persisted on the meeting row, and
+content lines are folded to 75 octets.
+**Why.** "A calendar event exists" was standing in for "both parties were invited", and the
+two came apart in the configuration this repo recommends. A Google **service account** cannot
+invite guests on a consumer calendar without domain-wide delegation, so `create_event` is
+deliberately called with no attendees — and the scheduler, seeing an event id come back,
+withheld the client's `.ics` on the strength of an invitation nobody had sent. The operator
+got a block; the client got an email announcing an invitation that was not there. The question
+has three answers and the code had two, so answering it either way got one configuration
+wrong: the client loses their only route to a block, or the operator is double-booked by a
+second invitation for the event they already hold. Each of the
+other three defects fails the same way — **silently, with every log line green**: an
+organiser listed as a guest sees their own call greyed out awaiting a reply they were never
+meant to give; an invitation whose `ORGANIZER` is unrelated to its sender reads as forged and
+is shown but not booked; and a calendar **discards** an update whose `SEQUENCE` does not
+exceed the one it holds, so under a hardcoded `1` the first reschedule moved the block and
+no later one did. Nothing anywhere reports any of these.
+**Consequences.** Any new `CalendarProvider` must answer `invites_attendees()` honestly;
+answering yes when it does not invite costs the client their calendar block. Never hardcode a
+`SEQUENCE` — call `db.bump_ical_sequence`, which increments in one statement for the reason
+`merge_json_key` does (ADR-0049): a repeated sequence is not a collision that raises, it is a
+change that vanishes. The honesty rule reaches the copy too: the confirmation email says a
+block is on the calendar only in the branch that actually carried one, and the client's
+wording claims what an invitation can do (ask) rather than what it cannot (write to a
+stranger's diary). The operator-facing banner now reports the **route** a block takes —
+Google invites both / Google books yours and the client is invited by email / both invited by
+email — because "Calendar: not connected" was read as "no block will appear", which was never
+true. Truly zero-click on **both** sides requires the OAuth-as-the-operator path, where Google
+adds the guest itself; that remains a deliberate trade against its 7-day Testing-mode token
+expiry (`meetings/google.py`), not an oversight.
+
 ### ADR-0062 — The world has one recipe, and everything in it stays inside the box
 **Status:** Accepted (2026-08-12) · Source: `scripts/score_scene/recipe.py`,
 `scripts/score_scene/pack.py`, `scripts/build_score_scene.py`,

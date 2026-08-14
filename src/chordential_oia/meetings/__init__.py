@@ -51,11 +51,30 @@ def meeting_configured() -> bool:
         "", "null", "0", "false", "off", "manual")
 
 
+def calendar_route() -> str:
+    """HOW a calendar block reaches each party, which is not the same question as whether a
+    calendar is connected — and the banner was answering the wrong one. "Calendar: not
+    connected" reads as "no block will appear", while in fact the confirmation email carries
+    a standard invitation and the block appears either way.
+
+      ``native``    a connected provider invites BOTH parties itself (OAuth as the operator)
+      ``operator``  a connected provider books the operator only (a service account cannot
+                    invite guests on a consumer calendar); the client is invited by our .ics
+      ``invite``    nothing connected; both parties are invited by our .ics
+    """
+    if not calendar_configured():
+        return "invite"
+    try:
+        return "native" if get_calendar_provider().invites_attendees() else "operator"
+    except Exception:  # noqa: BLE001 — an unanswerable seam is reported as the weaker claim
+        return "operator"
+
+
 def integration_status() -> dict:
     """A secret-free snapshot of which discovery seams are switched on (for the setup banner —
     the #1 gotcha is setting a key but forgetting its *_PROVIDER switch)."""
     return {"zoom": meeting_configured(), "recall": capture_configured(),
-            "calendar": calendar_configured()}
+            "calendar": calendar_configured(), "calendar_route": calendar_route()}
 
 
 __all__ = [
@@ -68,5 +87,5 @@ __all__ = [
     "meeting_configured", "integration_status",
     "WorkingHours", "Slot", "free_slots", "slot_is_free", "parse_iso",
     "CalendarProvider", "NullCalendarProvider", "get_calendar_provider",
-    "calendar_configured", "CALENDAR_PROVIDER_ENV",
+    "calendar_configured", "calendar_route", "CALENDAR_PROVIDER_ENV",
 ]

@@ -86,6 +86,13 @@ class GoogleCalendarProvider(CalendarProvider):
         return bool(self.sa_info) or bool(
             self.client_id and self.client_secret and self.refresh_token)
 
+    def invites_attendees(self) -> bool:
+        """Only the OAuth path invites guests. A service account acts as ITSELF, and a
+        consumer calendar will not let it add attendees without domain-wide delegation —
+        so `create_event` deliberately sends none, and the client's invitation has to
+        come from our own .ics. Saying so here is what stops the scheduler suppressing it."""
+        return bool(self.configured()) and not self._use_sa()
+
     # ── availability ────────────────────────────────────────────────────────
     def busy(self, start: datetime, end: datetime) -> List[Interval]:
         if not self.configured():
