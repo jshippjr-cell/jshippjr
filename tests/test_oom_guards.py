@@ -11,6 +11,8 @@ Three layers, each tested here:
 """
 import http.server
 import importlib
+import subprocess
+import sys
 import threading
 
 import pytest
@@ -136,17 +138,46 @@ def test_dm_error_mark_removes_agency_from_the_queue(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # 3 · Worker memory ceiling
 # --------------------------------------------------------------------------- #
-def test_worker_sets_an_address_space_ceiling(monkeypatch):
+def test_worker_sets_an_address_space_ceiling():
+    """Checked in a SUBPROCESS, because importing the worker caps the process it lands in
+    and that cap cannot be undone.
+
+    `_enrich_worker` sets RLIMIT_AS soft AND hard together — `(cap,) * 2` — and a lowered
+    HARD limit can never be raised again, not even by root. This test used to import the
+    module into the pytest process and restore the limit in a `finally`, where the restore
+    raised `ValueError: not allowed to raise maximum limit` straight into an
+    `except Exception: pass`. Every test that ran afterwards in that process was capped at
+    256 MB of address space, and the first one to need a thread stack — a Starlette
+    TestClient opening its portal thread — hung in `Thread.start()` for ever, with no
+    failure and no message. Whole batches timed out and were written off as slow.
+
+    A subprocess is also the honest place to check it: that module exists to be spawned.
+    """
+    pytest.importorskip("resource")
+    probe = (
+        "import importlib, os, resource\n"
+        "os.environ['CHORDENTIAL_WORKER_MAX_MB'] = '256'\n"
+        "import chordential_oia.web._enrich_worker as w\n"
+        "importlib.reload(w)\n"
+        "print(resource.getrlimit(resource.RLIMIT_AS)[0])\n"
+    )
+    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert int(out.stdout.strip()) == 256 * 1024 * 1024
+
+
+def test_measuring_the_ceiling_does_not_cap_the_test_process():
+    """The guard on the above. If this file ever caps its own process again, everything
+    after it in the run hangs instead of failing — so assert the parent is untouched, and
+    prove a thread can still start."""
     resource = pytest.importorskip("resource")
-    monkeypatch.setenv("CHORDENTIAL_WORKER_MAX_MB", "256")
-    before = resource.getrlimit(resource.RLIMIT_AS)
-    try:
-        import chordential_oia.web._enrich_worker as worker
-        importlib.reload(worker)
-        soft, _hard = resource.getrlimit(resource.RLIMIT_AS)
-        assert soft == 256 * 1024 * 1024
-    finally:
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, before)
-        except Exception:
-            pass
+    import threading
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+    assert hard == resource.RLIM_INFINITY, (
+        "a hard address-space cap leaked into the test process and can never be lifted")
+    done = threading.Event()
+    t = threading.Thread(target=done.set)
+    t.start()
+    assert done.wait(10), "Thread.start() stalled — the address space is capped"
+    t.join(10)
