@@ -14,6 +14,7 @@ Every fact carries three orthogonal dimensions:
 """
 from __future__ import annotations
 
+import re
 from typing import List, Optional
 
 from . import db
@@ -75,6 +76,46 @@ CANONICAL_FIELDS = [
     ("direction", "reference_playlist", "fact", "Reference playlist",
      "Tracks / artists cited as touchstones", None),
 ]
+# Engine-proposed keys are STEERED toward the canonical slots by a prompt guide, and a
+# model that ignores the guide is not a bug you fix by asking louder. On the live
+# comprehension call every trap was read correctly and then filed under a name of the
+# model's own choosing: the $45,000 landed in "Production Budget", the conditional launch
+# in "Seasonality", the asset list inside that same "Production Budget" — while Budget,
+# Timeline and Deliverables sat EMPTY. Everything downstream (the estimate, the brief, the
+# proposal) reads the canonical slots, so a perfect read filed beside them is worth
+# nothing. Case alone caused a second bug: "Business Objective" rendered as a duplicate
+# field beside "Business objective".
+#
+# So the mapping is deterministic, and happens after extraction rather than by instruction.
+_KEY_ALIASES = {
+    "budget": "budget_band", "budget_range": "budget_band", "music_budget": "budget_band",
+    "production_budget": "budget_band", "fee": "budget_band", "budget_figure": "budget_band",
+    "timeline": "deadline", "seasonality": "deadline", "launch_timing": "deadline",
+    "air_date": "deadline", "delivery_date": "deadline", "launch_window": "deadline",
+    "schedule": "deadline", "timing": "deadline",
+    "assets": "deliverables", "formats": "deliverables", "deliverable": "deliverables",
+    "deliverables_list": "deliverables", "spot_lengths": "deliverables",
+    "references": "reference_playlist", "reference_tracks": "reference_playlist",
+    "sonic_references": "reference_playlist", "reference_artists": "reference_playlist",
+    "decision_maker": "decision_makers", "approver": "decision_makers",
+    "final_approver": "decision_makers",
+    "objective": "business_objective", "brand": "brand_notes", "agency": "agency_notes",
+    "mood": "emotional_arc", "emotional_direction": "emotional_arc",
+}
+
+
+def canonical_key(key: str) -> str:
+    """Snap a proposed field name onto the canonical slot it means, if it means one.
+
+    Case and punctuation normalise first, so "Business Objective" and "business_objective"
+    are ONE field rather than two. A name with no canonical meaning is left alone — that
+    is the dynamic field doing its job, and it must keep working."""
+    k = re.sub(r"[^a-z0-9]+", "_", (key or "").strip().lower()).strip("_")
+    if any(k == ck for _f, ck, _kind, _l, _p, _o in CANONICAL_FIELDS):
+        return k
+    return _KEY_ALIASES.get(k, k)
+
+
 CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
                     for f, k, kind, label, ph, opp in CANONICAL_FIELDS}
 CANONICAL_FACET_ORDER = ["engagement", "buyer", "direction"]

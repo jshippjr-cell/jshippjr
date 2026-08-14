@@ -106,7 +106,9 @@ def test_what_it_finds_reaches_campaign_intelligence(conn, monkeypatch):
     fields = {f["key"]: f["value"] for f in db.list_ci_fields(conn, ci_id)} \
         if hasattr(db, "list_ci_fields") else {}
     if fields:
-        assert fields.get("timeline") == "24 days"
+        # "timeline" snaps to the canonical "deadline" slot on the way in — a fact filed
+        # beside the slot the estimate reads is a fact the estimate cannot use.
+        assert fields.get("deadline") == "24 days", fields
 
 
 def test_a_capture_with_no_text_says_so(conn):

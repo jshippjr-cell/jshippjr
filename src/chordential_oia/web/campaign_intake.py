@@ -398,6 +398,27 @@ MODALITY_LABEL = {"notes": "Discovery notes", "transcript": "Meeting transcript"
 # Every intake LANE funnels through here (ADR-0014); only the edge (how the text arrived)
 # differs. The Capture is the permanent raw evidence; every field it proposes cites it.
 # --------------------------------------------------------------------------- #
+def _canonicalise(candidates: List[Dict]) -> List[Dict]:
+    """Snap every proposed field name onto the canonical slot it means.
+
+    The engine is STEERED toward the canonical keys by a prompt guide, and on the live
+    comprehension call it read every trap correctly and then filed the answers under names
+    of its own: $45,000 into "Production Budget", the conditional launch into
+    "Seasonality" — while Budget and Timeline sat empty. The estimate, the brief and the
+    proposal all read the canonical slots, so a perfect read filed beside them is worth
+    nothing. Asking the model more firmly is not a fix; this is.
+
+    A name with no canonical meaning passes through untouched — that is the dynamic field
+    working as intended, and it must keep working.
+    """
+    out = []
+    for c in candidates:
+        c = dict(c)
+        c["key"] = ci.canonical_key(c.get("key", ""))
+        out.append(c)
+    return out
+
+
 def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_id=None,
                    metadata: Optional[dict] = None, artifact_ref: str = "",
                    external_ref: str = "", created_by: str = "operator",
@@ -431,7 +452,7 @@ def _apply_capture(conn, ci_id: int, lane, text: str, *, opp_id=None, campaign_i
             llm = extraction_bridge.for_capture(
                 conn, ci_id=ci_id, opp_id=opp_id, campaign_id=campaign_id,
                 lane=lane, metadata=metadata)
-    candidates = extract(text, stance, llm=llm, priors=priors)
+    candidates = _canonicalise(extract(text, stance, llm=llm, priors=priors))
     # Preserve the engine's structured run report on the capture envelope (evidence of
     # HOW the extraction ran: workers, timings, recall rounds, conflicts).
     run_report = getattr(llm, "report", None)
@@ -505,7 +526,7 @@ def reanalyze_capture(conn, capture_id: int, *, created_by: str = "operator") ->
         llm = extraction_bridge.for_capture(
             conn, ci_id=ci_id, opp_id=cap["opp_id"], campaign_id=cap["campaign_id"],
             lane=lane, metadata=_meta(cap))
-    candidates = extract(text, stance, llm=llm, priors=priors)
+    candidates = _canonicalise(extract(text, stance, llm=llm, priors=priors))
 
     run_report = getattr(llm, "report", None)
     meta = dict(_meta(cap) or {})

@@ -97,13 +97,22 @@ def test_it_keeps_what_the_caller_did_before():
     assert "INSERT INTO meetings VALUES (1)" in conn.log
 
 
-def test_a_successful_block_releases_its_savepoint():
-    """Savepoints that are never released pile up inside one transaction."""
+def test_a_successful_block_does_NOT_release_its_savepoint():
+    """It used to, and that was the bug that reached a client.
+
+    Almost every db helper here COMMITS internally, and a COMMIT discards every savepoint
+    in the transaction — so the RELEASE hit one that no longer existed, raised, and
+    aborted the transaction. Live: `POST /meet/<token>/pick -> 500,
+    InvalidSavepointSpecification: savepoint "be_1" does not exist`, on the link a client
+    clicks to accept a meeting time.
+
+    Releasing bought nothing: the next COMMIT releases it anyway."""
     from chordential_oia.web import db
     conn = _PostgresLike()
     with db.best_effort(conn):
         conn.execute("INSERT INTO ai_spend VALUES (1)")
-    assert any("RELEASE SAVEPOINT" in s for s in conn.log)
+    assert not any("RELEASE SAVEPOINT" in s for s in conn.log)
+    conn.execute("INSERT INTO captures VALUES (1)")      # still usable
 
 
 def test_nested_blocks_do_not_collide():

@@ -20,7 +20,7 @@ scope. A wrong fact here is a wrong number in front of a client.
 > original music for it.
 >
 > On timing: we're thinking early spring, but it depends on the client's board meeting.
-> That's on the fourteenth. If they green-light it we're live six weeks after that, and if
+> That's on the nineteenth. If they green-light it we're live six weeks after that, and if
 > they don't, this whole thing slides to autumn.
 >
 > Budget. I want to be straight with you — the number I've been given is forty thousand.
@@ -62,7 +62,7 @@ missing fact asks you a question, a wrong fact does not.
 | Deliverables | :90 hero, :60, :30, 9:16 verticals, stems | Mixed spoken and written forms |
 | Decision maker | **Maria, CMO** — final sign-off | The speaker is *not* the approver |
 | References | Ólafur Arnalds, Nils Frahm | Plain attribution |
-| Timeline | Conditional on a board meeting on the 14th; ~6 weeks after approval, else slips to autumn | The hard one |
+| Timeline | Conditional on a board meeting on the 19th; ~6 weeks after approval, else slips to autumn | The hard one |
 
 ### The traps — each is a specific failure mode
 
@@ -73,7 +73,7 @@ missing fact asks you a question, a wrong fact does not.
    Anything reporting a $2.1M budget has failed badly — that error walks into a proposal.
 
 3. **The conditional deadline.** "early spring, but it depends on the board meeting on the
-   14th… six weeks after… otherwise autumn." A date is wrong. "Conditional" is right.
+   19th… six weeks after… otherwise autumn." A date is wrong. "Conditional" is right.
    This is the single most important line in the script: everything about scheduling,
    pricing, and creator availability hangs off it, and a confidently wrong date is worse
    than an empty Timeline field.
