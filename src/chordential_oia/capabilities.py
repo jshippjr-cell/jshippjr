@@ -662,7 +662,7 @@ def build_capabilities_doc(
     # engine's open questions (client_voice): our conflict records, our identity
     # reconciliations and truncated fragments are for the operator, and nine separate
     # "no X was mentioned" rights lines are a form nobody agreed to fill in.
-    from .client_voice import client_questions
+    from .client_voice import client_questions, client_risks
     client_asks, deferred_terms_note = client_questions(
         list(ci_view.get("open_questions") or []))
     # Understanding — override wins (a human wrote it); else CI-derived (what the meeting
@@ -752,7 +752,10 @@ def build_capabilities_doc(
         delivery_template_label=template["label"],
         delivery_assumptions=delivery_assumptions,
         ci=ci_fields,
-        risks=list(ci_view.get("risks") or []),
+        # Through the same filter as the questions. Leaving this one unfiltered meant
+        # everything removed from `open_questions` simply came out of `risks` instead
+        # (client_voice.client_risks).
+        risks=client_risks(list(ci_view.get("risks") or [])),
         open_questions=client_asks,
         deferred_terms_note=deferred_terms_note,
         met=met,

@@ -167,7 +167,17 @@ def test_the_real_question_survives_all_of_it():
 
 
 def test_the_client_list_is_capped_even_if_everything_is_legitimate():
-    many = [f"Genuine question number {i} about the campaign?" for i in range(20)]
+    """Genuinely different questions, because near-identical ones are correctly merged by
+    the duplicate rule and would test nothing about the cap."""
+    many = [
+        "Which cut is the hero, the sixty or the thirty?",
+        "Does the vocal need to sit under a voiceover in any version?",
+        "Is the edit locked, or should we expect picture changes?",
+        "Who else at the brand should see the first pass?",
+        "Are you supplying the archive stems or should we recreate them?",
+        "How many rounds of revision do you expect to need?",
+        "Will this play in cinema as well as broadcast?",
+    ]
     ask, _note = client_questions(many)
     assert len(ask) == 4
 
@@ -219,3 +229,140 @@ def test_the_discovery_cta_is_gone_once_the_call_has_happened():
     before = cap.build_capabilities_doc(opp, qual, None, toggles=toggles,
                                         ci_view={"fields": FIELDS}, met=False)
     assert before.show_call is True, "pre-discovery the invitation is the whole point"
+
+
+# ── the risk list, which is where all of it went instead ─────────────────────────
+# Fen & Foundry test call, 2026-08-14. The questions had been filtered; RISKS had not,
+# so everything removed from one list came out of the other. The live brief carried ~40
+# bullets under "Risks we're tracking", printed under the client's own company name.
+LIVE_RISKS = [
+    # ours: conflict records
+    "The source states conflicting brand notes values — confirm which is right: "
+    "“Brand narrative: '11 years of being small is our whole story'” / “Client is wary”",
+    "The source states conflicting production budget values — confirm which is right: "
+    "“Total campaign/production budget is approximately $110,000” / “The $110,000 figure”",
+    # ours: a transcription problem, shown to the client as a project risk
+    "Meeting metadata lists only one speaker ('Jon Shipp') despite a clear two-party "
+    "dialogue in the transcript — clarify speaker identities/roles for accurate attribution",
+    "The role of primary contact Marta Vance at Fen & Foundry is not specified anywhere "
+    "in the captured materials.",
+    "Interviewer's question mentioned 'master, cut down, social, stems' as example "
+    "deliverable types, but client's confirmed list did not include a social cutdown.",
+    # resolved: the audit trail, read back as though still live
+    "Initial budget figure of $110,000 was ambiguous (stated as budget 'for the "
+    "campaign'); it was later clarified that $110,000 covers total production while "
+    "$38,000 is specifically allocated for music, inclusive of the license.",
+    "Usage term is confirmed to run from first air date rather than delivery date, which "
+    "aligns with the March 4 launch date — this was clarified but originally ambiguous.",
+    # questions, already in the questions list
+    "What is Marta Vance's exact title/role at Fen & Foundry, and does she have sole "
+    "sign-off authority, or are there other approvers involved in final decisions?",
+    "If the color grade lock (Feb 2) slips again, will the February 18 delivery deadline "
+    "still hold, or does it need to move to protect the March 4 launch?",
+    # deferred terms, already said once by the note
+    "No PRO (performing rights organization) registration or cue sheet handling was discussed",
+    "Territory of use was not specified despite brand going national in spring",
+    "No mention of union/non-union musician status for the recording",
+    # the same fact, four times
+    "Final delivery is required February 18 (two weeks before March 4 air date) for "
+    "station clearance, but the color grade lock date has already slipped twice and is "
+    "now set for February 2, creating schedule risk for on-time delivery.",
+    "Color grade lock (an upstream production dependency) has already slipped twice, "
+    "indicating a pattern of schedule delay that could push the February 18 music "
+    "delivery deadline.",
+    "The color grade lock date has already slipped twice, creating schedule risk that "
+    "could compress the music delivery timeline.",
+    "Delivery is dependent on color grade being locked, which has slipped twice already.",
+    # genuine, and the ones a client should actually see
+    "Client has had two prior negative experiences with music for this brand: one "
+    "described as 'too polished' and another as sounding 'a little like an insurance "
+    "advertisement,' indicating high sensitivity to tone and elevated approval risk.",
+    "The $38,000 music budget must cover both composition/production and the license, "
+    "which combined with potential exclusivity costs could strain the budget.",
+    "Client indicated that approvals and paperwork move through them personally, "
+    "suggesting a single point of approval and a single point of failure if unavailable.",
+    # a plain fact, not a risk at all
+    "Warm, handmade feel throughout.",
+]
+
+
+def test_the_risk_list_is_a_warning_not_a_log():
+    from chordential_oia.client_voice import client_risks
+    kept = client_risks(LIVE_RISKS)
+    assert len(kept) <= 5, f"{len(kept)} risks is a log, not a warning"
+    assert kept, "and the genuine ones must survive"
+
+
+def test_our_own_conflict_records_and_transcription_problems_stay_ours():
+    from chordential_oia.client_voice import client_risks
+    joined = " ".join(client_risks(LIVE_RISKS)).lower()
+    assert "conflicting" not in joined
+    assert "meeting metadata" not in joined, (
+        "our transcription mislabelled the speakers; that is not the client's risk")
+    assert "captured materials" not in joined
+    assert "interviewer" not in joined
+
+
+def test_an_ambiguity_we_already_resolved_is_not_a_live_concern():
+    """"$110,000 was ambiguous… it was later clarified" is the audit trail. Reading it
+    back under "Risks we're tracking" makes a settled thing sound unsettled."""
+    from chordential_oia.client_voice import client_risks
+    joined = " ".join(client_risks(LIVE_RISKS)).lower()
+    assert "later clarified" not in joined
+    assert "originally ambiguous" not in joined
+
+
+def test_a_question_is_not_a_risk_it_is_already_in_the_questions_list():
+    from chordential_oia.client_voice import client_risks
+    for r in client_risks(LIVE_RISKS):
+        assert not r.rstrip().endswith("?"), f"a question printed as a risk: {r[:60]}"
+    assert not any("What is Marta" in r for r in client_risks(LIVE_RISKS))
+
+
+def test_the_same_fact_four_times_is_reported_once():
+    """The colour grade slip appeared four times in one list, worded differently each
+    time. A reader does not experience that as thoroughness."""
+    from chordential_oia.client_voice import client_risks
+    grade = [r for r in client_risks(LIVE_RISKS) if "color grade" in r.lower()]
+    assert len(grade) == 1, f"the colour grade slip was reported {len(grade)} times"
+
+
+def test_the_risks_that_survive_are_the_ones_that_name_a_consequence():
+    """Ordered, not truncated at whatever the extractor emitted first. On the live brief
+    the first five included two resolved ambiguities and a question, while the colour
+    grade slipping twice into a fixed delivery date did not make the list at all."""
+    from chordential_oia.client_voice import client_risks
+    kept = " ".join(client_risks(LIVE_RISKS)).lower()
+    assert "color grade" in kept, "the schedule risk with a date on it must survive"
+    assert "too polished" in kept or "insurance advertisement" in kept
+
+
+def test_nothing_is_destroyed_the_operator_still_sees_every_risk():
+    from chordential_oia.client_voice import client_risks, internal_risks
+    kept, held = client_risks(LIVE_RISKS), internal_risks(LIVE_RISKS)
+    assert len(kept) + len(held) == len(LIVE_RISKS)
+    assert any("Meeting metadata" in r for r in held)
+    assert any("conflicting" in r for r in held)
+
+
+def test_a_short_risk_is_never_merged_into_an_unrelated_one():
+    """Containment on a five-word line is two shared words. The length guard is what
+    stops "Stems on all versions" and "Stems are not included" collapsing into one."""
+    from chordential_oia.client_voice import client_risks
+    out = client_risks(["Budget is tight for stems.", "Timeline is tight for mixing."])
+    assert len(out) == 2
+
+
+def test_the_brief_puts_the_filtered_risks_on_the_page(tmp_path):
+    from chordential_oia import capabilities as cap
+    from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
+    from chordential_oia.qualification import QualificationEngine
+    opp = Opportunity(client="Fen & Foundry", need="Brand launch film, original score",
+                      description="Original music for a two-minute roastery film.",
+                      buyer_type=BuyerType.BRAND,
+                      music_requirement=MusicRequirement.ORIGINAL)
+    doc = cap.build_capabilities_doc(
+        opp, QualificationEngine().qualify(opp), None, toggles=cap.default_toggles("New"),
+        ci_view={"fields": FIELDS, "risks": LIVE_RISKS}, met=True)
+    assert len(doc.risks) <= 5
+    assert not any("conflicting" in r for r in doc.risks)

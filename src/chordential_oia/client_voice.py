@@ -143,6 +143,16 @@ _INTERNAL_MARKERS = (
     "crm",
     "discrepancy",
     "possible name confusion",
+    # Notes about OUR OWN capture rather than about the engagement. A live brief showed a
+    # client "Meeting metadata lists only one speaker ('Jon Shipp') despite a clear
+    # two-party dialogue" — a transcription problem on our side, printed as a project risk
+    # under their company's name.
+    "meeting metadata",
+    "captured materials",
+    "in the transcript",
+    "interviewer",
+    "speaker identities",
+    "not specified anywhere",
 )
 
 # The commercial and rights points a discovery call routinely does not reach. Individually
@@ -202,7 +212,7 @@ def client_questions(open_questions: Sequence[str], *,
     Nothing is deleted anywhere: every question stays in Campaign Intelligence, where the
     operator works. This decides only what is put in front of a CLIENT.
     """
-    seen, ask, topics = set(), [], []
+    seen, sigs, ask, topics = set(), [], [], []
     for raw in open_questions or []:
         q = _clean(raw)
         if not q:
@@ -213,6 +223,12 @@ def client_questions(open_questions: Sequence[str], *,
         seen.add(fingerprint)
         if _is_internal(q):
             continue
+        # Near-duplicates too, not just identical text. A live brief asked the client
+        # Marta's own job title twice in a four-item list, in two different wordings.
+        sig = _signature(q)
+        if not _deferrable_topic(q) and _is_near_duplicate(sig, sigs):
+            continue
+        sigs.append(sig)
         topic = _deferrable_topic(q)
         if topic:
             if topic not in topics:
@@ -228,6 +244,151 @@ def client_questions(open_questions: Sequence[str], *,
                 f"We'll put our standard terms in the proposal so you have something to "
                 f"react to rather than a questionnaire to fill in.")
     return ask[:max(0, limit)], note
+
+
+_MAX_CLIENT_RISKS = 5
+
+_STOPWORDS = frozenset("""a an the and or but if is are was were be been being to of in on
+for with as at by from that this it its their there which who whom what when will would
+not no need needs should must may might can could have has had do does did client clients
+about into over under than then so such we our us you your they them he she""".split())
+
+
+def _signature(text: str) -> frozenset:
+    """The content words of a line, for judging whether two lines say the same thing."""
+    words = re.findall(r"[a-z0-9$]+", _clean(text).lower())
+    return frozenset(w for w in words if w not in _STOPWORDS and len(w) > 2)
+
+
+_CONTAINMENT_MIN_WORDS = 6
+
+
+def _is_near_duplicate(sig: frozenset, seen: List[frozenset], threshold: float = 0.5,
+                       containment: float = 0.5) -> bool:
+    """Do two lines say the same thing? Judged two ways, because one is not enough.
+
+    Exact-text dedupe misses all of it: a live brief carried the colour-grade slip FOUR
+    times, worded differently each time, and "too polished" three. A reader does not
+    experience that as thoroughness.
+
+    **Jaccard** catches two similar-length restatements. It does NOT catch a short line
+    swallowed by a longer one — "The colour grade lock has already slipped twice, creating
+    schedule risk" against the same fact plus both dates and the reason scored 0.47, under
+    any threshold safe enough to use. **Containment** — the shared words as a fraction of
+    the SHORTER line — scores that pair 0.75, because the short one genuinely adds nothing.
+    A restatement with extra detail is still a restatement."""
+    for other in seen:
+        union = sig | other
+        shared = len(sig & other)
+        if union and shared / len(union) >= threshold:
+            return True
+        # Containment is only meaningful on a line long enough for the ratio to mean
+        # something: at six content words a 0.5 score is three shared words, and below
+        # that it would merge lines that genuinely differ. Short lines get Jaccard alone.
+        smaller = min(len(sig), len(other))
+        if smaller >= _CONTAINMENT_MIN_WORDS and shared / smaller >= containment:
+            return True
+    return False
+
+
+# A risk is something that could STILL go wrong. Two things that keep arriving in the
+# concern bucket are neither.
+_RESOLVED = ("was clarified", "later clarified", "was confirmed", "is confirmed",
+             "has been confirmed", "originally ambiguous", "this was clarified",
+             "client confirmed")
+_ASKS = ("what is", "what's", "clarify ", "confirm ", "does client", "will the",
+         "worth confirming", "need to confirm", "should be confirmed")
+
+# Words that mean a sentence names a CONSEQUENCE rather than an observation. Used to
+# order, not to exclude: a five-item list built from the first five extracted is arbitrary,
+# and on the live brief it surfaced two resolved ambiguities and a question while leaving
+# out the colour grade that had already slipped twice into a fixed delivery date.
+_CONSEQUENCE = ("risk", "slip", "delay", "deadline", "compress", "strain", "miss",
+                "fail", "jeopard", "push the", "single point", "not currently reflected",
+                "carries additional cost", "elevated", "sensitiv")
+
+
+def _is_resolved(text: str) -> bool:
+    t = _clean(text).lower()
+    return any(m in t for m in _RESOLVED)
+
+
+def _reads_as_a_question(text: str) -> bool:
+    t = _clean(text).lower()
+    return t.endswith("?") or t.startswith(_ASKS)
+
+
+def _risk_weight(text: str) -> int:
+    t = _clean(text).lower()
+    score = sum(1 for w in _CONSEQUENCE if w in t)
+    if re.search(r"\b(january|february|march|april|may|june|july|august|september|"
+                 r"october|november|december)\b", t) or "$" in t:
+        score += 1                       # a risk pinned to a date or a number is concrete
+    return score
+
+
+def client_risks(risks: Sequence[str], *, limit: int = _MAX_CLIENT_RISKS) -> List[str]:
+    """The few risks a CLIENT should see, from everything flagged as a concern.
+
+    This function exists because I fixed `open_questions` and left its identical twin.
+    Everything filtered out of one list came straight out of the other: a live Campaign
+    Brief carried roughly forty "risks", among them six of our own conflict records,
+    fragments truncated mid-word, a note about our transcription mislabelling the speakers,
+    and the same colour-grade slip restated four times. Under the client's own company name,
+    on a page headed "Risks we're tracking".
+
+    A risk list is a warning. Forty of them is not a warning, it is a log — and a log that
+    admits our record-keeping problems to the person paying us.
+
+    Held back is not deleted: `internal_risks` returns the complement for the operator, who
+    is the only person who can act on a conflict record anyway."""
+    kept: List[str] = []
+    seen: List[frozenset] = []
+    for raw in risks or []:
+        r = _clean(raw)
+        if not r or _is_internal(r):
+            continue
+        # A gap in the commercial terms is not a risk, it is a thing to settle — and it is
+        # already said once, properly, by `client_questions`'s deferred note.
+        if _deferrable_topic(r):
+            continue
+        # Neither is an ambiguity we already resolved ("$110,000 was ambiguous… it was
+        # later clarified") — that is the audit trail, and reading it back as a live
+        # concern makes a settled thing sound unsettled.
+        if _is_resolved(r):
+            continue
+        # Nor a question. It belongs in the questions list, where it already is; a live
+        # brief printed "What is Marta Vance's exact title" in BOTH.
+        if _reads_as_a_question(r):
+            continue
+        sig = _signature(r)
+        if _is_near_duplicate(sig, seen):
+            continue
+        seen.append(sig)
+        kept.append(r)
+    # Ordered by whether the sentence names a consequence, so a cap keeps the risks that
+    # matter rather than the ones the extractor happened to emit first.
+    kept.sort(key=lambda t: -_risk_weight(t))
+    return kept[:max(0, limit)]
+
+
+def internal_risks(risks: Sequence[str]) -> List[str]:
+    """Everything `client_risks` held back, for the operator's own surfaces."""
+    keep, kept_sigs = [], []
+    for raw in risks or []:
+        r = _clean(raw)
+        if not r:
+            continue
+        if (_is_internal(r) or _deferrable_topic(r) or _is_resolved(r)
+                or _reads_as_a_question(r)):
+            keep.append(r)
+            continue
+        sig = _signature(r)
+        if _is_near_duplicate(sig, kept_sigs):
+            keep.append(r)
+        else:
+            kept_sigs.append(sig)
+    return keep
 
 
 def internal_questions(open_questions: Sequence[str]) -> List[str]:
