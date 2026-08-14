@@ -20,23 +20,29 @@ def _fake_key():
             "token_uri": "https://oauth2.googleapis.com/token", "project_id": "proj"}
 
 
+# `_load_service_account` returns (info, problem): a key that is SET BUT UNREADABLE is not
+# the same state as no key, and collapsing them onto None is what let a broken key fall
+# back to the retired OAuth token (see test_a_broken_key_does_not_become_the_old_one.py).
 def test_loads_raw_json_key(monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps(_fake_key()))
-    info = g._load_service_account()
+    info, problem = g._load_service_account()
+    assert not problem
     assert info and info["client_email"] == "cal@proj.iam.gserviceaccount.com"
 
 
 def test_loads_base64_wrapped_key(monkeypatch):
     raw = base64.b64encode(json.dumps(_fake_key()).encode()).decode()
     monkeypatch.setenv("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON", raw)
-    info = g._load_service_account()
+    info, problem = g._load_service_account()
+    assert not problem
     assert info and info["type"] == "service_account"
 
 
-def test_no_key_is_none(monkeypatch):
+def test_no_key_is_none_and_is_not_reported_as_a_problem(monkeypatch):
+    """Absent is a legitimate choice — only SET-AND-BROKEN is a problem."""
     monkeypatch.delenv("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
     monkeypatch.delenv("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_FILE", raising=False)
-    assert g._load_service_account() is None
+    assert g._load_service_account() == (None, "")
 
 
 def test_service_account_counts_as_configured(monkeypatch):

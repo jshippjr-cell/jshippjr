@@ -65,16 +65,34 @@ def calendar_route() -> str:
     if not calendar_configured():
         return "invite"
     try:
-        return "native" if get_calendar_provider().invites_attendees() else "operator"
+        p = get_calendar_provider()
+        if getattr(p, "config_problem", lambda: "")():
+            return "invite"       # the credential is broken; only the .ics will reach anyone
+        return "native" if p.invites_attendees() else "operator"
     except Exception:  # noqa: BLE001 — an unanswerable seam is reported as the weaker claim
         return "operator"
+
+
+def calendar_problem() -> str:
+    """What is wrong with the calendar credential, in words, or ``""``.
+
+    Reported because the chip above reads the CONFIGURATION and a configuration can be
+    present and unusable at the same time — which is exactly the state that produced a page
+    saying "Google invites both calendars" while Google answered 400 to everything."""
+    if not calendar_configured():
+        return ""
+    try:
+        return str(getattr(get_calendar_provider(), "config_problem", lambda: "")() or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def integration_status() -> dict:
     """A secret-free snapshot of which discovery seams are switched on (for the setup banner —
     the #1 gotcha is setting a key but forgetting its *_PROVIDER switch)."""
     return {"zoom": meeting_configured(), "recall": capture_configured(),
-            "calendar": calendar_configured(), "calendar_route": calendar_route()}
+            "calendar": calendar_configured(), "calendar_route": calendar_route(),
+            "calendar_problem": calendar_problem()}
 
 
 __all__ = [
@@ -87,5 +105,6 @@ __all__ = [
     "meeting_configured", "integration_status",
     "WorkingHours", "Slot", "free_slots", "slot_is_free", "parse_iso",
     "CalendarProvider", "NullCalendarProvider", "get_calendar_provider",
-    "calendar_configured", "calendar_route", "CALENDAR_PROVIDER_ENV",
+    "calendar_configured", "calendar_route", "calendar_problem",
+    "CALENDAR_PROVIDER_ENV",
 ]

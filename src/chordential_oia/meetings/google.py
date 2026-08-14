@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import urllib.error
 import urllib.parse
@@ -43,29 +44,53 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _CAL_BASE = "https://www.googleapis.com/calendar/v3"
 _SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
+_log = logging.getLogger("chordential.google_calendar")
 
-def _load_service_account() -> Optional[dict]:
-    """The service-account key as a dict, or None. Accepts raw JSON or base64-wrapped JSON
-    (Render env vars are single-line; base64 sidesteps the newlines in the PEM private key),
-    or a file path via CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_FILE."""
+
+def _load_service_account() -> Tuple[Optional[dict], str]:
+    """The service-account key as ``(info, problem)``. Accepts raw JSON or base64-wrapped
+    JSON (Render env vars are single-line; base64 sidesteps the newlines in the PEM private
+    key), or a file path via CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_FILE.
+
+    A key that is SET BUT UNREADABLE returns a problem string rather than None, because
+    those two states are not the same thing and treating them as one is how a fixed problem
+    quietly un-fixed itself. The operator moved to a service account specifically to escape
+    the 7-day OAuth expiry; if the key fails to parse, `None` made it indistinguishable
+    from "no service account", `configured()` fell through to the leftover OAuth variables,
+    and the app went back to the very token that had been retired — while the page reported
+    a connected calendar and Google answered 400. Silence turned a typo into a regression
+    of something already solved.
+    """
     raw = os.environ.get("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    where = "CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON"
     if not raw:
         path = os.environ.get("CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
-        if path and os.path.exists(path):
+        if path:
+            where = f"CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_FILE ({path})"
+            if not os.path.exists(path):
+                return None, f"{where} points at a file that does not exist"
             try:
                 with open(path, encoding="utf-8") as f:
                     raw = f.read().strip()
-            except OSError:
-                return None
+            except OSError as e:
+                return None, f"{where} could not be read: {e}"
     if not raw:
-        return None
+        return None, ""                      # genuinely not configured — the OAuth path is fine
     try:
-        return json.loads(raw)
+        return json.loads(raw), ""
     except json.JSONDecodeError:
-        try:
-            return json.loads(base64.b64decode(raw).decode("utf-8"))
-        except Exception:  # noqa: BLE001 — malformed key → treat as unconfigured, never crash
-            return None
+        pass
+    try:
+        info = json.loads(base64.b64decode(raw).decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return None, (
+            f"{where} is set but is neither valid JSON nor base64 of valid JSON "
+            f"({len(raw)} characters). The usual causes are a truncated paste and pasting "
+            f"the key file raw — its private key contains newlines, which an env var drops. "
+            f"Re-do it as `base64 -w0 key.json` and paste the single line.")
+    if not isinstance(info, dict) or not info.get("private_key"):
+        return None, f"{where} decoded but carries no private_key — is it the right file?"
+    return info, ""
 
 
 class GoogleCalendarProvider(CalendarProvider):
@@ -77,13 +102,47 @@ class GoogleCalendarProvider(CalendarProvider):
         self.refresh_token = os.environ.get("CHORDENTIAL_GOOGLE_REFRESH_TOKEN", "").strip()
         self.calendar_id = (os.environ.get("CHORDENTIAL_GOOGLE_CALENDAR_ID", "")
                             or "primary").strip()
-        self.sa_info = _load_service_account()
+        self.sa_info, self.sa_problem = _load_service_account()
         self.timeout = 20
+        if self.sa_problem:
+            _log.error("Google Calendar: %s", self.sa_problem)
 
     def _use_sa(self) -> bool:
         return bool(self.sa_info)
 
+    def auth_mode(self) -> str:
+        """``service_account`` | ``oauth`` | ``broken`` | ``none`` — which credential is
+        actually in play, which is not always the one that was configured."""
+        if self.sa_info:
+            return "service_account"
+        if self.sa_problem:
+            return "broken"
+        if self.client_id and self.client_secret and self.refresh_token:
+            return "oauth"
+        return "none"
+
+    def config_problem(self) -> str:
+        """What is wrong with this configuration, in words, or ``""``."""
+        if self.sa_problem:
+            extra = (" The legacy OAuth variables are still set, and they are NOT being used"
+                     " as a fallback: silently going back to the token you retired is how"
+                     " this looked fixed while it was not. Fix the key, or clear"
+                     " CHORDENTIAL_GOOGLE_SERVICE_ACCOUNT_JSON to use OAuth deliberately."
+                     if (self.client_id and self.client_secret and self.refresh_token) else "")
+            return self.sa_problem + extra
+        return ""
+
     def configured(self) -> bool:
+        """A BROKEN service-account key does not fall back to OAuth.
+
+        It used to, and that is the whole failure: the operator moved to a service account
+        to escape the 7-day OAuth expiry, the key did not parse, and the app quietly resumed
+        using the expired refresh token — reporting a connected calendar the entire time.
+        A stated intent that cannot be honoured must not degrade into the thing it replaced
+        (the same rule `signing_providers` follows). Booking is unaffected either way: with
+        no native event the emailed .ics is the route to both calendars."""
+        if self.sa_problem:
+            return False
         return bool(self.sa_info) or bool(
             self.client_id and self.client_secret and self.refresh_token)
 

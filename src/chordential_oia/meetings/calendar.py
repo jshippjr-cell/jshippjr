@@ -59,6 +59,9 @@ class NullCalendarProvider(CalendarProvider):
     def invites_attendees(self) -> bool:
         return False
 
+    def config_problem(self) -> str:
+        return ""
+
     def create_event(self, *, summary, description, start, end, attendees, location="") -> str:
         return ""
 

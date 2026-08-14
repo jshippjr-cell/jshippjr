@@ -47,6 +47,16 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
      And say it ALWAYS, not only when it is wrong. A warning that appears only on failure
      is indistinguishable from a deploy that has not landed yet, which is exactly how the
      operator was left unable to tell whether the check was even running. #}
+  {# A credential can be PRESENT and UNUSABLE at once, and that combination is what the
+     chip above could not see. A service-account key that fails to parse used to be treated
+     as "no service account", which fell through to the leftover OAuth variables — the very
+     token the operator had already retired to escape its 7-day expiry. It looked fixed and
+     was not, for as long as nobody read a log. #}
+  {% if integrations.calendar_problem %}
+  <p class="small" style="margin:6px 0 0;color:var(--red,#a33)">⚠ <b>Google Calendar is
+    configured but its credential cannot be used</b>, so no native block is being created.
+    {{ integrations.calendar_problem }}</p>
+  {% endif %}
   <p class="small" style="margin:6px 0 0">Your copy of this call goes to
     <b>{{ integrations.operator_email or 'nobody — no address is set' }}</b>{% if integrations.mail %},
     by email{% else %} <b>(not sent: no mail provider)</b>{% endif %}.</p>
