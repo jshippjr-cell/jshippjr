@@ -31,7 +31,7 @@ from ..capabilities import (
     quote_band as capabilities_quote_band,
 )
 from ..matching import match_talent
-from ..models import BuyerValue
+from ..models import BuyerValue, Opportunity
 from ..outreach import (
     COMPOSE_BLOCK_KEYS, assemble_email, build_compose_blocks, build_outreach_plan,
     compose_selection, respond_action, _mailto,
@@ -86,6 +86,47 @@ def opportunity_delete(opp_id: int, return_to: str = Form("/inbox")):
     if summary.get("deleted"):
         dest += ("&" if "?" in dest else "?") + "deleted=" + quote(summary.get("client", ""))
     return RedirectResponse(dest, status_code=303)
+
+
+# NOTE: declared BEFORE /opportunity/{opp_id}. FastAPI matches in declaration
+# order, and a literal path competing with a typed parameter loses if it comes
+# second: "new" is not an int, so /opportunity/new answered 422 rather than the
+# form. Static segments go above their parameterised sibling.
+@router.get("/opportunity/new", response_class=HTMLResponse)
+def opportunity_new_form(request: Request):
+    """Add a deal by hand.
+
+    Until this existed there was NO way to create an opportunity directly. Every one had
+    to arrive as an inbound lead and then be promoted — correct for something that came
+    through the front door, and pure friction for a referral, a phone call, or a test run:
+    two pages and four steps to type in a name. Reported live, by an operator who assumed
+    the deal he was told about already existed."""
+    return render(request, "opportunity_new.html", nav="inbox")
+
+
+@router.post("/opportunity/new")
+def opportunity_new_create(client: str = Form(""), need: str = Form(""),
+                           description: str = Form(""), contact_name: str = Form(""),
+                           contact_email: str = Form("")):
+    """Create it and go straight to it. Client and need are the only required fields —
+    everything else the pipeline is built to discover, and demanding it here would just
+    invite guesses at the moment you know least."""
+    client, need = client.strip(), need.strip()
+    if not client or not need:
+        return RedirectResponse("/opportunity/new?err=missing", status_code=303)
+    conn = db.connect()
+    try:
+        opp = Opportunity(client=client, need=need, description=description.strip(),
+                          source="manual")
+        new_id = db.insert_opportunity(conn, opp)
+        if not new_id:
+            return RedirectResponse("/opportunity/new?err=failed", status_code=303)
+        if contact_name.strip() or contact_email.strip():
+            db.update_outreach(conn, new_id, contact_name=contact_name.strip(),
+                               contact_email=contact_email.strip())
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{new_id}", status_code=303)
 
 
 @router.get("/opportunity/{opp_id}", response_class=HTMLResponse)

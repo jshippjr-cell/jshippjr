@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Add a deal{% endblock %}
+{% block heading %}<a class="crumb" href="/inbox">Opportunities</a> / Add a deal{% endblock %}
+{% block content %}
+<style>
+.nd{max-width:540px}
+.nd .f{display:flex;flex-direction:column;gap:5px;margin-bottom:15px}
+.nd label{font-weight:600;font-size:13px}
+.nd input,.nd textarea{border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:9px;font:inherit}
+.nd .hint{font-size:12px;color:var(--muted,#7a6b67)}
+.nd .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.nd .pair{grid-template-columns:1fr}}
+.nd .acts{display:flex;gap:10px;align-items:center;margin-top:6px}
+</style>
+<section class="card nd">
+  <div class="card-head"><h2>Add a deal</h2></div>
+  {% if request.query_params.get('err') == 'missing' %}
+  <p class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;
+     border-radius:9px;padding:9px 12px">A buyer and a title, and you're in.</p>
+  {% elif request.query_params.get('err') == 'failed' %}
+  <p class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;
+     border-radius:9px;padding:9px 12px">That didn't save. Try again.</p>
+  {% endif %}
+
+  <p class="hint" style="margin:0 0 16px">For a referral, a phone call, or a test run.
+    Anything that came through the website is already in
+    <a class="link" href="/incoming">Incoming</a>.</p>
+
+  <form method="post" action="/opportunity/new">
+    <div class="f">
+      <label for="client">Buyer</label>
+      <input id="client" name="client" required autofocus
+             placeholder="The Larkspur Trust">
+    </div>
+    <div class="f">
+      <label for="need">What they need</label>
+      <input id="need" name="need" required
+             placeholder="Winter appeal film — original score">
+    </div>
+    <div class="f">
+      <label for="description">Anything you already know <span class="hint">(optional)</span></label>
+      <textarea id="description" name="description" rows="3"
+                placeholder="Three-minute fundraising film. Discovery call to run."></textarea>
+      {# Deliberately NOT asking for budget, timeline or deliverables. Those are what the
+         discovery call is for, and a form that demands them here just collects guesses
+         made at the moment you know least. #}
+      <span class="hint">Budget, timeline and deliverables come from the call. Leave them.</span>
+    </div>
+    <div class="pair">
+      <div class="f">
+        <label for="contact_name">Contact <span class="hint">(optional)</span></label>
+        <input id="contact_name" name="contact_name" placeholder="Nadia Okonjo">
+      </div>
+      <div class="f">
+        <label for="contact_email">Their email <span class="hint">(optional)</span></label>
+        <input id="contact_email" name="contact_email" type="email"
+               placeholder="nadia@example.org">
+      </div>
+    </div>
+    <div class="acts">
+      <button class="btn primary" type="submit">Create deal</button>
+      <a class="link muted" href="/inbox">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

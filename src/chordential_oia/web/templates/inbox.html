@@ -4,6 +4,13 @@
 {% block heading %}Opportunity Inbox{% endblock %}
 {% block content %}
 
+{# Until this button existed there was no way to create an opportunity by hand at all:
+   every one had to arrive as an inbound lead and be promoted, which is two pages and
+   four steps for a referral or a test. #}
+<div style="display:flex;justify-content:flex-end;margin:0 0 12px">
+  <a class="btn primary" href="/opportunity/new">+ Add a deal</a>
+</div>
+
 {% if request.query_params.get('deleted') %}
 <div class="callout" style="background:#eef7ee;border:1px solid #cfe6cf;color:#2f6a34;border-radius:10px;padding:10px 14px;margin-bottom:14px">
   ✓ Deleted <b>{{ request.query_params.get('deleted') }}</b> and everything attached to it.
