@@ -105,6 +105,16 @@ def _money_band(text: str) -> str:
         if len(gap) <= 160 and _STRETCH.search(gap) and figs[0][1] != figs[1][1]:
             return "%s to %s" % (figs[0][1], figs[1][1])
     return explicit or (figs[0][1] if figs else "")
+# "We want weekly deliverables. We want to check in weekly." Stated twice on a real call
+# and dropped both times — there was no canonical slot for a cadence, so nothing looked
+# for one. A campaign fact does not need a slot to exist (see the dynamic field on the
+# Intelligence card); it only needs somewhere to live, and now it has one.
+_CADENCE = re.compile(
+    r"\b(?:check[\s-]?ins?|checking\s+in|deliverables?|updates?|reviews?|calls?)\b[^.]{0,40}?"
+    r"\b(daily|weekly|bi-?weekly|fortnightly|monthly|every\s+(?:day|week|two\s+weeks|month))\b"
+    r"|\b(daily|weekly|bi-?weekly|fortnightly|monthly|every\s+(?:day|week|two\s+weeks|month))\b"
+    r"[^.]{0,40}?\b(?:check[\s-]?ins?|checking\s+in|deliverables?|updates?|reviews?|calls?)\b",
+    re.I)
 _DISCIPLINES = {
     "sound design": "Sound design", "sonic branding": "Sonic branding",
     "music supervision": "Music supervision", "orchestration": "Orchestration",
@@ -149,6 +159,12 @@ def _extract_objective(text: str) -> List[Dict]:
     disc = next((label for kw, label in _DISCIPLINES.items() if kw in low), None)
     if disc:
         out.append(_cand("engagement", "primary_discipline", "fact", disc, confidence=55))
+    cad = _CADENCE.search(text)
+    if cad:
+        word = next((g for g in cad.groups() if g), "")
+        if word:
+            out.append(_cand("engagement", "check_in_cadence", "fact",
+                             word.strip().lower(), confidence=55))
     nm = _NAME_NEAR_ROLE.search(text)
     if nm:
         rl = _ROLE.search(text)

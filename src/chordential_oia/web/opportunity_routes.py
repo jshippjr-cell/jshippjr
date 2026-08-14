@@ -17,6 +17,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 from typing import Optional
 from urllib.parse import quote
 
@@ -265,9 +266,16 @@ async def _analyze_with_approval(opp_id, stance, modality, lane, text, file):
 @router.post("/opportunity/{opp_id}/intelligence/field")
 def opp_intelligence_field(opp_id: int, value: str = Form(""), field_id: str = Form(""),
                            facet: str = Form(""), key: str = Form(""),
-                           kind: str = Form("fact")):
+                           kind: str = Form("fact"), label: str = Form("")):
     """Human edit of a CI field — authoritative (ADR-0013). Edits an existing field by id,
-    or fills an empty canonical slot by (facet,key,kind). Then reflects to the opportunity."""
+    fills an empty canonical slot by (facet,key,kind), or CREATES a field nobody defined.
+
+    The canonical ten are the fields every campaign has. They were never meant to be the
+    only fields a campaign can have — a check-in cadence, a legal lead time, a stakeholder
+    nobody has a slot for. Storage and the view already carried arbitrary facts; there was
+    simply no way for a person to make one. A typed label becomes the key."""
+    if label.strip() and not key.strip():
+        key = re.sub(r"[^a-z0-9]+", "_", label.strip().lower()).strip("_")[:48]
     if not campaigns.workspace_enabled():
         return HTMLResponse("Not found", status_code=404)
     value = (value or "").strip()

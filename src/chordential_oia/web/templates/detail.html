@@ -393,6 +393,31 @@
   </div>
   {% endfor %}
 
+  {# The canonical ten are the fields EVERY campaign has — never the only fields a
+     campaign may have. A check-in cadence, a legal lead time, a stakeholder with no slot:
+     storage and the view already carried arbitrary facts, and nothing could make one. #}
+  <div class="ci-section">
+    <h3>Anything else that matters</h3>
+    <form class="ci-inline" method="post"
+          action="/opportunity/{{ row['id'] }}/intelligence/field"
+          style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select name="facet" aria-label="Where it belongs">
+        <option value="engagement">Engagement</option>
+        <option value="buyer">Buyer</option>
+        <option value="direction">Creative direction</option>
+      </select>
+      <input type="text" name="label" placeholder="Call it what it is (e.g. Check-in cadence)"
+             maxlength="60" style="flex:1;min-width:190px" required>
+      <input type="text" name="value" placeholder="What it is (e.g. Weekly, Thursdays)"
+             maxlength="400" style="flex:1;min-width:190px" required>
+      <button class="btn tiny" type="submit">Add</button>
+    </form>
+    <p class="muted small" style="margin:6px 0 0">Anything you add here is yours — a human
+      value the engine will not overwrite, and the extractor learns from the fields you
+      reach for that it never proposed.</p>
+  </div>
+
+
   {# Observed Facts — the EP's working-memory scratchpad (ADR-0021): every meaningful
      observation the extractor caught that has no dedicated slot yet. Confirm to keep,
      edit to sharpen — every disposition trains the producer's learned priors. #}
