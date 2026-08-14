@@ -71,11 +71,29 @@ def _build_message(to: str, subject: str, text: str, html: Optional[str],
     if html:
         msg.add_alternative(html, subtype="html")
     if ics:
-        # Attach as a real .ics part. method=REQUEST makes clients treat it as an
-        # invitation (RSVP/add-to-calendar) rather than an opaque file.
-        msg.add_attachment(
-            ics.encode("utf-8"), maintype="text", subtype="calendar",
-            filename="invite.ics", params={"method": "REQUEST", "charset": "UTF-8"})
+        # The calendar goes in TWICE, and the first one is the one that matters.
+        #
+        # As an ALTERNATIVE part: text/calendar; method=REQUEST, with no
+        # Content-Disposition. That is the shape Google Calendar and Outlook
+        # themselves send, and the shape Gmail/Apple/Outlook read as an INVITATION —
+        # the thing that produces an RSVP card and drops the event on the
+        # recipient's calendar.
+        #
+        # It used to be added with add_attachment(), which stamps
+        # `Content-Disposition: attachment; filename="invite.ics"`. A calendar part
+        # marked as an attachment is a FILE: the client offers to download it, and
+        # no block ever appears on anyone's calendar. The invite was being built
+        # correctly, sent correctly, and then presented as a download.
+        msg.add_alternative(ics, subtype="calendar")
+        cal = msg.get_payload()[-1]
+        cal.set_param("method", "REQUEST")
+        cal.set_param("charset", "UTF-8")
+        del cal["Content-Disposition"]
+        # ...and again as a real file, for the clients that only look for one. This
+        # is the fallback, which is why it is second and why it is application/ics:
+        # a second text/calendar part would compete with the invitation above.
+        msg.add_attachment(ics.encode("utf-8"), maintype="application", subtype="ics",
+                           filename="invite.ics")
     return msg
 
 
