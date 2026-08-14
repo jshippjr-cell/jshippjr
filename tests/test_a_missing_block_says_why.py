@@ -162,6 +162,63 @@ def test_the_meeting_card_reports_what_happened_after(env, monkeypatch):
         "the meeting card must say the invitation was never sent")
 
 
+def test_the_page_says_where_your_copy_goes_even_when_nothing_is_wrong(env, monkeypatch):
+    """A check that only speaks up on failure cannot be told apart from a deploy that has
+    not landed. The operator hit exactly that: no warning, and no way to know whether the
+    warning existed. So the line is always there, and its CONTENT carries the verdict."""
+    from fastapi.testclient import TestClient
+    _dbm, _ms, _conn, opp = env
+    monkeypatch.setenv("CHORDENTIAL_MAIL_PROVIDER", "smtp")
+    monkeypatch.setenv("CHORDENTIAL_SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("CHORDENTIAL_SMTP_FROM", "hello@chordential.com")
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jshippjr@gmail.com")
+    from chordential_oia.web import app as app_mod
+    importlib.reload(app_mod)
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp['id']}/schedule").text
+    assert "Your copy of this call goes to" in page
+    assert "jshippjr@gmail.com" in page
+    assert "not your inbox" not in page, "nothing is wrong here — do not cry wolf"
+
+
+def test_a_calendar_that_refuses_the_event_says_so_instead_of_logging_it(env, monkeypatch):
+    """The failure this hid. An OAuth refresh token minted in Testing status dies after 7
+    days; `create_event` then raises `invalid_grant`, the exception was swallowed into a
+    log warning, and the schedule page went on reporting a connected calendar."""
+    from fastapi.testclient import TestClient
+    dbm, ms, conn, opp = env
+    monkeypatch.setenv("CHORDENTIAL_CALENDAR_PROVIDER", "google")
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jshippjr@gmail.com")
+
+    class _Refuses:
+        name = "google"
+
+        def invites_attendees(self):
+            return True
+
+        def create_event(self, **kw):
+            raise RuntimeError("HTTP 400: invalid_grant")
+
+    monkeypatch.setattr(ms.M, "get_calendar_provider", lambda: _Refuses())
+    res = _book(dbm, ms, conn, opp)
+
+    assert res["ok"], "a calendar refusal must never fail the booking"
+    cal = [e for e in _log(dbm, conn, res["meeting"]["id"]) if e["role"] == "calendar"]
+    assert cal and cal[0]["status"] == "error"
+    assert "invalid_grant" in cal[0]["detail"]
+
+    # and, because Google created nothing, the emailed invitation must take over
+    others = [e for e in _log(dbm, conn, res["meeting"]["id"]) if e["role"] != "calendar"]
+    assert all(e["invite"] for e in others), (
+        "with no native event, the .ics is the only route to any calendar")
+
+    from chordential_oia.web import app as app_mod
+    importlib.reload(app_mod)
+    with TestClient(app_mod.app) as c:
+        page = c.get(f"/opportunity/{opp['id']}").text
+    assert "Google refused the event" in page
+
+
 def test_the_deploy_blueprint_declares_the_operator_address():
     """It was missing entirely, so the Render dashboard never prompted for the one setting
     that decides whether the operator's calendar is ever touched."""

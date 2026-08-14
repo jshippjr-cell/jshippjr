@@ -39,10 +39,17 @@ form:has(input[name=mode][value=direct]:checked) .sd-propose-only{display:none}
     <span class="on">📅 {% if integrations.calendar_route == 'native' %}Google invites both calendars{% elif integrations.calendar_route == 'operator' %}Google books yours, the client is invited by email{% else %}Both calendars invited by email{% endif %}</span>
   </div>
   {# The confirmation carries the calendar invitation, so an unsent email is an unbooked
-     calendar. Both of these are silent by default and both were live: the mailer is a
-     no-op until its provider is set, and "the operator" falls back to the app's own
-     sending address when CHORDENTIAL_OPERATOR_EMAIL is unset — which render.yaml never
-     even declared, so nothing prompted for it. Say so BEFORE the call is booked. #}
+     calendar. Both of these are silent by default: the mailer is a no-op until its
+     provider is set, and "the operator" falls back to the app's own sending address when
+     CHORDENTIAL_OPERATOR_EMAIL is unset — which render.yaml never even declared, so
+     nothing prompted for it. Say so BEFORE the call is booked.
+
+     And say it ALWAYS, not only when it is wrong. A warning that appears only on failure
+     is indistinguishable from a deploy that has not landed yet, which is exactly how the
+     operator was left unable to tell whether the check was even running. #}
+  <p class="small" style="margin:6px 0 0">Your copy of this call goes to
+    <b>{{ integrations.operator_email or 'nobody — no address is set' }}</b>{% if integrations.mail %},
+    by email{% else %} <b>(not sent: no mail provider)</b>{% endif %}.</p>
   {% if not integrations.mail %}
   <p class="small" style="margin:6px 0 0;color:var(--red,#a33)">⚠ No mail provider is
     configured, so no confirmation and <b>no calendar invitation</b> will be sent to anyone.

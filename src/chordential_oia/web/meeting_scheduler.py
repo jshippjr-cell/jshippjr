@@ -148,6 +148,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
 
     # 3) calendar invite (both types, if a calendar is connected)
     cal = M.get_calendar_provider()
+    calendar_note = ""
     if M.calendar_configured() and start_at:
         try:
             start_dt = M.parse_iso(start_at)
@@ -162,8 +163,15 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
                     attendees=[e for e in (_operator_email(), client_email) if e],
                     location=where)
         except Exception as e:  # noqa: BLE001
-            _log.warning("Calendar event create failed (%s: %s); no invite sent",
-                         type(e).__name__, e)
+            # A REFUSAL, not a hiccup — and it used to end here, as a warning line in a log
+            # nobody reads. The commonest one is an expired OAuth refresh token
+            # ("invalid_grant"): a token minted while the Google app is in Testing status
+            # dies after 7 days, so auto-booking works for a week and then silently stops
+            # while the page still says a calendar is connected. Carried out to the meeting
+            # card so the operator is told which it was.
+            calendar_note = f"{type(e).__name__}: {e}"[:300]
+            _log.warning("Calendar event create failed (%s); falling back to the emailed "
+                         "invitation", calendar_note)
 
     mid = db.create_meeting(
         conn, opp_id=opp["id"], ci_id=ci_id, start_at=start_at, join_url=join_url,
@@ -184,7 +192,8 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             db.add_ci_event(conn, ci_id, actor=scheduled_by or "operator",
                             verb="meeting_scheduled", facet="engagement", key="discovery_call",
                             to_value=f"{meeting_type} · {fmt_et(start_at)}", source="scheduler")
-    _send_confirmations(opp, db.get_meeting(conn, mid), conn=conn)
+    _send_confirmations(opp, db.get_meeting(conn, mid), conn=conn,
+                        calendar_note=calendar_note)
     return {"ok": True, "meeting": db.get_meeting(conn, mid)}
 
 
@@ -584,7 +593,8 @@ def _fold(line: str) -> str:
     return "\r\n".join(out)
 
 
-def _send_confirmations(opp, meeting, *, rescheduled: bool = False, conn=None) -> list:
+def _send_confirmations(opp, meeting, *, rescheduled: bool = False, conn=None,
+                        calendar_note: str = "") -> list:
     when = _fmt(meeting["start_at"])
     verb = "rescheduled to" if rescheduled else "confirmed for"
     manage = f"{_public_base()}/meeting/{meeting['id']}/manage?k={meeting['manage_token']}"
@@ -597,6 +607,12 @@ def _send_confirmations(opp, meeting, *, rescheduled: bool = False, conn=None) -
     client_ics, op_ics = invites_for(meeting, opp)
     native = _native_event(meeting)
     log: list = []
+    if calendar_note:
+        log.append({"role": "calendar", "to": "", "status": "error", "detail": calendar_note,
+                    "invite": False, "native": False})
+    elif M.calendar_configured() and native:
+        log.append({"role": "calendar", "to": "", "status": "sent", "detail": "",
+                    "invite": False, "native": True})
     if meeting["client_email"]:
         status = _safe_mail(
             meeting["client_email"], f"Discovery call {verb} {when}",

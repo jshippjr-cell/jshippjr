@@ -219,7 +219,15 @@
     {% if confirmations %}
     <div class="mtg-chips" style="margin-top:6px">
       {% for c in confirmations %}
-        {% if c['status'] == 'no-address' %}
+        {% if c['role'] == 'calendar' and c['status'] == 'error' %}
+        {# Google REFUSED the event. This used to be a log warning and nothing else, so a
+           connected-but-broken calendar looked exactly like a working one. "invalid_grant"
+           here means the OAuth refresh token expired — Testing-mode tokens die after 7 days. #}
+        <span class="mtg-chip fail" title="{{ c['detail'] }}">
+          ✕ Google refused the event — {{ c['detail'][:90] }}</span>
+        {% elif c['role'] == 'calendar' %}
+        <span class="mtg-chip ok">● Google created the event</span>
+        {% elif c['status'] == 'no-address' %}
         <span class="mtg-chip fail" title="Set CHORDENTIAL_OPERATOR_EMAIL to your own inbox">
           ✕ No calendar invite for you — no operator address is set</span>
         {% elif c['status'] == 'logged' %}
