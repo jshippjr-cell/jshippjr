@@ -52,6 +52,11 @@
       <summary class="btn ghost">⋯ Actions</summary>
       <div class="acts-menu">
         <a href="/opportunity/{{ row['id'] }}/schedule" data-drawer-src>🎥 Create discovery call</a>
+        {# Also in the menu, not only on the meeting card: a deal typed in by hand has no
+           meeting yet, so the card is absent and the prep sheet was unreachable on
+           EXACTLY the deals that most need preparing. Prep comes before the booking as
+           often as after it. #}
+        <a href="/opportunity/{{ row['id'] }}/prep" data-drawer-src>📋 Call prep</a>
         <a href="/opportunity/{{ row['id'] }}/commercial">🧾 Commercial Review</a>
         <a href="/opportunity/{{ row['id'] }}/procurement">📑 Procurement</a>
         {% if row['url'] %}<a href="{{ row['url'] }}" target="_blank" rel="noopener">📋 Original post ↗</a>{% endif %}

@@ -200,6 +200,17 @@ def test_it_is_reachable_from_the_meeting_card(client):
     assert "Call prep" in detail
 
 
+def test_it_is_reachable_before_any_call_is_booked(client):
+    """The meeting card is the natural home for it and was the ONLY home for it, so a
+    deal typed in by hand — which has no meeting until you book one — showed no way to
+    reach the prep sheet at all. That is backwards: the deals with nothing in the diary
+    are the ones you have not prepared for."""
+    detail = client.get(f"/opportunity/{_opp_with()}").text
+    assert "Create discovery call" in detail, "sanity: no meeting exists on this deal"
+    assert "Reschedule" not in detail, "sanity: the meeting card is genuinely absent"
+    assert "Call prep" in detail
+
+
 def test_an_unknown_opportunity_is_a_404_not_a_crash(client):
     assert client.get("/opportunity/99999/prep").status_code == 404
 
