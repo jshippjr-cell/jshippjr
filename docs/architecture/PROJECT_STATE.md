@@ -94,6 +94,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The module that crippled anything importing it** (2026-08-16). `_enrich_worker` set
+  `RLIMIT_AS` **at import time**, soft and hard together — and a lowered hard limit can
+  never be raised again, not even by root. Any process that merely imported it was capped
+  at 320MB for life, and the only symptom was `Thread.start()` blocking for ever: no
+  exception, no message, just a hang. It bit **twice**. First through `test_oom_guards`
+  itself, which was fixed by moving that check to a subprocess — the symptom, not the
+  cause. So it bit again through `test_scheduler_loop`, which imports the module to drive
+  the worker in-process: run alone the suite fitted inside the cap and passed; batched
+  with other files it deadlocked in `asyncio.to_thread` and a whole batch timed out at
+  600s. Diagnosed with **py-spy** on the hung process, confirmed pre-existing by replaying
+  the identical batch on a worktree two commits back. The ceiling now belongs to `main()`,
+  where the process is known to exist to run one job and die. That batch: 600s hang →
+  **10.5s, 88 passed**.
 - **We know how we are pricing the product** (ADR-0065, 2026-08-16). Reported live: *"I
   have no idea how I am pricing the product. The proposal generated a price based on what
   the client told me their budget was, which is a name-your-price on my service."* True:

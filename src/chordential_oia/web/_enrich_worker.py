@@ -25,12 +25,28 @@ import sys
 # web server (an instance-level OOM takes the whole site down — observed live).
 # RLIMIT_AS makes a runaway die here as MemoryError -> non-zero exit, which the
 # supervisor already handles by marking the agency and moving on.
-try:  # pragma: no cover - platform-dependent
-    import resource
-    _cap_mb = max(128, int(os.environ.get("CHORDENTIAL_WORKER_MAX_MB", "320")))
-    resource.setrlimit(resource.RLIMIT_AS, (_cap_mb * 1024 * 1024,) * 2)
-except Exception:  # noqa: BLE001 — best-effort; absent on non-POSIX
-    pass
+def _cap_memory() -> None:
+    """Apply the ceiling. Called from ``main`` — deliberately NOT at import.
+
+    It used to run at import time, and the limit is set soft AND hard together, which is
+    irreversible even as root. So any process that merely IMPORTED this module was capped
+    at 320MB for the rest of its life, and the only symptom was that `Thread.start()`
+    silently blocked for ever once the process grew past the cap — no exception, no
+    message, just a hang. `tests/test_scheduler_loop.py` imports this module to drive the
+    worker in-process, which capped pytest; run alone the suite fit inside 320MB and
+    passed, and in a batch alongside other files it deadlocked in `asyncio.to_thread`.
+    Diagnosed by py-spy on the hung process after a full-suite run stalled.
+
+    Guarding on ``__main__`` would be subtler and weaker: `run()` is called directly by
+    tests, so the entrypoint is the honest place to put a whole-process side effect.
+    """
+    try:  # pragma: no cover - platform-dependent
+        import resource
+        cap_mb = max(128, int(os.environ.get("CHORDENTIAL_WORKER_MAX_MB", "320")))
+        resource.setrlimit(resource.RLIMIT_AS, (cap_mb * 1024 * 1024,) * 2)
+    except Exception:  # noqa: BLE001 — best-effort; absent on non-POSIX
+        pass
+
 
 from . import db
 
@@ -90,6 +106,9 @@ def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         return 2
+    # The ceiling belongs to the WORKER PROCESS, so it is applied here, where we know
+    # this process exists to run one job and die. See `_cap_memory`.
+    _cap_memory()
     try:
         spec = json.loads(argv[0])
     except (ValueError, TypeError):

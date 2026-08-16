@@ -138,33 +138,62 @@ def test_dm_error_mark_removes_agency_from_the_queue(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # 3 · Worker memory ceiling
 # --------------------------------------------------------------------------- #
-def test_worker_sets_an_address_space_ceiling():
-    """Checked in a SUBPROCESS, because importing the worker caps the process it lands in
-    and that cap cannot be undone.
+def test_worker_sets_an_address_space_ceiling_when_run_but_not_when_imported():
+    """The ceiling belongs to the worker PROCESS, so it is applied by its entrypoint.
 
     `_enrich_worker` sets RLIMIT_AS soft AND hard together — `(cap,) * 2` — and a lowered
-    HARD limit can never be raised again, not even by root. This test used to import the
-    module into the pytest process and restore the limit in a `finally`, where the restore
-    raised `ValueError: not allowed to raise maximum limit` straight into an
-    `except Exception: pass`. Every test that ran afterwards in that process was capped at
-    256 MB of address space, and the first one to need a thread stack — a Starlette
-    TestClient opening its portal thread — hung in `Thread.start()` for ever, with no
-    failure and no message. Whole batches timed out and were written off as slow.
+    HARD limit can never be raised again, not even by root. It used to be applied at
+    IMPORT, which meant merely importing the module capped whatever process it landed in
+    for ever. The only symptom was that `Thread.start()` silently blocked once the process
+    grew past the cap: no exception, no message, just a hang.
 
-    A subprocess is also the honest place to check it: that module exists to be spawned.
+    That is not hypothetical, and it bit twice. First through this very file, which imported
+    the module into the pytest process and tried to restore the limit in a `finally` —
+    where the restore raised `ValueError: not allowed to raise maximum limit` into an
+    `except Exception: pass`. Moving this check to a subprocess fixed the symptom here and
+    left the cause in place, so it bit again through `tests/test_scheduler_loop.py`, which
+    imports the module to drive the worker in-process: run alone the suite fitted inside
+    320 MB and passed, and in a batch alongside other files it deadlocked in
+    `asyncio.to_thread`. Found with py-spy on the hung process.
+
+    Both halves are asserted, in one subprocess, because "it caps when run" is only half
+    the contract and the other half is what actually broke.
     """
-    pytest.importorskip("resource")
+    resource = pytest.importorskip("resource")
     probe = (
-        "import importlib, os, resource\n"
+        "import os, resource\n"
         "os.environ['CHORDENTIAL_WORKER_MAX_MB'] = '256'\n"
         "import chordential_oia.web._enrich_worker as w\n"
-        "importlib.reload(w)\n"
+        "print('after_import', resource.getrlimit(resource.RLIMIT_AS)[1])\n"
+        "w._cap_memory()\n"
+        "print('after_cap', resource.getrlimit(resource.RLIMIT_AS)[0])\n"
+    )
+    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    lines = dict(line.split() for line in out.stdout.strip().splitlines())
+    assert int(lines["after_import"]) == resource.RLIM_INFINITY, (
+        "importing the worker capped the importing process — the defect that hangs "
+        "any later Thread.start() with no error")
+    assert int(lines["after_cap"]) == 256 * 1024 * 1024
+
+
+def test_the_worker_entrypoint_applies_the_ceiling():
+    """The other end of the same contract: the cap must actually reach a real worker run,
+    or the ceiling that exists to stop a runaway scrape taking the instance down is gone."""
+    pytest.importorskip("resource")
+    probe = (
+        "import json, os, resource, sys\n"
+        "os.environ['CHORDENTIAL_WORKER_MAX_MB'] = '256'\n"
+        "import chordential_oia.web._enrich_worker as w\n"
+        # A spec with no recognised action: main() caps, run() does nothing, exits 0.
+        "w.main([json.dumps({'action': 'nothing-to-do'})])\n"
         "print(resource.getrlimit(resource.RLIMIT_AS)[0])\n"
     )
     out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
                          timeout=60)
     assert out.returncode == 0, out.stderr
-    assert int(out.stdout.strip()) == 256 * 1024 * 1024
+    assert int(out.stdout.strip().splitlines()[-1]) == 256 * 1024 * 1024
 
 
 def test_measuring_the_ceiling_does_not_cap_the_test_process():
