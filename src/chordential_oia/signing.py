@@ -29,8 +29,11 @@ means anything. A signature that cannot detect that is decoration.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -127,6 +130,13 @@ class Signature:
     # without having to reconstruct history.
     certified_version: str = ""
     terms_snapshot: Dict[str, Any] = field(default_factory=dict)
+    # The drawn mark, as a PNG data URL, when the signer made one. Deliberately NOT part
+    # of the digest and never required: what makes an electronic signature binding is
+    # intent, consent and attribution, all carried by the typed name and the recorded
+    # consent. A drawing is a courtesy to the signer's expectations, so a browser where
+    # the canvas fails must still be able to sign — and a mark treated as the evidence
+    # would mean a signature that a rendering bug could erase.
+    drawn_mark: str = ""
 
     def to_json(self) -> str:
         return json.dumps(self.__dict__, sort_keys=True)
@@ -151,6 +161,7 @@ def build_signature(
     token: str = "",
     certified_version: str = "",
     terms_snapshot: Optional[Dict[str, Any]] = None,
+    drawn_mark: str = "",
 ) -> Signature:
     """Make a signature record for a document as it stands right now.
 
@@ -184,7 +195,48 @@ def build_signature(
         token_fingerprint=fingerprint(token),
         certified_version=(certified_version or "").strip(),
         terms_snapshot=dict(terms_snapshot or {}),
+        drawn_mark=clean_drawn_mark(drawn_mark),
     )
+
+
+# A drawn signature big enough to be a signature and small enough not to be a payload.
+# The pad emits roughly 8-40KB; the ceiling is generous for a slow hand on a big screen
+# and still far below anything that could be smuggled through this field.
+MAX_DRAWN_MARK = 400_000
+
+
+def clean_drawn_mark(value: str) -> str:
+    """Accept a PNG data URL from our own signature pad, or nothing.
+
+    This value arrives from a token-gated public form and is rendered back into an
+    ``<img src>``, so it is validated rather than trusted: anything that is not a plain
+    base64 PNG data URL is DROPPED, not sanitised and not stored. A rejected mark costs
+    the signer a drawing; an accepted `data:text/html` or `javascript:` would cost every
+    later reader of the document. The signature itself never depends on this field, which
+    is what makes dropping it the safe direction to fail.
+    """
+    mark = (value or "").strip()
+    if not mark:
+        return ""
+    if len(mark) > MAX_DRAWN_MARK:
+        return ""
+    if not mark.startswith("data:image/png;base64,"):
+        return ""
+    payload = mark[len("data:image/png;base64,"):]
+    if not payload or len(payload) % 4:
+        return ""
+    # Base64 only. A single character outside the alphabet means this was not produced by
+    # `canvas.toDataURL`, and guessing at what it was instead is not our job.
+    if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", payload):
+        return ""
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (ValueError, binascii.Error):
+        return ""
+    # It must actually be a PNG, not a base64 blob wearing a PNG label.
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ""
+    return mark
 
 
 def verify(stored_digest: str, current_text: Optional[str]) -> str:

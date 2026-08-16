@@ -94,6 +94,31 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **We know how we are pricing the product** (ADR-0065, 2026-08-16). Reported live: *"I
+  have no idea how I am pricing the product. The proposal generated a price based on what
+  the client told me their budget was, which is a name-your-price on my service."* True:
+  `quote_band`'s second tier was the disclosed budget, which fires on every deal that has
+  had a discovery call. Measured on one film — cost $4,062–$8,435, quoted **$6,000** to a
+  client who said $6,000 and **$90,000** to one who said $90,000. `pricing.py` now splits
+  a **creative fee** (cost at target margin) from a **licence fee** (media × territory ×
+  term × exclusivity), because production cost is flat with respect to usage and value is
+  not — the same cue is $14,000 or $28,500 on the licence alone. Budget is demoted to a
+  three-way verdict. Calibrated against real competitor data in
+  `docs/market-pricing-research.md`; the clearest miss was exclusivity, priced at +85%
+  against a market of +150%. **Not yet wired to what a client is quoted** — that is a
+  business decision and the factors are the operator's to ratify.
+- **The discovery summary is the proposal, and it can be signed** (ADR-0065, 2026-08-16).
+  A met deal's summary carries the commercial close and an Agreement block; accepting it
+  is a real signature bound to a SHA-256 of `agreement.signable_text()`, so a term moved
+  afterwards reads SUPERSEDED. Sign with a **finger on a phone or a mouse on a desktop** —
+  the drawn mark is validated as a base64 PNG or dropped, is excluded from the digest, and
+  is never required, so a browser where the canvas fails still signs. Supersedes ADR-0020
+  on one point only (no pricing in the summary); its rule of exactly ONE commercial
+  commitment is better served, because the client used to be asked twice.
+- **The prep sheet prices its own questions** (ADR-0065, 2026-08-16). The four licence
+  questions were already on the sheet and already flagged as the ones dropped when a call
+  overruns; now each answer is costed against the live deal, loudest first. On the
+  Larkspur test deal, exclusivity is worth **$8,000**.
 - **The budget reached the Budget field** (ADR-0064, 2026-08-14). A live discovery call
   stated it plainly — *"roughly 25. No, no, 30,000. And that's all in including any
   licensing"* — and the ten-agent engine read it correctly, spoken correction and all,

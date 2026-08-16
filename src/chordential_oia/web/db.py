@@ -1449,14 +1449,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             certified_version TEXT,
             terms_json TEXT,             -- what the document said, for legibility
             voided_at TEXT, voided_by TEXT, void_reason TEXT,
-            opportunity_id INTEGER DEFAULT 0   -- the subject when no project exists yet
+            opportunity_id INTEGER DEFAULT 0,  -- the subject when no project exists yet
+            drawn_mark TEXT                    -- the drawn signature, PNG data URL
         )"""
     )
     # The Discovery Summary & Proposal is signed BEFORE a project exists, so it is stamped
     # with the opportunity instead. Existing databases predate the column.
     sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signature)")}
-    if "opportunity_id" not in sig_cols:
-        conn.execute("ALTER TABLE signature ADD COLUMN opportunity_id INTEGER DEFAULT 0")
+    for _name, _decl in (("opportunity_id", "INTEGER DEFAULT 0"), ("drawn_mark", "TEXT")):
+        if _name not in sig_cols:
+            conn.execute(f"ALTER TABLE signature ADD COLUMN {_name} {_decl}")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -5809,13 +5811,13 @@ def record_signature(conn, sig) -> int:
         """INSERT INTO signature (project_id, doc_kind, digest, signer_name,
                signer_email, typed_name, consent_text, signed_at, actor,
                ip_fingerprint, user_agent, token_fingerprint, certified_version,
-               terms_json, opportunity_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               terms_json, opportunity_id, drawn_mark)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sig.project_id, sig.doc_kind, sig.digest, sig.signer_name, sig.signer_email,
          sig.typed_name, sig.consent_text, sig.signed_at, sig.actor,
          sig.ip_fingerprint, sig.user_agent, sig.token_fingerprint,
          sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True),
-         getattr(sig, "opportunity_id", 0) or 0))
+         getattr(sig, "opportunity_id", 0) or 0, getattr(sig, "drawn_mark", "") or ""))
     conn.commit()
     return int(cur.lastrowid)
 

@@ -98,10 +98,15 @@ TERM_FACTORS: Dict[Optional[int], float] = {
     1: 0.65, 2: 0.85, 3: 1.00, 5: 1.30, 10: 1.60, None: 1.90,
 }
 
+# Calibrated against the market rather than guessed (see docs/market-pricing-research.md).
+# The 2026 sync rate cards put limited exclusivity at +50% and full exclusivity at +150%
+# or more, with a second source giving a 2×–5× range. The first pass here had them at
+# +40% and +85%, which underpriced the single term clients most often assume is free —
+# and which the call prep sheet already warns is "a real cost to us".
 EXCLUSIVITY_FACTORS: Dict[str, float] = {
     "none": 1.00,
-    "category": 1.40,        # nobody in their competitive set
-    "full": 1.85,            # nobody at all; the piece leaves our catalogue
+    "category": 1.50,        # nobody in their competitive set — market: +50%
+    "full": 2.50,            # nobody at all; the piece leaves our catalogue — market: +150%
 }
 EXCLUSIVITY_LABELS: Dict[str, str] = {
     "none": "non-exclusive", "category": "category-exclusive", "full": "fully exclusive",
@@ -112,6 +117,29 @@ EXCLUSIVITY_LABELS: Dict[str, str] = {
 # it does to have it made — which is the ratio the market already runs at, and the ratio
 # this business currently collects none of.
 BASE_LICENCE_SHARE = 0.50
+
+# Four factors multiplied together compound fast, and the market does not. Normalised to
+# a common baseline, the published sync card puts "perpetual, worldwide, all media" at
+# 2.5× a one-year North American licence; unchecked, these tables reach 7.6×. Each factor
+# is individually defensible and their product is not, because a buyer refusing to pay is
+# a fact no rate card overrides. The cap is set above the market's top so bespoke work —
+# where a buyout transfers a real asset rather than renting a catalogue track — keeps
+# headroom, and it is a documented ceiling rather than a quiet fudge of the factors.
+LICENCE_FACTOR_CAP = 4.0
+
+# What the market charges, for the prep sheet and for anyone re-reading these numbers in
+# a year. Sourced August 2026; see docs/market-pricing-research.md for the full working.
+# Swell is the closest comparator — a music house with a PUBLISHED rate card — and the
+# entry package is the number a buyer will have in their head.
+MARKET_BENCHMARKS = [
+    ("Swell Music + Sound", "Original score · 1 demo · 5 revisions · stems", 10_000, 10_000),
+    ("Swell Music + Sound", "Original score · 5 demos", 15_000, 15_000),
+    ("Swell Music + Sound", "Custom library track · unlimited use", 5_000, 5_000),
+    ("Synchro Music (UK)", "Bespoke ad music · simple, digital only", 3_800, 3_800),
+    ("Synchro Music (UK)", "Bespoke ad music · mid-scale commission", 10_000, 19_000),
+    ("Synchro Music (UK)", "Flagship TV campaign · full buyout", 38_000, 38_000),
+    ("Industry guides", "Custom composition for a :30 spot", 2_000, 25_000),
+]
 
 # Verdicts on the client's stated budget.
 BELOW_FLOOR = "below_floor"
@@ -141,10 +169,21 @@ class LicenceTerms:
 
     @property
     def factor(self) -> float:
+        raw = (MEDIA_FACTORS.get(self.media, 1.0)
+               * TERRITORY_FACTORS.get(self.territory, 1.0)
+               * TERM_FACTORS.get(self.term_years, 1.0)
+               * EXCLUSIVITY_FACTORS.get(self.exclusivity, 1.0))
+        return min(raw, LICENCE_FACTOR_CAP)
+
+    @property
+    def capped(self) -> bool:
+        """True when the four factors compounded past what the market will pay. Worth
+        surfacing: it means the licence being asked for is at the ceiling, which is a
+        negotiation position rather than an arithmetic result."""
         return (MEDIA_FACTORS.get(self.media, 1.0)
                 * TERRITORY_FACTORS.get(self.territory, 1.0)
                 * TERM_FACTORS.get(self.term_years, 1.0)
-                * EXCLUSIVITY_FACTORS.get(self.exclusivity, 1.0))
+                * EXCLUSIVITY_FACTORS.get(self.exclusivity, 1.0)) > LICENCE_FACTOR_CAP
 
     @property
     def term_label(self) -> str:
@@ -447,3 +486,49 @@ def derivation(quote: Quote) -> List[Tuple[str, str, str]]:
         ("Licence", quote.licence_basis, f"${quote.licence_fee:,}"),
         ("Total", "", f"${quote.total:,}"),
     ]
+
+
+# ── The price guide, for the call ────────────────────────────────────────────────────
+
+def price_guide(estimate: Estimate, licence: Optional[LicenceTerms] = None) -> dict:
+    """What each licence answer is WORTH, priced against this specific deal.
+
+    The prep sheet already asks the four licence questions and already tells the operator
+    they matter — "Territory is priced", "Term drives the fee more than almost anything
+    else". What it could not say was *how much*, so the questions read as diligence rather
+    than as money, and they are the ones that get dropped when a call runs long.
+
+    This prices every option against THIS job, so the sheet can say the thing that
+    actually changes behaviour on a call: asking about exclusivity is worth $7,700 here.
+    Everything is derived from the same `build_quote` the proposal uses — one derivation,
+    two reporters — so the guide cannot quote a number the proposal would not honour.
+    """
+    licence = licence or LicenceTerms()
+    here = build_quote(estimate, licence)
+    rows = []
+    for label, field, options, labels in (
+        ("Media", "media", list(MEDIA_FACTORS), MEDIA_LABELS),
+        ("Territory", "territory", list(TERRITORY_FACTORS), TERRITORY_LABELS),
+        ("Licence term", "term_years", [1, 2, 3, 5, 10, None], None),
+        ("Exclusivity", "exclusivity", list(EXCLUSIVITY_FACTORS), EXCLUSIVITY_LABELS),
+    ):
+        priced = []
+        for option in options:
+            trial = LicenceTerms(**{**licence.__dict__, field: option})
+            quote = build_quote(estimate, trial)
+            priced.append({
+                "label": (trial.term_label if labels is None
+                          else labels.get(option, str(option))),
+                "total": quote.total,
+                "delta": quote.total - here.total,
+                "current": option == getattr(licence, field),
+            })
+        spread = max(p["total"] for p in priced) - min(p["total"] for p in priced)
+        rows.append({"question": label, "field": field, "options": priced,
+                     "spread": spread, "stated": getattr(licence, f"{field.split('_')[0]}_stated",
+                                                         False)})
+    # Loudest first: the question worth the most money is the one that must survive a
+    # call that overruns, and it is not always the one the operator expects.
+    rows.sort(key=lambda r: r["spread"], reverse=True)
+    return {"quote": here, "rows": rows,
+            "benchmarks": MARKET_BENCHMARKS, "prior_note": PRIOR_NOTE}

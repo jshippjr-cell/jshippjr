@@ -1664,6 +1664,67 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0065 — The summary is the proposal, the licence is the price, and the budget is only a check
+**Status:** Accepted (2026-08-16, operator directive) · Supersedes one clause of ADR-0020 ·
+Source: `agreement.py`, `pricing.py`, `signing.py`, `client_voice.client_assumptions`,
+`web/workspace_routes.py`, `docs/market-pricing-research.md`,
+`tests/test_pricing_is_not_the_clients_budget.py`, `tests/test_a_signature_you_can_draw.py`
+
+**Decision.** Three changes to how a deal is closed.
+
+(1) **The Discovery Summary carries the commercial close and can be signed.** Once a
+discovery call has happened (`met`), the client's summary shows scope, fee, terms and an
+Agreement block. Accepting it is a real signature bound to a SHA-256 of
+`agreement.signable_text()` — one deterministic text that is both what the client reads
+and what the digest covers, rebuilt on the sign path so what is stored is provably what
+the page showed. A drawn mark (finger or mouse) may accompany it but is never the
+evidence: it is optional, validated as a base64 PNG or dropped, and excluded from the
+digest, so a browser where the canvas fails can still sign. Signing does not award the
+deal — it records the client's half and leaves countersigning to a human.
+
+(2) **Price is a creative fee plus a licence fee.** The creative fee is cost at target
+margin (`estimation`, unchanged). The licence fee is media × territory × term ×
+exclusivity, capped at `LICENCE_FACTOR_CAP`. The client's stated budget NEVER sets the
+price; it produces a verdict — below floor, in band, above band.
+
+(3) **The prep sheet prices its own questions.** Each licence answer is costed against
+the live deal, loudest first, through the same `build_quote` the proposal uses.
+
+**Why.** ADR-0020 held that the Summary carries no pricing and that the commercial
+conversation happens later at a released proposal. Its underlying rule — the deal has
+exactly ONE commercial commitment — is untouched and better served: the client used to be
+asked twice (confirm the summary, then approve a proposal) and now commits once. The half
+of ADR-0020 that was right survives as the `met` gate: before the call there is no
+scoping, so no honest number, so the summary still shows none.
+
+The pricing change answers a live report — *"I have no idea how I am pricing the
+product… that is a name-your-price on my service."* `quote_band`'s second tier was the
+client's disclosed budget, which fires on every deal that has had a discovery call,
+because discovering the budget is what a discovery call does. Measured on one film: cost
+$4,062–$8,435, quoted $6,000 to a client who said $6,000 and $90,000 to one who said
+$90,000. Two real engines sat underneath and reached nobody.
+
+Splitting creative from licence is specific to music: production cost is nearly flat with
+respect to usage and value is not. The same ninety-second cue is $14,000 or $28,500 on
+the licence alone. Those four inputs were already questions on the prep sheet, whose own
+copy already promised they were priced.
+
+**Consequences.**
+- The signable text is the DOCUMENT. Anything that changes it changes every existing
+  signature's verdict, so acceptance copy lives in Python (`agreement.ACCEPTANCE_TEXT`),
+  not in a template where it could be edited without a signature noticing.
+- A signature may hang off an opportunity (`opportunity_id`) or a project, never both.
+- Never print internal assumptions on a client document. `client_voice.client_assumptions`
+  is the gate; the estimator's own list states our target margin.
+- Never quote below `pricing` floor, built on the HIGH end of the cost band.
+- Licence factors are **priors**, ratified against `docs/market-pricing-research.md` and
+  not calibrated on Chordential actuals. Re-read that document before changing one.
+- `estimation.suggested_price` still folds a usage factor into the creative number and
+  therefore now DISAGREES with `pricing`. `build_quote` deliberately ignores it. It is a
+  legacy figure pending retirement.
+- `quote_band` is unchanged so far: the engine is built and tested but not yet wired to
+  what a client is quoted. That wiring is a business decision, not a refactor.
+
 ### ADR-0064 — A canonical key has exactly one home, so its facet is derived, never accepted
 **Status:** Accepted (2026-08-14) · Source: `web/campaign_intelligence.py` (`canonical_slot`),
 `web/campaign_intake.py` (`_canonicalise`), `web/db.py`

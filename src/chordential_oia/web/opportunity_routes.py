@@ -24,9 +24,10 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
-from .. import mailer
+from .. import mailer, signing
 from ..capabilities import (
-    DELIVERY_TEMPLATES, SECTION_FAMILY, build_capabilities_doc, build_understanding,
+    DELIVERY_TEMPLATES, SECTION_FAMILY, attach_agreement, build_capabilities_doc,
+    build_understanding,
     chips_for, default_toggles, doc_from_json, doc_to_json,
     quote_band as capabilities_quote_band,
 )
@@ -806,6 +807,7 @@ def discovery_prep_sheet(request: Request, opp_id: int):
     confidently and wrongly is the failure this product keeps having, and the only cheap
     moment to catch it is while the person who knows is still on the line."""
     from ..call_prep import coverage, prep_sheet
+    from ..pricing import licence_from_ci, price_guide
     conn = db.connect()
     try:
         row = db.get_opportunity(conn, opp_id)
@@ -817,11 +819,19 @@ def discovery_prep_sheet(request: Request, opp_id: int):
             fields = dict(
                 campaign_intelligence.brief_view(conn, ci_row["id"]).get("fields") or {})
         meeting = db.meeting_for_opp(conn, opp_id)
+        _r, opp, ev = _load(conn, opp_id)
     finally:
         conn.close()
     groups = prep_sheet(fields)
+    # The price of each answer, computed for THIS deal (ADR-0065). The four licence
+    # questions were already on the sheet and already flagged as the ones that get
+    # dropped when a call overruns; what the sheet could not say was what dropping them
+    # costs. Priced through the same `build_quote` the proposal uses, so the guide cannot
+    # quote a number the proposal would not honour.
+    qual, _scored = ev
+    guide = price_guide(estimate_for(opp, qual=qual), licence_from_ci(fields))
     return render(request, "call_prep.html", nav="inbox", row=row, meeting=meeting,
-                  groups=groups, cover=coverage(groups))
+                  groups=groups, cover=coverage(groups), guide=guide)
 
 
 @router.get("/opportunity/{opp_id}/schedule", response_class=HTMLResponse)
@@ -1689,8 +1699,36 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
                 commercial_overrides=(overrides or {}).get("commercial")),
         ).deposit_amount
 
+    # Re-derive the agreement with the deposit figure, exactly as the client's copy does
+    # (`_live_brief_ctx`). Both surfaces must build the SAME text or the digest disagrees:
+    # without this the operator's copy kept the prose deposit while the client signed one
+    # naming the real number, so an untouched document read as SUPERSEDED. One derivation,
+    # many reporters — and this is the reporter that had drifted.
+    attach_agreement(doc, deposit_amount=deposit_amount)
+
+    # The signature, on the operator's copy too. Without this the person who has to
+    # countersign and start production could only learn the client had signed from an
+    # email — the document itself, the thing that WAS signed, said nothing. No `sign_url`
+    # is passed, so this view renders the record and never a form: the author of a
+    # document must not be able to sign it on the client's behalf.
+    conn = db.connect()
+    try:
+        proposal_signature = db.latest_opportunity_signature(
+            conn, opp_id, signing.DOC_PROPOSAL)
+    finally:
+        conn.close()
+    sig_state = signing.verify(
+        proposal_signature["digest"] if proposal_signature is not None else "",
+        doc.agreement.signable_text() if getattr(doc, "agreement", None) else None)
+
     return render(
         request, "capabilities_doc.html", nav="inbox", row=row, doc=doc,
+        proposal_signature=proposal_signature,
+        proposal_signature_mark=(
+            (proposal_signature["drawn_mark"] if "drawn_mark" in proposal_signature.keys()
+             else "") if proposal_signature is not None else ""),
+        proposal_signature_note=signing.verdict_note(
+            sig_state, dict(proposal_signature) if proposal_signature is not None else None),
         deposit_amount=deposit_amount,
         deposit_invoice_id=(deposit_invoice["id"] if deposit_invoice else None),
         edit=edit, overrides=overrides, chip_library=chip_library,

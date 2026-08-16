@@ -503,6 +503,10 @@
       {# Signed. The verdict is the honest one, including SUPERSEDED — a client whose
          signed terms were edited afterwards is entitled to see that they were. #}
       <div class="docusign" style="border-style:solid">
+        {% if proposal_signature_mark %}
+        <img class="sig-mark" src="{{ proposal_signature_mark }}"
+             alt="Signature of {{ proposal_signature['typed_name'] }}">
+        {% endif %}
         <div style="font-weight:750">✓ Signed by {{ proposal_signature['typed_name'] }}</div>
         <div class="fineprint" style="margin-top:4px">{{ proposal_signature_note }}</div>
       </div>
@@ -511,7 +515,30 @@
         <p style="margin:0 0 10px">{{ acceptance_text }}</p>
         <p class="fineprint" style="margin:0 0 12px">{{ acceptance_limits }}</p>
         {% if sign_url %}
-        <form method="post" action="{{ sign_url }}" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
+        <form method="post" action="{{ sign_url }}" id="sign-form" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
+          {# Draw your signature — finger on a phone, mouse on a desktop. The drawing is
+             a courtesy, not the evidence: what makes this binding under ESIGN/UETA is
+             intent, consent and attribution, all of which the typed name and the
+             checkbox below already carry. So it is OPTIONAL and its absence never blocks
+             a signature — a client on a browser where the canvas fails must still be
+             able to sign, and a mark nobody could produce is worse than no mark. It is
+             stored as a PNG data URL beside the digest, never in place of it. #}
+          <div class="sig-pad-wrap">
+            <label style="font-size:13px;font-weight:650">Sign here
+              <span style="font-weight:500;opacity:.7">— use your finger or mouse (optional)</span>
+            </label>
+            <div class="sig-pad-box">
+              <canvas id="sig-pad" width="900" height="300" aria-label="Signature drawing area"
+                      role="img"></canvas>
+              <span class="sig-pad-line" aria-hidden="true"></span>
+              <span class="sig-pad-hint" id="sig-hint" aria-hidden="true">Sign above the line</span>
+            </div>
+            <div class="sig-pad-acts">
+              <button type="button" class="btn ghost tiny" id="sig-clear">Clear</button>
+              <span class="fineprint" id="sig-state">Not signed yet</span>
+            </div>
+            <input type="hidden" name="drawn_signature" id="sig-data" value="">
+          </div>
           <label style="font-size:13px;font-weight:650">Your full name
             <input type="text" name="typed_name" required autocomplete="name"
                    placeholder="Type your full name to sign"
@@ -580,6 +607,79 @@
     <div class="foot">Chordential · procurement-grade music · chordential.com</div>
   </div>
 </div>
+
+{% if doc.show_agreement and sign_url %}
+<style>
+/* The signature pad. Sized so a thumb has room on a phone — the canvas backing store is
+   fixed at 900x300 and CSS scales it, so the same drawing lands identically whatever the
+   viewport, and `touch-action:none` stops the page scrolling out from under a stroke,
+   which is the failure that makes web signature pads feel broken on mobile. */
+.sig-pad-wrap{display:flex;flex-direction:column;gap:6px}
+.sig-pad-box{position:relative;border:1px solid var(--sand,#d8cdb6);border-radius:8px;
+  background:#fff;overflow:hidden}
+#sig-pad{display:block;width:100%;height:150px;touch-action:none;cursor:crosshair}
+.sig-pad-line{position:absolute;left:6%;right:6%;bottom:34px;border-bottom:1px solid #c9bfae;
+  pointer-events:none}
+.sig-pad-hint{position:absolute;left:6%;bottom:12px;font-size:11px;color:#a2988a;
+  pointer-events:none;transition:opacity .15s}
+.sig-pad-box.has-ink .sig-pad-hint{opacity:0}
+.sig-pad-acts{display:flex;align-items:center;gap:10px}
+.sig-mark{display:block;max-width:260px;margin:0 0 6px;background:#fff}
+@media print{ .sig-pad-wrap{display:none} }
+</style>
+<script>
+(function () {
+  var pad = document.getElementById('sig-pad');
+  if (!pad || !pad.getContext) return;          // no canvas → the typed name still signs
+  var ctx = pad.getContext('2d');
+  var box = pad.parentNode, data = document.getElementById('sig-data');
+  var state = document.getElementById('sig-state');
+  var drawing = false, inked = false, last = null;
+
+  ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1b2a4a';                  // ink blue, so a signature reads as one
+
+  // Canvas pixels from a pointer, accounting for the CSS scale. Without this the stroke
+  // lands somewhere other than under the finger on every screen except one.
+  function at(e) {
+    var r = pad.getBoundingClientRect();
+    return {x: (e.clientX - r.left) * (pad.width / r.width),
+            y: (e.clientY - r.top) * (pad.height / r.height)};
+  }
+  function start(e) {
+    drawing = true; last = at(e); e.preventDefault();
+    if (pad.setPointerCapture && e.pointerId != null) pad.setPointerCapture(e.pointerId);
+  }
+  function move(e) {
+    if (!drawing) return;
+    var p = at(e);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p; e.preventDefault();
+    if (!inked) { inked = true; box.classList.add('has-ink'); state.textContent = 'Signed'; }
+  }
+  function end() { drawing = false; last = null; }
+
+  pad.addEventListener('pointerdown', start);
+  pad.addEventListener('pointermove', move);
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+  pad.addEventListener('pointerleave', end);
+
+  document.getElementById('sig-clear').addEventListener('click', function () {
+    ctx.clearRect(0, 0, pad.width, pad.height);
+    inked = false; box.classList.remove('has-ink');
+    state.textContent = 'Not signed yet'; data.value = '';
+  });
+
+  // Serialise at SUBMIT, not on every stroke: a data URL regenerated per pointermove is
+  // megabytes of garbage for no gain. An empty pad submits an empty field, and the
+  // signature still stands on the typed name — the drawing was never the evidence.
+  document.getElementById('sign-form').addEventListener('submit', function () {
+    data.value = inked ? pad.toDataURL('image/png') : '';
+  });
+})();
+</script>
+{% endif %}
 
 <script>
 // Compact brand audio player: drive each .cap-audio off its hidden <audio>.

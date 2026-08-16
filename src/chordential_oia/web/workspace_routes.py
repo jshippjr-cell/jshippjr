@@ -282,7 +282,8 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
 
 @router.post("/workspace/{token}/sign")
 def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form(""),
-                            signer_email: str = Form(""), consent: str = Form("")):
+                            signer_email: str = Form(""), consent: str = Form(""),
+                            drawn_signature: str = Form("")):
     """The client accepts the Discovery Summary & Proposal (ADR-0065).
 
     This is the deal's ONE commercial commitment (ADR-0020's rule, kept), and it is a real
@@ -329,6 +330,10 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
             ip=(request.client.host if request.client else ""),
             user_agent=request.headers.get("user-agent", ""),
             token=token,
+            # Validated, never trusted: `clean_drawn_mark` drops anything that is not a
+            # real base64 PNG rather than storing it, because this value is rendered back
+            # into an <img src> for every later reader of the document.
+            drawn_mark=drawn_signature,
             terms_snapshot={"fee": agr.fee_line, "scope": agr.scope,
                             "timeline": agr.timeline, "deposit": agr.deposit,
                             "terms": list(agr.terms)},
@@ -555,6 +560,9 @@ def _live_brief_ctx(conn, opp_id):
         # The client's own copy is the ONE place the signature block is live.
         "sign_url": f"/workspace/{token}/sign" if doc.show_agreement and sig is None else "",
         "proposal_signature": sig,
+        "proposal_signature_mark": (
+            (sig["drawn_mark"] if "drawn_mark" in sig.keys() else "") if sig is not None
+            else ""),
         "proposal_signature_note": signing.verdict_note(
             signing.verify(sig["digest"] if sig is not None else "",
                            doc.agreement.signable_text() if doc.agreement else None),

@@ -47,7 +47,31 @@ details.cp-why summary::before{content:"Why this matters ▾";}
 details.cp-why[open] summary::before{content:"Why this matters ▴";}
 details.cp-why p{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
 
+/* The price guide. Denser than the question lines because it is scanned before the call
+   rather than read during it — the number you want in your head when you ask. */
+.cp-guide{border:1px solid var(--line,#e7e1d8);border-left:3px solid var(--ember,#b34a21);
+  border-radius:9px;padding:13px 14px;background:var(--surface,#fff)}
+.cp-price{margin:0 0 9px;padding:0 0 9px;border-bottom:1px dashed var(--line,#e7e1d8)}
+.cp-price:last-of-type{border-bottom:0;padding-bottom:0;margin-bottom:4px}
+.cp-price-q{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin:0 0 5px;
+  font-size:13px;font-weight:700;color:var(--ink,#241016)}
+.cp-swing{font-size:12px;font-weight:600;color:var(--ember,#b34a21)}
+.cp-opts{display:flex;flex-wrap:wrap;gap:6px}
+.cp-opt{font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line,#e7e1d8);
+  color:var(--muted,#7a6b67);white-space:nowrap}
+.cp-opt b{color:var(--ink,#241016);font-weight:700;margin-left:4px}
+.cp-opt i{font-style:normal;margin-left:4px;font-size:11px;opacity:.75}
+.cp-opt.is-now{border-color:var(--ember,#b34a21);background:var(--surface-2,#faf3ee);
+  color:var(--ink,#241016)}
+.cp-bench summary::before{content:"What the market charges ▾"}
+.cp-bench[open] summary::before{content:"What the market charges ▴"}
+.cp-bench-list{font-size:12.5px;color:var(--muted,#7a6b67);margin:4px 0 0;padding-left:18px}
+.cp-bench-list b{color:var(--ink,#241016)}
+
 @media print{
+  /* The guide PRINTS — the swing on each question is the reason to ask it, and the
+     sheet is carried to the call on paper as often as on a screen. */
+  .cp-guide{break-inside:avoid;border-left-width:3px}
   .cp-actions,.cp-box,nav,header,.crumb{display:none !important}
   .cp-line{grid-template-columns:1fr;border-color:#ccc;break-inside:avoid}
   details.cp-why{display:none}
@@ -76,6 +100,48 @@ details.cp-why p{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
     <button class="btn tiny" type="button" onclick="window.print()">Print</button>
     <button class="btn tiny" type="button" id="cp-reset">Clear ticks</button>
   </div>
+
+  {# ── The price guide (ADR-0065). The four licence questions were already on this
+        sheet, and already flagged as the ones that get dropped when a call overruns.
+        What the sheet could not say was what dropping them COSTS — so they read as
+        diligence rather than as money. Priced for THIS deal, loudest question first,
+        through the same engine the proposal uses. ── #}
+  {% if guide %}
+  <div class="cp-group cp-guide">
+    <h3>What each answer is worth</h3>
+    <p class="cp-blurb">Priced for this deal. Baseline
+      <b>${{ '{:,}'.format(guide.quote.total) }}</b> — creative
+      ${{ '{:,}'.format(guide.quote.creative_fee) }} plus licence
+      ${{ '{:,}'.format(guide.quote.licence_fee) }} for {{ guide.quote.licence_basis }}.
+      Our floor is <b>${{ '{:,}'.format(guide.quote.floor) }}</b>.</p>
+    {% for r in guide.rows %}
+    <div class="cp-price">
+      <p class="cp-price-q">{{ r.question }}
+        <span class="cp-swing">±${{ '{:,}'.format(r.spread) }} on this deal</span>
+        {% if not r.stated %}<span class="cp-tag ask">Not yet asked</span>{% endif %}
+      </p>
+      <div class="cp-opts">
+        {% for o in r.options %}
+        <span class="cp-opt {{ 'is-now' if o.current }}">{{ o.label }}
+          <b>${{ '{:,}'.format(o.total) }}</b>
+          {% if o.delta %}<i>{{ '+' if o.delta > 0 }}{{ '{:,}'.format(o.delta) }}</i>{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <details class="cp-why cp-bench"><summary></summary>
+      <p><b>What the market charges</b> (August 2026 — see docs/market-pricing-research.md):</p>
+      <ul class="cp-bench-list">
+        {% for who, what, lo, hi in guide.benchmarks %}
+        <li><b>{{ who }}</b> · {{ what }} —
+          ${{ '{:,}'.format(lo) }}{% if hi != lo %}–${{ '{:,}'.format(hi) }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+      <p>{{ guide.prior_note }}</p>
+    </details>
+  </div>
+  {% endif %}
 
   {% for g in groups %}
   <div class="cp-group">

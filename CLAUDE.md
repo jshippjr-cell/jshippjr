@@ -165,6 +165,21 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `buyer_intel` (ADR-0057), as the queue count lives only in `queue.compute_queue`
   (ADR-0029) and the price only in `web.estimate.estimate_for` (ADR-0033). If two pages
   answer the same question, one of them is wrong on a day nobody is looking.
+- **Two fees, and the budget is only a check** (ADR-0065): `pricing.py` prices a
+  **creative fee** (cost at target margin — `estimation`, not second-guessed) plus a
+  **licence fee** (media × territory × term × exclusivity, capped). What the client said
+  their budget is NEVER sets the price; it returns a verdict (below floor / in band /
+  above band). The factor tables are **priors ratified against
+  `docs/market-pricing-research.md`** — read that before touching one. Note
+  `estimation.suggested_price` folds usage into the creative number and therefore now
+  disagrees; `build_quote` ignores it deliberately.
+- **The summary IS the proposal, and it is signed** (ADR-0065): after a call, the client's
+  Discovery Summary carries scope/fee/terms and an Agreement block.
+  `agreement.signable_text()` is ONE deterministic text that is both what the client reads
+  and what the SHA-256 covers — never hash rendered HTML, and never put acceptance copy in
+  a template, because it is part of the signed document. A drawn signature (finger/mouse)
+  is optional, validated by `signing.clean_drawn_mark` or dropped, and excluded from the
+  digest. A signature hangs off an opportunity OR a project, never both.
 - **Scope carries its own evidence:** `estimation.Scope` / `estimation.Session`
   (ADR-0058) each pair a value with whether the brief STATED it. Anything assumed is
   named on the surface that shows the number. Mirror this for any inferred input a
