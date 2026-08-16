@@ -34,7 +34,21 @@ VALUE_PROP = (
 
 
 # Deal stage → which sections show by default.
-def default_toggles(status: str) -> dict:
+def default_toggles(status: str, *, met: bool = False) -> dict:
+    """Which sections a document of this stage opens with.
+
+    ``met`` — a discovery call has happened — is the second axis, and it is the one that
+    turns the summary into a proposal (ADR-0065). "You don't talk price before scoping"
+    is the rule the stage axis encodes, and it is right; but after the call the scoping
+    HAS happened, and a summary that still withheld the number sent the client away to
+    wait for a second document. That second document is the one they needed to take to
+    whoever holds the budget, and it arrived days after the conversation that earned it.
+
+    A met deal therefore opens with cost, terms and the delivery outline on — the
+    commercial close, in the same artifact as what we heard. Every one of them is still
+    a checkbox: the machine proposes, and the operator can uncheck any of it before
+    anyone sees it.
+    """
     s = (status or "New").strip()
     if s == "Submitted":
         stage = "proposal"
@@ -42,13 +56,14 @@ def default_toggles(status: str) -> dict:
         stage = "contract"
     else:
         stage = "discovery"
+    priced = met or stage in ("proposal", "contract")
     return {
         "stage": stage,
         "examples": True,
         "call": True,
-        "cost": stage in ("proposal", "contract"),       # hidden in discovery
-        "terms": stage in ("proposal", "contract"),       # deposit terms at proposal+
-        "delivery": stage in ("proposal", "contract"),    # delivery-package outline
+        "cost": priced,          # hidden before scoping; after the call, scoping is done
+        "terms": priced,         # deposit terms travel with the number, never apart
+        "delivery": priced,      # delivery-package outline
     }
 
 
@@ -96,6 +111,17 @@ class CapabilitiesDoc:
     show_terms: bool = False
     terms: List[str] = field(default_factory=list)
     show_docusign: bool = False
+    # What the fee rests on that the brief did not state (ADR-0058), in the client's
+    # hearing — `client_voice.client_assumptions` holds back the margin and the
+    # calibration notes, which are true, internal, and would price the next negotiation
+    # for the buyer if printed on a document they sign.
+    assumptions: List[str] = field(default_factory=list)
+    # The summary as something that can be AGREED to (ADR-0065). Present only when the
+    # document carries a price and terms; `agreement.is_signable` is the gate, so a
+    # summary that quotes nothing offers no signature rather than collecting a
+    # commitment to an unnamed number.
+    show_agreement: bool = False
+    agreement: Optional["object"] = None
     # delivery-package outline (what their package will include) — progressive
     # disclosure: rendered only when there's real backing data to personalize it.
     show_delivery: bool = False
@@ -142,9 +168,32 @@ def doc_from_json(payload: str) -> Optional[CapabilitiesDoc]:
         data["examples"] = [WorkExample(**e) for e in data.get("examples") or []]
         data["deliverables"] = [Deliverable(**d) for d in data.get("deliverables") or []]
         data["rollout"] = [RolloutItem(**r) for r in data.get("rollout") or []]
-        return CapabilitiesDoc(**data)
+        # The agreement is DERIVED, so it is rebuilt rather than rehydrated: a snapshot
+        # stores it as a plain dict, and a dict that reached the template would have no
+        # `signable_text` — a signature block rendered over nothing. Everything it is
+        # built from is snapshotted, so rebuilding reproduces it exactly, which is also
+        # what makes the digest of a frozen send still verify.
+        data.pop("agreement", None)
+        return attach_agreement(CapabilitiesDoc(**data))
     except TypeError:
         return None
+
+
+def attach_agreement(doc: CapabilitiesDoc,
+                     deposit_amount: Optional[float] = None) -> CapabilitiesDoc:
+    """Give the document its agreement, when there is something to agree to.
+
+    One derivation, one place (ADR-0062's rule applied to a contract): the agreement is
+    assembled from the document the client is reading, so the text that is displayed and
+    the text a signature binds to cannot drift apart. Called on both paths — a freshly
+    built document and a rehydrated snapshot — because a frozen send is exactly the case
+    where the two drifting apart would be invisible.
+    """
+    from .agreement import build_agreement, is_signable
+    doc.show_agreement = is_signable(doc)
+    doc.agreement = (build_agreement(doc, deposit_amount=deposit_amount)
+                     if doc.show_agreement else None)
+    return doc
 
 
 def _round100(value: float, up: bool) -> int:
@@ -647,8 +696,16 @@ def build_capabilities_doc(
         )
 
     terms: List[str] = []
+    assumptions: List[str] = []
     if show_terms:
         terms = build_proposal(opp, qual, estimate).terms
+    if show_cost:
+        # Named beside the figure, not discovered at invoice (ADR-0058). Through
+        # `client_voice` because the estimator's own list states our target margin and
+        # that the priors are uncalibrated — both true, both internal, and printing
+        # either on a document the buyer signs would price the next negotiation for them.
+        from .client_voice import client_assumptions
+        assumptions = client_assumptions(list(estimate.assumptions or []))
 
     secondary = [d.label for d in getattr(qual, "secondary_disciplines", [])]
 
@@ -720,7 +777,7 @@ def build_capabilities_doc(
         commercial = _build_commercial(opp, estimate, terms, ci_fields,
                                        price_low, price_high, deliverables)
 
-    return CapabilitiesDoc(
+    return attach_agreement(CapabilitiesDoc(
         client=client,
         need=opp.need,
         stage=stage,
@@ -745,6 +802,7 @@ def build_capabilities_doc(
         price_high=price_high,
         show_terms=show_terms,
         terms=terms,
+        assumptions=assumptions,
         show_docusign=(stage == "contract"),
         show_delivery=show_delivery,
         campaign_label=opp.need,
@@ -769,4 +827,4 @@ def build_capabilities_doc(
         met=met,
         intro=_intro_line(met),
         commercial=commercial,
-    )
+    ))

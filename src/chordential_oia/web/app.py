@@ -24,6 +24,7 @@ from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
+from .. import agreement, signing
 from ..storage import get_object_store, storage_status
 from . import (accounts, actor, campaigns, db, discovery, roles, scheduler, seed,
                uploads, webpush)
@@ -131,6 +132,13 @@ templates.env.globals["campaign_workspace_enabled"] = campaigns.workspace_enable
 templates.env.filters["stage_label"] = db.stage_label
 # True only when the internal gate is active (CHORDENTIAL_ADMIN_TOKEN set).
 templates.env.globals["admin_gate_on"] = bool(os.environ.get("CHORDENTIAL_ADMIN_TOKEN"))
+# What a client agrees to when they sign (ADR-0065) + the e-signature consent (ADR-0059).
+# Globals, not route context: a route that forgot to pass them would render a signature
+# block with a blank acceptance line. They live in Python because this text is part of the
+# signed DOCUMENT — it enters the digest, so editing it is a change signatures can detect.
+templates.env.globals["acceptance_text"] = agreement.ACCEPTANCE_TEXT
+templates.env.globals["acceptance_limits"] = agreement.ACCEPTANCE_LIMITS
+templates.env.globals["consent_text"] = signing.CONSENT_TEXT
 
 
 @asynccontextmanager

@@ -39,11 +39,18 @@ from typing import Any, Dict, List, Optional
 # than a new branch in the routes.
 DOC_CLEARANCE = "clearance_certificate"
 DOC_DELIVERY_ACCEPTANCE = "delivery_acceptance"
-DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE)
+# The discovery summary, once it carries the commercial close. It is the FIRST thing a
+# client signs and the only signable document that hangs off an opportunity rather than
+# a project — a project does not exist yet when the proposal is accepted, and inventing
+# one so the foreign key had somewhere to point would have made a deal look won on the
+# strength of a document nobody had answered.
+DOC_PROPOSAL = "discovery_proposal"
+DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
     DOC_DELIVERY_ACCEPTANCE: "Delivery acceptance",
+    DOC_PROPOSAL: "Discovery Summary & Proposal",
 }
 
 # The consent a signer is shown and agrees to. Recorded VERBATIM on the signature, not
@@ -106,6 +113,12 @@ class Signature:
     # signing in the console); a client signing through a token-gated portal has none,
     # which is why the token is fingerprinted instead.
     actor: str = ""
+    # The subject, when it is not a project. A proposal is signed BEFORE any project
+    # exists — that is the point of signing it — so it is stamped with the opportunity
+    # instead and `project_id` stays 0. Exactly one of the two is set; `build_signature`
+    # refuses a signature attached to neither, because a signature nothing can be found
+    # by is a record that will never be produced in the dispute it was kept for.
+    opportunity_id: int = 0
     ip_fingerprint: str = ""
     user_agent: str = ""
     token_fingerprint: str = ""
@@ -126,7 +139,8 @@ def now_iso() -> str:
 def build_signature(
     *,
     doc_kind: str,
-    project_id: int,
+    project_id: int = 0,
+    opportunity_id: int = 0,
     document_text: str,
     signer_name: str,
     signer_email: str = "",
@@ -151,10 +165,13 @@ def build_signature(
         raise ValueError("refusing to sign an empty document")
     if not (typed_name or "").strip():
         raise ValueError("refusing to record a signature with no typed name")
+    if not int(project_id or 0) and not int(opportunity_id or 0):
+        raise ValueError("refusing to sign a document attached to nothing")
     return Signature(
         doc_kind=doc_kind,
         doc_label=DOC_LABELS[doc_kind],
-        project_id=int(project_id),
+        project_id=int(project_id or 0),
+        opportunity_id=int(opportunity_id or 0),
         digest=document_digest(document_text),
         signer_name=(signer_name or "").strip(),
         signer_email=(signer_email or "").strip().lower(),

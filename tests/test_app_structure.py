@@ -228,7 +228,7 @@ def test_the_router_carries_the_whole_group():
     ("creator_routes.py", "/creator", 6),
     ("campaign_routes.py", "/campaign", 7),
     ("simulator_routes.py", "/simulator", 7),
-    ("workspace_routes.py", "/workspace", 5),
+    ("workspace_routes.py", "/workspace", 6),
 ])
 def test_a_router_carries_its_whole_group_and_nothing_else(module, prefix, count):
     """A route module holds one group. A stray path from somewhere else means a
@@ -271,8 +271,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 268, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 268 — "
+    assert len(decls) == 269, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 269 — "
         f"a slice lost or gained a URL")
 
 

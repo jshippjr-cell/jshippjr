@@ -403,3 +403,53 @@ def internal_questions(open_questions: Sequence[str]) -> List[str]:
 
 
 __all__ = ["summary_prose", "client_questions", "internal_questions"]
+
+# ── What an estimate rests on, in the client's hearing ──────────────────────────────
+#
+# `estimation._assumptions` is written for the operator and says so: it discloses the
+# target gross margin, that the priors are uncalibrated, and what the blended rates are
+# built from. Every one of those is true and none of them belongs on a document a buyer
+# SIGNS — a proposal that states our margin has priced the next negotiation for us.
+#
+# What the client is owed is the other half of that list: which numbers came out of their
+# brief and which we guessed. ADR-0058 is the rule ("scope carries its own evidence") and
+# a signable proposal is where breaking it costs the most, because the guess stops being
+# a working figure and becomes a term.
+_MARGIN_MARKERS = (
+    "gross margin", "margin", "expert priors", "not calibrated", "uncalibrated",
+    "phase 1", "phase 2", "blended $/hr", "afm", "sag-aftra", "market data",
+    "confidence band", "actuals",
+)
+
+# The lead-in `estimation` uses for the one line that names what it had to guess. Kept as
+# a constant because this is a contract between two modules: if that phrasing changes and
+# this misses it, the assumption silently stops reaching the client — which fails quietly,
+# in the direction of saying less than we should.
+ASSUMED_PREFIX = "assumed, not stated in the brief"
+
+
+def client_assumptions(assumptions: Sequence[str], *, limit: int = 6) -> List[str]:
+    """The assumptions a client should read beneath a number they are asked to accept.
+
+    Keeps what describes THEIR project — scope, duration, recording, what we had to
+    guess — and drops what describes our pricing model. The guessed-inputs line is
+    promoted to the top wherever it appears: it is the one a reader most needs and the
+    one buried deepest.
+    """
+    kept: List[str] = []
+    for raw in assumptions or []:
+        a = _clean(raw)
+        if not a or a in kept:
+            continue
+        if any(m in a.lower() for m in _MARGIN_MARKERS):
+            continue
+        kept.append(a)
+    kept.sort(key=lambda a: 0 if a.lower().startswith(ASSUMED_PREFIX) else 1)
+    return kept[:limit]
+
+
+def internal_assumptions(assumptions: Sequence[str]) -> List[str]:
+    """The complement — everything `client_assumptions` held back. Nothing is hidden
+    from the person who can act on it; it is only kept off the client's copy."""
+    return [a for a in (_clean(x) for x in assumptions or [])
+            if a and any(m in a.lower() for m in _MARGIN_MARKERS)]

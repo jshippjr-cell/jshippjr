@@ -1448,9 +1448,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             token_fingerprint TEXT,
             certified_version TEXT,
             terms_json TEXT,             -- what the document said, for legibility
-            voided_at TEXT, voided_by TEXT, void_reason TEXT
+            voided_at TEXT, voided_by TEXT, void_reason TEXT,
+            opportunity_id INTEGER DEFAULT 0   -- the subject when no project exists yet
         )"""
     )
+    # The Discovery Summary & Proposal is signed BEFORE a project exists, so it is stamped
+    # with the opportunity instead. Existing databases predate the column.
+    sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signature)")}
+    if "opportunity_id" not in sig_cols:
+        conn.execute("ALTER TABLE signature ADD COLUMN opportunity_id INTEGER DEFAULT 0")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
     # source + what the pipeline extracted from it. Every intake LANE (discovery call, notes,
     # transcript, debrief, RFP, email, brief, …) normalizes to this one envelope, and CI
@@ -1809,6 +1815,7 @@ _INDEXES = (
     ("idx_buyer_org_agency", "buyer_org(agency_id)"),
     # ADR-0059 — every delivery page asks "is this signed, and does it still match".
     ("idx_signature_project", "signature(project_id, doc_kind)"),
+    ("idx_signature_opportunity", "signature(opportunity_id, doc_kind)"),
 )
 
 
@@ -5802,12 +5809,13 @@ def record_signature(conn, sig) -> int:
         """INSERT INTO signature (project_id, doc_kind, digest, signer_name,
                signer_email, typed_name, consent_text, signed_at, actor,
                ip_fingerprint, user_agent, token_fingerprint, certified_version,
-               terms_json)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               terms_json, opportunity_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sig.project_id, sig.doc_kind, sig.digest, sig.signer_name, sig.signer_email,
          sig.typed_name, sig.consent_text, sig.signed_at, sig.actor,
          sig.ip_fingerprint, sig.user_agent, sig.token_fingerprint,
-         sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True)))
+         sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True),
+         getattr(sig, "opportunity_id", 0) or 0))
     conn.commit()
     return int(cur.lastrowid)
 
@@ -5830,6 +5838,29 @@ def latest_signature(conn, project_id: int, doc_kind: str):
         "SELECT * FROM signature WHERE project_id = ? AND doc_kind = ? "
         "AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1",
         (project_id, doc_kind)).fetchone()
+
+
+def latest_opportunity_signature(conn, opp_id: int, doc_kind: str):
+    """The signature in force on an OPPORTUNITY's document — the proposal, signed before
+    any project exists. Same rule as `latest_signature`: newest, not voided, None when
+    nothing is signed. `project_id` is never consulted, so a signature that later gains a
+    project cannot be found twice under two subjects."""
+    return conn.execute(
+        "SELECT * FROM signature WHERE opportunity_id = ? AND doc_kind = ? "
+        "AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1",
+        (int(opp_id), doc_kind)).fetchone()
+
+
+def list_opportunity_signatures(conn, opp_id: int, doc_kind: str = "") -> List[sqlite3.Row]:
+    """Every signature on an opportunity, newest first — voided ones included, which are
+    part of the history rather than an embarrassment to hide."""
+    if doc_kind:
+        return conn.execute(
+            "SELECT * FROM signature WHERE opportunity_id = ? AND doc_kind = ? "
+            "ORDER BY signed_at DESC", (int(opp_id), doc_kind)).fetchall()
+    return conn.execute(
+        "SELECT * FROM signature WHERE opportunity_id = ? ORDER BY signed_at DESC",
+        (int(opp_id),)).fetchall()
 
 
 def void_signature(conn, signature_id: int, *, by: str, reason: str) -> bool:

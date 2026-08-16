@@ -99,9 +99,24 @@
   {% endif %}
   {% if scope_confirm_url %}
   {# ADR-0020: the Summary's one action — alignment, not commitment. Two answers: it's
-     right (confirm → we prepare the proposal), or something's off (send corrections back). #}
+     right (confirm → we prepare the proposal), or something's off (send corrections back).
+     ADR-0065: when the summary CARRIES the proposal, "yes, this reflects our project" is
+     the signature above, so offering it here as well would put two accept buttons on one
+     page — the exact "two approval moments where the business has one" that ADR-0020 was
+     written to remove. Signable → this box keeps only the correction path. #}
   <div class="ws-wrap" style="margin-top:10px">
     <div class="ws-now" id="confirm">
+      {% if doc and doc.show_agreement %}
+      <div class="lab">If something's wrong</div>
+      <h2>Not quite right?</h2>
+      <p>Don't sign it. Tell us what to fix and we'll correct the summary and send it back —
+        nothing moves until it reads the way your project actually is.</p>
+      <form method="post" action="{{ scope_confirm_url }}" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
+        <input type="text" name="confirmed_by" placeholder="Your name" required style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit">
+        <textarea name="comment" rows="2" required placeholder="What should we correct?" style="border:1px solid var(--ws-line);border-radius:8px;padding:10px;font:inherit"></textarea>
+        <button type="submit" name="decision" value="no" style="align-self:flex-start;background:transparent;border:1px solid var(--ws-line);color:var(--ws-ink);border-radius:10px;padding:11px 18px;font-weight:600;font:inherit;cursor:pointer">Send us the correction</button>
+      </form>
+      {% else %}
       <div class="lab">One question</div>
       <h2>Did we get this right?</h2>
       <p>Read the summary above. If it reflects your project, confirm and we'll prepare your
@@ -114,6 +129,18 @@
           <button type="submit" name="decision" value="no" style="background:transparent;border:1px solid var(--ws-line);color:var(--ws-ink);border-radius:10px;padding:11px 18px;font-weight:600;font:inherit;cursor:pointer">No — something's off</button>
         </div>
       </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% if proposal_signed %}
+  {# Signed. What happens next, in the order it happens, so nobody has to ask. #}
+  <div class="ws-wrap" style="margin-top:10px">
+    <div class="ws-now">
+      <div class="lab">Signed</div>
+      <h2>Thank you — we have your signature</h2>
+      <p>We countersign and raise the deposit invoice; work begins when the deposit clears.
+        The signed document stays on this page, at this link, for as long as you need it.</p>
     </div>
   </div>
   {% endif %}

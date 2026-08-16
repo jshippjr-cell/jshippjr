@@ -480,13 +480,63 @@
     </section>
     {% endif %}
 
-    {% if doc.show_docusign %}
+    {# ── What the fee rests on (ADR-0058). Beside the number, never in a footnote: a
+          band built on an assumed runtime is a guess, and a client asked to SIGN it is
+          entitled to read the guess rather than meet it at invoice. `client_voice`
+          decides what belongs here — our margin and calibration notes do not. ── #}
+    {% if doc.assumptions %}
     <section class="block">
+      <h2 class="sec">What this rests on</h2>
+      <ul class="terms">{% for a in doc.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    {# ── The agreement (ADR-0065): the summary as something that can be ACCEPTED.
+          `agreement.signable_text()` is the document — the same text a signature's
+          digest is taken over — so what is displayed here and what is signed cannot
+          drift apart. It renders for the operator too, read-only, because the person
+          sending it should see exactly what the client will be asked to agree to. ── #}
+    {% if doc.show_agreement and doc.agreement %}
+    <section class="block" id="agreement">
       <h2 class="sec">Agreement</h2>
-      <div class="docusign">
-        On your go-ahead, we'll send a countersignable agreement (Terms &amp; Conditions
-        attached) for e-signature on signature. No printing or scanning needed.
+      {% if proposal_signature %}
+      {# Signed. The verdict is the honest one, including SUPERSEDED — a client whose
+         signed terms were edited afterwards is entitled to see that they were. #}
+      <div class="docusign" style="border-style:solid">
+        <div style="font-weight:750">✓ Signed by {{ proposal_signature['typed_name'] }}</div>
+        <div class="fineprint" style="margin-top:4px">{{ proposal_signature_note }}</div>
       </div>
+      {% else %}
+      <div class="docusign">
+        <p style="margin:0 0 10px">{{ acceptance_text }}</p>
+        <p class="fineprint" style="margin:0 0 12px">{{ acceptance_limits }}</p>
+        {% if sign_url %}
+        <form method="post" action="{{ sign_url }}" style="display:flex;flex-direction:column;gap:10px;max-width:460px">
+          <label style="font-size:13px;font-weight:650">Your full name
+            <input type="text" name="typed_name" required autocomplete="name"
+                   placeholder="Type your full name to sign"
+                   style="display:block;width:100%;margin-top:4px;border:1px solid var(--sand);border-radius:8px;padding:10px;font:inherit">
+          </label>
+          <label style="font-size:13px;font-weight:650">Email
+            <input type="email" name="signer_email" required autocomplete="email"
+                   style="display:block;width:100%;margin-top:4px;border:1px solid var(--sand);border-radius:8px;padding:10px;font:inherit">
+          </label>
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.5">
+            <input type="checkbox" name="consent" value="1" required style="margin-top:3px">
+            <span>{{ consent_text }}</span>
+          </label>
+          <button class="btn pay-btn" type="submit" style="align-self:flex-start">Sign and accept →</button>
+        </form>
+        {% else %}
+        {# The operator's own view. No form: the person who WROTE the document must not
+           be able to sign it on the client's behalf from the page that composes it. #}
+        <p class="fineprint" style="margin:0">
+          The client signs this from their workspace. Everything above the signature
+          line is what they will be agreeing to.
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
     </section>
     {% endif %}
 

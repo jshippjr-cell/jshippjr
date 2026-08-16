@@ -1415,7 +1415,8 @@ def compose_send(opp_id: int):
         qual, _scored = evaluate(opp)
         est = estimate_for(opp, qual=qual)
         doc = build_capabilities_doc(
-            opp, qual, est, toggles=default_toggles(row["status"]), overrides=overrides,
+            opp, qual, est, toggles=default_toggles(row["status"], met=met),
+            overrides=overrides,
             call_url=os.environ.get("CHORDENTIAL_DISCOVERY_CALL_URL", "").strip(),
             ci_view=ci_view, met=met)
         db.create_brief_snapshot(conn, opp_id, doc_to_json(doc))
@@ -1650,7 +1651,7 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
     qual, scored = ev
     est = estimate_for(opp, qual=qual)
 
-    toggles = default_toggles(row["status"])
+    toggles = default_toggles(row["status"], met=met)
     qp = request.query_params
     if qp.get("submitted"):                       # toggle bar was applied
         for key in ("cost", "examples", "call", "terms", "delivery"):

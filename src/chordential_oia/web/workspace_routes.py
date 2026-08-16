@@ -21,9 +21,10 @@ import os
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import mailer
+from .. import mailer, signing
 from ..capabilities import (
-    build_capabilities_doc, default_toggles, quote_band as capabilities_quote_band,
+    attach_agreement, build_capabilities_doc, default_toggles,
+    quote_band as capabilities_quote_band,
 )
 from ..proposals import build_proposal
 from . import (
@@ -130,6 +131,8 @@ def client_workspace(request: Request, token: str):
         approved_note = ""
         preparing = False
         scope_confirm_url = ""
+        proposal_signed = db.latest_opportunity_signature(
+            conn, opp["id"], signing.DOC_PROPOSAL) is not None
         if phase == workspace.BRIEF:
             brief_ctx = _live_brief_ctx(conn, opp["id"])
             # ADR-0020: the Summary's one action — "yes, this reflects our project".
@@ -141,6 +144,14 @@ def client_workspace(request: Request, token: str):
             cr = db.current_commercial_review(conn, opp["id"])
             if cr is not None and cr["status"] in ("released", "approved"):
                 review = commercial.review_from_json(cr["doc_json"])
+            elif proposal_signed:
+                # They signed the summary-as-proposal (ADR-0065). Signing sets
+                # `scope_confirmed`, which advances the phase out of BRIEF — so without
+                # this the client pressed "Sign and accept" and watched the document they
+                # had just signed disappear, replaced by "we're preparing your proposal"
+                # for a proposal they had already accepted. The signed document stays on
+                # screen, and its own Agreement block now shows the signature.
+                brief_ctx = _live_brief_ctx(conn, opp["id"])
             else:
                 preparing = True
         elif phase == workspace.KICKOFF:
@@ -191,6 +202,7 @@ def client_workspace(request: Request, token: str):
                   stage_url=stage_url, review=review, approve_url=approve_url,
                   approved_note=approved_note, k=readiness, prod=prod,
                   preparing=preparing, scope_confirm_url=scope_confirm_url,
+                  proposal_signed=proposal_signed,
                   back_url=f"/opportunity/{opp['id']}/capabilities?k={token}",
                   deposit_pay=deposit_pay,
                   **(brief_ctx or {}))
@@ -266,6 +278,99 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
     finally:
         conn.close()
     return RedirectResponse(f"/workspace/{token}", status_code=303)
+
+
+@router.post("/workspace/{token}/sign")
+def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form(""),
+                            signer_email: str = Form(""), consent: str = Form("")):
+    """The client accepts the Discovery Summary & Proposal (ADR-0065).
+
+    This is the deal's ONE commercial commitment (ADR-0020's rule, kept), and it is a real
+    signature rather than a typed name in a JSON blob: the digest is taken over
+    ``agreement.signable_text()`` rebuilt HERE, from the live document, so what is stored
+    is provably what the page showed. If a term moves afterwards, `signing.verify` reports
+    SUPERSEDED instead of showing a signature that no longer covers anything.
+
+    It does not award the deal. A client signature is the client's half; "the machine
+    proposes, Jon disposes" means the project is still spun up by a human, so this records
+    the commitment, tells the operator, and puts countersigning in their court.
+    """
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        opp_id = opp["id"]
+        # Consent is required by the form and re-checked here: a POST that skipped the
+        # browser has skipped the one element that makes an electronic signature valid.
+        if not consent.strip() or not typed_name.strip():
+            return RedirectResponse(f"/workspace/{token}?flag=sign-incomplete#agreement",
+                                    status_code=303)
+        # Already signed → don't stack a second signature for a double submit. The
+        # existing one stands; signing again is not an edit, and the append-only table
+        # would otherwise grow a duplicate every time a client refreshed the page.
+        if db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL) is not None:
+            return RedirectResponse(f"/workspace/{token}#agreement", status_code=303)
+        ctx = _live_brief_ctx(conn, opp_id)
+        doc = (ctx or {}).get("doc")
+        agr = getattr(doc, "agreement", None) if doc is not None else None
+        if agr is None:
+            # No price, no terms → nothing to agree to. Refusing is the point: a
+            # signature collected here would look like a commitment to a number that
+            # was never named.
+            return RedirectResponse(f"/workspace/{token}?flag=not-signable", status_code=303)
+        sig = signing.build_signature(
+            doc_kind=signing.DOC_PROPOSAL,
+            opportunity_id=opp_id,
+            document_text=agr.signable_text(),
+            signer_name=typed_name.strip(),
+            signer_email=signer_email.strip(),
+            typed_name=typed_name.strip(),
+            ip=(request.client.host if request.client else ""),
+            user_agent=request.headers.get("user-agent", ""),
+            token=token,
+            terms_snapshot={"fee": agr.fee_line, "scope": agr.scope,
+                            "timeline": agr.timeline, "deposit": agr.deposit,
+                            "terms": list(agr.terms)},
+        )
+        db.record_signature(conn, sig)
+        # The existing scope-confirmation state, so every surface that already reads it
+        # (the workspace phase, the next action, the operator's board) keeps working. A
+        # signature is a STRONGER confirmation, not a different one — and writing only the
+        # new record would have quietly regressed all of them to "waiting on the client".
+        if not db.get_doc_overrides(conn, opp_id).get("scope_confirmed"):
+            db.update_doc_override(conn, opp_id, "scope_confirmed", {
+                "at": sig.signed_at, "by": sig.typed_name, "comment": "",
+                "signed": True})
+        db.update_doc_override(conn, opp_id, "proposal_signed", {
+            "at": sig.signed_at, "by": sig.typed_name, "email": sig.signer_email,
+            "digest": sig.digest})
+        _reconcile_opp_status(conn, opp_id)
+        if campaigns.workspace_enabled():
+            try:
+                ci = campaign_intelligence.ensure_for_opportunity(conn, opp)
+                db.add_ci_event(conn, ci["id"], actor="client", verb="proposal_signed",
+                                facet="engagement", key="discovery_summary",
+                                to_value=f"signed by {sig.typed_name}", source="workspace")
+            except Exception:  # noqa: BLE001
+                pass
+        op_mail = meeting_scheduler._operator_email()
+        if op_mail:
+            try:
+                mailer.send_email(
+                    op_mail, f"✍ Proposal SIGNED — {opp['client']}",
+                    f"{sig.typed_name} signed the Discovery Summary & Proposal for "
+                    f"{opp['need']}.\n"
+                    f"Fee: {agr.fee_line or '—'}\n"
+                    f"Signed at: {sig.signed_at}\n"
+                    f"Document digest: {sig.digest[:16]}…\n\n"
+                    f"Next: countersign and start production.\n"
+                    f"{_public_base()}/opportunity/{opp_id}")
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/workspace/{token}#agreement", status_code=303)
 
 
 @router.get("/workspace/{token}/court.json")
@@ -397,10 +502,18 @@ def _live_brief_ctx(conn, opp_id):
     est = estimate_for(opp, qual=qual)
     overrides = db.get_doc_overrides(conn, opp_id)
     ci_view, met = _brief_ci_context(conn, row)
-    toggles = default_toggles(row["status"])
-    # ADR-0020: the Discovery Summary exists only to confirm we heard them — never pricing,
-    # never terms, never a deposit. The commercial conversation happens at the proposal.
-    toggles.update({"cost": False, "terms": False})
+    toggles = default_toggles(row["status"], met=met)
+    # ADR-0065 supersedes ADR-0020 on THIS point only. ADR-0020 held that the Discovery
+    # Summary carries no pricing and no terms, and that the commercial conversation
+    # happens later at a released proposal. Its underlying rule — the deal has exactly ONE
+    # commercial commitment — is untouched and in fact better served: the client used to
+    # be asked twice (confirm the summary, then approve a proposal), and now commits once,
+    # by signing. What changes is only WHICH document carries the close.
+    #
+    # The half of ADR-0020 that was right survives as the `met` gate: before the call
+    # there is no scoping, so there is no honest number, so the summary still shows none.
+    if not met:
+        toggles.update({"cost": False, "terms": False})
     # The "book a discovery call" CTA belongs BEFORE discovery. Once it's happened (met),
     # this IS the summary of that call — re-inviting them to book one is contradictory.
     # Reported live: "it's still auto attaching the discovery call CTA when that already
@@ -428,11 +541,24 @@ def _live_brief_ctx(conn, opp_id):
                 deposit_invoice_id = inv["id"]
                 break
     token = db.ensure_share_token(conn, opp_id)
+    # Re-derive the agreement now that the real deposit figure is known, so the text the
+    # client signs names the actual number instead of the prose fallback. Deterministic —
+    # `deposit_amount` comes from the same quote band the page shows — which is what lets
+    # the sign route rebuild this identically and get the same digest.
+    attach_agreement(doc, deposit_amount=deposit_amount)
+    sig = db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL)
     return {
         "row": row, "doc": doc, "overrides": overrides,
         "request_url": f"/opportunity/{opp_id}/request?k={token}",
         "deposit_amount": deposit_amount, "deposit_invoice_id": deposit_invoice_id,
         "edit": False, "public": True, "embedded": True,
+        # The client's own copy is the ONE place the signature block is live.
+        "sign_url": f"/workspace/{token}/sign" if doc.show_agreement and sig is None else "",
+        "proposal_signature": sig,
+        "proposal_signature_note": signing.verdict_note(
+            signing.verify(sig["digest"] if sig is not None else "",
+                           doc.agreement.signable_text() if doc.agreement else None),
+            dict(sig) if sig is not None else None),
         "chip_library": {}, "section_family": {}, "custom_chips": [], "delivery_templates": {},
     }
 
