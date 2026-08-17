@@ -308,8 +308,32 @@ SCORED_FORMATS = (
 
 _NUM = r"(\d+(?:\.\d+)?)"
 _RANGE = r"(?:\s*(?:-|–|—|to)\s*" + _NUM + r")?"
-_MINUTES_RE = re.compile(_NUM + _RANGE + r"\s*(?:minutes?|mins?)\b")
-_CUES_RE = re.compile(_NUM + _RANGE + r"\s*cues?\b")
+# The separator before the unit must allow a HYPHEN. "3 minute film" parsed and
+# "3-minute film" did not, which is the more common way people write it — so a brief
+# stating its own length was read as stating nothing, and the format default won. On a
+# "3-minute branded documentary" that default was 30 minutes: a tenfold scope error,
+# silently, on the number a client is quoted.
+_UNIT_GAP = r"[\s-]*"
+_MINUTES_RE = re.compile(_NUM + _RANGE + _UNIT_GAP + r"(?:minutes?|mins?)\b")
+_CUES_RE = re.compile(_NUM + _RANGE + _UNIT_GAP + r"cues?\b")
+
+# Advertising music is written in SECONDS far more often than in minutes, and none of
+# these forms registered at all: "90 seconds of music", ":90", "30-second cutdown".
+_SECONDS_RE = re.compile(_NUM + _RANGE + _UNIT_GAP + r"(?:seconds?|secs?)\b")
+# Not preceded by a digit and not followed by another colon, so ":90" reads as
+# ninety seconds while the ":45" inside a timestamp like "1:45:00" does not.
+_TIMECODE_RE = re.compile(r"(?<![\d:]):(\d{2,3})(?!:)\b")
+
+# Durations are as often spelled out as they are typed as digits, and a charity film is
+# a "three-minute film" on every brief that ever described one.
+_WORD_NUM = {"a": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+             "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "sixty": 60,
+             "ninety": 90}
+_WORD_MINUTES_RE = re.compile(
+    r"\b(" + "|".join(_WORD_NUM) + r")" + _UNIT_GAP + r"(?:minutes?|mins?)\b")
+_WORD_SECONDS_RE = re.compile(
+    r"\b(" + "|".join(_WORD_NUM) + r")" + _UNIT_GAP + r"(?:seconds?|secs?)\b")
 _EPISODES_RE = re.compile(_NUM + r"\s*(?:x\s*)?(?:-\s*)?episodes?\b")
 _PER_EPISODE = ("per episode", "an episode", "/episode", "per ep", "each episode")
 
@@ -326,6 +350,54 @@ def _first_quantity(rx: re.Pattern, text: str) -> Optional[float]:
     low = float(m.group(1))
     high = float(m.group(2)) if m.lastindex and m.lastindex >= 2 and m.group(2) else None
     return (low + high) / 2.0 if high else low
+
+
+def _stated_minutes(text: str) -> Optional[float]:
+    """The longest duration the brief actually states, in minutes — however it is written.
+
+    LONGEST rather than first: "a three-minute film with a 90-second wordless middle
+    section" states both the piece and a part of it, and the piece is the scope. Taking
+    the first match would price the part.
+
+    Returns None when the brief states no duration at all, which is a different thing
+    from stating a short one and must stay distinguishable — ``minutes_stated`` is what
+    tells a client whether the figure beside their fee was measured or assumed.
+    """
+    found = []
+    for value in (_first_quantity(_MINUTES_RE, text),):
+        if value:
+            found.append(value)
+    m = _WORD_MINUTES_RE.search(text)
+    if m:
+        found.append(float(_WORD_NUM[m.group(1)]))
+    secs = _first_quantity(_SECONDS_RE, text)
+    if secs:
+        found.append(secs / 60.0)
+    m = _WORD_SECONDS_RE.search(text)
+    if m:
+        found.append(float(_WORD_NUM[m.group(1)]) / 60.0)
+    for code in _TIMECODE_RE.findall(text):
+        # ":90" is ninety seconds. Anything ≥ 10 minutes written this way is a timestamp,
+        # not a runtime, so it is ignored rather than guessed at.
+        seconds = float(code)
+        if seconds <= 600:
+            found.append(seconds / 60.0)
+    return max(found) if found else None
+
+
+# Content made FOR a brand is advertising, whatever documentary grammar it borrows. A
+# "branded documentary" is a marketing asset of a few minutes; the documentary default
+# assumed thirty. Priced at the long-form default, one live deal quoted $124,500 against
+# a stated budget of $20,000-$40,000 — roughly $48,000 of it desk hours the brief never
+# implied. When such a brief states no duration, a branded default is used and reported.
+_BRANDED_MARKERS = ("branded", "brand film", "brand documentary", "brand doc",
+                    "promo", "promotional", "corporate", "advert", "advertis",
+                    "campaign film", "commercial spot", "case study", "sizzle")
+_BRANDED_SPEC = {"minutes": 4.0, "cues": 4}
+
+
+def _is_branded(text: str) -> bool:
+    return any(k in text for k in _BRANDED_MARKERS)
 
 
 @dataclass
@@ -386,7 +458,15 @@ def infer_scope(text: str) -> Scope:
     episodes = _first_quantity(_EPISODES_RE, low)
     episodes = int(episodes) if episodes else 0
 
-    stated_minutes = _first_quantity(_MINUTES_RE, low)
+    # A branded piece borrows documentary grammar and is an advertisement. Its default is
+    # a few minutes, not the thirty a broadcast documentary carries — and only the
+    # DEFAULT changes, so a branded brief that states a real duration is still believed.
+    branded = _is_branded(low)
+    if branded:
+        spec = {**spec, "minutes": _BRANDED_SPEC["minutes"], "cues": _BRANDED_SPEC["cues"],
+                "per_episode": False}
+
+    stated_minutes = _stated_minutes(low)
     minutes_stated = stated_minutes is not None
     if minutes_stated and episodes and any(k in low for k in _PER_EPISODE):
         stated_minutes = stated_minutes * episodes          # "6 minutes per episode" × 10
@@ -399,6 +479,11 @@ def infer_scope(text: str) -> Scope:
         stated_cues = stated_cues * episodes
     cues = stated_cues if cues_stated else (
         spec["cues"] * episodes if spec["per_episode"] and episodes else spec["cues"])
+    # Cues cannot outnumber the minutes of music by much: an assumed twenty cues across a
+    # stated three minutes is twenty spotting-and-delivery allowances for a piece that can
+    # hold about three. Only the ASSUMED count is trimmed — a stated one is theirs.
+    if minutes_stated and not cues_stated:
+        cues = max(1, min(cues, int(round(minutes)) or 1))
 
     return Scope(kind="scored", fmt=fmt, label=spec["label"],
                  minutes=float(minutes), cues=int(round(cues)), episodes=episodes,

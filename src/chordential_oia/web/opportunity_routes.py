@@ -1590,6 +1590,29 @@ def set_status(
     )
 
 
+@router.post("/opportunity/{opp_id}/create-project")
+def opportunity_create_project(opp_id: int):
+    """Spin up the project for a deal that is already won.
+
+    Countersigning creates the project itself, so this is the self-heal for the deals
+    that were countersigned before it did — and the fallback for any award that reached
+    "Won" by a path that skipped project creation. Idempotent: an existing project is
+    returned, never duplicated.
+    """
+    conn = db.connect()
+    try:
+        if db.get_opportunity(conn, opp_id) is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        pid = _ensure_project_for_opp(conn, opp_id)
+        _reconcile_opp_status(conn, opp_id)
+    finally:
+        conn.close()
+    # Straight to the project, because the next decision is WHO — the roles are waiting
+    # there and assigning one sends the portal, the scope email and the client's update.
+    return RedirectResponse(f"/project/{pid}" if pid else f"/opportunity/{opp_id}",
+                            status_code=303)
+
+
 @router.post("/opportunity/{opp_id}/countersign")
 def opportunity_countersign(request: Request, opp_id: int, typed_name: str = Form(""),
                             consent: str = Form("")):
@@ -1648,6 +1671,13 @@ def opportunity_countersign(request: Request, opp_id: int, typed_name: str = For
         db.record_signature(conn, sig)
         db.update_doc_override(conn, opp_id, "proposal_countersigned", {
             "at": sig.signed_at, "by": sig.typed_name, "digest": sig.digest})
+        # Countersigning IS the award — both parties are now bound — so it creates the
+        # project, exactly as approving a Commercial Review does (ADR-0018). Without this
+        # the deal was won and had nowhere to put the work: the board offered "Start
+        # production" and there was no project to start, no roles to fill, and nobody to
+        # assign. Production does not begin with a button; it begins with a team.
+        _ensure_project_for_opp(conn, opp_id)
+        _reconcile_opp_status(conn, opp_id)   # → Won
         # The contact lives on the ROW, not on the Opportunity dataclass; falling back to
         # the address the signer actually used means we write to whoever signed.
         _row_mail = row["contact_email"] if "contact_email" in row.keys() else ""

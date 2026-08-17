@@ -104,7 +104,19 @@ def test_the_operator_can_countersign(client):
         "the two parties signed different documents")
     page = c.get(f"/opportunity/{oid}").text
     assert "Countersigned" in page and "signed by both parties" in page
-    assert "Start production" in page, "the next move moves on"
+    # Countersigning is the award, so it spins up the project — and the next move is
+    # therefore WHO, not a button. It used to say "Start production" and link to the page
+    # the operator was already on: a dead Go with no project, no roles and nobody to
+    # assign. Production does not begin with a button; it begins with a team.
+    assert "Start production" not in page
+    assert "Assign the" in page, "the board should be asking who does the work"
+    conn = app_mod.db.connect()
+    try:
+        project = app_mod.db.project_for_opp(conn, oid)
+    finally:
+        conn.close()
+    assert project is not None, "the award created no project"
+    assert f"/project/{project['id']}" in page, "the next move must actually go somewhere"
 
 
 def test_countersigning_is_impossible_before_the_client_signs(client):

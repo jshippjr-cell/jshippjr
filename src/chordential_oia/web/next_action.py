@@ -109,10 +109,18 @@ def compute(conn, db, opp, project) -> dict:
                                    f"it binding on both sides, then start production."),
                         "url": f"/opportunity/{opp_id}#agreement", "post": False,
                         "since": signed["signed_at"] or ""}
-            return {"court": "you", "label": "Start production",
-                    "detail": "Signed by both parties — raise the deposit and begin.",
-                    "url": f"/opportunity/{opp_id}", "post": False,
-                    "since": countersigned["signed_at"] or ""}
+            # Countersigned and no project yet — the award happened but nothing was spun
+            # up to hold the work. This used to return "Start production" pointing at the
+            # page the operator was already on, so the one button on the board did
+            # nothing. Production does not start with a button; it starts with a team.
+            if project is None:
+                return {"court": "you", "label": "Create the project and assign the team",
+                        "detail": "Signed by both sides — spin up the project so the work "
+                                  "has somewhere to live.",
+                        "url": f"/opportunity/{opp_id}/create-project", "post": True,
+                        "since": countersigned["signed_at"] or ""}
+            # Otherwise fall through to the kickoff ladder below, which already knows the
+            # real sequence: assign each role, then the deposit, then Start Production.
         if review is None or review["status"] != "released":
             return {"court": "you", "label": "Release the proposal",
                     "detail": "Scope is confirmed — review the numbers and release.",
