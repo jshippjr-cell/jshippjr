@@ -94,6 +94,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A client was shown the internal login at the moment of signing** (2026-08-17).
+  Reported live: a client opened her Discovery Summary from the emailed link, read it,
+  typed her name, drew her signature, pressed **Sign and accept** — and got
+  *"Procurement OS — internal / Password or passphrase"*. `/workspace/{token}/sign` had
+  been added to the router and not to `app._WORKSPACE_RE`, the alternation exempting
+  token-gated client paths from the admin gate. The GET was exempt, so the document
+  rendered perfectly and the gap appeared only at the one moment it exists for. The
+  operator's first guess — a stale link — was wrong: the share token is durable (ADR-0018)
+  and still resolved. The exemption list is now **derived from the router** by
+  `tests/test_the_client_never_meets_the_login.py`, verified by reintroducing the bug, so
+  it cannot fall behind again. Also fixed on that screen: `That didn’t match` — a
+  Python escape written into HTML, rendering raw.
+
 - **The price is now the work, everywhere a buyer can see it** (ADR-0065, 2026-08-17).
   `quote_band`'s disclosed-budget tier is gone — the client's stated figure produces a
   **verdict**, not a price, and the verdict lands on the deal page naming both numbers so

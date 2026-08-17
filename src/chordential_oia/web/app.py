@@ -361,8 +361,17 @@ _MEET_RE = re.compile(r"^/meet/[A-Za-z0-9_-]+(/pick)?/?$")
 # The Client Workspace (ADR-0018): /workspace/<token> — the durable client destination.
 # The unguessable workspace token IS the access control (validated in-route), so the path
 # bypasses the admin login gate, same exemption as first-touch and the delivery portal.
+# Every action reachable behind the workspace token must be listed here, or the client
+# is bounced to the INTERNAL login the moment they press the button. Reported live: a
+# client read her Discovery Summary, drew her signature, pressed "Sign and accept" and
+# was shown "Procurement OS — internal / Password or passphrase". `/sign` had been added
+# to the router and not to this alternation; the page rendered because GET was exempt,
+# so the gap only appeared at the one moment that mattered.
+# `tests/test_app_structure.py` now fails if a /workspace route exists that this does not
+# match — the list cannot silently fall behind the router again.
 _WORKSPACE_RE = re.compile(
-    r"^/workspace/[A-Za-z0-9_-]+(/approve|/confirm-scope|/approve-version|/court\.json)?/?$")
+    r"^/workspace/[A-Za-z0-9_-]+"
+    r"(/approve|/confirm-scope|/approve-version|/sign|/court\.json)?/?$")
 
 
 def _is_public_scheduling(path: str) -> bool:
