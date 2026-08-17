@@ -42,15 +42,15 @@ from ..proposals import build_proposal
 from ..storage import get_object_store
 from ..strategic import assess_strategic_value
 from . import (
-    campaign_intake, campaign_intelligence, campaigns, commercial, db, intake_lanes,
-    meeting_scheduler, next_action, procurement, producer_learning, signals,
+    actor, campaign_intake, campaign_intelligence, campaigns, commercial, db,
+    intake_lanes, meeting_scheduler, next_action, procurement, producer_learning, signals,
 )
 from .estimate import estimate_for
 from .evaluate import evaluate
 from .filters import slug
 from .opportunity_ops import (
     _KANBAN_STAGES, _brief_ci_context, _buyer_context, _ensure_project_for_opp,
-    _estimate_for_row, _load,
+    _estimate_for_row, _load, agreement_doc_for,
     _quote_band_for, _reconcile_opp_status, _to_utc_iso,
 )
 from .shell import public_base as _public_base, render, safe_local as _safe_local
@@ -191,6 +191,20 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         quote = capabilities_quote_for(
             opp, _estimate_for_row(conn, row, opp, ev[0]), ci_fields=_ci_fields,
             commercial_overrides=db.get_doc_overrides(conn, opp_id).get("commercial"))
+        # The signature, on the page where the operator actually works. It was only on
+        # the Campaign Brief, so a signed deal looked unsigned on its own detail page and
+        # the board went on saying "release the proposal" for a proposal already accepted.
+        proposal_signature = db.latest_opportunity_signature(
+            conn, opp_id, signing.DOC_PROPOSAL)
+        countersignature = db.latest_opportunity_signature(
+            conn, opp_id, signing.DOC_PROPOSAL_COUNTERSIGN)
+        sig_state = signing.UNKNOWN
+        agreement_text = ""
+        if proposal_signature is not None:
+            _r2, _o2, _e2, _sdoc, _sdep = agreement_doc_for(conn, opp_id)
+            _agr = getattr(_sdoc, "agreement", None)
+            agreement_text = _agr.signable_text() if _agr is not None else ""
+            sig_state = signing.verify(proposal_signature["digest"], agreement_text)
     finally:
         conn.close()
     qual, scored = ev
@@ -221,7 +235,12 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
         kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
-        quote=quote,
+        quote=quote, proposal_signature=proposal_signature,
+        countersignature=countersignature, agreement_text=agreement_text,
+        signature_state=sig_state,
+        signature_note=signing.verdict_note(
+            sig_state, dict(proposal_signature) if proposal_signature is not None else None),
+        signature_valid=(sig_state == signing.VALID),
         ai_spend=_ai_spend_status(),
     )
 
@@ -1569,6 +1588,84 @@ def set_status(
     return RedirectResponse(
         _safe_local(return_to, f"/opportunity/{opp_id}"), status_code=303
     )
+
+
+@router.post("/opportunity/{opp_id}/countersign")
+def opportunity_countersign(request: Request, opp_id: int, typed_name: str = Form(""),
+                            consent: str = Form("")):
+    """Our half of the signed proposal (ADR-0065).
+
+    The acceptance text the client signs says, in as many words, "we countersign, raise
+    the deposit invoice, and work begins when that deposit clears". Until now that was a
+    promise the product could not keep: nothing anywhere could countersign, so the first
+    sentence of the first document we ask a client to sign was one we did not honour.
+
+    Two refusals, both load-bearing:
+
+    * **Nothing to countersign until they have signed.** A countersignature on a document
+      the other party has not accepted is not a contract, it is a note to self.
+    * **Never countersign a document that has MOVED since they signed it.** If
+      `signing.verify` says SUPERSEDED, the text we would be binding ourselves to is not
+      the text they agreed to. Refusing is the whole reason the digest exists — the
+      alternative is two parties signed to two different documents, which is exactly the
+      failure the old typed-name-in-a-blob could not even detect.
+    """
+    who = actor.identify(request).get("label", "") or ""
+    conn = db.connect()
+    try:
+        row, opp, ev = _load(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        client_sig = db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL)
+        if client_sig is None:
+            return RedirectResponse(f"/opportunity/{opp_id}?flag=not-signed#agreement",
+                                    status_code=303)
+        if db.latest_opportunity_signature(
+                conn, opp_id, signing.DOC_PROPOSAL_COUNTERSIGN) is not None:
+            return RedirectResponse(f"/opportunity/{opp_id}#agreement", status_code=303)
+        _r, _o, _e, doc, _dep = agreement_doc_for(conn, opp_id)
+        agr = getattr(doc, "agreement", None)
+        text = agr.signable_text() if agr is not None else None
+        if signing.verify(client_sig["digest"], text) != signing.VALID:
+            # The document changed after they signed it. Countersigning now would bind us
+            # to terms they never saw.
+            return RedirectResponse(f"/opportunity/{opp_id}?flag=superseded#agreement",
+                                    status_code=303)
+        try:
+            sig = signing.build_signature(
+                doc_kind=signing.DOC_PROPOSAL_COUNTERSIGN,
+                opportunity_id=opp_id,
+                document_text=text,
+                signer_name=who or "Chordential",
+                typed_name=(typed_name.strip() or who or "Chordential"),
+                actor=who,
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                terms_snapshot={"countersigns": client_sig["digest"]},
+            )
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=400)
+        db.record_signature(conn, sig)
+        db.update_doc_override(conn, opp_id, "proposal_countersigned", {
+            "at": sig.signed_at, "by": sig.typed_name, "digest": sig.digest})
+        # The contact lives on the ROW, not on the Opportunity dataclass; falling back to
+        # the address the signer actually used means we write to whoever signed.
+        _row_mail = row["contact_email"] if "contact_email" in row.keys() else ""
+        client_mail = (_row_mail or "").strip() or (client_sig["signer_email"] or "")
+        need, client_name = row["need"], row["client"]
+        share_token = db.ensure_share_token(conn, opp_id)
+    finally:
+        conn.close()
+    if client_mail:
+        try:
+            mailer.send_email(
+                client_mail, f"Countersigned — {client_name} · {need}",
+                f"We have countersigned the agreement for {need}. It is now signed by "
+                f"both parties.\n\nNext: we raise the deposit invoice, and work begins "
+                f"when it clears.\n\n{_public_base()}/workspace/{share_token}")
+        except Exception:  # noqa: BLE001
+            pass
+    return RedirectResponse(f"/opportunity/{opp_id}#agreement", status_code=303)
 
 
 @router.post("/opportunity/{opp_id}/delivery-sent")

@@ -93,6 +93,26 @@ def compute(conn, db, opp, project) -> dict:
                     "detail": "They confirm (or correct) with one click in their workspace.",
                     "url": "", "post": False,
                     "since": snap["created_at"] if snap else ""}
+        # A SIGNED proposal is not a proposal waiting to be released (ADR-0065). Reported
+        # live: the client signed, and the board still said "Release the proposal" for a
+        # proposal she had already accepted — the one surface whose whole job is naming
+        # the next move was pointing at a step that had happened. Signing satisfies the
+        # release AND the approval, because the summary IS the proposal.
+        from .. import signing as _signing
+        signed = db.latest_opportunity_signature(conn, opp_id, _signing.DOC_PROPOSAL)
+        if signed is not None:
+            countersigned = db.latest_opportunity_signature(
+                conn, opp_id, _signing.DOC_PROPOSAL_COUNTERSIGN)
+            if countersigned is None:
+                return {"court": "you", "label": "Countersign the agreement",
+                        "detail": (f"{signed['typed_name']} signed it. Countersign to make "
+                                   f"it binding on both sides, then start production."),
+                        "url": f"/opportunity/{opp_id}#agreement", "post": False,
+                        "since": signed["signed_at"] or ""}
+            return {"court": "you", "label": "Start production",
+                    "detail": "Signed by both parties — raise the deposit and begin.",
+                    "url": f"/opportunity/{opp_id}", "post": False,
+                    "since": countersigned["signed_at"] or ""}
         if review is None or review["status"] != "released":
             return {"court": "you", "label": "Release the proposal",
                     "detail": "Scope is confirmed — review the numbers and release.",

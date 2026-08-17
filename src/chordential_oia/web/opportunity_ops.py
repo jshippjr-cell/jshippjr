@@ -238,6 +238,52 @@ def _estimate_for_row(conn, row, opp, qual=None):
                         project_id=(proj["id"] if proj is not None else None))
 
 
+def agreement_doc_for(conn, opp_id):
+    """THE signable document for a deal — the one the client reads and signs, rebuilt.
+
+    Every surface that touches the signature must produce byte-identical text or the
+    digest is worthless: the client's workspace, the operator's copy of the brief, and
+    the countersign route all hash `doc.agreement.signable_text()`. Three places built
+    it independently and two of them had already drifted — once on the deposit line, once
+    on the estimate — so it is derived here, once, and reported everywhere else.
+
+    Returns ``(row, opp, ev, doc, deposit_amount)``, or ``(None, …)`` if the deal is gone.
+    """
+    from ..capabilities import (
+        attach_agreement, build_capabilities_doc, default_toggles,
+        quote_band as _qb,
+    )
+    from ..proposals import build_proposal
+    row, opp, ev = _load(conn, opp_id)
+    if row is None:
+        return None, None, None, None, 0
+    qual, _scored = ev
+    est = _estimate_for_row(conn, row, opp, qual)
+    overrides = db.get_doc_overrides(conn, opp_id)
+    ci_view, met = _brief_ci_context(conn, row)
+    toggles = default_toggles(row["status"], met=met)
+    # Before the call there is no scoping, so no honest number, so no priced summary and
+    # nothing to sign (ADR-0065's `met` gate — the half of ADR-0020 that was right).
+    if not met:
+        toggles.update({"cost": False, "terms": False})
+    doc = build_capabilities_doc(
+        opp, qual, est, toggles=toggles, overrides=overrides,
+        call_url="", ci_view=ci_view, met=met)
+    ci_fields = (ci_view or {}).get("fields") or {}
+    deposit_amount = build_proposal(
+        opp, qual, est,
+        quote_band=_qb(opp, est, ci_fields=ci_fields,
+                       commercial_overrides=(overrides or {}).get("commercial")),
+    ).deposit_amount
+    project = db.project_for_opp(conn, opp_id)
+    if project is not None:
+        stored = db.proposal_for_project(conn, project["id"])
+        if stored is not None and stored["deposit_amount"]:
+            deposit_amount = stored["deposit_amount"]
+    attach_agreement(doc, deposit_amount=deposit_amount)
+    return row, opp, ev, doc, deposit_amount
+
+
 def _quote_band_for(conn, row, opp, est):
     """THE number we'd put in front of this buyer (ADR-0034) — the same call the
     client's Campaign Brief and Commercial Review render. Resolving it needs the DB

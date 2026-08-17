@@ -34,7 +34,8 @@ from . import (
 from .delivery_ops import _approve_version_core
 from .estimate import estimate_for
 from .opportunity_ops import (
-    _brief_ci_context, _ensure_project_for_opp, _load, _reconcile_opp_status,
+    _brief_ci_context, _ensure_project_for_opp, _estimate_for_row, _load,
+    _reconcile_opp_status,
 )
 from .shell import public_base as _public_base, render
 
@@ -359,6 +360,20 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
                                 to_value=f"signed by {sig.typed_name}", source="workspace")
             except Exception:  # noqa: BLE001
                 pass
+        # Both notifications carry THE DOCUMENT, not a summary of it. A mail saying only
+        # "signed, fee $12,500" is a receipt for a contract nobody attached: the operator
+        # asked "where is the signed document" the first time this fired, and the client
+        # is entitled under ESIGN/UETA to retain what she agreed to rather than have to
+        # go back to a link for it.
+        document = agr.signable_text()
+        signed_block = (
+            f"\n\n{'=' * 58}\nSIGNED COPY — the exact text this signature covers\n"
+            f"{'=' * 58}\n{document}\n{'=' * 58}\n"
+            f"Signed by: {sig.typed_name}"
+            + (f" <{sig.signer_email}>" if sig.signer_email else "")
+            + f"\nSigned at: {sig.signed_at}\n"
+            f"Consent given: {sig.consent_text}\n"
+            f"Document digest (SHA-256): {sig.digest}\n")
         op_mail = meeting_scheduler._operator_email()
         if op_mail:
             try:
@@ -366,11 +381,25 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
                     op_mail, f"✍ Proposal SIGNED — {opp['client']}",
                     f"{sig.typed_name} signed the Discovery Summary & Proposal for "
                     f"{opp['need']}.\n"
-                    f"Fee: {agr.fee_line or '—'}\n"
-                    f"Signed at: {sig.signed_at}\n"
-                    f"Document digest: {sig.digest[:16]}…\n\n"
-                    f"Next: countersign and start production.\n"
-                    f"{_public_base()}/opportunity/{opp_id}")
+                    f"Fee: {agr.fee_line or '—'}\n\n"
+                    f"Next: countersign, then start production.\n"
+                    f"{_public_base()}/opportunity/{opp_id}#agreement"
+                    + signed_block)
+            except Exception:  # noqa: BLE001
+                pass
+        # The signer's own copy. Retention is a requirement of the legal shape this
+        # module claims (ESIGN/UETA), and "it is on the web page" is a weaker answer than
+        # a copy in their inbox on the day they signed.
+        if sig.signer_email:
+            try:
+                mailer.send_email(
+                    sig.signer_email,
+                    f"Your signed copy — {opp['client']} · {opp['need']}",
+                    f"Thank you. Below is the agreement exactly as you signed it, for "
+                    f"your records.\n\nWe countersign and raise the deposit invoice; work "
+                    f"begins when the deposit clears. Your workspace stays at "
+                    f"{_public_base()}/workspace/{token}"
+                    + signed_block)
             except Exception:  # noqa: BLE001
                 pass
     finally:
@@ -504,7 +533,11 @@ def _live_brief_ctx(conn, opp_id):
     if row is None:
         return None
     qual, _scored = ev
-    est = estimate_for(opp, qual=qual)
+    # The SAME estimate the operator's surfaces resolve (ADR-0033/0065): with the deal's
+    # project, so assigned rates are in play. This built its own without one, so the
+    # document the CLIENT signed could quote a different fee from the deal page the
+    # operator was reading — the divergence being signed rather than merely displayed.
+    est = _estimate_for_row(conn, row, opp, qual)
     overrides = db.get_doc_overrides(conn, opp_id)
     ci_view, met = _brief_ci_context(conn, row)
     toggles = default_toggles(row["status"], met=met)

@@ -87,6 +87,63 @@
    scroll past everything first. #}
 {{ opp_subnav(row, 'overview') }}
 
+{# ── The signed agreement (ADR-0065). Reported live: a client signed, and the deal page
+      showed nothing — no document, no signature — while the board went on saying
+      "release the proposal" for a proposal already accepted. The signed copy lives HERE,
+      on the page the operator works from, with the verdict and our half of it. ── #}
+{% if proposal_signature %}
+<section class="card" id="agreement" style="border-left:4px solid {{ '#2F6A34' if signature_valid else '#C8552B' }}">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+    <span class="pill {{ 'live' if not signature_valid }}" style="flex:none">
+      {{ 'SIGNED' if signature_valid else 'SIGNED — DOCUMENT CHANGED' }}
+    </span>
+    <div style="flex:1;min-width:240px">
+      <div style="font-weight:750">{{ proposal_signature['typed_name'] }}
+        {%- if proposal_signature['signer_email'] %} · {{ proposal_signature['signer_email'] }}{% endif %}</div>
+      <div class="muted small" style="margin-top:3px">{{ signature_note }}</div>
+      <div class="muted small mono" style="margin-top:3px;opacity:.7">
+        SHA-256 <span style="user-select:all">{{ proposal_signature['digest'] }}</span></div>
+    </div>
+  </div>
+  {% if proposal_signature['drawn_mark'] %}
+  <img src="{{ proposal_signature['drawn_mark'] }}" alt="Signature of {{ proposal_signature['typed_name'] }}"
+       style="display:block;max-width:240px;margin:10px 0 0;background:#fff;border:1px solid var(--line,#e7e1d8);border-radius:6px">
+  {% endif %}
+
+  {% if countersignature %}
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line,#e7e1d8)">
+    <b>✓ Countersigned</b> by {{ countersignature['typed_name'] }} on
+    {{ countersignature['signed_at'][:10] }} — signed by both parties.
+  </div>
+  {% elif signature_valid %}
+  {# The acceptance text they signed PROMISES this ("we countersign, raise the deposit
+     invoice, and work begins when that deposit clears"), so it has to exist. #}
+  <form method="post" action="/opportunity/{{ row['id'] }}/countersign"
+        style="margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line,#e7e1d8);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input type="text" name="typed_name" placeholder="Your name, to countersign"
+           style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px 10px;font:inherit;min-width:220px">
+    <label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
+      <input type="checkbox" name="consent" value="1"> I agree to sign electronically
+    </label>
+    <button class="btn primary" type="submit">Countersign</button>
+  </form>
+  {% else %}
+  <div class="muted small" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line,#e7e1d8)">
+    <b>Countersigning is blocked.</b> The document has changed since they signed it, so
+    countersigning now would bind us to terms they never saw. Restore what they agreed to,
+    or ask them to sign the new version.
+  </div>
+  {% endif %}
+
+  {% if agreement_text %}
+  <details style="margin-top:12px">
+    <summary class="muted small" style="cursor:pointer">The signed document</summary>
+    <pre style="white-space:pre-wrap;font-size:12.5px;line-height:1.5;background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:12px;margin:8px 0 0;overflow-x:auto">{{ agreement_text }}</pre>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
 {# ── The price, and what the client said about it (ADR-0065). The verdict is the part
       that exists nowhere else: a stated budget below our floor used to quietly BECOME
       the quote, so the deal was taken at a loss without anyone deciding to. It is now a

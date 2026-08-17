@@ -48,12 +48,21 @@ DOC_DELIVERY_ACCEPTANCE = "delivery_acceptance"
 # one so the foreign key had somewhere to point would have made a deal look won on the
 # strength of a document nobody had answered.
 DOC_PROPOSAL = "discovery_proposal"
-DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL)
+# Our half of the same document. The acceptance text the client signs says in as many
+# words "we countersign, raise the deposit invoice, and work begins when that deposit
+# clears" — so a countersignature has to be a real thing that exists, or the first
+# sentence of our first binding document is one we cannot keep. It is a SEPARATE kind
+# rather than a second row of the client's, so `latest_opportunity_signature` keeps
+# answering "did the client sign?" without having to guess which row is whose.
+DOC_PROPOSAL_COUNTERSIGN = "discovery_proposal_countersign"
+DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
+             DOC_PROPOSAL_COUNTERSIGN)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
     DOC_DELIVERY_ACCEPTANCE: "Delivery acceptance",
     DOC_PROPOSAL: "Discovery Summary & Proposal",
+    DOC_PROPOSAL_COUNTERSIGN: "Discovery Summary & Proposal (countersigned)",
 }
 
 # The consent a signer is shown and agrees to. Recorded VERBATIM on the signature, not
