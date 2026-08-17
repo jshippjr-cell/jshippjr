@@ -685,8 +685,13 @@ def _build_commercial(opp: Opportunity, estimate: Estimate, terms: List[str],
                       deliverables: List[Deliverable]) -> dict:
     """The commercial close — the last section of the brief, not a separate document.
     Pricing from the estimation engine (or the CI budget band), scope/timeline from CI."""
-    scope = (ci_fields.get("deliverables") or "").strip()
-    timeline = (ci_fields.get("deadline") or "").strip()
+    # Cleaned for a document someone SIGNS: the extractor's own narration
+    # ("Deliverables mentioned:") and its hedges ("(needs clarified)") are not contract
+    # terms. An uncertainty leaves the term and returns as a caveat — never silently
+    # dropped, because that turns a guess into a fact (ADR-0058).
+    from .client_voice import contract_phrase, joined_sentence
+    scope, scope_caveats = contract_phrase(ci_fields.get("deliverables") or "")
+    timeline, timeline_caveats = contract_phrase(ci_fields.get("deadline") or "")
     budget_band = (ci_fields.get("budget_band") or "").strip()
     return {
         "price_low": price_low, "price_high": price_high,
@@ -697,8 +702,10 @@ def _build_commercial(opp: Opportunity, estimate: Estimate, terms: List[str],
         "terms": list(terms),
         "revisions": "Two structured revision rounds are included; more are scoped, never surprised.",
         "deposit": "50% to begin, the balance on final approval, invoiced and never chased.",
-        "completion": (f"Working back from {timeline}." if timeline
+        "completion": (joined_sentence("Working back from", timeline) if timeline
                        else "Estimated completion is set at kickoff, working back from your air date."),
+        # Surfaced on the document beside the number, not buried in the term itself.
+        "caveats": scope_caveats + timeline_caveats,
     }
 
 
@@ -839,7 +846,11 @@ def build_capabilities_doc(
         price_high=price_high,
         show_terms=show_terms,
         terms=terms,
-        assumptions=assumptions,
+        # Plus anything the CONTRACT TERMS had to set aside — a scope item the call
+        # described but did not settle belongs here, named, rather than inside the term
+        # wearing a "(needs clarified)" nobody agreed to sign.
+        assumptions=assumptions + [c for c in (commercial or {}).get("caveats") or []
+                                   if c not in assumptions],
         show_docusign=(stage == "contract"),
         show_delivery=show_delivery,
         campaign_label=opp.need,

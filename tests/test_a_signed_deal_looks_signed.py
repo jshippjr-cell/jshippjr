@@ -215,3 +215,105 @@ def test_the_client_and_the_operator_read_the_same_bytes(client):
     client_text = client_doc.agreement.signable_text()
     assert client_text == operator_doc.agreement.signable_text()
     assert stored["digest"] == document_digest(client_text)
+
+
+# ── the document reads like a document, and still hashes like the document ───────────
+def test_the_signed_copy_is_typeset_not_dumped(client):
+    """Reported live: "the signed copy of the document came back as text." It rendered in
+    a <pre> block — a contract that looks like a log file is a contract nobody trusts."""
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _sign(c, token)
+    page = c.get(f"/opportunity/{oid}").text
+    assert "<pre" not in page.split('id="agreement"')[1].split("</section>")[0], (
+        "the agreement is still a monospace dump")
+    assert 'class="sigdoc"' in page
+    assert "<h4>SCOPE</h4>" in page and "<h4>ACCEPTANCE</h4>" in page
+    assert 'class="k">Fee<' in page, "the fee is a labelled term, not a run of text"
+
+
+def test_typesetting_never_touches_the_hashed_bytes(client):
+    """The load-bearing half. Reformatting the STRING would change the digest and void
+    every signature over it, so the transformation has to be presentational only."""
+    from chordential_oia.signing import document_digest
+    from chordential_oia.web.opportunity_ops import agreement_doc_for
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        before = app_mod.db.latest_opportunity_signature(conn, oid, DOC_PROPOSAL)["digest"]
+        _r, _o, _e, doc, _d = agreement_doc_for(conn, oid)
+    finally:
+        conn.close()
+    assert document_digest(doc.agreement.signable_text()) == before
+    page = c.get(f"/opportunity/{oid}").text
+    assert "SIGNED — DOCUMENT CHANGED" not in page
+    assert before in page, "the page shows a digest that is not the stored one"
+
+
+# ── what a client signs is not the extractor's notes ─────────────────────────────────
+def _ci(app_mod, oid, **fields):
+    from chordential_oia.web import campaign_intelligence as ci_mod
+    conn = app_mod.db.connect()
+    try:
+        row = app_mod.db.get_opportunity(conn, oid)
+        cid = ci_mod.ensure_for_opportunity(conn, row)["id"]
+        for key, value in fields.items():
+            ci_mod.edit_or_create(conn, cid, "engagement", key, "fact", value,
+                                  actor="operator")
+    finally:
+        conn.close()
+
+
+def test_the_machines_own_narration_never_becomes_a_contract_term(client):
+    """A live signed proposal carried, as its SCOPE line:
+
+        Scope: Deliverables mentioned: three-minute master film, … (needs clarified).
+
+    "Deliverables mentioned:" is the extractor narrating itself. "(needs clarified)" is
+    the machine saying it is NOT sure — printed as a settled term in the document where
+    an unconfirmed item costs the most.
+    """
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _ci(app_mod, oid,
+        deliverables="Deliverables mentioned: three-minute master film, 30-second social "
+                     "cutdown, and a live-event playback version (needs clarified).",
+        deadline="Final delivery needed two weeks before the November 3rd launch.")
+    from chordential_oia.web.opportunity_ops import agreement_doc_for
+    conn = app_mod.db.connect()
+    try:
+        _r, _o, _e, doc, _d = agreement_doc_for(conn, oid)
+    finally:
+        conn.close()
+    text = doc.agreement.signable_text()
+    assert "Deliverables mentioned:" not in text
+    assert "needs clarified" not in text
+    assert "three-minute master film" in text, "the actual scope survived the cleaning"
+    # Removed from the term, RETURNED as a caveat — never silently dropped, because that
+    # turns a guess into a fact (ADR-0058).
+    assert "not finalised" in text and "WHAT THIS RESTS ON" in text
+
+
+def test_a_captured_sentence_is_folded_in_without_mangling_it(client):
+    """The live document read "Working back from Final delivery needed two weeks before
+    the November 3rd launch, i.e. mid-October.." — a mid-sentence capital and a doubled
+    period, on a contract line."""
+    c, app_mod = client
+    oid, _token = _deal(app_mod)
+    _ci(app_mod, oid,
+        deadline="Final delivery needed two weeks before the November 3rd launch, "
+                 "i.e. mid-October.")
+    from chordential_oia.web.opportunity_ops import agreement_doc_for
+    conn = app_mod.db.connect()
+    try:
+        _r, _o, _e, doc, _d = agreement_doc_for(conn, oid)
+    finally:
+        conn.close()
+    completion = [ln for ln in doc.agreement.signable_text().splitlines()
+                  if ln.startswith("Completion:")][0]
+    assert ".." not in completion
+    assert "from Final delivery" not in completion, "mid-sentence capital survived"
+    assert "from final delivery" in completion
+    assert completion.rstrip().endswith(".")

@@ -92,6 +92,28 @@
       "release the proposal" for a proposal already accepted. The signed copy lives HERE,
       on the page the operator works from, with the verdict and our half of it. ── #}
 {% if proposal_signature %}
+<style>
+/* The signed document, set like a document. Presentational only — the hashed text is
+   untouched (see the note under the block). */
+.sigdoc{background:#fff;border:1px solid var(--line,#e7e1d8);border-radius:10px;
+  padding:20px 24px;margin:8px 0 0;max-width:62em;
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  color:var(--ink,#241016)}
+.sigdoc h4{font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+  color:var(--ember,#b34a21);margin:18px 0 6px;padding-bottom:4px;
+  border-bottom:1px solid var(--line,#eee6dc)}
+.sigdoc h4:first-child{margin-top:0;font-size:15px;letter-spacing:.04em;color:var(--ink,#241016);
+  text-transform:none;border-bottom:2px solid var(--ink,#241016);padding-bottom:7px}
+.sigdoc p{margin:0 0 7px}
+.sigdoc .sigdoc-gap{height:9px}
+.sigdoc .sigdoc-row{display:flex;gap:12px;margin:0 0 4px;align-items:baseline}
+.sigdoc .sigdoc-row .k{flex:0 0 8.5em;font-weight:650;color:var(--muted,#7a6b67);
+  font-size:12.5px}
+.sigdoc .sigdoc-row .v{flex:1;min-width:0}
+.sigdoc .sigdoc-item{margin:0 0 3px 14px;position:relative}
+.sigdoc .sigdoc-item::before{content:"·";position:absolute;left:-11px;color:var(--sand,#b3aca2)}
+@media print{.sigdoc{border:0;padding:0}}
+</style>
 <section class="card" id="agreement" style="border-left:4px solid {{ '#2F6A34' if signature_valid else '#C8552B' }}">
   <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
     <span class="pill {{ 'live' if not signature_valid }}" style="flex:none">
@@ -136,9 +158,28 @@
   {% endif %}
 
   {% if agreement_text %}
-  <details style="margin-top:12px">
+  {# Rendered as a DOCUMENT, not a terminal dump. The bytes are untouched — this is the
+     exact text the digest covers, only typeset: section headings picked out, terms set
+     in proportional type, the fee given its weight. Reformatting the STRING would change
+     the hash and void the signature, so the transformation is presentational and lives
+     entirely here. Reported live: "the signed copy of the document came back as text."
+     A contract that looks like a log file is a contract nobody trusts. #}
+  <details style="margin-top:12px" open>
     <summary class="muted small" style="cursor:pointer">The signed document</summary>
-    <pre style="white-space:pre-wrap;font-size:12.5px;line-height:1.5;background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:12px;margin:8px 0 0;overflow-x:auto">{{ agreement_text }}</pre>
+    <div class="sigdoc">
+      {%- for line in agreement_text.split('\n') -%}
+        {%- set t = line.strip() -%}
+        {%- if not t %}<div class="sigdoc-gap"></div>
+        {%- elif t == t.upper() and t|length > 3 and not t.startswith('-') %}<h4>{{ t }}</h4>
+        {%- elif t.startswith('- ') %}<div class="sigdoc-item">{{ t[2:] }}</div>
+        {%- elif ': ' in t and t.split(': ')[0]|length < 22 %}<div class="sigdoc-row"><span class="k">{{ t.split(': ')[0] }}</span><span class="v">{{ t.split(': ', 1)[1] }}</span></div>
+        {%- else %}<p>{{ t }}</p>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+    <p class="muted fineprint" style="margin:8px 0 0">
+      Typeset for reading. The signature covers the text exactly as stored — the hash
+      above is of the document, not of this rendering.</p>
   </details>
   {% endif %}
 </section>

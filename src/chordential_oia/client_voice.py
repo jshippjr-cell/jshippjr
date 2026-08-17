@@ -453,3 +453,73 @@ def internal_assumptions(assumptions: Sequence[str]) -> List[str]:
     from the person who can act on it; it is only kept off the client's copy."""
     return [a for a in (_clean(x) for x in assumptions or [])
             if a and any(m in a.lower() for m in _MARGIN_MARKERS)]
+
+# ── Values that become CONTRACT TERMS ────────────────────────────────────────────────
+#
+# Campaign Intelligence records what it heard, in its own voice, hedges included. That is
+# right for intelligence and wrong for a contract. A live signed proposal carried:
+#
+#     Scope: Deliverables mentioned: three-minute master film, 30-second social cutdown,
+#     stems (for video editor), and a screening/live-event playback version for the
+#     February fundraising dinner (needs clarified).
+#
+# Two separate faults in one line a client put her name to. "Deliverables mentioned:" is
+# the extractor narrating itself. "(needs clarified)" is the machine saying it is NOT
+# sure — printed as a settled term, in the document where an unconfirmed item is most
+# expensive. ADR-0058 says a value carries its own evidence; here the evidence was
+# carried INTO the binding text instead of beside it.
+_EXTRACTION_PREFIX = re.compile(
+    r"^\s*(?:the\s+)?(?:client\s+|buyer\s+|they\s+)?"
+    r"(?:deliverables?|scope|timeline|budget|requirements?|assets?)?\s*"
+    r"(?:mentioned|stated|said|noted|indicated|discussed|confirmed|requested)\s*:\s*",
+    re.I)
+
+# Parentheticals that mean "we are not sure". They must leave the term and reappear as a
+# caveat — deleting them outright would turn a guess into a fact, which is worse than the
+# clutter it removes.
+_UNCERTAIN_PAREN = re.compile(
+    r"\s*\((?:needs?\s+(?:to\s+be\s+)?(?:clarified|confirming|confirmation|confirmed)"
+    r"|to\s+be\s+confirmed|tbc|tbd|unconfirmed|not\s+confirmed|unclear|assumed"
+    r"|if\s+confirmed|pending)\)\s*", re.I)
+
+
+def contract_phrase(value: str) -> Tuple[str, List[str]]:
+    """Clean one Campaign Intelligence value for use as a contract term.
+
+    Returns ``(term, caveats)``. The term is what belongs on the agreement; each caveat is
+    a sentence naming something the brief did not settle, for the document's
+    "WHAT THIS RESTS ON" section. Nothing is silently dropped: an uncertainty removed from
+    the term always comes back as a caveat, because the alternative is a signed document
+    presenting a guess as a fact.
+    """
+    text = _clean(value)
+    if not text:
+        return "", []
+    text = _EXTRACTION_PREFIX.sub("", text, count=1)
+    caveats: List[str] = []
+    if _UNCERTAIN_PAREN.search(text):
+        caveats.append(
+            "Part of the scope was described on the call but not finalised; it is "
+            "confirmed at spotting before any of it is built.")
+        text = _UNCERTAIN_PAREN.sub(" ", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    text = re.sub(r"\s+([,.;:])", r"\1", text)
+    return text.rstrip(" .") + ("." if text.rstrip().endswith(".") else ""), caveats
+
+
+def joined_sentence(lead: str, tail: str) -> str:
+    """Glue a lead-in onto a captured phrase without producing "Working back from Final
+    delivery needed two weeks before the launch..".
+
+    The live document did exactly that: a full captured sentence, capital and terminal
+    stop intact, concatenated after "Working back from" — leaving a mid-sentence capital
+    and a doubled period on a contract line. Lower-cases the join and lets the lead-in own
+    the punctuation.
+    """
+    tail = _clean(tail).rstrip(" .")
+    if not tail:
+        return ""
+    if tail[:1].isupper() and not tail[:4].isupper():
+        # Not an acronym or a proper noun run — safe to fold into the sentence.
+        tail = tail[0].lower() + tail[1:]
+    return f"{lead.rstrip()} {tail}."
