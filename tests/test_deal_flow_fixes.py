@@ -40,15 +40,29 @@ from chordential_oia.web import opportunity_routes  # noqa: E402
 from chordential_oia.web import campaign_intelligence  # noqa: E402
 
 
-def test_commercial_pricing_follows_discovered_budget(tmp_path, monkeypatch):
+def test_commercial_pricing_reports_the_discovered_budget_without_obeying_it(
+        tmp_path, monkeypatch):
+    """This asserted that a discovered $30,000 budget BECAME the quote. ADR-0065 ended
+    that — it was the name-your-price defect, and on a job costing more than they said it
+    meant taking the work at a loss. What must still hold is that the budget reaches the
+    Review (it is the number that decides whether to pursue) and that the deposit is
+    always half of whatever is actually quoted."""
+    from chordential_oia.capabilities import quote_for
+    from chordential_oia.web.opportunity_ops import _estimate_for_row, _load
     app_mod = _app(tmp_path, monkeypatch)
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
     oid = _opp(app_mod, conn, "$30,000")
     _row, review = opportunity_routes._build_review_for_opp(conn, oid)
+    row, opp, ev = _load(conn, oid)
+    quote = quote_for(opp, _estimate_for_row(conn, row, opp, ev[0]),
+                      ci_fields={"budget_band": "$30,000"})
     conn.close()
-    # the quote reflects the $30k budget, NOT the estimator's low cost band
-    assert review.fee_low == 30000 and review.fee_high == 30000
-    assert review.deposit_amount == 15000            # 50% of the quoted band
+    assert (review.fee_low, review.fee_high) != (30000, 30000), (
+        "the client's stated budget is being quoted back to them")
+    assert quote.stated_budget == 30000, "the budget never reached the engine"
+    assert quote.budget_verdict in ("in_band", "above_band", "below_floor")
+    # The deposit still tracks the band on the page — the defect this file exists for.
+    assert review.deposit_amount == round(((review.fee_low + review.fee_high) / 2) * 0.5)
 
 
 def test_commercial_price_is_editable(tmp_path, monkeypatch):

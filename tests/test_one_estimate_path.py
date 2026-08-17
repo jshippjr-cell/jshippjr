@@ -105,9 +105,17 @@ def test_the_public_price_band_prices_it_the_same_way_too():
     ))
     band = public.public_price_band(
         "DJ for the launch party", "Need a DJ and a Spotify playlist for the event.")
-    ratio = est.suggested_price / est.estimated_cost
-    assert band["low"] <= est.cost_low * ratio + 100
-    assert band["high"] >= est.cost_high * ratio - 100
+    # It used to walk `est.suggested_price / est.estimated_cost` back by hand, because the
+    # public band converted the authority's COST band at margin itself. Under ADR-0065 the
+    # authority returns a PRICE and a caller renders it — so the check is now the thing the
+    # test was always about: the prospect's number and the operator's are one call, not two
+    # arithmetics that happen to land close.
+    from chordential_oia.capabilities import quote_band
+    opp = Opportunity(client="(prospect)", need="DJ for the launch party",
+                      description="Need a DJ and a Spotify playlist for the event.")
+    lo, hi = quote_band(opp, est)
+    assert abs(band["low"] - lo) <= 100 and abs(band["high"] - hi) <= 100, (
+        f'intake quotes ${band["low"]:,}-${band["high"]:,}, the console ${lo:,}-${hi:,}')
 
 
 def test_an_unqualified_deal_is_priced_against_a_real_team():

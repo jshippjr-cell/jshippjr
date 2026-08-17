@@ -42,9 +42,19 @@ def test_band_brackets_estimator_suggested_price(ctx):
     band = public.public_price_band(pt, desc)
     assert band is not None
     assert 0 < band["low"] < band["high"]
-    # No divergent math: the estimator's own suggested price sits inside the band.
-    suggested = _suggested_for(pt, desc)
-    assert band["low"] <= suggested <= band["high"]
+    # No divergent math — but the number to agree WITH is the quote authority, not
+    # `estimate.suggested_price`. That figure folds a usage factor into the creative
+    # number, so ADR-0065 deliberately stopped using it: the licence is priced once, in
+    # the licence line. Bracketing it here would pin the public band to a legacy
+    # calculation the proposal no longer honours.
+    from chordential_oia.capabilities import quote_band
+    from chordential_oia.models import Opportunity
+    from chordential_oia.web.estimate import estimate_for
+    opp = Opportunity(client="(prospect)", need=pt, description=desc)
+    lo, hi = quote_band(opp, estimate_for(opp))
+    assert abs(band["low"] - lo) <= 100 and abs(band["high"] - hi) <= 100, (
+        f'the public band ${band["low"]:,}-${band["high"]:,} is not what we would quote '
+        f'(${lo:,}-${hi:,})')
 
 
 def test_band_rounds_to_tidy_hundreds(ctx):
