@@ -172,10 +172,16 @@ def test_assigned_day_rate_flows_into_proposal(ctx):
     # ADR-0034: the proposal's TOTAL is the quote, not the cost-derived suggestion.
     # These are deliberately different numbers — the client agreed to a price, and
     # what the crew costs is our margin question, reported on the estimate page.
+    #
+    # The band used to be pinned to (8000, 15000), the fixture's disclosed budget, back
+    # when the budget WAS the quote. Under ADR-0065 the price derives from the work, so
+    # the durable claim is the RELATIONSHIP: the proposal totals the quote, and a dearer
+    # assigned crew moves the quote, because the creative fee is cost at margin.
     from chordential_oia.capabilities import quote_band
     lo, hi = quote_band(opp, override_est)
-    assert (lo, hi) == (8000, 15000), "the fixture's disclosed budget is the quote"
     assert round(prop["total_price"], 2) == round((lo + hi) / 2, 2)
+    assert quote_band(opp, override_est) != quote_band(opp, default_est), (
+        "the assigned day rate no longer reaches the client-facing quote")
 
 
 def test_opportunity_price_band_path_unchanged(ctx):

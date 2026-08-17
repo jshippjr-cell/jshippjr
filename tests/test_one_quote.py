@@ -24,7 +24,8 @@ import importlib
 import pytest
 
 from chordential_oia.capabilities import (
-    _price_band, build_capabilities_doc, default_toggles, quote_band, quote_phrase,
+    _price_band, build_capabilities_doc, default_toggles, quote_band, quote_for,
+    quote_phrase,
 )
 from chordential_oia.models import Opportunity
 from chordential_oia.web import opportunity_routes
@@ -39,6 +40,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 # dead imports alive in it.
 from chordential_oia.web.opportunity_ops import _brief_ci_context  # noqa: E402
 from chordential_oia.web.opportunity_ops import _load  # noqa: E402
+from chordential_oia.web.opportunity_ops import _estimate_for_row  # noqa: E402
 from chordential_oia.web.opportunity_ops import _quote_band_for  # noqa: E402
 
 
@@ -52,16 +54,35 @@ def _opp(**kw):
 # --------------------------------------------------------------------------- #
 # The authority itself
 # --------------------------------------------------------------------------- #
-def test_the_disclosed_budget_beats_the_estimator():
-    """ADR-0020: what the client told us they'd spend is what we quote to. This is the
-    rule the Commercial Review already followed and the other three ignored."""
+def test_the_disclosed_budget_no_longer_sets_the_price():
+    """ADR-0065 supersedes ADR-0034 tier 2, and this test with it.
+
+    The old rule was "what the client told us they'd spend is what we quote to", which
+    made the product a name-your-price: the SAME job was quoted $20–40k to a client who
+    said $20–40k and $6k to one who said $6k. The budget is still read — it decides the
+    verdict below — but the number now comes from what the work is worth.
+    """
     opp = _opp(budget_min=20000, budget_max=40000)
     est = estimate_for(opp)
-    assert quote_band(opp, est) == (20000, 40000)
-    assert _price_band(est) != (20000, 40000), "fixture no longer proves anything"
+    assert quote_band(opp, est) != (20000, 40000), "the budget is being quoted back"
+    assert quote_band(opp, est) == quote_band(_opp(), est), (
+        "two identical jobs priced differently because one buyer named a figure")
 
 
-def test_an_operator_override_beats_the_disclosed_budget():
+def test_the_budget_becomes_a_verdict_instead_of_a_price():
+    """It is not ignored — ignoring it would throw away the one number that says whether
+    this deal is worth having. It just stops being the answer."""
+    opp = _opp()
+    est = estimate_for(opp)
+    lo, hi = quote_band(opp, est)
+    rich = quote_for(opp, est, ci_fields={"budget_band": f"${hi + 100_000:,}"})
+    assert rich.budget_verdict == "above_band" and rich.band == (lo, hi)
+    poor = quote_for(opp, est, ci_fields={"budget_band": "$500"})
+    assert poor.budget_verdict == "below_floor" and poor.band == (lo, hi)
+    assert poor.total >= poor.floor, "never quote below what the work costs"
+
+
+def test_an_operator_override_beats_the_derivation():
     """The machine proposes, Jon disposes — a human price wins over every derivation."""
     opp = _opp(budget_min=20000, budget_max=40000)
     est = estimate_for(opp)
@@ -69,18 +90,37 @@ def test_an_operator_override_beats_the_disclosed_budget():
                       commercial_overrides={"fee_low": 26000, "fee_high": 33000}) == (26000, 33000)
 
 
-def test_campaign_intelligence_beats_the_opportunity_columns():
-    """CI is the source of truth (ADR-0017/0020): what the client said in the meeting
-    outranks whatever the original posting listed."""
+def test_an_overridden_quote_still_adds_up():
+    """The itemisation is rescaled with the total. Left at its computed values beside a
+    different total, the document would show a buyer arithmetic that does not work."""
+    opp = _opp()
+    q = quote_for(opp, estimate_for(opp),
+                  commercial_overrides={"fee_low": 26000, "fee_high": 33000})
+    assert q.creative_fee + q.licence_fee == q.total
+    assert q.overridden, "a human's price must not be presented as the engine's"
+
+
+def test_campaign_intelligence_still_beats_the_opportunity_columns():
+    """CI remains the source of truth (ADR-0017) for the budget READING — a meeting
+    outranks a posting. It just feeds the verdict now instead of the price."""
     opp = _opp(budget_min=5000, budget_max=9000)
     est = estimate_for(opp)
-    assert quote_band(opp, est, ci_fields={"budget_band": "$18,000–$24,000"}) == (18000, 24000)
+    from chordential_oia.capabilities import stated_budget_text
+    assert stated_budget_text(opp, {"budget_band": "$18,000–$24,000"}) == "$18,000–$24,000"
+    assert "5,000" in stated_budget_text(opp, None)
+    assert quote_for(opp, est, ci_fields={"budget_band": "$18,000–$24,000"}).stated_budget == 24000
 
 
-def test_with_nothing_discovered_it_falls_back_to_the_estimator():
+def test_with_nothing_discovered_the_price_is_what_the_work_is_worth():
+    """The old fallback was the estimator's own band — cost at margin, with usage folded
+    into the creative number. It is now creative fee PLUS a priced licence."""
     opp = _opp()
     est = estimate_for(opp)
-    assert quote_band(opp, est) == _price_band(est)
+    lo, hi = quote_band(opp, est)
+    assert lo and hi and lo < hi
+    assert (lo, hi) != _price_band(est), "the licence is not being priced"
+    q = quote_for(opp, est)
+    assert q.creative_fee > 0 and q.licence_fee > 0
 
 
 def test_it_never_invents_a_number():
@@ -136,7 +176,11 @@ def test_all_four_surfaces_quote_the_same_number(app_mod):
             oid = row["id"]
             _r, opp, ev = _load(conn, oid)
             qual, _scored = ev
-            est = estimate_for(opp, qual=qual)
+            # The SAME estimate resolution every buyer-facing surface uses — with the
+            # deal's project, so assigned rates are in play (ADR-0033). Building it any
+            # other way here would make this test assert agreement with a number no
+            # surface actually shows.
+            est = _estimate_for_row(conn, row, opp, qual)
             expected = _quote_band_for(conn, row, opp, est)
             assert expected[0], f"opp {oid} resolved no quote"
             want = _band_text(*expected)
@@ -239,7 +283,12 @@ def test_a_proposal_totals_the_quote_not_the_estimate():
     est = estimate_for(opp, qual=qual)
     band = quote_band(opp, est)
     quoted = build_proposal(opp, qual, est, quote_band=band)
-    assert quoted.total_price == 8000
+    # The midpoint of THE BAND, derived — it used to be hardcoded to 8000, which was the
+    # midpoint of the disclosed $6,000–$10,000 budget back when the budget was the quote.
+    # Asserting the relationship rather than the constant is what the test was always
+    # about, and it survives the price moving (ADR-0065).
+    assert quoted.total_price == round((band[0] + band[1]) / 2)
+    assert quoted.total_price != est.suggested_price, "back to the estimator's own number"
     assert quoted.deposit_amount + quoted.balance_due == quoted.total_price
     assert build_proposal(opp, qual, est).total_price == est.suggested_price, (
         "without a band the estimator's number still stands — callers wanting terms only")
@@ -290,7 +339,7 @@ def test_the_briefs_pay_deposit_sits_under_the_band_it_shows(app_mod):
         ).fetchall()
         for row in rows:
             _r, opp, ev = _load(conn, row["id"])
-            est = estimate_for(opp, qual=ev[0])
+            est = _estimate_for_row(conn, row, opp, ev[0])
             lo, hi = _quote_band_for(conn, row, opp, est)
             expected[row["id"]] = (lo, hi, round(((lo + hi) / 2) * DEFAULT_DEPOSIT_PCT))
     finally:

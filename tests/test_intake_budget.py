@@ -116,8 +116,12 @@ def test_a_stated_budget_reaches_the_opportunity(app_mod):
     assert (opp["budget_min"], opp["budget_max"]) == (25000.0, 40000.0)
 
 
-def test_we_quote_the_budget_they_stated(app_mod):
-    from chordential_oia.capabilities import quote_band
+def test_the_stated_budget_reaches_the_verdict_not_the_price(app_mod):
+    """ADR-0065 supersedes this test's original claim, which was that we quote the budget
+    they stated. That was the name-your-price defect: the client set our fee by naming a
+    number. What the chain must still deliver is the budget REACHING us — it is the input
+    to the verdict that says whether the deal is worth having."""
+    from chordential_oia.capabilities import quote_band, quote_for
     from chordential_oia.web import db
     from chordential_oia.web.estimate import estimate_for
 
@@ -130,7 +134,11 @@ def test_we_quote_the_budget_they_stated(app_mod):
             conn.execute("SELECT * FROM opportunities WHERE id=?", (opp_row["id"],)).fetchone())
     finally:
         conn.close()
-    assert quote_band(opp, estimate_for(opp)) == (25000, 40000)
+    est = estimate_for(opp)
+    assert quote_band(opp, est) != (25000, 40000), "the budget is being quoted back"
+    q = quote_for(opp, est)
+    assert q.stated_budget == 40000, "the stated budget never reached the engine"
+    assert q.budget_verdict in ("in_band", "above_band", "below_floor")
 
 
 def test_the_band_shown_at_intake_matches_what_we_quote_later(app_mod):

@@ -226,30 +226,67 @@ def quote_band(
     renderer: the client Campaign Brief, the client Commercial Review, the pursuit
     checklist, and the outreach cadence all quote this and nothing else.
 
-    Precedence (ADR-0020 — Campaign Intelligence is the source of truth):
+    Precedence (ADR-0065 supersedes ADR-0034 tier 2):
 
     1. an explicit operator override (``fee_low``/``fee_high``) — a human decided;
-    2. the **discovered budget** — CI's ``budget_band``, else the opportunity's own
-       budget columns. What the client told us they'd spend is what we quote to;
-    3. the estimator's price band — cost converted at target margin.
+    2. **what the work is worth** — :func:`chordential_oia.pricing.build_quote`: the
+       creative fee at target margin plus the licence fee for the media, territory, term
+       and exclusivity discovery actually captured, floored at cost.
 
-    Returns ``(low, high)``, or ``(None, None)`` when nothing resolves — never a
+    Tier 2 used to be *the client's disclosed budget*, and that fired on essentially
+    every deal that had had a discovery call, because discovering the budget is what a
+    discovery call does. It made the product a name-your-price: the same charity film was
+    quoted $6,000 to a client who said $6,000 and $90,000 to one who said $90,000,
+    against a cost to deliver of $4,062–$8,435. The budget is still read — it decides
+    ``Quote.budget_verdict`` — but it no longer sets the number, and a figure below our
+    floor now produces a flag for the operator instead of a quote we lose money on.
+
+    Returns ``(low, high)``, or ``(None, None)`` with no estimate to price from — never a
     fabricated number, and never the estimate's *cost* range.
     """
+    quote = quote_for(opp, estimate, ci_fields=ci_fields,
+                      commercial_overrides=commercial_overrides)
+    return (quote.low, quote.high) if quote is not None else (None, None)
+
+
+def stated_budget_text(opp, ci_fields: Optional[dict] = None) -> str:
+    """What the client said their budget was, wherever they said it.
+
+    CI first (a meeting outranks a posting — ADR-0017), then the opportunity's own
+    columns. Used ONLY to judge the quote, never to set it.
+    """
+    band = str((ci_fields or {}).get("budget_band") or "").strip()
+    if band:
+        return band
+    lo = int(getattr(opp, "budget_min", 0) or 0)
+    hi = int(getattr(opp, "budget_max", 0) or 0)
+    nums = [n for n in (lo, hi) if n]
+    return " to ".join(f"${n:,}" for n in sorted(set(nums))) if nums else ""
+
+
+def quote_for(
+    opp: Opportunity, estimate: Optional[Estimate], *,
+    ci_fields: Optional[dict] = None, commercial_overrides: Optional[dict] = None,
+):
+    """THE quote — the whole of it, not just the two numbers (ADR-0065).
+
+    ``quote_band`` is this function's tuple view. Surfaces that need more than a band —
+    the itemised derivation a buyer can check, the floor, the verdict on what the client
+    said — reach for this, so the price on the proposal and the warning on the deal page
+    can never come from two different calculations.
+    """
+    from .pricing import build_quote, licence_from_ci
+    if estimate is None:
+        return None
+    quote = build_quote(
+        estimate, licence_from_ci(ci_fields),
+        budget_band=stated_budget_text(opp, ci_fields),
+    )
     ov = commercial_overrides or {}
     olo, ohi = ov.get("fee_low"), ov.get("fee_high")
     if olo and ohi:
-        return int(olo), int(ohi)
-    nums = _money_ints((ci_fields or {}).get("budget_band") or "")
-    if not nums:
-        lo = int(getattr(opp, "budget_min", 0) or 0)
-        hi = int(getattr(opp, "budget_max", 0) or 0)
-        nums = [n for n in (lo, hi) if n]
-    if nums:
-        return min(nums), max(nums)
-    if estimate is None:
-        return None, None
-    return _price_band(estimate)
+        return quote.rescaled_to(int(olo), int(ohi))
+    return quote
 
 
 def quote_phrase(band: Optional[tuple]) -> str:

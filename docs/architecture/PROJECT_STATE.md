@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The price is now the work, everywhere a buyer can see it** (ADR-0065, 2026-08-17).
+  `quote_band`'s disclosed-budget tier is gone — the client's stated figure produces a
+  **verdict**, not a price, and the verdict lands on the deal page naming both numbers so
+  the decision (reduce the scope, or decline) is a human's. Wiring it exposed two latent
+  divergences the budget-as-quote had been masking: the Commercial Review priced off
+  global role rates while the project's own proposal used the assigned creators' real
+  ones (now one helper, `_estimate_for_row`), and the public intake was converting the
+  authority's band at margin a second time. Most striking find — the seeded orchestral
+  fixture: $25,700 of players and room, $34,468 to deliver, and we were quoting the
+  client's stated **$8,000–$15,000**. Less than half of cost, silently, on every deal
+  shaped like that one.
+
 - **The module that crippled anything importing it** (2026-08-16). `_enrich_worker` set
   `RLIMIT_AS` **at import time**, soft and hard together — and a lowered hard limit can
   never be raised again, not even by root. Any process that merely imported it was capped

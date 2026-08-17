@@ -114,11 +114,12 @@ def public_price_band(project_type: str, description: str, budget_text: str = ""
     low, high = quote_band(opp, est)
     if not (low and high):
         return None
-    # The estimator's leg comes back as a COST band; convert at the estimate's own
-    # margin. A disclosed budget is already a price and needs no conversion.
-    if not (opp.budget_min and opp.budget_max):
-        ratio = est.suggested_price / est.estimated_cost
-        low, high = est.cost_low * ratio, est.cost_high * ratio
+    # No conversion. `quote_band` returns a PRICE (ADR-0065) — creative fee plus licence,
+    # floored at cost — where it used to hand back the estimator's cost band on the
+    # no-budget path, which this function then converted at margin itself. Converting the
+    # new number would mark it up twice, and the visitor would be shown a figure the
+    # proposal will not honour. The whole point of one authority is that a caller renders
+    # it rather than adjusting it.
     return {"low": _round_band(low, up=False), "high": _round_band(high, up=True)}
 
 

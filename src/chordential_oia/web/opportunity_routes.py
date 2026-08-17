@@ -29,7 +29,7 @@ from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, attach_agreement, build_capabilities_doc,
     build_understanding,
     chips_for, default_toggles, doc_from_json, doc_to_json,
-    quote_band as capabilities_quote_band,
+    quote_band as capabilities_quote_band, quote_for as capabilities_quote_for,
 )
 from ..matching import match_talent
 from ..models import BuyerValue, Opportunity
@@ -49,7 +49,8 @@ from .estimate import estimate_for
 from .evaluate import evaluate
 from .filters import slug
 from .opportunity_ops import (
-    _KANBAN_STAGES, _brief_ci_context, _buyer_context, _ensure_project_for_opp, _load,
+    _KANBAN_STAGES, _brief_ci_context, _buyer_context, _ensure_project_for_opp,
+    _estimate_for_row, _load,
     _quote_band_for, _reconcile_opp_status, _to_utc_iso,
 )
 from .shell import public_base as _public_base, render, safe_local as _safe_local
@@ -182,6 +183,14 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
             p["id"]: [meeting_scheduler.fmt_et(s)
                       for s in meeting_scheduler.proposal_slots(p)]
             for p in open_proposals}
+        # The price, and the verdict on what the client said they had (ADR-0065). The
+        # verdict is the half the operator cannot get anywhere else: a budget below our
+        # floor used to become the quote silently, and now it becomes a sentence naming
+        # both numbers so the decision — reduce the scope, or decline — is a human's.
+        _ci_fields = (ci_view or {}).get("fields") or {}
+        quote = capabilities_quote_for(
+            opp, _estimate_for_row(conn, row, opp, ev[0]), ci_fields=_ci_fields,
+            commercial_overrides=db.get_doc_overrides(conn, opp_id).get("commercial"))
     finally:
         conn.close()
     qual, scored = ev
@@ -212,6 +221,7 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         discovery_requests=discovery_requests, open_proposals=open_proposals,
         proposal_slots_et=proposal_slots_et, capture_summary=capture_summary,
         kickoff_pending=kickoff_pending, deposit_paid=deposit_paid, next_act=next_act,
+        quote=quote,
         ai_spend=_ai_spend_status(),
     )
 
@@ -995,7 +1005,15 @@ def _build_review_for_opp(conn, opp_id, version=1):
     if row is None:
         return None, None
     qual, _scored = ev
-    est = estimate_for(opp, qual=qual)
+    # Priced against the ASSIGNED talent's real rates once a project exists — the whole
+    # point of `estimate_for`'s project_id (ADR-0033): "the internal number and the
+    # client-facing proposal cannot diverge after assignment". This call omitted it, so
+    # the Review priced off global role defaults while the project's own proposal priced
+    # off the real ones. Nobody noticed because the quote came from the client's stated
+    # budget, which made both paths return the same figure whatever estimate fed them;
+    # the moment the price started deriving from the work (ADR-0065), the two disagreed
+    # on the deposit — the client approving one number and being invoiced from another.
+    est = _estimate_for_row(conn, row, opp, qual)
     ci_view, met = _brief_ci_context(conn, row)
     overrides = db.get_doc_overrides(conn, opp_id).get("commercial") or {}
     review = commercial.build_commercial_review(opp, qual, est, ci_view, met=met,
@@ -1161,10 +1179,12 @@ def estimate_page(request: Request, opp_id: int):
         row, opp, ev = _load(conn, opp_id)
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
+        qual, scored = ev
+        # Inside the open connection: the estimate now resolves the deal's project to
+        # pick up its assigned rates, so it needs the DB.
+        est = _estimate_for_row(conn, row, opp, qual)
     finally:
         conn.close()
-    qual, scored = ev
-    est = estimate_for(opp, qual=qual)
     return render(
         request, "estimate.html", nav="inbox", row=row, opp=opp, qual=qual, est=est
     )
@@ -1176,7 +1196,7 @@ def _brief_for(conn, opp_id: int):
     if row is None:
         return None, None, None
     qual, scored = ev
-    est = estimate_for(opp, qual=qual)
+    est = _estimate_for_row(conn, row, opp, qual)
     strategic = assess_strategic_value(opp)
     brief = build_pursuit_brief(opp, qual, scored, est, strategic,
                                 quote_band=_quote_band_for(conn, row, opp, est))
@@ -1243,7 +1263,7 @@ def _outreach_for(conn, opp_id: int):
     if row is None:
         return None, None, None
     qual, scored = ev
-    est = estimate_for(opp, qual=qual)
+    est = _estimate_for_row(conn, row, opp, qual)
     strategic = assess_strategic_value(opp)
     plan = build_outreach_plan(
         opp, qual, scored, est, strategic, contact_name=row["contact_name"],
@@ -1423,7 +1443,7 @@ def compose_send(opp_id: int):
         ci_view, met = _brief_ci_context(conn, row)
         overrides = db.get_doc_overrides(conn, opp_id)
         qual, _scored = evaluate(opp)
-        est = estimate_for(opp, qual=qual)
+        est = _estimate_for_row(conn, row, opp, qual)
         doc = build_capabilities_doc(
             opp, qual, est, toggles=default_toggles(row["status"], met=met),
             overrides=overrides,
@@ -1655,11 +1675,11 @@ def opportunity_capabilities(request: Request, opp_id: int, k: str = "", v: str 
             snap = db.get_brief_snapshot(conn, int(v))
             if snap is not None and snap["opp_id"] == opp_id:
                 snapshot_doc = doc_from_json(snap["doc_json"])
+        qual, scored = ev
+        est = _estimate_for_row(conn, row, opp, qual)
     finally:
         conn.close()
     request_url = f"/opportunity/{opp_id}/request?k={brief_token}"
-    qual, scored = ev
-    est = estimate_for(opp, qual=qual)
 
     toggles = default_toggles(row["status"], met=met)
     qp = request.query_params

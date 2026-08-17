@@ -112,8 +112,16 @@ def test_generate_and_view_proposal(ctx):
     opp = _sample_opp()
     _, est = _qual_and_estimate(opp)
     lo, hi = quote_band(opp, est)
-    assert (lo, hi) == (8000, 15000), "the fixture's disclosed budget is the quote"
+    # This used to assert (8000, 15000) — the fixture's disclosed budget, because the
+    # budget WAS the quote. That fixture is a NATIONAL ORCHESTRAL spot: $25,700 of it is
+    # players and the room, and it costs $34,468 to deliver. Quoting the client's $8–15k
+    # was quoting less than half of cost, on every deal shaped like this one, silently.
+    # Under ADR-0065 the price derives from the work and the shortfall is reported.
     assert round(prop["total_price"], 2) == round((lo + hi) / 2, 2)
+    assert lo > est.cost_high, "still quoting under what the work costs"
+    from chordential_oia.capabilities import quote_for
+    assert quote_for(opp, est).budget_verdict == "below_floor", (
+        "a budget less than half of cost must be reported, not accepted in silence")
     # Line items still come from the estimate — the crew and cost are real.
     assert prop["deposit_amount"] + prop["balance_due"] == prop["total_price"]
 

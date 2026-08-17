@@ -18,6 +18,7 @@ from ..capabilities import quote_band as capabilities_quote_band
 from ..models import BuyerValue, MusicDiscipline
 from . import campaign_intelligence, campaigns, db, production
 from .buyer_intel import relationship_for
+from .estimate import estimate_for
 from .evaluate import evaluate
 
 
@@ -215,6 +216,26 @@ def _ensure_project_for_opp(conn, opp_id: int) -> Optional[int]:
         except Exception:  # noqa: BLE001 — seeding never blocks the award
             pass
     return pid
+
+
+def _estimate_for_row(conn, row, opp, qual=None):
+    """THE estimate behind a client-facing quote for this opportunity.
+
+    `estimate_for` is already the one path that turns a row into an estimate (ADR-0033),
+    but it leaves each caller to decide whether to pass ``project_id`` — and that choice
+    changes the client's price, because passing it swaps global role defaults for the
+    assigned creators' real rates. So the app had two conventions for "the estimate for
+    this opp", and the Commercial Review used one while the project's own proposal used
+    the other. That divergence was invisible while the quote came from the client's
+    stated budget, since the budget won whatever estimate fed it; when the price started
+    deriving from the work (ADR-0065) the two documents disagreed on the deposit.
+
+    One rule, stated once: if the deal has a project, its assigned rates are the truth.
+    Reach for this from anywhere a BUYER will see the number.
+    """
+    proj = db.project_for_opp(conn, row["id"])
+    return estimate_for(opp, conn=conn, qual=qual,
+                        project_id=(proj["id"] if proj is not None else None))
 
 
 def _quote_band_for(conn, row, opp, est):

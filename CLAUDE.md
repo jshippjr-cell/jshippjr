@@ -165,6 +165,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `buyer_intel` (ADR-0057), as the queue count lives only in `queue.compute_queue`
   (ADR-0029) and the price only in `web.estimate.estimate_for` (ADR-0033). If two pages
   answer the same question, one of them is wrong on a day nobody is looking.
+- **One quote authority, wired to the work** (ADR-0034 + ADR-0065): `capabilities.quote_for`
+  returns the whole `Quote` (itemisation, floor, verdict); `quote_band` is its tuple view.
+  Every buyer-facing surface renders it and **never adjusts it** — `public_price_band` used
+  to re-convert it at margin and double-marked-up the moment it stopped being a cost band.
+  Build the estimate behind it with **`opportunity_ops._estimate_for_row`**, which resolves
+  the deal's project so assigned rates are in play; two conventions for that is how the
+  Review and the proposal came to disagree on the deposit.
 - **Two fees, and the budget is only a check** (ADR-0065): `pricing.py` prices a
   **creative fee** (cost at target margin — `estimation`, not second-guessed) plus a
   **licence fee** (media × territory × term × exclusivity, capped). What the client said

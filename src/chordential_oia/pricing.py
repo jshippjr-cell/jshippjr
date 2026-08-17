@@ -335,10 +335,39 @@ class Quote:
     budget_note: str = ""
     stated_budget: Optional[int] = None
     assumptions: List[str] = field(default_factory=list)
+    # An operator typed this price. Surfaces say so rather than presenting a human's
+    # decision as the engine's arithmetic.
+    overridden: bool = False
 
     @property
     def band(self) -> Tuple[int, int]:
         return self.low, self.high
+
+    def rescaled_to(self, low: int, high: int) -> "Quote":
+        """The same quote at an operator-set price (the machine proposes, Jon disposes).
+
+        The two lines are rescaled to keep their ratio, so a document showing an
+        overridden total still ADDS UP. Leaving the itemisation at its computed values
+        beside a different total would put visibly wrong arithmetic in front of a buyer,
+        which costs more than the override was worth.
+
+        The floor and the verdict are deliberately carried over untouched: they describe
+        what the work costs and what the client said, and neither of those changed
+        because we chose a different number. ``floored`` is RE-derived, because an
+        override below cost is exactly the case worth still being told about.
+        """
+        low, high = int(low), int(high)
+        total = int(round((low + high) / 2))
+        share = (self.licence_fee / self.total) if self.total else BASE_LICENCE_SHARE
+        licence = _money(total * share)
+        return Quote(
+            creative_fee=total - licence, licence_fee=licence, total=total,
+            low=low, high=high, floor=self.floor, floored=total < self.floor,
+            licence=self.licence, creative_basis=self.creative_basis,
+            licence_basis=self.licence_basis, budget_verdict=self.budget_verdict,
+            budget_note=self.budget_note, stated_budget=self.stated_budget,
+            assumptions=list(self.assumptions), overridden=True,
+        )
 
 
 def _budget_ints(text: str) -> List[int]:

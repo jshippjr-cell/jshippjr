@@ -1722,8 +1722,22 @@ copy already promised they were priced.
 - `estimation.suggested_price` still folds a usage factor into the creative number and
   therefore now DISAGREES with `pricing`. `build_quote` deliberately ignores it. It is a
   legacy figure pending retirement.
-- `quote_band` is unchanged so far: the engine is built and tested but not yet wired to
-  what a client is quoted. That wiring is a business decision, not a refactor.
+- **`quote_band` is wired** (2026-08-17, operator directive). Its tier 2 — the disclosed
+  budget — is gone; the price is `pricing.build_quote`. `capabilities.quote_for` is the
+  richer authority (the whole `Quote`: itemisation, floor, verdict) and `quote_band` is
+  its tuple view, so the number on the proposal and the warning on the deal page cannot
+  come from two calculations. An operator override still wins, via `Quote.rescaled_to`,
+  which rescales the two lines so an overridden document still adds up.
+- **Any surface a BUYER sees must build its estimate through `opportunity_ops.
+  _estimate_for_row`.** `estimate_for` was already the one path (ADR-0033) but left each
+  caller to decide whether to pass `project_id`, and that choice swaps global role rates
+  for the assigned creators' real ones — changing the client's price. The Commercial
+  Review used one convention and the project's proposal the other; the budget-as-quote
+  hid it, because the budget won whatever estimate fed it. Wiring the price to the work
+  surfaced it immediately as the two documents disagreeing on the deposit.
+- **A caller renders the authority; it never adjusts it.** `public.public_price_band` was
+  converting `quote_band`'s result at margin, correct when that result was a cost band
+  and a double mark-up the moment it became a price.
 
 ### ADR-0064 — A canonical key has exactly one home, so its facet is derived, never accepted
 **Status:** Accepted (2026-08-14) · Source: `web/campaign_intelligence.py` (`canonical_slot`),

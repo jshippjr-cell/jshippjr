@@ -87,6 +87,30 @@
    scroll past everything first. #}
 {{ opp_subnav(row, 'overview') }}
 
+{# ── The price, and what the client said about it (ADR-0065). The verdict is the part
+      that exists nowhere else: a stated budget below our floor used to quietly BECOME
+      the quote, so the deal was taken at a loss without anyone deciding to. It is now a
+      sentence naming both numbers, and the decision — reduce the scope, or decline — is
+      a human's. Only rendered when there is something to say. ── #}
+{% if quote and quote.budget_verdict != 'in_band' and quote.budget_verdict != 'unknown' %}
+<section class="card" style="border-left:4px solid {{ '#C8552B' if quote.budget_verdict == 'below_floor' else '#8a8580' }}">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+    <span class="pill {{ 'live' if quote.budget_verdict == 'below_floor' }}" style="flex:none">
+      {{ 'BELOW OUR FLOOR' if quote.budget_verdict == 'below_floor' else 'ABOVE OUR BAND' }}
+    </span>
+    <div style="flex:1;min-width:240px">
+      <div style="font-weight:700">{{ quote.budget_note }}</div>
+      <div class="muted small" style="margin-top:4px">
+        Quoted ${{ '{:,}'.format(quote.low) }}–${{ '{:,}'.format(quote.high) }} ·
+        creative ${{ '{:,}'.format(quote.creative_fee) }} + licence ${{ '{:,}'.format(quote.licence_fee) }}
+        for {{ quote.licence_basis }}{% if quote.overridden %} ·
+        <b>price set by hand</b>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {# ── NEXT (ADR-0020 §6): the page's ONE accented element — the deal's one obvious move. ── #}
 {% if next_act %}
 <section class="card next-hero" id="next" style="border-left:4px solid {{ '#C8552B' if next_act.court == 'you' else '#2F6A34' if next_act.court in ('client','team') else '#8a8580' }}">
