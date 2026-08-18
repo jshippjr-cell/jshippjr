@@ -29,7 +29,7 @@ from chordential_oia.web import app as app_mod  # noqa: E402
 WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py", "opportunity_routes.py",
-           "project_routes.py", "creator_routes.py",
+           "project_routes.py", "creator_routes.py", "contributor_routes.py",
            "campaign_routes.py", "simulator_routes.py",
            "workspace_routes.py", "console_routes.py",
            "billing_routes.py", "meetings_routes.py",
@@ -204,9 +204,21 @@ def test_the_agencies_group_left_app_py():
 
 def test_app_py_is_getting_smaller_not_larger():
     """A guard rail, not a target. 8,600 leaves room to work while making it obvious
-    if a slice is put back or a new surface is grown in the wrong file."""
+    if a slice is put back or a new surface is grown in the wrong file.
+
+    Raised 750 → 760 (2026-08-18) for the contributor-release surface. What app.py holds
+    now is the application object and THE ADMIN GATE, and a new token-gated public
+    surface legitimately costs a regex plus an exemption line — that is the gate doing
+    its job, not logic creeping back. The alternative on offer was deleting the comments
+    explaining why each exemption exists, and those comments are load-bearing: a missing
+    exemption silently 303s a real client to the internal login, which has now happened
+    twice in production.
+
+    If this needs raising again, extract the gate (`_is_public_path` and its regexes)
+    into its own module instead. That is a real shrink; another +10 is not.
+    """
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 750, (
+    assert n < 760, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -225,7 +237,10 @@ def test_the_router_carries_the_whole_group():
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post)
     ("project_routes.py", "/project", 62),
-    ("creator_routes.py", "/creator", 8),
+    ("creator_routes.py", "/creator", 11),
+    # A session player has no portal, no assignments and no reason to come back — not
+    # a creator, so not in that router. The group tripwire is what said so.
+    ("contributor_routes.py", "/contributor", 2),
     ("campaign_routes.py", "/campaign", 7),
     ("simulator_routes.py", "/simulator", 7),
     ("workspace_routes.py", "/workspace", 6),
@@ -271,8 +286,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 275, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 275 — "
+    assert len(decls) == 280, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 280 — "
         f"a slice lost or gained a URL")
 
 

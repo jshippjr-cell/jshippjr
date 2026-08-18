@@ -29,7 +29,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from ..delivery import (
     current_version, revision_status, scoped_deliverables, seed_brief, versions_list,
 )
-from .. import composer_agreement, signing
+from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
 from . import db, production
 from .delivery_ops import (
@@ -219,6 +219,13 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
             return HTMLResponse("Not found", status_code=404)
         t = db.talent_from_row(row)
         assignments = _creator_assignment_view(conn, row["id"])
+        # Who else played, per room. Clause 6A is the composer's obligation, so the
+        # roster lives where the composer is — not on an operator screen they never see.
+        contributors = {a["project_id"]: [
+            dict(c, signed=db.latest_contributor_signature(
+                conn, c["id"], signing.DOC_CONTRIBUTOR_RELEASE) is not None)
+            for c in (dict(r) for r in db.list_contributors(conn, a["project_id"]))]
+            for a in assignments}
     finally:
         conn.close()
     all_rooms = assignments
@@ -227,7 +234,8 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
     return render(
         request, "creator_portal.html", nav="", token=token, t=t,
         completeness=profile_completeness(t), assignments=assignments,
-        all_rooms=all_rooms, focused=p,
+        all_rooms=all_rooms, focused=p, contributors=contributors,
+        contributor_roles=contributor_release.ROLES,
     )
 
 
@@ -363,6 +371,118 @@ def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) ->
                 f"{_pb()}/talent" + block)
         except Exception:  # noqa: BLE001
             pass
+
+
+@router.post("/creator/{token}/project/{project_id}/contributor")
+def creator_add_contributor(token: str, project_id: int, name: str = Form(""),
+                            role: str = Form("Performer"), email: str = Form(""),
+                            instrument: str = Form("")):
+    """The composer names someone who played on the work, and we email them a release.
+
+    Clause 6A obliges the writer to collect one from anyone who performed, sang,
+    programmed, produced, engineered or co-wrote — "paid or unpaid, stranger or friend".
+    Naming them here is how that obligation becomes something a person can actually do at
+    11pm after a session, which is when they will do it or not at all.
+    """
+    conn = db.connect()
+    try:
+        talent = db.get_talent_by_portal_token(conn, token)
+        if talent is None:
+            return HTMLResponse("Not found", status_code=404)
+        project = db.get_project(conn, project_id)
+        if project is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not name.strip():
+            return RedirectResponse(f"/creator/{token}?p={project_id}#contributors",
+                                    status_code=303)
+        work = (instrument.strip()
+                or f"{project['client']} · {project['need']}").strip()
+        cid = db.add_contributor(
+            conn, project_id=project_id, talent_id=talent["id"],
+            name=name.strip(), role=role.strip() or "Performer",
+            email=email.strip(), work=work,
+            booked_by=(talent["name"] or "").strip())
+        row = db.get_contributor(conn, cid)
+        rel = contributor_release.build_release(row)
+        sent = _mail_release(row, rel)
+        if sent:
+            db.mark_contributor_sent(conn, cid)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/creator/{token}?p={project_id}#contributors",
+                            status_code=303)
+
+
+@router.post("/creator/{token}/project/{project_id}/contributor/{cid}/remind")
+def creator_remind_contributor(token: str, project_id: int, cid: int):
+    """Send the release again. People lose emails; chasing is the composer's job and it
+    should be one button, not a note-to-self."""
+    conn = db.connect()
+    try:
+        if db.get_talent_by_portal_token(conn, token) is None:
+            return HTMLResponse("Not found", status_code=404)
+        row = db.get_contributor(conn, cid)
+        if row is None or row["project_id"] != project_id:
+            return HTMLResponse("Not found", status_code=404)
+        if db.latest_contributor_signature(
+                conn, cid, signing.DOC_CONTRIBUTOR_RELEASE) is None:
+            if _mail_release(row, contributor_release.build_release(row)):
+                db.mark_contributor_sent(conn, cid)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/creator/{token}?p={project_id}#contributors",
+                            status_code=303)
+
+
+@router.post("/creator/{token}/project/{project_id}/contributor/{cid}/remove")
+def creator_remove_contributor(token: str, project_id: int, cid: int):
+    """Named the wrong person, or they did not end up playing. Refused once signed — a
+    signed release is evidence, and evidence is not deleted because it is inconvenient."""
+    conn = db.connect()
+    try:
+        if db.get_talent_by_portal_token(conn, token) is None:
+            return HTMLResponse("Not found", status_code=404)
+        row = db.get_contributor(conn, cid)
+        if row is not None and row["project_id"] == project_id:
+            db.remove_contributor(conn, cid)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/creator/{token}?p={project_id}#contributors",
+                            status_code=303)
+
+
+def _mail_release(row, rel) -> bool:
+    """Send one contributor their release. Returns whether it went.
+
+    They are not a user of this system and never will be: no account, no password, one
+    link that is the whole credential. A session player should be able to sign on a phone
+    in a car park.
+    """
+    from .. import mailer
+    from .shell import public_base as _pb
+    email = (row["email"] or "").strip()
+    if not email or not mailer.mail_configured():
+        return False
+    url = f"{_pb()}/contributor/{row['token']}"
+    first = (row["name"] or "there").split(" ")[0]
+    body = (
+        f"Hi {first},\n\n"
+        f"{row['booked_by'] or 'A composer'} has named you as having played on "
+        f"\"{row['work']}\" for Chordential. Before we can deliver it to the client we "
+        f"need a short release from you — it confirms the recording is yours to give and "
+        f"that we can use it.\n\n"
+        f"Read and sign it here (takes a minute, works on a phone):\n{url}\n\n"
+        f"It is about the recording, not your fee — whatever you agreed to be paid is "
+        f"between you and {row['booked_by'] or 'whoever booked you'}, and this does not "
+        f"change it.\n\n"
+        f"— Chordential"
+    )
+    try:
+        return mailer.send_email(
+            email, f"Quick release to sign — {row['work'][:60]}", body,
+            html=mailer.branded_html(_pb(), body)) == "sent"
+    except Exception:  # noqa: BLE001 — chasing a signature never breaks the session
+        return False
 
 
 @router.post("/creator/{token}/project/{project_id}/note/{comment_id}/address")

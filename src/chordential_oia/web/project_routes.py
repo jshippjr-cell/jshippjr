@@ -496,6 +496,12 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     cert_sig_state = signing.verify(
         (cert_sig or {}).get("digest", ""), cert_text if cert_sig else None)
     cert_sig_note = signing.verdict_note(cert_sig_state, cert_sig)
+    # THE question the certificate could not previously ask: is the chain of title
+    # actually complete? `_contributors` builds it from ASSIGNMENTS — operator records —
+    # so a session player the composer booked and nobody entered was invisible. These are
+    # the people named on this project who have not signed their release, and each one
+    # could make the certificate's central claim false.
+    release_gaps = db.contributor_release_gaps(conn, project_id)
 
     cues = build_cue_sheet(row, assignments, delivery=delivery)
     manifest = build_manifest(
@@ -679,7 +685,11 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         "cert_signature": cert_sig,
         "cert_signature_state": cert_sig_state,
         "cert_signature_note": cert_sig_note,
-        "cert_signable": cert_sig_state != signing.VALID,
+        # Signing the certificate is refused while anyone named is unsigned: warranting
+        # to a buyer that nothing needs anyone else's permission, while holding a list of
+        # people who have not given theirs, is the failure this whole chain exists to stop.
+        "cert_signable": cert_sig_state != signing.VALID and not release_gaps,
+        "release_gaps": release_gaps,
         # The honest Content-ID sentence — the ONE source of truth (delivery.py),
         # so the browser doc and the ZIP doc can't drift on legally-material copy.
         "content_id_honest": CONTENT_ID_HONEST,

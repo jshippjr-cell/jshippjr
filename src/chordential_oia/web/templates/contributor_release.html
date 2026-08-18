@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contributor Release · Chordential</title>
+  <link rel="icon" href="/static/public/wordmark-dark.png">
+  <style>
+    /* A contract the writer is asked to sign, set like one. No operator chrome: the
+       per-creator token IS the credential, and this page is theirs. */
+    :root{--ink:#211d1b;--bg:#F7F1EC;--surface:#fff;--line:#e7e1d8;--muted:#8a8580;
+      --accent:#C8552B;--sand:#d8cdb6}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    .top{display:flex;align-items:center;gap:10px;padding:16px 22px;
+      border-bottom:1px solid var(--line);background:var(--surface)}
+    .top img{height:19px}
+    .top .ph{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+      color:var(--accent);font-weight:700}
+    .wrap{max-width:760px;margin:30px auto 70px;padding:0 20px}
+    h1{font-size:24px;margin:0 0 4px}
+    .sub{color:var(--muted);margin:0 0 22px;font-size:14.5px}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+      padding:24px 28px;box-shadow:0 10px 30px rgba(68,22,30,.05)}
+    .doc h4{font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;
+      color:var(--accent);margin:20px 0 7px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+    .doc h4:first-child{margin-top:0;font-size:16px;letter-spacing:.04em;color:var(--ink);
+      text-transform:none;border-bottom:2px solid var(--ink);padding-bottom:8px}
+    .doc p{margin:0 0 8px}
+    .doc .gap{height:10px}
+    .doc .row{display:flex;gap:12px;margin:0 0 4px;align-items:baseline}
+    .doc .row .k{flex:0 0 7em;font-weight:650;color:var(--muted);font-size:12.5px}
+    .doc .row .v{flex:1;min-width:0}
+    .doc .item{margin:0 0 4px 14px;position:relative}
+    .doc .item::before{content:"·";position:absolute;left:-11px;color:var(--sand)}
+    .signed{border:1px solid #bcdcc7;background:#f2f9f4;border-radius:12px;padding:16px 18px;
+      margin:0 0 20px}
+    .signed.moved{border-color:#e6c8b0;background:#fbeee6}
+    .fine{font-size:12px;color:var(--muted)}
+    .mark{display:block;max-width:240px;margin:8px 0 0;background:#fff;
+      border:1px solid var(--line);border-radius:6px}
+    .signbox{margin-top:22px;padding-top:20px;border-top:2px solid var(--ink)}
+    .signbox label{display:block;font-size:13px;font-weight:650;margin:0 0 4px}
+    .signbox input[type=text],.signbox input[type=email]{width:100%;box-sizing:border-box;
+      border:1px solid var(--sand);border-radius:8px;padding:11px;font:inherit;margin:0 0 12px}
+    .pad-box{position:relative;border:1px solid var(--sand);border-radius:8px;
+      background:#fff;overflow:hidden;margin:0 0 6px}
+    #sig-pad{display:block;width:100%;height:150px;touch-action:none;cursor:crosshair}
+    .pad-line{position:absolute;left:6%;right:6%;bottom:34px;border-bottom:1px solid #c9bfae;
+      pointer-events:none}
+    .pad-hint{position:absolute;left:6%;bottom:12px;font-size:11px;color:#a2988a;
+      pointer-events:none;transition:opacity .15s}
+    .pad-box.has-ink .pad-hint{opacity:0}
+    .pad-acts{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+    .btn{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 22px;
+      font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+    .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);
+      padding:6px 12px;font-size:12.5px;font-weight:600}
+    .consent{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.5;
+      margin:0 0 16px}
+    .consent input{margin-top:3px}
+    .limits{background:#faf3ee;border-left:3px solid var(--sand);padding:12px 14px;
+      border-radius:0 8px 8px 0;margin:0 0 16px;font-size:13.5px}
+    @media print{.top,.signbox,.btn{display:none}.card{border:0;box-shadow:none}}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <img src="/static/public/wordmark-dark.png" alt="Chordential">
+    <span class="ph">Contributor Release</span>
+  </div>
+  <div class="wrap">
+    <h1>Contributor Release</h1>
+    <p class="sub">{{ release.booked_by or 'A composer' }} named you as having played on
+      <b>{{ release.work }}</b>. This is short — read it and sign at the bottom. It is
+      about the recording, not your fee.</p>
+
+    <div class="card">
+      {% if signature %}
+      <div class="signed {{ '' if signature_valid else 'moved' }}">
+        <div style="font-weight:750">
+          {{ '✓ Signed' if signature_valid else '⚠ Signed — this document has since changed' }}
+          by {{ signature['typed_name'] }}</div>
+        <div class="fine" style="margin-top:4px">{{ signature_note }}</div>
+        {% if signature['drawn_mark'] %}
+        <img class="mark" src="{{ signature['drawn_mark'] }}"
+             alt="Signature of {{ signature['typed_name'] }}">
+        {% endif %}
+        {% if False %}
+        {% else %}
+        <div class="fine" style="margin-top:8px">That's everything we need from you.
+          A copy is in your inbox.</div>
+        {% endif %}
+        <div class="fine mono" style="margin-top:8px;opacity:.75;word-break:break-all">
+          SHA-256 {{ signature['digest'] }}</div>
+      </div>
+      {% endif %}
+
+      {# The document, typeset. The BYTES are what the signature covers — this only sets
+         them; reformatting the text itself would change the digest and void the
+         signature, so the transformation lives here and nowhere else. #}
+      <div class="doc">
+        {%- for line in release_text.split('\n') -%}
+          {%- set t = line.strip() -%}
+          {%- if not t %}<div class="gap"></div>
+          {%- elif t == t.upper() and t|length > 3 and not t.startswith('-') %}<h4>{{ t }}</h4>
+          {%- elif t[:2] in ('1.','2.','3.','4.','5.','6.','7.','8.','9.') %}<h4>{{ t }}</h4>
+          {%- elif t.startswith('- ') %}<div class="item">{{ t[2:] }}</div>
+          {%- elif ': ' in t and t.split(': ')[0]|length < 12 %}<div class="row"><span class="k">{{ t.split(': ')[0] }}</span><span class="v">{{ t.split(': ', 1)[1] }}</span></div>
+          {%- else %}<p>{{ t }}</p>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+
+      {% if sign_url %}
+      <div class="signbox">
+        {% if request.query_params.get('flag') == 'incomplete' %}
+        <p style="color:var(--accent);font-weight:650">Please type your name and tick the
+          consent box — both are what make an electronic signature count.</p>
+        {% endif %}
+        <p style="font-weight:650">{{ acceptance_text }}</p>
+        <form method="post" action="{{ sign_url }}" id="sign-form">
+          <label>Sign here <span style="font-weight:500;opacity:.7">— finger or mouse
+            (optional)</span></label>
+          <div class="pad-box">
+            <canvas id="sig-pad" width="900" height="300" role="img"
+                    aria-label="Signature drawing area"></canvas>
+            <span class="pad-line" aria-hidden="true"></span>
+            <span class="pad-hint" aria-hidden="true">Sign above the line</span>
+          </div>
+          <div class="pad-acts">
+            <button type="button" class="btn ghost" id="sig-clear">Clear</button>
+            <span class="fine" id="sig-state">Not signed yet</span>
+          </div>
+          <input type="hidden" name="drawn_signature" id="sig-data" value="">
+          <label for="tn">Your full name</label>
+          <input id="tn" type="text" name="typed_name" required autocomplete="name"
+                 placeholder="Type your full name to sign">
+          <label for="em">Email</label>
+          <input id="em" type="email" name="signer_email" required autocomplete="email"
+                 placeholder="Where your signed copy goes">
+          <label class="consent">
+            <input type="checkbox" name="consent" value="1" required>
+            <span>{{ consent_text }}</span>
+          </label>
+          <button class="btn" type="submit">Sign the agreement →</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    <p class="fine" style="text-align:center;margin-top:20px">
+      Chordential · this link is yours. Questions? Reply to the email that brought you here.</p>
+  </div>
+
+{% if sign_url %}
+<script>
+/* The signature pad — same behaviour as the client's. `touch-action:none` stops the page
+   scrolling out from under a stroke, which is what makes web signature pads feel broken
+   on a phone. The drawing is optional: what makes this binding is intent, consent and
+   attribution, so a browser where the canvas fails must still be able to sign. */
+(function () {
+  var pad = document.getElementById('sig-pad');
+  if (!pad || !pad.getContext) return;
+  var ctx = pad.getContext('2d'), box = pad.parentNode;
+  var data = document.getElementById('sig-data'), state = document.getElementById('sig-state');
+  var drawing = false, inked = false, last = null;
+  ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1b2a4a';
+
+  function at(e) {
+    var r = pad.getBoundingClientRect();
+    return {x: (e.clientX - r.left) * (pad.width / r.width),
+            y: (e.clientY - r.top) * (pad.height / r.height)};
+  }
+  function start(e) {
+    drawing = true; last = at(e); e.preventDefault();
+    if (pad.setPointerCapture && e.pointerId != null) pad.setPointerCapture(e.pointerId);
+  }
+  function move(e) {
+    if (!drawing) return;
+    var p = at(e);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p; e.preventDefault();
+    if (!inked) { inked = true; box.classList.add('has-ink'); state.textContent = 'Signed'; }
+  }
+  function end() { drawing = false; last = null; }
+  pad.addEventListener('pointerdown', start);
+  pad.addEventListener('pointermove', move);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+    pad.addEventListener(ev, end);
+  });
+  document.getElementById('sig-clear').addEventListener('click', function () {
+    ctx.clearRect(0, 0, pad.width, pad.height);
+    inked = false; box.classList.remove('has-ink');
+    state.textContent = 'Not signed yet'; data.value = '';
+  });
+  /* Serialised at SUBMIT, not per stroke: a data URL regenerated on every pointermove is
+     megabytes of garbage for no gain. */
+  document.getElementById('sign-form').addEventListener('submit', function () {
+    data.value = inked ? pad.toDataURL('image/png') : '';
+  });
+})();
+</script>
+{% endif %}
+</body>
+</html>

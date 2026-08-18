@@ -158,10 +158,11 @@ def test_every_creator_portal_post_bypasses_the_gate(tmp_path, monkeypatch):
     for path, methods in registered_routes(app_mod.app):
         if not path.startswith("/creator/") or "POST" not in methods:
             continue
-        # substitute concrete values for the path params, then test the regex
-        concrete = (path.replace("{token}", "TOKENabc123")
-                        .replace("{project_id}", "1")
-                        .replace("{comment_id}", "2"))
+        # Substitute EVERY path param, not a named list of three — the list fell behind
+        # the moment a route introduced a fourth ({cid}), and the un-substituted "{cid}"
+        # then failed the regex for a route that was in fact exempt. Digits satisfy both
+        # the token charset and the numeric ids, so one value covers every parameter.
+        concrete = re.sub(r"\{[^}]+\}", "12345", path)
         if not app_mod._CREATOR_PORTAL_RE.match(concrete):
             missing.append(path)
     assert not missing, f"creator POST routes not gate-exempt: {missing}"

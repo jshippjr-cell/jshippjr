@@ -813,6 +813,70 @@
        "hits": [{% for h in c.hits or [] %}{"t": {{ h.t if h.t is not none else 'null' }}, "name": {{ (h.name or '')|tojson }}}{{ "," if not loop.last }}{% endfor %}]}{{ "," if not loop.last }}
     {% endfor %}]
   </script>
+
+  {# ── Who else played (clause 6A). The composer's obligation, so it lives where the
+        composer is. Naming someone emails them a short release; nobody gets an account,
+        and a signed release is what the clearance certificate actually stands on. ── #}
+  <div class="sr-panel" id="contributors" style="margin-top:18px;padding:16px 18px;
+       border:1px solid rgba(255,255,255,.16);border-radius:12px">
+    <div style="font-weight:750;margin-bottom:4px">Who else played on this</div>
+    <p style="opacity:.72;font-size:13.5px;margin:0 0 12px">
+      Anyone who performed, sang, programmed, produced, engineered or co-wrote — paid or
+      unpaid, in the room or over the internet. Name them and we email them a one-minute
+      release. We can't deliver to the client until they've signed.</p>
+
+    {% set rows = contributors.get(a.project_id, []) %}
+    {% if rows %}
+    <ul style="list-style:none;padding:0;margin:0 0 14px">
+      {% for c in rows %}
+      <li style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;
+                 padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">
+        <span style="font-weight:650">{{ c.name }}</span>
+        <span style="opacity:.7;font-size:13px">{{ c.role }}</span>
+        {% if c.signed %}
+        <span style="color:#7fd39b;font-size:13px;font-weight:650">✓ signed</span>
+        {% else %}
+        <span style="color:#e0a463;font-size:13px">
+          {{ 'sent — waiting' if c.sent_at else 'not sent' }}</span>
+        <span style="flex:1"></span>
+        <form method="post" style="margin:0"
+              action="/creator/{{ token }}/project/{{ a.project_id }}/contributor/{{ c.id }}/remind">
+          <button type="submit" style="background:transparent;border:1px solid rgba(255,255,255,.2);
+                  color:inherit;border-radius:8px;padding:4px 10px;font:inherit;font-size:12.5px;
+                  cursor:pointer">{{ 'Send again' if c.sent_at else 'Send it' }}</button>
+        </form>
+        <form method="post" style="margin:0"
+              action="/creator/{{ token }}/project/{{ a.project_id }}/contributor/{{ c.id }}/remove">
+          <button type="submit" title="Remove — only while unsigned"
+                  style="background:transparent;border:0;color:inherit;opacity:.5;
+                  font:inherit;font-size:15px;cursor:pointer">×</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p style="opacity:.6;font-size:13px;margin:0 0 12px">
+      Nobody yet. If you played everything yourself, there's nothing to do here.</p>
+    {% endif %}
+
+    <form method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/contributor"
+          style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="text" name="name" placeholder="Their name" required
+             style="flex:1;min-width:150px;border:1px solid rgba(255,255,255,.2);border-radius:8px;
+             padding:8px 10px;font:inherit;background:transparent;color:inherit">
+      <select name="role" style="border:1px solid rgba(255,255,255,.2);border-radius:8px;
+              padding:8px 10px;font:inherit;background:transparent;color:inherit">
+        {% for r in contributor_roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select>
+      <input type="email" name="email" placeholder="Their email" required
+             style="flex:1;min-width:170px;border:1px solid rgba(255,255,255,.2);border-radius:8px;
+             padding:8px 10px;font:inherit;background:transparent;color:inherit">
+      <button type="submit" style="background:var(--sr-accent,#C8552B);color:#fff;border:0;
+              border-radius:8px;padding:9px 16px;font:inherit;font-weight:700;cursor:pointer">
+        Add &amp; send release</button>
+    </form>
+  </div>
 </div>
 {% endfor %}
 

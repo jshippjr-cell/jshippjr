@@ -221,6 +221,16 @@
         License: {% if license_confirmed %}<span class="ok">confirmed ✓</span>{% else %}<span class="pend">draft — confirm to certify</span>{% endif %}<br>
         Contributors: {{ cert.contributors|length }}{% if cert.contributors %} <span class="k">— {{ cert.contributors|map(attribute='name')|join(', ') }}</span>{% endif %}<br>
         Content-ID: <span class="k">{{ cert.content_id }}</span>
+        {# The chain of title, checked rather than asserted. The certificate's central
+           claim is that nothing in the work needs anyone else's permission; these are
+           the people who could make that false. Signing is blocked while any remain. #}
+        {% if release_gaps %}<br>
+        <span class="pend">⚠ {{ release_gaps|length }} release{{ '' if release_gaps|length == 1 else 's' }}
+          outstanding — {{ release_gaps|map(attribute='name')|join(', ') }}</span>
+        <span class="k">· the certificate cannot be signed until they sign theirs</span>
+        {% elif cert.contributors %}<br>
+        <span class="ok">Contributor releases: all signed ✓</span>
+        {% endif %}
       </div>
     </div>
     <div class="agent">

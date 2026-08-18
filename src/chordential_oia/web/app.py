@@ -37,6 +37,7 @@ from .talent_routes import router as talent_router
 from .opportunity_routes import router as opportunity_router
 from .project_routes import router as project_router
 from .creator_routes import router as creator_router
+from .contributor_routes import router as contributor_router
 from .campaign_routes import router as campaign_router
 from .simulator_routes import router as simulator_router
 from .workspace_routes import router as workspace_router
@@ -305,6 +306,7 @@ app.include_router(talent_router)
 app.include_router(opportunity_router)
 app.include_router(project_router)
 app.include_router(creator_router)
+app.include_router(contributor_router)
 app.include_router(campaign_router)
 app.include_router(simulator_router)
 app.include_router(workspace_router)
@@ -411,8 +413,11 @@ _DELIVERY_DELEGATE_RE = re.compile(r"^/project/\d+/delivery/delegate/?$")
 # recurred: reply/address/capture were omitted and broke in prod with the gate on;
 # tests/test_admin_gate.py now asserts every /creator/* route is covered).
 _CREATOR_PORTAL_RE = re.compile(
-    r"^/creator/[A-Za-z0-9_-]+(/agreement(/sign)?"
-    r"|/project/\d+/(version|deliverable|capture|note/\d+/(reply|address)))?/?$")
+    r"^/creator/[A-Za-z0-9_-]+(/agreement(/sign)?|/project/\d+/(version|deliverable"
+    r"|capture|contributor/\d+/(remind|remove)|contributor"
+    r"|note/\d+/(reply|address)))?/?$")
+# A session player's release. No account, ever — the link is the whole credential.
+_CONTRIBUTOR_RE = re.compile(r"^/contributor/[A-Za-z0-9_-]+(/sign)?/?$")
 # Session Room (Living OS P5): the live-room poll + presence ping are hit from the
 # token-gated client portal too — each route token-validates in-route (a bad token
 # gets the operator-only view refused / 404), so the paths bypass the login gate.
@@ -431,6 +436,7 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _DELIVERY_SIGN_RE.match(path)
         or _DELIVERY_DELEGATE_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
+        or _CONTRIBUTOR_RE.match(path)
         or _SESSION_ROOM_RE.match(path)
         or _CLIENT_PAY_RE.match(path)
         or path == "/pay/return"

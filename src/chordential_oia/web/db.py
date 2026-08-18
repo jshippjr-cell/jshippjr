@@ -1451,14 +1451,33 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             voided_at TEXT, voided_by TEXT, void_reason TEXT,
             opportunity_id INTEGER DEFAULT 0,  -- the subject when no project exists yet
             drawn_mark TEXT,                   -- the drawn signature, PNG data URL
-            talent_id INTEGER DEFAULT 0        -- the subject for a supply-side agreement
+            talent_id INTEGER DEFAULT 0,       -- the subject for a supply-side agreement
+            contributor_id INTEGER DEFAULT 0   -- …or one session player's release
+        )"""
+    )
+    # Everyone who is not the composer: session players, vocalists, programmers,
+    # co-writers. Named BY the composer against a project, each with their own
+    # unguessable token — they are not users of this system and never will be, so the
+    # link is the whole credential (same model as the client workspace).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS contributors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            talent_id INTEGER,               -- the composer who named and booked them
+            name TEXT, email TEXT, role TEXT,
+            work TEXT,                       -- what they played on, in plain words
+            booked_by TEXT,                  -- the composer's name, frozen at naming
+            token TEXT,                      -- their release link; the credential
+            sent_at TEXT,
+            created_at TEXT
         )"""
     )
     # The Discovery Summary & Proposal is signed BEFORE a project exists, so it is stamped
     # with the opportunity instead. Existing databases predate the column.
     sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signature)")}
     for _name, _decl in (("opportunity_id", "INTEGER DEFAULT 0"), ("drawn_mark", "TEXT"),
-                         ("talent_id", "INTEGER DEFAULT 0")):
+                         ("talent_id", "INTEGER DEFAULT 0"),
+                         ("contributor_id", "INTEGER DEFAULT 0")):
         if _name not in sig_cols:
             conn.execute(f"ALTER TABLE signature ADD COLUMN {_name} {_decl}")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
@@ -1821,6 +1840,8 @@ _INDEXES = (
     ("idx_signature_project", "signature(project_id, doc_kind)"),
     ("idx_signature_opportunity", "signature(opportunity_id, doc_kind)"),
     ("idx_signature_talent", "signature(talent_id, doc_kind)"),
+    ("idx_signature_contributor", "signature(contributor_id, doc_kind)"),
+    ("idx_contributors_project", "contributors(project_id)"),
 )
 
 
@@ -5814,14 +5835,14 @@ def record_signature(conn, sig) -> int:
         """INSERT INTO signature (project_id, doc_kind, digest, signer_name,
                signer_email, typed_name, consent_text, signed_at, actor,
                ip_fingerprint, user_agent, token_fingerprint, certified_version,
-               terms_json, opportunity_id, drawn_mark, talent_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               terms_json, opportunity_id, drawn_mark, talent_id, contributor_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sig.project_id, sig.doc_kind, sig.digest, sig.signer_name, sig.signer_email,
          sig.typed_name, sig.consent_text, sig.signed_at, sig.actor,
          sig.ip_fingerprint, sig.user_agent, sig.token_fingerprint,
          sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True),
          getattr(sig, "opportunity_id", 0) or 0, getattr(sig, "drawn_mark", "") or "",
-         getattr(sig, "talent_id", 0) or 0))
+         getattr(sig, "talent_id", 0) or 0, getattr(sig, "contributor_id", 0) or 0))
     conn.commit()
     return int(cur.lastrowid)
 
@@ -5888,6 +5909,83 @@ def list_talent_signatures(conn, talent_id: int, doc_kind: str = "") -> List[sql
     return conn.execute(
         "SELECT * FROM signature WHERE talent_id = ? ORDER BY signed_at DESC",
         (int(talent_id),)).fetchall()
+
+
+def latest_contributor_signature(conn, contributor_id: int, doc_kind: str):
+    """The release in force for one contributor. Newest, not voided, None when unsigned."""
+    return conn.execute(
+        "SELECT * FROM signature WHERE contributor_id = ? AND doc_kind = ? "
+        "AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1",
+        (int(contributor_id), doc_kind)).fetchone()
+
+
+def add_contributor(conn, *, project_id: int, name: str, role: str, email: str = "",
+                    work: str = "", booked_by: str = "", talent_id: int = 0) -> int:
+    """Name one person the composer worked with. Returns the contributor id."""
+    import secrets
+    cur = conn.execute(
+        "INSERT INTO contributors (project_id, talent_id, name, email, role, work, "
+        "booked_by, token, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (int(project_id), int(talent_id or 0), (name or "").strip(),
+         (email or "").strip(), (role or "Performer").strip(), (work or "").strip(),
+         (booked_by or "").strip(), secrets.token_urlsafe(12), _now()))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_contributors(conn, project_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM contributors WHERE project_id = ? ORDER BY id",
+        (int(project_id),)).fetchall()
+
+
+def contributor_by_token(conn, token: str):
+    if not (token or "").strip():
+        return None
+    return conn.execute(
+        "SELECT * FROM contributors WHERE token = ?", (token.strip(),)).fetchone()
+
+
+def get_contributor(conn, contributor_id: int):
+    return conn.execute(
+        "SELECT * FROM contributors WHERE id = ?", (int(contributor_id),)).fetchone()
+
+
+def mark_contributor_sent(conn, contributor_id: int) -> None:
+    conn.execute("UPDATE contributors SET sent_at = ? WHERE id = ?",
+                 (_now(), int(contributor_id)))
+    conn.commit()
+
+
+def remove_contributor(conn, contributor_id: int) -> bool:
+    """Only while unsigned. A signed release is evidence and is never deleted — the
+    same rule the signature table follows."""
+    from .. import signing as _signing
+    if latest_contributor_signature(
+            conn, contributor_id, _signing.DOC_CONTRIBUTOR_RELEASE) is not None:
+        return False
+    conn.execute("DELETE FROM contributors WHERE id = ?", (int(contributor_id),))
+    conn.commit()
+    return True
+
+
+def contributor_release_gaps(conn, project_id: int) -> List[dict]:
+    """Everyone named on this project who has NOT signed their release.
+
+    The clearance certificate's whole claim is that nothing in the work needs anyone
+    else's permission. This is the list of people who could make that false, and it is
+    the answer to "is the chain of title actually complete" — a question the certificate
+    could not previously ask, because it was built from operator records rather than
+    from anything anyone signed.
+    """
+    from .. import signing as _signing
+    out: List[dict] = []
+    for row in list_contributors(conn, project_id):
+        if latest_contributor_signature(
+                conn, row["id"], _signing.DOC_CONTRIBUTOR_RELEASE) is None:
+            out.append({"id": row["id"], "name": row["name"], "role": row["role"],
+                        "email": row["email"] or "", "sent_at": row["sent_at"] or ""})
+    return out
 
 
 def void_signature(conn, signature_id: int, *, by: str, reason: str) -> bool:

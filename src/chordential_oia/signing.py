@@ -62,9 +62,13 @@ DOC_PROPOSAL_COUNTERSIGN = "discovery_proposal_countersign"
 # document the system had never seen.
 DOC_COMPOSER_AGREEMENT = "composer_agreement"
 DOC_COMPOSER_COUNTERSIGN = "composer_agreement_countersign"
+# Everyone who is not the composer. Clause 6A of the Composer Agreement obliges the
+# writer to collect this, and for a while it obliged them to collect a document that did
+# not exist anywhere — which reads as diligence and delivers none.
+DOC_CONTRIBUTOR_RELEASE = "contributor_release"
 DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
              DOC_PROPOSAL_COUNTERSIGN, DOC_COMPOSER_AGREEMENT,
-             DOC_COMPOSER_COUNTERSIGN)
+             DOC_COMPOSER_COUNTERSIGN, DOC_CONTRIBUTOR_RELEASE)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
@@ -73,6 +77,7 @@ DOC_LABELS = {
     DOC_PROPOSAL_COUNTERSIGN: "Discovery Summary & Proposal (countersigned)",
     DOC_COMPOSER_AGREEMENT: "Composer Agreement",
     DOC_COMPOSER_COUNTERSIGN: "Composer Agreement (countersigned)",
+    DOC_CONTRIBUTOR_RELEASE: "Contributor Release",
 }
 
 # The consent a signer is shown and agrees to. Recorded VERBATIM on the signature, not
@@ -144,6 +149,8 @@ class Signature:
     # …or a writer, for the supply-side agreement. Exactly one of the three subjects is
     # set; `build_signature` refuses a signature attached to none of them.
     talent_id: int = 0
+    #: …or one session player, vocalist or co-writer, for their release.
+    contributor_id: int = 0
     ip_fingerprint: str = ""
     user_agent: str = ""
     token_fingerprint: str = ""
@@ -174,6 +181,7 @@ def build_signature(
     project_id: int = 0,
     opportunity_id: int = 0,
     talent_id: int = 0,
+    contributor_id: int = 0,
     document_text: str,
     signer_name: str,
     signer_email: str = "",
@@ -199,7 +207,8 @@ def build_signature(
         raise ValueError("refusing to sign an empty document")
     if not (typed_name or "").strip():
         raise ValueError("refusing to record a signature with no typed name")
-    if not any((int(project_id or 0), int(opportunity_id or 0), int(talent_id or 0))):
+    if not any((int(project_id or 0), int(opportunity_id or 0), int(talent_id or 0),
+                int(contributor_id or 0))):
         raise ValueError("refusing to sign a document attached to nothing")
     return Signature(
         doc_kind=doc_kind,
@@ -207,6 +216,7 @@ def build_signature(
         project_id=int(project_id or 0),
         opportunity_id=int(opportunity_id or 0),
         talent_id=int(talent_id or 0),
+        contributor_id=int(contributor_id or 0),
         digest=document_digest(document_text),
         signer_name=(signer_name or "").strip(),
         signer_email=(signer_email or "").strip().lower(),
