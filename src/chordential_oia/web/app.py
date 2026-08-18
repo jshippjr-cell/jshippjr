@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from .. import agreement, signing
+from ..payments import boot_line as payments_boot_line
 from ..storage import get_object_store, storage_status
 from . import (accounts, actor, campaigns, db, discovery, roles, scheduler, seed,
                uploads, webpush)
@@ -175,6 +176,8 @@ async def lifespan(app: FastAPI):
               "which is what actually runs.", flush=True)
     elif _pool["applicable"]:
         print(f"[db] Postgres connection pool: {_pool['min']}–{_pool['max']}.", flush=True)
+    # Same honesty for money: every way this seam fails is quiet (see payments.boot_line).
+    print(f"[payments] {payments_boot_line()}", flush=True)
 
     conn = db.connect()
     db.init_db(conn)

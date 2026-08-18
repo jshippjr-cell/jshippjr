@@ -90,3 +90,59 @@ def test_checkout_route_stores_external_ref(ctx):
         conn.close()
     assert inv["status"] == "Issued"
     assert inv["external_ref"] == "null-checkout-deposit-" + str(iid)
+
+
+# ── what the boot line says (ADR-0043's honesty rule, applied to money) ──────────────
+def test_status_reports_the_null_default(monkeypatch):
+    from chordential_oia.payments import payments_status
+    monkeypatch.delenv("CHORDENTIAL_PAYMENT_PROVIDER", raising=False)
+    s = payments_status()
+    assert s["live"] is False and s["provider"] == "null"
+
+
+def test_status_separates_the_three_ways_stripe_fails(monkeypatch):
+    """They fail in three different places — on a page, at the Pay button, and not at
+    all — so the boot line must be able to tell them apart."""
+    from chordential_oia.payments import payments_status
+    monkeypatch.setenv("CHORDENTIAL_PAYMENT_PROVIDER", "stripe")
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+    s = payments_status()
+    assert s["live"] is True and s["key"] is False, "no key → checkout fails at Pay"
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_live_abc")
+    s = payments_status()
+    assert s["key"] is True and s["mode"] == "live"
+    assert s["webhook_verified"] is False, (
+        "an unverified webhook is an open 'mark this invoice paid' endpoint and must "
+        "be distinguishable from a healthy one")
+
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_x")
+    assert payments_status()["webhook_verified"] is True
+
+
+def test_status_names_the_key_mode(monkeypatch):
+    """"We were still on the test key" is discovered from a month of payments that
+    never arrived, unless it is said at boot."""
+    from chordential_oia.payments import payments_status
+    monkeypatch.setenv("CHORDENTIAL_PAYMENT_PROVIDER", "stripe")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_abc")
+    assert payments_status()["mode"] == "test"
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_live_abc")
+    assert payments_status()["mode"] == "live"
+
+
+def test_the_deploy_blueprint_declares_the_payment_config():
+    """render.yaml declared mail, calendar and storage but not payments, while the build
+    installed the stripe extra — a file describing a deployment that could not take
+    money. The keys live in the dashboard; the CONTRACT belongs in git."""
+    import pathlib
+    blueprint = (pathlib.Path(__file__).resolve().parent.parent / "render.yaml").read_text()
+    for key in ("CHORDENTIAL_PAYMENT_PROVIDER", "STRIPE_SECRET_KEY",
+                "STRIPE_WEBHOOK_SECRET", "CHORDENTIAL_PUBLIC_DOMAIN"):
+        assert key in blueprint, f"{key} is not declared in render.yaml"
+    # The placeholders in the comments are documentation; a `value:` carrying one would
+    # be a committed secret. Check what is ASSIGNED, not what is mentioned.
+    assigned = [ln for ln in blueprint.splitlines() if ln.strip().startswith("value:")]
+    assert not [ln for ln in assigned if "sk_live" in ln or "sk_test" in ln
+                or "whsec_" in ln], "a real secret is committed in render.yaml"

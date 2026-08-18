@@ -119,6 +119,36 @@ services:
         sync: false
       - key: CHORDENTIAL_OPERATOR_EMAIL  # e.g. you@gmail.com — NOT the sending address
         sync: false
+      # ── Payments (Stripe Checkout) ──────────────────────────────────────────
+      # The build already installs the `stripe` extra, but nothing here declared the
+      # switch or the keys, so this file described a deployment that could not take
+      # money. They live in the dashboard either way; declaring them is what makes the
+      # contract visible next to mail and calendar, and what stops the next person
+      # concluding payments were never wired.
+      #
+      # Two client-facing charges ride this: the DEPOSIT, paid from the client's
+      # workspace once the proposal is countersigned, and the FINAL, paid from the
+      # delivery portal before the download unlocks. Unset, the seam is the Null
+      # provider — every Pay button answers "online payment isn't switched on yet"
+      # honestly rather than faking a charge, and the studio collects out of band.
+      #
+      # STRIPE_WEBHOOK_SECRET is the one that is easy to skip and expensive to skip:
+      # without it /webhooks/stripe parses the event WITHOUT verifying the signature,
+      # which is fine in dev and is an unauthenticated "mark this invoice paid" endpoint
+      # in production. Add the endpoint in the Stripe dashboard pointing at
+      # https://chordential.com/webhooks/stripe (event: checkout.session.completed) and
+      # paste its signing secret here.
+      - key: CHORDENTIAL_PAYMENT_PROVIDER   # "stripe" to take money; unset = Null seam
+        sync: false
+      - key: STRIPE_SECRET_KEY              # sk_live_… (secret)
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET          # whsec_… — REQUIRED in production, see above
+        sync: false
+      # The absolute origin every client-facing link is built from: Stripe's success and
+      # cancel redirects, reviewer links, the first-touch page, the workspace. Wrong here
+      # means a payer completes checkout and is returned to the wrong host.
+      - key: CHORDENTIAL_PUBLIC_DOMAIN
+        value: "https://chordential.com"
       # ── Google Calendar (auto-book the discovery call) ──────────────────────
       # RECOMMENDED: a service account — it NEVER expires (an OAuth "Testing"-mode
       # refresh token silently dies after 7 days, which is why auto-booking kept

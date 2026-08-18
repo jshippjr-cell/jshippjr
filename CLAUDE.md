@@ -126,8 +126,16 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - `CHORDENTIAL_PUBLIC_DOMAIN` (default `https://chordential.com`) — absolute links
   (first-touch page, reviewer links, Stripe redirects).
 - **Provider seams (null by default, real when configured):** payments —
-  `CHORDENTIAL_PAYMENT_PROVIDER=stripe` + `STRIPE_*`; email — `CHORDENTIAL_MAIL_PROVIDER=smtp`
-  + `CHORDENTIAL_SMTP_*` (HOST/FROM required). Both no-op until set. **Signing is the
+  `CHORDENTIAL_PAYMENT_PROVIDER=stripe` + `STRIPE_SECRET_KEY` + **`STRIPE_WEBHOOK_SECRET`**;
+  email — `CHORDENTIAL_MAIL_PROVIDER=smtp`
+  + `CHORDENTIAL_SMTP_*` (HOST/FROM required). Both no-op until set. **Payments run live
+  on Stripe in prod** — declared in `render.yaml`, keys in the Render dashboard. Two
+  client-facing charges ride the seam: the **deposit** from the client's workspace once
+  the proposal is countersigned, and the **final** from the delivery portal before the
+  download unlocks. Without `STRIPE_WEBHOOK_SECRET`, `/webhooks/stripe` accepts
+  **unverified** events — an open "mark this invoice paid" endpoint. Every state is
+  announced at boot by `payments_status()` (`[payments] …`), including test-vs-live key,
+  the same rule storage and pooling follow. **Signing is the
   exception** (ADR-0059): `CHORDENTIAL_SIGNATURE_PROVIDER` defaults to `inhouse`, which
   is a REAL electronic signature, and an unknown value **raises at boot** rather than
   degrading.
