@@ -579,7 +579,7 @@
     {% if a.picture %}
     <button class="take-chip sr-cutaudio" title="Toggle the cut's own audio (VO/temp) under your music">cut audio: off</button>
     {% endif %}
-    <span class="t-keys">space · ←/→ · B brief · N notes · V takes</span>
+    <span class="t-keys">space · ↵ from the top · ←/→ · B brief · N notes · V takes</span>
     <span class="spacer"></span>
     <div class="layer-keys">
       <button class="lk sr-open" data-sheet="brief"><b>B</b>Brief</button>
@@ -1027,26 +1027,39 @@
     }
 
     function drawWave(){
-      var w = waveCv.width = waveCv.clientWidth * devicePixelRatio,
-          h = waveCv.height = waveCv.clientHeight * devicePixelRatio,
-          g = waveCv.getContext("2d");
+      // Resize ONLY when the size actually changed. Assigning canvas.width reallocates
+      // the backing store and wipes the context — doing that every animation frame is
+      // what made the lit edge stutter and fall behind the head at 60fps.
+      var w = Math.round(waveCv.clientWidth * devicePixelRatio),
+          h = Math.round(waveCv.clientHeight * devicePixelRatio);
+      if (waveCv.width !== w || waveCv.height !== h){ waveCv.width = w; waveCv.height = h; }
+      var g = waveCv.getContext("2d");
       g.clearRect(0, 0, w, h);
       if (!hasAudio) return;
       // Against picture, the waveform occupies its true span of the master
       // timeline (a :45 take under a :60 cut fills 75% of the lane).
       var span = (hasPicture && mDur()) ? Math.min(1, (dur || 0) / mDur()) : 1;
-      var prog = dur ? (audio.currentTime || 0) / dur : 0;
+      // ONE clock, and the boundary derived the way the head is. This used to light
+      // bars by the TAKE's own progress (audio.currentTime / dur) while the head was
+      // placed by the MASTER (mTime / mDur) — two clocks that agree only while the
+      // 0.12s sync window happens to be closed, so the glow ran ahead of or behind the
+      // head for most of a bar. Computing the head's x here, from the same numbers the
+      // playhead uses, makes them the same pixel by construction — at any span, and in
+      // the odd case of a take longer than the cut, where the old geometry could not
+      // line up at all.
       var W = w * span;
+      var headX = mDur() ? Math.max(0, Math.min(1, (mTime() || 0) / mDur())) * w : 0;
       if (peaks){
-        var n = peaks.length;
+        var n = peaks.length, bw = Math.max(1, W / n - 1.5);
         for (var i = 0; i < n; i++){
           var bh = Math.max(2, peaks[i] * h * 0.88), x = i / n * W;
-          g.fillStyle = (i / n <= prog) ? "rgba(240,119,44,.9)" : "rgba(240,119,44,.28)";
-          g.fillRect(x, (h - bh) / 2, Math.max(1, W / n - 1.5), bh);
+          g.fillStyle = (x + bw <= headX) ? "rgba(240,119,44,.9)"
+                      : (x <= headX ? "rgba(240,119,44,.62)" : "rgba(240,119,44,.28)");
+          g.fillRect(x, (h - bh) / 2, bw, bh);
         }
       } else {
         g.fillStyle = "rgba(240,119,44,.25)"; g.fillRect(0, h/2 - 1, W, 2);
-        g.fillStyle = "rgba(240,119,44,.9)"; g.fillRect(0, h/2 - 1, W * prog, 2);
+        g.fillStyle = "rgba(240,119,44,.9)"; g.fillRect(0, h/2 - 1, Math.min(W, headX), 2);
       }
     }
 
@@ -1485,7 +1498,16 @@
     loadTake(root.querySelector(".sr-take.on") || null);
     addEventListener("resize", function(){ drawPoster(); drawWave(); });
 
+    function restart(){
+      // Back to the top and rolling. Composers loop the same eight bars against a hit
+      // dozens of times; reaching for the scrubber to do it is the wrong instrument.
+      seek(0);
+      if (hasPicture){ if (video.paused) video.play(); }
+      else if (hasAudio && audio.paused) audio.play();
+      update();
+    }
     rooms.push({ root: root, toggle: toggle, seek: seek, audio: audio,
+                 restart: restart, time: mTime,
                  openSheet: openSheet, upForm: root.querySelector("form.sr-upload-form") });
   });
 
@@ -1600,8 +1622,12 @@
     var r = activeRoom(); if (!r) return;
     if (e.code === "Space"){ e.preventDefault(); r.toggle(); }
     else if (e.key === "Escape"){ if (!cancelPendingDrop()) closeAllSheets(); }
-    else if (e.key === "ArrowLeft"){ e.preventDefault(); r.seek((r.audio.currentTime || 0) - 2); }
-    else if (e.key === "ArrowRight"){ e.preventDefault(); r.seek((r.audio.currentTime || 0) + 2); }
+    else if (e.key === "Enter"){ e.preventDefault(); r.restart(); }
+    // Nudges read the MASTER clock too. Against picture, `audio.currentTime` is the
+    // follower and can sit 0.12s off, so ←/← from it drifted the picture a little
+    // further out of true on every press.
+    else if (e.key === "ArrowLeft"){ e.preventDefault(); r.seek((r.time() || 0) - 2); }
+    else if (e.key === "ArrowRight"){ e.preventDefault(); r.seek((r.time() || 0) + 2); }
     else if (e.key === "b" || e.key === "B") r.openSheet("brief");
     else if (e.key === "n" || e.key === "N") r.openSheet("notes");
     else if (e.key === "v" || e.key === "V") r.openSheet("takes");
