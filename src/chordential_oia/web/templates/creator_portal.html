@@ -98,8 +98,12 @@
   .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
   /* ── doorline ── */
   .doorline{display:flex;align-items:center;gap:12px;padding:14px 0 18px;flex-wrap:wrap}
-  .wordmark{font-family:var(--serif);font-size:15px;white-space:nowrap}
-  .wordmark b{color:var(--orange);font-weight:400}
+  /* The real wordmark, not a re-set of it. Every other surface — the client portal,
+     the brief, the agreements, every email — already ships the file; the session room
+     was the one place drawing the logo out of a serif face and a coloured <b>, which is
+     a different mark to anyone who knows the one they paid for. Knockout, because this
+     room is dark. */
+  .wordmark{display:block;height:17px;width:auto}
   .kicker{font:700 9.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--dim2)}
   .door-title{font-size:13px;color:var(--dim);flex:0 1 auto;min-width:80px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap}
@@ -426,7 +430,7 @@
 {% if not assignments %}
 <div class="room">
   <div class="doorline">
-    <span class="wordmark">Chord<b>ential</b></span>
+    <img class="wordmark" src="/static/public/wordmark-ko.png" alt="Chordential">
     <span class="kicker">Session Room</span>
   </div>
   <div class="stage noaudio" style="aspect-ratio:16/6">
@@ -487,7 +491,7 @@
 
   <!-- doorline -->
   <div class="doorline">
-    <span class="wordmark">Chord<b>ential</b></span>
+    <img class="wordmark" src="/static/public/wordmark-ko.png" alt="Chordential">
     <span class="kicker">Session Room</span>
     <span class="door-title"><b>{{ a.need }}</b> · {{ a.client }}</span>
     <span class="spacer"></span>
@@ -892,7 +896,10 @@
 {# Arrival (Phase 4 §Act 1): the once-per-engagement house-lights sequence. Rendered
    hidden; JS shows it only for a fresh, un-arrived, open room (localStorage-gated). #}
 <div class="sr-arrival" id="sr-arrival" hidden>
-  <div class="sr-arrival-sub">Chordential · Session Room</div>
+  <div class="sr-arrival-sub">
+    <img src="/static/public/wordmark-ko.png" alt="Chordential"
+         style="height:15px;width:auto;display:inline-block;vertical-align:-2px;margin-right:9px">
+    Session Room</div>
   <div class="sr-arrival-line">Everything is ready.<br>This room is waiting for your music.</div>
   <button class="sr-begin" type="button" id="sr-begin">Begin</button>
   <button class="sr-skip" type="button" id="sr-skip">Skip intro</button>

@@ -728,6 +728,11 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # A creator's submission awaiting Jon's publish decision (console-only; the
         # client portal never reads this — pending work stays off the client's page).
         "pending_version": delivery.get("pending_version") or None,
+        # The client's cut, so the taste gate can be JUDGED rather than only heard.
+        # A submission arrived with a bare <audio> and nothing to watch it against —
+        # reported live: "i only get to hear the audio ... i need to review the
+        # composer's audio with the video it is supporting".
+        "picture": delivery.get("picture") or None,
         "assets": assets_with_approval,
         # Per-asset approval rollup ("N of M deliverables approved") — surfaced
         # next to the whole-version Approve so the gap is visible.

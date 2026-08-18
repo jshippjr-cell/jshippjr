@@ -106,7 +106,84 @@
         The client can't see this yet. Listen, then publish it to the client (which
         notifies the reviewers) or discard it.
       </div>
+      {# The screening room. A take was judged here against nothing but itself — the
+         picture it was written to was one page away, so the decision that gates every
+         client's first impression was made half-blind. Reported live. The cut and the
+         pending take run locked together; the client still sees none of it. #}
+      {% if picture %}
+      <div class="screen" id="screen">
+        <video id="screen-vid" src="{{ picture.url }}" preload="metadata" playsinline muted
+               style="width:100%;display:block;background:#000;border-radius:8px;cursor:pointer"></video>
+        <audio id="screen-aud" preload="metadata" src="{{ pending_version.url }}"></audio>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <button type="button" id="screen-play" class="btn tiny"
+                  style="min-width:44px">▶</button>
+          <input type="range" id="screen-seek" min="0" max="1000" value="0" step="1"
+                 style="flex:1;accent-color:var(--orange,#E4671F)">
+          <span class="muted small" id="screen-time"
+                style="font-variant-numeric:tabular-nums;white-space:nowrap">0:00 / 0:00</span>
+        </div>
+        <p class="muted small" style="margin:6px 0 10px">
+          Cut <b>{{ picture.n }}</b> ({{ picture.orig }}) with {{ pending_version.by }}'s take,
+          locked together. <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
+             target="_blank" rel="noopener">Open the full portal ↗</a>
+        </p>
+      </div>
+      <script>
+      /* Picture leads, the take follows — the same 0.12s lock the composer's room uses,
+         because judging a hit against picture needs tighter sync than the ear forgives.
+         Deliberately small: this is a screening, not the session room. */
+      (function(){
+        var v = document.getElementById('screen-vid'), a = document.getElementById('screen-aud'),
+            play = document.getElementById('screen-play'), seek = document.getElementById('screen-seek'),
+            time = document.getElementById('screen-time');
+        if (!v || !a) return;
+        function fmt(t){
+          t = Math.max(0, t || 0);
+          return Math.floor(t / 60) + ':' + ('0' + Math.floor(t % 60)).slice(-2);
+        }
+        function sync(){
+          var t = v.currentTime || 0;
+          if (Math.abs((a.currentTime || 0) - t) > 0.12) a.currentTime = t;
+          if (!v.paused && a.paused) a.play();
+          if (v.paused && !a.paused) a.pause();
+        }
+        function paint(){
+          var d = v.duration || a.duration || 0;
+          time.textContent = fmt(v.currentTime) + ' / ' + fmt(d);
+          if (d) seek.value = Math.round((v.currentTime / d) * 1000);
+        }
+        function toggle(){ v.paused ? v.play() : v.pause(); }
+        play.addEventListener('click', toggle);
+        v.addEventListener('click', toggle);
+        v.addEventListener('play', function(){ play.textContent = '❚❚'; sync(); });
+        v.addEventListener('pause', function(){ play.textContent = '▶'; sync(); });
+        v.addEventListener('timeupdate', function(){ sync(); paint(); });
+        v.addEventListener('loadedmetadata', paint);
+        a.addEventListener('loadedmetadata', paint);
+        seek.addEventListener('input', function(){
+          var d = v.duration || 0;
+          if (!d) return;
+          v.currentTime = (seek.value / 1000) * d; sync(); paint();
+        });
+        /* The take can outrun the cut, or the cut can fail to stream. Say so and fall
+           back to the audio rather than leaving a black rectangle. */
+        v.addEventListener('error', function(){
+          document.getElementById('screen').innerHTML =
+            '<p class="muted small">The cut can\'t be streamed right now — the take plays on its own.</p>';
+          a.controls = true; document.getElementById('screen').appendChild(a);
+        });
+        paint();
+      })();
+      </script>
+      {% else %}
       <audio controls preload="none" src="{{ pending_version.url }}" style="max-width:100%;margin-bottom:10px"></audio>
+      <p class="muted small" style="margin:0 0 10px">
+        No cut from the client yet, so there is nothing to watch this against.
+        <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
+           target="_blank" rel="noopener">Open the full portal ↗</a>
+      </p>
+      {% endif %}
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0">
           <input type="hidden" name="action" value="publish">
