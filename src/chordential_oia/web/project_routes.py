@@ -306,8 +306,7 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
             trow = db.get_talent(conn, talent_id)
             portal_token = trow["portal_token"] if trow is not None and "portal_token" in trow.keys() else None
             if not portal_token:
-                import secrets as _sec
-                portal_token = _sec.token_urlsafe(12)
+                portal_token = db.public_token(16)
                 conn.execute("UPDATE talent SET portal_token=? WHERE id=?",
                              (portal_token, talent_id))
                 conn.commit()

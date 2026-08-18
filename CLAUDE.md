@@ -153,6 +153,12 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `reviewers.py`** (ADR-0060): expiry, last-used, revoke-don't-delete, and explicit
   sign/approve/delegate. A delegate is always strictly weaker than their inviter, and
   a gate exemption is only ever granted to a route that does its OWN stricter check.
+  **Mint every link token with `db.public_token(n)`** (ADR-0066) — letters and digits,
+  never `secrets.token_urlsafe`, whose `-`/`_` end ~1 link in 30 in punctuation that mail
+  clients trim off. And **never hand `send_email` your own `html`**: it wraps any body
+  containing a URL in `branded_html` so the link ships as a real `<a href>` rather than
+  bare text a phone has to find the end of. Both rules are tripwired in
+  `tests/test_a_link_that_survives_the_inbox.py`.
 - **Column migrations:** add to the `_*_COLUMNS` dict + the `ALTER TABLE` loop in `db.py`
   (`CREATE TABLE` for fresh DBs; the loop migrates existing ones).
 - **Canonical identity:** a buyer is one **person** (`buyer_person`, keyed by email —

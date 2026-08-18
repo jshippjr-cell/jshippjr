@@ -1664,6 +1664,36 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0066 — A link in an email is anchored, and a token never ends in punctuation
+**Status:** Accepted (2026-08-18, reported live) · Source: `mailer.send_email`,
+`web/db.public_token`, `web/meeting_scheduler.py`, `web/project_routes.py`,
+`tests/test_a_link_that_survives_the_inbox.py`
+
+**Decision.** Two rules, both enforced at the floor rather than at each call site.
+(1) `send_email` wraps any body containing a URL in `branded_html`, so every link ships
+as a real `<a href>`. A caller may pass its own `html`, but it must be built with
+`branded_html`; a test refuses any that is not. (2) Every token that appears in a link is
+minted by `db.public_token`, whose alphabet is letters and digits only. `token_urlsafe`
+is banned outside `accounts.py`, where the token is a cookie and never retyped.
+
+**Why.** A composer opened his portal link from the Gmail app and got 404; the same link
+worked on a desktop. Neither the gate nor the token was at fault — `/creator/<token>`
+returns 200 with no cookie at all. The email was plain text, so the mail client had to
+find the URL and guess where it ended, and the token was `ouLvIvWMxli-zHT-`. A linkifier
+reads that trailing hyphen as sentence punctuation and trims it, and a token one
+character short belongs to nobody. `token_urlsafe` draws from base64url, so **about one
+link in thirty** ended in `-` or `_`: composer portals, client workspaces, reviewer
+sign-off links, contributor releases. Five client- and creator-facing sends were bare
+text — the proposal-ready notice and the countersigned notice among them — which is
+five chances to remember a rule, and the reason the rule now lives in `send_email`.
+
+**Consequences.** Do not call `secrets.token_urlsafe` for anything that reaches a URL;
+call `db.public_token(n)`. Do not pass a hand-rolled `html` to `send_email`. **Tokens
+already issued are left as they are** — re-minting would break every link sitting in
+somebody's inbox, which is a worse failure than the one being fixed; the anchor makes
+the existing ones work. Two characters of alphabet cost ~0.05 bits each, which is not a
+security trade worth discussing.
+
 ### ADR-0065 — The summary is the proposal, the licence is the price, and the budget is only a check
 **Status:** Accepted (2026-08-16, operator directive) · Supersedes one clause of ADR-0020 ·
 Source: `agreement.py`, `pricing.py`, `signing.py`, `client_voice.client_assumptions`,

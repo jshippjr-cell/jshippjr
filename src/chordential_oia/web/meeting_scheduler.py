@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -108,7 +107,7 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
     ci_id = None
     if campaigns.workspace_enabled():
         ci_id = campaign_intelligence.ensure_for_opportunity(conn, opp)["id"]
-    manage_token = secrets.token_urlsafe(24)
+    manage_token = db.public_token(32)
 
     join_url = (join_url or "").strip()   # an operator-pasted link (used if no Zoom provider)
     external_meeting_id = notetaker = bot_id = calendar_event_id = armed_at = ""
@@ -370,7 +369,7 @@ def propose(conn, opp, *, slots: list, meeting_type: str = ZOOM, duration_min: i
     if not slots:
         return {"ok": False, "error": "Pick at least one time."}
     pid = db.create_meeting_proposal(
-        conn, opp_id=opp["id"], token=secrets.token_urlsafe(24), slots=slots,
+        conn, opp_id=opp["id"], token=db.public_token(32), slots=slots,
         meeting_type=meeting_type, duration_min=duration_min, client_name=client_name,
         client_email=client_email, message=message, join_url=join_url,
         request_id=request_id)

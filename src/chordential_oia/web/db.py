@@ -55,6 +55,27 @@ def stage_label(status: str) -> str:
     """Friendly display label for a raw pipeline status (falls back to the raw value)."""
     return STAGE_LABELS.get(status, status)
 
+
+# Letters and digits only — deliberately NOT ``secrets.token_urlsafe``.
+#
+# Every token minted here ends up in a URL that a human receives in an email, pastes
+# into a chat, or reads off a screen. ``token_urlsafe`` draws from base64url, which
+# includes ``-`` and ``_``, so about one link in thirty ends in punctuation. Mail and
+# messaging clients that linkify plain text treat a trailing ``-`` as the end of a
+# sentence and trim it, and the recipient gets a 404 from a link that is correct.
+# A composer's portal link did exactly that (token ``ouLvIvWMxli-zHT-``): it opened on
+# a desktop and 404'd from the phone. Dropping two characters from the alphabet costs
+# ~0.05 bits each and removes the whole class.
+#
+# EXISTING tokens are left alone. Re-minting them would break every link already in
+# somebody's inbox — a worse failure than the one being fixed, and not ours to spend.
+_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+
+def public_token(length: int = 16) -> str:
+    """An unguessable token safe to put in a link. 62^16 ≈ 95 bits at the default."""
+    return "".join(secrets.choice(_TOKEN_ALPHABET) for _ in range(length))
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2123,7 +2144,7 @@ def ensure_share_token(conn: sqlite3.Connection, opp_id: int) -> Optional[str]:
     existing = row["share_token"]
     if existing and str(existing).strip():
         return existing
-    token = secrets.token_urlsafe(9)
+    token = public_token(13)
     conn.execute(
         "UPDATE opportunities SET share_token = ? WHERE id = ?", (token, opp_id)
     )
@@ -2160,7 +2181,7 @@ def rotate_share_token(conn: sqlite3.Connection, *, opp_id=None, project_id=None
     if opp_id is None and project_id is None:
         return None
 
-    token = secrets.token_urlsafe(9)
+    token = public_token(13)
     stamp = datetime.now(timezone.utc).isoformat()
     touched = 0
     if opp_id is not None:
@@ -4681,7 +4702,7 @@ def ensure_talent_portal_token(conn: sqlite3.Connection, talent_id: int) -> Opti
     existing = row["portal_token"]
     if existing and str(existing).strip():
         return existing
-    token = secrets.token_urlsafe(12)
+    token = public_token(16)
     conn.execute(
         "UPDATE talent SET portal_token = ? WHERE id = ?", (token, talent_id)
     )
@@ -5928,7 +5949,7 @@ def add_contributor(conn, *, project_id: int, name: str, role: str, email: str =
         "booked_by, token, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         (int(project_id), int(talent_id or 0), (name or "").strip(),
          (email or "").strip(), (role or "Performer").strip(), (work or "").strip(),
-         (booked_by or "").strip(), secrets.token_urlsafe(12), _now()))
+         (booked_by or "").strip(), public_token(16), _now()))
     conn.commit()
     return int(cur.lastrowid)
 
@@ -7250,7 +7271,7 @@ def add_delivery_reviewer(
         return None
     roster = list_delivery_reviewers(conn, project_id)
     reviewer = reviewers.new_reviewer(
-        token=secrets.token_urlsafe(9), name=name, email=email, role=role,
+        token=public_token(13), name=name, email=email, role=role,
         invited_by=invited_by, inviter_expiry=inviter_expiry, days=days)
     roster.append(reviewer)
     update_delivery(conn, project_id, "reviewers", roster)
@@ -7434,7 +7455,7 @@ def ensure_project_share_token(conn: sqlite3.Connection, project_id: int) -> Opt
     existing = row["share_token"]
     if existing and str(existing).strip():
         return existing
-    token = secrets.token_urlsafe(9)
+    token = public_token(13)
     conn.execute(
         "UPDATE projects SET share_token = ? WHERE id = ?", (token, project_id)
     )

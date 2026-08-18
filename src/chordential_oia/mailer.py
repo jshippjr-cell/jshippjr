@@ -190,10 +190,22 @@ def send_email(to: str, subject: str, text: str, html: Optional[str] = None,
 
     Returns ``"sent"`` (handed to SMTP), ``"logged"`` (null/unconfigured — recorded
     intent, sent nothing), or ``"error"`` (an exception was swallowed). The default
-    provider is **null**, so out of the box this is a no-op log."""
+    provider is **null**, so out of the box this is a no-op log.
+
+    A body carrying a link gets the branded HTML shell automatically when the caller
+    passes no ``html``. That is not cosmetic. Without an HTML part the recipient's mail
+    client has to FIND the URL in plain text and guess where it ends, and a token minted
+    by ``secrets.token_urlsafe`` can end in ``-`` or ``_`` — which a linkifier reads as
+    trailing punctuation and trims. The link then 404s on a phone while the same link
+    pasted on a desktop works, which is exactly how this was reported. Five client- and
+    creator-facing sends were bare text: the composer's portal link, "your proposal is
+    ready", the countersigned notice, and a reviewer's personal sign-off link. Wrapping
+    here rather than at each call site is the point — a new send cannot forget."""
     to = (to or "").strip()
     if not to:
         return "error"
+    if html is None and ("https://" in (text or "") or "http://" in (text or "")):
+        html = branded_html(_public_base(), text)
     try:
         # Gate on the FULL config (provider + host + from), not just the provider
         # switch: a half-set env (e.g. provider=smtp but no host yet) must be a

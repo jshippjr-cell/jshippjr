@@ -45,7 +45,7 @@
     <div class="status-buttons" style="margin-top:8px">
       <a class="btn" href="/creator/{{ portal_token }}" target="_blank" rel="noopener">Open portal ↗</a>
       <form method="post" action="/talent/{{ t.id }}/portal" style="display:inline">
-        <button class="btn" type="submit">Re-issue link</button>
+        <button class="btn" type="submit" title="Emails them this same link again — it does not change it, and any link they already have keeps working.">✉ Resend link</button>
       </form>
     </div>
     {% else %}
