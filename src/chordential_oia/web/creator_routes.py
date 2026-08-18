@@ -341,8 +341,15 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
 def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) -> None:
     """Their copy, and the operator's. Retention is a requirement of the legal shape this
     claims (ESIGN/UETA), and a writer who signed a rights assignment should not have to
-    come back to a link to read what they gave away."""
-    from .. import mailer
+    come back to a link to read what they gave away.
+
+    The drawn signature travels as an ATTACHED PNG. Reported live: "it comes back as
+    signed but it comes back as text. I cant see a copy of the digital signature." It was
+    plain text with no image at all — and even inline it would not have shown, because
+    the mark is stored as a data: URI and Gmail strips those out of <img>. A file arrives
+    everywhere and is a thing either party can keep.
+    """
+    from .. import mailer, signing as _signing
     from . import meeting_scheduler
     from .shell import public_base as _pb
     block = (f"\n\n{'=' * 58}\nSIGNED COPY — the exact text this signature covers\n"
@@ -352,23 +359,29 @@ def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) ->
              + f"\nSigned at: {sig.signed_at}\n"
              f"Consent given: {sig.consent_text}\n"
              f"Document digest (SHA-256): {sig.digest}\n")
+    png = _signing.drawn_mark_png(getattr(sig, "drawn_mark", "") or "")
+    files = [("signature.png", "image/png", png)] if png else []
+    if png:
+        block += "\nThe drawn signature is attached as signature.png.\n"
+    base = _pb()
     if signer_mail:
-        try:
-            mailer.send_email(
-                signer_mail, "Your signed Composer Agreement — Chordential",
-                "Thank you. Below is the agreement exactly as you signed it, for your "
+        text = ("Thank you. Below is the agreement exactly as you signed it, for your "
                 "records. It commits you to no work; each engagement is offered and "
                 "accepted separately." + block)
+        try:
+            mailer.send_email(signer_mail, "Your signed Composer Agreement — Chordential",
+                              text, html=mailer.branded_html(base, text), files=files)
         except Exception:  # noqa: BLE001
             pass
     op_mail = meeting_scheduler._operator_email()
     if op_mail:
-        try:
-            mailer.send_email(
-                op_mail, f"✍ Composer Agreement signed — {row_name or sig.typed_name}",
-                f"{sig.typed_name} signed the Composer Agreement.\n"
+        text = (f"{sig.typed_name} signed the Composer Agreement.\n"
                 f"They are now assignable (the agreement half of the gate).\n"
-                f"{_pb()}/talent" + block)
+                f"{base}/talent" + block)
+        try:
+            mailer.send_email(op_mail,
+                              f"✍ Composer Agreement signed — {row_name or sig.typed_name}",
+                              text, html=mailer.branded_html(base, text), files=files)
         except Exception:  # noqa: BLE001
             pass
 

@@ -545,3 +545,126 @@ def test_the_governing_law_is_the_studios_and_is_set(monkeypatch):
     # Law and forum are separate, or the clause reads "the law of X … the courts of X".
     assert "the law of the State of Florida, and both sides submit to the courts of " \
         "Miami-Dade County" in text
+
+
+# ── the dashboard finds out, not just the inbox ──────────────────────────────────────
+def _png_bytes():
+    import base64
+    import zlib
+    raw = b"".join(b"\x00" + b"\xff\xff\xff" * 4 for _ in range(4))
+    def chunk(tag, data):
+        return (len(data).to_bytes(4, "big") + tag + data
+                + zlib.crc32(tag + data).to_bytes(4, "big"))
+    blob = (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", (4).to_bytes(4, "big") + (4).to_bytes(4, "big")
+                    + bytes([8, 2, 0, 0, 0]))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    return "data:image/png;base64," + base64.b64encode(blob).decode(), blob
+
+
+def test_a_signed_agreement_lands_on_the_dashboard_queue(gated):
+    """Reported: "when the talent signs the composer agreement and sends it back the
+    chordential dashboard needs to get a notification." It only ever sent an email, and
+    an email is not a queue — a signature is a pending DECISION, which is what the
+    Disposition Queue is for."""
+    from chordential_oia.web import queue as queue_mod
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    conn = app_mod.db.connect()
+    try:
+        before = [q for q in queue_mod.compute_queue(conn, app_mod.db)
+                  if q["kind"] == "composer_countersign"]
+    finally:
+        conn.close()
+    assert before == []
+
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        cards = [q for q in queue_mod.compute_queue(conn, app_mod.db)
+                 if q["kind"] == "composer_countersign"]
+    finally:
+        conn.close()
+    assert len(cards) == 1
+    card = cards[0]
+    assert "Dale Malleh" in card["title"]
+    assert card["url"] == f"/talent/{tid}#access", "the card must go where the act is"
+    assert card["urgency"] == 3, "a person who signed is waiting on us"
+
+
+def test_the_card_clears_once_it_is_countersigned(gated):
+    """A queue that keeps showing a decision already taken is one nobody trusts."""
+    from chordential_oia.web import queue as queue_mod
+    c, app_mod = gated
+    _as_operator(c)
+    tid, token = _writer(app_mod)
+    _sign(c, token)
+    c.post(f"/talent/{tid}/agreement/countersign", data={"typed_name": "Jon Shipp"},
+           follow_redirects=False)
+    conn = app_mod.db.connect()
+    try:
+        cards = [q for q in queue_mod.compute_queue(conn, app_mod.db)
+                 if q["kind"] == "composer_countersign"]
+    finally:
+        conn.close()
+    assert cards == []
+
+
+def test_the_queue_page_shows_it(gated):
+    c, app_mod = gated
+    _as_operator(c)
+    _tid, token = _writer(app_mod)
+    _sign(c, token)
+    page = c.get("/queue").text
+    assert "Signed — waiting on your countersignature" in page
+    assert "Countersign — Dale Malleh" in page
+
+
+# ── the drawn signature travels as a file ────────────────────────────────────────────
+def test_the_signed_copy_carries_the_drawn_signature_as_an_attachment(gated, monkeypatch):
+    """Reported: "it comes back as signed but it comes back as text. I cant see a copy of
+    the digital signature." It was plain text with no image — and inline would not have
+    worked either, because the mark is stored as a data: URI and Gmail strips those out
+    of <img>. A file arrives everywhere."""
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jon@chordential.com")
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, subject, body, **kw: sent.append((to, kw)) or "sent")
+    c, app_mod = gated
+    _tid, token = _writer(app_mod)
+    mark, blob = _png_bytes()
+    _sign(c, token, drawn_signature=mark)
+
+    assert len(sent) == 2, "both parties get a copy"
+    for _to, kw in sent:
+        assert kw.get("html"), "a contract that arrives as a wall of text reads as spam"
+        files = kw.get("files") or []
+        assert len(files) == 1, "the drawn signature did not travel"
+        name, mime, data = files[0]
+        assert name == "signature.png" and mime == "image/png"
+        assert data == blob, "the attachment is not the mark they drew"
+
+
+def test_no_drawing_means_no_attachment(gated, monkeypatch):
+    """An empty PNG attached to every contract is noise, and it would imply a mark that
+    was never made."""
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jon@chordential.com")
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, subject, body, **kw: sent.append(kw) or "sent")
+    c, app_mod = gated
+    _tid, token = _writer(app_mod)
+    _sign(c, token)
+    assert sent and all(not (kw.get("files") or []) for kw in sent)
+
+
+def test_a_hostile_mark_never_becomes_an_attachment(gated, monkeypatch):
+    """`clean_drawn_mark` guards what is stored; `drawn_mark_png` guards what is handed
+    to a mail client. A row written by hand in the database must not become a file."""
+    from chordential_oia import signing
+    assert signing.drawn_mark_png("data:text/html;base64,PHNjcmlwdD4=") is None
+    assert signing.drawn_mark_png("") is None
+    mark, blob = _png_bytes()
+    assert signing.drawn_mark_png(mark) == blob

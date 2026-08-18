@@ -12,15 +12,17 @@ Ranking is a deterministic urgency ladder — revenue- and client-touching first
   0  a client is waiting        (new discovery-call requests)
   1  money is owed to us        (issued, unpaid invoices)
   2  money we owe our people    (Owed payouts — the composer-side brand)
-  3  the pipeline has a date    (follow-ups due today or earlier)
-  4  the deal's next move is yours (per-deal court-state, pointed inward)
-  5  a composer is waiting at the taste gate (pending submissions)
-  6  qualified-enough to look at (REVIEW-tier opportunities — the funnel
+  3  someone signed and is waiting on us (a composer's agreement, or a client's
+     proposal, signed and awaiting our countersignature)
+  4  the pipeline has a date    (follow-ups due today or earlier)
+  5  the deal's next move is yours (per-deal court-state, pointed inward)
+  6  a composer is waiting at the taste gate (pending submissions)
+  7  qualified-enough to look at (REVIEW-tier opportunities — the funnel
      audit's Finding 1: the volume the precision-biased alert tier hides)
-  7  a reel awaits your verdict (talent review queue)
-  8  the supply-side floor has a gap (ADR-0024: approved creator, no
+  8  a reel awaits your verdict (talent review queue)
+  9  the supply-side floor has a gap (ADR-0024: approved creator, no
      agreement/rate — not assignable until fixed)
-  9  intelligence housekeeping  (CI conflicts, then proposed fields)
+  10 intelligence housekeeping  (CI conflicts, then proposed fields)
 
 Age breaks ties within a rung (oldest first). No LLM anywhere.
 """
@@ -37,6 +39,7 @@ RUNGS = (
     "A client is waiting",
     "Money owed to us",
     "Money we owe our people",
+    "Signed — waiting on your countersignature",
     "Follow-ups due",
     "Your move on a deal",
     "Composer submissions at the taste gate",
@@ -101,10 +104,53 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
             "/payouts", age_key=po["created_at"] if "created_at" in po.keys() else "",
             evidence=f"payout #{po['id']}"))
 
-    # 3 — follow-ups due on/before today.
+    # 3 — somebody signed and is waiting on US. A composer signs their agreement and is
+    #     assignable but not bound on both sides; a client signs a proposal and is waiting
+    #     to be countersigned before anything starts. Both were only ever an email, and an
+    #     email is not a queue — reported live: "when the talent signs the composer
+    #     agreement and sends it back the chordential dashboard needs to get a
+    #     notification." A signature is a pending DECISION, which is what this surface is.
+    from .. import signing as _signing
+    for r in conn.execute(
+            """SELECT s.talent_id, s.typed_name, s.signed_at, t.name AS talent_name
+               FROM signature s JOIN talent t ON t.id = s.talent_id
+               WHERE s.doc_kind = ? AND s.voided_at IS NULL AND s.talent_id > 0
+                 AND NOT EXISTS (SELECT 1 FROM signature c
+                                 WHERE c.talent_id = s.talent_id
+                                   AND c.doc_kind = ? AND c.voided_at IS NULL)
+               ORDER BY s.signed_at ASC LIMIT 25""",
+            (_signing.DOC_COMPOSER_AGREEMENT, _signing.DOC_COMPOSER_COUNTERSIGN)
+    ).fetchall():
+        cards.append(_card(
+            3, "composer_countersign",
+            f"Countersign — {r['talent_name'] or r['typed_name']}",
+            "They signed the Composer Agreement. Countersign to bind it both ways.",
+            f"/talent/{r['talent_id']}#access", age_key=r["signed_at"] or "",
+            evidence=f"signed {(r['signed_at'] or '')[:10]}"))
+    for r in conn.execute(
+            """SELECT s.opportunity_id, s.typed_name, s.signed_at,
+                      o.client AS client, o.need AS need
+               FROM signature s JOIN opportunities o ON o.id = s.opportunity_id
+               WHERE s.doc_kind = ? AND s.voided_at IS NULL AND s.opportunity_id > 0
+                 AND NOT EXISTS (SELECT 1 FROM signature c
+                                 WHERE c.opportunity_id = s.opportunity_id
+                                   AND c.doc_kind = ? AND c.voided_at IS NULL)
+               ORDER BY s.signed_at ASC LIMIT 25""",
+            (_signing.DOC_PROPOSAL, _signing.DOC_PROPOSAL_COUNTERSIGN)
+    ).fetchall():
+        cards.append(_card(
+            3, "proposal_countersign",
+            f"Countersign — {r['client']}",
+            f"{r['typed_name']} signed the proposal for {r['need']}. "
+            f"Countersign, then start production.",
+            f"/opportunity/{r['opportunity_id']}#agreement",
+            age_key=r["signed_at"] or "",
+            evidence=f"signed {(r['signed_at'] or '')[:10]}"))
+
+    # 4 — follow-ups due on/before today.
     for r in db.followups_due(conn, limit=25):
         cards.append(_card(
-            3, "followup",
+            4, "followup",
             f"Follow up — {r['client']}",
             f"{(r['next_action'] or 'Next touch').strip()} (due {r['next_action_due']}).",
             f"/opportunity/{r['id']}", age_key=r["next_action_due"] or ""))
@@ -121,7 +167,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
         na = next_action.compute(conn, db, opp, prow)
         if na["court"] == "you" and na.get("url") and not pv:
             cards.append(_card(
-                4, "next_action", f"{na['label']} — {opp['client']}",
+                5, "next_action", f"{na['label']} — {opp['client']}",
                 f"{na.get('detail', '')} ({opp['need']})", na["url"],
                 age_key=na.get("since") or "", post=bool(na.get("post"))))
 
@@ -130,7 +176,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
         pv = db.get_delivery(conn, prow["id"]).get("pending_version")
         if pv:
             cards.append(_card(
-                5, "submission",
+                6, "submission",
                 f"Submission to vet — {prow['client']}",
                 f"{pv.get('by') or 'A composer'} uploaded a version on "
                 f"{(pv.get('at') or '')[:10]}. Publish it or send it back — the "
@@ -145,7 +191,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
            ORDER BY score DESC, created_at ASC LIMIT 15""").fetchall()
     for r in rows:
         cards.append(_card(
-            6, "review_opp",
+            7, "review_opp",
             f"Worth a look — {r['client'] or r['title'] or 'opportunity'}",
             f"Alignment {r['alignment'] or r['score'] or '?'} — routed REVIEW, "
             "never alerted. Confirm or pass.",
@@ -156,7 +202,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
             "SELECT id, name, created_at FROM talent WHERE review_status = 'Pending' "
             "ORDER BY created_at ASC LIMIT 25").fetchall():
         cards.append(_card(
-            7, "reel", f"Reel review — {row['name']}",
+            8, "reel", f"Reel review — {row['name']}",
             "Approve or decline; approved creators become matchable.",
             f"/talent/{row['id']}", age_key=row["created_at"] or ""))
 
@@ -171,7 +217,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 {"agreement": "executed agreement", "rate": "rate"}[b]
                 for b in blockers)
             cards.append(_card(
-                8, "floor_gap", f"Not assignable — {row['name']}",
+                9, "floor_gap", f"Not assignable — {row['name']}",
                 f"Approved but missing {missing}. Fix before their next match.",
                 f"/talent/{row['id']}#access", age_key=row["created_at"] or ""))
 
@@ -189,7 +235,7 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 else "Proposed fact to confirm")
         url = f"/opportunity/{r['opp_id']}" if r["opp_id"] else "/dashboard"
         cards.append(_card(
-            9, "ci", f"{verb} — {r['ci_title'] or 'campaign'}",
+            10, "ci", f"{verb} — {r['ci_title'] or 'campaign'}",
             f"{r['facet']}.{r['key']}", url, age_key=r["updated_at"] or ""))
 
     cards.sort(key=lambda c: (c["urgency"], c["age_key"]))

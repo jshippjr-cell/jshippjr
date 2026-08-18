@@ -273,6 +273,22 @@ def clean_drawn_mark(value: str) -> str:
     return mark
 
 
+def drawn_mark_png(mark: str) -> Optional[bytes]:
+    """The stored drawn signature as real PNG bytes, or None.
+
+    Re-validated on the way out, not trusted on the way in: `clean_drawn_mark` guards
+    what is stored, and this guards what is handed to a mail client or written to a
+    file. A row that predates the validator, or one edited in the database by hand, must
+    not become an attachment nobody checked.
+    """
+    if not clean_drawn_mark(mark or ""):
+        return None
+    try:
+        return base64.b64decode(mark.split(",", 1)[1], validate=True)
+    except (ValueError, IndexError, binascii.Error):
+        return None
+
+
 def verify(stored_digest: str, current_text: Optional[str]) -> str:
     """Does this signature still describe the document?
 

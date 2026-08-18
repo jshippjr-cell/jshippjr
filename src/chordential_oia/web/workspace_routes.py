@@ -373,6 +373,10 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
         # is entitled under ESIGN/UETA to retain what she agreed to rather than have to
         # go back to a link for it.
         document = agr.signable_text()
+        # The drawn mark as an attached PNG — a data: URI is stripped by Gmail, so an
+        # inline copy simply never appears (reported on the composer side first).
+        _png = signing.drawn_mark_png(getattr(sig, "drawn_mark", "") or "")
+        _files = [("signature.png", "image/png", _png)] if _png else []
         signed_block = (
             f"\n\n{'=' * 58}\nSIGNED COPY — the exact text this signature covers\n"
             f"{'=' * 58}\n{document}\n{'=' * 58}\n"
@@ -380,18 +384,21 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
             + (f" <{sig.signer_email}>" if sig.signer_email else "")
             + f"\nSigned at: {sig.signed_at}\n"
             f"Consent given: {sig.consent_text}\n"
-            f"Document digest (SHA-256): {sig.digest}\n")
+            f"Document digest (SHA-256): {sig.digest}\n"
+            + ("\nThe drawn signature is attached as signature.png.\n" if _png else ""))
         op_mail = meeting_scheduler._operator_email()
         if op_mail:
             try:
-                mailer.send_email(
-                    op_mail, f"✍ Proposal SIGNED — {opp['client']}",
+                _body = (
                     f"{sig.typed_name} signed the Discovery Summary & Proposal for "
                     f"{opp['need']}.\n"
                     f"Fee: {agr.fee_line or '—'}\n\n"
                     f"Next: countersign, then start production.\n"
                     f"{_public_base()}/opportunity/{opp_id}#agreement"
                     + signed_block)
+                mailer.send_email(
+                    op_mail, f"✍ Proposal SIGNED — {opp['client']}", _body,
+                    html=mailer.branded_html(_public_base(), _body), files=_files)
             except Exception:  # noqa: BLE001
                 pass
         # The signer's own copy. Retention is a requirement of the legal shape this
@@ -399,14 +406,16 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
         # a copy in their inbox on the day they signed.
         if sig.signer_email:
             try:
-                mailer.send_email(
-                    sig.signer_email,
-                    f"Your signed copy — {opp['client']} · {opp['need']}",
+                _cbody = (
                     f"Thank you. Below is the agreement exactly as you signed it, for "
                     f"your records.\n\nWe countersign and raise the deposit invoice; work "
                     f"begins when the deposit clears. Your workspace stays at "
                     f"{_public_base()}/workspace/{token}"
                     + signed_block)
+                mailer.send_email(
+                    sig.signer_email,
+                    f"Your signed copy — {opp['client']} · {opp['need']}", _cbody,
+                    html=mailer.branded_html(_public_base(), _cbody), files=_files)
             except Exception:  # noqa: BLE001
                 pass
     finally:
