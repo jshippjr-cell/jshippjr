@@ -259,7 +259,11 @@ def creator_agreement(request: Request, token: str):
         agreement=agr, agreement_text=text, signature=sig, countersignature=counter,
         signature_note=signing.verdict_note(state, dict(sig) if sig is not None else None),
         signature_valid=(state == signing.VALID),
-        sign_url=f"/creator/{token}/agreement/sign" if sig is None else "",
+        # Not signable without a governing law — the document says so rather than
+        # collecting a signature on a cross-border assignment with no stated forum.
+        sign_url=(f"/creator/{token}/agreement/sign"
+                  if sig is None and composer_agreement.is_signable(agr) else ""),
+        blocked_reason=composer_agreement.blocked_reason(agr),
         acceptance_text=composer_agreement.ACCEPTANCE_TEXT,
         acceptance_limits=composer_agreement.ACCEPTANCE_LIMITS,
         consent_text=signing.CONSENT_TEXT,
@@ -292,6 +296,8 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
                 conn, talent_id, signing.DOC_COMPOSER_AGREEMENT) is not None:
             return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
         agr = composer_agreement.build_agreement(row)
+        if not composer_agreement.is_signable(agr):
+            return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
         try:
             sig = signing.build_signature(
                 doc_kind=signing.DOC_COMPOSER_AGREEMENT,

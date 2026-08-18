@@ -115,7 +115,12 @@
         {%- endfor -%}
       </div>
 
-      {% if sign_url %}
+      {% if blocked_reason and not signature %}
+      <div class="signbox">
+        <div class="limits" style="border-left-color:var(--accent)">
+          <b>Not ready to sign.</b> {{ blocked_reason }}</div>
+      </div>
+      {% elif sign_url %}
       <div class="signbox">
         {% if request.query_params.get('flag') == 'incomplete' %}
         <p style="color:var(--accent);font-weight:650">Please type your name and tick the

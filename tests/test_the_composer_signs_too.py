@@ -28,29 +28,149 @@ pytest.importorskip("fastapi")
 
 
 # ── the document says what the engine says ───────────────────────────────────────────
+LAW = "the State of Tennessee"
+
+
+def _agr(name=None):
+    return composer_agreement.build_agreement(
+        {"name": name} if name else None, law=LAW)
+
+
 def test_every_number_comes_from_policy_not_from_prose():
     """If a term here and a number in `compensation` disagree, the engine is right and
     this document is a bug — so the figures are READ from it (ADR-0061)."""
-    text = composer_agreement.build_agreement().signable_text()
+    text = _agr().signable_text()
     assert f"{compensation.COMPOSER_SHARE * 100:.0f}%" in text
     assert f"{compensation.COMPOSER_SHARE_WITH_SESSION * 100:.0f}%" in text
     assert f"${compensation.DEMO_FEE:,.0f}" in text
     assert compensation.HOUSE_PUBLISHER in text
 
 
-def test_it_carries_the_warranty_the_clearance_certificate_stands_on():
-    """The load-bearing clause. Everything the studio promises a buyer about clearance is
-    downstream of the writer having promised it first."""
-    text = composer_agreement.build_agreement().signable_text().lower()
-    assert "no samples" in text
-    assert "third-party recordings" in text or "third-party" in text
-    assert "clearance certificate" in text, "the clause must say what it backs"
+def test_it_grants_the_composition_and_not_only_the_recording():
+    """The finding that failed v1.0, and the one that mattered most.
+
+    Clause 4 assigned "the master recording". Clause 5 SAID the publisher's share "is
+    held by Chordential Music" — indicative mood, no verb of grant, nothing transferred.
+    Meanwhile `delivery.DEFAULT_LICENSE` sells every client a perpetual SYNC licence,
+    which is a licence of the COMPOSITION. We were licensing a copyright we did not own,
+    under a certificate warranting clean title, while the writer stayed free to license
+    the same cue to a competitor.
+    """
+    text = _agr().signable_text()
+    assert "assigns to Chordential Music the whole of the copyright in the composition" \
+        in text, "the composition is still not granted"
+    assert "assigns to the studio" in text, "the master grant lost its verb"
+    # And the master grant now has scope words — an assignment of unstated interest,
+    # territory, term and media is not an assignment of anything checkable.
+    for word in ("full term of copyright", "throughout the world",
+                 "all media now known or later invented"):
+        assert word in text
 
 
-def test_the_writer_keeps_their_writers_share():
-    text = composer_agreement.build_agreement().signable_text()
-    assert "100% of the writer's share" in text
-    assert "cue sheet" in text
+def test_the_writer_keeps_performance_income_and_half_the_publisher_share():
+    text = _agr().signable_text()
+    assert "writer keeps the writer's share of public performance income" in text
+    assert "50% of the publisher's share belongs to the writers" in text
+    # The condition the CODE enforces must appear in the document the writer signs:
+    # `publisher_rows` gives them nothing without a registered entity, and v1.0 promised
+    # "50/50" unconditionally. That gap is a clean misrepresentation argument.
+    assert "holds that half FOR the writer" in text
+    assert "does not keep it by default and does not keep it by silence" in text
+
+
+def test_it_warrants_the_music_is_human_made():
+    """The entire market positioning — "never AI-generated" in the outreach copy — was
+    unwarranted anywhere. And it is a validity gate, not hygiene: AI-generated material
+    is uncopyrightable, so there is nothing to assign and nothing to certify."""
+    text = _agr().signable_text()
+    assert "created by a human being" in text
+    assert "Suno" in text and "Udio" in text
+    assert "not owned by anybody under US copyright law" in text
+    # Ordinary studio tools must stay allowed or no working composer can sign it.
+    assert "pitch correction" in text and "AI-assisted mastering" in text
+
+
+def test_it_captures_everyone_else_who_played():
+    """Chain of title is a graph. A composer who books a violinist creates a rights
+    holder the studio has never heard of — and in the UK performers' rights are a
+    separate property right the composer cannot assign on their behalf."""
+    text = _agr().signable_text()
+    assert "contributor release" in text
+    assert "singers, session players" in text
+    assert "AFM" in text and "SAG-AFTRA" in text, "union exposure is unaddressed"
+
+
+def test_the_library_warranty_is_one_a_working_composer_can_sign():
+    """v1.0 banned "library material" outright, which no composer using Kontakt or
+    Spitfire can honestly sign — and was silent on the actual risk, which is delivering
+    a solo stem of a licensed patch."""
+    text = _agr().signable_text()
+    assert "Licensed virtual instruments and sample libraries are fine" in text
+    assert "heard on its own" in text, "the stems risk is what the EULA turns on"
+    assert "Telling the studio honestly is never itself a breach" in text
+
+
+def test_the_warranty_is_backed_by_a_capped_indemnity():
+    text = _agr().signable_text()
+    assert "cover the studio's reasonable, documented losses" in text
+    assert "$25,000" in text and "3 times the fees" in text
+    assert "does not apply where the writer knew the warranty was untrue" in text
+    assert "seven years" in text, "no evidence retention — the files win the dispute"
+
+
+def test_payment_has_a_date_the_composer_can_rely_on():
+    """Pay-when-paid with no backstop was the clearest below-market term: if the client
+    never paid, the composer never got paid, ever."""
+    text = _agr().signable_text()
+    assert "within 120 days of the client accepting delivery, whether or not the " \
+        "client has paid" in text
+    assert "the writer is paid as though it had" in text, "no duty to invoice"
+
+
+def test_the_composer_shares_licence_and_renewal_income():
+    """The fee base is the CREATIVE fee — so the licence fee, which is consideration for
+    exclusivity and term the writer assigned, needs its own share or they get nothing
+    when a client extends."""
+    text = _agr().signable_text()
+    assert "It does not include the licence fee" in text, "the base is still ambiguous"
+    assert "extend the term, widen the territory, add media" in text
+    assert "for as long as the work earns" in text
+
+
+def test_it_has_the_furniture_a_contract_needs():
+    text = _agr().signable_text()
+    for clause in ("waives their moral rights", "independent contractor",
+                   "governed by the law of", "unenforceable, the rest still stands",
+                   "showreel", "materially similar cue for a competing brand"):
+        assert clause in text, f"missing: {clause}"
+
+
+def test_credit_is_a_promise_the_studio_can_actually_keep():
+    """v1.0 promised the client would credit the composer — an obligation performable
+    only by a third party the studio does not control."""
+    text = _agr().signable_text()
+    assert "a promise to ask, not a promise that it happens" in text
+    assert "credits the writer as composer on the cue sheet it files, every time" in text
+
+
+def test_it_refuses_to_be_signed_without_a_governing_law():
+    """No honest default exists — inventing a jurisdiction for a document someone signs
+    is the same class of error as inventing a price. So it refuses rather than degrading,
+    the rule `signing_providers` already follows."""
+    blank = composer_agreement.build_agreement({"name": "Dale"}, law="")
+    assert not composer_agreement.is_signable(blank)
+    assert "CHORDENTIAL_GOVERNING_LAW" in composer_agreement.blocked_reason(blank)
+    assert composer_agreement.is_signable(_agr())
+
+
+def test_survival_includes_the_duty_to_pay():
+    """v1.0 survived clauses 4, 5, 6 and 8 — the rights assignment survived termination
+    and the duty to PAY for it did not."""
+    text = _agr().signable_text()
+    survival = text.split("9. ENDING IT")[1].split("10.")[0]
+    for clause in ("3,", "3B", "3C", "10", "11"):
+        assert clause in survival
+    assert "Clause 5 survives for the life of copyright" in text
 
 
 def test_it_says_plainly_that_it_books_no_work():
@@ -62,15 +182,14 @@ def test_it_says_plainly_that_it_books_no_work():
 
 def test_the_document_is_deterministic():
     """A digest is worth nothing over a text that rebuilds differently."""
-    a = composer_agreement.build_agreement().signable_text()
-    b = composer_agreement.build_agreement().signable_text()
+    a = _agr().signable_text()
+    b = _agr().signable_text()
     assert a == b and document_digest(a) == document_digest(b)
 
 
 def test_a_named_writer_appears_in_their_own_agreement():
-    agr = composer_agreement.build_agreement({"name": "Dale Malleh"})
-    assert "Dale Malleh" in agr.signable_text()
-    assert composer_agreement.build_agreement().signable_text().count("the writer") >= 1
+    assert "Dale Malleh" in _agr("Dale Malleh").signable_text()
+    assert _agr().signable_text().count("the writer") >= 1
 
 
 # ── the writer signs it, on their own token-gated page ───────────────────────────────
@@ -80,6 +199,7 @@ def gated(tmp_path, monkeypatch):
     composer to the internal login on their own page."""
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "ca.db"))
     monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "passphrase")
+    monkeypatch.setenv("CHORDENTIAL_GOVERNING_LAW", "the State of Tennessee")
     for m in ("db", "campaigns", "app"):
         importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
     from fastapi.testclient import TestClient
@@ -147,7 +267,7 @@ def test_the_signature_is_bound_to_the_text_they_read(gated):
     finally:
         conn.close()
     assert sig["digest"] == document_digest(
-        composer_agreement.build_agreement(row).signable_text())
+        composer_agreement.build_agreement(row, law=LAW).signable_text())
 
 
 def test_signing_is_the_assignment_gate(gated):

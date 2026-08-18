@@ -113,6 +113,10 @@ services:
       # unset: an unconfigured inbox that looks configured, so the invitation went to the
       # app's own sending address and no block ever reached the operator's calendar.
       # Nothing failed and nothing logged. The scheduler now says so on the page; set this.
+      # The law and courts that settle a dispute under the Composer Agreement. Unset,
+      # the agreement is not signable — there is no honest default for a jurisdiction.
+      - key: CHORDENTIAL_GOVERNING_LAW
+        sync: false
       - key: CHORDENTIAL_OPERATOR_EMAIL  # e.g. you@gmail.com — NOT the sending address
         sync: false
       # ── Google Calendar (auto-book the discovery call) ──────────────────────
