@@ -29,6 +29,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from ..delivery import (
     current_version, revision_status, scoped_deliverables, seed_brief, versions_list,
 )
+from .. import composer_agreement, signing
 from ..talent import profile_completeness
 from . import db, production
 from .delivery_ops import (
@@ -228,6 +229,134 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
         completeness=profile_completeness(t), assignments=assignments,
         all_rooms=all_rooms, focused=p,
     )
+
+
+@router.get("/creator/{token}/agreement", response_class=HTMLResponse)
+def creator_agreement(request: Request, token: str):
+    """The Composer Agreement, for the writer to read and sign.
+
+    On the composer's own token-gated portal, because that is where they already are and
+    because the per-creator token IS the credential (same model as the client workspace).
+    Nothing here is admin-gated; the route validates the token itself.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        agr = composer_agreement.build_agreement(row)
+        sig = db.latest_talent_signature(conn, row["id"], signing.DOC_COMPOSER_AGREEMENT)
+        counter = db.latest_talent_signature(
+            conn, row["id"], signing.DOC_COMPOSER_COUNTERSIGN)
+        composer_name = row["name"]
+    finally:
+        conn.close()
+    text = agr.signable_text()
+    state = signing.verify(sig["digest"] if sig is not None else "", text)
+    return render(
+        request, "composer_agreement.html", nav="", token=token,
+        composer_name=composer_name,
+        agreement=agr, agreement_text=text, signature=sig, countersignature=counter,
+        signature_note=signing.verdict_note(state, dict(sig) if sig is not None else None),
+        signature_valid=(state == signing.VALID),
+        sign_url=f"/creator/{token}/agreement/sign" if sig is None else "",
+        acceptance_text=composer_agreement.ACCEPTANCE_TEXT,
+        acceptance_limits=composer_agreement.ACCEPTANCE_LIMITS,
+        consent_text=signing.CONSENT_TEXT,
+    )
+
+
+@router.post("/creator/{token}/agreement/sign")
+def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(""),
+                           signer_email: str = Form(""), consent: str = Form(""),
+                           drawn_signature: str = Form("")):
+    """The writer signs. This IS the assignment gate (ADR-0024).
+
+    The gate used to turn on `agreement_executed_at`, a date an operator typed to say a
+    document existed somewhere the system had never seen. Signing now stamps it — so the
+    thing that unblocks assigning someone to paid work is the writer's own signature over
+    a text we can still produce, not a memory of a conversation.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_talent_by_portal_token(conn, token)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        talent_id = row["id"]
+        if not consent.strip() or not typed_name.strip():
+            return RedirectResponse(f"/creator/{token}/agreement?flag=incomplete",
+                                    status_code=303)
+        # Already signed → the existing one stands. Signing again is not an edit, and the
+        # append-only table would otherwise grow a row per refresh.
+        if db.latest_talent_signature(
+                conn, talent_id, signing.DOC_COMPOSER_AGREEMENT) is not None:
+            return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
+        agr = composer_agreement.build_agreement(row)
+        try:
+            sig = signing.build_signature(
+                doc_kind=signing.DOC_COMPOSER_AGREEMENT,
+                talent_id=talent_id,
+                document_text=agr.signable_text(),
+                signer_name=(row["name"] or "").strip(),
+                signer_email=(signer_email.strip()
+                              or (row["email"] if "email" in row.keys() else "") or ""),
+                typed_name=typed_name.strip(),
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                token=token,
+                drawn_mark=drawn_signature,
+                certified_version=agr.version,
+                terms_snapshot={"share_pct": agr.share_pct,
+                                "share_with_session_pct": agr.share_with_session_pct,
+                                "publisher_to_writers_pct": agr.publisher_to_writers_pct},
+            )
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=400)
+        db.record_signature(conn, sig)
+        # The gate, satisfied by the signature rather than by an assertion about one.
+        db.set_talent_agreement(conn, talent_id, sig.signed_at[:10],
+                                f"Signed in portal · {sig.digest[:12]}")
+        signer_mail = sig.signer_email
+        doc_text = agr.signable_text()
+    finally:
+        conn.close()
+    _mail_signed_copy(signer_mail, sig, doc_text, row_name=sig.signer_name)
+    return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
+
+
+def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) -> None:
+    """Their copy, and the operator's. Retention is a requirement of the legal shape this
+    claims (ESIGN/UETA), and a writer who signed a rights assignment should not have to
+    come back to a link to read what they gave away."""
+    from .. import mailer
+    from . import meeting_scheduler
+    from .shell import public_base as _pb
+    block = (f"\n\n{'=' * 58}\nSIGNED COPY — the exact text this signature covers\n"
+             f"{'=' * 58}\n{doc_text}\n{'=' * 58}\n"
+             f"Signed by: {sig.typed_name}"
+             + (f" <{sig.signer_email}>" if sig.signer_email else "")
+             + f"\nSigned at: {sig.signed_at}\n"
+             f"Consent given: {sig.consent_text}\n"
+             f"Document digest (SHA-256): {sig.digest}\n")
+    if signer_mail:
+        try:
+            mailer.send_email(
+                signer_mail, "Your signed Composer Agreement — Chordential",
+                "Thank you. Below is the agreement exactly as you signed it, for your "
+                "records. It commits you to no work; each engagement is offered and "
+                "accepted separately." + block)
+        except Exception:  # noqa: BLE001
+            pass
+    op_mail = meeting_scheduler._operator_email()
+    if op_mail:
+        try:
+            mailer.send_email(
+                op_mail, f"✍ Composer Agreement signed — {row_name or sig.typed_name}",
+                f"{sig.typed_name} signed the Composer Agreement.\n"
+                f"They are now assignable (the agreement half of the gate).\n"
+                f"{_pb()}/talent" + block)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @router.post("/creator/{token}/project/{project_id}/note/{comment_id}/address")

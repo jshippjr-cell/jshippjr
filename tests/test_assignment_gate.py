@@ -124,9 +124,15 @@ def test_assign_allowed_after_agreement_and_rate(client):
 
 
 def test_talent_page_shows_agreement_state(client):
+    """The manual tick survives as the FALLBACK — a paper agreement signed before the
+    portal existed is a real agreement. It is relabelled "Mark executed by hand" because
+    the primary path is now the composer signing it in their portal, where the system can
+    still produce the text they agreed to."""
     tid = _unsigned_talent_id(client)
     page = client.get(f"/talent/{tid}").text
-    assert "Mark agreement executed" in page
+    assert "Mark executed by hand" in page
+    assert "Composer Agreement not signed yet" in page, (
+        "the operator should be able to see, and send, the real thing")
     assert "Not assignable yet" in page
     client.post(f"/talent/{tid}/agreement",
                 data={"executed": "1", "ref": "Drive/agr.pdf"}, follow_redirects=True)
@@ -137,7 +143,7 @@ def test_talent_page_shows_agreement_state(client):
     client.post(f"/talent/{tid}/agreement",
                 data={"executed": "0"}, follow_redirects=True)
     page = client.get(f"/talent/{tid}").text
-    assert "Mark agreement executed" in page
+    assert "Mark executed by hand" in page
     assert "Drive/agr.pdf" not in page
 
 

@@ -1,0 +1,318 @@
+"""The writer's half of the chain of title, signed rather than asserted.
+
+Reported live: *"Where do I find the composer agreement in the talent section?"* — and
+the answer was that there wasn't one. `talent.agreement_executed_at` was a date an
+operator typed to record that an agreement existed *somewhere else*, and `agreement_ref`
+was free text for where the paper lived. The assignment gate (ADR-0024) turned on a
+checkbox about a document the system had never seen.
+
+That is a weak spot in the thing this business sells. The Clearance Certificate warrants
+to a BUYER that the work is "100% original & cleared: no samples, no third-party masters"
+— and the only thing that can make that true is the writer having warranted it first. A
+certificate whose backing is a tickbox is backed by a memory of a conversation.
+
+So the composer signs the way the client does (ADR-0059/0065): one deterministic text, a
+digest of exactly what they read, an optional drawn mark, a countersignature — and the
+signature IS the gate.
+"""
+import importlib
+
+import pytest
+
+from chordential_oia import compensation, composer_agreement
+from chordential_oia.signing import (
+    DOC_COMPOSER_AGREEMENT, DOC_COMPOSER_COUNTERSIGN, document_digest,
+)
+
+pytest.importorskip("fastapi")
+
+
+# ── the document says what the engine says ───────────────────────────────────────────
+def test_every_number_comes_from_policy_not_from_prose():
+    """If a term here and a number in `compensation` disagree, the engine is right and
+    this document is a bug — so the figures are READ from it (ADR-0061)."""
+    text = composer_agreement.build_agreement().signable_text()
+    assert f"{compensation.COMPOSER_SHARE * 100:.0f}%" in text
+    assert f"{compensation.COMPOSER_SHARE_WITH_SESSION * 100:.0f}%" in text
+    assert f"${compensation.DEMO_FEE:,.0f}" in text
+    assert compensation.HOUSE_PUBLISHER in text
+
+
+def test_it_carries_the_warranty_the_clearance_certificate_stands_on():
+    """The load-bearing clause. Everything the studio promises a buyer about clearance is
+    downstream of the writer having promised it first."""
+    text = composer_agreement.build_agreement().signable_text().lower()
+    assert "no samples" in text
+    assert "third-party recordings" in text or "third-party" in text
+    assert "clearance certificate" in text, "the clause must say what it backs"
+
+
+def test_the_writer_keeps_their_writers_share():
+    text = composer_agreement.build_agreement().signable_text()
+    assert "100% of the writer's share" in text
+    assert "cue sheet" in text
+
+
+def test_it_says_plainly_that_it_books_no_work():
+    """A composer reading "agreement" reasonably assumes it commits them to a job. It
+    does not, and saying so is cheaper than the conversation where they find out."""
+    assert "not a booking" in composer_agreement.ACCEPTANCE_LIMITS
+    assert "guarantees you none" in composer_agreement.ACCEPTANCE_LIMITS
+
+
+def test_the_document_is_deterministic():
+    """A digest is worth nothing over a text that rebuilds differently."""
+    a = composer_agreement.build_agreement().signable_text()
+    b = composer_agreement.build_agreement().signable_text()
+    assert a == b and document_digest(a) == document_digest(b)
+
+
+def test_a_named_writer_appears_in_their_own_agreement():
+    agr = composer_agreement.build_agreement({"name": "Dale Malleh"})
+    assert "Dale Malleh" in agr.signable_text()
+    assert composer_agreement.build_agreement().signable_text().count("the writer") >= 1
+
+
+# ── the writer signs it, on their own token-gated page ───────────────────────────────
+@pytest.fixture()
+def gated(tmp_path, monkeypatch):
+    """The admin gate ON — the configuration where a missing exemption bounces a
+    composer to the internal login on their own page."""
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "ca.db"))
+    monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "passphrase")
+    for m in ("db", "campaigns", "app"):
+        importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as c:
+        yield c, app_mod
+
+
+def _writer(app_mod, name="Dale Malleh"):
+    from chordential_oia.models import MusicDiscipline
+    from chordential_oia.talent import Talent
+    db = app_mod.db
+    conn = db.connect()
+    try:
+        tid = db.insert_talent(conn, Talent(name=name, email="dale@example.com",
+                                            disciplines=[MusicDiscipline.COMPOSITION]))
+        return tid, db.ensure_talent_portal_token(conn, tid)
+    finally:
+        conn.close()
+
+
+def _as_operator(c):
+    """The operator pages are gated (that is the point of the fixture) — sign in."""
+    c.post("/admin/login", data={"email": "", "password": "passphrase"},
+           follow_redirects=False)
+    return c
+
+
+def _sign(c, token, name="Dale Malleh", **extra):
+    data = {"typed_name": name, "signer_email": "dale@example.com", "consent": "1"}
+    data.update(extra)
+    return c.post(f"/creator/{token}/agreement/sign", data=data, follow_redirects=False)
+
+
+def test_the_composer_reads_and_signs_without_meeting_the_login(gated):
+    """The bug that bit a client at exactly this moment: the GET was exempt from the
+    admin gate and the POST was not, so the page rendered and the button bounced them to
+    "Procurement OS — internal"."""
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    page = c.get(f"/creator/{token}/agreement")
+    assert page.status_code == 200
+    assert "Password or passphrase" not in page.text
+    assert "COMPOSER AGREEMENT" in page.text
+
+    r = _sign(c, token)
+    assert r.status_code == 303
+    assert "/admin/login" not in r.headers.get("location", "")
+    conn = app_mod.db.connect()
+    try:
+        sig = app_mod.db.latest_talent_signature(conn, tid, DOC_COMPOSER_AGREEMENT)
+    finally:
+        conn.close()
+    assert sig is not None and sig["typed_name"] == "Dale Malleh"
+
+
+def test_the_signature_is_bound_to_the_text_they_read(gated):
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        row = app_mod.db.get_talent(conn, tid)
+        sig = app_mod.db.latest_talent_signature(conn, tid, DOC_COMPOSER_AGREEMENT)
+    finally:
+        conn.close()
+    assert sig["digest"] == document_digest(
+        composer_agreement.build_agreement(row).signable_text())
+
+
+def test_signing_is_the_assignment_gate(gated):
+    """ADR-0024's gate used to turn on a date an operator typed. What unblocks putting
+    someone on paid work is now their own signature over a text we can still produce."""
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    conn = app_mod.db.connect()
+    try:
+        before = app_mod.db.talent_assignment_blockers(app_mod.db.get_talent(conn, tid))
+    finally:
+        conn.close()
+    assert "agreement" in before
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        row = app_mod.db.get_talent(conn, tid)
+    finally:
+        conn.close()
+    assert "agreement" not in app_mod.db.talent_assignment_blockers(row)
+    assert (row["agreement_ref"] or "").startswith("Signed in portal")
+
+
+def test_a_drawn_mark_is_kept_and_a_hostile_one_is_not(gated):
+    import base64
+    import zlib
+
+    def png():
+        raw = b"".join(b"\x00" + b"\xff\xff\xff" * 4 for _ in range(4))
+        def chunk(tag, data):
+            return (len(data).to_bytes(4, "big") + tag + data
+                    + zlib.crc32(tag + data).to_bytes(4, "big"))
+        blob = (b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", (4).to_bytes(4, "big") + (4).to_bytes(4, "big")
+                        + bytes([8, 2, 0, 0, 0]))
+                + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        return "data:image/png;base64," + base64.b64encode(blob).decode()
+
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    _sign(c, token, drawn_signature=png())
+    conn = app_mod.db.connect()
+    try:
+        assert app_mod.db.latest_talent_signature(
+            conn, tid, DOC_COMPOSER_AGREEMENT)["drawn_mark"].startswith("data:image/png")
+    finally:
+        conn.close()
+
+    tid2, token2 = _writer(app_mod, name="Other Writer")
+    _sign(c, token2, name="Other Writer",
+          drawn_signature="data:text/html;base64,PHNjcmlwdD4=")
+    conn = app_mod.db.connect()
+    try:
+        sig = app_mod.db.latest_talent_signature(conn, tid2, DOC_COMPOSER_AGREEMENT)
+    finally:
+        conn.close()
+    assert sig is not None, "the signature stands; only the drawing was refused"
+    assert (sig["drawn_mark"] or "") == ""
+
+
+def test_signing_twice_does_not_stack_signatures(gated):
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    _sign(c, token)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        rows = app_mod.db.list_talent_signatures(conn, tid, DOC_COMPOSER_AGREEMENT)
+    finally:
+        conn.close()
+    assert len(rows) == 1
+
+
+def test_consent_is_required(gated):
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    c.post(f"/creator/{token}/agreement/sign",
+           data={"typed_name": "Dale Malleh", "signer_email": "d@e.com", "consent": ""},
+           follow_redirects=False)
+    conn = app_mod.db.connect()
+    try:
+        assert app_mod.db.latest_talent_signature(
+            conn, tid, DOC_COMPOSER_AGREEMENT) is None
+    finally:
+        conn.close()
+
+
+def test_a_bad_portal_token_is_not_found(gated):
+    c, _app_mod = gated
+    assert c.get("/creator/nope/agreement").status_code == 404
+    assert c.post("/creator/nope/agreement/sign",
+                  data={"typed_name": "X", "consent": "1"},
+                  follow_redirects=False).status_code == 404
+
+
+# ── the operator sees it, and countersigns ───────────────────────────────────────────
+def test_the_talent_page_shows_the_signed_agreement(gated):
+    """The reported question, answered: it is on the talent page, and it is the document
+    rather than a date about one."""
+    c, app_mod = gated
+    _as_operator(c)
+    tid, token = _writer(app_mod)
+    before = c.get(f"/talent/{tid}").text
+    assert "not signed yet" in before.lower()
+    assert f"/creator/{token}/agreement" in before, "the operator can send them the link"
+    _sign(c, token)
+    page = c.get(f"/talent/{tid}").text
+    assert "Composer Agreement SIGNED" in page
+    assert "Dale Malleh" in page
+    assert "The signed agreement" in page and "WHAT THE WRITER WARRANTS" in page
+
+
+def test_the_operator_countersigns_the_same_document(gated):
+    c, app_mod = gated
+    _as_operator(c)
+    tid, token = _writer(app_mod)
+    _sign(c, token)
+    r = c.post(f"/talent/{tid}/agreement/countersign",
+               data={"typed_name": "Jon Shipp"}, follow_redirects=False)
+    assert r.status_code == 303
+    conn = app_mod.db.connect()
+    try:
+        theirs = app_mod.db.latest_talent_signature(conn, tid, DOC_COMPOSER_AGREEMENT)
+        ours = app_mod.db.latest_talent_signature(conn, tid, DOC_COMPOSER_COUNTERSIGN)
+    finally:
+        conn.close()
+    assert ours is not None and ours["digest"] == theirs["digest"], (
+        "the two parties signed different documents")
+    assert "signed by both parties" in c.get(f"/talent/{tid}").text
+
+
+def test_countersigning_is_refused_before_the_writer_signs(gated):
+    c, app_mod = gated
+    _as_operator(c)
+    tid, _token = _writer(app_mod)
+    c.post(f"/talent/{tid}/agreement/countersign", data={"typed_name": "Jon Shipp"},
+           follow_redirects=False)
+    conn = app_mod.db.connect()
+    try:
+        assert app_mod.db.latest_talent_signature(
+            conn, tid, DOC_COMPOSER_COUNTERSIGN) is None
+    finally:
+        conn.close()
+
+
+def test_the_writer_is_offered_the_agreement_on_their_own_portal(gated):
+    """A document nobody can find is the same as no document."""
+    c, app_mod = gated
+    _tid, token = _writer(app_mod)
+    page = c.get(f"/creator/{token}").text
+    assert f"/creator/{token}/agreement" in page
+    assert "Composer Agreement" in page
+
+
+def test_the_signed_copy_reaches_both_parties(gated, monkeypatch):
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jon@chordential.com")
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, subject, body, **kw: sent.append((to, body)))
+    c, app_mod = gated
+    _tid, token = _writer(app_mod)
+    _sign(c, token)
+    assert {t for t, _ in sent} == {"dale@example.com", "jon@chordential.com"}
+    for _to, body in sent:
+        assert "SIGNED COPY" in body and "COMPOSER AGREEMENT" in body
+        assert "WHAT THE WRITER WARRANTS" in body
+        assert len(body.split("Document digest (SHA-256): ")[1][:64].strip()) == 64

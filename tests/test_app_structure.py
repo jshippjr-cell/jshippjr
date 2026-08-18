@@ -219,13 +219,13 @@ def test_the_router_carries_the_whole_group():
 
 @pytest.mark.parametrize("module,prefix,count", [
     ("agencies_routes.py", "/agencies", 26),
-    ("talent_routes.py", None, 15),          # two prefixes: /talent + /payouts
+    ("talent_routes.py", None, 16),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 65),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post)
     ("project_routes.py", "/project", 62),
-    ("creator_routes.py", "/creator", 6),
+    ("creator_routes.py", "/creator", 8),
     ("campaign_routes.py", "/campaign", 7),
     ("simulator_routes.py", "/simulator", 7),
     ("workspace_routes.py", "/workspace", 6),
@@ -271,8 +271,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 271, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 271 — "
+    assert len(decls) == 274, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 274 — "
         f"a slice lost or gained a URL")
 
 

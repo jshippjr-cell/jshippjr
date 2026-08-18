@@ -1450,13 +1450,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             terms_json TEXT,             -- what the document said, for legibility
             voided_at TEXT, voided_by TEXT, void_reason TEXT,
             opportunity_id INTEGER DEFAULT 0,  -- the subject when no project exists yet
-            drawn_mark TEXT                    -- the drawn signature, PNG data URL
+            drawn_mark TEXT,                   -- the drawn signature, PNG data URL
+            talent_id INTEGER DEFAULT 0        -- the subject for a supply-side agreement
         )"""
     )
     # The Discovery Summary & Proposal is signed BEFORE a project exists, so it is stamped
     # with the opportunity instead. Existing databases predate the column.
     sig_cols = {r["name"] for r in conn.execute("PRAGMA table_info(signature)")}
-    for _name, _decl in (("opportunity_id", "INTEGER DEFAULT 0"), ("drawn_mark", "TEXT")):
+    for _name, _decl in (("opportunity_id", "INTEGER DEFAULT 0"), ("drawn_mark", "TEXT"),
+                         ("talent_id", "INTEGER DEFAULT 0")):
         if _name not in sig_cols:
             conn.execute(f"ALTER TABLE signature ADD COLUMN {_name} {_decl}")
     # Campaign Intake — a Capture is an IMMUTABLE evidence record (one per input): the raw
@@ -1818,6 +1820,7 @@ _INDEXES = (
     # ADR-0059 — every delivery page asks "is this signed, and does it still match".
     ("idx_signature_project", "signature(project_id, doc_kind)"),
     ("idx_signature_opportunity", "signature(opportunity_id, doc_kind)"),
+    ("idx_signature_talent", "signature(talent_id, doc_kind)"),
 )
 
 
@@ -5811,13 +5814,14 @@ def record_signature(conn, sig) -> int:
         """INSERT INTO signature (project_id, doc_kind, digest, signer_name,
                signer_email, typed_name, consent_text, signed_at, actor,
                ip_fingerprint, user_agent, token_fingerprint, certified_version,
-               terms_json, opportunity_id, drawn_mark)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               terms_json, opportunity_id, drawn_mark, talent_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sig.project_id, sig.doc_kind, sig.digest, sig.signer_name, sig.signer_email,
          sig.typed_name, sig.consent_text, sig.signed_at, sig.actor,
          sig.ip_fingerprint, sig.user_agent, sig.token_fingerprint,
          sig.certified_version, json.dumps(sig.terms_snapshot, sort_keys=True),
-         getattr(sig, "opportunity_id", 0) or 0, getattr(sig, "drawn_mark", "") or ""))
+         getattr(sig, "opportunity_id", 0) or 0, getattr(sig, "drawn_mark", "") or "",
+         getattr(sig, "talent_id", 0) or 0))
     conn.commit()
     return int(cur.lastrowid)
 
@@ -5863,6 +5867,27 @@ def list_opportunity_signatures(conn, opp_id: int, doc_kind: str = "") -> List[s
     return conn.execute(
         "SELECT * FROM signature WHERE opportunity_id = ? ORDER BY signed_at DESC",
         (int(opp_id),)).fetchall()
+
+
+def latest_talent_signature(conn, talent_id: int, doc_kind: str):
+    """The signature in force on a WRITER's document — the standing Composer Agreement.
+    Same rule as the other two: newest, not voided, None when nothing is signed."""
+    return conn.execute(
+        "SELECT * FROM signature WHERE talent_id = ? AND doc_kind = ? "
+        "AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1",
+        (int(talent_id), doc_kind)).fetchone()
+
+
+def list_talent_signatures(conn, talent_id: int, doc_kind: str = "") -> List[sqlite3.Row]:
+    """Every signature on a writer, newest first — voided ones included, because a
+    withdrawn agreement is part of the record rather than an embarrassment to hide."""
+    if doc_kind:
+        return conn.execute(
+            "SELECT * FROM signature WHERE talent_id = ? AND doc_kind = ? "
+            "ORDER BY signed_at DESC", (int(talent_id), doc_kind)).fetchall()
+    return conn.execute(
+        "SELECT * FROM signature WHERE talent_id = ? ORDER BY signed_at DESC",
+        (int(talent_id),)).fetchall()
 
 
 def void_signature(conn, signature_id: int, *, by: str, reason: str) -> bool:

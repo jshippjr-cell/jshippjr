@@ -68,7 +68,67 @@
       </form>
     </div>
     <div style="margin-top:12px">
-      <form method="post" action="/talent/{{ t.id }}/agreement">
+      {# The agreement the writer actually signed — the thing the clearance certificate
+         stands on. The manual "mark executed" tick is still here BELOW it, because a
+         paper agreement signed before this existed is a real agreement; but a signature
+         in the portal is what it now looks like when the system has seen the document. #}
+      {% if composer_sig %}
+      <div style="border:1px solid {{ '#bcdcc7' if composer_sig_valid else '#e6c8b0' }};
+                  background:{{ '#f2f9f4' if composer_sig_valid else '#fbeee6' }};
+                  border-radius:10px;padding:12px 14px">
+        <div style="font-weight:750">
+          {{ '✓ Composer Agreement SIGNED' if composer_sig_valid
+             else '⚠ Signed — the agreement has since changed' }}
+          by {{ composer_sig['typed_name'] }}
+          {%- if composer_sig['signer_email'] %} · {{ composer_sig['signer_email'] }}{% endif %}</div>
+        <div class="muted small" style="margin-top:3px">{{ composer_sig_note }}</div>
+        {% if composer_sig['drawn_mark'] %}
+        <img src="{{ composer_sig['drawn_mark'] }}" alt="Signature of {{ composer_sig['typed_name'] }}"
+             style="display:block;max-width:200px;margin:8px 0 0;background:#fff;border:1px solid var(--line,#e7e1d8);border-radius:6px">
+        {% endif %}
+        <div class="muted fineprint mono" style="margin-top:6px;opacity:.7;word-break:break-all">
+          SHA-256 {{ composer_sig['digest'] }}</div>
+        {% if composer_counter %}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line,#e7e1d8)">
+          <b>✓ Countersigned</b> by {{ composer_counter['typed_name'] }} on
+          {{ composer_counter['signed_at'][:10] }} — signed by both parties.</div>
+        {% elif composer_sig_valid %}
+        <form method="post" action="/talent/{{ t.id }}/agreement/countersign"
+              style="margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line,#e7e1d8);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" name="typed_name" placeholder="Your name, to countersign"
+                 style="border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:7px 9px;font:inherit;min-width:200px">
+          <button class="btn tiny primary" type="submit">Countersign</button>
+        </form>
+        {% else %}
+        <div class="muted small" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line,#e7e1d8)">
+          <b>Countersigning is blocked.</b> The agreement has changed since they signed it —
+          ask them to sign the current version.</div>
+        {% endif %}
+        <details style="margin-top:10px">
+          <summary class="muted small" style="cursor:pointer">The signed agreement</summary>
+          <pre style="white-space:pre-wrap;font-size:12px;line-height:1.5;background:var(--surface-2,#faf3ee);border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:12px;margin:8px 0 0;overflow-x:auto">{{ agreement_text }}</pre>
+        </details>
+      </div>
+      {% else %}
+      {# Shown whether or not a portal link exists yet: "has this composer signed?" is a
+         question the operator has regardless, and hiding the answer behind a token they
+         had not issued meant the page said nothing at all about the agreement. #}
+      <div style="border:1px dashed var(--ember,#b34a21);border-radius:10px;padding:12px 14px">
+        <div style="font-weight:700">Composer Agreement not signed yet</div>
+        {% if portal_url %}
+        <p class="muted small" style="margin:4px 0 8px">Send them this — the agreement is
+          waiting there, and signing it satisfies the assignment gate.</p>
+        <input type="text" readonly value="{{ portal_url }}/agreement"
+               onclick="this.select()" class="mono"
+               style="width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px;font-size:12px">
+        {% else %}
+        <p class="muted small" style="margin:4px 0 0">Issue a portal link above and the
+          agreement goes with it — that is where they read and sign it.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <form method="post" action="/talent/{{ t.id }}/agreement" style="margin-top:10px">
         {% if agreement_executed_at %}
         <span class="pill sv-door">✓ Composer Agreement executed ({{ agreement_executed_at }}{% if agreement_ref %} — {{ agreement_ref }}{% endif %})</span>
         <input type="hidden" name="executed" value="0">
@@ -76,8 +136,8 @@
         {% else %}
         <span class="muted small">Composer Agreement + rate required before assignment — the rights chain starts here.</span>
         <input type="hidden" name="executed" value="1">
-        <input type="text" name="ref" placeholder="Where the signed copy lives (optional)" style="max-width:220px">
-        <button class="btn tiny" type="submit">Mark agreement executed</button>
+        <input type="text" name="ref" placeholder="Signed on paper? Note where it lives" style="max-width:220px">
+        <button class="btn tiny" type="submit">Mark executed by hand</button>
         {% endif %}
       </form>
       {% if assignment_blockers %}

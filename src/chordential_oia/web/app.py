@@ -411,8 +411,8 @@ _DELIVERY_DELEGATE_RE = re.compile(r"^/project/\d+/delivery/delegate/?$")
 # recurred: reply/address/capture were omitted and broke in prod with the gate on;
 # tests/test_admin_gate.py now asserts every /creator/* route is covered).
 _CREATOR_PORTAL_RE = re.compile(
-    r"^/creator/[A-Za-z0-9_-]+"
-    r"(/project/\d+/(version|deliverable|capture|note/\d+/(reply|address)))?/?$")
+    r"^/creator/[A-Za-z0-9_-]+(/agreement(/sign)?"
+    r"|/project/\d+/(version|deliverable|capture|note/\d+/(reply|address)))?/?$")
 # Session Room (Living OS P5): the live-room poll + presence ping are hit from the
 # token-gated client portal too — each route token-validates in-route (a bad token
 # gets the operator-only view refused / 404), so the paths bypass the login gate.

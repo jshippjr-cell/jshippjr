@@ -440,6 +440,21 @@
 </div>
 {% endif %}
 
+{# The standing agreement. It gates being assigned at all, so it belongs where the
+   composer lands rather than behind a link they were emailed once. #}
+<div class="room" style="padding-top:18px;padding-bottom:0">
+  <a href="/creator/{{ token }}/agreement"
+     style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;text-decoration:none;
+            border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px 16px;
+            color:inherit">
+    <span style="font-weight:750">Composer Agreement</span>
+    <span style="opacity:.72;font-size:13.5px;flex:1;min-width:200px">
+      The standing terms — what you're paid, what you keep, what you warrant. Signing it
+      is what lets us put you on paid work. It books you for nothing.</span>
+    <span style="font-weight:700;opacity:.85">Read &amp; sign →</span>
+  </a>
+</div>
+
 {% if all_rooms|length > 1 %}
 <div class="room" style="padding-bottom:0">
   <div class="roomnav">

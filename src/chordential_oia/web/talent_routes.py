@@ -23,10 +23,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
-from .. import mailer, recruiting
+from .. import composer_agreement, mailer, recruiting, signing
 from ..models import MusicDiscipline
 from ..talent import Talent, normalize_url, profile_completeness
-from . import db
+from . import actor, db
 from .shell import public_base as _public_base, render, safe_local as _safe_local
 
 router = APIRouter(tags=["talent"])
@@ -174,8 +174,17 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
         agreement_ref = (row["agreement_ref"]
                          if "agreement_ref" in row.keys() else "") or ""
         assignment_blockers = db.talent_assignment_blockers(row)
+        # The signed agreement itself, not just the date someone typed about one.
+        agr = composer_agreement.build_agreement(row)
+        agreement_text = agr.signable_text()
+        composer_sig = db.latest_talent_signature(
+            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT)
+        composer_counter = db.latest_talent_signature(
+            conn, talent_id, signing.DOC_COMPOSER_COUNTERSIGN)
     finally:
         conn.close()
+    sig_state = signing.verify(
+        composer_sig["digest"] if composer_sig is not None else "", agreement_text)
     portal_url = f"{_public_base()}/creator/{portal_token}" if portal_token else None
     # Recruiting composer: a personalized, deterministic invite draft Jon can copy,
     # edit, and send to a prospect (machine proposes, Jon disposes).
@@ -189,6 +198,11 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
         portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
         agreement_executed_at=agreement_at, agreement_ref=agreement_ref,
         assignment_blockers=assignment_blockers,
+        agreement_text=agreement_text, composer_sig=composer_sig,
+        composer_counter=composer_counter,
+        composer_sig_note=signing.verdict_note(
+            sig_state, dict(composer_sig) if composer_sig is not None else None),
+        composer_sig_valid=(sig_state == signing.VALID),
         invite=invite, mail_configured=mailer.mail_configured(),
         invite_result=invite_result,
     )
@@ -326,6 +340,54 @@ def talent_set_w9(talent_id: int, received: str = Form("")):
     try:
         db.set_talent_w9(conn, talent_id,
                          _date.today().isoformat() if received == "1" else None)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+
+
+@router.post("/talent/{talent_id}/agreement/countersign")
+def talent_countersign_agreement(request: Request, talent_id: int,
+                                 typed_name: str = Form("")):
+    """The studio's half of the Composer Agreement.
+
+    Refused before the writer has signed, and refused once the document has MOVED since
+    they signed it — the same two rules the client proposal's countersignature follows.
+    Countersigning a text they never read would leave the two parties bound to different
+    documents, which is precisely what the digest exists to catch.
+    """
+    who = actor.identify(request).get("label", "") or ""
+    conn = db.connect()
+    try:
+        row = db.get_talent(conn, talent_id)
+        if row is None:
+            return HTMLResponse("Talent not found", status_code=404)
+        theirs = db.latest_talent_signature(
+            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT)
+        if theirs is None:
+            return RedirectResponse(f"/talent/{talent_id}?flag=not-signed#access",
+                                    status_code=303)
+        if db.latest_talent_signature(
+                conn, talent_id, signing.DOC_COMPOSER_COUNTERSIGN) is not None:
+            return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+        text = composer_agreement.build_agreement(row).signable_text()
+        if signing.verify(theirs["digest"], text) != signing.VALID:
+            return RedirectResponse(f"/talent/{talent_id}?flag=superseded#access",
+                                    status_code=303)
+        try:
+            sig = signing.build_signature(
+                doc_kind=signing.DOC_COMPOSER_COUNTERSIGN,
+                talent_id=talent_id,
+                document_text=text,
+                signer_name=who or "Chordential",
+                typed_name=(typed_name.strip() or who or "Chordential"),
+                actor=who,
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                terms_snapshot={"countersigns": theirs["digest"]},
+            )
+        except ValueError as exc:
+            return HTMLResponse(str(exc), status_code=400)
+        db.record_signature(conn, sig)
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)

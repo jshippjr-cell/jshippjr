@@ -55,14 +55,24 @@ DOC_PROPOSAL = "discovery_proposal"
 # rather than a second row of the client's, so `latest_opportunity_signature` keeps
 # answering "did the client sign?" without having to guess which row is whose.
 DOC_PROPOSAL_COUNTERSIGN = "discovery_proposal_countersign"
+# The supply side of the same business. The Clearance Certificate warrants to a BUYER
+# that nothing in the work needs anyone else's clearance; the only thing that can make
+# that true is the writer having warranted it first, in something they signed. Until
+# this existed the certificate's backing was a checkbox an operator ticked about a
+# document the system had never seen.
+DOC_COMPOSER_AGREEMENT = "composer_agreement"
+DOC_COMPOSER_COUNTERSIGN = "composer_agreement_countersign"
 DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
-             DOC_PROPOSAL_COUNTERSIGN)
+             DOC_PROPOSAL_COUNTERSIGN, DOC_COMPOSER_AGREEMENT,
+             DOC_COMPOSER_COUNTERSIGN)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
     DOC_DELIVERY_ACCEPTANCE: "Delivery acceptance",
     DOC_PROPOSAL: "Discovery Summary & Proposal",
     DOC_PROPOSAL_COUNTERSIGN: "Discovery Summary & Proposal (countersigned)",
+    DOC_COMPOSER_AGREEMENT: "Composer Agreement",
+    DOC_COMPOSER_COUNTERSIGN: "Composer Agreement (countersigned)",
 }
 
 # The consent a signer is shown and agrees to. Recorded VERBATIM on the signature, not
@@ -131,6 +141,9 @@ class Signature:
     # refuses a signature attached to neither, because a signature nothing can be found
     # by is a record that will never be produced in the dispute it was kept for.
     opportunity_id: int = 0
+    # …or a writer, for the supply-side agreement. Exactly one of the three subjects is
+    # set; `build_signature` refuses a signature attached to none of them.
+    talent_id: int = 0
     ip_fingerprint: str = ""
     user_agent: str = ""
     token_fingerprint: str = ""
@@ -160,6 +173,7 @@ def build_signature(
     doc_kind: str,
     project_id: int = 0,
     opportunity_id: int = 0,
+    talent_id: int = 0,
     document_text: str,
     signer_name: str,
     signer_email: str = "",
@@ -185,13 +199,14 @@ def build_signature(
         raise ValueError("refusing to sign an empty document")
     if not (typed_name or "").strip():
         raise ValueError("refusing to record a signature with no typed name")
-    if not int(project_id or 0) and not int(opportunity_id or 0):
+    if not any((int(project_id or 0), int(opportunity_id or 0), int(talent_id or 0))):
         raise ValueError("refusing to sign a document attached to nothing")
     return Signature(
         doc_kind=doc_kind,
         doc_label=DOC_LABELS[doc_kind],
         project_id=int(project_id or 0),
         opportunity_id=int(opportunity_id or 0),
+        talent_id=int(talent_id or 0),
         digest=document_digest(document_text),
         signer_name=(signer_name or "").strip(),
         signer_email=(signer_email or "").strip().lower(),
