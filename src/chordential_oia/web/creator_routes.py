@@ -139,7 +139,15 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
     delivery state, the versions THIS creator can submit/see, and the client's
     review feedback on the current version (read-only)."""
     out = []
+    # ONE ROOM PER PROJECT, not per assignment row. A creator wearing three hats on one
+    # engagement — composer, editor, mixer — got three identical rooms stacked down the
+    # page, the same picture and the same take rendered three times. Reported live. The
+    # engagement is the room; the hats are a line in it.
+    seen = {}
     for a in db.list_talent_assignments(conn, talent_id):
+        if a["project_id"] in seen:
+            seen[a["project_id"]]["roles"].append(a["role"])
+            continue
         delivery = db.get_delivery(conn, a["project_id"])
         prow = db.get_project(conn, a["project_id"])
         # Once the client approves the master (creative lock), the composer's job shifts
@@ -162,9 +170,11 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
                     "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
                     "pending": (d["asset"] or "").strip().lower() in pending_labels,
                 })
-        out.append({
+        entry = {
             "project_id": a["project_id"],
             "role": a["role"],
+            # Every hat this creator wears on this engagement, in assignment order.
+            "roles": [a["role"]],
             "client": a["client"],
             "need": a["need"],
             "deadline": a["deadline"],
@@ -195,7 +205,9 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
             "cues": db.get_cues(conn, a["project_id"]),
             # Phase 4 §13 — the private Capture shelf (composer + studio only).
             "captures": db.get_captures(conn, a["project_id"]),
-        })
+        }
+        seen[a["project_id"]] = entry
+        out.append(entry)
     # Needs-me-first (composer review P1): rooms owing the composer work come
     # before in-motion rooms; delivered rooms sink to the bottom.
     def _urgency(v):
@@ -204,6 +216,11 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
                     or (not v["versions"] and not v["pending"] and not closed))
         return 2 if closed else (0 if needs_me else 1)
     out.sort(key=_urgency)
+    # "Composer · Editor · Mixer" — one line, order preserved, duplicates dropped.
+    for v in out:
+        uniq = list(dict.fromkeys(r for r in v["roles"] if (r or "").strip()))
+        v["roles"] = uniq
+        v["role"] = " · ".join(uniq) or v["role"]
     return out
 
 

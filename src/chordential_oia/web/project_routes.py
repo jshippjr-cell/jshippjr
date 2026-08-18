@@ -1939,9 +1939,28 @@ def review_comment(
 _PRESENCE_TTL = 90            # seconds; single-worker deployment, honest scope
 
 
-def _session_role(conn, project_id: int, k: str, r: str):
-    """Resolve the caller's room role. A valid share/reviewer token → client;
-    no token → operator (the login gate already protected the path)."""
+def _session_role(conn, project_id: int, k: str, r: str, t: str = ""):
+    """Resolve the caller's room role.
+
+    A talent portal token → **talent**, but only for a project they are actually
+    assigned to; a valid share/reviewer token → client; no token → operator (the login
+    gate already protected the path).
+
+    The talent arm did not exist, so the one person doing the work could not join the
+    room the work happens in: the composer's portal never showed who else was there and
+    never appeared to anyone else. Reported live — *"as i and the composer mixer editor
+    log in to the portal we can all see notes and comments"*. The assignment check is
+    the point: a portal token is a credential for a CREATOR, not for every project.
+    """
+    if t:
+        row = db.get_talent_by_portal_token(conn, t)
+        if row is None:
+            return None, ""
+        assigned = any(int(a["talent_id"] or 0) == int(row["id"])
+                       for a in db.list_assignments(conn, project_id))
+        if not assigned:
+            return None, ""
+        return "talent", (row["name"] or "Creator")
     if k or r:
         ok, reviewer = _access_ok(conn, project_id, k, r)
         if not ok:
@@ -1951,10 +1970,11 @@ def _session_role(conn, project_id: int, k: str, r: str):
 
 
 @router.get("/project/{project_id}/session.json")
-def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = ""):
+def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = "",
+                      t: str = ""):
     conn = db.connect()
     try:
-        role, _name = _session_role(conn, project_id, k, r)
+        role, _name = _session_role(conn, project_id, k, r, t)
         if role is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         events = [
@@ -1977,10 +1997,10 @@ def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = "")
 
 @router.post("/project/{project_id}/presence")
 def session_room_presence(project_id: int, k: str = Form(""), r: str = Form(""),
-                          name: str = Form("")):
+                          t: str = Form(""), name: str = Form("")):
     conn = db.connect()
     try:
-        role, fallback = _session_role(conn, project_id, k, r)
+        role, fallback = _session_role(conn, project_id, k, r, t)
     finally:
         conn.close()
     if role is None:

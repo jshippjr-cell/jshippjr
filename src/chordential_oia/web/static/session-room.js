@@ -25,9 +25,44 @@
     '<div class="sr-line">' +
     '<span class="sr-dot" aria-hidden="true"></span>' +
     '<span class="sr-label">Session live</span>' +
+    '<span class="sr-faces" aria-hidden="true"></span>' +
     '<span class="sr-who" aria-live="polite"></span></div>' +
     '<ul class="sr-feed" aria-live="polite"></ul>';
-  var who = root.querySelector(".sr-who"), feed = root.querySelector(".sr-feed");
+  var who = root.querySelector(".sr-who"), feed = root.querySelector(".sr-feed"),
+      faces = root.querySelector(".sr-faces");
+
+  /* A face per person in the room. Names, not accounts — the client is a buyer with a
+     link and the creator is a token, so identity here is the name they are known by.
+     The colour is DERIVED from that name, so the same person is the same colour on
+     every screen without anyone storing a preference. */
+  function initials(n) {
+    var parts = String(n || "?").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : ""))
+      .toUpperCase();
+  }
+  function hue(n) {
+    var h = 0, str = String(n || "");
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360;
+    return h;
+  }
+  function renderFaces(people) {
+    faces.innerHTML = "";
+    people.slice(0, 6).forEach(function (p) {
+      var el = document.createElement("span");
+      el.className = "sr-face";
+      el.textContent = initials(p.name);
+      el.title = p.name + " · " + p.role;
+      el.style.background = "hsl(" + hue(p.name) + ",58%,42%)";
+      faces.appendChild(el);
+    });
+    if (people.length > 6) {
+      var more = document.createElement("span");
+      more.className = "sr-face sr-face-more";
+      more.textContent = "+" + (people.length - 6);
+      faces.appendChild(more);
+    }
+  }
 
   var KIND_ICON = { comment: "💬", approval: "✓", version: "♪" };
   function addEvent(e) {
@@ -48,11 +83,15 @@
         if (!d || d.error) return;
         (d.events || []).forEach(addEvent);
         if (d.last) after = d.last;
-        var others = (d.presence || []).filter(function (p) {
+        var all = (d.presence || []);
+        var others = all.filter(function (p) {
           return !(p.name === name && p.role === role);
         });
+        /* Everyone, you included — the room should show you in it, the way a shared
+           document does. */
+        renderFaces(all.length ? all : [{ name: name, role: role }]);
         who.textContent = others.length
-          ? "in the room: " + others.map(function (p) {
+          ? "with you: " + others.map(function (p) {
               return p.name + " · " + p.role; }).join(", ")
           : "you're the only one here";
       }).catch(function () {});
