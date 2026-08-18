@@ -46,11 +46,22 @@ from typing import List, Optional
 
 from . import compensation
 
-#: Where arguments get settled. There is no honest default — inventing a jurisdiction
-#: for a contract someone signs is the same class of error as inventing a price. Unset,
-#: the agreement is NOT SIGNABLE (see :func:`is_signable`), because a cross-border
-#: perpetual copyright assignment with no stated law is a fight about which court before
-#: it is a fight about anything else.
+#: Where arguments get settled. ONE decision for the business, not one per project — a
+#: composer signs this once and it governs every engagement they take, so it follows
+#: where the STUDIO is, not where a client or a piece of work happens to be. Chordential
+#: operates from Miami, so Florida is the default and Miami-Dade is the forum.
+#:
+#: It was briefly unset and blocking, on the reasoning that inventing a jurisdiction is
+#: like inventing a price. That was right about invention and wrong about the question:
+#: the operator knows where they are, and a document that refuses to exist until an
+#: environment variable is exported is not safer, it is just stuck. The default is a real
+#: answer; the env var overrides it if the entity is registered elsewhere (a Delaware LLC,
+#: say) or counsel prefers another forum.
+DEFAULT_GOVERNING_LAW = "the State of Florida"
+#: The courts that hear it. Split from the law because a single string made the
+#: clause read "governed by the law of X, and both sides submit to the courts of X".
+DEFAULT_FORUM = "Miami-Dade County, Florida"
+FORUM_ENV = "CHORDENTIAL_FORUM"
 GOVERNING_LAW_ENV = "CHORDENTIAL_GOVERNING_LAW"
 
 # Capped so a freelancer can actually bear it. An uncapped warranty against a few
@@ -79,8 +90,15 @@ ACCEPTANCE_LIMITS = (
 
 
 def governing_law() -> str:
-    """The stated law and forum, or "" when the operator has not set one."""
-    return (os.environ.get(GOVERNING_LAW_ENV) or "").strip()
+    """The stated law and forum. Always a real answer — the env var overrides the
+    default, and an operator who blanks it deliberately gets the default back rather
+    than an unsignable document."""
+    return (os.environ.get(GOVERNING_LAW_ENV) or "").strip() or DEFAULT_GOVERNING_LAW
+
+
+def forum() -> str:
+    """The courts that hear a dispute."""
+    return (os.environ.get(FORUM_ENV) or "").strip() or DEFAULT_FORUM
 
 
 @dataclass
@@ -94,6 +112,7 @@ class ComposerAgreement:
     demo_fee: float = compensation.DEMO_FEE
     publisher_to_writers_pct: float = compensation.PUBLISHER_SPLIT_TO_WRITERS * 100.0
     law: str = ""
+    court: str = ""
     version: str = "2.0"
     notes: List[str] = field(default_factory=list)
 
@@ -359,8 +378,9 @@ class ComposerAgreement:
             "",
             "11. LAW, AND ARGUMENTS",
             f"This agreement is governed by the law of {self.law}, and both sides submit "
-            f"to the courts of {self.law}. Either side may still go to any court to stop "
-            f"a breach of clause 6 or to protect the rights granted in clauses 4 and 5.",
+            f"to the courts of {self.court}. Either side may still go to any court to "
+            f"stop a breach of clause 6 or to protect the rights granted in clauses 4 "
+            f"and 5.",
             "Before either side starts proceedings, they will spend 30 days trying to "
             "settle it — in writing first, then on a call.",
             "",
@@ -388,7 +408,8 @@ class ComposerAgreement:
 
 
 def build_agreement(talent_row=None, *, notes: Optional[List[str]] = None,
-                    law: Optional[str] = None) -> ComposerAgreement:
+                    law: Optional[str] = None,
+                    court: Optional[str] = None) -> ComposerAgreement:
     """The standing agreement for one writer.
 
     ``talent_row`` is a talent DB row (or anything with a ``name``). Everything else comes
@@ -404,6 +425,7 @@ def build_agreement(talent_row=None, *, notes: Optional[List[str]] = None,
     return ComposerAgreement(
         composer=name or "the writer",
         law=(law if law is not None else governing_law()),
+        court=(court if court is not None else forum()),
         notes=[str(n).strip() for n in (notes or []) if str(n).strip()],
     )
 
@@ -411,11 +433,10 @@ def build_agreement(talent_row=None, *, notes: Optional[List[str]] = None,
 def is_signable(agreement: Optional[ComposerAgreement] = None) -> bool:
     """May this be put in front of a writer to sign?
 
-    Only with a governing law set. A cross-border perpetual copyright assignment with no
-    stated law is a fight about which court before it is a fight about anything else, and
-    there is no honest default to fall back on — inventing a jurisdiction for a document
-    someone signs is the same class of error as inventing a price. So the document
-    refuses rather than degrading, which is the rule `signing_providers` already follows.
+    A governing law is required and now always present, so this is True in normal use.
+    It stays a check rather than an assumption because the law is threaded through
+    `build_agreement(law=...)`, and a caller that passes an empty string explicitly is
+    saying something — a contract with no stated forum must not collect a signature.
     """
     law = (agreement.law if agreement is not None else governing_law())
     return bool((law or "").strip())
@@ -426,5 +447,4 @@ def blocked_reason(agreement: Optional[ComposerAgreement] = None) -> str:
     if is_signable(agreement):
         return ""
     return (f"No governing law is set, so this agreement is not ready to sign. Set "
-            f"{GOVERNING_LAW_ENV} (for example \"the State of Tennessee\" or \"England "
-            f"and Wales\") to the law and courts that will settle any dispute.")
+            f"{GOVERNING_LAW_ENV} to the law and courts that will settle any dispute.")

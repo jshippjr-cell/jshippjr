@@ -159,7 +159,7 @@ def talent_create(
 
 
 @router.get("/talent/{talent_id}", response_class=HTMLResponse)
-def talent_detail(request: Request, talent_id: int, invite: str = ""):
+def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str = ""):
     invite_result = invite  # ?invite=<send-status> flash; renamed to avoid shadowing
     conn = db.connect()
     try:
@@ -175,8 +175,11 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
                          if "agreement_ref" in row.keys() else "") or ""
         assignment_blockers = db.talent_assignment_blockers(row)
         # The signed agreement itself, not just the date someone typed about one.
-        agr = composer_agreement.build_agreement(row)
-        agreement_text = agr.signable_text()
+        # NOT named `agr` — that is the query parameter carrying the send status, and a
+        # local of the same name shadowed it, so the page rendered a dataclass repr where
+        # the operator expected "sent to dale@example.com".
+        _agreement = composer_agreement.build_agreement(row)
+        agreement_text = _agreement.signable_text()
         composer_sig = db.latest_talent_signature(
             conn, talent_id, signing.DOC_COMPOSER_AGREEMENT)
         composer_counter = db.latest_talent_signature(
@@ -204,7 +207,7 @@ def talent_detail(request: Request, talent_id: int, invite: str = ""):
             sig_state, dict(composer_sig) if composer_sig is not None else None),
         composer_sig_valid=(sig_state == signing.VALID),
         invite=invite, mail_configured=mailer.mail_configured(),
-        invite_result=invite_result,
+        invite_result=invite_result, agr_result=agr,
     )
 
 
@@ -343,6 +346,53 @@ def talent_set_w9(talent_id: int, received: str = Form("")):
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+
+
+@router.post("/talent/{talent_id}/agreement/send")
+def talent_send_agreement(talent_id: int):
+    """Email the composer their agreement. We have their address — asking the operator to
+    copy a link out of the page and paste it into a mail client was work the product was
+    supposed to remove, and it is the step where "I'll do it later" happens.
+
+    Mints the portal token if there isn't one, so sending is a single decision rather
+    than a two-step ritual: issue a link, then remember to send it.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_talent(conn, talent_id)
+        if row is None:
+            return RedirectResponse("/talent", status_code=303)
+        name = (row["name"] or "").strip()
+        email = ((row["email"] if "email" in row.keys() else "") or "").strip()
+        already = db.latest_talent_signature(
+            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT) is not None
+        token = db.ensure_talent_portal_token(conn, talent_id)
+    finally:
+        conn.close()
+    if already:
+        return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+    if not email or not mailer.mail_configured() or not token:
+        # No address or no mail provider → say so; the link is on the page to copy.
+        return RedirectResponse(f"/talent/{talent_id}?agr=manual#access", status_code=303)
+    base = _public_base()
+    url = f"{base}/creator/{token}/agreement"
+    first = (name.split(" ")[0] if name else "there")
+    body = (
+        f"Hi {first},\n\n"
+        f"Before we can put you on paid work, we need our Composer Agreement signed. "
+        f"It's the standing terms — what you're paid, what you keep, and what you "
+        f"warrant about the music.\n\n"
+        f"Read and sign it here:\n{url}\n\n"
+        f"Two things worth knowing before you open it. It commits you to no work and "
+        f"guarantees you none — every engagement is offered and accepted separately. "
+        f"And you keep 100% of your writer's share, plus half the publisher's share, "
+        f"which is better than most houses will offer you.\n\n"
+        f"It takes about five minutes. Any questions, just reply to this.\n\n"
+        f"— Chordential"
+    )
+    status = mailer.send_email(email, "Your Composer Agreement — Chordential", body,
+                               html=mailer.branded_html(base, body))
+    return RedirectResponse(f"/talent/{talent_id}?agr={status}#access", status_code=303)
 
 
 @router.post("/talent/{talent_id}/agreement/countersign")

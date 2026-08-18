@@ -39,7 +39,7 @@ US co-owner can grant only non-exclusive licences.
 | 11 | No delivery spec, acceptance, or kill fee | Clauses 2A / 2B — 48k/24-bit, 5-working-day acceptance, 50% kill fee before delivery |
 | 12 | No moral-rights waiver (UK composers) | Clause 4A, with the brand and category disclosed before acceptance |
 | 13 | Credit promised on the client's behalf | Clause 7 — a promise to ask, and a promise to file the cue sheet |
-| 14 | No governing law, forum, or boilerplate | Clauses 11 / 12 — **and the document refuses to be signable until a law is set** |
+| 14 | No governing law, forum, or boilerplate | Clauses 11 / 12 — Florida law, Miami-Dade forum, overridable by env |
 | 15 | Survival list omitted the duty to pay | Clause 9 — payment clauses survive; clause 5 survives for the life of copyright |
 | 16 | Composer could not use their own work in a reel | Clause 4B |
 | 17 | Nothing stopped the composer competing with sold exclusivity | Clause 6C — 12 months, same category, narrow |
@@ -66,8 +66,13 @@ US co-owner can grant only non-exclusive licences.
 
 ## Still open — for counsel
 
-1. **Governing law and forum must be chosen.** Set `CHORDENTIAL_GOVERNING_LAW`. Until it
-   is set the agreement is not signable, by design.
+1. **Governing law and forum are set: the State of Florida, courts of Miami-Dade County**
+   (the studio operates from Miami). `CHORDENTIAL_GOVERNING_LAW` / `CHORDENTIAL_FORUM`
+   override them if the entity is registered elsewhere — a Delaware LLC being the usual
+   reason — or if counsel prefers another forum. **This item previously read "unsignable
+   until set", which the council flagged as stale: the code now defaults, `is_signable()`
+   is True, and the document is live.** Confirm the choice; it is one decision for the
+   business, not one per engagement.
 2. **The 17 U.S.C. §203 termination right** at ~35 years attaches to assignment (it would
    not to work-for-hire). Near-academic for campaign advertising, but it qualifies the
    word "Perpetuity" in `DEFAULT_LICENSE` and should be a recorded decision.
@@ -79,3 +84,22 @@ US co-owner can grant only non-exclusive licences.
    more than the protection.
 6. **Nothing here has been through retained counsel.** This review was a technical pass,
    not legal advice.
+
+
+---
+
+## Council review, 2026-08-18
+
+`docs/composer-agreement-council.md` — four seats plus the CEO, on whether v2.0 is the
+right *deal* rather than whether it is well drafted. It ratified the document with
+changes and left one standing dissent. What it found that the lawyer pass did not:
+
+- **Clause 10's cooperation duty triggers on a claim being MADE, not proven** — unpaid,
+  unbounded, surviving termination. Changed to paid at day rate where the warranty holds.
+- **No force majeure and no cure period anywhere in v2.0.** A writer who delivers 90% and
+  is hospitalised gets zero under clause 2B.
+- **Clause 6A's contributor release and 6B's AI disclosure list have no home in the
+  codebase** — zero matches outside the agreement text. A clause that cannot be performed
+  is worse than no clause; the release is now a blocking build before composer #1.
+- **Clause 3C has no de minimis and no end date**, so it obliges a full 3B statement on
+  trivial renewal sums for ever.

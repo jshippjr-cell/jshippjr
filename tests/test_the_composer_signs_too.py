@@ -436,3 +436,112 @@ def test_the_signed_copy_reaches_both_parties(gated, monkeypatch):
         assert "SIGNED COPY" in body and "COMPOSER AGREEMENT" in body
         assert "WHAT THE WRITER WARRANTS" in body
         assert len(body.split("Document digest (SHA-256): ")[1][:64].strip()) == 64
+
+
+# ── sending it is one button, not a copy-paste ───────────────────────────────────────
+def test_the_operator_emails_the_agreement_rather_than_pasting_a_link(gated, monkeypatch):
+    """Reported: "we have the composer's email why are you requiring me to copy paste a
+    link". Copying a link out of a page and into a mail client is the step where "I'll do
+    it later" happens, and it is exactly the work this product exists to remove."""
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, subject, body, **kw: (sent.append((to, subject, body))
+                                                         or "sent"))
+    c, app_mod = gated
+    _as_operator(c)
+    tid, _token = _writer(app_mod)
+    r = c.post(f"/talent/{tid}/agreement/send", follow_redirects=False)
+    assert r.status_code == 303 and "agr=sent" in r.headers["location"]
+    assert len(sent) == 1
+    to, subject, body = sent[0]
+    assert to == "dale@example.com"
+    assert "Composer Agreement" in subject
+    assert "/agreement" in body, "the mail must carry the link they sign at"
+    # What a composer needs to know BEFORE opening a contract from a studio they do not
+    # know: it books them nothing, and the publishing term is better than most.
+    assert "commits you to no work" in body
+    assert "writer's share" in body
+
+
+def test_sending_mints_the_portal_link_so_it_is_one_decision(gated, monkeypatch):
+    """Issue a link, then remember to send it, is two steps and one of them gets
+    forgotten."""
+    from chordential_oia import mailer
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email", lambda *a, **kw: "sent")
+    c, app_mod = gated
+    _as_operator(c)
+    from chordential_oia.models import MusicDiscipline
+    from chordential_oia.talent import Talent
+    conn = app_mod.db.connect()
+    try:
+        tid = app_mod.db.insert_talent(conn, Talent(
+            name="No Token Yet", email="new@example.com",
+            disciplines=[MusicDiscipline.COMPOSITION]))
+        assert not (app_mod.db.get_talent(conn, tid)["portal_token"] or "")
+    finally:
+        conn.close()
+    c.post(f"/talent/{tid}/agreement/send", follow_redirects=False)
+    conn = app_mod.db.connect()
+    try:
+        assert (app_mod.db.get_talent(conn, tid)["portal_token"] or ""), (
+            "sending should mint the credential it is sending")
+    finally:
+        conn.close()
+
+
+def test_a_composer_with_no_email_is_told_not_guessed_at(gated, monkeypatch):
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, *a, **kw: sent.append(to) or "sent")
+    c, app_mod = gated
+    _as_operator(c)
+    from chordential_oia.models import MusicDiscipline
+    from chordential_oia.talent import Talent
+    conn = app_mod.db.connect()
+    try:
+        tid = app_mod.db.insert_talent(conn, Talent(
+            name="No Address", email="", disciplines=[MusicDiscipline.COMPOSITION]))
+    finally:
+        conn.close()
+    r = c.post(f"/talent/{tid}/agreement/send", follow_redirects=False)
+    assert "agr=manual" in r.headers["location"]
+    assert sent == [], "never guess at where a contract should go"
+    assert "no email on file" in c.get(f"/talent/{tid}?agr=manual").text
+
+
+def test_it_will_not_re_send_to_someone_who_already_signed(gated, monkeypatch):
+    from chordential_oia import mailer
+    sent = []
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, *a, **kw: sent.append(to) or "sent")
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+    _sign(c, token)
+    sent.clear()
+    _as_operator(c)
+    c.post(f"/talent/{tid}/agreement/send", follow_redirects=False)
+    assert sent == [], "asking a composer to sign what they already signed"
+
+
+def test_the_governing_law_is_the_studios_and_is_set(monkeypatch):
+    """Reported as confusing: is this per project? No — one decision for the business. A
+    composer signs once and it governs every engagement, so it follows where the STUDIO
+    is. It was briefly unset and blocking, which made the document refuse to exist until
+    an environment variable was exported — not safer, just stuck."""
+    # No env override here: the DEFAULT is what a fresh deploy uses, and that is the
+    # thing worth pinning.
+    monkeypatch.delenv("CHORDENTIAL_GOVERNING_LAW", raising=False)
+    monkeypatch.delenv("CHORDENTIAL_FORUM", raising=False)
+    text = composer_agreement.build_agreement({"name": "Dale"}).signable_text()
+    assert "governed by the law of" in text
+    assert composer_agreement.DEFAULT_GOVERNING_LAW in text
+    assert composer_agreement.DEFAULT_FORUM in text
+    # Law and forum are separate, or the clause reads "the law of X … the courts of X".
+    assert "the law of the State of Florida, and both sides submit to the courts of " \
+        "Miami-Dade County" in text

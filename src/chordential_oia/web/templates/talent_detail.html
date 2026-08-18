@@ -115,16 +115,36 @@
          had not issued meant the page said nothing at all about the agreement. #}
       <div style="border:1px dashed var(--ember,#b34a21);border-radius:10px;padding:12px 14px">
         <div style="font-weight:700">Composer Agreement not signed yet</div>
-        {% if portal_url %}
-        <p class="muted small" style="margin:4px 0 8px">Send them this — the agreement is
-          waiting there, and signing it satisfies the assignment gate.</p>
-        <input type="text" readonly value="{{ portal_url }}/agreement"
-               onclick="this.select()" class="mono"
-               style="width:100%;box-sizing:border-box;border:1px solid var(--line,#e7e1d8);border-radius:8px;padding:8px;font-size:12px">
+        {# One button. We have their address — asking the operator to copy a link out of
+           the page and paste it into a mail client is the step where "I'll do it later"
+           happens, and it is exactly the work this product exists to remove. Minting the
+           portal token is folded in, so sending is one decision rather than two. #}
+        {% if agr_result == 'sent' %}
+        <p class="muted small" style="margin:4px 0 8px">✓ Sent to <b>{{ t.email }}</b>.
+          They read and sign it in their portal; you'll get a copy when they do.</p>
+        {% elif agr_result == 'manual' %}
+        <p class="muted small" style="margin:4px 0 8px">Couldn't send{% if not t.email %} —
+          no email on file for them{% elif not mail_configured %} — no mail provider is
+          configured{% endif %}. The link below still works.</p>
+        {% elif agr_result %}
+        <p class="muted small" style="margin:4px 0 8px">Send reported
+          <b>{{ agr_result }}</b> — the link below still works.</p>
         {% else %}
-        <p class="muted small" style="margin:4px 0 0">Issue a portal link above and the
-          agreement goes with it — that is where they read and sign it.</p>
+        <p class="muted small" style="margin:4px 0 8px">Signing it satisfies the
+          assignment gate. They keep 100% of their writer's share and half the
+          publisher's — worth saying when you send it.</p>
         {% endif %}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <form method="post" action="/talent/{{ t.id }}/agreement/send" style="margin:0">
+            <button class="btn tiny primary" type="submit">
+              ✉ {{ 'Send again' if agr_result else 'Email the agreement' }}
+              {%- if t.email %} to {{ t.email }}{% endif %}</button>
+          </form>
+          {% if portal_url %}
+          <a class="btn tiny" href="{{ portal_url }}/agreement" target="_blank"
+             rel="noopener">Open it ↗</a>
+          {% endif %}
+        </div>
       </div>
       {% endif %}
 
