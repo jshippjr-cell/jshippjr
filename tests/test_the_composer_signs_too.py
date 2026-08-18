@@ -668,3 +668,34 @@ def test_a_hostile_mark_never_becomes_an_attachment(gated, monkeypatch):
     assert signing.drawn_mark_png("") is None
     mark, blob = _png_bytes()
     assert signing.drawn_mark_png(mark) == blob
+
+
+def test_the_room_stops_asking_once_she_has_signed(gated):
+    """The portal's agreement banner was unconditional.
+
+    A composer who had signed — and been countersigned — still landed on "Read & sign →"
+    and the line that signing "is what lets us put you on paid work", while working on a
+    paid project. Found walking the engagement end to end. Same class as the client being
+    told to release a proposal that was already released.
+    """
+    c, app_mod = gated
+    tid, token = _writer(app_mod)
+
+    before = c.get(f"/creator/{token}").text
+    assert "Read &amp; sign" in before, (
+        "an unsigned composer must still be asked — otherwise this proves nothing")
+
+    c.post(f"/creator/{token}/agreement/sign",
+           data={"typed_name": "Dale Malleh", "signer_email": "dale@example.com",
+                 "consent": "1"}, follow_redirects=False)
+    after = c.get(f"/creator/{token}").text
+    assert "Read &amp; sign" not in after, "it still told a signed composer to sign"
+    assert "Read your copy" in after
+    assert "We countersign shortly" in after
+
+    _as_operator(c)
+    c.post(f"/talent/{tid}/agreement/countersign", data={"typed_name": "Jon Shipp"},
+           follow_redirects=False)
+    executed = c.get(f"/creator/{token}").text
+    assert "in force" in executed
+    assert "countersigned by us" in executed

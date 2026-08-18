@@ -226,6 +226,14 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
                 conn, c["id"], signing.DOC_CONTRIBUTOR_RELEASE) is not None)
             for c in (dict(r) for r in db.list_contributors(conn, a["project_id"]))]
             for a in assignments}
+        # The banner below was unconditional: a composer who had signed, and been
+        # countersigned, was still told to "Read & sign" the agreement and that signing
+        # "is what lets us put you on paid work" — while working. Same class of error as
+        # the client being told to release a proposal already released.
+        agr_signed = db.latest_talent_signature(
+            conn, row["id"], signing.DOC_COMPOSER_AGREEMENT)
+        agr_counter = db.latest_talent_signature(
+            conn, row["id"], signing.DOC_COMPOSER_COUNTERSIGN)
     finally:
         conn.close()
     all_rooms = assignments
@@ -236,6 +244,7 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
         completeness=profile_completeness(t), assignments=assignments,
         all_rooms=all_rooms, focused=p, contributors=contributors,
         contributor_roles=contributor_release.ROLES,
+        agr_signed=agr_signed, agr_counter=agr_counter,
     )
 
 
@@ -338,7 +347,12 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
     return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
 
 
-def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) -> None:
+def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str,
+                      doc_title: str = "Composer Agreement",
+                      signer_note: str = ("It commits you to no work; each engagement is "
+                                          "offered and accepted separately."),
+                      operator_note: str = ("They are now assignable (the agreement half "
+                                            "of the gate).")) -> None:
     """Their copy, and the operator's. Retention is a requirement of the legal shape this
     claims (ESIGN/UETA), and a writer who signed a rights assignment should not have to
     come back to a link to read what they gave away.
@@ -348,6 +362,12 @@ def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) ->
     plain text with no image at all — and even inline it would not have shown, because
     the mark is stored as a data: URI and Gmail strips those out of <img>. A file arrives
     everywhere and is a thing either party can keep.
+
+    The document is a PARAMETER because the contributor release borrows this function.
+    Hard-coded, it told a session cellist she had signed the Composer Agreement, and told
+    the operator she was "now assignable" — she is not on the roster, is not assignable,
+    and did not sign that document. Naming the wrong instrument in the receipt for a
+    signature is the honesty rule broken in the one place it matters most.
     """
     from .. import mailer, signing as _signing
     from . import meeting_scheduler
@@ -365,22 +385,21 @@ def _mail_signed_copy(signer_mail: str, sig, doc_text: str, *, row_name: str) ->
         block += "\nThe drawn signature is attached as signature.png.\n"
     base = _pb()
     if signer_mail:
-        text = ("Thank you. Below is the agreement exactly as you signed it, for your "
-                "records. It commits you to no work; each engagement is offered and "
-                "accepted separately." + block)
+        text = (f"Thank you. Below is the {doc_title.lower()} exactly as you signed it, "
+                f"for your records. {signer_note}" + block)
         try:
-            mailer.send_email(signer_mail, "Your signed Composer Agreement — Chordential",
+            mailer.send_email(signer_mail, f"Your signed {doc_title} — Chordential",
                               text, html=mailer.branded_html(base, text), files=files)
         except Exception:  # noqa: BLE001
             pass
     op_mail = meeting_scheduler._operator_email()
     if op_mail:
-        text = (f"{sig.typed_name} signed the Composer Agreement.\n"
-                f"They are now assignable (the agreement half of the gate).\n"
+        text = (f"{sig.typed_name} signed the {doc_title}.\n"
+                f"{operator_note}\n"
                 f"{base}/talent" + block)
         try:
             mailer.send_email(op_mail,
-                              f"✍ Composer Agreement signed — {row_name or sig.typed_name}",
+                              f"✍ {doc_title} signed — {row_name or sig.typed_name}",
                               text, html=mailer.branded_html(base, text), files=files)
         except Exception:  # noqa: BLE001
             pass

@@ -448,10 +448,19 @@
             border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px 16px;
             color:inherit">
     <span style="font-weight:750">Composer Agreement</span>
+    {% if agr_signed %}
+    <span style="opacity:.72;font-size:13.5px;flex:1;min-width:200px">
+      {% if agr_counter %}Signed by you and countersigned by us on
+        {{ agr_counter['signed_at'][:10] }} — in force.{% else %}You signed this on
+        {{ agr_signed['signed_at'][:10] }}. We countersign shortly; nothing is needed
+        from you.{% endif %}</span>
+    <span style="font-weight:700;opacity:.85">✓ Read your copy →</span>
+    {% else %}
     <span style="opacity:.72;font-size:13.5px;flex:1;min-width:200px">
       The standing terms — what you're paid, what you keep, what you warrant. Signing it
       is what lets us put you on paid work. It books you for nothing.</span>
     <span style="font-weight:700;opacity:.85">Read &amp; sign →</span>
+    {% endif %}
   </a>
 </div>
 

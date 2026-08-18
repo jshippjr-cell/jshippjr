@@ -279,3 +279,44 @@ def test_the_console_names_who_is_outstanding(gated):
     page = c.get(f"/project/{pid}/delivery").text
     assert "release" in page and "Ana Ruiz" in page
     assert "cannot be signed until" in page
+
+
+def test_the_release_is_not_emailed_as_a_composer_agreement(gated, monkeypatch):
+    """A session player's receipt must name the document she signed.
+
+    It borrowed the Composer Agreement's mail wholesale, so a cellist was sent "Your
+    signed Composer Agreement" and the operator was told she was "now assignable" — she
+    is not on the roster and cannot be assigned to anything. A receipt for a signature
+    that names the wrong instrument is the honesty rule broken where it matters most.
+    """
+    from chordential_oia import mailer
+    c, app_mod = gated
+    pid, _tid, token = _project_and_composer(app_mod)
+    _name_one(c, token, pid)
+    conn = app_mod.db.connect()
+    try:
+        row = app_mod.db.list_contributors(conn, pid)[0]
+    finally:
+        conn.close()
+
+    sent = []
+    monkeypatch.setenv("CHORDENTIAL_OPERATOR_EMAIL", "jon@chordential.com")
+    monkeypatch.setattr(mailer, "mail_configured", lambda: True)
+    monkeypatch.setattr(mailer, "send_email",
+                        lambda to, subject, body, **kw: (
+                            sent.append((to, subject, body)) or "sent"))
+    c.post(f"/contributor/{row['token']}/sign",
+           data={"typed_name": "Ana Ruiz", "signer_email": "ana@example.com",
+                 "consent": "1"}, follow_redirects=False)
+
+    assert sent, "she signed a rights assignment and got no copy of it"
+    for _to, subject, body in sent:
+        assert "Composer Agreement" not in subject, f"wrong document named: {subject!r}"
+        assert "Composer Agreement" not in body
+        assert "now assignable" not in body, (
+            "a contributor is not a roster creator and cannot be assigned")
+    signer = [s for s in sent if s[0] == "ana@example.com"]
+    operator = [s for s in sent if s[0] == "jon@chordential.com"]
+    assert signer and "Contributor Release" in signer[0][1]
+    assert operator and "Contributor Release" in operator[0][1]
+    assert "not about your fee" in signer[0][2] or "not about your fee" in signer[0][2].lower()

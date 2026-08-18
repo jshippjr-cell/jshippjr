@@ -93,5 +93,15 @@ def contributor_sign(request: Request, token: str, typed_name: str = Form(""),
         signer_mail = sig.signer_email
     finally:
         conn.close()
-    _mail_signed_copy(signer_mail, sig, text, row_name=sig.signer_name)
+    # Name the document they actually signed. This borrowed the Composer Agreement's
+    # copy, so a session player was emailed "Your signed Composer Agreement" and the
+    # operator was told they were "now assignable" — neither is true of someone who
+    # played on one session and is not on the roster.
+    _mail_signed_copy(
+        signer_mail, sig, text, row_name=sig.signer_name,
+        doc_title="Contributor Release",
+        signer_note=("It covers your contribution to this one piece of work. It is not "
+                     "about your fee, which stays between you and whoever booked you."),
+        operator_note=(f"{rel.role} on {rel.work or 'the project'} — the chain of title "
+                       f"for this work is one release less exposed."))
     return RedirectResponse(f"/contributor/{token}", status_code=303)
