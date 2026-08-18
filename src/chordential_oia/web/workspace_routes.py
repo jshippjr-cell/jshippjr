@@ -308,14 +308,21 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
         if not consent.strip() or not typed_name.strip():
             return RedirectResponse(f"/workspace/{token}?flag=sign-incomplete#agreement",
                                     status_code=303)
-        # Already signed → don't stack a second signature for a double submit. The
-        # existing one stands; signing again is not an edit, and the append-only table
-        # would otherwise grow a duplicate every time a client refreshed the page.
-        if db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL) is not None:
-            return RedirectResponse(f"/workspace/{token}#agreement", status_code=303)
         ctx = _live_brief_ctx(conn, opp_id)
         doc = (ctx or {}).get("doc")
         agr = getattr(doc, "agreement", None) if doc is not None else None
+        # A signature already covering THIS text → nothing to do. A double submit or a
+        # refresh must not stack a duplicate onto an append-only table.
+        #
+        # But a signature covering an OLDER text must not block the new one. The whole
+        # correction flow ends here: the client flags something, the summary is fixed,
+        # and they come back to accept the fix. Refusing on "already signed" left them
+        # looking at a superseded signature with no way forward, and the deal stuck.
+        # The old row stays — the record is that they signed v1 and then v2.
+        prior = db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL)
+        if prior is not None and agr is not None and signing.verify(
+                prior["digest"], agr.signable_text()) == signing.VALID:
+            return RedirectResponse(f"/workspace/{token}#agreement", status_code=303)
         if agr is None:
             # No price, no terms → nothing to agree to. Refusing is the point: a
             # signature collected here would look like a commitment to a number that
@@ -585,21 +592,30 @@ def _live_brief_ctx(conn, opp_id):
     # the sign route rebuild this identically and get the same digest.
     attach_agreement(doc, deposit_amount=deposit_amount)
     sig = db.latest_opportunity_signature(conn, opp_id, signing.DOC_PROPOSAL)
+    sig_state = signing.verify(
+        sig["digest"] if sig is not None else "",
+        doc.agreement.signable_text() if doc.agreement else None)
     return {
         "row": row, "doc": doc, "overrides": overrides,
         "request_url": f"/opportunity/{opp_id}/request?k={token}",
         "deposit_amount": deposit_amount, "deposit_invoice_id": deposit_invoice_id,
         "edit": False, "public": True, "embedded": True,
-        # The client's own copy is the ONE place the signature block is live.
-        "sign_url": f"/workspace/{token}/sign" if doc.show_agreement and sig is None else "",
+        # The client's own copy is the ONE place the signature block is live. It stays
+        # live when the existing signature is SUPERSEDED: a corrected document is a
+        # different document, and the client must be able to sign the new one. Without
+        # this a client who signed, was sent a fix, and came back to accept it found her
+        # old signature marked superseded and NO WAY TO SIGN — the one path the
+        # correction flow exists to reach.
+        "sign_url": (f"/workspace/{token}/sign"
+                     if doc.show_agreement and sig_state != signing.VALID else ""),
         "proposal_signature": sig,
         "proposal_signature_mark": (
             (sig["drawn_mark"] if "drawn_mark" in sig.keys() else "") if sig is not None
             else ""),
+        "proposal_signature_superseded": (sig is not None
+                                          and sig_state == signing.SUPERSEDED),
         "proposal_signature_note": signing.verdict_note(
-            signing.verify(sig["digest"] if sig is not None else "",
-                           doc.agreement.signable_text() if doc.agreement else None),
-            dict(sig) if sig is not None else None),
+            sig_state, dict(sig) if sig is not None else None),
         "chip_library": {}, "section_family": {}, "custom_chips": [], "delivery_templates": {},
     }
 

@@ -499,7 +499,7 @@
     {% if doc.show_agreement and doc.agreement %}
     <section class="block" id="agreement">
       <h2 class="sec">Agreement</h2>
-      {% if proposal_signature %}
+      {% if proposal_signature and not proposal_signature_superseded %}
       {# Signed. The verdict is the honest one, including SUPERSEDED — a client whose
          signed terms were edited afterwards is entitled to see that they were. #}
       <div class="docusign" style="border-style:solid">
@@ -512,6 +512,18 @@
       </div>
       {% else %}
       <div class="docusign">
+        {% if proposal_signature_superseded %}
+        {# They signed an earlier version and we corrected it. Show WHAT they signed
+           before, so nobody is asked to sign again without being told why. #}
+        <div style="background:#fbeee6;border:1px solid #e6c8b0;border-radius:8px;padding:12px 14px;margin:0 0 14px">
+          <div style="font-weight:750">This has been updated since you signed it</div>
+          <p class="fineprint" style="margin:4px 0 0">
+            {{ proposal_signature['typed_name'] }} signed an earlier version on
+            {{ proposal_signature['signed_at'][:10] }}. We have corrected the document,
+            so that signature no longer covers it. Please read it again and re-sign —
+            your earlier signature is kept on record either way.</p>
+        </div>
+        {% endif %}
         <p style="margin:0 0 10px">{{ acceptance_text }}</p>
         <p class="fineprint" style="margin:0 0 12px">{{ acceptance_limits }}</p>
         {% if sign_url %}

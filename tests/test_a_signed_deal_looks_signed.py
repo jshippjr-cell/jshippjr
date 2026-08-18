@@ -329,3 +329,86 @@ def test_a_captured_sentence_is_folded_in_without_mangling_it(client):
     assert "from Final delivery" not in completion, "mid-sentence capital survived"
     assert "from final delivery" in completion
     assert completion.rstrip().endswith(".")
+
+
+# ── a corrected document can be signed again ─────────────────────────────────────────
+def test_a_client_can_re_sign_a_document_we_corrected(client):
+    """The whole correction flow ends here and could not finish.
+
+    A client signs, we fix something, and they come back to accept the fix. The sign
+    route refused on "already signed" — which is right for a double submit and wrong for
+    a document that has legitimately MOVED — and the form was not rendered at all, since
+    `sign_url` was set only when no signature existed. So the client saw her own
+    signature marked superseded and no way forward, and the deal stopped there.
+    """
+    from chordential_oia.signing import document_digest
+    from chordential_oia.web.opportunity_ops import agreement_doc_for
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        first = app_mod.db.latest_opportunity_signature(conn, oid, DOC_PROPOSAL)["digest"]
+        app_mod.db.update_doc_override(
+            conn, oid, "understanding", "Corrected: a six-minute film, not three.")
+    finally:
+        conn.close()
+
+    page = c.get(f"/workspace/{token}").text
+    assert "This has been updated since you signed it" in page, (
+        "the client is asked to sign again without being told why")
+    assert "Sign and accept" in page, "there is no way to sign the corrected document"
+
+    r = _sign(c, token, name="Nadia Okonjo")
+    assert r.status_code == 303
+    conn = app_mod.db.connect()
+    try:
+        rows = app_mod.db.list_opportunity_signatures(conn, oid, DOC_PROPOSAL)
+        current = app_mod.db.latest_opportunity_signature(conn, oid, DOC_PROPOSAL)
+        _r, _o, _e, doc, _d = agreement_doc_for(conn, oid)
+    finally:
+        conn.close()
+    assert len(rows) == 2, "the earlier signature must be KEPT — the table is a record"
+    assert current["digest"] != first
+    assert current["digest"] == document_digest(doc.agreement.signable_text())
+    assert "unchanged since signing" in c.get(f"/opportunity/{oid}").text
+
+
+def test_signing_the_same_document_twice_still_does_not_stack(client):
+    """The guard that was right, kept: a refresh or a double submit must not append a
+    duplicate to a table that is append-only by design."""
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _sign(c, token)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        rows = app_mod.db.list_opportunity_signatures(conn, oid, DOC_PROPOSAL)
+    finally:
+        conn.close()
+    assert len(rows) == 1
+
+
+def test_countersigning_becomes_possible_again_after_a_re_sign(client):
+    """The state this unblocks. Countersigning is refused on a moved document — correct —
+    so without a re-sign path a corrected deal could never be countersigned at all."""
+    c, app_mod = client
+    oid, token = _deal(app_mod)
+    _sign(c, token)
+    conn = app_mod.db.connect()
+    try:
+        app_mod.db.update_doc_override(conn, oid, "understanding", "Corrected scope.")
+    finally:
+        conn.close()
+    assert "Countersigning is blocked" in c.get(f"/opportunity/{oid}").text
+    _sign(c, token)
+    c.post(f"/opportunity/{oid}/countersign",
+           data={"typed_name": "Jon Shipp", "consent": "1"}, follow_redirects=False)
+    conn = app_mod.db.connect()
+    try:
+        cs = app_mod.db.latest_opportunity_signature(
+            conn, oid, DOC_PROPOSAL_COUNTERSIGN)
+        theirs = app_mod.db.latest_opportunity_signature(conn, oid, DOC_PROPOSAL)
+    finally:
+        conn.close()
+    assert cs is not None and cs["digest"] == theirs["digest"]
