@@ -24,7 +24,7 @@ import hmac
 import json
 import math
 import os
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -2123,6 +2123,62 @@ async def review_upload_reference(
             _notify_operator_review, project_id, project,
             f"Client reference · {_campaign_label(project) if project else 'campaign'}",
             f"{ref['by']} added '{ref['label']}'. Listen before the composer leans on it.")
+    return _review_redirect(project_id, k, name=author, email=email, r=r)
+
+
+@router.post("/project/{project_id}/review/assets")
+async def review_upload_assets(
+    request: Request, project_id: int, k: str = Form(""), r: str = Form(""),
+    author: str = Form(""), email: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    ref_file: List[UploadFile] = File(default=[]),
+    ref_label: List[str] = Form(default=[]),
+):
+    """Everything the client is staging, sent in ONE act.
+
+    The cut and the references had a submit button each, and each one navigated. Reported
+    live: *"I had a video loaded in the box 'drop your cut here' but that disappeared
+    because I clicked add a reference."* Two forms on one card is a trap — the browser
+    reloads on the first submit and silently discards whatever was chosen in the other.
+    Worse, each button also DELIVERED: there was no way to gather a cut and two
+    references and hand them over together, which is how anyone actually briefs.
+
+    So the page stages, and this is the one door. Every part is optional; what arrives
+    is what was staged. The per-file routes stay — they are still the operator's door and
+    a no-JS fallback — but the client's card posts here.
+    """
+    conn = db.connect()
+    pic, refs = None, []
+    try:
+        ok, reviewer = _access_ok(conn, project_id, k, r)
+        if not ok:
+            return HTMLResponse("Not found", status_code=404)
+        who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
+        if file is not None and (file.filename or "").strip():
+            pic = await _store_picture(conn, project_id, file, who)
+        for i, rf in enumerate(ref_file or []):
+            if rf is None or not (rf.filename or "").strip():
+                continue
+            label = (ref_label[i] if i < len(ref_label) else "") or ""
+            stored = await _store_reference(conn, project_id, rf, who, label=label)
+            if stored is not None:
+                refs.append(stored)
+        project = db.get_project(conn, project_id)
+    finally:
+        conn.close()
+    # One handover, one notification — not one per file.
+    if pic is not None or refs:
+        camp = _campaign_label(project) if project else "campaign"
+        parts = []
+        if pic is not None:
+            parts.append(f"the cut ({pic.get('orig', 'picture')})")
+        if refs:
+            parts.append(f"{len(refs)} reference{'s' if len(refs) != 1 else ''}: "
+                         + ", ".join(f"'{x['label']}'" for x in refs))
+        await run_in_threadpool(
+            _notify_operator_review, project_id, project,
+            f"Client assets · {camp}",
+            f"{who} sent " + " and ".join(parts) + ".")
     return _review_redirect(project_id, k, name=author, email=email, r=r)
 
 

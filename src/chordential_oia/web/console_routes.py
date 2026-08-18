@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..matching import match_talent
 from ..talent import profile_completeness
-from . import (db, next_action, queue as queue_mod, relationships,
+from . import (db, next_action, queue as queue_mod, rehearsal, relationships,
                scheduler as scheduler_mod, sources, triage)
 from .buyer_intel import STAGES, days_since, relationship_for
 from .estimate import estimate_for
@@ -829,3 +829,22 @@ def queue_unsnooze(next: str = Form("/queue")):
     finally:
         conn.close()
     return RedirectResponse(_safe_next(next, "/queue"), status_code=303)
+
+
+@router.post("/rehearsal")
+def rehearsal_create():
+    """Create a rehearsal deal standing at the moment the Discovery Summary is sent.
+
+    The client experience could only be tested by walking a real funnel or practising on
+    a real buyer. This drops a deal in at the interesting step — the call already held,
+    so the summary is priced and signable — addressed to the operator's own inbox, so
+    every client email arrives here and every link in it is clickable. Marked
+    `source='rehearsal'` so it is never mistaken for pipeline, and deletable in one click
+    when the run is over.
+    """
+    conn = db.connect()
+    try:
+        opp_id = rehearsal.create(conn, db)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}?rehearsal=1", status_code=303)

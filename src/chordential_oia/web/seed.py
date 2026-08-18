@@ -579,6 +579,30 @@ def reset_and_seed(db_path: str = db.DEFAULT_DB_PATH) -> int:
 # in the opportunities table is build/demo placeholder data.
 _REAL_OPP_SOURCES = ("signal", "front_of_house", "lead_indicator")
 
+# The build's own placeholders, asked of the SEEDER rather than listed here.
+#
+# This used to be the inverse — "delete everything whose source is not one of three
+# known-real ones" — and that is a whitelist nobody could keep complete. `+ Add a deal`
+# writes source='manual', which was not on it, so **every deal typed in by hand was
+# deleted on the next boot**, and with autoDeploy that is every push. It went quietly:
+# the row and its project, proposals and outreach all went together, and the dashboard
+# afterwards looked merely empty. Proven with a deal added through the real form and a
+# second startup.
+#
+# Identify what the build made, positively, and leave everything else alone. A source
+# the seeder stops using drops out of here by itself.
+def _demo_opp_sources() -> tuple:
+    try:
+        return tuple(sorted({(o.source or "") for o in gather_opportunities()}))
+    except Exception:  # noqa: BLE001 — a purge that cannot enumerate must delete nothing
+        return ()
+
+
+# Demo creators arrive either from `_TALENT_SEED` (no source at all) or from a registered
+# talent source (only "sample" ships). A creator who applied, or one the operator typed
+# in ("manual"), is neither.
+_DEMO_TALENT_SOURCES = ("", "sample", "demo_delivery")
+
 
 def seed_demo_enabled() -> bool:
     """Seed the demo dataset only when explicitly asked (dev/tests). Off by
@@ -594,11 +618,14 @@ def purge_demo_data(conn: sqlite3.Connection) -> int:
     never deletes opportunities created through the real flow (signal/lead
     promotes) or talent that applied. Returns how many opportunities were removed."""
     db.init_db(conn)
-    keep = ",".join("?" * len(_REAL_OPP_SOURCES))
+    sources = _demo_opp_sources()
+    if not sources:
+        return 0
+    mark = ",".join("?" * len(sources))
     demo = [
         r[0] for r in conn.execute(
-            f"SELECT id FROM opportunities WHERE IFNULL(source,'') NOT IN ({keep})",
-            _REAL_OPP_SOURCES,
+            f"SELECT id FROM opportunities WHERE IFNULL(source,'') IN ({mark})",
+            sources,
         ).fetchall()
     ]
     if not demo:
@@ -629,10 +656,15 @@ def purge_demo_data(conn: sqlite3.Connection) -> int:
     # All seeded talent is demo; keep only creators who actually applied — AND
     # anyone still assigned to a surviving project (deleting them would orphan
     # live assignments; Phase-2 watchlist: the seed-idempotency guard).
+    # Same correction on the supply side, and the same reason: this deleted every creator
+    # whose source was not exactly 'applicant', which included every one added by hand —
+    # their agreement, rate and portal token with them.
     try:
+        tmark = ",".join("?" * len(_DEMO_TALENT_SOURCES))
         conn.execute(
-            "DELETE FROM talent WHERE IFNULL(source,'') != 'applicant' "
-            "AND id NOT IN (SELECT talent_id FROM assignments WHERE talent_id IS NOT NULL)")
+            f"DELETE FROM talent WHERE IFNULL(source,'') IN ({tmark}) "
+            "AND id NOT IN (SELECT talent_id FROM assignments WHERE talent_id IS NOT NULL)",
+            _DEMO_TALENT_SOURCES)
     except Exception:
         pass
     conn.commit()

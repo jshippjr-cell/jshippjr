@@ -32,6 +32,10 @@ _HERE = os.path.dirname(__file__)
 
 #: The one Jinja environment. ``app.py`` adds the filters and globals.
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
+# Is the money seam live? Only the rehearsal banner asks, to warn that Pay deposit
+# opens a REAL Stripe checkout. Callable, so a test that flips the env sees it.
+templates.env.globals["payments_live"] = (
+    lambda: __import__("chordential_oia.payments", fromlist=["x"]).payments_status()["live"])
 
 
 def render(request: Request, name: str, **kw):

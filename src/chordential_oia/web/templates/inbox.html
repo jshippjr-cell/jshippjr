@@ -7,7 +7,13 @@
 {# Until this button existed there was no way to create an opportunity by hand at all:
    every one had to arrive as an inbound lead and be promoted, which is two pages and
    four steps for a referral or a test. #}
-<div style="display:flex;justify-content:flex-end;margin:0 0 12px">
+<div style="display:flex;justify-content:flex-end;gap:8px;margin:0 0 12px">
+  {# Walk the CLIENT's side without practising on a real buyer, and without building a
+     deal by hand to reach the only part worth testing. #}
+  <form method="post" action="/rehearsal" style="display:inline">
+    <button class="btn" type="submit"
+            title="A test deal addressed to your own inbox, standing at the moment the Discovery Summary is sent. Delete it when you're done.">🎭 Rehearsal deal</button>
+  </form>
   <a class="btn primary" href="/opportunity/new">+ Add a deal</a>
 </div>
 

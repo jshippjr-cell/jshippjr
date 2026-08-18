@@ -4,6 +4,28 @@
 {% block heading %}<a class="crumb" href="/inbox">Inbox</a> / {{ row['need'][:48] }}{% endblock %}
 {% block content %}
 
+{% if row['source'] == 'rehearsal' %}
+<div class="callout" style="background:#f4f0fb;border:1px solid #d6cbe8;color:#4a3a6b;margin-bottom:14px">
+  <span class="callout-ico">🎭</span>
+  <div>
+    <strong>This is a rehearsal.</strong> An invented buyer, addressed to
+    <strong>{{ row['contact_email'] or 'your own inbox' }}</strong> — so every client email
+    arrives with you and every link in it is one you can click. The call is already
+    recorded as held, which is what makes the summary priced and signable.
+    <div class="muted small" style="margin-top:6px">
+      Send it with <b>⋯ Actions → ✉ Email this</b>, then open <b>🌐 Client workspace</b> to
+      see exactly what they see. Sign it there as the client, countersign here, and the
+      deposit and picture requests appear.
+      {% if payments_live() %}
+      <br><b>Careful:</b> Stripe is live, so <b>Pay deposit</b> opens a real checkout for a
+      real card. Loading that page is the test — you don't have to finish it.
+      {% endif %}
+      <br>Delete the whole thing when you're done: <b>⋯ Actions → Delete</b>.
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if request.query_params.get('err') == 'deposit_unpaid' %}
 <div class="callout" style="background:#fbeee6;border:1px solid #e6c8b0;color:#8a4b1d;margin-bottom:14px">
   <span class="callout-ico">⏳</span> Production can't start yet — the client's <strong>deposit hasn't cleared</strong>.

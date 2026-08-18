@@ -236,7 +236,7 @@ def test_the_router_carries_the_whole_group():
     ("opportunity_routes.py", "/opportunity", 65),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post)
-    ("project_routes.py", "/project", 62),
+    ("project_routes.py", "/project", 63),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -274,6 +274,10 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     +2 for snoozing a Disposition Queue card and bringing them all back, +1 for
     fetching a call's transcript by hand instead of only via the background poller,
     +1 for the call prep sheet (Phase 0 of the Call Copilot, docs/discovery-copilot-plan.md),
+    +1 for the rehearsal deal, because the client's half of the product could only be
+    tested by walking a real funnel or practising on a real buyer,
+    +1 for handing over the client's cut and references in ONE act, because two submit
+    buttons on one card threw away whichever file the other was holding,
     +2 for adding a deal by hand — a form and its post, and until they existed there was no
     way to create an opportunity at all except promoting an inbound lead.
     Retiring
@@ -286,8 +290,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 280, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 280 — "
+    assert len(decls) == 282, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 282 — "
         f"a slice lost or gained a URL")
 
 
