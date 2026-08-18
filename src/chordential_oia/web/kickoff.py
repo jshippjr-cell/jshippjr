@@ -58,8 +58,14 @@ def _procurement_line(conn, db, opp) -> dict:
     return {"label": "Procurement", "state": "pending", "na_note": note}
 
 
-def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] = None) -> dict:
-    """Assemble the Production Readiness view. Pure reads; no new state written here."""
+def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] = None,
+                    portal_url: str = "") -> dict:
+    """Assemble the Production Readiness view. Pure reads; no new state written here.
+
+    ``portal_url`` is the client's own token-gated delivery portal, passed in rather than
+    minted here so this module stays read-only. Without it the assets action still names
+    what is needed; with it, the client can act on it.
+    """
     ci_view = ci_view or {}
     ci_fields = dict(ci_view.get("fields") or {})
     review = commercial.review_from_json(review_row["doc_json"]) if review_row else None
@@ -96,6 +102,8 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
     _prop = db.proposal_for_project(conn, project["id"]) if project else None
     owed = int(_prop["deposit_amount"] or 0) if _prop is not None else 0
     deposit = _deposit_state(invoices, owed)
+    _delivery = db.get_delivery(conn, project["id"]) if project else {}
+    has_picture = bool((_delivery or {}).get("picture"))
     timeline = (ci_fields.get("deadline") or (review.timeline if review else "") or "").strip()
     kickoff_done = bool(project and (project["kickoff_completed_at"]
                                      if "kickoff_completed_at" in project.keys() else None))
@@ -106,16 +114,33 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
          "state": {"received": "done", "awaiting": "pending", "none": "na"}[deposit],
          "na_note": "No deposit required" if deposit == "none" else ""},
         _procurement_line(conn, db, opp),
+        {"label": "Your picture received",
+         "state": "done" if has_picture else "pending"},
         {"label": "Team assigned", "state": "done" if team_assigned else "pending"},
         {"label": "Timeline confirmed", "state": "done" if timeline else "pending"},
         {"label": "Kickoff complete", "state": "done" if kickoff_done else "pending"},
     ]
 
     # ── Client actions remaining: only items the CLIENT owns and hasn't done ──
+    #
+    # The picture is one of them, and it was missing. The composer's session room is built
+    # around the client's cut — it renders "picture arrives with the client's cut" and
+    # waits — and the delivery portal has had the Drop that receives it all along. Nothing
+    # ever ASKED for it: Kickoff listed the deposit and nothing else, so a client whose
+    # deposit was settled read "Everything is ready" while the room their money had
+    # started sat empty, waiting on footage nobody had requested. Reported live.
+    #
+    # It is not gated on the deposit. Sending us the cut early costs the client nothing
+    # and is the single most useful thing they can do while we assign the composer.
     client_actions = []
     if deposit == "awaiting":
         client_actions.append({"label": "Send your deposit to confirm the booking",
                                "kind": "deposit"})
+    if project is not None and not has_picture:
+        client_actions.append({
+            "label": "Send us the cut your music is written to, and any references",
+            "kind": "assets", "url": portal_url,
+            "cta": "Upload your picture →" if portal_url else ""})
     all_ready = not client_actions
 
     # ── Upcoming milestones: the project's milestones, else the Review's schedule ──

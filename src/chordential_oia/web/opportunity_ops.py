@@ -284,6 +284,40 @@ def agreement_doc_for(conn, opp_id):
     return row, opp, ev, doc, deposit_amount
 
 
+def _ensure_proposal_for_project(conn, opp_id: int, project_id: int) -> Optional[int]:
+    """Persist the signed money as the project's Proposal row. Idempotent.
+
+    Countersigning is the award (ADR-0065), but the row every downstream money surface
+    reads is `proposals`: the workspace's Pay-deposit button, `/project/<id>/pay`, and
+    Kickoff's "Send your deposit to confirm the booking" all resolve the amount through
+    `proposal_for_project`. Only the older Commercial-Review path ever wrote one
+    (`_ensure_proposal_from_review`), so a deal closed the new way — client signs the
+    summary, we countersign — arrived at Kickoff with no proposal, which
+    `kickoff._deposit_state` reads as **no deposit required**. The client was shown
+    "Everything is ready", with no invoice, no Pay button and nothing to do, while the
+    acceptance text they had just signed promised a deposit invoice. Reported live.
+
+    The money comes from the SIGNED agreement's own band rather than a fresh quote, so
+    the invoice cannot name a number the client never agreed to. The caller has already
+    established the document still verifies against their signature.
+    """
+    from ..proposals import build_proposal
+    if db.proposal_for_project(conn, project_id) is not None:
+        return None
+    row, opp, ev, doc, _dep = agreement_doc_for(conn, opp_id)
+    if row is None:
+        return None
+    agr = getattr(doc, "agreement", None)
+    if agr is None or not getattr(agr, "price_low", None):
+        return None                      # nothing priced → nothing to invoice
+    qual, _scored = ev
+    est = _estimate_for_row(conn, row, opp, qual)
+    proposal = build_proposal(
+        opp, qual, est,
+        quote_band=(agr.price_low, agr.price_high or agr.price_low))
+    return db.insert_proposal(conn, project_id, opp_id, proposal)
+
+
 def _quote_band_for(conn, row, opp, est):
     """THE number we'd put in front of this buyer (ADR-0034) — the same call the
     client's Campaign Brief and Commercial Review render. Resolving it needs the DB

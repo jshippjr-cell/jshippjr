@@ -193,6 +193,14 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   a template, because it is part of the signed document. A drawn signature (finger/mouse)
   is optional, validated by `signing.clean_drawn_mark` or dropped, and excluded from the
   digest. A signature hangs off an opportunity OR a project, never both.
+- **Closing by signature takes the same road as closing by review** (ADR-0067):
+  countersigning writes the project's `proposals` row via
+  `opportunity_ops._ensure_proposal_for_project` — from the SIGNED band, never a fresh
+  quote — and `_workspace_signals` reports `commercial_approved`, so the deal reaches
+  KICKOFF, which is the only surface that asks the client for anything. Kickoff asks for
+  the picture as well as the deposit (never gated on it), and a client action that can be
+  taken carries the link that takes it. A second way to close a deal is not done when the
+  signature is stored: walk the client's path after it.
 - **Scope carries its own evidence:** `estimation.Scope` / `estimation.Session`
   (ADR-0058) each pair a value with whether the brief STATED it. Anything assumed is
   named on the surface that shows the number. Mirror this for any inferred input a

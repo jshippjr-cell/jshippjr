@@ -22,7 +22,10 @@
     <section class="block ko-actions">
       <h2 class="sec">A couple of things from you</h2>
       <ul class="ko-todo">
-        {% for a in k.client_actions %}<li>{{ a.label }}</li>{% endfor %}
+        {# An action the client can take HERE carries its own door. Listing "send us the
+           cut" with no way to send it is the same failure as not asking at all. #}
+        {% for a in k.client_actions %}<li>{{ a.label }}{% if a.url %}
+          <a class="ko-cta" href="{{ a.url }}">{{ a.cta or 'Open →' }}</a>{% endif %}</li>{% endfor %}
       </ul>
       <p class="muted small">Once these are in, your team begins, and there's nothing further to manage.</p>
     </section>
@@ -95,6 +98,9 @@
   .kickoff .ko-ready h2{font-size:24px;color:var(--wine,#44161E);margin:0 0 8px}
   .kickoff .ko-ready p{color:#5a5550;font-size:15px;line-height:1.6;max-width:52ch;margin:0 auto}
   .kickoff .ko-todo{margin:6px 0 0;padding-left:18px;color:#7a3a12;font-weight:600}
+  .kickoff .ko-todo li{margin-bottom:8px}
+  .kickoff .ko-cta{display:inline-block;margin-left:10px;padding:5px 12px;border-radius:8px;
+    background:#C8552B;color:#fff;text-decoration:none;font-size:13px;font-weight:700}
   .kickoff .ko-check{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px}
   .kickoff .ko-check li{display:flex;gap:11px;align-items:baseline;font-size:14.5px}
   .kickoff .ko-mark{width:18px;text-align:center;font-weight:700}

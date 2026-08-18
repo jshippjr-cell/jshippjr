@@ -76,12 +76,21 @@ def _workspace_signals(conn, opp, project):
     # ADR-0020: the client's scope confirmation ("yes, this reflects our project") advances
     # the workspace into the commercial phase — shown as "preparing your proposal" until the
     # operator releases it.
-    scope_confirmed = bool(db.get_doc_overrides(conn, opp_id).get("scope_confirmed"))
+    _ov = db.get_doc_overrides(conn, opp_id)
+    scope_confirmed = bool(_ov.get("scope_confirmed"))
+    # A countersigned proposal IS commercial approval (ADR-0065 — the summary is the
+    # proposal). Reading only the Commercial Review meant a deal closed by signature had
+    # `commercial_approved` False, so `compute_phase` sent it straight past KICKOFF into
+    # PRODUCTION — and Kickoff is where the client's remaining actions live. That is how
+    # a signed client ended up with no deposit ask and no request for their picture: not
+    # because the readiness view was wrong, but because they never reached it.
+    countersigned = bool(_ov.get("proposal_countersigned"))
     return {
         "has_project": project is not None,
         "delivered": delivered,
         "kickoff_complete": kickoff_complete,
-        "commercial_approved": bool(review) and review["status"] == "approved",
+        "commercial_approved": (bool(review) and review["status"] == "approved")
+                               or countersigned,
         "commercial_ready": (bool(review) and review["status"] == "released")
                             or scope_confirmed,
         "brief_ready": brief_ready,
@@ -161,7 +170,12 @@ def client_workspace(request: Request, token: str):
             # it's in (enforced on the operator's Start Production action).
             cr = db.current_commercial_review(conn, opp["id"])
             ci_view, _met = _brief_ci_context(conn, opp)
-            readiness = kickoff.build_readiness(conn, db, opp, project, cr, ci_view=ci_view)
+            # The portal is where the client's own Drop lives, so Kickoff's "send us the
+            # cut" can be a button rather than a sentence about a page they can't reach.
+            _portal = (f"/project/{project['id']}/delivery-portal?k={token}#picture"
+                       if project is not None else "")
+            readiness = kickoff.build_readiness(conn, db, opp, project, cr,
+                                                ci_view=ci_view, portal_url=_portal)
         prod = None
         if phase in (workspace.PRODUCTION, workspace.DELIVERY) and project is not None:
             # ADR-0019: production answers the court question first — whose move is it —

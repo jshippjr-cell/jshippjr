@@ -126,13 +126,19 @@ def test_readiness_all_ready_when_no_client_actions(tmp_path, monkeypatch):
     opp_id = _opp(app_mod.db, conn); conn.close()
     with TestClient(app_mod.app) as c:
         token = _to_approved(app_mod, c, app_mod.db.connect, opp_id)
-        # The deposit is the one client action after approval — settle it, then the
-        # readiness reaches its genuine all-clear state.
+        # TWO client actions stand after approval — the deposit and the cut the music is
+        # written to. Settle both and the readiness reaches its genuine all-clear state.
+        # It used to reach it with the deposit alone, which is how a client read
+        # "Everything is ready" while the composer's room sat waiting on footage nobody
+        # had asked them for (see test_the_client_has_something_to_do).
         conn = app_mod.db.connect()
         proj = app_mod.db.project_for_opp(conn, opp_id)
         conn.execute("INSERT INTO invoices (project_id, kind, status, created_at) "
                      "VALUES (?,?,?,?)", (proj["id"], "Deposit", "paid", "x"))
-        conn.commit(); conn.close()
+        conn.commit()
+        app_mod.db.update_delivery(conn, proj["id"], "picture",
+                                   {"n": 1, "orig": "cut.mp4", "at": "2026-01-01"})
+        conn.close()
         page = c.get(f"/workspace/{token}").text
     # deposit in, nothing else outstanding → the reassuring message
     assert "Everything is ready." in page

@@ -1664,6 +1664,35 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0067 — Closing by signature takes the same road as closing by review
+**Status:** Accepted (2026-08-18, reported live) · Extends ADR-0065 · Source:
+`opportunity_ops._ensure_proposal_for_project`, `workspace_routes._workspace_signals`,
+`kickoff.build_readiness`, `tests/test_the_client_has_something_to_do.py`
+
+**Decision.** A countersigned proposal is commercially approved, full stop. Countersigning
+writes the project's `proposals` row from the **signed** agreement's own band, and
+`_workspace_signals` reports `commercial_approved` for a countersignature exactly as it
+does for an approved Commercial Review. Kickoff asks the client for the picture as well as
+the deposit, and every client action that can be taken carries the link that takes it.
+
+**Why.** ADR-0065 gave the deal a second way to close — the client signs the Discovery
+Summary, we countersign — but every client-facing obligation still hung off the first way.
+Three consequences, one root: no `proposals` row (only `_ensure_proposal_from_review` ever
+wrote one), so `proposal_for_project` returned None, the owed deposit read as 0, and the
+Pay button never rendered; no `commercial_approved`, so `compute_phase` sent a signed deal
+past KICKOFF into PRODUCTION, and Kickoff is the only surface that asks the client for
+anything; and nothing anywhere requested the picture, though the composer's session room
+renders "picture arrives with the client's cut" and waits, and the delivery portal has
+always had the Drop that receives it. A client signed, was promised a deposit invoice in
+the acceptance text, and was shown a room that said **Everything is ready**.
+
+**Consequences.** A new way to close a deal is not finished when the signature is stored.
+Walk the client's path afterwards — money, phase, and the things we need FROM them — and
+make it converge with the existing one rather than run beside it. The picture is never
+gated on the deposit: it costs the client nothing to send early and is the most useful
+thing they can do while the composer is being assigned. Money shown to a client comes from
+what they SIGNED, never a quote recomputed afterwards.
+
 ### ADR-0066 — A link in an email is anchored, and a token never ends in punctuation
 **Status:** Accepted (2026-08-18, reported live) · Source: `mailer.send_email`,
 `web/db.public_token`, `web/meeting_scheduler.py`, `web/project_routes.py`,

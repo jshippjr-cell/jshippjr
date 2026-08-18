@@ -50,7 +50,7 @@ from .evaluate import evaluate
 from .filters import slug
 from .opportunity_ops import (
     _KANBAN_STAGES, _brief_ci_context, _buyer_context, _ensure_project_for_opp,
-    _estimate_for_row, _load, agreement_doc_for,
+    _ensure_proposal_for_project, _estimate_for_row, _load, agreement_doc_for,
     _quote_band_for, _reconcile_opp_status, _to_utc_iso,
 )
 from .shell import public_base as _public_base, render, safe_local as _safe_local
@@ -1676,7 +1676,11 @@ def opportunity_countersign(request: Request, opp_id: int, typed_name: str = For
         # the deal was won and had nowhere to put the work: the board offered "Start
         # production" and there was no project to start, no roles to fill, and nobody to
         # assign. Production does not begin with a button; it begins with a team.
-        _ensure_project_for_opp(conn, opp_id)
+        _pid = _ensure_project_for_opp(conn, opp_id)
+        # ...and the signed money becomes the project's proposal, or the deposit the
+        # acceptance text just promised exists nowhere the client can pay it.
+        if _pid:
+            _ensure_proposal_for_project(conn, opp_id, _pid)
         _reconcile_opp_status(conn, opp_id)   # → Won
         # The contact lives on the ROW, not on the Opportunity dataclass; falling back to
         # the address the signer actually used means we write to whoever signed.
@@ -1691,8 +1695,12 @@ def opportunity_countersign(request: Request, opp_id: int, typed_name: str = For
             mailer.send_email(
                 client_mail, f"Countersigned — {client_name} · {need}",
                 f"We have countersigned the agreement for {need}. It is now signed by "
-                f"both parties.\n\nNext: we raise the deposit invoice, and work begins "
-                f"when it clears.\n\n{_public_base()}/workspace/{share_token}")
+                f"both parties.\n\nTwo things are waiting for you in your workspace: the "
+                f"deposit, which starts production, and a place to send us the cut your "
+                f"music is written to, along with any references. The cut goes straight "
+                f"to your composer's session room — you can send it before the deposit, "
+                f"and the earlier it lands the more useful it is.\n\n"
+                f"{_public_base()}/workspace/{share_token}")
         except Exception:  # noqa: BLE001
             pass
     return RedirectResponse(f"/opportunity/{opp_id}#agreement", status_code=303)
