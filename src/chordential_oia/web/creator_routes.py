@@ -27,7 +27,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..delivery import (
-    current_version, revision_status, scoped_deliverables, seed_brief, versions_list,
+    current_version, merge_license, revision_status, scoped_deliverables, seed_brief,
+    versions_list,
 )
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
@@ -68,6 +69,7 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         if (c["version"] or "") != cur_n:
             continue
         keys = c.keys()
+        disp = (c["disposition"] if "disposition" in keys else "") or ""
         n = {
             "id": c["id"], "t": c["t_seconds"],
             "t_end": (c["t_end"] if "t_end" in keys else None),
@@ -78,6 +80,7 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
             # Species (EP P1): a conform (re-sync to a new cut) is free — the
             # composer must SEE that per-note, not just in the banner.
             "conform": bool(c["conform"] if "conform" in keys else 0),
+            "disposition": disp,
             "at": c["created_at"] or "",
             "replies": [],
         }
@@ -132,6 +135,25 @@ def _rel_deadline(iso: str) -> str:
     if days == 0:
         return "due today"
     return f"{-days} day{'s' if days != -1 else ''} past due"
+
+
+def _call_intel(conn, prow) -> dict:
+    """The discovery call, as the composer needs to read it. Empty when there is no
+    linked opportunity or no intelligence yet — an absent section, never a fake one."""
+    from . import campaign_intelligence as ci, campaigns
+    if not prow["opp_id"] or not campaigns.workspace_enabled():
+        return {"facts": [], "risks": [], "open_questions": [], "insights": []}
+    try:
+        row = db.get_opportunity(conn, prow["opp_id"])
+        if row is None:
+            return {"facts": [], "risks": [], "open_questions": [], "insights": []}
+        view = ci.brief_view(conn, ci.ensure_for_opportunity(conn, row)["id"])
+        return {"facts": ci.composer_brief(view),
+                "risks": list(view.get("risks") or []),
+                "open_questions": list(view.get("open_questions") or []),
+                "insights": list(view.get("insights") or [])}
+    except Exception:  # noqa: BLE001 — the room must open even if intelligence hiccups
+        return {"facts": [], "risks": [], "open_questions": [], "insights": []}
 
 
 def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
@@ -189,6 +211,19 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
             db.get_opportunity(conn, prow["opp_id"]) if prow["opp_id"] else None,
             delivery),
         "deadline_rel": _rel_deadline(prow["deadline"]) if prow["deadline"] else "",
+        # What the DISCOVERY CALL established, for the person writing the music. The
+        # brief sheet was seeded only from the opportunity's `need` and `description`
+        # (`delivery.seed_brief`), so a call summarised into Campaign Intelligence — the
+        # objective, the arc, the deliverables, the decision makers, the open questions —
+        # reached the operator's page and never reached the composer. Reported live.
+        "intel": _call_intel(conn, prow),
+        # What the client is actually licensing. The EP review was blunt: "I cannot
+        # approve music whose usage I cannot see." The FEE stays operator-only
+        # (`see_money`); the GRANT is what they are buying and belongs beside the button.
+        "license": merge_license(delivery.get("license")),
+        # A cut waiting to be conformed (ADR-0069). The room keeps playing the cut the
+        # notes were written against until the studio says how far the picture moved.
+        "conform_pending": delivery.get("conform_pending") or None,
         # Phase 2 — the picture + references + conform marking
         "picture": delivery.get("picture") or None,
         "references": list(delivery.get("references") or []),
@@ -224,6 +259,9 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         if prow is None:
             continue
         entry = _room_fields(conn, a["project_id"], prow, role=a["role"])
+        # The composer's own portal is a TALENT view, so it obeys the same rule the room
+        # does: a note is not work until a human has priced it (ADR-0069).
+        entry["feedback"] = room.priced_notes_only(entry["feedback"])
         seen[a["project_id"]] = entry
         out.append(entry)
     # Needs-me-first (composer review P1): rooms owing the composer work come

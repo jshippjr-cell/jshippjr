@@ -132,6 +132,26 @@ CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
 # A canonical key has exactly ONE home, so the facet is not the model's to choose.
 CANONICAL_FACET_FOR_KEY = {k: f for f, k, _kind, _l, _p, _o in CANONICAL_FIELDS}
 
+# The composer's read of the call: canonical key -> (label, facet), in declared order.
+# The room's Brief layer renders this, because a discovery call summarised into
+# Campaign Intelligence and then not shown to the person writing the music is a summary
+# nobody reads. Reported live: "thats the whole point for the information from the
+# discovery call to get summarized into a nice brief for the composer".
+BRIEF_ORDER = [(k, label, f) for f, k, kind, label, _p, _o in CANONICAL_FIELDS
+               if kind == "fact"]
+
+
+def composer_brief(view: dict) -> list:
+    """The call's established facts, labelled and ordered, skipping what it never
+    established. Takes `brief_view`'s output; returns [(label, value, facet)]."""
+    fields = dict((view or {}).get("fields") or {})
+    out = []
+    for key, label, facet in BRIEF_ORDER:
+        val = (fields.get(key) or "").strip()
+        if val:
+            out.append({"label": label, "value": val, "facet": facet})
+    return out
+
 
 def arrived_by_alias(key: str) -> bool:
     """Did this field reach its slot under its own name, or through the alias map?

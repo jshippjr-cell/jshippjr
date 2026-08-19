@@ -196,6 +196,68 @@
       </div>
     </div>
     {% endif %}
+    {# ADR-0069 — every client note is priced before it becomes work. "Request changes"
+       cost a round and a plain note cost nothing, and both reached the composer: an
+       unpriced revision channel beside a counter reading "Round 1 of 2". Nothing here is
+       automatic — the machine proposes, you dispose. #}
+    {# ADR-0069 — a new cut is PARKED until someone says how far the picture moved.
+       Until then the room keeps playing the cut everyone's notes were written against,
+       because silently re-pointing a note is worse than admitting we do not know. #}
+    {% if conform_pending %}
+    <div class="conform-park" style="border:1px solid var(--orange,#E4671F);border-radius:10px;
+         padding:14px 16px;margin:0 0 14px;background:rgba(228,103,31,.06)">
+      <div style="font-weight:700;color:var(--orange,#E4671F);margin-bottom:2px">
+        Cut {{ conform_pending.n }} is waiting to be conformed</div>
+      <p class="muted small" style="margin:0 0 10px">
+        {{ conform_pending.by }} uploaded <b>{{ conform_pending.orig }}</b>. The room is still
+        playing the cut every note was written against. Say how far the picture moved at
+        the head and every note moves with it — positive if material was added, negative
+        if it was cut. Leave it at 0 if the timing did not change.</p>
+      <form method="post" action="/project/{{ project['id'] }}/conform"
+            style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="action" value="apply">
+        <label class="small muted">Offset (seconds)
+          <input type="text" name="offset" value="0" inputmode="decimal"
+                 style="width:90px;margin-left:6px;padding:6px 8px"></label>
+        <input type="text" name="note" placeholder="What changed? (optional)"
+               style="flex:1;min-width:180px;padding:6px 9px">
+        <button class="btn" type="submit">Conform to cut {{ conform_pending.n }}</button>
+      </form>
+      <form method="post" action="/project/{{ project['id'] }}/conform" style="margin-top:8px"
+            onsubmit="return confirm('Discard cut {{ conform_pending.n }}? The room keeps the cut it is playing.');">
+        <input type="hidden" name="action" value="discard">
+        <button class="btn ghost tiny" type="submit">Discard this cut</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if unpriced_notes %}
+    <div class="unpriced" style="border:1px solid var(--line,#e7e1d8);border-radius:10px;
+         padding:14px 16px;margin:0 0 14px;background:#fdfaf5">
+      <div style="font-weight:700;margin-bottom:2px">
+        {{ unpriced_notes|length }} client note{{ 's' if unpriced_notes|length != 1 }} to price</div>
+      <p class="muted small" style="margin:0 0 10px">The composer cannot see these yet.
+        A conform is free, a revision spends a round, out-of-scope is quoted separately.</p>
+      {% for n in unpriced_notes %}
+      <div style="border-top:1px solid var(--line,#efe9e0);padding:9px 0">
+        <div style="font-size:13.5px">
+          {% if n.t_seconds is not none %}<b class="mono">{{ '%d:%02d'|format((n.t_seconds/60)|int,(n.t_seconds%60)|int) }}</b>{% endif %}
+          <b>{{ n.author }}</b> · {{ n.body }}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+          {% for how, label, hint in [
+              ('conform','Conform · free','The picture moved; re-syncing to it never costs a round'),
+              ('revision','Revision · costs a round','Real new direction, inside what was sold'),
+              ('out_of_scope','Out of scope · quote it','Beyond the brief — quoted separately, never free work')] %}
+          <form method="post" action="/project/{{ project['id'] }}/note/{{ n.id }}/disposition" style="margin:0">
+            <input type="hidden" name="how" value="{{ how }}">
+            <button class="btn tiny" type="submit" title="{{ hint }}">{{ label }}</button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% if versions %}
     <div class="vrail" aria-label="Version history">
       {% for v in versions %}

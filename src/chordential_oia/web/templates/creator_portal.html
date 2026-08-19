@@ -135,6 +135,18 @@
   .who-client{border-color:rgba(120,190,255,.55);color:#9fd0ff}
   .who-operator{border-color:rgba(240,119,44,.65);color:var(--orange)}
   .who-talent{border-color:rgba(150,220,160,.5);color:#a7e0b2}
+  /* The call, as the composer reads it. */
+  .intel{margin:2px 0 4px}
+  .intel-row{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:7px 0;
+    border-top:1px solid rgba(255,255,255,.08);align-items:baseline}
+  .intel-k{font:700 10.5px var(--sans);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--dim2,#8d867e)}
+  .intel-v{font-size:14px;line-height:1.5}
+  .intel-list{margin:2px 0 6px;padding-left:18px;font-size:13.5px;line-height:1.6}
+  .intel-list.warn li{color:#e8b98f}
+  /* A sheet opened mid-playback sits BESIDE the picture instead of over it. */
+  .sr-sheet.beside{box-shadow:0 -20px 60px rgba(0,0,0,.55)}
+  @media (max-width:640px){.intel-row{grid-template-columns:1fr;gap:2px}}
   /* The verdict, in the room where the work is heard. */
   .verdict{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 0;
     padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
@@ -147,6 +159,11 @@
     font:700 13px var(--sans);cursor:pointer;background:transparent;color:inherit;
     white-space:nowrap}
   .v-approve{background:var(--orange);border-color:var(--orange);color:#fff}
+  .commits{margin:14px 0 0;padding:12px 14px;border:1px solid rgba(255,255,255,.14);
+    border-radius:12px;background:rgba(255,255,255,.03)}
+  .commits-h{font:700 9.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim2,#8d867e);margin-bottom:6px}
+  .commits ul{margin:0;padding-left:18px;font-size:13px;line-height:1.65}
   .kicker{font:700 9.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--dim2)}
   .door-title{font-size:13px;color:var(--dim);flex:0 1 auto;min-width:80px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap}
@@ -534,7 +551,9 @@
 {% set disp_state = 'Delivered' if closed else ('In review' if (a.pending and not a.versions) else
                     ('Writing' if a.delivery_state == 'Not started' else a.delivery_state)) %}
 {% set open_ct = a.feedback.open_count if (a.feedback and a.feedback.notes) else 0 %}
-<div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}>
+<div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}
+     data-fps="{{ a.picture.fps if a.picture and a.picture.fps else '' }}"
+     data-tc0="{{ a.picture.tc_start if a.picture and a.picture.tc_start else '' }}">
 
   <!-- doorline -->
   <div class="doorline">
@@ -675,6 +694,7 @@
     {% else %}
     <input type="hidden" name="author" value="{{ room_who|default('') }}">
     {% endif %}
+    <input type="hidden" name="origin" value="room">
     <input type="hidden" name="t" class="nb-t" value="0">
     <input type="hidden" name="t_end" class="nb-tend" value="">
     <button type="button" class="nb-mark" title="Mark the start of a range, then press again at the end">⇤ Range</button>
@@ -689,13 +709,35 @@
         is the split this room exists to end. Creators never see it: approving your own
         work is not a review (room.CAPS). ── #}
   {% if 'approve' in (caps|default([])) and a.versions %}
+  {# What Approve COMMITS, said before it is pressed. The EP review would not press it:
+     "approve for what? Is that me saying the music is locked, that a revision round is
+     burned, that I owe money?" A one-tap irreversible commercial action with an unstated
+     consequence is not a decision, it is an accident waiting. #}
+  <div class="commits">
+    <div class="commits-h">What approving commits</div>
+    <ul>
+      <li><b>Locks {{ a.version_state or 'this version' }}</b> as the selected master. We
+        then produce the deliverables below and you sign off each one.</li>
+      <li>{% if a.feedback and a.feedback.revisions_included %}
+          Approving does <b>not</b> spend a round — {{ a.feedback.round_phrase or 'your rounds' }}
+          {% if a.feedback.revisions_included %}({{ a.feedback.revisions_included - (a.feedback.revisions_used or 0) }} left){% endif %}.
+          <b>Request changes</b> spends one.
+          {% else %}Requesting changes starts a revision round.{% endif %}</li>
+      {% if a.license %}
+      <li>You are licensing: <b>{{ a.license.media }}</b> · {{ a.license.territory }} ·
+        {{ a.license.term }} · {{ a.license.exclusivity }}.</li>
+      {% endif %}
+      <li>It does not release payment on its own, and it can be undone — ask the studio.</li>
+    </ul>
+  </div>
   <div class="verdict">
     <form method="post" action="/project/{{ a.project_id }}/review/approve" class="v-yes">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
       <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
       <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
       <input type="hidden" name="email" value="{{ known_email|default('') }}">
-      <button type="submit" class="v-btn v-approve">✓ Approve {{ a.version_state or 'this version' }}</button>
+      <button type="submit" class="v-btn v-approve"
+              onclick="return confirm('Approve {{ (a.version_state or 'this version')|e }} as the selected master?\n\nWe produce the remaining deliverables from it and you sign off each one. This does not spend a revision round.');">✓ Approve {{ a.version_state or 'this version' }}</button>
     </form>
     <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
@@ -703,7 +745,8 @@
       <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
       <input type="hidden" name="email" value="{{ known_email|default('') }}">
       <input type="text" name="body" placeholder="What needs to change?" required>
-      <button type="submit" class="v-btn">Request changes</button>
+      <button type="submit" class="v-btn"
+              title="Starts a revision round">Request changes{% if a.feedback and a.feedback.revisions_included %} · uses a round{% endif %}</button>
     </form>
   </div>
   {% endif %}
@@ -732,6 +775,35 @@
       {% endif %}
       <span class="chip">{{ disp_state }}</span>
     </div>
+    {# What the discovery call actually established. It was summarised into Campaign
+       Intelligence, shown to the operator, and never reached the person writing the
+       music — the brief opened with a reference track and nothing else. Reported live.
+       Absent when the call established nothing; never invented. #}
+    {% if a.intel and a.intel.facts %}
+    <h3>What the call established</h3>
+    <div class="intel">
+      {% for f in a.intel.facts %}
+      <div class="intel-row">
+        <span class="intel-k">{{ f.label }}</span>
+        <span class="intel-v">{{ f.value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if a.intel and a.intel.open_questions %}
+    <h3>Still open</h3>
+    <p class="fineprint" style="margin:0 0 6px">Unanswered from the call. Write around
+      these rather than guessing — ask the studio and it gets answered, not assumed.</p>
+    <ul class="intel-list">
+      {% for q in a.intel.open_questions %}<li>{{ q }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if a.intel and a.intel.risks %}
+    <h3>Watch out for</h3>
+    <ul class="intel-list warn">
+      {% for r in a.intel.risks %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+    {% endif %}
     {% if a.references %}
     <h3>References: hear them, don't guess them</h3>
     <p class="fineprint" style="margin:0 0 4px">References guide tone and feel; the score stays original,
@@ -783,6 +855,12 @@
   <!-- ── LAYER: Notes ── -->
   <div class="sheet sr-sheet" data-sheet="notes" role="dialog" aria-modal="true" aria-label="Client feedback" tabindex="-1">
     <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
+    {% if a.conform_pending %}
+    <div class="conform"><b>A newer cut ({{ a.conform_pending.n }}) has landed and is not
+      conformed yet.</b> This room is still playing cut {{ a.picture.n if a.picture else 1 }} —
+      the one your notes and your music were written against. Nothing moves until the
+      studio says how far the picture shifted, so keep working to what you see here.</div>
+    {% endif %}
     {% if a.picture and a.picture.n > 1 %}
     <div class="conform"><b>Picture changed. This is cut {{ a.picture.n }}.</b>
       Re-syncing your music to the new cut is a conform, and <b>it doesn't count against
@@ -1209,9 +1287,29 @@
       g.fillStyle = gl; g.fillRect(0, 0, w, h);
     }
 
+    /* The cut's OWN clock. Frames were hardcoded to 24 and the hour to "00:", so every
+       timecode in this room was wrong on any 23.976 or 25 cut and wrong by an hour on
+       anything mastered at 01:00:00:00 — and this is the number people type into notes
+       and cue sheets. When the cut did not state its rate we say seconds from head
+       rather than invent frames: a wrong timecode is worse than an honest one. */
+    var FPS = parseFloat(root.dataset.fps || "") || 0;
+    var TC0 = root.dataset.tc0 || "";
+    function tcStartSeconds(){
+      var m = /^(\d{1,2}):(\d{2}):(\d{2})(?:[:;](\d{1,3}))?$/.exec((TC0 || "").trim());
+      if (!m || !FPS) return 0;
+      return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (m[4] ? (+m[4]) / FPS : 0);
+    }
     function tcFmt(x){
-      var m = Math.floor(x/60), s = Math.floor(x%60), f = Math.floor((x%1)*24);
-      return "00:" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0") + ":" + String(f).padStart(2,"0");
+      if (!FPS){
+        // No declared rate: seconds from head, said plainly.
+        var mm = Math.floor(x / 60), ss = Math.floor(x % 60);
+        return String(mm) + ":" + String(ss).padStart(2, "0");
+      }
+      var t = (x || 0) + tcStartSeconds();
+      var h = Math.floor(t / 3600), m2 = Math.floor((t % 3600) / 60),
+          s2 = Math.floor(t % 60), f = Math.floor((t % 1) * FPS);
+      return String(h).padStart(2,"0") + ":" + String(m2).padStart(2,"0") + ":" +
+             String(s2).padStart(2,"0") + ":" + String(f).padStart(2,"0");
     }
     function renderPins(){
       noteLane.querySelectorAll(".pin,.pin-beyond").forEach(function(p){ p.remove(); });
@@ -1566,7 +1664,14 @@
       var s = root.querySelector('.sr-sheet[data-sheet="' + name + '"]');
       if (s){
         lastFocus = document.activeElement;
-        s.classList.add("on"); veil.classList.add("on"); s.focus();
+        s.classList.add("on");
+        /* The veil blurs the picture. While the room is PLAYING that is the one thing
+           you are looking at — clicking a note to see what it says should not black out
+           the frame it is about. Reported live. Paused, the veil stays: then the sheet
+           is the subject. */
+        if (mPaused()) veil.classList.add("on");
+        else { veil.classList.remove("on"); s.classList.add("beside"); }
+        s.focus();
       }
     }
     // Expose a tiny per-room API so the page-level ⌘K command bar (Phase 4) can
@@ -1673,7 +1778,39 @@
       body.addEventListener("keydown", function(e){ e.stopPropagation(); });
       setInterval(paint, 250);
       paint();
-      bar.addEventListener("submit", function(){ send.disabled = true; });
+      /* Post WITHOUT leaving. A normal submit reloaded the room, which stopped the
+         music and the picture mid-note, and for a client the redirect landed them back
+         on the old delivery portal. Both reported live. The note goes up in the
+         background, the transport never notices, and the pin appears where it was
+         dropped. No JS → the form still posts and `origin=room` brings them back here. */
+      bar.addEventListener("submit", function(e){
+        if (!window.fetch || !window.FormData) return;
+        e.preventDefault();
+        var text = (body.value || "").trim();
+        if (!text) return;
+        var fd = new FormData(bar);
+        send.disabled = true; send.textContent = "Sending…";
+        fetch(bar.action, { method: "POST", body: fd, redirect: "follow",
+                            credentials: "same-origin" })
+          .then(function(resp){
+            if (!resp.ok) throw new Error("post failed");
+            var at = parseFloat(tEl.value) || 0;
+            notes.push({ id: "local-" + Date.now(), t: at,
+                         t_end: (endEl.value ? parseFloat(endEl.value) : null),
+                         author: bar.querySelector("[name=author]").value || "You",
+                         body: text, kind: "comment", resolved: false,
+                         addressed: false, conform: false, replies: [] });
+            body.value = ""; from = null;
+            mark.classList.remove("armed"); mark.textContent = "⇤ Range";
+            renderPins();
+            send.disabled = false; paint();
+            whisper("Note left at " + fmt(at));
+          })
+          .catch(function(){
+            send.disabled = false; send.textContent = "Try again";
+            toast("That note did not send. Check your connection and try again.");
+          });
+      });
     })();
 
     rooms.push({ root: root, toggle: toggle, seek: seek, audio: audio,

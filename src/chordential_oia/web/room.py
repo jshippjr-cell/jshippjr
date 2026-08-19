@@ -67,6 +67,29 @@ def can(role: str, capability: str) -> bool:
     return capability in caps_for(role)
 
 
+def priced_notes_only(feedback: dict) -> dict:
+    """The composer's list, with everything a human has not yet priced removed.
+
+    ADR-0069. "Request changes" cost a revision round and a plain note cost nothing —
+    and both reached the composer and both got worked on. That is an unpriced revision
+    channel running beside a counter that says "Round 1 of 2", and the buyer learns which
+    lane is free within one project. A note becomes WORK only once the studio has called
+    it a conform (picture moved — free), a revision (counts a round), or out of scope
+    (quoted separately, never actioned for nothing).
+
+    This is "the machine proposes, Jon disposes" applied to feedback rather than to
+    buttons — the same rule, one layer deeper.
+    """
+    fb = dict(feedback or {})
+    kept = [n for n in (fb.get("notes") or [])
+            if (n.get("disposition") or "") in ("conform", "revision")]
+    fb["notes"] = kept
+    fb["open_count"] = sum(1 for n in kept
+                           if n.get("kind") in ("comment", "change_request")
+                           and not (n.get("resolved") or n.get("addressed")))
+    return fb
+
+
 def room_view(conn, db, project_id: int, role: str, *,
               talent_id: Optional[int] = None, build) -> Optional[dict]:
     """THE engagement, shaped for one role.
@@ -93,6 +116,9 @@ def room_view(conn, db, project_id: int, role: str, *,
         room["captures"] = []
     if "see_deliverable_specs" not in allowed:
         room["deliverables"] = []
+    if role == TALENT:
+        # A creator is handed only what has been priced (ADR-0069).
+        room["feedback"] = priced_notes_only(room.get("feedback") or {})
     if "see_internal" not in allowed:
         # Studio-side replies on a client note are internal by definition.
         fb = dict(room.get("feedback") or {})

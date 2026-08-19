@@ -215,6 +215,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
   is the authority and an unknown role gets nothing. A gate-exempt route must make its
   own stricter check: `_session_role` reads "no token" as *operator*.
+- **A note is not work until it is priced** (ADR-0069): every client note is classified
+  `conform` / `revision` / `out_of_scope` before a creator sees it — `room.priced_notes_only`
+  is the ONE rule, read by the room and the composer's portal. A change request arrives
+  pre-priced as a revision. A new cut is **parked** (`conform_pending`) until the studio
+  states the offset and every note moves with the picture. A cut carries its own `fps` +
+  `tc_start`; with none declared the room says *seconds from head* rather than inventing
+  frames.
 - **Scope carries its own evidence:** `estimation.Scope` / `estimation.Session`
   (ADR-0058) each pair a value with whether the brief STATED it. Anything assumed is
   named on the surface that shows the number. Mirror this for any inferred input a

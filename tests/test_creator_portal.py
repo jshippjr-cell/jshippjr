@@ -318,6 +318,10 @@ def test_composer_addressed_never_touches_client_resolved(ctx):
     cid = db_mod.add_review_comment(
         conn, pid, version="1", t_seconds=12.0, author="Dana (Client)",
         body="Bring the brass in later", kind="change_request")
+    # ADR-0069 — a note is not work until a human prices it, and this test is about
+    # REPLIES, not pricing. Inserted straight into the table it bypasses the route that
+    # would have priced it, so price it here.
+    db_mod.set_comment_disposition(conn, pid, cid, "revision")
     conn.close()
     r = client.post(f"/creator/{tok}/project/{pid}/note/{cid}/address",
                     follow_redirects=False)
@@ -345,6 +349,8 @@ def test_composer_reply_is_internal_and_invisible_to_client(ctx):
     cid = db_mod.add_review_comment(
         conn, pid, version="1", t_seconds=8.0, author="Dana (Client)",
         body="Pull the drums back under the VO", kind="change_request")
+    # ADR-0069 — priced, because this test is about the REPLY thread, not the pricing.
+    db_mod.set_comment_disposition(conn, pid, cid, "revision")
     conn.close()
     r = client.post(f"/creator/{tok}/project/{pid}/note/{cid}/reply",
                     data={"body": "The drums ARE the spot — can we discuss?"},

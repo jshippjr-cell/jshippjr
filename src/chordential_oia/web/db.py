@@ -1017,6 +1017,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # just a point — its end timecode. NULL keeps the classic single-point pin.
     if "t_end" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN t_end REAL")
+    # ADR-0069 — the note DISPOSITION. "Request changes" cost a round and a note cost
+    # nothing, yet both reached the composer and both got worked on: an unpriced revision
+    # channel sitting next to a counter that said "Round 1 of 2". Every client note is now
+    # classified by a human before it becomes work — conform (picture moved, free),
+    # revision (counts a round), or out_of_scope (quoted separately, never actioned free).
+    # Blank means UNDISPOSITIONED: in the operator's queue, invisible to the composer.
+    if "disposition" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN disposition TEXT DEFAULT ''")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -7197,6 +7205,40 @@ def toggle_comment_resolved(
     return new_val
 
 
+DISPOSITIONS = ("conform", "revision", "out_of_scope")
+
+
+def set_comment_disposition(conn, project_id: int, comment_id: int, how: str):
+    """Classify one note. Returns the previous disposition, or None if there is no such
+    note. An unknown value RAISES — a typo must not silently leave a note unpriced."""
+    how = (how or "").strip().lower()
+    if how and how not in DISPOSITIONS:
+        raise ValueError(f"unknown disposition {how!r}")
+    row = conn.execute(
+        "SELECT disposition FROM review_comments WHERE id = ? AND project_id = ?",
+        (comment_id, project_id)).fetchone()
+    if row is None:
+        return None
+    was = (row["disposition"] or "")
+    conn.execute("UPDATE review_comments SET disposition = ? WHERE id = ?",
+                 (how, comment_id))
+    # A conform is free by definition, and the two columns must not disagree — the room
+    # and the console both read `conform` for the per-note "free" tag.
+    conn.execute("UPDATE review_comments SET conform = ? WHERE id = ?",
+                 (1 if how == "conform" else 0, comment_id))
+    conn.commit()
+    return was
+
+
+def undispositioned_notes(conn, project_id: int) -> list:
+    """Client notes waiting on a human. Top-level only — a reply rides its parent."""
+    return conn.execute(
+        "SELECT * FROM review_comments WHERE project_id = ? AND parent_id IS NULL"
+        " AND IFNULL(disposition,'') = '' AND IFNULL(internal,0) = 0"
+        " AND kind IN ('comment','change_request') ORDER BY id ASC",
+        (project_id,)).fetchall()
+
+
 def toggle_comment_conform(
     conn: sqlite3.Connection, project_id: int, comment_id: int
 ) -> Optional[int]:
@@ -7208,9 +7250,13 @@ def toggle_comment_conform(
     if row is None:
         return None
     new_val = 0 if (row["cf"] or 0) else 1
+    # The species toggle IS a disposition — the older, two-valued form of the same
+    # decision (ADR-0069). Setting only `conform` left the note undispositioned, so the
+    # operator classified it and the composer still could not see it.
     conn.execute(
-        "UPDATE review_comments SET conform = ? WHERE id = ? AND project_id = ?",
-        (new_val, comment_id, project_id))
+        "UPDATE review_comments SET conform = ?, disposition = ? "
+        "WHERE id = ? AND project_id = ?",
+        (new_val, "conform" if new_val else "revision", comment_id, project_id))
     conn.commit()
     return new_val
 

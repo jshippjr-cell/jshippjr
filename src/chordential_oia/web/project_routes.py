@@ -728,6 +728,10 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # A creator's submission awaiting Jon's publish decision (console-only; the
         # client portal never reads this — pending work stays off the client's page).
         "pending_version": delivery.get("pending_version") or None,
+        # ADR-0069 — client notes waiting to be priced. Until one is, it is not work and
+        # the composer does not see it.
+        "unpriced_notes": [dict(n) for n in db.undispositioned_notes(conn, project_id)],
+        "conform_pending": delivery.get("conform_pending") or None,
         # The client's cut, so the taste gate can be JUDGED rather than only heard.
         # A submission arrived with a bare <audio> and nothing to watch it against —
         # reported live: "i only get to hear the audio ... i need to review the
@@ -1863,7 +1867,7 @@ def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
     parent_id: str = Form(""), r: str = Form(""), t_end: str = Form(""),
-    creator_token: str = Form(""),
+    creator_token: str = Form(""), origin: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style).
 
@@ -1966,6 +1970,14 @@ def review_comment(
             )
     finally:
         conn.close()
+    if (origin or "").strip() == "room":
+        # Posted FROM the room. Sending a client back to the old delivery portal was the
+        # one place the two surfaces still showed through each other. Reported live.
+        cred = (f"?t={creator_token}" if creator_token else
+                (f"?k={k}" if k else (f"?r={r}" if r else "")))
+        resp = RedirectResponse(f"/room/{project_id}{cred}#p{project_id}", status_code=303)
+        _set_reviewer_cookie(resp, name, mail)
+        return resp
     return _review_redirect(project_id, k, name=name, email=mail, r=r,
                             creator=creator_token)
 
@@ -2054,7 +2066,8 @@ def session_room_presence(request: Request, project_id: int, k: str = Form(""),
     return {"ok": True}
 
 
-async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Optional[dict]:
+async def _store_picture(conn, project_id: int, file: UploadFile, by: str,
+                         *, fps: str = "", tc_start: str = "") -> Optional[dict]:
     """Store the client's cut as the room's PICTURE (Phase 2). The current cut is
     archived to ``picture_history`` and the cut number bumps — a new cut is a
     CONFORM event, never a revision (production model): notes from the prior cut
@@ -2076,6 +2089,12 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Op
     if len((by or "").strip()) < 2:
         by = "The client"                       # attribution fallback (EP P2-3)
     pic = {"url": f"/uploads/{safe_name}", "filename": safe_name,
+           # A cut's own clock, stated by whoever delivered it. Hardcoding 24fps and a
+           # zero start meant every timecode in this room was wrong on any 23.976 or 25
+           # cut, and wrong by an hour on anything mastered at 01:00:00:00 — and the
+           # timecode is the number people type into notes and cue sheets. Blank is
+           # honest and the room says "seconds from head" instead of inventing frames.
+           "fps": (fps or "").strip(), "tc_start": (tc_start or "").strip(),
            "orig": file.filename, "by": by,
            "at": _dt.now(_tz.utc).isoformat(),
            "n": (int(prior.get("n") or 0) + 1) if prior else 1}
@@ -2083,11 +2102,32 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str) -> Op
         hist = list(delivery.get("picture_history") or [])
         hist.append(prior)
         db.update_delivery(conn, project_id, "picture_history", hist)
+        # ADR-0069 — a NEW cut FREEZES the room until a human reconciles it.
+        #
+        # Before this, cut N+1 simply replaced cut N: every note kept its old
+        # `t_seconds` while the ground under it moved, so a note reading "hit the door
+        # slam" pointed fourteen frames into the next shot, wearing a small grey chip
+        # that said the cut had changed. The composer's take then locked to the NEW
+        # picture inside 0.12s while the pins stayed put — music out of sync with
+        # picture, notes out of sync with music, and nothing on screen red.
+        #
+        # So the new cut is PARKED. The stage keeps playing the cut everyone's notes
+        # were written against until the studio states the offset (or says there is
+        # none), and every take not written against the loaded cut says so out loud.
+        # Guessing where a note moved to is worse than admitting we do not know.
+        db.update_delivery(conn, project_id, "conform_pending", {
+            "n": pic["n"], "at": pic["at"], "by": by, "orig": file.filename,
+            "url": pic["url"], "filename": safe_name,
+            "fps": pic["fps"], "tc_start": pic["tc_start"],
+        })
+        db.add_update(conn, project_id,
+                      f"{by} uploaded cut {pic['n']} ({file.filename}). The room is "
+                      f"holding cut {prior.get('n') or 1} until it is conformed — say "
+                      f"how far the picture moved and every note follows it.")
+        return pic
     db.update_delivery(conn, project_id, "picture", pic)
     db.add_update(conn, project_id,
-                  f"{by} uploaded cut {pic['n']} of the picture ({file.filename})."
-                  + (" Notes from the prior cut are marked, so changes it causes are"
-                     " conforms, not revisions." if prior else ""))
+                  f"{by} uploaded cut {pic['n']} of the picture ({file.filename}).")
     return pic
 
 
@@ -2137,6 +2177,7 @@ async def review_upload_picture(
     request: Request, project_id: int, k: str = Form(""), r: str = Form(""),
     author: str = Form(""), email: str = Form(""),
     file: Optional[UploadFile] = File(None),
+    fps: str = Form(""), tc_start: str = Form(""),
 ):
     """The client door's Drop: upload the cut the music is written to. Token-gated
     like every review action; the room dresses itself around the picture."""
@@ -2148,7 +2189,8 @@ async def review_upload_picture(
         who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
         pic = None
         if file is not None and (file.filename or "").strip():
-            pic = await _store_picture(conn, project_id, file, who)
+            pic = await _store_picture(conn, project_id, file, who,
+                                       fps=fps, tc_start=tc_start)
         project = db.get_project(conn, project_id)
     finally:
         conn.close()
@@ -2201,6 +2243,7 @@ async def review_upload_assets(
     file: Optional[UploadFile] = File(None),
     ref_file: List[UploadFile] = File(default=[]),
     ref_label: List[str] = Form(default=[]),
+    fps: str = Form(""), tc_start: str = Form(""),
 ):
     """Everything the client is staging, sent in ONE act.
 
@@ -2223,7 +2266,8 @@ async def review_upload_assets(
             return HTMLResponse("Not found", status_code=404)
         who = (reviewer.get("name") if reviewer else "") or author.strip() or "The client"
         if file is not None and (file.filename or "").strip():
-            pic = await _store_picture(conn, project_id, file, who)
+            pic = await _store_picture(conn, project_id, file, who,
+                                       fps=fps, tc_start=tc_start)
         for i, rf in enumerate(ref_file or []):
             if rf is None or not (rf.filename or "").strip():
                 continue
@@ -2470,6 +2514,106 @@ def review_note_species(project_id: int, comment_id: int):
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 
+@router.post("/project/{project_id}/conform")
+def project_conform(request: Request, project_id: int, offset: str = Form("0"),
+                    note: str = Form(""), action: str = Form("apply")):
+    """Reconcile a parked cut, and move every note with the picture (ADR-0069).
+
+    ``offset`` is how far the new cut sits from the old at the head, in seconds —
+    positive when material was ADDED before a moment (its note moves later), negative
+    when material was cut. ``action=discard`` throws the new cut away and keeps the one
+    the room is playing.
+
+    This is the only honest way to keep timecoded notes meaningful across a re-cut: the
+    room refuses to guess, so a human states the shift once and every pin follows it.
+    Notes are moved, never deleted; a note pushed before the head clamps to 0 rather than
+    disappearing, because a note nobody can find is worse than one in the wrong place.
+    """
+    if not _admin_authed(request):
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        pending = delivery.get("conform_pending") or None
+        if not pending:
+            return RedirectResponse(f"/project/{project_id}/delivery#versions",
+                                    status_code=303)
+        if (action or "").strip() == "discard":
+            db.update_delivery(conn, project_id, "conform_pending", None)
+            db.add_update(conn, project_id,
+                          f"Cut {pending.get('n')} discarded; the room keeps the cut it "
+                          f"was playing.")
+            return RedirectResponse(f"/project/{project_id}/delivery#versions",
+                                    status_code=303)
+        try:
+            secs = float((offset or "0").strip() or 0)
+        except ValueError:
+            secs = 0.0
+        if secs:
+            for c in db.list_review_comments(conn, project_id):
+                if c["t_seconds"] is None:
+                    continue
+                conn.execute(
+                    "UPDATE review_comments SET t_seconds = ?, t_end = ? WHERE id = ?",
+                    (max(0.0, float(c["t_seconds"]) + secs),
+                     (max(0.0, float(c["t_end"]) + secs)
+                      if c["t_end"] is not None else None), c["id"]))
+            conn.commit()
+        pic = {k: v for k, v in pending.items()}
+        db.update_delivery(conn, project_id, "picture", pic)
+        db.update_delivery(conn, project_id, "conform_pending", None)
+        db.add_update(conn, project_id,
+                      f"Cut {pic.get('n')} conformed"
+                      + (f" — every note moved {secs:+.2f}s with the picture." if secs
+                         else " — the picture did not move; notes stand.")
+                      + (f" {note.strip()}" if note.strip() else ""))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+
+
+@router.post("/project/{project_id}/note/{comment_id}/disposition")
+def review_note_disposition(request: Request, project_id: int, comment_id: int,
+                            how: str = Form("")):
+    """Price one client note before it becomes work (ADR-0069).
+
+    conform      the picture moved; re-syncing to it is free and never costs a round.
+    revision     real new direction; it consumes one of the scoped rounds.
+    out_of_scope beyond what was sold; it is quoted separately and NEVER reaches the
+                 composer as free work.
+
+    Until a note carries one of these it sits in the operator's queue and the composer
+    does not see it. That is the point: "Request changes" cost a round while a plain note
+    cost nothing, and both were being worked on — an unpriced revision channel beside a
+    counter reading "Round 1 of 2".
+
+    Operator-only, and it says so: this route is NOT in `_REVIEW_ACTIONS`, so the admin
+    gate covers it. The check is here as well because a gate can be turned off.
+    """
+    if not _admin_authed(request):
+        return HTMLResponse("Not found", status_code=404)
+    conn = db.connect()
+    try:
+        try:
+            was = db.set_comment_disposition(conn, project_id, comment_id, how)
+        except ValueError:
+            return HTMLResponse("Unknown disposition", status_code=400)
+        if was is None:
+            return HTMLResponse("Not found", status_code=404)
+        # The round ledger moves with the species, in one direction per transition, so
+        # re-classifying a note cannot spend a round twice or give one back it never took.
+        delivery = db.get_delivery(conn, project_id)
+        used = int(delivery.get("revisions_used") or 0)
+        now = (how or "").strip().lower()
+        if was != "revision" and now == "revision":
+            db.update_delivery(conn, project_id, "revisions_used", used + 1)
+        elif was == "revision" and now != "revision":
+            db.update_delivery(conn, project_id, "revisions_used", max(0, used - 1))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+
+
 @router.post("/project/{project_id}/delivery/asset/publish")
 def delivery_publish_asset(project_id: int, filename: str = Form(""),
                            action: str = Form("publish")):
@@ -2614,11 +2758,17 @@ def review_changes(
         # words wins. Reading only `note` burned a revision round and recorded
         # nothing the client said.
         note_text = (note or "").strip() or (body or "").strip() or "Requested changes."
-        db.add_review_comment(
+        _cid = db.add_review_comment(
             conn, project_id, version=_current_version_tag(delivery),
             author=name, email=mail, body=note_text, kind="change_request",
             verified=reviewer is not None,
         )
+        # A change request arrives ALREADY PRICED as a revision (ADR-0069): pressing this
+        # button is the client spending a round, and the round is spent right here. The
+        # unpriced lane the disposition queue exists to close is the FREE one — a plain
+        # note, which cost nothing and was worked on anyway. The studio can still
+        # re-classify this to a conform, which hands the round back.
+        db.set_comment_disposition(conn, project_id, _cid, "revision")
         db.update_delivery(conn, project_id, "revisions_used",
                            int(delivery.get("revisions_used") or 0) + 1)
         # ADR-0019: the round LEDGER behind the counter — which version, who, what they said

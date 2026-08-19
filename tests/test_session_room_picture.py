@@ -65,13 +65,27 @@ def test_second_cut_is_a_conform_event(ctx):
                     data={"k": share, "author": "Dana"},
                     files={"file": (name, b"fakevideo-bytes", "video/mp4")},
                     follow_redirects=False)
+    # ADR-0069: a second cut is PARKED, not swapped. Replacing the picture under
+    # everyone's notes left each pin at its old second while the ground moved, so the
+    # room holds the cut the notes were written against until a human states the shift.
     conn = db_mod.connect(); d = db_mod.get_delivery(conn, pid); conn.close()
-    assert d["picture"]["n"] == 2
+    assert d["picture"]["n"] == 1, "the picture was swapped under the existing notes"
+    assert (d.get("conform_pending") or {}).get("n") == 2
     assert len(d.get("picture_history") or []) == 1
     page = client.get(f"/creator/{tok}").text
-    assert "Picture changed" in page          # the conform banner
+    assert "not conformed yet" in page.replace("\n      ", " ")
+
+    # Once the studio conforms it, the new cut loads and the banner is the classic one.
+    client.post("/admin/login", data={"email": "", "password": "passphrase"},
+                follow_redirects=False)
+    client.post(f"/project/{pid}/conform", data={"offset": "0", "action": "apply"},
+                follow_redirects=False)
+    conn = db_mod.connect(); d2 = db_mod.get_delivery(conn, pid); conn.close()
+    assert d2["picture"]["n"] == 2 and not d2.get("conform_pending")
+    page2 = client.get(f"/creator/{tok}").text
+    assert "Picture changed" in page2          # the conform banner
     # the money fact stated outright (composer review P1): conforms are free
-    assert "doesn't count against" in page and "conform" in page
+    assert "doesn't count against" in page2 and "conform" in page2
 
 
 def test_non_video_rejected_as_picture(ctx):

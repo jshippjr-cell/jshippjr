@@ -237,7 +237,7 @@ def test_the_router_carries_the_whole_group():
     ("opportunity_routes.py", "/opportunity", 65),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post)
-    ("project_routes.py", "/project", 63),
+    ("project_routes.py", "/project", 65),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -281,6 +281,10 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     buttons on one card threw away whichever file the other was holding,
     +1 for THE room (ADR-0068) — one capability-gated surface for creator, client and
     studio, where there had been three templates rendering one engagement,
+    +1 for pricing a client note before it becomes work (ADR-0069) — conform / revision /
+    out-of-scope, because a note cost nothing and was actioned anyway,
+    +1 for conforming a parked cut (ADR-0069) — a re-cut moves every note with the
+    picture instead of leaving them pointing at frames that moved,
     +2 for adding a deal by hand — a form and its post, and until they existed there was no
     way to create an opportunity at all except promoting an inbound lead.
     Retiring
@@ -293,8 +297,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 283, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 283 — "
+    assert len(decls) == 285, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 285 — "
         f"a slice lost or gained a URL")
 
 

@@ -53,6 +53,13 @@ def test_range_note_stored_and_rendered(ctx):
                        "WHERE project_id=? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
     conn.close()
     assert row["t_seconds"] == 3.0 and row["t_end"] == 7.0
+    # ADR-0069 — a plain note is not work until the studio prices it, and this test is
+    # about the SPAN, not the pricing. Price it so it reaches the composer's room.
+    conn = db_mod.connect()
+    cid = conn.execute("SELECT id FROM review_comments WHERE project_id=? "
+                       "ORDER BY id DESC LIMIT 1", (pid,)).fetchone()["id"]
+    db_mod.set_comment_disposition(conn, pid, cid, "revision")
+    conn.close()
     page = client.get(f"/creator/{tok}").text
     assert "note-span" in page and '"t_end": 7' in page
 

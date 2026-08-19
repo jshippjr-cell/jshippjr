@@ -1664,6 +1664,50 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0069 — A note is not work until a human has priced it, and a cut is not loaded until it is conformed
+**Status:** Accepted (2026-08-19, review panel + operator directive) · Extends ADR-0068 ·
+Source: `room.priced_notes_only`, `db.set_comment_disposition`,
+`project_routes.review_note_disposition`, `project_routes.project_conform`,
+`campaign_intelligence.composer_brief`,
+`tests/test_a_note_is_not_work_until_it_is_priced.py`
+
+**Decision.** Four rules, from a six-seat review of the room (composer, audio engineer,
+picture editor, agency EP, software engineer, executive team).
+
+(1) **Every client note is classified before it becomes work** — `conform` (the picture
+moved; free), `revision` (counts a round), or `out_of_scope` (quoted separately). An
+unclassified note sits in the operator's queue and is **absent** from the creator's list.
+A change request arrives already priced as a revision, because pressing that button IS
+the client spending a round.
+
+(2) **A cut carries its own clock.** `fps` and `tc_start` are stated when the picture is
+delivered and the room reads them. With no declared rate the room says *seconds from
+head* rather than inventing frames.
+
+(3) **A new cut is PARKED until conformed.** The room keeps playing the cut the notes were
+written against; the studio states how far the picture moved and every note moves with
+it, or discards the cut. Notes are shifted, never deleted, and clamp at zero.
+
+(4) **Approve states what it commits** — what it locks, whether it spends a round, and
+the licence being granted — and confirms before it fires. The FEE stays operator-only.
+
+**Why.** "Request changes" cost a revision round and a plain note cost nothing, yet both
+reached the composer and both got worked on: an unpriced revision channel running beside
+a counter reading "Round 1 of 2". The buyer learns which lane is free within one project.
+Timecode was hardcoded to 24fps at hour zero, so every number the composer read back was
+wrong on a 23.976 or 25 cut — and that number is what goes into notes and cue sheets. A
+re-cut replaced the picture silently, leaving each pin at its old second while the ground
+moved. And the EP would not press Approve at all: *"approve for what — that the music is
+locked, that a round is burned, that I owe money?"*
+
+**Consequences.** "The machine proposes, Jon disposes" now governs FEEDBACK, not only
+buttons: `priced_notes_only` is the one rule and both the room and the composer's own
+portal read it. Do not add a path that hands a creator an unpriced note. When the room
+cannot know something — where a note moved to, what frame rate a cut is — it must SAY so
+rather than compute a plausible answer; a wrong timecode is worse than an honest one.
+Money shown to a client is still only what they signed: the grant is visible in the room,
+the fee is not.
+
 ### ADR-0068 — One room, capability-gated by who holds the link
 **Status:** Accepted (2026-08-18, operator directive) · Source: `web/room.py`,
 `web/room_routes.py`, `creator_routes._room_fields`, `tests/test_the_one_room.py`
