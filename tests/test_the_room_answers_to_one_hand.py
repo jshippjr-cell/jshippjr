@@ -155,10 +155,14 @@ def test_the_send_button_says_what_it_will_do(room):
         "as a point note")
 
 
-def test_a_range_can_be_drawn_with_the_mouse(room):
+def test_a_range_is_drawn_across_the_waveform(room):
+    """Not the Notes lane. You find a passage by LOOKING at the music, and the Notes
+    lane is full of pins and spans that own their own clicks (operator, 2026-08-19)."""
     nb = _notebar(room)
-    assert 'noteLane.addEventListener("mousedown"' in nb, (
-        "no drag-to-mark on the Notes lane")
+    assert 'musicLane.addEventListener("mousedown"' in nb, (
+        "no drag-to-mark on the waveform")
+    assert 'noteLane.addEventListener("mousedown"' not in nb, (
+        "the drag is back on the Notes lane, where it competes with every pin on it")
     assert 'document.addEventListener("mousemove"' in nb and \
            'document.addEventListener("mouseup"' in nb, (
         "the drag must be tracked on the document — a fast drag leaves the lane")
@@ -175,6 +179,31 @@ def test_drawing_a_range_does_not_also_seek(room):
     assert "suppressSeek" in spine, (
         "the spine's click handler does not honour the suppression, so every range "
         "drag jumps the playhead")
+
+
+def test_a_notes_range_bar_never_moves_the_playhead(room):
+    """`.note-span` was `pointer-events:none`, so a click on it fell through to the
+    spine and seeked: reaching for the stretch a note covers threw the picture to
+    wherever the cursor happened to land inside it."""
+    css = room[room.index(".note-span{"):]
+    css = css[:css.index("}")]
+    assert "pointer-events:none" not in css, (
+        "the range bar is transparent to clicks again, so the spine seeks underneath it")
+    span = room[room.index('span.className = "note-span"'):]
+    span = span[:span.index("noteLane.appendChild(span)")]
+    assert "e.stopPropagation()" in span, (
+        "the range bar lets its click reach the spine's seek-on-click")
+    assert "seek(" not in span, (
+        "clicking a note's range moves the playhead — only its pin may do that")
+    assert 'openSheet("notes")' in span, (
+        "the range bar no longer opens the note it belongs to")
+
+
+def test_only_the_pin_moves_the_playhead(room):
+    """The other half of the pair: the note's own button still seeks to its start."""
+    pin = room[room.index('pin.addEventListener("click"'):]
+    pin = pin[:pin.index("noteLane.appendChild(pin)")]
+    assert "seek(n.t)" in pin, "the note's pin no longer takes you to the note"
 
 
 def test_a_tap_is_not_a_range(room):

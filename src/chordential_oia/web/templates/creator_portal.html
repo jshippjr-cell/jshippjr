@@ -144,8 +144,8 @@
   .nb-band.set{background:rgba(240,119,44,.28);
     border-left-color:var(--orange);border-right-color:var(--orange);
     box-shadow:inset 0 0 0 1px rgba(240,119,44,.25)}
-  /* A drag across the Notes lane marks a range, so say so with the cursor. */
-  .lane.sr-lane-notes{cursor:ew-resize}
+  /* A drag across the WAVEFORM marks a range, so say so with the cursor. */
+  .lane.music{cursor:ew-resize}
   /* The measured distance between music and picture. Quiet when it is a lock —
      a number you can ignore is the point — and lit when it is not. */
   .sync-read{font:600 10.5px var(--mono);letter-spacing:.04em;color:rgba(237,230,220,.5);
@@ -277,7 +277,9 @@
      solid wine fill + end caps distinguish it from a point pin */
   .note-span{position:absolute;top:50%;transform:translateY(-50%);height:8px;border-radius:4px;
     background:var(--wine);opacity:.8;box-shadow:inset 2px 0 0 var(--wine),inset -2px 0 0 var(--wine);
-    border-left:2px solid #c25667;border-right:2px solid #c25667;z-index:1;pointer-events:none}
+    border-left:2px solid #c25667;border-right:2px solid #c25667;z-index:1;
+    /* clickable, and it OPENS the note — it does not seek (see renderPins) */
+    pointer-events:auto;cursor:pointer}
   .note-span.resolved{opacity:.3}
   /* ── the cue lane (Phase 3) ── regions + hit diamonds, state as border weight */
   .lane.sr-lane-cues{height:38px;background:linear-gradient(180deg,rgba(139,160,174,.05),transparent)}
@@ -770,7 +772,7 @@
     <input type="hidden" name="t" class="nb-t" value="0">
     <input type="hidden" name="t_end" class="nb-tend" value="">
     <button type="button" class="nb-mark"
-            title="Open a range here, press again to close it — or drag across the Notes lane">⇤ Range</button>
+            title="Open a range here, press again to close it — or drag across the waveform">⇤ Range</button>
     <input type="text" name="body" class="nb-body" autocomplete="off"
            placeholder="Say it at this moment…" required>
     <button type="submit" class="nb-send"><span class="nb-lead">Note at</span>
@@ -1428,6 +1430,21 @@
           span.style.left = Math.max(0, n.t / D * 100) + "%";
           span.style.width = Math.max(1, (Math.min(n.t_end, D) - n.t) / D * 100) + "%";
           span.title = "Client note over " + tcFmt(n.t) + " to " + tcFmt(n.t_end);
+          /* The bar was `pointer-events:none`, so a click on it fell through to the
+             spine and SEEKED — you reached for the stretch a note covers to read it and
+             the picture jumped to wherever your cursor happened to be inside it.
+             Reported live. Reading a note is not a transport instruction: the bar opens
+             the note and leaves the playhead where it is. Only the note's own pin moves
+             it, and only to the note's start. */
+          span.addEventListener("click", function(e){
+            e.stopPropagation();
+            openSheet("notes");
+            var card = root.querySelector('.sr-note[data-note="' + n.id + '"]');
+            if (card){
+              root.querySelectorAll(".sr-note").forEach(function(x){ x.classList.remove("hot"); });
+              card.classList.add("hot"); card.scrollIntoView({ block: "nearest" });
+            }
+          });
           noteLane.appendChild(span);
         }
         var pin = document.createElement("button");
@@ -1984,7 +2001,9 @@
         if (!band){
           band = document.createElement("div");
           band.className = "nb-band";
-          noteLane.appendChild(band);
+          // On the SPINE, not one lane: the hand draws across the waveform and the
+          // note lands on the lane above, so the highlight has to be true of both.
+          spine.appendChild(band);
         }
         band.classList.toggle("set", to !== null);
         var lo = Math.min(from, edge()) / D * 100, hi = Math.max(from, edge()) / D * 100;
@@ -2005,7 +2024,7 @@
         if (from === null){
           from = mTime() || 0; to = null;
           setMark("armed");
-          whisper("Range open — let it run or scrub, then press again to close it");
+          whisper("Range open — let it run, or press again at the end. You can also drag across the waveform.");
           paint(); paintBand();
         } else if (to === null){
           closeRange(mTime() || 0);
@@ -2013,18 +2032,22 @@
           clearRange();
         }
       });
-      /* …or draw it with the mouse. Marking a passage by watching it play is right when
-         you are watching; when you already know where it is, dragging across the lane is
-         two seconds instead of two presses and a wait. The lane's own furniture (pins,
-         spans, the beyond badge) keeps its clicks — a drag only starts on bare lane. */
+      /* …or draw it across THE WAVEFORM. Marking a passage by watching it play is right
+         when you are watching; when you already know where it is, you find it by looking
+         at the music — that is what the waveform is for, and it is where the hand goes
+         (operator, 2026-08-19). The Notes lane above is where the mark LANDS, not where
+         it is drawn: it is full of pins and spans that own their own clicks, and a drag
+         starting on one of them would have to guess which you meant. */
+      var musicLane = root.querySelector(".lane.music");
       function xToTime(e){
-        var rct = noteLane.getBoundingClientRect(), D = mDur() || 0;
+        var rct = (musicLane || noteLane).getBoundingClientRect(), D = mDur() || 0;
         return Math.max(0, Math.min(D, (e.clientX - rct.left) / (rct.width || 1) * D));
       }
       var dragging = false, dragMoved = false;
-      noteLane.addEventListener("mousedown", function(e){
+      if (musicLane) musicLane.addEventListener("mousedown", function(e){
         if (e.button !== 0 || !mDur()) return;
-        if (e.target !== noteLane && !e.target.classList.contains("lane-label")) return;
+        // the lane itself or its waveform canvas — never a control sitting on it
+        if (e.target !== musicLane && e.target !== waveCv) return;
         dragging = true; dragMoved = false;
         from = xToTime(e); to = from;
         setMark("armed"); paint(); paintBand();
