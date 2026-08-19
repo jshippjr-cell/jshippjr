@@ -1840,13 +1840,29 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
 
 
 def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
-                     r: str = "", flag: str = "", creator: str = ""):
-    """Bounce back to the portal after an action. A verified reviewer link (``r``)
+                     r: str = "", flag: str = "", creator: str = "", origin: str = ""):
+    """Bounce back to the surface the action came FROM. A verified reviewer link (``r``)
     is preserved so the reviewer stays verified; otherwise the share token (``k``).
+
+    ``origin="room"`` keeps you in the room. A client who left notes in the room and then
+    pressed **Request changes** was thrown out to the delivery portal — a different page,
+    about the same version, with none of what they had just been doing on it. Reported
+    live: *"it took me out to the client workspace, im not entirely sure that
+    necessary."* It is not. The room is where they heard it and where they said it; the
+    verdict does not relocate them.
 
     ``flag`` (e.g. ``incomplete``) surfaces a portal notice — used by the
     delivery-completeness gate to explain why an approve did NOT deliver."""
     extra = f"&gate={flag}" if (flag or "").strip() else ""
+    if (origin or "").strip() == "room":
+        cred = (f"?t={creator}" if (creator or "").strip() else
+                (f"?r={r}" if (r or "").strip() else
+                 (f"?k={k}" if (k or "").strip() else "?")))
+        resp = RedirectResponse(f"/room/{project_id}{cred}{extra}#p{project_id}",
+                                status_code=303)
+        if not (r or "").strip():
+            _set_reviewer_cookie(resp, name, email)
+        return resp
     if (creator or "").strip():
         # A creator posting from THE room (ADR-0068). Sending them to the client portal
         # with an empty ?k= landed them on a 404 — the redirect ejected the very callers
@@ -2428,6 +2444,7 @@ def review_address(
 def review_approve(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), r: str = Form(""),
+    origin: str = Form(""),
     deliver_partial: str = Form(""),
 ):
     """The agency approves the current version — the trigger for Delivery
@@ -2470,7 +2487,7 @@ def review_approve(
         else:
             name, mail = _reviewer_identity(request, author, email)
         if not (name and mail):
-            return _review_redirect(project_id, k, r=r, flag="identify")
+            return _review_redirect(project_id, k, r=r, flag="identify", origin=origin)
         # Approving the master version records the CREATIVE approval (Creative Lock). It no
         # longer ships an incomplete package — the full download unlocks only when every
         # deliverable is uploaded + signed off (_maybe_finalize_delivery). So there's no
@@ -2478,7 +2495,7 @@ def review_approve(
         _approve_version_core(conn, project_id, name, mail)   # notifies creators + operator
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail, r=r)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r, origin=origin)
 
 
 @router.post("/project/{project_id}/review/reopen")
@@ -2790,7 +2807,7 @@ def _notify_client_new_version(email: str, name: str, campaign: str, label: str,
 def review_changes(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), note: str = Form(""),
-    r: str = Form(""), body: str = Form(""),
+    r: str = Form(""), body: str = Form(""), origin: str = Form(""),
 ):
     """The agency requests changes — logs the request and bumps the revision count.
 
@@ -2818,7 +2835,8 @@ def review_changes(
         else:
             name, mail = _reviewer_identity(request, author, email)
         if not (name and mail):
-            return _review_redirect(project_id, k, name=name, email=mail, r=r)
+            return _review_redirect(project_id, k, name=name, email=mail, r=r,
+                                    origin=origin)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
         # `body` is the room's field name, `note` the portal's — whichever carries
@@ -2867,7 +2885,7 @@ def review_changes(
         body_text=(f"The client requested changes on {campaign}:\n\n\"{note_text}\"\n\n"
                    "Open your creator portal to see the full timecoded feedback and "
                    "submit your next version."))
-    return _review_redirect(project_id, k, name=name, email=mail, r=r)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r, origin=origin)
 
 
 @router.post("/project/{project_id}/review/asset")

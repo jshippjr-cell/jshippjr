@@ -94,6 +94,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A take and its notes are one thing** (ADR-0071, 2026-08-19). A composer submitted v2
+  and the room still opened on v1, with v1's notes on the lane — because notes were
+  filtered to the version under review and rendered once, so there was nothing for
+  selecting a take to select. Every note now names the take it was written against; the
+  newest take leads (labelled `v2 …`, not "with the studio"); clicking a take row loads
+  it *and its notes* without starting it, with ▶ kept for auditioning. A take nobody has
+  heard opens on an empty pane. Alongside: a verdict given in the room stays in the room
+  (`origin=room` — Request changes used to eject the client to the delivery portal), and
+  a submission waiting at the taste gate raises a **Queue nav badge**, because the alert
+  went out by email and no page said anything.
+
 - **The client's room named the freelancers** (ADR-0070, 2026-08-19). The presence
   roster ("Ada · talent"), every note author and every line of the live feed reached the
   buyer by name — the executive review's one condition on putting the room in front of a

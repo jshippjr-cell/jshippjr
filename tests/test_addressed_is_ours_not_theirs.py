@@ -41,7 +41,11 @@ def studio(tmp_path, monkeypatch):
     monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "t.db"))
     monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "letmein")
     monkeypatch.delenv("CHORDENTIAL_SEED_DEMO", raising=False)
+    # `db.DEFAULT_DB_PATH` is read at IMPORT time, so reloading only `app` leaves every
+    # connection pointed at whatever database the first import saw — tests then share one
+    # file and a count from a previous test leaks into this one. Reload db FIRST.
     import importlib
+    importlib.reload(importlib.import_module("chordential_oia.web.db"))
     from chordential_oia.web import app as app_mod
     importlib.reload(app_mod)
     from chordential_oia.web import db

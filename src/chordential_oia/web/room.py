@@ -134,6 +134,10 @@ def priced_notes_only(feedback: dict) -> dict:
     kept = [n for n in (fb.get("notes") or [])
             if (n.get("disposition") or "") in ("conform", "revision")]
     fb["notes"] = kept
+    # The earlier takes' notes obey the same rule. They are the same notes, one
+    # version back; an unpriced one does not become work by being old.
+    fb["archive"] = [n for n in (fb.get("archive") or [])
+                     if (n.get("disposition") or "") in ("conform", "revision")]
     fb["open_count"] = sum(1 for n in kept
                            if n.get("kind") in ("comment", "change_request")
                            and not (n.get("resolved") or n.get("addressed")))
@@ -172,11 +176,12 @@ def room_view(conn, db, project_id: int, role: str, *,
     if "see_internal" not in allowed:
         # Studio-side replies on a client note are internal by definition.
         fb = dict(room.get("feedback") or {})
-        fb["notes"] = [
-            dict(n, replies=[r for r in (n.get("replies") or [])
-                             if not r.get("internal")])
-            for n in (fb.get("notes") or [])
-        ]
+        for key in ("notes", "archive"):
+            fb[key] = [
+                dict(n, replies=[r for r in (n.get("replies") or [])
+                                 if not r.get("internal")])
+                for n in (fb.get(key) or [])
+            ]
         room["feedback"] = fb
     if "see_who" not in allowed:
         # AUTHORSHIP. The note stays — a client must read what the studio said back to
@@ -184,14 +189,15 @@ def room_view(conn, db, project_id: int, role: str, *,
         # template for the same reason as everything above it: a template that forgets
         # an `{% if %}` should leak nothing.
         fb = dict(room.get("feedback") or {})
-        fb["notes"] = [
-            dict(n,
-                 author=attribute(role, n.get("author_role"), n.get("author") or ""),
-                 replies=[dict(r, author=attribute(role, r.get("author_role"),
-                                                   r.get("author") or ""))
-                          for r in (n.get("replies") or [])])
-            for n in (fb.get("notes") or [])
-        ]
+        for key in ("notes", "archive"):
+            fb[key] = [
+                dict(n,
+                     author=attribute(role, n.get("author_role"), n.get("author") or ""),
+                     replies=[dict(r, author=attribute(role, r.get("author_role"),
+                                                       r.get("author") or ""))
+                              for r in (n.get("replies") or [])])
+                for n in (fb.get(key) or [])
+            ]
         room["feedback"] = fb
         # And the take's provenance. `from_creator` names the composer on every row of
         # the version ladder. No client-facing template reads it TODAY — this closes it

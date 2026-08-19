@@ -3495,6 +3495,30 @@ def incoming_unactioned_count(conn: sqlite3.Connection) -> int:
     return leads + new_signal_count(conn)
 
 
+def pending_submission_count(conn: sqlite3.Connection) -> int:
+    """Creator submissions waiting at the taste gate — the Queue nav badge.
+
+    A composer uploaded a take and the whole system said so by email and by a card on a
+    page nobody was looking at: *"the alert went out to approve which is great, no badge
+    showed up in the dashboard letting me know something new happened."* (operator,
+    2026-08-19). The taste gate is the one queue where nothing moves until the operator
+    moves it, so it is the one that has to be visible from wherever they are standing.
+
+    The LIKE narrows the scan to rows that have ever CARRIED a pending version before
+    any JSON is parsed; this runs on every page render, and it is one query either way.
+    """
+    n = 0
+    for row in conn.execute(
+            "SELECT delivery_json FROM projects WHERE delivery_json LIKE ?",
+            ("%pending_version%",)):
+        try:
+            if (json.loads(row["delivery_json"] or "{}") or {}).get("pending_version"):
+                n += 1
+        except (ValueError, TypeError):
+            continue                    # a malformed blob is not a submission
+    return n
+
+
 def get_inbound_lead(conn: sqlite3.Connection, lead_id: int) -> Optional[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM inbound_leads WHERE id = ?", (lead_id,)

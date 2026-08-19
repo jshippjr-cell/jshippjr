@@ -1664,6 +1664,52 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0071 — A take and its notes are one thing
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
+Source: `creator_routes._creator_feedback`, `room.priced_notes_only`,
+`db.pending_submission_count`, `project_routes._review_redirect`,
+`tests/test_the_room_opens_on_the_newest_take.py`
+
+**Decision.** Four rules, from one round of live testing.
+
+(1) **A note belongs to the TAKE it was written against**, and the room selects takes.
+`_creator_feedback` stamps every note with its version and returns the current version's
+notes plus an `archive` of the rest; the room renders all of them and shows only the
+selected take's. Selecting a take brings its conversation; a take nobody has heard yet
+opens on an empty pane, which is where the next round gets written.
+
+(2) **The newest take is the one loaded** — the pending submission when the role may see
+it, carrying the label it will get on publish (`v2 …`), not "with the studio". The old
+default existed because an undecodable bounce could kill the room; the `audio.error`
+fallback now covers that, so the newest take can lead.
+
+(3) **Selecting and auditioning are different intentions.** Clicking a take row loads it
+and its notes and stays where you are; ▶ loads and plays. One control that did all three
+meant the only way to look at a take was to start it.
+
+(4) **A verdict given in the room stays in the room** (`origin=room`), and **a submission
+waiting at the taste gate is visible from every page** (the Queue nav badge). Both are
+the same rule: the surface where the work is heard is where the decision is made, and a
+queue nothing moves through without the operator has to be legible from wherever they
+are standing.
+
+**Why.** *"when i logged into 'the room' V1 was loaded, and the notes from V1 was there,
+V2 should be loaded and labelled as v2 with a fresh pane for new notes"*; *"it requires me
+to click play in order for v2 to be loaded, and it instantly starts playing"*; *"it took
+me out to the client workspace, im not entirely sure that necessary"*; *"the alert went
+out to approve which is great, no badge showed up in the dashboard"*. Underneath all four
+is one idea the room had not been built on: notes were filtered to the version under
+review and rendered once, so there was nothing for selecting a take to select — and with
+no per-take notes, the newest take could not lead without appearing to lose the
+conversation.
+
+**Consequences.** `feedback["notes"]` still means *the take under review* — every counter,
+badge and existing reader depends on that and must not be widened to the archive. A new
+note is recorded against the version under review whatever take is being auditioned
+(`_current_version_tag` is the authority); the room says so rather than filing the card
+where you were looking. Any surface that filters or subtracts notes must handle `archive`
+too — `priced_notes_only` and both `room_view` subtractions do.
+
 ### ADR-0070 — The roster is not the client's, and the room says what its playback is
 **Status:** Accepted (2026-08-19, review panel + operator directive) · Extends ADR-0068 ·
 Source: `room.attribute`, `room.CAPS['see_who']`, `project_routes.session_room_poll`,

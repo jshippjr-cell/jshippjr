@@ -54,6 +54,10 @@ def render(request: Request, name: str, **kw):
             context["new_signals"] = db.new_signal_count(conn)
             # Unified "Incoming" badge — all sources (leads + signals).
             context["new_incoming"] = db.incoming_unactioned_count(conn)
+            # The taste gate. A composer's submission moves nowhere until the operator
+            # publishes it, so "a take is waiting" has to be legible from every page —
+            # an email and a card on the Queue were not enough to notice.
+            context["new_submissions"] = db.pending_submission_count(conn)
         finally:
             conn.close()
     return templates.TemplateResponse(request=request, name=name, context=context)

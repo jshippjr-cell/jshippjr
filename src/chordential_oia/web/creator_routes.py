@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..delivery import (
     current_version, merge_license, revision_status, scoped_deliverables, seed_brief,
-    versions_list,
+    version_label, versions_list,
 )
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
@@ -77,14 +77,18 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         if mail and mail in crew:
             return "talent"
         return "client"
+    archive = []
     for c in rows:
-        # Only the notes a composer acts on, and only for the version they're on now.
+        # Only the notes a composer acts on. EVERY version's, not just the current
+        # one — a note belongs to the take it was written against, and the room now
+        # lets you select a take (operator, 2026-08-19: *"when i click for a version
+        # to be loaded it should also come with its notes"*). `notes` stays the
+        # current version's list, because the counters, the badge and every existing
+        # reader mean "what is waiting on the take under review".
         if c["kind"] not in ("comment", "change_request", "asset_change"):
             continue
         if c["parent_id"]:
             continue                       # replies thread under their parent below
-        if (c["version"] or "") != cur_n:
-            continue
         keys = c.keys()
         disp = (c["disposition"] if "disposition" in keys else "") or ""
         n = {
@@ -98,10 +102,14 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
             # composer must SEE that per-note, not just in the banner.
             "conform": bool(c["conform"] if "conform" in keys else 0),
             "disposition": disp,
+            # The take this note was written against. Blank for a note left before
+            # any version existed — it belongs to no take and shows with the first.
+            "version": (c["version"] or ""),
             "at": c["created_at"] or "",
             "replies": [],
         }
-        notes.append(n); by_id[c["id"]] = n
+        (notes if (c["version"] or "") == cur_n else archive).append(n)
+        by_id[c["id"]] = n
     for c in rows:                          # thread replies (client, studio, composer)
         if c["parent_id"] and c["parent_id"] in by_id:
             keys = c.keys()
@@ -120,6 +128,10 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
     scoped = int(rs.get("scoped") or 0) or None
     return {
         "notes": notes,
+        # Earlier takes' notes, newest version first. Rendered in the room but shown
+        # only when that take is selected — so switching to v1 brings v1's
+        # conversation with it, and a fresh take opens on a fresh pane.
+        "archive": sorted(archive, key=lambda n: (n["version"], n["id"]), reverse=True),
         # What's WAITING: every open human note the composer hasn't handled —
         # timeline comments AND formal change requests (asset_change is system
         # bookkeeping, excluded). The client-side recompute after "Mark addressed"
@@ -219,7 +231,13 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         # review — so they can see it landed instead of the empty "upload your first"
         # state (reported live: after submitting, the portal looked like nothing happened).
         # Removed for the client by `room.room_view`: published versions only.
-        "pending": delivery.get("pending_version") or None,
+        # It carries the LABEL it will get on publish. "with the studio" told you a take
+        # was in the building and not which one it is; a room holding v1 and an unnamed
+        # newer thing reads as a room holding v1 (operator, 2026-08-19: *"V2 should be
+        # loaded and labelled as v2"*).
+        "pending": (dict(delivery["pending_version"],
+                         label=version_label(len(versions_list(delivery)) + 1))
+                    if delivery.get("pending_version") else None),
         "feedback": _creator_feedback(conn, project_id, delivery),
         "creative_lock": locked,
         "deliverables": deliverables,

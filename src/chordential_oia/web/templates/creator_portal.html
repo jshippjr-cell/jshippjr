@@ -409,6 +409,15 @@
 
   /* takes sheet */
   .take-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair);flex-wrap:wrap}
+  /* A take row is a SELECT: click it and the room loads that take and its notes. */
+  .sr-take-row{cursor:pointer;border-radius:8px;padding-left:8px;padding-right:8px;margin:0 -8px;
+    transition:background var(--t-micro,.12s) ease}
+  .sr-take-row:hover{background:rgba(255,255,255,.04)}
+  .sr-take-row.on{background:var(--orange-soft);box-shadow:inset 0 0 0 1px rgba(240,119,44,.35)}
+  .row-state{font:700 9px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--orange)}
+  /* The pane a take opens on when nothing has been said about it yet. */
+  .fb-empty-take{color:var(--dim);font-size:13px;line-height:1.55;margin:10px 0 0}
+  .fb-empty-take[hidden]{display:none}
   .take-row:first-of-type{border-top:0}
   .take-row .vlabel{font:700 11.5px var(--mono);color:var(--orange);min-width:34px}
   .take-row .fname{font:11px var(--mono);color:var(--dim2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -596,7 +605,11 @@
 <div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}
      data-fps="{{ a.picture.fps if a.picture and a.picture.fps else '' }}"
      data-tc0="{{ a.picture.tc_start if a.picture and a.picture.tc_start else '' }}"
-     data-cut="{{ a.picture.n if a.picture and a.picture.n else '' }}">
+     data-cut="{{ a.picture.n if a.picture and a.picture.n else '' }}"
+     {# The version a NEW note is recorded against — the server's rule
+        (`_current_version_tag`), stated here so the room can put the note where it
+        actually landed instead of where you were looking. #}
+     data-note-version="{{ a.versions[-1].n if a.versions else '0' }}">
 
   <!-- doorline -->
   <div class="doorline">
@@ -631,7 +644,9 @@
     <div class="poster-title">
       <span class="pt-kick">{{ a.client|upper }}</span>
       <h1>{{ a.need }}</h1>
-      <span class="pt-sub">Your role: {{ a.role }}</span>
+      {# `a.role` is the CREATOR's hat on this engagement; the studio and the client have
+         none, so the line rendered as a bare "Your role:" with nothing after it. #}
+      {% if a.role %}<span class="pt-sub">Your role: {{ a.role }}</span>{% endif %}
     </div>
     <span class="picture-note">PICTURE ARRIVES WITH THE CLIENT'S CUT</span>
     {% endif %}
@@ -684,15 +699,26 @@
       {# the listening default is the last PUBLISHED take — the pending one may be
          an undecodable bounce (AIFF in Chrome) and the room must stay alive #}
       {# A take names the CUT it was written against. "v2" alone is half an answer:
-         music is written to a picture, and the picture moves. #}
+         music is written to a picture, and the picture moves. And it names its own
+         VERSION, so selecting it brings that take's notes with it. #}
       {% for v in a.versions %}
-      <button class="take-chip sr-take {{ 'on' if loop.last }}"
-              data-src="{{ v.url or '' }}" data-cut="{{ v.cut or '' }}">{{ v.label
+      <button class="take-chip sr-take {{ 'on' if loop.last and not a.pending }}"
+              data-src="{{ v.url or '' }}" data-cut="{{ v.cut or '' }}"
+              data-version="{{ v.n }}">{{ v.label
         }}{% if v.cut %}<span class="tc-cut"> · cut {{ v.cut }}</span>{% endif %}</button>
       {% endfor %}
+      {# THE NEWEST TAKE IS THE ONE LOADED. The room opened on the last PUBLISHED take
+         even when a newer one was sitting in it — so a composer submitted v2, the alert
+         went out, and the room still played v1 with v1's notes on the lane. Reported
+         live. An undecodable bounce was the reason for the old default; the `audio.error`
+         handler now falls back to a playable take, so the newest one can lead.
+         `data-version` is EMPTY: a take with no published version has no notes yet, and
+         that is the fresh pane you write the next round of them into. #}
       {% if a.pending %}
-      <button class="take-chip pending sr-take {{ 'on' if not a.versions }}"
-              data-src="{{ a.pending.url or '' }}" data-cut="{{ a.pending.cut or '' }}">with the studio{%
+      <button class="take-chip pending sr-take on"
+              data-src="{{ a.pending.url or '' }}" data-cut="{{ a.pending.cut or '' }}"
+              data-version="" title="Submitted, with the studio — the client cannot hear it yet">{{
+        a.pending.label or 'with the studio' }}<span class="tc-cut"> · with the studio</span>{%
         if a.pending.cut %}<span class="tc-cut"> · cut {{ a.pending.cut }}</span>{% endif %}</button>
       {% endif %}
     </div>
@@ -810,7 +836,12 @@
     </ul>
   </div>
   <div class="verdict">
+    {# `origin=room` keeps the verdict IN the room. Without it the client pressed
+       Request changes on the take they were listening to and landed on the delivery
+       portal — a different page about the same version, with none of what they had
+       just been doing on it. Reported live. #}
     <form method="post" action="/project/{{ a.project_id }}/review/approve" class="v-yes">
+      <input type="hidden" name="origin" value="room">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
       <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
       <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
@@ -819,6 +850,7 @@
               onclick="return confirm('Approve {{ (a.version_state or 'this version')|e }} as the selected master?\n\nWe produce the remaining deliverables from it and you sign off each one. This does not spend a revision round.');">✓ Approve {{ a.version_state or 'this version' }}</button>
     </form>
     <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no">
+      <input type="hidden" name="origin" value="room">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
       <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
       <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
@@ -939,14 +971,19 @@
       Re-syncing your music to the new cut is a conform, and <b>it doesn't count against
       your rounds.</b> Notes tagged from an earlier cut may have moved.</div>
     {% endif %}
-    {% if a.feedback and a.feedback.notes %}
+    {% if a.feedback and (a.feedback.notes or a.feedback.archive) %}
     <div class="fb-top">
       <span class="open-ct">{{ a.feedback.open_count }} to address</span>
       {% if a.feedback.round_phrase %}<span>· {{ a.feedback.round_phrase }}</span>{% endif %}
       <span>· "addressed" is your working state; the client's list only changes when the studio publishes</span>
     </div>
-    {% for n in a.feedback.notes %}
-    <div class="note-card sr-note {{ 'done' if (n.resolved or n.addressed) }}" data-note="{{ n.id }}">
+    {# A note belongs to the TAKE it was written against. Every take's notes are here,
+       tagged; the room shows the selected take's and hides the rest, so switching to v1
+       brings v1's conversation and a fresh take opens on a fresh pane. #}
+    <p class="fb-empty-take" hidden></p>
+    {% for n in (a.feedback.notes + (a.feedback.archive|default([]))) %}
+    <div class="note-card sr-note {{ 'done' if (n.resolved or n.addressed) }}"
+         data-note="{{ n.id }}" data-version="{{ n.version|default('') }}">
       <div class="nc-top">
         <span class="nc-dot"></span>
         <span class="nc-who">{{ n.author }}</span>
@@ -1038,17 +1075,27 @@
     </div>
 
     {% if a.pending %}
-    <div class="take-row">
-      <span class="vlabel">→</span>
+    <div class="take-row sr-take-row" data-src="{{ a.pending.url or '' }}" data-version=""
+         role="button" tabindex="0" title="Load {{ a.pending.label or 'this take' }}">
+      <span class="vlabel">{{ a.pending.label or '→' }}</span>
       <span class="pend-badge">With the studio · under review</span>
       <span class="fname">{{ a.pending.orig or a.pending.filename }}{% if a.pending.at %} · {{ a.pending.at[:10] }}{% endif %}</span>
+      <span class="row-state"></span>
       {% if a.pending.url %}<button type="button" class="row-play sr-row-play" data-src="{{ a.pending.url }}" aria-label="Play this take">▶</button>{% endif %}
     </div>
     {% endif %}
+    {# Clicking a take LOADS it — the track and the notes written against it — and
+       stays where you are. It used to have one control, ▶, which loaded it, started it
+       and shut the sheet: *"it requires me to click play in order for v2 to be loaded,
+       and it instantly starts playing"* (operator, 2026-08-19). Selecting and auditioning
+       are two different intentions; ▶ is still there for the second one. #}
     {% for v in a.versions|reverse %}
-    <div class="take-row">
+    <div class="take-row sr-take-row" data-src="{{ v.url or '' }}" data-version="{{ v.n }}"
+         role="button" tabindex="0" title="Load {{ v.label }} and its notes">
       <span class="vlabel">{{ v.label }}</span>
       <span class="fname">{{ v.name or '' }}</span>
+      {% if v.cut %}<span class="tc-cut">cut {{ v.cut }}</span>{% endif %}
+      <span class="row-state"></span>
       {% if v.url %}<button type="button" class="row-play sr-row-play" data-src="{{ v.url }}" aria-label="Play {{ v.label }}">▶</button>{% endif %}
     </div>
     {% endfor %}
@@ -1110,8 +1157,8 @@
   </div>
 
   <script type="application/json" class="sr-notes-data">
-    [{% if a.feedback and a.feedback.notes %}{% for n in a.feedback.notes %}
-      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "t_end": {{ n.t_end if n.t_end is not none else 'null' }}, "kind": "{{ n.kind }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
+    [{% if a.feedback and (a.feedback.notes or a.feedback.archive) %}{% for n in (a.feedback.notes + (a.feedback.archive|default([]))) %}
+      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "t_end": {{ n.t_end if n.t_end is not none else 'null' }}, "kind": "{{ n.kind }}", "version": "{{ n.version|default('') }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
 
@@ -1211,7 +1258,16 @@
     <img src="/static/public/wordmark-ko.png" alt="Chordential"
          style="height:23px;width:auto;display:inline-block;vertical-align:-4px;margin-right:11px">
     Session Room</div>
-  <div class="sr-arrival-line">Everything is ready.<br>This room is waiting for your music.</div>
+  {# The house-lights line has to be TRUE of the room behind it. It said "waiting for
+     your music" over a room already holding two takes, on the first visit of whoever
+     opened it — which for the studio and the client is every room. This block is
+     PAGE-level (outside the per-room loop), so it reads the room it is covering rather
+     than a loop variable that is out of scope here. #}
+  {% set arr = (assignments|first) if assignments else None %}
+  <div class="sr-arrival-line">{% if arr and (arr.versions or arr.pending) %}Everything is
+      here.<br>{{ arr.pending.label if arr.pending else (arr.version_state or 'The latest take')
+      }} is loaded, with its notes.{% else %}Everything is ready.<br>This room is waiting
+      for your music.{% endif %}</div>
   <button class="sr-begin" type="button" id="sr-begin">Begin</button>
   <button class="sr-skip" type="button" id="sr-skip">Skip intro</button>
 </div>
@@ -1316,10 +1372,40 @@
       conformWarn.hidden = false;
       stage.classList.add("out-of-conform");
     }
+    /* A take and its notes are one thing. Selecting v1 brings v1's conversation with
+       it; selecting a take with no published version — the one just submitted — opens
+       an empty pane, which is the fresh sheet the next round gets written on. */
+    var shownVersion = null;
+    function showVersion(tag){
+      shownVersion = (tag == null ? "" : String(tag));
+      var shown = 0, total = 0;
+      root.querySelectorAll(".sr-note").forEach(function(card){
+        total++;
+        var match = (card.dataset.version || "") === shownVersion;
+        card.hidden = !match;
+        if (match) shown++;
+      });
+      var empty = root.querySelector(".fb-empty-take");
+      if (empty){
+        empty.hidden = (shown > 0) || (total === 0);
+        empty.textContent = shownVersion
+          ? "No notes on this take yet."
+          : "This take is with the studio — the client hasn't heard it, so there are no "
+            + "notes on it yet. Notes on earlier takes are under their own version.";
+      }
+      root.querySelectorAll(".sr-take-row").forEach(function(rw){
+        var on = (rw.dataset.version || "") === shownVersion;
+        rw.classList.toggle("on", on);
+        var st = rw.querySelector(".row-state");
+        if (st) st.textContent = on ? "loaded" : "";
+      });
+      renderPins();
+    }
     function loadTake(chip){
       chips.forEach(function(c){ c.classList.remove("on"); });
       peaks = null;
       paintConform(chip);
+      if (chip) showVersion(chip.dataset.version || "");
       // 'noaudio' only silences the room when there is no picture either —
       // with a cut loaded, the stage plays picture-only just fine
       if (!chip){ if (!hasPicture) stage.classList.add("noaudio"); hasAudio = false; return; }
@@ -1442,7 +1528,8 @@
       // notes past this cut's end never fake a position (design review P1-3):
       // they collect into one honest "beyond this cut" badge at the lane's edge
       var beyond = notes.filter(function(n){
-        return n.t !== null && n.t !== undefined && n.t > D; });
+        return (shownVersion === null || (n.version || "") === shownVersion)
+          && n.t !== null && n.t !== undefined && n.t > D; });
       if (beyond.length){
         var bb = document.createElement("button");
         bb.type = "button"; bb.className = "pin-beyond";
@@ -1452,6 +1539,8 @@
         noteLane.appendChild(bb);
       }
       notes.forEach(function(n){
+        // a pin belongs to the take it was written against
+        if (shownVersion !== null && (n.version || "") !== shownVersion) return;
         if (n.t === null || n.t === undefined || n.t > D) return;
         // a range note (t_end) draws a span bar under the lane before its pin
         if (n.t_end != null && n.t_end > n.t){
@@ -1789,11 +1878,41 @@
     });
     // a take row's play button routes through the room's one audio engine —
     // no native browser chrome inside the room (review P1-4)
+    function chipFor(src, version){
+      var found = null;
+      chips.forEach(function(c){
+        if (found) return;
+        if (c.dataset.src && c.dataset.src === src) found = c;
+        else if ((c.dataset.version || "") === (version || "") && !src) found = c;
+      });
+      return found;
+    }
+    // Selecting a take: load it and its notes, stay in the sheet, play nothing.
+    root.querySelectorAll(".sr-take-row").forEach(function(rw){
+      function select(){
+        var chip = chipFor(rw.dataset.src, rw.dataset.version);
+        if (chip){ loadTake(chip); }
+        else if (rw.dataset.src){
+          audio.src = rw.dataset.src; hasAudio = true; peaks = null;
+          showVersion(rw.dataset.version || ""); drawWave();
+        }
+        whisper("Loaded " + (rw.querySelector(".vlabel") || {}).textContent);
+      }
+      rw.addEventListener("click", function(e){
+        if (e.target.closest(".row-play")) return;    // ▶ has its own intention
+        select();
+      });
+      rw.addEventListener("keydown", function(e){
+        if (e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); select(); }
+      });
+    });
+    // ▶ is the second intention: load it AND play it, from the top of the room.
     root.querySelectorAll(".sr-row-play").forEach(function(b){
-      b.addEventListener("click", function(){
-        var chip = null;
-        chips.forEach(function(c){ if (c.dataset.src === b.dataset.src) chip = c; });
-        if (chip){ loadTake(chip); } else { audio.src = b.dataset.src; hasAudio = true; peaks = null; }
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        var chip = chipFor(b.dataset.src, "");
+        if (chip){ loadTake(chip); }
+        else { audio.src = b.dataset.src; hasAudio = true; peaks = null; }
         closeAllSheets(); audio.play();
       });
     });
@@ -1970,7 +2089,9 @@
 
     // init
     drawPoster();
-    loadTake(root.querySelector(".sr-take.on") || null);
+    var firstChip = root.querySelector(".sr-take.on");
+    loadTake(firstChip || null);
+    if (!firstChip) showVersion(root.dataset.noteVersion || "");
     addEventListener("resize", function(){ drawPoster(); drawWave(); });
 
     function restart(){
@@ -2004,6 +2125,7 @@
         var card = document.createElement("div");
         card.className = "note-card sr-note";
         card.setAttribute("data-note", n.id);
+        card.setAttribute("data-version", n.version || "");
         card.innerHTML =
           '<div class="nc-top"><span class="nc-dot"></span>' +
           '<span class="nc-who"></span>' +
@@ -2157,10 +2279,15 @@
           .then(function(resp){
             if (!resp.ok) throw new Error("post failed");
             var at = parseFloat(tEl.value) || 0;
+            /* The note lands on the version under REVIEW, whichever take you happen
+               to be auditioning — that is the server's rule and the client's portal
+               reads the same one. Stamping it with what is on screen would put a card
+               in a pane the next reload disagrees with. */
+            var landed = root.dataset.noteVersion || "0";
             notes.push({ id: "local-" + Date.now(), t: at,
                          t_end: (endEl.value ? parseFloat(endEl.value) : null),
                          author: bar.querySelector("[name=author]").value || "You",
-                         body: text, kind: "comment", resolved: false,
+                         body: text, kind: "comment", version: landed, resolved: false,
                          addressed: false, conform: false, replies: [] });
             body.value = ""; from = null; to = null; setMark("");
             renderPins(); paintBand();
@@ -2176,7 +2303,10 @@
                one. Put it in the list and move the count with it. */
             addNoteCard(notes[notes.length - 1]);
             paint();
-            whisper("Note left at " + fmt(at));
+            whisper(landed === shownVersion || shownVersion === null
+              ? "Note left at " + fmt(at)
+              : "Note left at " + fmt(at) + " — on the take under review, not the one "
+                + "you're auditioning.");
           })
           .catch(function(){
             // Put the label back the way `paint()` expects to find it — the toast
