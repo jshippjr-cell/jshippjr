@@ -88,31 +88,33 @@ def _lane(page, asset):
 # ── a lane is a folder ──────────────────────────────────────────────────────────────
 def test_a_lane_takes_a_whole_stem_package(crew):
     c, _db, pid, toks, _k, _a = crew
-    got = _send(c, pid, toks["mixer"], "Mix-ready stem package",
+    got = _send(c, pid, toks["composer"], "Mix-ready stem package",
                 ["kick.wav", "snare.wav", "bass.wav", "gtr_l.wav", "gtr_r.wav", "vox.wav"])
     assert got["ok"] and got["added"] == 6 and got["count"] == 6, got
 
 
 def test_a_lane_stays_open_for_the_rest(crew):
-    """The defect exactly: the row closed on the first file."""
+    """The defect exactly: the row closed on the first file. Sent from the COMPOSER's
+    room — the stem package is theirs to bounce (ADR-0075)."""
     c, _db, pid, toks, _k, _a = crew
-    _send(c, pid, toks["mixer"], "Mix-ready stem package", ["kick.wav", "snare.wav"])
-    later = _send(c, pid, toks["mixer"], "Mix-ready stem package",
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    later = _send(c, pid, toks["composer"], "Mix-ready stem package",
                   ["strings.wav", "brass.wav", "fx.wav"])
     assert later["count"] == 5, later
-    lane = _lane(c.get(f"/room/{pid}?t={toks['mixer']}").text, "Mix-ready stem package")
+    lane = _lane(c.get(f"/room/{pid}?t={toks['composer']}").text, "Mix-ready stem package")
     assert "5 files with the studio" in lane, lane
     assert "Add more" in lane, "the lane closed itself again"
 
 
 def test_each_lane_counts_only_its_own(crew):
     c, _db, pid, toks, _k, _a = crew
-    _send(c, pid, toks["mixer"], "Mix-ready stem package", ["a.wav", "b.wav", "c.wav"])
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav", "b.wav", "c.wav"])
     cuts = _send(c, pid, toks["editor"], ":30 / :15 / :06 cutdowns",
                  ["cut30.wav", "cut15.wav"])
     assert cuts["count"] == 2, "the count is a running total of everything ever sent"
-    page = c.get(f"/room/{pid}?t={toks['editor']}").text
+    page = c.get(f"/room/{pid}?t={toks['composer']}").text
     assert "3 files with the studio" in _lane(page, "Mix-ready stem package")
+    page = c.get(f"/room/{pid}?t={toks['editor']}").text
     assert "2 files with the studio" in _lane(page, ":30 / :15")
 
 
@@ -122,7 +124,7 @@ def test_one_bad_file_does_not_lose_the_others(crew):
     files = [("file", ("kick.wav", io.BytesIO(b"RIFF0000WAVE" + os.urandom(48)), "audio/wav")),
              ("file", ("empty.wav", io.BytesIO(b""), "audio/wav")),
              ("file", ("snare.wav", io.BytesIO(b"RIFF0000WAVE" + os.urandom(48)), "audio/wav"))]
-    got = c.post(f"/creator/{toks['mixer']}/project/{pid}/deliverable",
+    got = c.post(f"/creator/{toks['composer']}/project/{pid}/deliverable",
                  data={"label": "Mix-ready stem package"}, files=files,
                  headers={"X-Requested-With": "fetch"}).json()
     assert got["ok"] and got["added"] == 2, got
@@ -130,18 +132,25 @@ def test_one_bad_file_does_not_lose_the_others(crew):
 
 def test_nothing_at_all_is_still_refused(crew):
     c, _db, pid, toks, _k, _a = crew
-    got = c.post(f"/creator/{toks['mixer']}/project/{pid}/deliverable",
+    got = c.post(f"/creator/{toks['composer']}/project/{pid}/deliverable",
                  data={"label": "Mix-ready stem package"},
                  files=[("file", ("empty.wav", io.BytesIO(b""), "audio/wav"))],
                  headers={"X-Requested-With": "fetch"})
     assert got.status_code == 400
 
 
-def test_the_lanes_accept_multiple_and_offer_one_press_for_all(crew):
-    c, _db, pid, toks, _k, _a = crew
-    page = c.get(f"/room/{pid}?t={toks['mixer']}").text
-    assert page.count('name="file" multiple') >= 4, (
-        "a lane still takes one file at a time")
+def test_every_lane_offered_accepts_many_files(crew):
+    """Asserted as a PROPERTY, not a count: lanes became role-scoped (ADR-0075), so how
+    many boxes a given room shows depends on who is looking."""
+    c, _db, pid, toks, _k, admin = crew
+    c.cookies.set(*admin)                       # the studio sees every lane
+    page = c.get(f"/room/{pid}").text
+    boxes = re.findall(r'<input type="file" name="file"([^>]*)>', page)
+    # Two lanes are open at this point: the composer's stems and the mixer's TV mix. The
+    # editor's two are legitimately closed — they wait on the mix (ADR-0075).
+    assert len(boxes) == 2, boxes
+    assert all("multiple" in b for b in boxes), (
+        f"a lane still takes one file at a time: {boxes}")
     assert 'id="deliv-all"' in page, (
         "no way to fill several lanes and send them together")
 
@@ -174,7 +183,7 @@ def test_every_delivered_file_waits_for_the_studio(crew):
     """*"re-upload them for my final approval before it gets pushed out to the client"* —
     the uniform publish gate, stems included."""
     c, db, pid, toks, ktok, _a = crew
-    _send(c, pid, toks["mixer"], "Mix-ready stem package", ["a.wav", "b.wav"])
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav", "b.wav"])
     conn = db.connect()
     d = db.get_delivery(conn, pid)
     conn.close()
@@ -188,7 +197,7 @@ def test_every_delivered_file_waits_for_the_studio(crew):
 
 def test_the_operator_sees_every_file_waiting(crew):
     c, db, pid, toks, _k, admin = crew
-    _send(c, pid, toks["mixer"], "Mix-ready stem package",
+    _send(c, pid, toks["composer"], "Mix-ready stem package",
           ["a.wav", "b.wav", "c.wav", "d.wav"])
     c.cookies.set(*admin)
     console = c.get(f"/project/{pid}/delivery").text

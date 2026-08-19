@@ -94,6 +94,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Composer → mixer → editor is a chain** (ADR-0075, 2026-08-19). Every creator saw
+  every deliverable lane with an open upload box, so the editor was invited to cut down a
+  mix that did not exist. The crafts and what each owes now live in `delivery.py`: the
+  composer bounces the stems, the mixer makes the instrumental/TV mix from the approved
+  master, the editor makes the cutdowns and verticals from the mixer's **published** mix
+  — and is told "waiting on the mixer" until it lands, then emailed and handed the file.
+  Supersedes the open item left by ADR-0074.
+
 - **A deliverable lane holds a folder** (ADR-0074, 2026-08-19). A lane took one file and
   closed itself, so a twelve-stem package was a row reading "under review" with one stem
   in it. Lanes now take many files, in as many batches as it takes, stay open, and report

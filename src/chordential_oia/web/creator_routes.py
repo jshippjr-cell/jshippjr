@@ -27,8 +27,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..delivery import (
-    current_version, merge_license, revision_status, scoped_deliverables, seed_brief,
-    version_label, versions_list,
+    current_version, deliverable_owner, merge_license, owed_after, revision_status,
+    role_key, scoped_deliverables, seed_brief, version_label, versions_list,
 )
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
@@ -212,23 +212,52 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
                         for x in (delivery.get("pending_assets") or []))
     published_n = Counter((a.get("label") or a.get("filename") or "").strip().lower()
                           for a in (delivery.get("assets") or []))
+    published_files = {}
+    for asset in (delivery.get("assets") or []):
+        key = (asset.get("label") or asset.get("filename") or "").strip().lower()
+        published_files.setdefault(key, []).append(
+            {"url": asset.get("url") or "",
+             "name": asset.get("orig") or asset.get("filename") or "file"})
+    # WHOSE LANE, and what it is made FROM (ADR-0075). The composer writes and bounces
+    # the stems; the mixer works from the approved master; the editor cuts down the
+    # mixer's finished mix. A lane whose upstream has not been published yet is not work
+    # anyone can start, and saying so is better than an empty upload box that looks like
+    # a missed deadline.
+    rows = [d for d in scoped_deliverables(prow, delivery) if not d.get("is_master")]
+    published_by_owner = {}
+    for d in rows:
+        owner = deliverable_owner(d["asset"], d.get("group", ""))
+        if published_n.get((d["asset"] or "").strip().lower()):
+            published_by_owner[owner] = True
     deliverables = []
-    for d in scoped_deliverables(prow, delivery):
-        if d.get("is_master"):
-            continue
+    for d in rows:
         key = (d["asset"] or "").strip().lower()
+        owner = deliverable_owner(d["asset"], d.get("group", ""))
+        waits_on = owed_after(owner)
         deliverables.append({
             "asset": d["asset"], "group": d["group"],
             "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
             "pending": bool(pending_n.get(key)),
             "pending_n": pending_n.get(key, 0),
             "published_n": published_n.get(key, 0),
+            "owner": owner,
+            "waits_on": waits_on,
+            # The published files themselves. The editor's cutdowns are made FROM the
+            # mixer's mix, so knowing it exists is half an answer — they need the file.
+            # `room.room_view` strips these for the client, who receives the package.
+            "files": published_files.get(key, []),
+            # Ready = nothing upstream, or the upstream craft has published something.
+            "ready": (not waits_on) or bool(published_by_owner.get(waits_on)),
         })
     return {
         "project_id": project_id,
         "role": role,
         # Every hat a creator wears on this engagement, in assignment order.
         "roles": ([role] if role else []),
+        # …and the CRAFTS behind those hats, which is what a deliverable lane is keyed
+        # by. "Mixer", "Audio Engineer" and "Mix engineer" are one craft; the room has
+        # to know that before it can say whose lane a row is.
+        "role_keys": [k for k in [role_key(role)] if k],
         "client": prow["client"],
         "need": prow["need"],
         "deadline": prow["deadline"],
@@ -330,6 +359,7 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         uniq = list(dict.fromkeys(r for r in v["roles"] if (r or "").strip()))
         v["roles"] = uniq
         v["role"] = " · ".join(uniq) or v["role"]
+        v["role_keys"] = list(dict.fromkeys(k for k in (role_key(r) for r in uniq) if k))
     return out
 
 

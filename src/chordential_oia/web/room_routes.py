@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from .. import contributor_release, signing
+from .. import contributor_release, delivery, signing
 from ..talent import profile_completeness
 from . import db, room
 from .creator_routes import _room_for_project
@@ -65,6 +65,9 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
                     if trow is not None and int(a["talent_id"] or 0) == int(trow["id"])]
             view["roles"] = list(dict.fromkeys(hats))
             view["role"] = " · ".join(view["roles"]) or "Creator"
+            # The crafts behind the hats — what a deliverable lane is keyed by (ADR-0075).
+            view["role_keys"] = list(dict.fromkeys(
+                k for k in (delivery.role_key(r) for r in view["roles"]) if k))
             viewer = db.talent_from_row(trow) if trow is not None else None
             # The standing agreement belongs to the CREATOR. Passing None made the banner
             # render its unsigned copy — so a client opening the room was told to read and

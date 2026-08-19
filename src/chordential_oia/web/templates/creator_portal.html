@@ -484,6 +484,13 @@
   .ok-line{color:var(--text);font-weight:700;font-size:11px;border:1px solid var(--hair2);border-radius:4px;padding:3px 8px}
   .deliv-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--hair)}
   .lane-count{white-space:nowrap}
+  /* Whose lane it is, and what it is waiting for (ADR-0075). */
+  .lane-owner{font:700 8.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
+    border:1px solid var(--hair2);border-radius:999px;padding:2px 7px;color:var(--dim2);
+    margin-left:7px;white-space:nowrap}
+  .lane-owner.yours{border-color:rgba(240,119,44,.55);color:var(--orange)}
+  .deliv-row.not-mine{opacity:.62}
+  .lane-wait{font:11.5px var(--sans);color:var(--dim2);font-style:italic;white-space:nowrap}
   /* The file the rest of the work is made from. */
   .work-from{margin:0 0 8px;padding:8px 11px;border:1px solid rgba(240,119,44,.35);
     border-radius:9px;background:var(--orange-soft)}
@@ -1254,20 +1261,37 @@
     {% if a.creative_lock %}
     <h3>✓ Master approved. Now deliver the remaining assets</h3>
     {# THE FILE THE REST OF THE WORK IS MADE FROM. A mixer or an editor is invited at
-       exactly this moment — to mix the approved master, or cut it to :30 and :15 — and
-       the room, which knows which version is approved, gave them no way to get it. Only
-       for a hand that may hold the source (`room.CAPS`). #}
+       exactly this moment — to mix the approved master, or cut the mix to :30 and :15 —
+       and the room, which knows which version is approved, gave them no way to get it.
+       Only for a hand that may hold the source (`room.CAPS`). #}
+    {% set mine = a.role_keys|default([]) %}
     {% if a.master and a.master.url and 'download_source' in (caps|default(['download_source'])) %}
     <p class="fineprint work-from">Work from <b>{{ a.master.label or 'the approved master' }}</b> —
       <a href="{{ a.master.url }}" download="{{ a.master.name or a.master.filename or 'master' }}"
          style="color:var(--orange)">⇓ download the approved master</a></p>
     {% endif %}
-    <p class="fineprint" style="margin:0 0 6px">Upload each below — a lane takes as many
-      files as it needs, so a stem package arrives whole. Everything lands with the studio
-      for review first, then we publish it to the client for sign-off.</p>
+    {# …and for a craft that works from someone ELSE's finished file, that file. The
+       editor cuts down the mixer's mix, not the composer's master (ADR-0075). #}
+    {% set upstream = a.deliverables|selectattr('owner', 'equalto', 'mixer')
+                                    |selectattr('files')|list if 'editor' in mine else [] %}
+    {% if upstream %}
+    <p class="fineprint work-from">Your cutdowns come from the published mix:
+      {% for u in upstream %}{% for f in u.files %}<a href="{{ f.url }}" download="{{ f.name }}"
+        style="color:var(--orange)">⇓ {{ f.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}{% endfor %}</p>
+    {% endif %}
+    <p class="fineprint" style="margin:0 0 6px">A lane takes as many files as it needs, so
+      a stem package arrives whole. Everything lands with the studio for review first, then
+      we publish it to the client for sign-off.</p>
     {% for d in a.deliverables %}
-    <div class="deliv-row">
-      <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
+    {# WHOSE LANE (ADR-0075). Everyone sees the whole delivery — the editor needs to know
+       the mix exists — but only the craft that owes a lane is offered its upload box.
+       With no hats known (the studio, or an unmapped role) every lane is offered, which
+       is the behaviour every room had before this. #}
+    {% set owned = (not mine) or (d.owner in mine) or not d.owner %}
+    <div class="deliv-row{{ ' not-mine' if not owned }}">
+      <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}
+        {% if d.owner and (mine or (room_role|default('')) == 'operator') %}<span class="lane-owner{{ ' yours' if owned and mine }}">{{
+          'yours' if (owned and mine) else d.owner }}</span>{% endif %}</span>
       {% if d.published_n %}
       <span class="ok-line">✓ Delivered{% if d.published_n > 1 %} · {{ d.published_n }} files{% endif %}</span>
       {% elif d.uploaded %}
@@ -1276,6 +1300,11 @@
       {% if d.pending_n %}
       <span class="pend-badge lane-count">{{ d.pending_n }} file{{ 's' if d.pending_n != 1 }} with the studio · under review</span>
       {% endif %}
+      {% if not d.ready %}
+      {# The chain, said out loud. An empty upload box on work nobody can start yet reads
+         as a missed deadline. #}
+      <span class="lane-wait">waiting on the {{ d.waits_on }} — you'll be emailed when it's published</span>
+      {% elif owned %}
       {# The lane STAYS OPEN. It used to close on the first file, so a twelve-stem package
          was a row reading "under review" with one stem in it and nowhere to put the rest. #}
       <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable"
@@ -1284,6 +1313,7 @@
         <input type="file" name="file" multiple required style="font-size:11.5px;max-width:180px">
         <button class="btn tiny" type="submit">{{ 'Add more' if (d.pending_n or d.uploaded) else 'Upload' }}</button>
       </form>
+      {% endif %}
     </div>
     {% endfor %}
     {# …or fill several lanes and send them together. #}

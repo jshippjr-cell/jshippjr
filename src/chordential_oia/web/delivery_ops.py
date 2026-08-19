@@ -19,8 +19,8 @@ from typing import Optional
 
 from .. import mailer
 from ..delivery import (
-    build_delivery_zip, current_version, delivery_completeness, scoped_deliverables,
-    state_on_client_approved, version_label, versions_list,
+    build_delivery_zip, current_version, delivery_completeness, role_key,
+    scoped_deliverables, state_on_client_approved, version_label, versions_list,
 )
 from ..storage import get_object_store
 from . import db, production, signals, webpush
@@ -72,13 +72,16 @@ def _delivery_console_url(project_id: int) -> str:
 
 
 def _notify_assigned_creators(project_id: int, project, *, subject: str,
-                              body_text: str, exclude_email: str = "") -> None:
+                              body_text: str, exclude_email: str = "",
+                              only_craft: str = "") -> None:
     """Composer-direction notification: email each assigned creator (with an email)
     when the client acts on their work — approved, or changes requested. Also used to
     broadcast a new assignment to the whole project crew. Closes the loop the review
     portal opened: the composer hears the verdict from us instead of Jon relaying it by
     hand. ``exclude_email`` skips one recipient (e.g. the just-assigned creator who has
-    already had a tailored email). Best-effort, per creator, never raises. Runs in its
+    already had a tailored email). ``only_craft`` narrows to one craft — the hand-off
+    down the chain (ADR-0075) is addressed to the editor, not to everyone who has ever
+    touched the project. Best-effort, per creator, never raises. Runs in its
     own DB connection so it's safe to fire-and-forget off the request thread."""
     conn = db.connect()
     try:
@@ -109,6 +112,8 @@ def _notify_assigned_creators(project_id: int, project, *, subject: str,
     for a in assignments:
         email = (a["talent_email"] or "").strip() if "talent_email" in a.keys() else ""
         if not email or email.lower() in seen:
+            continue
+        if only_craft and role_key(a["role"] if "role" in a.keys() else "") != only_craft:
             continue
         seen.add(email.lower())
         name = (a["talent_name"] or "there").strip() if "talent_name" in a.keys() else "there"

@@ -36,7 +36,8 @@ from .. import mailer, recruiting, reviewers, signing
 from ..estimation import ROLE_RATES, stated_length
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet, build_manifest,
-    build_timeline, current_version, delivery_completeness, license_confirmation,
+    build_timeline, current_version, delivery_completeness,
+    deliverable_owner as D_deliverable_owner, license_confirmation,
     merge_signatory, reconcile_brief, revision_status,
     scoped_deliverables, seed_brief, version_label, version_name, versions_list,
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, CONTENT_ID_HONEST, DELIVERY_STATES, VERSION_STATES,
@@ -2744,8 +2745,12 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
     """Jon's disposition of a creator's pending DELIVERABLE (stems, cutdowns,
     verticals): publish it into the client-visible assets, or discard it. The same
     gate the master gets — uniform, per the EP review (unvetted stems on delivery
-    night were the hole)."""
+    night were the hole).
+
+    Publishing is also a HAND-OFF: the editor's cutdowns are made from the mixer's
+    finished mix (ADR-0075), so the mix landing is the moment they are up."""
     conn = db.connect()
+    invite = None
     try:
         delivery = db.get_delivery(conn, project_id)
         pending = list(delivery.get("pending_assets") or [])
@@ -2767,13 +2772,38 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
                           f"Sent back the pending deliverable '{hit.get('label')}'.")
         else:
             assets = list(delivery.get("assets") or [])
+            was_published = {(a.get("label") or "").strip().lower()
+                             for a in assets}
+            # Carry the ORIGINAL name through. Without it a published deliverable
+            # downloads as `proj7-0bb762d8b1.wav`, and the next person in the chain has
+            # to open twelve of those to find out which is the kick.
             assets.append({"label": hit.get("label"), "url": hit.get("url"),
-                           "filename": hit.get("filename"), "kind": hit.get("kind")})
+                           "filename": hit.get("filename"), "orig": hit.get("orig") or "",
+                           "kind": hit.get("kind")})
             db.update_delivery(conn, project_id, "assets", assets)
             db.add_update(conn, project_id,
                           f"Published '{hit.get('label')}' · ready for client sign-off.")
+            # THE CHAIN (ADR-0075). The editor's cutdowns are made from the mixer's
+            # finished mix, so publishing that mix is the moment they are up — and
+            # nobody was telling them. Only on the FIRST published file of that lane;
+            # twelve stems must not send twelve emails.
+            if (hit.get("label") or "").strip().lower() not in was_published:
+                owner = D_deliverable_owner(hit.get("label") or "")
+                downstream = [k for k, up in (("editor", "mixer"),) if up == owner]
+                if downstream:
+                    project = db.get_project(conn, project_id)
+                    invite = (project, downstream[0], hit.get("label") or "the mix")
     finally:
         conn.close()
+    if invite is not None:
+        project, craft, label = invite
+        campaign = _campaign_label(project)
+        signals.fire_and_forget(
+            _notify_assigned_creators, project_id, project, only_craft=craft,
+            subject=f"You're up · {campaign}",
+            body_text=(f"The {label} for {campaign} is published, which is what your "
+                       "work is made from.\n\nOpen your room: the mix is there to "
+                       "download, and your lanes are open."))
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 

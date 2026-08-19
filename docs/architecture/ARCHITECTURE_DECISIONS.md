@@ -1664,6 +1664,45 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0075 — Composer → mixer → editor is a chain, and the room knows it
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0074 ·
+Source: `delivery.role_key` / `deliverable_owner` / `owed_after`,
+`creator_routes._room_fields`, `project_routes.delivery_publish_asset`,
+`tests/test_the_chain_composer_mixer_editor.py`
+
+**Decision.** The production model, in the engine (ADR-0002 — a fact about how the studio
+makes records is not template logic):
+
+| craft | owes | works from |
+|---|---|---|
+| composer | the master (version ladder) + the **stem package** | the brief and the picture |
+| mixer / audio engineer | **instrumental / TV mix**, VO-safe, loudness + codec per medium | the **approved master** |
+| editor | **cutdowns**, **social verticals** | the mixer's **published mix** |
+
+`role_key` reads the craft out of a free-text assignment role ("Mixer", "Audio Engineer",
+"Mix engineer" are one job). `deliverable_owner` says whose lane a row is.
+`owed_after` says the editor waits on the mixer, and nobody else waits on anyone.
+
+Three surfaces read it. The room shows **every** lane to everyone — the editor needs to
+know a mix is coming — and offers the upload box only on lanes your craft owns. A lane
+whose upstream has not been PUBLISHED yet says so ("waiting on the mixer — you'll be
+emailed when it's published") instead of showing an empty box. Publishing the first file
+of the mix emails the editor, and only the editor.
+
+**Why.** *"The Composer writes the music, and upload the stems. The audio Engineer or
+mixer mixes the composer's work … Editor makes the cutdowns and the verticals from the
+mix engineer's final work."* Every creator saw every lane with an open box on all of
+them, so the editor was invited to deliver cutdowns of a mix that did not exist — and an
+empty upload box on work nobody can start reads as a missed deadline rather than a queue.
+
+**Consequences.** The room GUIDES; the taste gate DECIDES. The upload route deliberately
+does **not** refuse a lane your craft does not own: one person wearing three hats is the
+normal case in a small studio, and a hard refusal would block a composer who also mixes,
+or the studio uploading on someone's behalf. Nothing reaches the client either way until
+the studio publishes it, which is where a mislabelled file is caught. A room whose roles
+map to no craft offers every lane, exactly as before this ADR — an unrecognised role must
+never produce a room where nobody can upload anything.
+
 ### ADR-0074 — A deliverable lane holds a folder, and the hand-off starts with the master
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
 Source: `creator_routes.creator_submit_deliverable`, `creator_routes._room_fields`,
@@ -1698,11 +1737,8 @@ counting deliverables counts FILES, not lanes, and `pending`/`uploaded` booleans
 beside the counts rather than replaced. The source master is `download_source`-gated
 everywhere: a client receives what they signed off, in the package, once it is paid for.
 
-**Not built, deliberately:** lanes are not scoped to a ROLE. Every assigned creator sees
-every lane, because nothing in the data says which role owes which deliverable —
-`scoped_deliverables` groups by asset category (Masters, Cutdowns, Social verticals,
-Production assets), not by who makes it. Inventing that mapping is a product decision, not
-a refactor; until it is taken, the mixer sees the editor's cutdown lane and vice versa.
+**Update (same day):** the open item — lanes not scoped to a role — was closed by
+**ADR-0075**, after the operator stated the production model.
 
 ### ADR-0073 — The room speaks to whoever is in it
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
