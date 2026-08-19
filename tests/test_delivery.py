@@ -420,7 +420,10 @@ def test_project_detail_has_no_from_opportunity_pill(client):
     pid = _win_and_make_project(client, 1)
     body = client.get(f"/project/{pid}").text
     assert "From opportunity" not in body
-    assert "Proposal &amp; invoices" in body or "Proposal & invoices" in body
+    # The "Proposal & invoices" pill came off the header: the operator reported it as a
+    # surface they no longer use (the invoices live on Revenue). What replaced it is the
+    # door to THE room (ADR-0068), which is where the engagement now is.
+    assert "The room" in body and f"/room/" in body
     assert "Delivery console" in body
 
 
@@ -1202,7 +1205,10 @@ def test_console_shows_client_review_link_and_version_rail(client):
     page = client.get(f"/project/{pid}/delivery").text
     # The client review link (the token portal URL) is on the toolbar.
     assert f"/project/{pid}/delivery-portal?k={token}" in page
-    assert "Open client review link" in page
+    # Relabelled: the old portal is now explicitly the client's APPROVE surface, and
+    # sits beside the doors into THE room (ADR-0068).
+    assert "Client review &amp; approve" in page
+    assert "Open the room" in page
     # The version rail shows the v1/v2 ladder with the current version marked.
     assert "Version history" in page
     assert "current" in page

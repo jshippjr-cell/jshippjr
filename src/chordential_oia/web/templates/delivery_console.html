@@ -125,8 +125,8 @@
         </div>
         <p class="muted small" style="margin:6px 0 10px">
           Cut <b>{{ picture.n }}</b> ({{ picture.orig }}) with {{ pending_version.by }}'s take,
-          locked together. <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
-             target="_blank" rel="noopener">Open the full portal ↗</a>
+          locked together. <a href="/room/{{ project['id'] }}"
+             target="_blank" rel="noopener">Open the room ↗</a>
         </p>
       </div>
       <script>
@@ -180,8 +180,7 @@
       <audio controls preload="none" src="{{ pending_version.url }}" style="max-width:100%;margin-bottom:10px"></audio>
       <p class="muted small" style="margin:0 0 10px">
         No cut from the client yet, so there is nothing to watch this against.
-        <a href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
-           target="_blank" rel="noopener">Open the full portal ↗</a>
+        <a href="/room/{{ project['id'] }}" target="_blank" rel="noopener">Open the room ↗</a>
       </p>
       {% endif %}
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -315,7 +314,7 @@
       <div class="lines">
         {% if state in ('Delivered','Released') %}<span class="ok">Assembled ✓</span>{% else %}<span class="k">Not assembled — unlocks when all sign-offs are in</span>{% endif %}<br>
         Download: {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">locked{% if state in ('Delivered','Released') %} — awaiting payment{% endif %}</span>{% endif %}<br>
-        {% if share_token %}<a class="link" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">Open client portal ↗</a>{% endif %}
+        {% if share_token %}<a class="link" href="/room/{{ project['id'] }}?k={{ share_token }}" target="_blank">Open the room, as the client ↗</a>{% endif %}
       </div>
     </div>
   </div>
@@ -337,8 +336,17 @@
   {% endif %}
 
   <div class="toolbar">
+    {# THE room (ADR-0068) — the shared surface, whoever opens it. Yours needs no token;
+       the client's and each creator's carry theirs. Reported live: "where do i go to
+       access the portal?" — it had been built with no door on this page. #}
+    <a class="btn primary" href="/room/{{ project['id'] }}" target="_blank">◉ Open the room</a>
     {% if share_token %}
-    <a class="btn" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}" target="_blank">↗ Open client review link</a>
+    <a class="btn" href="/room/{{ project['id'] }}?k={{ share_token }}" target="_blank"
+       title="The room exactly as the client sees it — published versions only">◉ The room, as the client</a>
+    {% endif %}
+    {% if share_token %}
+    <a class="btn ghost" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
+       target="_blank" title="The client's review surface — approve, sign off deliverables, pay. Still the old portal until the room carries those controls.">↗ Client review &amp; approve</a>
     {% endif %}
     <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
     {# Ship: the master is approved and EVERY deliverable is uploaded + signed off, but the

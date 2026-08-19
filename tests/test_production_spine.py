@@ -155,7 +155,9 @@ def test_workspace_production_speaks_the_court(tmp_path, monkeypatch):
         page2 = c.get(url).text
         assert "A new version is waiting for you" in page2
         assert "Listen &amp; share your thoughts" in page2
-        assert f"/project/{pid}/delivery-portal?k={token}" in page2   # the listening room
+        # The listening room is now THE room (ADR-0068): the client's durable link
+        # leads into the shared surface, not a second one.
+        assert f"/room/{pid}?k={token}" in page2
         # the creative journey renders — direction + thesis + version
         assert "Warm / Human" in page2 and "the whistle motif" in page2
         assert "v1 Concept" in page2

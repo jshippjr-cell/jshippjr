@@ -15,12 +15,14 @@
   <div>
     <div class="pill-row">
       <span class="pill {{ 'st-won' if row['status']=='Delivered' else 'st-pursuing' }}">{{ row['status'] }}</span>
-      {% if campaign_workspace_enabled() %}
-      <form method="post" action="/project/{{ row['id'] }}/campaign/open" style="display:inline;margin:0">
-        <button class="pill" type="submit" style="border:0;cursor:pointer">◎ Campaign workspace →</button>
-      </form>
-      {% endif %}
-      <a class="pill ghost" href="/project/{{ row['id'] }}/proposal">Proposal &amp; invoices →</a>
+      {# Two pills came off this row. Reported live: "campaign workspace and proposals and
+         invoices arent doing anything, they lead to dead site that we no longer utilize."
+         Both still RENDER — they are superseded, not broken — so the routes stay and
+         nothing that links to them elsewhere is orphaned. What they were reached for now
+         lives closer to the work: the engagement is THE room, and the invoices are on
+         Revenue. An entry point to a surface nobody uses is a wrong turn on the page you
+         work from every day. #}
+      <a class="pill" href="/room/{{ row['id'] }}">◉ The room →</a>
       <a class="pill ghost" href="/project/{{ row['id'] }}/delivery">Delivery console →</a>
     </div>
     <h1 class="detail-title">{{ row['need'] }}</h1>

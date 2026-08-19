@@ -461,6 +461,16 @@
 .ci-update-actions{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap}
 .ci-section{margin-top:6px}
 .ci-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#8a8580);margin:16px 0 6px}
+.ci-acc{border-top:1px solid var(--line,#efe9e0)}
+.ci-acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
+  padding:10px 0;user-select:none}
+.ci-acc>summary::-webkit-details-marker{display:none}
+.ci-acc>summary::before{content:"›";display:inline-block;transition:transform .15s ease;
+  color:var(--muted,#8a8580);font-size:16px;line-height:1}
+.ci-acc[open]>summary::before{transform:rotate(90deg)}
+.ci-acc>summary h3{margin:0;flex:1}
+.ci-acc-count{font:11px var(--mono,monospace);color:var(--muted,#8a8580);
+  border:1px solid var(--line,#efe9e0);border-radius:999px;padding:1px 8px}
 .ci-field{display:grid;grid-template-columns:180px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line,#efe9e0)}
 .ci-field-label{font-weight:600;font-size:13px;padding-top:6px}
 .ci-field-label .k{display:block;color:var(--muted,#8a8580);font-weight:500;font-size:11px}
@@ -563,9 +573,17 @@
   {% endfor %}
 
   {# The canonical, always-editable fields (filled or "not yet observed"). #}
+  {# An accordion, because the full canonical set is a very long page and most of it is
+     "not yet observed" on any given deal. A section opens when it actually HOLDS
+     something — so what the call established is what you land on, and the empty
+     scaffolding stays folded away. Reported live: "the list is wayy too long." #}
   {% for sec in ci_view.sections %}
-  <div class="ci-section">
-    <h3>{{ sec.label }}</h3>
+  {% set _filled = sec['items'] | selectattr('id') | list | length %}
+  <details class="ci-section ci-acc"{% if _filled %} open{% endif %}>
+    <summary>
+      <h3>{{ sec.label }}</h3>
+      <span class="ci-acc-count">{{ _filled }}/{{ sec['items'] | length }}</span>
+    </summary>
     {% for it in sec['items'] %}
     <div class="ci-field{% if not it.id %} ci-empty{% endif %}">
       <div class="ci-field-label">{{ it.label }}{% if it.human_value %} <span class="pill pv-human" title="You set this — authoritative">you · confirmed</span>{% endif %}</div>
@@ -591,7 +609,7 @@
       </div>
     </div>
     {% endfor %}
-  </div>
+  </details>
   {% endfor %}
 
   {# The canonical ten are the fields EVERY campaign has — never the only fields a

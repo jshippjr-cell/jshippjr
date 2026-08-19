@@ -184,7 +184,10 @@ def client_workspace(request: Request, token: str):
             prod = {
                 "court": production.court_state(project, delivery_blob),
                 "journey": production.creative_journey(delivery_blob),
-                "portal_url": f"/project/{project['id']}/delivery-portal?k={token}",
+                # THE room (ADR-0068) — the client's durable link leads into the shared
+                # surface, not a second one. Published versions only; the subtraction is
+                # server-side.
+                "portal_url": f"/room/{project['id']}?k={token}",
                 "approve_url": f"/workspace/{token}/approve-version",
             }
         stage_url = ""
@@ -195,7 +198,7 @@ def client_workspace(request: Request, token: str):
                 workspace.DISCOVERY: f"/opportunity/{opp['id']}/request?k={token}",
             }.get(phase, "")
             if not stage_url and project is not None:
-                stage_url = f"/project/{project['id']}/delivery-portal?k={token}"
+                stage_url = f"/room/{project['id']}?k={token}"
         # Client-facing DEPOSIT payment: once there's a project (awarded), surface the
         # deposit due + a Pay button until it's paid. Uses the project share token so the
         # token-gated /pay route authorizes it.

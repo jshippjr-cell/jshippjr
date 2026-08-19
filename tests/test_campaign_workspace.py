@@ -212,8 +212,11 @@ def test_open_campaign_and_edit_direction_and_phase(tmp_path, monkeypatch):
                                     18000, 24000, ["Composer"], "2027-11-01")
     conn.close()
     with TestClient(app_mod.app) as c:
-        # the project page now offers the workspace
-        assert "Campaign workspace" in c.get(f"/project/{pid}").text
+        # The project page no longer ADVERTISES the workspace — the operator reported it
+        # as a surface they no longer use, and an entry point to one of those is a wrong
+        # turn on the page you work from every day. The module itself is untouched and
+        # still opens; only the pill went.
+        assert "Campaign workspace" not in c.get(f"/project/{pid}").text
         # open (lazy-create) → redirect to the campaign
         r = c.post(f"/project/{pid}/campaign/open", follow_redirects=False)
         assert r.status_code == 303

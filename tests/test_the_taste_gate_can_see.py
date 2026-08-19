@@ -108,13 +108,14 @@ def test_the_pending_take_plays_against_the_clients_cut(console):
     assert "winter-appeal-v1.mp4" in block, "say which cut is being screened"
 
 
-def test_the_gate_links_to_the_full_portal(console):
-    """"or better yet, in addition to a link to the full size portal" — both."""
-    c, app_mod, pid, tok = console
+def test_the_gate_links_to_the_room(console):
+    """"or better yet, in addition to a link to the full size portal" — both. The full
+    surface is now THE room (ADR-0068), so that is where the link goes."""
+    c, app_mod, pid, _tok = console
     _pending(app_mod, pid, with_picture=True)
     page = c.get(f"/project/{pid}/delivery").text
-    assert f"/project/{pid}/delivery-portal?k={tok}" in page
-    assert "Open the full portal" in page
+    assert f"/room/{pid}" in page
+    assert "Open the room" in page
 
 
 def test_with_no_cut_it_says_so_and_still_plays_the_take(console):
@@ -126,7 +127,7 @@ def test_with_no_cut_it_says_so_and_still_plays_the_take(console):
     assert "<video" not in block[:2000]
     assert "/uploads/take-v1.wav" in block
     assert "No cut from the client yet" in block
-    assert "Open the full portal" in block
+    assert "Open the room" in block
 
 
 def test_the_publish_and_discard_decisions_survive(console):
