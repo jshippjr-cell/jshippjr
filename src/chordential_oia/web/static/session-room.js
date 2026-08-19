@@ -21,13 +21,20 @@
   var qs = token ? "&" + tkind + "=" + encodeURIComponent(token) : "";
   var after = parseInt(root.dataset.after || "0", 10) || 0;
 
+  /* The FEED is opt-out per mount (`data-feed="0"`). On the delivery console it was
+     four rows of note text sitting above the title, restating what the notes queue, the
+     review tape and the room all show below it — and pushing the command centre off the
+     first screen. *"The comments up at the top of the delivery section is not needed"*
+     (operator, 2026-08-19). Presence stays: who else is in the room right now is the one
+     thing no other block on that page answers. */
+  var wantFeed = (root.dataset.feed || "1") !== "0";
   root.innerHTML =
     '<div class="sr-line">' +
     '<span class="sr-dot" aria-hidden="true"></span>' +
     '<span class="sr-label">Session live</span>' +
     '<span class="sr-faces" aria-hidden="true"></span>' +
     '<span class="sr-who" aria-live="polite"></span></div>' +
-    '<ul class="sr-feed" aria-live="polite"></ul>';
+    (wantFeed ? '<ul class="sr-feed" aria-live="polite"></ul>' : '');
   var who = root.querySelector(".sr-who"), feed = root.querySelector(".sr-feed"),
       faces = root.querySelector(".sr-faces");
 
@@ -66,6 +73,7 @@
 
   var KIND_ICON = { comment: "💬", approval: "✓", version: "♪" };
   function addEvent(e) {
+    if (!feed) return;                    // presence-only mount
     var li = document.createElement("li");
     li.className = "sr-ev" + (e.kind === "approval" ? " sr-ev-approval" : "");
     li.innerHTML = '<span class="sr-ico">' + (KIND_ICON[e.kind] || "•") +

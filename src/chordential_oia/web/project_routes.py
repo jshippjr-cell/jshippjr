@@ -2778,23 +2778,44 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
 
 
 @router.post("/project/{project_id}/delivery/publish")
-def delivery_publish(project_id: int, action: str = Form("publish")):
-    """Jon's disposition of a creator's pending submission: publish it to the client
-    (moves it into the version ladder and notifies the reviewers) or discard it. The
-    gate that keeps unvetted creator work off the client's portal."""
+def delivery_publish(project_id: int, action: str = Form("publish"),
+                     note: str = Form(""), origin: str = Form("")):
+    """The TASTE GATE. Jon's disposition of a creator's pending submission: publish it to
+    the client (into the version ladder, and the client is told), or send it back.
+
+    "The machine proposes, Jon disposes" — this is the gate itself, and it is the reason
+    a client never hears work nobody chose.
+
+    ``send_back`` replaces a silent ``discard``. Discarding cleared the submission,
+    wrote a line into the project's own updates, and told the composer NOTHING: their
+    take simply stopped existing, with no reason and no request. The one action in this
+    system whose whole point is a judgement was the one that never reached the person
+    being judged. It now carries a reason, emails the crew, and lands in the room's event
+    stream. ``discard`` still works and does the same thing — a submission that vanishes
+    without a word is not a behaviour worth keeping a door open for.
+    """
     conn = db.connect()
     result = None
     reviewers = []
+    sent_back = ""
     try:
         project = db.get_project(conn, project_id)
         if project is None:
             return HTMLResponse("Project not found", status_code=404)
         delivery = db.get_delivery(conn, project_id)
         if not delivery.get("pending_version"):
-            return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
-        if action == "discard":
+            return _publish_redirect(project_id, origin)
+        if action in ("discard", "send_back"):
+            pv = delivery.get("pending_version") or {}
+            sent_back = (note or "").strip() or "No reason given."
             db.update_delivery(conn, project_id, "pending_version", "")
-            db.add_update(conn, project_id, "Discarded the pending creator submission.")
+            db.add_update(conn, project_id, f"Sent the submission back: {sent_back}")
+            # The composer is IN the room; the verdict on their work belongs in it.
+            db.add_project_event(
+                conn, project_id, "sent_back", actor_role="operator",
+                actor_name="Studio",
+                body=f"Take sent back to {pv.get('by') or 'the composer'}: {sent_back}",
+                audience="operator,talent")
         else:
             result = _publish_pending_submission(conn, project_id)
             if result is not None:
@@ -2810,6 +2831,15 @@ def delivery_publish(project_id: int, action: str = Form("publish")):
                     client_token = db.ensure_share_token(conn, opp["id"])
     finally:
         conn.close()
+    # Composer-direction: the reason, by email, to the people who made the take.
+    if sent_back:
+        campaign = _campaign_label(project)
+        signals.fire_and_forget(
+            _notify_assigned_creators, project_id, project,
+            subject=f"Your take needs another pass · {campaign}",
+            body_text=(f"The studio listened to your take on {campaign} and is sending "
+                       f"it back before the client hears it.\n\n\"{sent_back}\"\n\n"
+                       "Open your room for the notes and to submit the next one."))
     # Client-direction notification only on a real publish — off the request thread.
     if result is not None:
         label, campaign = result
@@ -2820,6 +2850,14 @@ def delivery_publish(project_id: int, action: str = Form("publish")):
             signals.fire_and_forget(
                 _notify_client_new_version, client_email, client_name, campaign, label,
                 client_token, portal_url)
+    return _publish_redirect(project_id, origin)
+
+
+def _publish_redirect(project_id: int, origin: str):
+    """Back where the decision was made. The gate now has a door in the room — which is
+    where the studio actually listens — so it must not eject them to the console."""
+    if (origin or "").strip() == "room":
+        return RedirectResponse(f"/room/{project_id}#p{project_id}", status_code=303)
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
 
 

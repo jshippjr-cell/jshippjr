@@ -212,6 +212,20 @@
   /* A sheet opened mid-playback sits BESIDE the picture instead of over it. */
   .sr-sheet.beside{box-shadow:0 -20px 60px rgba(0,0,0,.55)}
   @media (max-width:640px){.intel-row{grid-template-columns:1fr;gap:2px}}
+  /* The taste gate — the studio's verdict, beside the take it is about. Deliberately
+     the same furniture as the client's verdict below it: two decisions, one shape. */
+  .gate{border:1px solid rgba(240,119,44,.4);border-radius:12px;padding:13px 15px;margin:12px 0 0;
+    background:linear-gradient(180deg,rgba(240,119,44,.07),transparent)}
+  .gate-h{font:700 12.5px var(--sans);color:var(--text);margin-bottom:7px}
+  .gate-h .fineprint{font-weight:400}
+  .gate-what{margin:0 0 11px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--dim)}
+  .gate-what b{color:var(--text)}
+  .gate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .gate-back{display:flex;gap:8px;align-items:center;margin:0;flex:1;min-width:260px}
+  .gate-back input[type=text]{flex:1;min-width:150px;background:rgba(255,255,255,.05);
+    border:1px solid var(--hair2);border-radius:9px;padding:9px 12px;
+    color:var(--paper,#EDE6DC);font:13px var(--sans);outline:none}
+  .gate-back input[type=text]:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(240,119,44,.16)}
   /* The verdict, in the room where the work is heard. */
   .verdict{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 0;
     padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
@@ -840,6 +854,42 @@
     <button type="submit" class="nb-send"><span class="nb-lead">Note at</span>
       <span class="nb-tc">0:00</span></button>
   </form>
+  {% endif %}
+
+  {# ── THE TASTE GATE. The studio's own verdict, in the room where the studio listens.
+        It existed only on the delivery console — so the operator auditioned the take
+        here and then had to go somewhere else to act on it, which is why they could not
+        find it at all: *"I don't see a way for me to push a version out to the client
+        after review, nor how to deny it and send it back to the composer"* (2026-08-19).
+        This is the gate that keeps unvetted work off the client's page; it belongs where
+        the judgement is made. Operator only — `room.CAPS`. ── #}
+  {% if 'publish' in (caps|default([])) and a.pending %}
+  <div class="gate">
+    <div class="gate-h">Your call on {{ a.pending.label or 'this take' }}
+      <span class="fineprint">· the client has not heard it</span></div>
+    <ul class="gate-what">
+      <li><b>Publish</b> puts it in the client's room as {{ a.pending.label or 'the next version' }}
+        and emails them that it is waiting. There is no taking that back quietly.</li>
+      <li><b>Send it back</b> returns it to
+        {{ a.pending.by or 'the composer' }} with your reason, by email and in this room.
+        It does not spend a client revision round — nobody outside the studio has heard it.</li>
+    </ul>
+    <div class="gate-row">
+      <form method="post" action="/project/{{ a.project_id }}/delivery/publish" style="margin:0"
+            onsubmit="return confirm('Publish {{ (a.pending.label or 'this take')|e }} to the client?\n\nThey are emailed that it is waiting, and they can hear it from that moment.');">
+        <input type="hidden" name="origin" value="room">
+        <input type="hidden" name="action" value="publish">
+        <button class="v-btn v-approve" type="submit">▲ Publish to the client</button>
+      </form>
+      <form method="post" action="/project/{{ a.project_id }}/delivery/publish" class="gate-back">
+        <input type="hidden" name="origin" value="room">
+        <input type="hidden" name="action" value="send_back">
+        <input type="text" name="note" required maxlength="600"
+               placeholder="What needs another pass? This is what they read.">
+        <button class="v-btn" type="submit" title="Returns the take to the composer with your reason">↩ Send it back</button>
+      </form>
+    </div>
+  </div>
   {% endif %}
 
   {# ── The client's verdict. The room is where they hear it, so it is where they say

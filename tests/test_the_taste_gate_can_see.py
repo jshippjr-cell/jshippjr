@@ -130,12 +130,19 @@ def test_with_no_cut_it_says_so_and_still_plays_the_take(console):
     assert "Open the room" in block
 
 
-def test_the_publish_and_discard_decisions_survive(console):
-    """The screening room is added BESIDE the decision, never in place of it."""
+def test_the_publish_and_send_back_decisions_survive(console):
+    """The screening room is added BESIDE the decision, never in place of it.
+
+    Written when the second decision was **Discard** — which cleared the submission and
+    told the composer nothing. It is a SEND-BACK now (ADR-0072), carrying a reason to the
+    people who made the take; what this test is really holding is that watching the work
+    never replaced acting on it.
+    """
     c, app_mod, pid, _tok = console
     _pending(app_mod, pid, with_picture=True)
     page = c.get(f"/project/{pid}/delivery").text
-    assert "Publish to client" in page and "Discard" in page
+    assert "Publish to client" in page and "Send it back" in page
+    assert 'name="note"' in page, "a take can be refused without saying why"
 
 
 def test_the_client_still_cannot_see_a_pending_take(console):

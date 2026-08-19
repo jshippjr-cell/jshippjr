@@ -94,6 +94,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The taste gate had no door in the room** (ADR-0072, 2026-08-19). *"I don't see a way
+  for me to push a version out to the client after review, nor how to deny it and send it
+  back to the composer."* Publish lived only on the delivery console, so the operator
+  auditioned a take in the room and had to leave it to act. And the console's other
+  button, **Discard**, cleared the submission and told the composer nothing — no reason,
+  no email. Both are in the room now, and denying a take is a **send-back** carrying a
+  reason to the crew by email and into the room's event stream (never to the client; they
+  never heard it). It spends no revision round. Also: the console's live feed replayed
+  the notes above the title, before anything you came to the page to do — presence stays,
+  the feed is opt-out per mount and the room keeps its own.
+
 - **A take and its notes are one thing** (ADR-0071, 2026-08-19). A composer submitted v2
   and the room still opened on v1, with v1's notes on the lane — because notes were
   filtered to the version under review and rendered once, so there was nothing for

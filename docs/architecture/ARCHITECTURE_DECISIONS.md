@@ -1664,6 +1664,40 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0072 — The taste gate has a door where the listening happens
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0003, ADR-0068 ·
+Source: `project_routes.delivery_publish`, `creator_portal.html` (the `.gate` block),
+`tests/test_the_taste_gate_has_a_door.py`
+
+**Decision.** The studio's disposition of a creator's submission — **publish to the
+client** or **send it back** — is available in THE ROOM, gated on `room.CAPS['publish']`,
+as well as on the delivery console. And denying a take is a send-back that carries a
+REASON to the people who made it: an email to the assigned crew and an event in the room,
+audience `operator,talent`. It spends no client revision round; nobody outside the studio
+has heard it. `discard` is kept as an alias and behaves identically — it no longer has a
+silent form.
+
+**Why.** *"I don't see a way for me to push a version out to the client after review, nor
+how to deny it and send it back to the composer, am i missing something?"* Not missing it
+— it was somewhere else. Publish lived only on the console, so the operator auditioned a
+take in the room, against picture, with the notes on the lane, and then had to leave the
+room to act on what they had just heard. A judgement made in one place and recorded in
+another is a judgement people stop making, and this is the judgement the whole publish
+gate exists for (ADR-0003).
+
+The second half did not exist at all. The console's other button was **Discard**: it
+cleared the submission, wrote a line into the project's own updates, and told the composer
+nothing. Their take stopped existing — no reason, no request, no email. The one action in
+the system whose entire point is a judgement was the one that never reached the person
+being judged.
+
+**Consequences.** Publish stays operator-only: a client publishing to themselves makes the
+gate decorative and a creator publishing their own take is not a review. Any new
+disposition of someone's work must reach them — a state change a person cannot see is a
+message we decided not to send. The client is deliberately NOT told about a send-back:
+they never heard the take, and watching a studio reject its own work is not information
+they asked for.
+
 ### ADR-0071 — A take and its notes are one thing
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
 Source: `creator_routes._creator_feedback`, `room.priced_notes_only`,

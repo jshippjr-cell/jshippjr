@@ -67,9 +67,11 @@
 {% endblock %}
 {% block content %}
 
-{# Session Room (Living OS P5): live presence + arrivals over the one event bus #}
+{# Session Room (Living OS P5): live PRESENCE only here. The event feed restated the
+   notes this page already lists three ways below, above the title, before anything you
+   came here to do. #}
 <div id="session-room" data-project="{{ project['id'] }}" data-role="operator"
-     data-name="Studio"></div>
+     data-name="Studio" data-feed="0"></div>
 <script src="/static/session-room.js?v={{ static_v }}" defer></script>
 
 
@@ -312,10 +314,17 @@
           <input type="hidden" name="action" value="publish">
           <button class="btn" type="submit">Publish to client</button>
         </form>
-        <form method="post" action="/project/{{ project['id'] }}/delivery/publish" style="margin:0"
-              onsubmit="return confirm('Discard this submission? The creator will need to resubmit.')">
-          <input type="hidden" name="action" value="discard">
-          <button class="btn ghost" type="submit">Discard</button>
+        {# "Discard" cleared the submission and told the composer nothing — their take
+           stopped existing, with no reason and no request. The one action whose whole
+           point is a judgement never reached the person being judged. #}
+        <form method="post" action="/project/{{ project['id'] }}/delivery/publish"
+              style="margin:0;display:flex;gap:8px;align-items:center;flex:1;min-width:280px">
+          <input type="hidden" name="action" value="send_back">
+          <input type="text" name="note" required maxlength="600" class="input"
+                 placeholder="What needs another pass? This is what they read."
+                 style="flex:1;min-width:180px">
+          <button class="btn ghost" type="submit"
+                  title="Returns the take to the composer with your reason, by email">Send it back</button>
         </form>
       </div>
     </div>
