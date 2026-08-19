@@ -1839,6 +1839,37 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
             pass
 
 
+def _note_version(delivery: dict, asked: str, *, may_see_pending: bool) -> str:
+    """Which take a new note attaches to.
+
+    A note used to land on the version under REVIEW whatever you were listening to, so
+    the room had to apologise for it — *"Note left at 0:21 — on the take under review,
+    not the one you're auditioning."* The operator's answer (2026-08-19): *"notes should
+    attach to the take thats playing."* They should: a note is about a piece of music,
+    and the take is which piece of music it is.
+
+    ``asked`` is the take the room had loaded. It is VALIDATED rather than trusted —
+    anyone holding a share link can post a version string, and a note filed against a
+    version that does not exist is a note nobody will ever see again. Accepted values:
+
+    * any version already in the ladder, and
+    * the NEXT version number, but only for a caller who may see the pending take —
+      that take becomes exactly that version on publish, so its notes are waiting for it.
+
+    Anything else falls back to the version under review, which is where notes have
+    always gone.
+    """
+    current = _current_version_tag(delivery)
+    asked = (asked or "").strip()
+    if not asked:
+        return current
+    versions = versions_list(delivery)
+    allowed = {str(v.get("n")) for v in versions}
+    if may_see_pending and delivery.get("pending_version"):
+        allowed.add(str(len(versions) + 1))
+    return asked if asked in allowed else current
+
+
 def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
                      r: str = "", flag: str = "", creator: str = "", origin: str = ""):
     """Bounce back to the surface the action came FROM. A verified reviewer link (``r``)
@@ -1887,7 +1918,7 @@ def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
     parent_id: str = Form(""), r: str = Form(""), t_end: str = Form(""),
-    creator_token: str = Form(""), origin: str = Form(""),
+    creator_token: str = Form(""), origin: str = Form(""), version: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style).
 
@@ -1978,8 +2009,17 @@ def review_comment(
                         t_end_val = _te
                 except ValueError:
                     t_end_val = None
+            # THE TAKE THAT IS PLAYING. A reply inherits its parent's take — it answers
+            # that note, and moving it would split a conversation across versions.
+            if parent is not None:
+                landed = (db.get_review_comment(conn, parent)["version"] or "")
+                landed = landed or _current_version_tag(delivery)
+            else:
+                landed = _note_version(
+                    delivery, version,
+                    may_see_pending=room.can(who_role, "see_pending"))
             db.add_review_comment(
-                conn, project_id, version=_current_version_tag(delivery),
+                conn, project_id, version=landed,
                 t_seconds=t_seconds, t_end=t_end_val, author=name, email=mail,
                 body=body.strip(), kind="comment", parent_id=parent,
                 verified=reviewer is not None, author_role=who_role,

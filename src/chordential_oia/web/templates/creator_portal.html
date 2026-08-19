@@ -83,15 +83,23 @@
   /* the spine draws itself left-to-right once, when arrival lifts. opacity:1 is
      REQUIRED — this rule's `animation` shorthand replaces the `.room>.spine`
      housefade that would otherwise reveal it, so without this the spine sits at
-     the base opacity:0 forever (the class is intentionally never removed). */
+     the base opacity:0 forever.
+
+     The class used to be left on for the life of the page, which meant a `clip-path`
+     equal to the spine's own box stayed applied — invisible until something needed to
+     paint OUTSIDE that box. The note peek does: it sits above the notes lane, so on the
+     first-ever visit to a room it was clipped away entirely and the feature simply did
+     not exist. `drawn` keeps the opacity the class was needed for and drops the clip;
+     the JS swaps to it on `animationend`. */
   .sr-spine.drawing{opacity:1;clip-path:inset(0 100% 0 0);animation:spine-draw 1.4s var(--ease) forwards}
+  .sr-spine.drawn{opacity:1;clip-path:none}
   @keyframes spine-draw{to{clip-path:inset(0 0 0 0)}}
   @media (prefers-reduced-motion:reduce){
     /* collapse to a simple fade: zero BOTH duration and the staged delays, so no
        element sits invisible waiting on a delay (§6: reduced-motion = simple fade) */
     .sr-arrival-line,.sr-arrival-sub,.sr-begin,.sr-skip{animation-duration:.01ms;animation-delay:0s}
     .sr-arrival{transition-duration:.01ms}
-    .sr-spine.drawing{animation:none;clip-path:none;opacity:1}}
+    .sr-spine.drawing,.sr-spine.drawn{animation:none;clip-path:none;opacity:1}}
 
   /* the instrument voice — monospace, tabular figures (spec §219). Used for cue
      codes + timecodes in the Brief; the class was referenced but never defined. */
@@ -139,6 +147,23 @@
   .nb-tc{font-family:var(--mono);font-variant-numeric:tabular-nums}
   .nb-lead{white-space:nowrap}
   .nb-who{flex:0 1 150px;min-width:110px}
+  /* THE NOTE THE PLAYHEAD IS ON. A pin is a dot until you click it, so listening
+     through a take meant hearing the bar a note is about and having to stop and go
+     find out what it said. It reads itself out as the head arrives (operator,
+     2026-08-19) and gets out of the way when the head has passed. */
+  .pin-peek{position:absolute;bottom:100%;margin-bottom:8px;z-index:6;pointer-events:none;
+    max-width:min(360px,72vw);background:rgba(20,18,22,.96);border:1px solid var(--hair2);
+    border-left:2px solid var(--wine);border-radius:8px;padding:8px 11px;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateX(-50%);
+    opacity:0;transition:opacity .18s var(--ease)}
+  .pin-peek.on{opacity:1}
+  .pin-peek .pk-who{font:700 9.5px var(--sans);letter-spacing:.12em;text-transform:uppercase;
+    color:var(--dim2);display:block;margin-bottom:3px}
+  .pin-peek .pk-body{font-size:12.5px;line-height:1.45;color:var(--text);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .pin-peek::after{content:"";position:absolute;top:100%;left:50%;margin-left:-5px;
+    border:5px solid transparent;border-top-color:var(--hair2)}
+  @media (prefers-reduced-motion:reduce){.pin-peek{transition:none}}
   /* The stretch a range note covers, painted on the lane while you mark it — and
      still there, brighter, once you close it and start writing. */
   .nb-band{position:absolute;top:0;bottom:0;background:rgba(240,119,44,.16);
@@ -609,7 +634,8 @@
      {# The version a NEW note is recorded against — the server's rule
         (`_current_version_tag`), stated here so the room can put the note where it
         actually landed instead of where you were looking. #}
-     data-note-version="{{ a.versions[-1].n if a.versions else '0' }}">
+     data-note-version="{{ a.versions[-1].n if a.versions else '0' }}"
+     data-pending-version="{{ (a.versions|length + 1) if a.pending else '' }}">
 
   <!-- doorline -->
   <div class="doorline">
@@ -798,6 +824,13 @@
     <input type="hidden" name="author" value="{{ room_who|default('') }}">
     {% endif %}
     <input type="hidden" name="origin" value="room">
+    {# THE TAKE THIS NOTE IS ABOUT. Kept in step with whatever is loaded, so a note
+       lands on the music you are listening to rather than on the version under review
+       (operator, 2026-08-19: *"notes should attach to the take thats playing"*). The
+       server validates it against the ladder — a version string from a form is not a
+       fact — and falls back to the take under review. #}
+    <input type="hidden" name="version" class="nb-version"
+           value="{{ (a.pending and (a.versions|length + 1)) or (a.versions[-1].n if a.versions else '') }}">
     <input type="hidden" name="t" class="nb-t" value="0">
     <input type="hidden" name="t_end" class="nb-tend" value="">
     <button type="button" class="nb-mark"
@@ -1158,7 +1191,13 @@
 
   <script type="application/json" class="sr-notes-data">
     [{% if a.feedback and (a.feedback.notes or a.feedback.archive) %}{% for n in (a.feedback.notes + (a.feedback.archive|default([]))) %}
-      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "t_end": {{ n.t_end if n.t_end is not none else 'null' }}, "kind": "{{ n.kind }}", "version": "{{ n.version|default('') }}", "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
+      {# `author` and `body` are here because the room now SPEAKS a note as the playhead
+         reaches it. They were absent, so the peek rendered a 56px sliver reading "Note"
+         with an empty body — the logic was right and the data was not there. Both go
+         through `|tojson`, like the cue names above: this is a JSON island, and a client
+         note is arbitrary text that will contain a quote sooner or later. `author` is
+         the SUBTRACTED name (room.room_view) — the same one the note cards show. #}
+      {"id": {{ n.id }}, "t": {{ n.t if n.t is not none else 'null' }}, "t_end": {{ n.t_end if n.t_end is not none else 'null' }}, "kind": "{{ n.kind }}", "version": "{{ n.version|default('') }}", "author": {{ (n.author or '')|tojson }}, "body": {{ (n.body or '')|tojson }}, "resolved": {{ 'true' if n.resolved else 'false' }}, "addressed": {{ 'true' if n.addressed else 'false' }}}{{ "," if not loop.last }}
     {% endfor %}{% endif %}]
   </script>
 
@@ -1292,7 +1331,9 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="foot">Session Room · space plays · Esc always returns to the room</div>
+{# Escape stopped closing the sheets when B/N/V became toggles; a footer that still
+   promised it was teaching the one gesture that no longer works. #}
+<div class="foot">Session Room · space plays · B/N/V open a layer, and close it again</div>
 
 <script>
 (function(){
@@ -1376,6 +1417,13 @@
        it; selecting a take with no published version — the one just submitted — opens
        an empty pane, which is the fresh sheet the next round gets written on. */
     var shownVersion = null;
+    function shownTakeLabel(){
+      var chip = root.querySelector(".sr-take.on");
+      if (!chip) return "";
+      var txt = chip.cloneNode(true);
+      txt.querySelectorAll(".tc-cut").forEach(function(x){ x.remove(); });
+      return (txt.textContent || "").trim();
+    }
     function showVersion(tag){
       shownVersion = (tag == null ? "" : String(tag));
       var shown = 0, total = 0;
@@ -1399,6 +1447,10 @@
         var st = rw.querySelector(".row-state");
         if (st) st.textContent = on ? "loaded" : "";
       });
+      // A new note is about THIS take. The pending take has no version in the ladder
+      // yet, so it borrows the number it will get on publish.
+      var vf = root.querySelector(".nb-version");
+      if (vf) vf.value = shownVersion || (root.dataset.pendingVersion || "");
       renderPins();
     }
     function loadTake(chip){
@@ -1585,6 +1637,46 @@
         noteLane.appendChild(pin);
       });
     }
+    /* The note under the playhead, read out as it arrives. A point note holds the
+       peek for a couple of seconds after its mark; a range holds it for the whole
+       stretch it covers, because that is how long it is about. Only while PLAYING —
+       parked on a pin, the pin is a thing you click. */
+    var peek = null, peekFor = null;
+    var PEEK_TAIL = 2.2;                 // how long a point note stays up, in seconds
+    function paintPeek(){
+      var D = mDur();
+      if (!D || mPaused()){ hidePeek(); return; }
+      var now = mTime() || 0, hit = null;
+      for (var i = 0; i < notes.length; i++){
+        var n = notes[i];
+        if (shownVersion !== null && (n.version || "") !== shownVersion) continue;
+        if (n.t === null || n.t === undefined || n.t > D) continue;
+        var end = (n.t_end != null && n.t_end > n.t) ? n.t_end : (n.t + PEEK_TAIL);
+        if (now >= n.t && now <= end){ hit = n; break; }
+      }
+      if (!hit){ hidePeek(); return; }
+      if (peekFor === hit.id && peek){ position(hit); return; }
+      peekFor = hit.id;
+      if (!peek){
+        peek = document.createElement("div");
+        peek.className = "pin-peek";
+        peek.innerHTML = '<span class="pk-who"></span><span class="pk-body"></span>';
+        noteLane.appendChild(peek);
+      }
+      peek.querySelector(".pk-who").textContent =
+        (hit.author || "Note") + (hit.kind === "change_request" ? " · changes" : "");
+      peek.querySelector(".pk-body").textContent = hit.body || "";
+      position(hit);
+      peek.classList.add("on");
+      function position(n){
+        peek.style.left = Math.min(97, Math.max(3, n.t / D * 100)) + "%";
+      }
+    }
+    function hidePeek(){
+      if (peek){ peek.classList.remove("on"); }
+      peekFor = null;
+    }
+
     // The whisper is the room's one voice — set its text + un-rest it briefly.
     var whisperTextEl = whisperEl ? whisperEl.querySelector("span:last-child") : null;
     function whisper(text){
@@ -1655,6 +1747,7 @@
       playhead.style.left = (D ? Math.min(100, t / D * 100) : 0) + "%";
       tcEl.textContent = tcFmt(t);
       drawWave();
+      paintPeek();
     }
     audio.addEventListener("loadedmetadata", function(){ dur = audio.duration || 0; renderPins(); renderCues(); update(); });
     audio.addEventListener("timeupdate", update);
@@ -2283,7 +2376,8 @@
                to be auditioning — that is the server's rule and the client's portal
                reads the same one. Stamping it with what is on screen would put a card
                in a pane the next reload disagrees with. */
-            var landed = root.dataset.noteVersion || "0";
+            var landed = (bar.querySelector(".nb-version") || {}).value
+                         || root.dataset.noteVersion || "0";
             notes.push({ id: "local-" + Date.now(), t: at,
                          t_end: (endEl.value ? parseFloat(endEl.value) : null),
                          author: bar.querySelector("[name=author]").value || "You",
@@ -2303,10 +2397,8 @@
                one. Put it in the list and move the count with it. */
             addNoteCard(notes[notes.length - 1]);
             paint();
-            whisper(landed === shownVersion || shownVersion === null
-              ? "Note left at " + fmt(at)
-              : "Note left at " + fmt(at) + " — on the take under review, not the one "
-                + "you're auditioning.");
+            whisper("Note left at " + fmt(at) + " on "
+                    + (shownTakeLabel() || "this take"));
           })
           .catch(function(){
             // Put the label back the way `paint()` expects to find it — the toast
@@ -2524,7 +2616,19 @@
     if (already && !force){ arr.remove(); return; }
     arr.hidden = false;
     var spine = room.querySelector(".sr-spine");
-    if (spine) spine.classList.add("drawing");
+    if (spine){
+      spine.classList.add("drawing");
+      // …and hand over to `.drawn` the moment the draw is finished, so the clip that
+      // performed it does not outlive it and erase anything that paints above the
+      // spine. Belt and braces: a browser that never fires the event still clears it.
+      spine.addEventListener("animationend", function done(){
+        spine.classList.remove("drawing"); spine.classList.add("drawn");
+        spine.removeEventListener("animationend", done);
+      });
+      setTimeout(function(){
+        spine.classList.remove("drawing"); spine.classList.add("drawn");
+      }, 2500);
+    }
     function begin(){
       if (arr.classList.contains("lifting")) return;
       arr.classList.add("lifting");

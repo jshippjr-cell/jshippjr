@@ -100,7 +100,9 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   selecting a take to select. Every note now names the take it was written against; the
   newest take leads (labelled `v2 …`, not "with the studio"); clicking a take row loads
   it *and its notes* without starting it, with ▶ kept for auditioning. A take nobody has
-  heard opens on an empty pane. Alongside: a verdict given in the room stays in the room
+  heard opens on an empty pane, and a new note lands on the take that is playing —
+  validated server-side, since a version string from a form is not a fact. The room also
+  speaks a note as the playhead reaches it. Alongside: a verdict given in the room stays in the room
   (`origin=room` — Request changes used to eject the client to the delivery portal), and
   a submission waiting at the taste gate raises a **Queue nav badge**, because the alert
   went out by email and no page said anything.

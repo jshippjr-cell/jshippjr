@@ -1672,11 +1672,20 @@ Source: `creator_routes._creator_feedback`, `room.priced_notes_only`,
 
 **Decision.** Four rules, from one round of live testing.
 
-(1) **A note belongs to the TAKE it was written against**, and the room selects takes.
+(1) **A note belongs to the TAKE it is about**, and the room selects takes.
 `_creator_feedback` stamps every note with its version and returns the current version's
 notes plus an `archive` of the rest; the room renders all of them and shows only the
 selected take's. Selecting a take brings its conversation; a take nobody has heard yet
-opens on an empty pane, which is where the next round gets written.
+opens on an empty pane, which is where the next round gets written. A NEW note lands on
+the take that is playing — the room sends it and `_note_version` **validates** it, since
+a version string from a form is not a fact: any take in the ladder, plus the number the
+pending take will get on publish and only for a caller who may see it; anything else
+falls back to the version under review. A reply inherits its parent's take, because a
+reply answers that note and moving it would split one conversation across two versions.
+
+The room also **speaks a note as the playhead reaches it** (`.pin-peek`): a point note
+holds for ~2.2s past its mark, a range for the stretch it covers, and neither shows while
+parked — paused, a pin is a thing you click.
 
 (2) **The newest take is the one loaded** — the pending submission when the role may see
 it, carrying the label it will get on publish (`v2 …`), not "with the studio". The old
@@ -1704,11 +1713,12 @@ no per-take notes, the newest take could not lead without appearing to lose the
 conversation.
 
 **Consequences.** `feedback["notes"]` still means *the take under review* — every counter,
-badge and existing reader depends on that and must not be widened to the archive. A new
-note is recorded against the version under review whatever take is being auditioned
-(`_current_version_tag` is the authority); the room says so rather than filing the card
-where you were looking. Any surface that filters or subtracts notes must handle `archive`
-too — `priced_notes_only` and both `room_view` subtractions do.
+badge and existing reader depends on that and must not be widened to the archive. Any
+surface that filters or subtracts notes must handle `archive` too — `priced_notes_only`
+and both `room_view` subtractions do. The room's `sr-notes-data` payload is now a
+CLIENT-FACING rendering of note text: it carries `author` and `body`, both `|tojson`'d,
+and `author` is the subtracted name. A version accepted from a form goes through
+`_note_version` and nowhere else; do not add a second path that trusts one.
 
 ### ADR-0070 — The roster is not the client's, and the room says what its playback is
 **Status:** Accepted (2026-08-19, review panel + operator directive) · Extends ADR-0068 ·
