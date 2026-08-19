@@ -44,7 +44,7 @@ def markup() -> str:
 
 
 def _sync(markup: str) -> str:
-    start = markup.index("function syncAudio()")
+    start = markup.index("function syncAudio(")
     body = markup[start:markup.index("function paintSync()", start)]
     return "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("//"))
 
@@ -60,13 +60,43 @@ def test_sync_is_measured_every_frame_not_four_times_a_second(markup):
 
 def test_small_drift_is_trimmed_not_seeked(markup):
     body = _sync(markup)
-    assert "playbackRate" in body, (
+    assert "setRate(" in body, (
         "the only remedy is still a hard seek, which clicks mid-phrase")
-    assert re.search(r"Math\.max\(0\.9\d, Math\.min\(1\.0\d", body), (
-        "the rate trim is unclamped; an audible pitch shift is worse than the drift")
-    assert "drift * 0.5" in body, (
-        "the controller runs at full gain against a buffer-quantised clock; it will "
-        "chase its own measurement noise")
+    trim = re.search(r"\bTRIM = (0\.\d+)", markup)
+    assert trim and float(trim.group(1)) <= 0.01, (
+        "the rate trim is over ±1%; an audible pitch shift is worse than the drift")
+
+
+def test_the_correction_is_not_applied_every_frame(markup):
+    """The regression this shape exists to prevent, reported live: *"the audio playback
+    is clipping, it sounds like the audio is chopped in milliseconds"*. Both remedies
+    were running at 60Hz — a hard `currentTime =` restarts the decoder and every
+    `playbackRate` write rebuilds the time-stretcher. Measuring wants the frame; acting
+    does not."""
+    body = _sync(markup)
+    assert "ACT_MS" in body and "lastAct" in body, (
+        "corrections are unthrottled again; at 60Hz the remedy is the artefact")
+    assert "SEEK_MS" in body and "lastSeek" in body, (
+        "a hard seek has no floor between attempts, so an unrecoverable gap becomes "
+        "a click track")
+    assert "audio.seeking" in body, (
+        "a correction can be issued while a seek is still in flight")
+
+
+def test_the_trim_does_not_engage_a_time_stretcher(markup):
+    """A ±0.5% resample is inaudible as pitch and free to engage. WSOLA is neither."""
+    assert "preservesPitch" in markup, (
+        "the rate trim time-stretches, which chops on exactly the material this room "
+        "is for")
+
+
+def test_the_trim_has_a_deadband(markup):
+    """One rate write per correction episode. A controller that recomputes a fresh
+    target from a buffer-quantised clock chatters across its own threshold."""
+    body = _sync(markup)
+    assert "SYNC_OK" in body and "SYNC_TRIM" in body, (
+        "engage and release share one threshold; the trim will chatter on it")
+    assert "trimming" in body, "no held state, so the trim is recomputed every pass"
 
 
 def test_a_hard_seek_is_reserved_for_a_real_dropout(markup):
@@ -75,8 +105,8 @@ def test_a_hard_seek_is_reserved_for_a_real_dropout(markup):
         "no seek path at all — a stalled stream would never recover")
     threshold = re.search(r"SYNC_SEEK = (0\.\d+)", markup)
     assert threshold, "the seek threshold is not declared"
-    assert float(threshold.group(1)) >= 0.05, (
-        "seeking below ~50ms puts the click back: that is the window a rate trim owns")
+    assert float(threshold.group(1)) >= 0.1, (
+        "seeking below ~100ms puts the click back: that is the window a rate trim owns")
 
 
 def test_the_room_says_how_far_out_it_is(markup):

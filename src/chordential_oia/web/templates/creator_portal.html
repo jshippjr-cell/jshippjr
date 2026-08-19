@@ -1300,7 +1300,7 @@
       audio.src = src;
       peaks = peakCache[src] || null;
       drawWave();
-      if (hasPicture) syncAudio();
+      if (hasPicture) syncAudio(true);   // a new take starts ON the frame
     }
 
     function decodePeaks(){
@@ -1572,9 +1572,9 @@
     });
     function loop(){
       if (mPaused()) return;
-      // Correction rides the FRAME, not `timeupdate`. Four measurements a second is
-      // a quarter-second of unmeasured drift, which is most of what the old window
-      // was tolerating in the first place.
+      // MEASUREMENT rides the frame — four samples a second leaves a quarter-second
+      // of drift unseen. Acting on it is rate-limited inside syncAudio; doing both at
+      // 60Hz is what chopped the audio.
       if (hasPicture) syncAudio();
       update(); requestAnimationFrame(loop);
     }
@@ -1589,43 +1589,78 @@
        itself louder than the error it fixes, and a composer learns to distrust what
        they are hearing at exactly the moment they are deciding whether it lands.
 
-       So: measured every animation frame, and corrected in proportion to how far out
-       it actually is.
-         under ~12ms  leave it alone — inside the frame, and chasing it would never
-                      let the rate settle
-         under ~80ms  TRIM THE RATE. ±2% for a fraction of a second sits under the
-                      threshold of pitch perception on music, and it closes the gap
-                      without a discontinuity
-         beyond       seek. That is a real dropout (a tab woke up, the stream stalled)
-                      and no rate trim recovers a second of it
+       Moving the correction into the frame loop then produced a WORSE artefact than
+       the one it replaced: *"the audio playback is clipping, it sounds like the audio
+       is chopped in milliseconds"* (operator, 2026-08-19). Both remedies were being
+       applied SIXTY TIMES A SECOND. A hard `audio.currentTime =` restarts the decoder,
+       so a persistent gap became 60 restarts per second instead of the old four; and
+       every write to `playbackRate` rebuilds the time-stretcher, so even the smooth
+       remedy chopped. Correcting continuously is not the same thing as measuring
+       continuously, and only the measurement wanted the frame rate.
+
+       So: MEASURE every frame (the readout, and the decision), ACT rarely.
+         under ~8ms   locked. Any trim in force is released and the rate is exactly 1
+         8–30ms       hold whatever is already happening — a deadband, so a clock
+                      hovering on a threshold cannot chatter across it
+         over ~30ms   trim by a FIXED ±0.5% (about 8 cents, and `preservesPitch` off
+                      so it resamples rather than time-stretches). One rate write per
+                      correction episode, not one per frame
+         over ~150ms  seek. That is a dropout, not drift — and at most once per 800ms,
+                      because a condition that cannot be recovered must not turn into
+                      a click track
        And the number itself is on screen (`.sr-sync`), because "is this in sync?" is
        a question the room should answer rather than leave to the ear. */
-    var SYNC_OK = 0.012, SYNC_SEEK = 0.08, syncDrift = 0, syncShown = 0;
-    function syncAudio(){
+    var SYNC_OK = 0.008,      // inside this the room is locked
+        SYNC_TRIM = 0.030,    // past this, engage the trim
+        SYNC_SEEK = 0.15,     // past this it is a dropout, not drift
+        TRIM = 0.005,         // ±0.5%
+        ACT_MS = 250,         // never act more often than this
+        SEEK_MS = 800;        // and never seek more often than this
+    var syncDrift = 0, syncShown = 0, lastAct = 0, lastSeek = 0, trimming = 0;
+    // No time-stretcher: at ±0.5% a resample is inaudible as pitch and, unlike WSOLA,
+    // costs nothing to engage. This is why the trim can be applied at all.
+    try { audio.preservesPitch = audio.mozPreservesPitch =
+          audio.webkitPreservesPitch = false; } catch(e){}
+    function setRate(r){
+      if (Math.abs(audio.playbackRate - r) < 0.0005) return;   // writes are not free
+      audio.playbackRate = r;
+    }
+    function syncAudio(force){
       if (!hasPicture || !hasAudio){ syncDrift = 0; paintSync(); return; }
       var t = video.currentTime || 0;
       if (t >= (dur || 0)){
         if (!audio.paused) audio.pause();
-        audio.playbackRate = 1; syncDrift = 0; paintSync(); return;
-      }
-      var drift = (audio.currentTime || 0) - t;      // + = the music is ahead
-      syncDrift = drift;
-      if (Math.abs(drift) > SYNC_SEEK){
-        audio.currentTime = t; audio.playbackRate = 1;
-      } else if (Math.abs(drift) > SYNC_OK && !video.paused){
-        /* Close half the gap per second, clamped to ±2%. Half rather than all, and
-           only when the rate would move meaningfully: `audio.currentTime` reports at
-           buffer granularity, so a full-gain controller reading a quantised clock at
-           60Hz chases its own measurement noise and puts a slow warble on every
-           sustained note — the artefact the seek was replaced to avoid. */
-        var want = Math.max(0.98, Math.min(1.02, 1 - drift * 0.5));
-        if (Math.abs(audio.playbackRate - want) > 0.002) audio.playbackRate = want;
-      } else {
-        audio.playbackRate = 1;
+        setRate(1); trimming = 0; syncDrift = 0; paintSync(); return;
       }
       if (!video.paused && audio.paused) audio.play();
-      if (video.paused && !audio.paused){ audio.pause(); audio.playbackRate = 1; }
+      if (video.paused && !audio.paused){ audio.pause(); setRate(1); trimming = 0; }
+      syncDrift = (audio.currentTime || 0) - t;      // + = the music is ahead
       paintSync();
+      // A user seek is an instruction, not drift: land the take on the frame at once.
+      if (force){
+        setRate(1); trimming = 0;
+        audio.currentTime = t; lastSeek = lastAct = Date.now();
+        return;
+      }
+      if (video.paused || audio.seeking) return;
+      var now = Date.now();
+      if (now - lastAct < ACT_MS) return;
+      lastAct = now;
+      var d = syncDrift, mag = Math.abs(d);
+      if (mag > SYNC_SEEK){
+        if (now - lastSeek > SEEK_MS){
+          lastSeek = now; setRate(1); trimming = 0; audio.currentTime = t;
+        }
+        return;
+      }
+      if (mag < SYNC_OK){
+        if (trimming){ setRate(1); trimming = 0; }
+        return;
+      }
+      if (mag > SYNC_TRIM || trimming){
+        var want = d > 0 ? -1 : 1;             // music ahead → slow it down
+        if (want !== trimming){ trimming = want; setRate(1 + want * TRIM); }
+      }
     }
     var syncEl = root.querySelector(".sr-sync");
     function paintSync(){
@@ -1651,7 +1686,7 @@
       if (hasPicture){
         if (!mDur()) return;
         video.currentTime = Math.max(0, Math.min(mDur(), t));
-        syncAudio(); update();
+        syncAudio(true); update();     // an instruction, not drift: land on the frame
         return;
       }
       if (!hasAudio || !dur) return;
@@ -1661,7 +1696,7 @@
       video.addEventListener("loadedmetadata", function(){ renderPins(); renderCues(); update(); });
       video.addEventListener("play", function(){
         stage.classList.add("playing"); playBtn.textContent = "❚❚";
-        decodePeaks(); syncAudio(); loop();
+        decodePeaks(); syncAudio(true); loop();
       });
       video.addEventListener("pause", function(){
         stage.classList.remove("playing"); playBtn.textContent = "▶"; syncAudio();

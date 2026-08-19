@@ -1688,10 +1688,20 @@ stamped on the submission and carried into the version ladder; chips read `v2 ·
 and a take playing against a different cut raises an out-of-conform band. Legitimate —
 it is what you do while working out how far the picture moved — but never silent.
 
-(3) **Sync is measured every frame and corrected in proportion.** Under ~12ms, leave it;
-under ~80ms, trim `playbackRate` within ±2% at half gain; beyond that, seek. The measured offset is on
-screen. The old rule — sample four times a second, hard-seek past three frames — both
-under-measured the drift and announced its own correction with a click.
+(3) **Sync is measured every frame and corrected RARELY.** Under ~8ms it is locked and
+any trim is released; 8–30ms is a deadband; past ~30ms a fixed ±0.5% `playbackRate` trim
+engages, with `preservesPitch` off so it resamples rather than time-stretches; past
+~150ms it seeks. Corrections are floored at one per 250ms and seeks at one per 800ms,
+and none is issued while a seek is in flight. The measured offset is on screen.
+
+The old rule — sample four times a second, hard-seek past three frames — both
+under-measured the drift and announced its own correction with a click. The first fix
+then moved BOTH remedies into the frame loop and made it far worse: *"the audio playback
+is clipping, it sounds like the audio is chopped in milliseconds"* (operator,
+2026-08-19). A hard `currentTime =` restarts the decoder and every `playbackRate` write
+rebuilds the time-stretcher, so a persistent gap became sixty restarts a second instead
+of four. **Measuring continuously is not correcting continuously** — only the
+measurement wanted the frame rate.
 
 (4) **The room states what its playback is.** Timing, structure and intent: yes. Level,
 low end and stereo width: not judgeable in a browser on an unknown device.
