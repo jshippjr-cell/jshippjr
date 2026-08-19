@@ -92,6 +92,130 @@
 </div>
 
 <!-- VERSIONS & REVIEW — the operator review surface, first (operator feedback) -->
+<!-- ACTION TOOLBAR -->
+<section class="card" id="delivery">
+  <div class="card-head"><h2>Command center</h2></div>
+
+  {# Delivery-completeness gate: a visible warning that scoped deliverables aren't
+     uploaded, so the operator can't silently ship a partial package as "everything".
+     We DON'T hard-block them (they may deliver partial deliberately) — build /
+     release stay enabled but require an explicit confirm() naming the gap. #}
+  {% if completeness and not completeness.complete %}
+  <div class="gate-warn" style="margin:0 0 14px;padding:11px 13px;border:1px solid #c08a2e;border-radius:6px;background:#fff9ee">
+    <p style="margin:0;font-weight:700;color:#8a5a00">⚠ Incomplete package — {{ completeness.text }}</p>
+    <p class="small" style="margin:5px 0 0;color:#8a5a00">Not uploaded yet: <b>{{ completeness.missing|join(', ') }}</b>. Building or releasing now ships a <b>partial</b> package (README flags the gap). Upload the missing deliverables, or confirm a partial delivery deliberately.</p>
+  </div>
+  {% endif %}
+
+  <div class="toolbar">
+    {# THE room (ADR-0068) — the shared surface, whoever opens it. Yours needs no token;
+       the client's and each creator's carry theirs. Reported live: "where do i go to
+       access the portal?" — it had been built with no door on this page. #}
+    <a class="btn primary" href="/room/{{ project['id'] }}" target="_blank">◉ Open the room</a>
+    {% if share_token %}
+    <a class="btn" href="/room/{{ project['id'] }}?k={{ share_token }}" target="_blank"
+       title="The room exactly as the client sees it — published versions only">◉ The room, as the client</a>
+    {% endif %}
+    {% if share_token %}
+    <a class="btn ghost" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
+       target="_blank" title="The client's review surface — approve, sign off deliverables, pay. Still the old portal until the room carries those controls.">↗ Client review &amp; approve</a>
+    {% endif %}
+    <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
+    {# Ship: the master is approved and EVERY deliverable is uploaded + signed off, but the
+       package hasn't shipped (e.g. after a reopen/un-ship, where nothing re-triggers the
+       automatic finalize). This is the one-click completion. #}
+    {% set _ready_ship = creative_lock and completeness and completeness.complete and asset_rollup and asset_rollup.total and asset_rollup.approved == asset_rollup.total and state not in ('Delivered', 'Released') %}
+    {% if _ready_ship %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/ship" class="inline">
+      <button class="btn primary" type="submit">🚀 Ship the delivery — all {{ asset_rollup.total }} signed off</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline"
+          {% if completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Build a PARTIAL delivery package anyway? It ships only what\'s uploaded.')"{% endif %}>
+      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
+      <button class="btn" type="submit">📦 Build delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
+    </form>
+    {% if not license_confirmed %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline">
+      <input type="hidden" name="by" value="{{ signatory.signer }}">
+      <button class="btn" type="submit">✍ Confirm license terms</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline"
+          {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% elif completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Mark this PARTIAL package released anyway?')"{% endif %}>
+      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
+      <button class="btn primary" type="submit"{% if not license_confirmed %} title="Confirm the license terms before releasing"{% endif %}>🚀 Mark released</button>
+    </form>
+    {% if creative_lock or state in ("Approved", "Delivered", "Released") %}
+    {# Reopen — approval is not a one-way door. From a SHIPPED delivery it un-ships back to
+       the deliverable sign-off stage (master stays approved, sign-offs preserved); from a
+       master-approved-but-unshipped state it reopens the creative. Tokenless operator path. #}
+    {% set is_shipped = state in ('Delivered', 'Released') %}
+    {% set reopen_msg = 'Pull this delivery back to the deliverable sign-off stage? The master stays approved and prior sign-offs are kept — only the shipped package and the client download are undone.' if is_shipped else 'Reopen the creative for changes? This un-approves the master, returns to review, and re-locks the client download.' %}
+    <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="inline"
+          onsubmit="return confirm('{{ reopen_msg }}')">
+      <button class="btn" type="submit">↩ {{ 'Reopen (un-ship)' if is_shipped else 'Reopen for changes' }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if release_flag == 'needs_license' %}
+  <p class="small" style="margin-top:10px;color:var(--wine)"><b>Release refused</b> — confirm the license terms first (no silent buyout-by-default). Press <b>Confirm license terms</b> above.</p>
+  {% endif %}
+  {% if license_confirmed %}
+  <p class="small muted" style="margin-top:10px">License confirmed by {{ license_confirmed.by }}{% if license_confirmed.date %} · {{ license_confirmed.date }}{% endif %} — the certificate now asserts the grant.</p>
+  {% else %}
+  <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
+  {% endif %}
+  {# ADR-0059 — the client's signature on the certificate, and whether it still
+     describes it. SUPERSEDED is shown loudly on purpose: it means the operator changed
+     a term after the client signed, and the client's portal is saying so too. #}
+  <div id="certificate" style="margin-top:12px">
+  {% if cert_signature and cert_signature_state == 'valid' %}
+    <p class="small" style="margin:0;color:#1d6b43"><b>✓ Certificate signed.</b> {{ cert_signature_note }}
+      <span class="muted">Mark: “{{ cert_signature.typed_name }}”{% if cert_signature.signer_email %} · {{ cert_signature.signer_email }}{% endif %} · fingerprint <code>{{ cert_signature.digest[:16] }}</code></span></p>
+  {% elif cert_signature and cert_signature_state == 'superseded' %}
+    <p class="small" style="margin:0;color:#8a3324"><b>⚠ The signed certificate has changed.</b> {{ cert_signature_note }}
+      The client's portal shows this too. Reissue and ask them to re-sign, or void the signature below.</p>
+  {% else %}
+    <p class="small muted" style="margin:0">Certificate not signed yet. A verified reviewer (personal <code>?r=</code> link) can sign it from the delivery portal once the licence is confirmed.</p>
+  {% endif %}
+  {% if cert_signature and not cert_signature.voided_at %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/signature/{{ cert_signature.id }}/void" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="text" name="reason" placeholder="Reason for withdrawing the signature" style="flex:1;min-width:240px">
+      <button class="btn btn-small" type="submit">Void signature</button>
+      <span class="small muted">The row is kept — that something was signed and later withdrawn is part of the record.</span>
+    </form>
+  {% endif %}
+  </div>
+  {% if delivery_zip %}
+  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="/project/{{ project['id'] }}/dl/{{ delivery_zip.filename }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
+  {% endif %}
+
+  <!-- Payment gate on the CLIENT's deliverable downloads -->
+  <div class="paygate" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e6dfd2)">
+    <div class="small">
+      <b>Client downloads:</b>
+      {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">🔒 locked</span>{% endif %}
+      {% if invoice_balance %}
+        · billed ${{ '%.0f'|format(invoice_balance.billed) }}, paid ${{ '%.0f'|format(invoice_balance.paid) }}{% if invoice_balance.outstanding %}, <b>outstanding ${{ '%.0f'|format(invoice_balance.outstanding) }}</b>{% endif %}
+      {% endif %}
+    </div>
+    <p class="small muted" style="margin:6px 0 8px">The client can always stream/review; the ZIP + file downloads unlock when paid in full. You can override:</p>
+    {% if delivery.get('download_unlocked') %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
+      <input type="hidden" name="unlock" value="0">
+      <button class="btn" type="submit">🔒 Re-lock to payment</button>
+    </form>
+    <span class="small muted">Manually unlocked — downloads open regardless of payment.</span>
+    {% else %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
+      <input type="hidden" name="unlock" value="1">
+      <button class="btn" type="submit">🔓 Unlock downloads anyway</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
 <div class="cols-2">
   <!-- VERSION RAIL + REVIEW ACTIVITY FEED -->
   <section class="card" id="versions">
@@ -382,129 +506,7 @@
   </div>
 </section>
 
-<!-- ACTION TOOLBAR -->
-<section class="card" id="delivery">
-  <div class="card-head"><h2>Command center</h2></div>
 
-  {# Delivery-completeness gate: a visible warning that scoped deliverables aren't
-     uploaded, so the operator can't silently ship a partial package as "everything".
-     We DON'T hard-block them (they may deliver partial deliberately) — build /
-     release stay enabled but require an explicit confirm() naming the gap. #}
-  {% if completeness and not completeness.complete %}
-  <div class="gate-warn" style="margin:0 0 14px;padding:11px 13px;border:1px solid #c08a2e;border-radius:6px;background:#fff9ee">
-    <p style="margin:0;font-weight:700;color:#8a5a00">⚠ Incomplete package — {{ completeness.text }}</p>
-    <p class="small" style="margin:5px 0 0;color:#8a5a00">Not uploaded yet: <b>{{ completeness.missing|join(', ') }}</b>. Building or releasing now ships a <b>partial</b> package (README flags the gap). Upload the missing deliverables, or confirm a partial delivery deliberately.</p>
-  </div>
-  {% endif %}
-
-  <div class="toolbar">
-    {# THE room (ADR-0068) — the shared surface, whoever opens it. Yours needs no token;
-       the client's and each creator's carry theirs. Reported live: "where do i go to
-       access the portal?" — it had been built with no door on this page. #}
-    <a class="btn primary" href="/room/{{ project['id'] }}" target="_blank">◉ Open the room</a>
-    {% if share_token %}
-    <a class="btn" href="/room/{{ project['id'] }}?k={{ share_token }}" target="_blank"
-       title="The room exactly as the client sees it — published versions only">◉ The room, as the client</a>
-    {% endif %}
-    {% if share_token %}
-    <a class="btn ghost" href="/project/{{ project['id'] }}/delivery-portal?k={{ share_token }}"
-       target="_blank" title="The client's review surface — approve, sign off deliverables, pay. Still the old portal until the room carries those controls.">↗ Client review &amp; approve</a>
-    {% endif %}
-    <a class="btn" href="/project/{{ project['id'] }}/delivery-package" target="_blank">📄 View delivery package</a>
-    {# Ship: the master is approved and EVERY deliverable is uploaded + signed off, but the
-       package hasn't shipped (e.g. after a reopen/un-ship, where nothing re-triggers the
-       automatic finalize). This is the one-click completion. #}
-    {% set _ready_ship = creative_lock and completeness and completeness.complete and asset_rollup and asset_rollup.total and asset_rollup.approved == asset_rollup.total and state not in ('Delivered', 'Released') %}
-    {% if _ready_ship %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/ship" class="inline">
-      <button class="btn primary" type="submit">🚀 Ship the delivery — all {{ asset_rollup.total }} signed off</button>
-    </form>
-    {% endif %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline"
-          {% if completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Build a PARTIAL delivery package anyway? It ships only what\'s uploaded.')"{% endif %}>
-      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
-      <button class="btn" type="submit">📦 Build delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
-    </form>
-    {% if not license_confirmed %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline">
-      <input type="hidden" name="by" value="{{ signatory.signer }}">
-      <button class="btn" type="submit">✍ Confirm license terms</button>
-    </form>
-    {% endif %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline"
-          {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% elif completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Mark this PARTIAL package released anyway?')"{% endif %}>
-      {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
-      <button class="btn primary" type="submit"{% if not license_confirmed %} title="Confirm the license terms before releasing"{% endif %}>🚀 Mark released</button>
-    </form>
-    {% if creative_lock or state in ("Approved", "Delivered", "Released") %}
-    {# Reopen — approval is not a one-way door. From a SHIPPED delivery it un-ships back to
-       the deliverable sign-off stage (master stays approved, sign-offs preserved); from a
-       master-approved-but-unshipped state it reopens the creative. Tokenless operator path. #}
-    {% set is_shipped = state in ('Delivered', 'Released') %}
-    {% set reopen_msg = 'Pull this delivery back to the deliverable sign-off stage? The master stays approved and prior sign-offs are kept — only the shipped package and the client download are undone.' if is_shipped else 'Reopen the creative for changes? This un-approves the master, returns to review, and re-locks the client download.' %}
-    <form method="post" action="/project/{{ project['id'] }}/review/reopen" class="inline"
-          onsubmit="return confirm('{{ reopen_msg }}')">
-      <button class="btn" type="submit">↩ {{ 'Reopen (un-ship)' if is_shipped else 'Reopen for changes' }}</button>
-    </form>
-    {% endif %}
-  </div>
-  {% if release_flag == 'needs_license' %}
-  <p class="small" style="margin-top:10px;color:var(--wine)"><b>Release refused</b> — confirm the license terms first (no silent buyout-by-default). Press <b>Confirm license terms</b> above.</p>
-  {% endif %}
-  {% if license_confirmed %}
-  <p class="small muted" style="margin-top:10px">License confirmed by {{ license_confirmed.by }}{% if license_confirmed.date %} · {{ license_confirmed.date }}{% endif %} — the certificate now asserts the grant.</p>
-  {% else %}
-  <p class="small" style="margin-top:10px;color:var(--muted)">License terms read as <b>DRAFT — pending confirmation</b> on the certificate until confirmed.</p>
-  {% endif %}
-  {# ADR-0059 — the client's signature on the certificate, and whether it still
-     describes it. SUPERSEDED is shown loudly on purpose: it means the operator changed
-     a term after the client signed, and the client's portal is saying so too. #}
-  <div id="certificate" style="margin-top:12px">
-  {% if cert_signature and cert_signature_state == 'valid' %}
-    <p class="small" style="margin:0;color:#1d6b43"><b>✓ Certificate signed.</b> {{ cert_signature_note }}
-      <span class="muted">Mark: “{{ cert_signature.typed_name }}”{% if cert_signature.signer_email %} · {{ cert_signature.signer_email }}{% endif %} · fingerprint <code>{{ cert_signature.digest[:16] }}</code></span></p>
-  {% elif cert_signature and cert_signature_state == 'superseded' %}
-    <p class="small" style="margin:0;color:#8a3324"><b>⚠ The signed certificate has changed.</b> {{ cert_signature_note }}
-      The client's portal shows this too. Reissue and ask them to re-sign, or void the signature below.</p>
-  {% else %}
-    <p class="small muted" style="margin:0">Certificate not signed yet. A verified reviewer (personal <code>?r=</code> link) can sign it from the delivery portal once the licence is confirmed.</p>
-  {% endif %}
-  {% if cert_signature and not cert_signature.voided_at %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/signature/{{ cert_signature.id }}/void" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <input type="text" name="reason" placeholder="Reason for withdrawing the signature" style="flex:1;min-width:240px">
-      <button class="btn btn-small" type="submit">Void signature</button>
-      <span class="small muted">The row is kept — that something was signed and later withdrawn is part of the record.</span>
-    </form>
-  {% endif %}
-  </div>
-  {% if delivery_zip %}
-  <p class="small muted" style="margin-top:10px">Last package: <a class="link" href="/project/{{ project['id'] }}/dl/{{ delivery_zip.filename }}">{{ delivery_zip.filename }}</a> · built {{ delivery_zip.built_at[:16]|replace('T',' ') }}{% if delivery_zip.partial %} · <span style="color:#8a5a00;font-weight:600">{{ delivery_zip.descriptor }}</span>{% endif %}</p>
-  {% endif %}
-
-  <!-- Payment gate on the CLIENT's deliverable downloads -->
-  <div class="paygate" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e6dfd2)">
-    <div class="small">
-      <b>Client downloads:</b>
-      {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">🔒 locked</span>{% endif %}
-      {% if invoice_balance %}
-        · billed ${{ '%.0f'|format(invoice_balance.billed) }}, paid ${{ '%.0f'|format(invoice_balance.paid) }}{% if invoice_balance.outstanding %}, <b>outstanding ${{ '%.0f'|format(invoice_balance.outstanding) }}</b>{% endif %}
-      {% endif %}
-    </div>
-    <p class="small muted" style="margin:6px 0 8px">The client can always stream/review; the ZIP + file downloads unlock when paid in full. You can override:</p>
-    {% if delivery.get('download_unlocked') %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
-      <input type="hidden" name="unlock" value="0">
-      <button class="btn" type="submit">🔒 Re-lock to payment</button>
-    </form>
-    <span class="small muted">Manually unlocked — downloads open regardless of payment.</span>
-    {% else %}
-    <form method="post" action="/project/{{ project['id'] }}/delivery/unlock" class="inline">
-      <input type="hidden" name="unlock" value="1">
-      <button class="btn" type="submit">🔓 Unlock downloads anyway</button>
-    </form>
-    {% endif %}
-  </div>
-</section>
 
 <!-- REVIEWERS (verified-identity approval) -->
 <section class="card" id="reviewers">

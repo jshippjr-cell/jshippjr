@@ -132,24 +132,45 @@ CANONICAL_BY_KEY = {(f, k, kind): (label, ph, opp)
 # A canonical key has exactly ONE home, so the facet is not the model's to choose.
 CANONICAL_FACET_FOR_KEY = {k: f for f, k, _kind, _l, _p, _o in CANONICAL_FIELDS}
 
-# The composer's read of the call: canonical key -> (label, facet), in declared order.
-# The room's Brief layer renders this, because a discovery call summarised into
-# Campaign Intelligence and then not shown to the person writing the music is a summary
-# nobody reads. Reported live: "thats the whole point for the information from the
-# discovery call to get summarized into a nice brief for the composer".
-BRIEF_ORDER = [(k, label, f) for f, k, kind, label, _p, _o in CANONICAL_FIELDS
-               if kind == "fact"]
+# What a COMPOSER needs from the call, chosen — not the whole intelligence dump.
+#
+# Dumping every canonical field was the lazy route and a dangerous one: it put the
+# BUDGET in front of the person we are negotiating a rate with, along with the decision
+# makers and how the agency behaves. None of that helps anyone write music, and one of
+# them is commercially ours. Reported live.
+#
+# A composer needs to know what the music is FOR, how it should FEEL, what to write TO,
+# what to DELIVER and by WHEN. That is the whole list, in reading order, and it is an
+# allowlist so a new canonical field cannot leak into the room by being added.
+BRIEF_KEYS = (
+    ("campaign_objective", "What this music is for"),
+    ("business_objective", "What the brand is trying to achieve"),
+    ("emotional_arc", "The feeling it carries"),
+    ("reference_playlist", "Touchstones they named"),
+    ("deliverables", "What you deliver"),
+    ("deadline", "When it is needed"),
+)
+# Never shown to a creator. Commercial and relationship facts: our side of the table.
+BRIEF_WITHHELD = ("budget_band", "decision_makers", "agency_notes", "brand_notes")
 
 
 def composer_brief(view: dict) -> list:
-    """The call's established facts, labelled and ordered, skipping what it never
-    established. Takes `brief_view`'s output; returns [(label, value, facet)]."""
+    """The call, curated for the person writing the music.
+
+    An ALLOWLIST, deliberately: `BRIEF_WITHHELD` is documentation of intent, but what
+    protects the budget is that nothing outside `BRIEF_KEYS` is ever returned. Values are
+    trimmed to a readable length — a brief that has to be scrolled is one nobody reads,
+    and the full record is always on the operator's page.
+    """
     fields = dict((view or {}).get("fields") or {})
     out = []
-    for key, label, facet in BRIEF_ORDER:
-        val = (fields.get(key) or "").strip()
-        if val:
-            out.append({"label": label, "value": val, "facet": facet})
+    for key, label in BRIEF_KEYS:
+        val = " ".join((fields.get(key) or "").split())
+        if not val:
+            continue
+        if len(val) > 320:
+            val = val[:317].rstrip(" ,;.") + "…"
+        out.append({"label": label, "value": val, "key": key})
     return out
 
 

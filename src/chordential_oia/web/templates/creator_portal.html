@@ -128,6 +128,10 @@
   .nb-send{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:700}
   .nb-tc{font-family:var(--mono);font-variant-numeric:tabular-nums}
   .nb-who{flex:0 1 150px;min-width:110px}
+  /* The stretch a range note covers, painted on the lane while you mark it. */
+  .nb-band{position:absolute;top:0;bottom:0;background:rgba(240,119,44,.22);
+    border-left:1px solid var(--orange);border-right:1px solid var(--orange);
+    pointer-events:none;z-index:3}
   /* The hat you are wearing, so the shared room never reads as anonymous. */
   .who-badge{font:700 9.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
     border-radius:999px;padding:3px 10px;white-space:nowrap;
@@ -708,7 +712,7 @@
         yes — walking them to a second surface to approve the thing they are listening to
         is the split this room exists to end. Creators never see it: approving your own
         work is not a review (room.CAPS). ── #}
-  {% if 'approve' in (caps|default([])) and a.versions %}
+  {% if 'client_verdict' in (caps|default([])) and a.versions %}
   {# What Approve COMMITS, said before it is pressed. The EP review would not press it:
      "approve for what? Is that me saying the music is locked, that a revision round is
      burned, that I owe money?" A one-tap irreversible commercial action with an unstated
@@ -796,12 +800,6 @@
       these rather than guessing — ask the studio and it gets answered, not assumed.</p>
     <ul class="intel-list">
       {% for q in a.intel.open_questions %}<li>{{ q }}</li>{% endfor %}
-    </ul>
-    {% endif %}
-    {% if a.intel and a.intel.risks %}
-    <h3>Watch out for</h3>
-    <ul class="intel-list warn">
-      {% for r in a.intel.risks %}<li>{{ r }}</li>{% endfor %}
     </ul>
     {% endif %}
     {% if a.references %}
@@ -1753,6 +1751,35 @@
           tcEl = bar.querySelector(".nb-tc"), mark = bar.querySelector(".nb-mark"),
           send = bar.querySelector(".nb-send"), body = bar.querySelector(".nb-body");
       var from = null;
+      var noteList = root.querySelector('.sr-sheet[data-sheet="notes"]');
+      var badge = root.querySelector('.lk[data-sheet="notes"]');
+      function addNoteCard(n){
+        if (!noteList || !n) return;
+        var card = document.createElement("div");
+        card.className = "note-card sr-note";
+        card.setAttribute("data-note", n.id);
+        card.innerHTML =
+          '<div class="nc-top"><span class="nc-dot"></span>' +
+          '<span class="nc-who"></span>' +
+          '<button type="button" class="nc-at mono">' + fmt(n.t) + '</button></div>' +
+          '<div class="nc-body"></div>';
+        card.querySelector(".nc-who").textContent = n.author || "You";
+        card.querySelector(".nc-body").textContent = n.body || "";
+        var anchor = noteList.querySelector(".note-card");
+        if (anchor) anchor.parentNode.insertBefore(card, anchor);
+        else noteList.appendChild(card);
+        var empty = noteList.querySelector(".fb-empty");
+        if (empty) empty.remove();
+        if (badge){
+          var chip = badge.querySelector(".n-open");
+          if (!chip){
+            chip = document.createElement("span");
+            chip.className = "n-open"; chip.textContent = "· 0";
+            badge.appendChild(chip);
+          }
+          chip.textContent = "· " + ((parseInt(chip.textContent.replace(/\D/g, ""), 10) || 0) + 1);
+        }
+      }
       function fmt(t){
         t = Math.max(0, Math.round(t || 0));
         return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2);
@@ -1768,15 +1795,33 @@
           tcEl.textContent = fmt(lo) + "–" + fmt(hi);
         }
       }
+      /* Range was a state nobody could see: it changed a hidden field and the button's
+         own label, and the picture gave you nothing back. It now PAINTS the stretch it
+         covers on the notes lane as you scrub, so "from here to here" is a thing you
+         watch rather than a thing you remember. */
+      var band = null;
+      function paintBand(){
+        if (from === null){ if (band){ band.remove(); band = null; } return; }
+        var D = mDur(); if (!D) return;
+        if (!band){
+          band = document.createElement("div");
+          band.className = "nb-band";
+          noteLane.appendChild(band);
+        }
+        var now = mTime() || 0;
+        var lo = Math.min(from, now) / D * 100, hi = Math.max(from, now) / D * 100;
+        band.style.left = lo + "%";
+        band.style.width = Math.max(0.4, hi - lo) + "%";
+      }
       mark.addEventListener("click", function(){
         if (from === null){ from = mTime() || 0; mark.classList.add("armed");
-          mark.textContent = "⇥ End range"; }
+          mark.textContent = "⇥ End range"; whisper("Range open — scrub to the end"); }
         else { from = null; mark.classList.remove("armed"); mark.textContent = "⇤ Range"; }
-        paint();
+        paint(); paintBand();
       });
       /* Typing must not steal the transport keys, and space in a note is a space. */
       body.addEventListener("keydown", function(e){ e.stopPropagation(); });
-      setInterval(paint, 250);
+      setInterval(function(){ paint(); paintBand(); }, 200);
       paint();
       /* Post WITHOUT leaving. A normal submit reloaded the room, which stopped the
          music and the picture mid-note, and for a client the redirect landed them back
@@ -1802,8 +1847,18 @@
                          addressed: false, conform: false, replies: [] });
             body.value = ""; from = null;
             mark.classList.remove("armed"); mark.textContent = "⇤ Range";
-            renderPins();
-            send.disabled = false; paint();
+            renderPins(); paintBand();
+            /* The button never came back: `paint()` rewrites the timecode inside the
+               label but the label itself still said "Sending…", so a note that had
+               landed looked like one still in flight. */
+            send.disabled = false;
+            send.innerHTML = 'Note at <span class="nb-tc">0:00</span>';
+            tcEl = send.querySelector(".nb-tc");
+            /* And it appeared as a PIN but not in the Notes list, because the list is
+               rendered server-side — so eight notes showed seven and the badge lagged by
+               one. Put it in the list and move the count with it. */
+            addNoteCard(notes[notes.length - 1]);
+            paint();
             whisper("Note left at " + fmt(at));
           })
           .catch(function(){

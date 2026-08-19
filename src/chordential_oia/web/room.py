@@ -38,9 +38,19 @@ ROLES = (OPERATOR, TALENT, CLIENT)
 # What each role may do or see. Read as: everything absent is denied.
 CAPS = {
     OPERATOR: {
-        "see_pending", "see_internal", "see_contributors", "see_captures",
+        # The studio's verdict is PUBLISH — the buffer between a submitted take and the
+        # client hearing it. It is deliberately NOT `client_verdict`: the creative
+        # sign-off, and the revision round it governs, belong to the buyer who is paying
+        # for them. "the studio's approval is just a buffer, it comes before the client's
+        # approval" (operator, 2026-08-19).
+        #
+        # `see_contributors` is gone too: naming who played is the COMPOSER's obligation
+        # under clause 6A, and the control belongs where the obligation is. The studio
+        # still sees who is outstanding — on the delivery console, where the clearance
+        # certificate is signed.
+        "see_pending", "see_internal", "see_captures",
         "see_deliverable_specs", "see_money", "upload_take", "comment",
-        "download_source", "approve", "publish",
+        "download_source", "publish",
     },
     TALENT: {
         # Their own pending submission — they uploaded it; hiding it made the portal
@@ -52,7 +62,11 @@ CAPS = {
         # PUBLISHED VERSIONS ONLY. A client who can hear an unreviewed take makes the
         # taste gate decorative, and the gate is the thing that protects them from a
         # first impression nobody chose.
-        "comment", "approve",
+        #
+        # `client_verdict` is theirs alone. Approving locks the master; requesting
+        # changes spends one of THEIR rounds. Neither is a decision the studio can take
+        # on their behalf from inside the room.
+        "comment", "client_verdict",
     },
 }
 

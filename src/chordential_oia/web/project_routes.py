@@ -2768,9 +2768,16 @@ def review_changes(
         # unpriced lane the disposition queue exists to close is the FREE one — a plain
         # note, which cost nothing and was worked on anyway. The studio can still
         # re-classify this to a conform, which hands the round back.
-        db.set_comment_disposition(conn, project_id, _cid, "revision")
-        db.update_delivery(conn, project_id, "revisions_used",
-                           int(delivery.get("revisions_used") or 0) + 1)
+        # A round is the CLIENT's to spend. The studio asking for a change is direction,
+        # not a revision request — it happens before the buyer has heard anything, and
+        # charging it to their budget would be spending their money on our own second
+        # thoughts. Recorded as a priced note; the counter does not move.
+        from_client = bool(k or r)
+        db.set_comment_disposition(conn, project_id, _cid,
+                                   "revision" if from_client else "conform")
+        if from_client:
+            db.update_delivery(conn, project_id, "revisions_used",
+                               int(delivery.get("revisions_used") or 0) + 1)
         # ADR-0019: the round LEDGER behind the counter — which version, who, what they said
         # (post-lock rounds are stamped so scope conversations have a record to stand on).
         production.log_round(conn, db, project_id,

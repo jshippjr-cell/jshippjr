@@ -142,18 +142,20 @@ def _call_intel(conn, prow) -> dict:
     linked opportunity or no intelligence yet — an absent section, never a fake one."""
     from . import campaign_intelligence as ci, campaigns
     if not prow["opp_id"] or not campaigns.workspace_enabled():
-        return {"facts": [], "risks": [], "open_questions": [], "insights": []}
+        return {"facts": [], "open_questions": []}
     try:
         row = db.get_opportunity(conn, prow["opp_id"])
         if row is None:
-            return {"facts": [], "risks": [], "open_questions": [], "insights": []}
+            return {"facts": [], "open_questions": []}
         view = ci.brief_view(conn, ci.ensure_for_opportunity(conn, row)["id"])
+        # Risks and insights are the STUDIO's read of the buyer — how they behave, what
+        # to watch commercially. Open questions are the only debrief item a composer acts
+        # on, and even those are capped: a brief is a page you read before you start, not
+        # an archive. The full record stays on the operator's page.
         return {"facts": ci.composer_brief(view),
-                "risks": list(view.get("risks") or []),
-                "open_questions": list(view.get("open_questions") or []),
-                "insights": list(view.get("insights") or [])}
+                "open_questions": list(view.get("open_questions") or [])[:4]}
     except Exception:  # noqa: BLE001 — the room must open even if intelligence hiccups
-        return {"facts": [], "risks": [], "open_questions": [], "insights": []}
+        return {"facts": [], "open_questions": []}
 
 
 def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:

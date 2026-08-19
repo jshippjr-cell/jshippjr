@@ -302,3 +302,85 @@ def test_the_client_is_shown_what_they_are_licensing(studio):
         page = client.get(f"/room/{pid}", params={"k": ktok}).text
     assert "You are licensing" in page
     assert "Worldwide" in page or "Perpetuity" in page
+
+
+# ── 5. the brief is curated, not dumped ─────────────────────────────────────────────
+def test_the_composers_brief_never_carries_the_budget(studio):
+    """Dumping the whole intelligence was the lazy route and a dangerous one: it put the
+    BUDGET in front of the person we negotiate a rate with, plus the decision makers and
+    how the agency behaves. An allowlist, so a new canonical field cannot leak in by
+    being added."""
+    from chordential_oia.web.campaign_intelligence import (
+        BRIEF_KEYS, BRIEF_WITHHELD, composer_brief)
+    allowed = {k for k, _label in BRIEF_KEYS}
+    for withheld in BRIEF_WITHHELD:
+        assert withheld not in allowed, f"{withheld} is on the composer's brief"
+    view = {"fields": {"budget_band": "$6,000 to $10,000",
+                       "decision_makers": "Marta signs off",
+                       "agency_notes": "They move slowly",
+                       "campaign_objective": "Reach lapsed donors"}}
+    out = composer_brief(view)
+    blob = str(out)
+    assert "6,000" not in blob and "Marta" not in blob and "slowly" not in blob
+    assert "lapsed donors" in blob
+
+
+def test_the_brief_stays_short_enough_to_read(studio):
+    from chordential_oia.web.campaign_intelligence import composer_brief
+    long = "word " * 400
+    out = composer_brief({"fields": {"emotional_arc": long}})
+    assert len(out[0]["value"]) <= 321, "the brief is a page, not an archive"
+    assert out[0]["value"].endswith("…")
+
+
+# ── 6. the verdict, and the round, are the client's ─────────────────────────────────
+def test_only_the_client_holds_the_verdict():
+    """"the studio's approval is just a buffer, it comes before the client's approval."
+    The studio's verdict is PUBLISH; the creative sign-off and the round it governs
+    belong to the buyer paying for them."""
+    from chordential_oia.web import room
+    assert room.can(room.CLIENT, "client_verdict")
+    assert not room.can(room.OPERATOR, "client_verdict")
+    assert not room.can(room.TALENT, "client_verdict")
+    assert room.can(room.OPERATOR, "publish") and not room.can(room.CLIENT, "publish")
+
+
+def test_the_studio_requesting_a_change_does_not_spend_the_clients_round(studio):
+    jon, app_mod, pid, _tid, _t, _k = studio
+    before = _rounds(app_mod, pid)
+    jon.post(f"/project/{pid}/review/changes",
+             data={"body": "Try it warmer before she hears it."},
+             follow_redirects=False)
+    assert _rounds(app_mod, pid) == before, (
+        "the studio spent the client's round on its own second thoughts")
+
+
+def test_the_client_requesting_a_change_does_spend_one(studio):
+    from fastapi.testclient import TestClient
+    _jon, app_mod, pid, _tid, _t, ktok = studio
+    before = _rounds(app_mod, pid)
+    with TestClient(app_mod.app) as client:
+        client.post(f"/project/{pid}/review/changes",
+                    data={"k": ktok, "author": "Marta", "email": "m@e.org",
+                          "body": "The strings are too bright."},
+                    follow_redirects=False)
+    assert _rounds(app_mod, pid) == before + 1
+
+
+def test_the_studio_is_not_offered_the_clients_controls(studio):
+    """Reported live: the studio view carried "who else played on this" (the composer's
+    clause-6A obligation) and "what approving commits" (written for the buyer)."""
+    jon, _app_mod, pid, _tid, _t, _k = studio
+    body = jon.get(f"/room/{pid}").text.split("</style>")[-1]
+    assert 'id="contributors"' not in body
+    assert "What approving commits" not in body
+    assert "/review/approve" not in body
+
+
+def test_the_composer_keeps_the_contributor_roster(studio):
+    """Naming who played is theirs; the guard must not be so wide it takes it."""
+    from fastapi.testclient import TestClient
+    _jon, app_mod, pid, _tid, ttok, _k = studio
+    with TestClient(app_mod.app) as creator:
+        body = creator.get(f"/room/{pid}", params={"t": ttok}).text.split("</style>")[-1]
+    assert 'id="contributors"' in body
