@@ -30,6 +30,7 @@ WEB = Path(app_mod.__file__).parent
 ROUTERS = ["agencies_routes.py", "discovery_routes.py",
            "talent_routes.py", "opportunity_routes.py",
            "project_routes.py", "creator_routes.py", "contributor_routes.py",
+           "room_routes.py",
            "campaign_routes.py", "simulator_routes.py",
            "workspace_routes.py", "console_routes.py",
            "billing_routes.py", "meetings_routes.py",
@@ -278,6 +279,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     tested by walking a real funnel or practising on a real buyer,
     +1 for handing over the client's cut and references in ONE act, because two submit
     buttons on one card threw away whichever file the other was holding,
+    +1 for THE room (ADR-0068) — one capability-gated surface for creator, client and
+    studio, where there had been three templates rendering one engagement,
     +2 for adding a deal by hand — a form and its post, and until they existed there was no
     way to create an opportunity at all except promoting an inbound lead.
     Retiring
@@ -290,8 +293,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 282, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 282 — "
+    assert len(decls) == 283, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 283 — "
         f"a slice lost or gained a URL")
 
 

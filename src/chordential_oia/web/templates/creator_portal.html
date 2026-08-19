@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Session Room · {{ t.name }} · Chordential</title>
+<title>Session Room · {{ (t.name if t else room_role|default('Studio'))|title }} · Chordential</title>
 <style>
   /* ── The Scoring Stage (docs/design/chordos-studio-experience.md, Phase 1) ──
      One room per engagement. The picture position is the hero (poster until the
@@ -444,7 +444,7 @@
   <div class="stage noaudio" style="aspect-ratio:16/6">
     <div class="poster-title" style="inset:0">
       <span class="pt-kick">SESSION ROOM</span>
-      <h1>Welcome, {{ t.name.split(' ')[0] }}.</h1>
+      <h1>Welcome{% if t %}, {{ t.name.split(' ')[0] }}{% endif %}.</h1>
       <p class="pt-sub">When you're staffed on a project, your room will be dressed and waiting here:
         the brief, the picture, the notes. We'll be in touch.</p>
     </div>
@@ -595,7 +595,11 @@
         {% if open_ct %}<span class="n-open">· {{ open_ct }}</span>{% endif %}</button>
       <button class="lk sr-open" data-sheet="takes"><b>V</b>Takes</button>
     </div>
+    {# Only a hand that may upload. The client is in the same room and must not be
+       offered the composer's controls (ADR-0068 — the caps are the authority). #}
+    {% if 'upload_take' in (caps|default(['upload_take'])) %}
     <button class="upload-cta sr-upload-cta">⇪ {{ 'Upload your first take' if (not a.versions and not a.pending) else 'Upload a new take' }}</button>
+    {% endif %}
     {# Mobile Companion (§13): the phone is for Listen/Know, not delivering work —
        uploading a take happens at the desk. Shown only on the phone breakpoint. #}
     <p class="companion-note">Companion mode: listen and check in here; upload your take from the studio at your desk.</p>
@@ -792,6 +796,7 @@
     </div>
     {% endfor %}
     {% if not a.deliverables %}<p class="fineprint">No additional deliverables scoped. The master completes this delivery.</p>{% endif %}
+    {% if 'upload_take' in (caps|default(['upload_take'])) %}
     <details style="margin-top:14px">
       <summary class="fineprint" style="cursor:pointer">Need to revise the master? Submit a new version</summary>
       <form class="uploader sr-upload-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data">
@@ -805,7 +810,8 @@
         <p class="fineprint">Submitting a new master reopens review and notifies the team.</p>
       </form>
     </details>
-    {% else %}
+    {% endif %}
+    {% elif 'upload_take' in (caps|default(['upload_take'])) %}
     <form class="uploader sr-upload-form" method="post"
           action="/creator/{{ token }}/project/{{ a.project_id }}/version" enctype="multipart/form-data">
       <label>{{ 'Submit an updated version. This replaces the one under review and re-notifies the team.'
@@ -838,6 +844,7 @@
   {# ── Who else played (clause 6A). The composer's obligation, so it lives where the
         composer is. Naming someone emails them a short release; nobody gets an account,
         and a signed release is what the clearance certificate actually stands on. ── #}
+  {% if 'see_contributors' in (caps|default(['see_contributors'])) %}
   <div class="sr-panel" id="contributors" style="margin-top:18px;padding:16px 18px;
        border:1px solid rgba(255,255,255,.16);border-radius:12px">
     <div style="font-weight:750;margin-bottom:4px">Who else played on this</div>
@@ -898,6 +905,7 @@
         Add &amp; send release</button>
     </form>
   </div>
+  {% endif %}
 </div>
 {% endfor %}
 
@@ -907,8 +915,10 @@
    One mount, on the engagement in focus — the event stream and presence are per project. #}
 {% if assignments %}
 <div class="room" style="padding-top:0">
-  <div id="session-room" data-project="{{ assignments[0].project_id }}" data-role="talent"
-       data-name="{{ t.name }}" data-token="{{ token }}" data-token-kind="t"></div>
+  <div id="session-room" data-project="{{ assignments[0].project_id }}"
+       data-name="{{ t.name if t else (room_role|default('Studio'))|title }}"
+       data-role="{{ room_role|default('talent') }}"
+       data-token="{{ room_token|default(token) }}" data-token-kind="{{ room_token_kind|default('t') }}"></div>
 </div>
 <script src="/static/session-room.js?v={{ static_v }}" defer></script>
 {% endif %}

@@ -32,3 +32,29 @@ def displayurl(value: Optional[str]) -> str:
     if not value:
         return "—"
     return value.split("://", 1)[-1].rstrip("/")
+
+
+# CSS-class maps for the pipeline vocabularies. Pure view mappings with no application
+# state, so they belong beside the other filters rather than in `app.py` (ADR-0044 — that
+# file only shrinks). The templates reach them as the globals registered below.
+_ACTION_CLASS = {"Pursue": "pursue", "Review": "review", "Watch": "watch", "Pass": "pass"}
+_TIER_CLASS = {"A-Tier": "a", "B-Tier": "b", "C-Tier": "c", "Watch": "watch"}
+_STATUS_CLASS = {"New": "new", "Pursuing": "pursuing", "Submitted": "submitted",
+                 "Won": "won", "Lost": "lost", "Passed": "passed"}
+_STRAT_CLASS = {"Door-opener": "door", "High": "high", "Medium": "medium", "Low": "low"}
+
+
+def action_class(v) -> str:
+    return _ACTION_CLASS.get(v, "")
+
+
+def tier_class(v) -> str:
+    return _TIER_CLASS.get(v, "")
+
+
+def status_class(v) -> str:
+    return _STATUS_CLASS.get(v, "")
+
+
+def strat_class(v) -> str:
+    return _STRAT_CLASS.get(v, "")

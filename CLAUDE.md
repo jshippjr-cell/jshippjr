@@ -209,6 +209,12 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   the picture as well as the deposit (never gated on it), and a client action that can be
   taken carries the link that takes it. A second way to close a deal is not done when the
   signature is stored: walk the client's path after it.
+- **One room, capability-gated** (ADR-0068): `/room/<project_id>` serves creator, client
+  and studio from ONE template. `creator_routes._room_fields` builds the engagement once;
+  `room.room_view` **subtracts** what the role may not see, so the client's copy is made
+  by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
+  is the authority and an unknown role gets nothing. A gate-exempt route must make its
+  own stricter check: `_session_role` reads "no token" as *operator*.
 - **Scope carries its own evidence:** `estimation.Scope` / `estimation.Session`
   (ADR-0058) each pair a value with whether the brief STATED it. Anything assumed is
   named on the surface that shows the number. Mirror this for any inferred input a

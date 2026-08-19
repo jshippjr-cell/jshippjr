@@ -29,7 +29,8 @@ from ..payments import boot_line as payments_boot_line
 from ..storage import get_object_store, storage_status
 from . import (accounts, actor, campaigns, db, discovery, roles, scheduler, seed,
                uploads, webpush)
-from .filters import displayurl, money, pct, slug
+from .filters import (action_class, displayurl, money, pct, slug,
+                      status_class, strat_class, tier_class)
 from .shell import (admin_authed as _admin_authed, admin_secret as _admin_secret,
                     signed_in_user as _signed_in_user)
 from .agencies_routes import router as agencies_router
@@ -39,6 +40,7 @@ from .opportunity_routes import router as opportunity_router
 from .project_routes import router as project_router
 from .creator_routes import router as creator_router
 from .contributor_routes import router as contributor_router
+from .room_routes import router as room_router
 from .campaign_routes import router as campaign_router
 from .simulator_routes import router as simulator_router
 from .workspace_routes import router as workspace_router
@@ -109,22 +111,14 @@ UPLOAD_DIR = uploads.upload_dir()
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-_ACTION_CLASS = {"Pursue": "pursue", "Review": "review", "Watch": "watch", "Pass": "pass"}
-_TIER_CLASS = {"A-Tier": "a", "B-Tier": "b", "C-Tier": "c", "Watch": "watch"}
-_STATUS_CLASS = {
-    "New": "new", "Pursuing": "pursuing", "Submitted": "submitted",
-    "Won": "won", "Lost": "lost", "Passed": "passed",
-}
-
 templates.env.filters["money"] = money
 templates.env.filters["pct"] = pct
 templates.env.filters["slug"] = slug
 templates.env.filters["displayurl"] = displayurl
-templates.env.globals["action_class"] = lambda a: _ACTION_CLASS.get(a, "")
-templates.env.globals["tier_class"] = lambda t: _TIER_CLASS.get(t, "")
-templates.env.globals["status_class"] = lambda s: _STATUS_CLASS.get(s, "")
-_STRAT_CLASS = {"Door-opener": "door", "High": "high", "Medium": "medium", "Low": "low"}
-templates.env.globals["strat_class"] = lambda s: _STRAT_CLASS.get(s, "")
+templates.env.globals["action_class"] = action_class
+templates.env.globals["tier_class"] = tier_class
+templates.env.globals["status_class"] = status_class
+templates.env.globals["strat_class"] = strat_class
 templates.env.globals["PIPELINE_STATES"] = db.PIPELINE_STATES
 # View-layer stage relabel (ruling #2): friendly label for a raw pipeline status.
 templates.env.globals["stage_label"] = db.stage_label
@@ -310,6 +304,7 @@ app.include_router(opportunity_router)
 app.include_router(project_router)
 app.include_router(creator_router)
 app.include_router(contributor_router)
+app.include_router(room_router)
 app.include_router(campaign_router)
 app.include_router(simulator_router)
 app.include_router(workspace_router)
@@ -421,6 +416,10 @@ _CREATOR_PORTAL_RE = re.compile(
     r"|note/\d+/(reply|address)))?/?$")
 # A session player's release. No account, ever — the link is the whole credential.
 _CONTRIBUTOR_RE = re.compile(r"^/contributor/[A-Za-z0-9_-]+(/sign)?/?$")
+# THE room (ADR-0068). The route resolves the caller's role from whichever credential
+# they hold (?t=/?k=/?r=) and 404s when none fits — stricter than the gate, which only
+# knows whether you are the operator.
+_ROOM_RE = re.compile(r"^/room/\d+/?$")
 # Session Room (Living OS P5): the live-room poll + presence ping are hit from the
 # token-gated client portal too — each route token-validates in-route (a bad token
 # gets the operator-only view refused / 404), so the paths bypass the login gate.
@@ -440,6 +439,7 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _DELIVERY_DELEGATE_RE.match(path)
         or _CREATOR_PORTAL_RE.match(path)
         or _CONTRIBUTOR_RE.match(path)
+        or _ROOM_RE.match(path)
         or _SESSION_ROOM_RE.match(path)
         or _CLIENT_PAY_RE.match(path)
         or path == "/pay/return"

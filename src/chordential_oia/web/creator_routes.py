@@ -31,7 +31,7 @@ from ..delivery import (
 )
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
-from . import db, production
+from . import db, production, room
 from .delivery_ops import (
     _campaign_label, _notify_operator_review, _project_estimate, _sync_role_milestones,
 )
@@ -134,6 +134,78 @@ def _rel_deadline(iso: str) -> str:
     return f"{-days} day{'s' if days != -1 else ''} past due"
 
 
+def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
+    """Every field the room shows about ONE engagement, for whoever is looking.
+
+    Role-agnostic on purpose: this builds the room in full and `room.room_view` performs
+    the SUBTRACTION for the role that asked. One derivation, many reporters — the rule
+    the queue, the price and the relationship already follow, applied to the room itself,
+    because three renderings of one engagement is how they drift.
+    """
+    delivery = db.get_delivery(conn, project_id)
+    # Once the client approves the master (creative lock), the composer's job shifts
+    # from iterating the master to producing the DERIVATIVE deliverables (instrumental,
+    # cutdowns, verticals, stems). Surface those so the portal can ask for them —
+    # the master is the version ladder, so it's excluded here.
+    locked = bool(production.creative_lock(delivery))
+    # Scoped deliverables + specs are DAY-ONE knowledge (composer review P1-8:
+    # "I bounce to spec from take one if you tell me on day one"), not a
+    # post-approval surprise. Pending = submitted, with the studio (EP P0-3).
+    pending_labels = {(x.get("label") or "").strip().lower()
+                      for x in (delivery.get("pending_assets") or [])}
+    deliverables = []
+    for d in scoped_deliverables(prow, delivery):
+        if d.get("is_master"):
+            continue
+        deliverables.append({
+            "asset": d["asset"], "group": d["group"],
+            "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
+            "pending": (d["asset"] or "").strip().lower() in pending_labels,
+        })
+    return {
+        "project_id": project_id,
+        "role": role,
+        # Every hat a creator wears on this engagement, in assignment order.
+        "roles": ([role] if role else []),
+        "client": prow["client"],
+        "need": prow["need"],
+        "deadline": prow["deadline"],
+        "status": prow["status"],
+        "delivery_state": (delivery.get("state") or "Not started"),
+        "version_state": (delivery.get("version_state") or ""),
+        "versions": versions_list(delivery),
+        # The creator's OWN latest submission, even while it's still pending Jon's
+        # review — so they can see it landed instead of the empty "upload your first"
+        # state (reported live: after submitting, the portal looked like nothing happened).
+        # Removed for the client by `room.room_view`: published versions only.
+        "pending": delivery.get("pending_version") or None,
+        "feedback": _creator_feedback(conn, project_id, delivery),
+        "creative_lock": locked,
+        "deliverables": deliverables,
+        # The room's Brief layer renders the REAL creative brief (the same
+        # effective brief the console shows), not a restatement of the title.
+        "brief": seed_brief(
+            prow,
+            db.get_opportunity(conn, prow["opp_id"]) if prow["opp_id"] else None,
+            delivery),
+        "deadline_rel": _rel_deadline(prow["deadline"]) if prow["deadline"] else "",
+        # Phase 2 — the picture + references + conform marking
+        "picture": delivery.get("picture") or None,
+        "references": list(delivery.get("references") or []),
+        # Phase 3 — the Cue Layer: cue regions + hit diamonds on the spine.
+        # Read-only for the composer (Jon owns the cue list); they score to it.
+        "cues": db.get_cues(conn, project_id),
+        # Phase 4 §13 — the private Capture shelf (composer + studio only).
+        "captures": db.get_captures(conn, project_id),
+    }
+
+
+def _room_for_project(conn, project_id: int) -> Optional[dict]:
+    """THE engagement, built once, for whoever is looking. ``None`` if it is gone."""
+    prow = db.get_project(conn, project_id)
+    return None if prow is None else _room_fields(conn, project_id, prow)
+
+
 def _creator_assignment_view(conn, talent_id: int) -> list:
     """Per-assignment cards for the composer portal: brief, role, deadline, the
     delivery state, the versions THIS creator can submit/see, and the client's
@@ -148,64 +220,10 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         if a["project_id"] in seen:
             seen[a["project_id"]]["roles"].append(a["role"])
             continue
-        delivery = db.get_delivery(conn, a["project_id"])
         prow = db.get_project(conn, a["project_id"])
-        # Once the client approves the master (creative lock), the composer's job shifts
-        # from iterating the master to producing the DERIVATIVE deliverables (instrumental,
-        # cutdowns, verticals, stems). Surface those so the portal can ask for them —
-        # the master is the version ladder, so it's excluded here.
-        locked = bool(production.creative_lock(delivery))
-        # Scoped deliverables + specs are DAY-ONE knowledge (composer review P1-8:
-        # "I bounce to spec from take one if you tell me on day one"), not a
-        # post-approval surprise. Pending = submitted, with the studio (EP P0-3).
-        pending_labels = {(a.get("label") or "").strip().lower()
-                          for a in (delivery.get("pending_assets") or [])}
-        deliverables = []
-        if prow is not None:
-            for d in scoped_deliverables(prow, delivery):
-                if d.get("is_master"):
-                    continue
-                deliverables.append({
-                    "asset": d["asset"], "group": d["group"],
-                    "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
-                    "pending": (d["asset"] or "").strip().lower() in pending_labels,
-                })
-        entry = {
-            "project_id": a["project_id"],
-            "role": a["role"],
-            # Every hat this creator wears on this engagement, in assignment order.
-            "roles": [a["role"]],
-            "client": a["client"],
-            "need": a["need"],
-            "deadline": a["deadline"],
-            "status": a["status"],
-            "delivery_state": (delivery.get("state") or "Not started"),
-            "version_state": (delivery.get("version_state") or ""),
-            "versions": versions_list(delivery),
-            # The creator's OWN latest submission, even while it's still pending Jon's
-            # review — so they can see it landed instead of the empty "upload your first"
-            # state (reported live: after submitting, the portal looked like nothing happened).
-            "pending": delivery.get("pending_version") or None,
-            "feedback": _creator_feedback(conn, a["project_id"], delivery),
-            "creative_lock": locked,
-            "deliverables": deliverables,
-            # The room's Brief layer renders the REAL creative brief (the same
-            # effective brief the console shows), not a restatement of the title.
-            "brief": seed_brief(
-                prow,
-                db.get_opportunity(conn, prow["opp_id"])
-                if prow is not None and prow["opp_id"] else None,
-                delivery),
-            "deadline_rel": _rel_deadline(a["deadline"]) if a["deadline"] else "",
-            # Phase 2 — the picture + references + conform marking
-            "picture": delivery.get("picture") or None,
-            "references": list(delivery.get("references") or []),
-            # Phase 3 — the Cue Layer: cue regions + hit diamonds on the spine.
-            # Read-only for the composer (Jon owns the cue list); they score to it.
-            "cues": db.get_cues(conn, a["project_id"]),
-            # Phase 4 §13 — the private Capture shelf (composer + studio only).
-            "captures": db.get_captures(conn, a["project_id"]),
-        }
+        if prow is None:
+            continue
+        entry = _room_fields(conn, a["project_id"], prow, role=a["role"])
         seen[a["project_id"]] = entry
         out.append(entry)
     # Needs-me-first (composer review P1): rooms owing the composer work come

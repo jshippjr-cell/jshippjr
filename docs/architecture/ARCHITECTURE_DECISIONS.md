@@ -1664,6 +1664,38 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0068 — One room, capability-gated by who holds the link
+**Status:** Accepted (2026-08-18, operator directive) · Source: `web/room.py`,
+`web/room_routes.py`, `creator_routes._room_fields`, `tests/test_the_one_room.py`
+
+**Decision.** One engagement is ONE room, at `/room/<project_id>`, and four credentials
+reach it: a creator's portal token (`?t=`), the client's share token (`?k=`), a named
+reviewer's link (`?r=`), or an authenticated admin session. Which one you hold decides
+your ROLE; `room.CAPS` decides what the room is built with. `creator_routes._room_fields`
+builds the engagement once, in full, and `room.room_view` SUBTRACTS what the role may not
+have. The client's copy carries **published versions only**.
+
+**Why.** One engagement had three surfaces — the composer's Session Room, the client's
+delivery portal, the operator's console — each with its own template and its own idea of
+what a version is. Three renderings of one thing is how they drift, and the drift showed:
+a creator with three hats got three rooms, and a client got a page that looked nothing
+like the room the work happens in. The operator asked for the Google Docs shape — *"one
+central doc but different user accessing the same doc"* — which is one document with
+viewer/commenter/editor permissions, not three documents.
+
+**Consequences.** The gate is **subtractive and server-side**: content a role may not see
+is absent from the dict, never hidden by an `{% if %}`. A template that forgets a guard
+then leaks nothing, which is the only arrangement worth trusting. An unknown role gets
+the empty capability set — a typo fails closed. **A route exempted from the admin gate
+must make its own, stricter check**: `_session_role` reads "no token" as *operator*,
+which is safe only behind the gate, so the room verifies an admin session itself for the
+tokenless arm. That hole was live for the length of one commit and was caught by its own
+test; do not exempt a path without asking what its no-credential branch assumes.
+
+Not yet done: the client's delivery portal and the composer's `/creator/<token>` are
+still their own doors. They keep working, and flipping them onto `/room` is a separate,
+reversible step — one that should follow somebody looking at the merged room first.
+
 ### ADR-0067 — Closing by signature takes the same road as closing by review
 **Status:** Accepted (2026-08-18, reported live) · Extends ADR-0065 · Source:
 `opportunity_ops._ensure_proposal_for_project`, `workspace_routes._workspace_signals`,
