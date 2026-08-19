@@ -1025,6 +1025,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # Blank means UNDISPOSITIONED: in the operator's queue, invisible to the composer.
     if "disposition" not in rc_cols:
         conn.execute("ALTER TABLE review_comments ADD COLUMN disposition TEXT DEFAULT ''")
+    # WHO SPOKE — as a role, not just a name. The room shows every note to everyone in
+    # it, and a client reading "Ada Cheng · 'the low brass is fighting the VO'" now knows
+    # the name of the person we hired, what we hired them for, and that the mix had a
+    # problem. None of that is theirs. Recorded at the write, because it cannot be
+    # recovered from a name afterwards. Blank on the rows written before this column
+    # existed; `_creator_feedback` infers those from evidence rather than guessing.
+    if "author_role" not in rc_cols:
+        conn.execute("ALTER TABLE review_comments ADD COLUMN author_role TEXT DEFAULT ''")
     # Web Push subscriptions — one row per browser/device that opted into native
     # phone alerts for the installed PWA. Deduped on the push endpoint.
     conn.execute(
@@ -7131,6 +7139,7 @@ def add_review_comment(
     conn: sqlite3.Connection, project_id: int, *, version: str = "", t_seconds=None,
     author: str = "", email: str = "", body: str = "", kind: str = "comment",
     parent_id=None, verified: bool = False, internal: bool = False, t_end=None,
+    author_role: str = "",
 ) -> int:
     """Append a review-portal event: a timecoded comment, an approval, or a
     change request. Attributed to the reviewer's name + email. Returns the new id.
@@ -7150,13 +7159,14 @@ def add_review_comment(
     cur = conn.execute(
         """INSERT INTO review_comments
            (project_id, version, t_seconds, t_end, author, email, body, kind, created_at,
-            resolved, parent_id, verified, internal)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            resolved, parent_id, verified, internal, author_role)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (project_id, version or "", t_seconds, te, author or "Anonymous",
          (email or "").strip() or None, body or "", kind,
          datetime.now(timezone.utc).isoformat(),
          0, int(parent_id) if parent_id not in (None, "") else None,
-         1 if verified else 0, 1 if internal else 0),
+         1 if verified else 0, 1 if internal else 0,
+         (author_role or "").strip()),
     )
     conn.commit()
     return int(cur.lastrowid)

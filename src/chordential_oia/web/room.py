@@ -50,13 +50,14 @@ CAPS = {
         # certificate is signed.
         "see_pending", "see_internal", "see_captures",
         "see_deliverable_specs", "see_money", "upload_take", "comment",
-        "download_source", "publish",
+        "download_source", "publish", "see_who",
     },
     TALENT: {
         # Their own pending submission — they uploaded it; hiding it made the portal
         # look like nothing had happened (reported live, and fixed once already).
         "see_pending", "see_internal", "see_contributors", "see_captures",
         "see_deliverable_specs", "upload_take", "comment", "download_source",
+        "see_who",
     },
     CLIENT: {
         # PUBLISHED VERSIONS ONLY. A client who can hear an unreviewed take makes the
@@ -66,9 +67,32 @@ CAPS = {
         # `client_verdict` is theirs alone. Approving locks the master; requesting
         # changes spends one of THEIR rounds. Neither is a decision the studio can take
         # on their behalf from inside the room.
+        #
+        # No `see_who`: the buyer bought music from Chordential, not a roster. They see
+        # that the studio is in the room and what the studio said — never which
+        # freelancer said it, nor that a freelancer exists. The exec review made this
+        # the condition on putting the room in front of a real client, and they were
+        # right: the roster is the business, and it walks out of the door with the name.
         "comment", "client_verdict",
     },
 }
+
+# What the studio speaks as, to a buyer. One voice, whoever is holding the pen.
+STUDIO_VOICE = "Chordential"
+
+
+def attribute(role: str, author_role: str, name: str) -> str:
+    """The name a viewer in ``role`` may see against a note written by ``author_role``.
+
+    A client's own side keeps its names — they know who their people are, and stripping
+    them would make their own conversation unreadable. Everything on our side of the
+    room is the studio, and anything whose side is not RECORDED is treated as ours: an
+    unattributed row is the one case where guessing wrong costs a relationship rather
+    than a little readability.
+    """
+    if can(role, "see_who"):
+        return name
+    return name if (author_role or "") == CLIENT else STUDIO_VOICE
 
 
 def caps_for(role: str) -> frozenset:
@@ -142,4 +166,24 @@ def room_view(conn, db, project_id: int, role: str, *,
             for n in (fb.get("notes") or [])
         ]
         room["feedback"] = fb
+    if "see_who" not in allowed:
+        # AUTHORSHIP. The note stays — a client must read what the studio said back to
+        # them — but it is signed by the studio. Rewritten here rather than in the
+        # template for the same reason as everything above it: a template that forgets
+        # an `{% if %}` should leak nothing.
+        fb = dict(room.get("feedback") or {})
+        fb["notes"] = [
+            dict(n,
+                 author=attribute(role, n.get("author_role"), n.get("author") or ""),
+                 replies=[dict(r, author=attribute(role, r.get("author_role"),
+                                                   r.get("author") or ""))
+                          for r in (n.get("replies") or [])])
+            for n in (fb.get("notes") or [])
+        ]
+        room["feedback"] = fb
+        # And the take's provenance. `from_creator` names the composer on every row of
+        # the version ladder. No client-facing template reads it TODAY — this closes it
+        # before one does, because the next person adding a "delivered by" line to the
+        # Takes sheet will find the name already sitting in the dict.
+        room["versions"] = [dict(v, from_creator="") for v in (room.get("versions") or [])]
     return room

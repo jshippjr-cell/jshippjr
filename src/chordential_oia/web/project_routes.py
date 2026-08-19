@@ -48,7 +48,7 @@ from ..models import MusicDiscipline
 from ..payments import get_payment_provider
 from ..proposals import build_proposal
 from ..storage import get_object_store
-from . import actor, campaigns, db, production, signals
+from . import actor, campaigns, db, production, room, signals
 from .billing import (
     _client_portal_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
     _proposal_from_row,
@@ -1330,6 +1330,10 @@ def _publish_pending_submission(conn, project_id: int):
         "filename": pv.get("filename"), "name": stem,
         "created_at": _dt.now(_tz.utc).isoformat(),
         "from_creator": pv.get("by") or "",
+        # The cut this take was written against, carried from the submission — the
+        # ladder is the long-lived record, and "v2 · cut 1" is the only way to know,
+        # a month later, that a take was never scored to the picture it now plays with.
+        "cut": pv.get("cut") or None,
     })
     db.update_delivery(conn, project_id, "versions", versions)
     db.update_delivery(conn, project_id, "version_state", label)
@@ -1884,6 +1888,12 @@ def review_comment(
         # the studio is the studio — so neither is asked to type a name into a box for
         # people who already know who they are.
         room_name = room_mail = ""
+        # WHICH SIDE of the room this note came from. Everything here already knew it —
+        # a creator token IS a talent row, an admin session IS the studio — and then
+        # threw it away, so every note in the ladder read `actor_role="client"` and the
+        # buyer's copy of the room named the freelancers back to them. ADR-0068 says the
+        # subtraction happens server-side; it cannot subtract what was never recorded.
+        who_role = "client"
         if creator_token:
             trow = db.get_talent_by_portal_token(conn, creator_token)
             assigned = trow is not None and any(
@@ -1893,6 +1903,7 @@ def review_comment(
                 return HTMLResponse("Not found", status_code=404)
             room_name = (trow["name"] or "Creator")
             room_mail = (trow["email"] or "") or f"creator+{trow['id']}@chordential.local"
+            who_role = "talent"
         elif not (k or r):
             # No token at all. This path is gate-exempt for the client's sake, so the
             # tokenless arm has to prove itself rather than be assumed to be the studio.
@@ -1901,6 +1912,7 @@ def review_comment(
             from . import meeting_scheduler as _ms
             room_name, room_mail = "Studio", (_ms._operator_email()
                                               or "studio@chordential.local")
+            who_role = "operator"
         if room_name:
             reviewer, name, mail = None, room_name, room_mail
         else:
@@ -1954,13 +1966,13 @@ def review_comment(
                 conn, project_id, version=_current_version_tag(delivery),
                 t_seconds=t_seconds, t_end=t_end_val, author=name, email=mail,
                 body=body.strip(), kind="comment", parent_id=parent,
-                verified=reviewer is not None,
+                verified=reviewer is not None, author_role=who_role,
             )
             verb = "replied" if parent is not None else "commented"
             # Session Room bus: the comment becomes an event everyone in the
-            # room may see (client-side act; audience = all roles).
+            # room may see — attributed to the side it actually came from.
             db.add_project_event(
-                conn, project_id, "comment", actor_role="client",
+                conn, project_id, "comment", actor_role=who_role,
                 actor_name=name, body=body.strip()[:200],
             )
             _notify_operator_review(
@@ -2034,7 +2046,11 @@ def session_room_poll(request: Request, project_id: int, after: int = 0, k: str 
             return JSONResponse({"error": "not found"}, status_code=404)
         events = [
             {"id": e["id"], "kind": e["kind"], "role": e["actor_role"],
-             "name": e["actor_name"], "body": e["body"], "at": e["created_at"]}
+             # Same rule as the room's notes (ADR-0068): a client reads what the studio
+             # did, never which freelancer did it. The live feed was the one surface
+             # still saying the name out loud, event by event, as the work happened.
+             "name": room.attribute(role, e["actor_role"], e["actor_name"] or ""),
+             "body": e["body"], "at": e["created_at"]}
             for e in db.list_project_events(conn, project_id, role=role,
                                             after_id=after)
         ]
@@ -2042,12 +2058,25 @@ def session_room_poll(request: Request, project_id: int, after: int = 0, k: str 
         conn.close()
     import time as _t
     now = _t.time()
-    room = _PRESENCE.get(project_id, {})
-    alive = {kk: v for kk, v in room.items() if now - v[2] < _PRESENCE_TTL}
+    here = _PRESENCE.get(project_id, {})
+    alive = {kk: v for kk, v in here.items() if now - v[2] < _PRESENCE_TTL}
     _PRESENCE[project_id] = alive
+    # PRESENCE, for whoever is asking. A client watching "Ada Cheng · talent" arrive and
+    # leave learns the roster by name and role, live, from the room we invited them into
+    # — the single thing the exec review said had to be fixed before this page goes in
+    # front of a real one. Our side of the room is ONE participant to them: the studio,
+    # here or not here. Their own side keeps its names.
+    seen = [{"name": v[0], "role": v[1]} for v in alive.values()]
+    if not room.can(role, "see_who"):
+        ours = [p for p in seen if p["role"] != room.CLIENT]
+        seen = [p for p in seen if p["role"] == room.CLIENT]
+        if ours:
+            # "studio", not "operator" — the roster is rendered as "<name> · <role>"
+            # and the buyer is not reading our org chart either.
+            seen.insert(0, {"name": room.STUDIO_VOICE, "role": "studio"})
     return {"events": events,
             "last": events[-1]["id"] if events else after,
-            "presence": [{"name": v[0], "role": v[1]} for v in alive.values()]}
+            "presence": seen}
 
 
 @router.post("/project/{project_id}/presence")

@@ -94,6 +94,28 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The client's room named the freelancers** (ADR-0070, 2026-08-19). The presence
+  roster ("Ada · talent"), every note author and every line of the live feed reached the
+  buyer by name — the executive review's one condition on putting the room in front of a
+  real client, because the roster IS the business. `see_who` is now an operator/talent
+  capability and `room.attribute` signs our whole side of the room as **Chordential**;
+  the client's own names stay theirs. Which side a note came from is recorded at the
+  write (`review_comments.author_role`) — every arm of the note route already knew and
+  threw it away, which is how `actor_role="client"` came to be stamped on notes the
+  studio wrote. Shipped with it: takes bound to the cut they were written against
+  (chips read `v2 · cut 1`, an out-of-conform band when they disagree); sync measured
+  every frame and corrected by `playbackRate` trim rather than a hard seek that clicks,
+  with the offset on screen; and a standing note that browser playback is true for
+  timing and intent but is not a mix room.
+
+- **The keyboard belonged to whatever you last clicked** (2026-08-19). Space deferred to
+  the focused control, so a tapped note or the Range button swallowed the transport key;
+  Escape closed the B/N/V sheets, so three unrelated gestures dismissed a layer and none
+  of them was the one that opened it. Space is the transport and nothing else; a sheet
+  closes by its own key or by clicking away. **Range** gained the state it never had —
+  open it, close it, the highlight STAYS while you write, and it can be drawn by
+  dragging across the Notes lane.
+
 - **A client was shown the internal login at the moment of signing** (2026-08-17).
   Reported live: a client opened her Discovery Summary from the emailed link, read it,
   typed her name, drew her signature, pressed **Sign and accept** — and got

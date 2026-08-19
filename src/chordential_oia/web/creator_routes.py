@@ -60,6 +60,23 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
     cur_n = str(cur["n"]) if cur else "0"
     notes, by_id = [], {}
     rows = db.list_review_comments(conn, project_id)
+    # Rows written before `author_role` existed carry a blank. Infer those from EVIDENCE
+    # — the note's email against this project's assigned creators — never from the shape
+    # of a name. Unknown resolves to `client`, which is the reading that keeps a buyer's
+    # own words attributed to them; a studio note wrongly shown as the studio's is
+    # nothing, and a client's note wrongly shown as ours would be a lie about who spoke.
+    crew = {(a["talent_email"] or "").strip().lower()
+            for a in db.list_assignments(conn, project_id) if a["talent_email"]}
+
+    def _role_of(row) -> str:
+        keys = row.keys()
+        stated = (row["author_role"] if "author_role" in keys else "") or ""
+        if stated:
+            return stated
+        mail = ((row["email"] if "email" in keys else "") or "").strip().lower()
+        if mail and mail in crew:
+            return "talent"
+        return "client"
     for c in rows:
         # Only the notes a composer acts on, and only for the version they're on now.
         if c["kind"] not in ("comment", "change_request", "asset_change"):
@@ -73,7 +90,7 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         n = {
             "id": c["id"], "t": c["t_seconds"],
             "t_end": (c["t_end"] if "t_end" in keys else None),
-            "author": c["author"],
+            "author": c["author"], "author_role": _role_of(c),
             "body": c["body"], "kind": c["kind"], "resolved": bool(c["resolved"]),
             "addressed": bool(c["composer_addressed"]
                               if "composer_addressed" in keys else 0),
@@ -89,7 +106,7 @@ def _creator_feedback(conn, project_id: int, delivery: dict) -> dict:
         if c["parent_id"] and c["parent_id"] in by_id:
             keys = c.keys()
             by_id[c["parent_id"]]["replies"].append({
-                "author": c["author"], "body": c["body"],
+                "author": c["author"], "author_role": _role_of(c), "body": c["body"],
                 "internal": bool(c["internal"] if "internal" in keys else 0),
             })
     # Scoped rounds come from the SAME source the console/portal read — the

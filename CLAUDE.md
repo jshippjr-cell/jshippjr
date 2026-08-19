@@ -86,9 +86,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - Install: `pip install -e ".[web,dev]"` (extras: `web`, `dev`, `gmail`, `ai`, `stripe`,
   `postgres`).
 - Test: `python -m pytest tests/ -q` (runs **parallel via pytest-xdist `-n auto`**,
-  ~70s; add `-n0` for serial debugging). On a small container xdist can stall — run
-  in batches of ~7 files with `-n0` instead. **1,577 tests**, must stay green before
-  commit.
+  ~70s; add `-n0` for serial debugging). On a small container xdist can stall — use
+  **`scripts/run_tests_batched.sh`** instead (~7 files per batch, `-n0`, ~25 min). It
+  prints every `FAILED`/`ERROR` line and exits non-zero; do NOT hand-roll a batch loop
+  that summarises with `tail -3`, which is how four red tests reached a commit under a
+  "0 failed" report. **1,577 tests**, must stay green before commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
 - Rebuild the front door's world (after any edit to `scripts/score_scene/`):

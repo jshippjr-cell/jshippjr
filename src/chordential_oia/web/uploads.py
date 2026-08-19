@@ -110,12 +110,19 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     # ADR-0026: disk always; DB mirror only under threshold (a large take must not
     # blob into SQLite).
     _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)
+    # WHICH CUT this take was written against. Music is written to a picture, and the
+    # picture moves — so a take is only ever in sync with one of them. Without this the
+    # room could play v2 (scored to cut 1) against cut 2 and look entirely normal while
+    # every hit landed late; the composer sees the drift and assumes their own bounce is
+    # wrong. Stamped at the moment of submission, when the answer is not in doubt.
+    pic = (db.get_delivery(conn, project_id).get("picture") or {})
     db.update_delivery(conn, project_id, "pending_version", {
         "url": f"/uploads/{safe_name}",
         "filename": safe_name,
         "orig": src_filename or "",
         "by": who or "A creator",
         "at": _dt.now(_tz.utc).isoformat(),
+        "cut": int(pic.get("n") or 0) or None,
     })
 
 

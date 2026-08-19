@@ -124,14 +124,47 @@
   .nb-mark,.nb-send{border:1px solid rgba(255,255,255,.18);border-radius:10px;
     padding:9px 13px;font:600 12.5px var(--sans);cursor:pointer;white-space:nowrap;
     background:transparent;color:inherit}
-  .nb-mark.armed{border-color:var(--orange);color:var(--orange)}
+  /* Open (armed) pulses because the range is still moving; HELD is solid because it
+     has stopped — and that difference is the whole point of closing one. */
+  .nb-mark.armed{border-color:var(--orange);color:var(--orange);
+    animation:nb-open 1.6s ease-in-out infinite}
+  @keyframes nb-open{0%,100%{box-shadow:0 0 0 0 rgba(240,119,44,0)}
+    50%{box-shadow:0 0 0 3px rgba(240,119,44,.18)}}
+  @media (prefers-reduced-motion:reduce){.nb-mark.armed{animation:none}}
+  .nb-mark.set{border-color:var(--orange);background:var(--orange-soft);color:var(--orange)}
   .nb-send{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:700}
   .nb-tc{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .nb-lead{white-space:nowrap}
   .nb-who{flex:0 1 150px;min-width:110px}
-  /* The stretch a range note covers, painted on the lane while you mark it. */
-  .nb-band{position:absolute;top:0;bottom:0;background:rgba(240,119,44,.22);
-    border-left:1px solid var(--orange);border-right:1px solid var(--orange);
+  /* The stretch a range note covers, painted on the lane while you mark it — and
+     still there, brighter, once you close it and start writing. */
+  .nb-band{position:absolute;top:0;bottom:0;background:rgba(240,119,44,.16);
+    border-left:1px solid rgba(240,119,44,.6);border-right:1px solid rgba(240,119,44,.6);
     pointer-events:none;z-index:3}
+  .nb-band.set{background:rgba(240,119,44,.28);
+    border-left-color:var(--orange);border-right-color:var(--orange);
+    box-shadow:inset 0 0 0 1px rgba(240,119,44,.25)}
+  /* A drag across the Notes lane marks a range, so say so with the cursor. */
+  .lane.sr-lane-notes{cursor:ew-resize}
+  /* The measured distance between music and picture. Quiet when it is a lock —
+     a number you can ignore is the point — and lit when it is not. */
+  .sync-read{font:600 10.5px var(--mono);letter-spacing:.04em;color:rgba(237,230,220,.5);
+    border:1px solid var(--hair);border-radius:999px;padding:4px 9px;white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .sync-read.off{color:var(--orange);border-color:rgba(240,119,44,.5)}
+  /* What this playback is good for, said before anyone signs anything off. */
+  .monitor-note{border:1px solid var(--hair);border-left:2px solid rgba(139,160,174,.5);
+    border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0 0;
+    font:13px/1.55 var(--sans);color:rgba(237,230,220,.62);background:rgba(139,160,174,.05)}
+  .monitor-note b{color:rgba(237,230,220,.9);font-weight:700}
+  /* The take is not scored to the picture on screen. */
+  .conform-warn{border:1px solid rgba(240,119,44,.45);border-radius:10px;
+    padding:10px 14px;margin:10px 0 0;font:13px/1.55 var(--sans);
+    color:rgba(237,230,220,.82);background:var(--orange-soft)}
+  .conform-warn b{color:var(--orange);font-weight:700}
+  .conform-warn[hidden]{display:none}
+  .stage.out-of-conform{box-shadow:inset 0 0 0 1px rgba(240,119,44,.4)}
+  .tc-cut{opacity:.6;font-weight:400}
   /* The hat you are wearing, so the shared room never reads as anonymous. */
   .who-badge{font:700 9.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
     border-radius:999px;padding:3px 10px;white-space:nowrap;
@@ -557,7 +590,8 @@
 {% set open_ct = a.feedback.open_count if (a.feedback and a.feedback.notes) else 0 %}
 <div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}
      data-fps="{{ a.picture.fps if a.picture and a.picture.fps else '' }}"
-     data-tc0="{{ a.picture.tc_start if a.picture and a.picture.tc_start else '' }}">
+     data-tc0="{{ a.picture.tc_start if a.picture and a.picture.tc_start else '' }}"
+     data-cut="{{ a.picture.n if a.picture and a.picture.n else '' }}">
 
   <!-- doorline -->
   <div class="doorline">
@@ -644,17 +678,26 @@
     <div class="take-chips">
       {# the listening default is the last PUBLISHED take — the pending one may be
          an undecodable bounce (AIFF in Chrome) and the room must stay alive #}
+      {# A take names the CUT it was written against. "v2" alone is half an answer:
+         music is written to a picture, and the picture moves. #}
       {% for v in a.versions %}
       <button class="take-chip sr-take {{ 'on' if loop.last }}"
-              data-src="{{ v.url or '' }}">{{ v.label }}</button>
+              data-src="{{ v.url or '' }}" data-cut="{{ v.cut or '' }}">{{ v.label
+        }}{% if v.cut %}<span class="tc-cut"> · cut {{ v.cut }}</span>{% endif %}</button>
       {% endfor %}
       {% if a.pending %}
       <button class="take-chip pending sr-take {{ 'on' if not a.versions }}"
-              data-src="{{ a.pending.url or '' }}">with the studio</button>
+              data-src="{{ a.pending.url or '' }}" data-cut="{{ a.pending.cut or '' }}">with the studio{%
+        if a.pending.cut %}<span class="tc-cut"> · cut {{ a.pending.cut }}</span>{% endif %}</button>
       {% endif %}
     </div>
     {% if a.picture %}
     <button class="take-chip sr-cutaudio" title="Toggle the cut's own audio (VO/temp) under your music">cut audio: off</button>
+    {# How far the music actually is from the picture, right now, in milliseconds.
+       The room lines two independent media clocks up and the correction is invisible
+       by design — so the one honest thing to do is show the number, rather than let a
+       composer wonder whether a hit is late or their monitoring is. #}
+    <span class="sync-read sr-sync" title="Music against picture, measured every frame. Under ±40ms is a lock.">sync ±0ms</span>
     {% endif %}
     <span class="t-keys">space · ↵ from the top · ←/→ · B brief · N notes · V takes</span>
     <span class="spacer"></span>
@@ -672,6 +715,31 @@
     {# Mobile Companion (§13): the phone is for Listen/Know, not delivering work —
        uploading a take happens at the desk. Shown only on the phone breakpoint. #}
     <p class="companion-note">Companion mode: listen and check in here; upload your take from the studio at your desk.</p>
+  </div>
+
+  {# ── What this playback is, and is NOT. ──────────────────────────────────────
+     The audio engineer's review would not sign off on a room that presents browser
+     playback as a monitoring environment: whatever device you are on sets the level,
+     laptop speakers and phones reproduce neither the low end nor the stereo image,
+     and the browser's own volume is somewhere in the chain. Someone can approve a mix
+     here believing they judged it. The room is honest about what it is good for —
+     timing, structure, intent, whether the music is right — and says out loud that the
+     mix itself has to be heard somewhere else. The honesty rule applies to our own
+     surfaces first. ── #}
+  <div class="monitor-note" role="note">
+    <b>What you're hearing</b> — this is a browser stream on whatever device you're on.
+    It's true for <b>timing, structure and intent</b>. It is not a mix room: level, low
+    end and stereo width can't be judged here. Sign off on the music from this room;
+    judge the mix on monitors or good headphones.
+  </div>
+
+  {# The cut a take was written against, when it isn't the cut on screen. Everything
+     below still plays — the room never hides the work — but nobody should read a late
+     hit as a mistake when the ground moved underneath it (ADR-0069). #}
+  <div class="conform-warn sr-conform-warn" hidden>
+    <b>Out of conform</b> — <span class="cw-take"></span> was written against
+    <b class="cw-was"></b>, and the room is playing <b class="cw-now"></b>. Hits will not
+    land where they were written. The studio states the offset before this becomes work.
   </div>
 
   {# ── The note bar. THE point of the room, and the client had no way to leave one:
@@ -701,10 +769,12 @@
     <input type="hidden" name="origin" value="room">
     <input type="hidden" name="t" class="nb-t" value="0">
     <input type="hidden" name="t_end" class="nb-tend" value="">
-    <button type="button" class="nb-mark" title="Mark the start of a range, then press again at the end">⇤ Range</button>
+    <button type="button" class="nb-mark"
+            title="Open a range here, press again to close it — or drag across the Notes lane">⇤ Range</button>
     <input type="text" name="body" class="nb-body" autocomplete="off"
            placeholder="Say it at this moment…" required>
-    <button type="submit" class="nb-send">Note at <span class="nb-tc">0:00</span></button>
+    <button type="submit" class="nb-send"><span class="nb-lead">Note at</span>
+      <span class="nb-tc">0:00</span></button>
   </form>
   {% endif %}
 
@@ -1169,6 +1239,8 @@
         waveCv = root.querySelector(".sr-wave"),
         whisperEl = root.querySelector(".sr-whisper"),
         chips = root.querySelectorAll(".sr-take");
+    // Set by a range drag on the Notes lane, read by the spine's seek-on-click.
+    var suppressSeek = false;
 
     var notes = [];
     try { notes = JSON.parse(root.querySelector(".sr-notes-data").textContent) || []; } catch(e){}
@@ -1191,9 +1263,31 @@
     var PEAK_BYTE_CAP = 30 * 1024 * 1024;
 
     function currentSrc(){ return audio.src || ""; }
+    /* A take was written against ONE cut. Playing it against a later one is legitimate
+       — it is exactly what you do while you work out how far the picture moved — but it
+       must never look normal, because a hit that misses by two seconds and a composer
+       who mixed it badly produce the same sound and only one of them is a mistake. */
+    var pictureCut = parseInt(root.dataset.cut || "", 10) || 0;
+    var conformWarn = root.querySelector(".sr-conform-warn");
+    function paintConform(chip){
+      if (!conformWarn) return;
+      var takeCut = chip ? (parseInt(chip.dataset.cut || "", 10) || 0) : 0;
+      if (!pictureCut || !takeCut || takeCut === pictureCut){
+        conformWarn.hidden = true;
+        stage.classList.remove("out-of-conform");
+        return;
+      }
+      conformWarn.querySelector(".cw-take").textContent =
+        (chip.textContent || "This take").trim();
+      conformWarn.querySelector(".cw-was").textContent = "cut " + takeCut;
+      conformWarn.querySelector(".cw-now").textContent = "cut " + pictureCut;
+      conformWarn.hidden = false;
+      stage.classList.add("out-of-conform");
+    }
     function loadTake(chip){
       chips.forEach(function(c){ c.classList.remove("on"); });
       peaks = null;
+      paintConform(chip);
       // 'noaudio' only silences the room when there is no picture either —
       // with a cut loaded, the stage plays picture-only just fine
       if (!chip){ if (!hasPicture) stage.classList.add("noaudio"); hasAudio = false; return; }
@@ -1461,19 +1555,72 @@
     });
     function loop(){
       if (mPaused()) return;
+      // Correction rides the FRAME, not `timeupdate`. Four measurements a second is
+      // a quarter-second of unmeasured drift, which is most of what the old window
+      // was tolerating in the first place.
+      if (hasPicture) syncAudio();
       update(); requestAnimationFrame(loop);
     }
 
+    /* ── SYNC ──────────────────────────────────────────────────────────────────
+       The take follows the picture: align, play/pause together, stop at its end.
+
+       This used to run on `timeupdate` — which fires roughly 4×/second — with one
+       remedy: past 0.12s of drift, slam `audio.currentTime`. The audio engineer's
+       review was blunt about both halves. Three frames is not a lock when the job is
+       judging a hit; and a hard seek mid-phrase CLICKS, so the correction announces
+       itself louder than the error it fixes, and a composer learns to distrust what
+       they are hearing at exactly the moment they are deciding whether it lands.
+
+       So: measured every animation frame, and corrected in proportion to how far out
+       it actually is.
+         under ~12ms  leave it alone — inside the frame, and chasing it would never
+                      let the rate settle
+         under ~80ms  TRIM THE RATE. ±2% for a fraction of a second sits under the
+                      threshold of pitch perception on music, and it closes the gap
+                      without a discontinuity
+         beyond       seek. That is a real dropout (a tab woke up, the stream stalled)
+                      and no rate trim recovers a second of it
+       And the number itself is on screen (`.sr-sync`), because "is this in sync?" is
+       a question the room should answer rather than leave to the ear. */
+    var SYNC_OK = 0.012, SYNC_SEEK = 0.08, syncDrift = 0, syncShown = 0;
     function syncAudio(){
-      // the take follows the picture: align, play/pause together, stop at its end.
-      // Drift over ~3 frames (0.12s) snaps — judging a hit against picture needs
-      // tighter lock than the ear forgives (design review P2-7).
-      if (!hasPicture || !hasAudio) return;
+      if (!hasPicture || !hasAudio){ syncDrift = 0; paintSync(); return; }
       var t = video.currentTime || 0;
-      if (t >= (dur || 0)){ if (!audio.paused) audio.pause(); return; }
-      if (Math.abs((audio.currentTime || 0) - t) > 0.12) audio.currentTime = t;
+      if (t >= (dur || 0)){
+        if (!audio.paused) audio.pause();
+        audio.playbackRate = 1; syncDrift = 0; paintSync(); return;
+      }
+      var drift = (audio.currentTime || 0) - t;      // + = the music is ahead
+      syncDrift = drift;
+      if (Math.abs(drift) > SYNC_SEEK){
+        audio.currentTime = t; audio.playbackRate = 1;
+      } else if (Math.abs(drift) > SYNC_OK && !video.paused){
+        /* Close half the gap per second, clamped to ±2%. Half rather than all, and
+           only when the rate would move meaningfully: `audio.currentTime` reports at
+           buffer granularity, so a full-gain controller reading a quantised clock at
+           60Hz chases its own measurement noise and puts a slow warble on every
+           sustained note — the artefact the seek was replaced to avoid. */
+        var want = Math.max(0.98, Math.min(1.02, 1 - drift * 0.5));
+        if (Math.abs(audio.playbackRate - want) > 0.002) audio.playbackRate = want;
+      } else {
+        audio.playbackRate = 1;
+      }
       if (!video.paused && audio.paused) audio.play();
-      if (video.paused && !audio.paused) audio.pause();
+      if (video.paused && !audio.paused){ audio.pause(); audio.playbackRate = 1; }
+      paintSync();
+    }
+    var syncEl = root.querySelector(".sr-sync");
+    function paintSync(){
+      if (!syncEl) return;
+      if (!hasPicture || !hasAudio){ syncEl.style.display = "none"; return; }
+      syncEl.style.display = "";
+      // Smoothed for READING only — the controller uses the raw number. A digit
+      // changing 60 times a second is not a readout, it is a blur.
+      syncShown += (syncDrift - syncShown) * 0.15;
+      var ms = Math.round(syncShown * 1000);
+      syncEl.textContent = "sync " + (ms > 0 ? "+" : ms < 0 ? "−" : "±") + Math.abs(ms) + "ms";
+      syncEl.classList.toggle("off", Math.abs(syncDrift) > 0.04);
     }
     function toggle(){
       if (hasPicture){
@@ -1537,6 +1684,9 @@
       c.addEventListener("click", function(){ var was = !audio.paused; loadTake(c); if (was) audio.play(); });
     });
     spine.addEventListener("click", function(e){
+      // A range drawn across the Notes lane ends in a click on this spine. Marking
+      // a passage is not asking to jump to the end of it.
+      if (suppressSeek){ suppressSeek = false; return; }
       var r = spine.getBoundingClientRect();
       seek((e.clientX - r.left) / r.width * (mDur() || 0));
     });
@@ -1672,6 +1822,13 @@
         s.focus();
       }
     }
+    /* The same key that opened it closes it. B/N/V are one switch each, not an
+       open-only door with a separate way out. */
+    function toggleSheet(name){
+      var s = root.querySelector('.sr-sheet[data-sheet="' + name + '"]');
+      if (s && s.classList.contains("on")) closeAllSheets();
+      else openSheet(name);
+    }
     // Expose a tiny per-room API so the page-level ⌘K command bar (Phase 4) can
     // drive whichever room is in view without reaching into this closure.
     root.__room = {
@@ -1680,11 +1837,11 @@
       download: function(){ var d = root.querySelector(".sr-download"); if (d) d.click(); }
     };
     root.querySelectorAll(".sr-open").forEach(function(b){
-      b.addEventListener("click", function(){ openSheet(b.dataset.sheet); });
+      b.addEventListener("click", function(e){ e.stopPropagation(); toggleSheet(b.dataset.sheet); });
     });
     root.querySelectorAll(".sr-close").forEach(function(b){ b.addEventListener("click", closeAllSheets); });
     var uploadCta = root.querySelector(".sr-upload-cta");
-    if (uploadCta) uploadCta.addEventListener("click", function(){ openSheet("takes"); });
+    if (uploadCta) uploadCta.addEventListener("click", function(e){ e.stopPropagation(); openSheet("takes"); });
 
     // whisper: present on arrival, resting after — the room quiets down
     if (whisperEl) setTimeout(function(){ whisperEl.classList.add("rested"); }, 7000);
@@ -1748,9 +1905,16 @@
     (function(){
       var bar = root.querySelector(".sr-notebar"); if (!bar) return;
       var tEl = bar.querySelector(".nb-t"), endEl = bar.querySelector(".nb-tend"),
-          tcEl = bar.querySelector(".nb-tc"), mark = bar.querySelector(".nb-mark"),
+          tcEl = bar.querySelector(".nb-tc"), leadEl = bar.querySelector(".nb-lead"),
+          mark = bar.querySelector(".nb-mark"),
           send = bar.querySelector(".nb-send"), body = bar.querySelector(".nb-body");
-      var from = null;
+      /* A range has three states, and it used to have one and a half: `from` was set,
+         the band chased the playhead forever, and there was no moment at which the
+         stretch was DECIDED. So you could not stop the picture, read what you had
+         marked, and then write about it. Now: open it, close it — the highlight stays
+         where you left it — write, send. Or drag across the Notes lane and skip the
+         first two steps (operator, 2026-08-19). */
+      var from = null, to = null;
       var noteList = root.querySelector('.sr-sheet[data-sheet="notes"]');
       var badge = root.querySelector('.lk[data-sheet="notes"]');
       function addNoteCard(n){
@@ -1784,21 +1948,35 @@
         t = Math.max(0, Math.round(t || 0));
         return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2);
       }
+      // Where the range currently ends: the playhead while it is open, the mark once
+      // it is closed. ONE answer, so the label, the hidden fields and the highlight
+      // can never disagree about what you are about to send.
+      function edge(){ return (to === null) ? (mTime() || 0) : to; }
       function paint(){
-        var now = mTime() || 0;
         if (from === null){
+          var now = mTime() || 0;
           tEl.value = Math.round(now); endEl.value = "";
           tcEl.textContent = fmt(now);
         } else {
-          var lo = Math.min(from, now), hi = Math.max(from, now);
+          var lo = Math.min(from, edge()), hi = Math.max(from, edge());
           tEl.value = Math.round(lo); endEl.value = Math.round(hi);
           tcEl.textContent = fmt(lo) + "–" + fmt(hi);
         }
+        if (leadEl){
+          leadEl.textContent = (from === null) ? "Note at"
+                             : (to === null) ? "Note over" : "Add note to range";
+        }
+      }
+      function setMark(state){
+        mark.classList.remove("armed", "set");
+        if (state) mark.classList.add(state);
+        mark.textContent = state === "armed" ? "⇥ End range"
+                         : state === "set" ? "✕ Clear range" : "⇤ Range";
       }
       /* Range was a state nobody could see: it changed a hidden field and the button's
-         own label, and the picture gave you nothing back. It now PAINTS the stretch it
-         covers on the notes lane as you scrub, so "from here to here" is a thing you
-         watch rather than a thing you remember. */
+         own label, and the picture gave you nothing back. It PAINTS the stretch it
+         covers on the notes lane, so "from here to here" is a thing you watch while you
+         mark it and a thing that is still there while you write about it. */
       var band = null;
       function paintBand(){
         if (from === null){ if (band){ band.remove(); band = null; } return; }
@@ -1808,16 +1986,67 @@
           band.className = "nb-band";
           noteLane.appendChild(band);
         }
-        var now = mTime() || 0;
-        var lo = Math.min(from, now) / D * 100, hi = Math.max(from, now) / D * 100;
+        band.classList.toggle("set", to !== null);
+        var lo = Math.min(from, edge()) / D * 100, hi = Math.max(from, edge()) / D * 100;
         band.style.left = lo + "%";
         band.style.width = Math.max(0.4, hi - lo) + "%";
       }
-      mark.addEventListener("click", function(){
-        if (from === null){ from = mTime() || 0; mark.classList.add("armed");
-          mark.textContent = "⇥ End range"; whisper("Range open — scrub to the end"); }
-        else { from = null; mark.classList.remove("armed"); mark.textContent = "⇤ Range"; }
+      function clearRange(){ from = null; to = null; setMark(""); paint(); paintBand(); }
+      // Anything shorter than this is a slip of the hand, not a passage.
+      var MIN_RANGE = 0.2;
+      function closeRange(at){
+        to = at;
+        if (Math.abs(to - from) < MIN_RANGE){ clearRange(); return; }
+        setMark("set");
+        whisper("Range held — write the note, then Add note to range");
         paint(); paintBand();
+      }
+      mark.addEventListener("click", function(){
+        if (from === null){
+          from = mTime() || 0; to = null;
+          setMark("armed");
+          whisper("Range open — let it run or scrub, then press again to close it");
+          paint(); paintBand();
+        } else if (to === null){
+          closeRange(mTime() || 0);
+        } else {
+          clearRange();
+        }
+      });
+      /* …or draw it with the mouse. Marking a passage by watching it play is right when
+         you are watching; when you already know where it is, dragging across the lane is
+         two seconds instead of two presses and a wait. The lane's own furniture (pins,
+         spans, the beyond badge) keeps its clicks — a drag only starts on bare lane. */
+      function xToTime(e){
+        var rct = noteLane.getBoundingClientRect(), D = mDur() || 0;
+        return Math.max(0, Math.min(D, (e.clientX - rct.left) / (rct.width || 1) * D));
+      }
+      var dragging = false, dragMoved = false;
+      noteLane.addEventListener("mousedown", function(e){
+        if (e.button !== 0 || !mDur()) return;
+        if (e.target !== noteLane && !e.target.classList.contains("lane-label")) return;
+        dragging = true; dragMoved = false;
+        from = xToTime(e); to = from;
+        setMark("armed"); paint(); paintBand();
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", function(e){
+        if (!dragging) return;
+        dragMoved = true; to = xToTime(e);
+        paint(); paintBand();
+      });
+      document.addEventListener("mouseup", function(e){
+        if (!dragging) return;
+        dragging = false;
+        /* The spine seeks on click, and a drag ends in one. Suppress exactly that one
+           — marking a passage must not also throw the playhead to its end — and drop
+           the flag on the next tick. A drag that ends OUTSIDE the spine produces no
+           click there at all, and a flag left standing would swallow the next genuine
+           seek instead. */
+        suppressSeek = dragMoved;
+        if (dragMoved) setTimeout(function(){ suppressSeek = false; }, 0);
+        if (!dragMoved) clearRange();
+        else closeRange(xToTime(e));
       });
       /* Typing must not steal the transport keys, and space in a note is a space. */
       body.addEventListener("keydown", function(e){ e.stopPropagation(); });
@@ -1845,15 +2074,15 @@
                          author: bar.querySelector("[name=author]").value || "You",
                          body: text, kind: "comment", resolved: false,
                          addressed: false, conform: false, replies: [] });
-            body.value = ""; from = null;
-            mark.classList.remove("armed"); mark.textContent = "⇤ Range";
+            body.value = ""; from = null; to = null; setMark("");
             renderPins(); paintBand();
             /* The button never came back: `paint()` rewrites the timecode inside the
                label but the label itself still said "Sending…", so a note that had
                landed looked like one still in flight. */
             send.disabled = false;
-            send.innerHTML = 'Note at <span class="nb-tc">0:00</span>';
+            send.innerHTML = '<span class="nb-lead">Note at</span> <span class="nb-tc">0:00</span>';
             tcEl = send.querySelector(".nb-tc");
+            leadEl = send.querySelector(".nb-lead");
             /* And it appeared as a PIN but not in the Notes list, because the list is
                rendered server-side — so eight notes showed seven and the badge lagged by
                one. Put it in the list and move the count with it. */
@@ -1862,7 +2091,13 @@
             whisper("Note left at " + fmt(at));
           })
           .catch(function(){
-            send.disabled = false; send.textContent = "Try again";
+            // Put the label back the way `paint()` expects to find it — the toast
+            // carries the failure, and a half-rebuilt button carries nothing.
+            send.disabled = false;
+            send.innerHTML = '<span class="nb-lead">Note at</span> <span class="nb-tc">0:00</span>';
+            tcEl = send.querySelector(".nb-tc");
+            leadEl = send.querySelector(".nb-lead");
+            paint();
             toast("That note did not send. Check your connection and try again.");
           });
       });
@@ -1870,7 +2105,8 @@
 
     rooms.push({ root: root, toggle: toggle, seek: seek, audio: audio,
                  restart: restart, time: mTime,
-                 openSheet: openSheet, upForm: root.querySelector("form.sr-upload-form") });
+                 openSheet: openSheet, toggleSheet: toggleSheet,
+                 upForm: root.querySelector("form.sr-upload-form") });
   });
 
   veil.addEventListener("click", closeAllSheets);
@@ -1978,21 +2214,49 @@
   addEventListener("keydown", function(e){
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-    // interactive elements keep their native keys (Space activates a button)
-    if (e.target.closest && e.target.closest("button, a, summary, [contenteditable]")
-        && (e.code === "Space" || e.key === "Enter")) return;
     var r = activeRoom(); if (!r) return;
-    if (e.code === "Space"){ e.preventDefault(); r.toggle(); }
-    else if (e.key === "Escape"){ if (!cancelPendingDrop()) closeAllSheets(); }
+    /* SPACE IS THE TRANSPORT, and nothing else. It used to defer to whatever had
+       focus — "interactive elements keep their native keys" — so the last thing you
+       CLICKED swallowed it: tap a note, press space, the note re-opens and the picture
+       keeps rolling; tap Range, press space, you mark a range instead of stopping.
+       Reported live. In a room built around watching one thing, the space bar belongs
+       to that thing. The focused control is also let go of, so the browser cannot fire
+       it on the keyup either. */
+    if (e.code === "Space"){
+      e.preventDefault();
+      if (e.target && e.target.blur && e.target !== document.body) e.target.blur();
+      r.toggle();
+      return;
+    }
+    // ENTER is the key for pressing things: a focused button keeps it.
+    if (e.target.closest && e.target.closest("button, a, summary, [contenteditable]")
+        && e.key === "Enter") return;
+    /* Escape cancels a pending DROP and nothing more. It used to close the sheets too,
+       which made three different gestures (Escape, the same letter, clicking out) all
+       dismiss a layer — so the layer felt like it fell shut on its own. A sheet you
+       opened with N closes with N or by clicking away from it (operator, 2026-08-19). */
+    if (e.key === "Escape"){ cancelPendingDrop(); }
     else if (e.key === "Enter"){ e.preventDefault(); r.restart(); }
     // Nudges read the MASTER clock too. Against picture, `audio.currentTime` is the
     // follower and can sit 0.12s off, so ←/← from it drifted the picture a little
     // further out of true on every press.
     else if (e.key === "ArrowLeft"){ e.preventDefault(); r.seek((r.time() || 0) - 2); }
     else if (e.key === "ArrowRight"){ e.preventDefault(); r.seek((r.time() || 0) + 2); }
-    else if (e.key === "b" || e.key === "B") r.openSheet("brief");
-    else if (e.key === "n" || e.key === "N") r.openSheet("notes");
-    else if (e.key === "v" || e.key === "V") r.openSheet("takes");
+    else if (e.key === "b" || e.key === "B") r.toggleSheet("brief");
+    else if (e.key === "n" || e.key === "N") r.toggleSheet("notes");
+    else if (e.key === "v" || e.key === "V") r.toggleSheet("takes");
+  });
+
+  /* Clicking AWAY from an open sheet closes it. The veil already did this while the
+     room was paused, but a sheet opened during playback deliberately has no veil (it
+     sits beside the picture) — so the only way out was Escape, which is now the one
+     gesture that does not close it. The layer buttons are exempt: their own handler
+     toggles, and closing here as well would re-open on the next press. */
+  document.addEventListener("click", function(e){
+    var open = document.querySelector(".sr-sheet.on");
+    if (!open || open.contains(e.target)) return;
+    if (e.target.closest && e.target.closest(".sr-open, .sr-upload-cta")) return;
+    closeAllSheets();
   });
 
   /* Deliverable rows upload independently, WITHOUT a full page reload; serialized;

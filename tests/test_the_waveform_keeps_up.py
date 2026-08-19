@@ -88,10 +88,24 @@ def test_the_canvas_is_only_resized_when_its_size_changed(room):
         "the canvas is still being reallocated before the size check")
 
 
+
+def _keymap(room: str) -> str:
+    """The ROOM's global keymap.
+
+    This used to be located with `room.index('addEventListener("keydown"')`, which finds
+    the FIRST keydown listener in the file — the note bar's one-line
+    `stopPropagation` — and then sliced to its `});` two tokens later. Every assertion
+    below was therefore reading an empty room and reporting on a keymap it had never
+    seen. Anchor on the handler's own first line instead.
+    """
+    start = room.index('addEventListener("keydown", function(e){\n    if (e.metaKey')
+    end = room.index('\n  });', start)
+    return room[start:end]
+
+
 # ── back to the top ─────────────────────────────────────────────────────────────────
 def test_enter_restarts_the_room(room):
-    keys = room[room.index('addEventListener("keydown"'):]
-    keys = keys[:keys.index("});")]
+    keys = _keymap(room)
     assert re.search(r'e\.key === "Enter".*r\.restart\(\)', keys), (
         "Enter is not bound to a restart")
 
@@ -105,8 +119,7 @@ def test_restart_returns_to_zero_and_rolls(room):
 
 def test_enter_still_belongs_to_a_focused_control(room):
     """A button under focus keeps its native Enter — the transport must not steal it."""
-    keys = room[room.index('addEventListener("keydown"'):]
-    keys = keys[:keys.index("});")]
+    keys = _keymap(room)
     guard = keys.index('e.key === "Enter"')
     assert "closest" in keys[:guard], (
         "the interactive-element guard must come before the transport keys")
@@ -114,8 +127,7 @@ def test_enter_still_belongs_to_a_focused_control(room):
 
 
 def test_the_nudge_keys_share_the_master_clock_too(room):
-    keys = room[room.index('addEventListener("keydown"'):]
-    keys = keys[:keys.index("});")]
+    keys = _keymap(room)
     arrows = [ln for ln in keys.splitlines() if "Arrow" in ln]
     assert arrows, "the nudge keys vanished"
     for ln in arrows:

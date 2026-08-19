@@ -93,10 +93,20 @@ def test_only_the_studio_may_publish():
     assert not room.can(room.CLIENT, "publish")
 
 
-def test_only_the_client_and_studio_approve():
+def test_the_creative_verdict_is_the_clients_alone():
+    """Written when the studio and the client shared one `approve`. They do not.
+
+    The studio's verdict is PUBLISH — the taste gate, a buffer before the client hears
+    anything (asserted above). The creative sign-off, and the revision round it governs,
+    belong to the buyer paying for them: *"the studio's approval is just a buffer, it
+    comes before the client's approval"* (operator, 2026-08-19). A studio Approve that
+    spent a client's round was the defect that split them.
+    """
     from chordential_oia.web import room
-    assert room.can(room.CLIENT, "approve") and room.can(room.OPERATOR, "approve")
-    assert not room.can(room.TALENT, "approve"), (
+    assert room.can(room.CLIENT, "client_verdict")
+    assert not room.can(room.OPERATOR, "client_verdict"), (
+        "the studio can take the buyer's creative decision on their behalf again")
+    assert not room.can(room.TALENT, "client_verdict"), (
         "a creator approving their own work is not a review")
 
 

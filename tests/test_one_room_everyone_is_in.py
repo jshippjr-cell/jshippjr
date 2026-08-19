@@ -184,8 +184,15 @@ def test_presence_and_the_feed_answer_the_creator(studio):
                for p in body["presence"]), body["presence"]
 
 
-def test_the_client_sees_the_creator_in_the_room(studio):
-    """The point of the whole thing: one room, and the people in it can see each other."""
+def test_the_client_sees_the_studio_in_the_room_and_not_the_roster(studio):
+    """One room, and the people in it can see each other — but a client sees ONE of us.
+
+    This test used to assert the composer's own name reached the client's roster, and
+    that is exactly what the executive review would not put in front of a real client
+    (ADR-0070): the buyer learns who we hired, live, as they arrive and leave. The
+    presence itself is the point and stays — someone IS here with you — collapsed to
+    the studio.
+    """
     c, app_mod = studio
     pid, _tid, tok = _creator_on(app_mod, ["Composer"])
     conn = app_mod.db.connect()
@@ -194,9 +201,11 @@ def test_the_client_sees_the_creator_in_the_room(studio):
     finally:
         conn.close()
     c.post(f"/project/{pid}/presence", data={"t": tok, "name": "Jon Shipp"})
-    seen = c.get(f"/project/{pid}/session.json", params={"k": share}).json()
-    assert any(p["name"] == "Jon Shipp" for p in seen["presence"]), (
-        "the client's portal cannot see the composer who is in the room with them")
+    seen = c.get(f"/project/{pid}/session.json", params={"k": share}).json()["presence"]
+    assert not any(p["name"] == "Jon Shipp" for p in seen), (
+        "the client's roster names the creator we hired")
+    assert any(p["name"] == "Chordential" for p in seen), (
+        "the client cannot tell that anyone is in the room with them at all")
 
 
 def test_the_composer_room_mounts_the_live_layer(studio):

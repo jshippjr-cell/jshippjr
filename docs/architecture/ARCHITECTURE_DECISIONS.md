@@ -1664,6 +1664,53 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0070 — The roster is not the client's, and the room says what its playback is
+**Status:** Accepted (2026-08-19, review panel + operator directive) · Extends ADR-0068 ·
+Source: `room.attribute`, `room.CAPS['see_who']`, `project_routes.session_room_poll`,
+`db.review_comments.author_role`, `uploads._store_pending_submission`,
+`tests/test_what_the_panel_would_not_sign_off.py`,
+`tests/test_the_room_answers_to_one_hand.py`
+
+**Decision.** Four rules closing the panel's findings on the one room.
+
+(1) **A client sees the studio, never the roster.** `see_who` is an operator/talent
+capability. Without it, `room.attribute` signs every note, reply and live-feed event
+from our side of the room as **Chordential**; the presence roster collapses our side to
+ONE participant; and the version ladder's `from_creator` is emptied before any template
+reaches for it. The client's own side keeps its names. Which side
+a note came from is RECORDED at the write (`review_comments.author_role`); rows predating
+the column are inferred from evidence — the author's email against the project's assigned
+creators — and an unattributed row is treated as ours, because guessing wrong that way
+costs a little readability and guessing wrong the other way costs a name.
+
+(2) **A take is bound to the cut it was written against.** The picture's cut number is
+stamped on the submission and carried into the version ladder; chips read `v2 · cut 1`,
+and a take playing against a different cut raises an out-of-conform band. Legitimate —
+it is what you do while working out how far the picture moved — but never silent.
+
+(3) **Sync is measured every frame and corrected in proportion.** Under ~12ms, leave it;
+under ~80ms, trim `playbackRate` within ±2% at half gain; beyond that, seek. The measured offset is on
+screen. The old rule — sample four times a second, hard-seek past three frames — both
+under-measured the drift and announced its own correction with a click.
+
+(4) **The room states what its playback is.** Timing, structure and intent: yes. Level,
+low end and stereo width: not judgeable in a browser on an unknown device.
+
+**Why.** The exec team's condition on putting this page in front of a real client was
+blunt: the room named the freelancers — presence roster, note authors, every event in the
+live feed — and the roster IS the business. A buyer who can read it can hire around us.
+Everything else here is the same species of defect the room already fixed once: a surface
+presenting a number, a name or a sound as more certain than it is. A composer reading a
+late hit cannot tell a bad bounce from a moved picture; a client approving a mix on laptop
+speakers believes they judged it. The honesty rule applies to our own surfaces first.
+
+**Consequences.** Subtraction stays SERVER-SIDE and by absence (ADR-0068): a template
+that forgets an `{% if %}` must leak nothing, and `attribute` fails closed on an
+unrecorded side. Any new surface that shows a name, an author or a participant to a
+client goes through `room.attribute`. Any new writer of a note or event must record its
+side; a route that knows the role and drops it is a defect, which is exactly how
+`actor_role="client"` came to be hardcoded on every note in the room.
+
 ### ADR-0069 — A note is not work until a human has priced it, and a cut is not loaded until it is conformed
 **Status:** Accepted (2026-08-19, review panel + operator directive) · Extends ADR-0068 ·
 Source: `room.priced_notes_only`, `db.set_comment_disposition`,
