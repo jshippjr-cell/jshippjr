@@ -94,6 +94,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The room spoke in one voice to three audiences** (ADR-0073, 2026-08-19). A client
+  opening their own cut was told *"The room is current. Write."* — a line written for the
+  composer, and an imperative even for them. Copy is `voice`-gated now (operator / talent
+  / client): the whisper, the cut's download link ("⇓ DOWNLOAD YOUR CUT" vs "FOR YOUR
+  DAW"), the sheet titles, the empty states, the phone note, the brief's closing line.
+  The drag-drop upload target is no longer rendered for a role that may not upload.
+
 - **The taste gate had no door in the room** (ADR-0072, 2026-08-19). *"I don't see a way
   for me to push a version out to the client after review, nor how to deny it and send it
   back to the composer."* Publish lived only on the delivery console, so the operator

@@ -651,6 +651,10 @@
      data-note-version="{{ a.versions[-1].n if a.versions else '0' }}"
      data-pending-version="{{ (a.versions|length + 1) if a.pending else '' }}">
 
+  {# WHO THE ROOM IS TALKING TO. One template serves the composer, the client and the
+     studio, and it was written entirely in the composer's voice — so a buyer opening
+     their own cut was offered a download "FOR YOUR DAW" and told to write. #}
+  {% set voice = room_role|default('talent') %}
   <!-- doorline -->
   <div class="doorline">
     <img class="wordmark" src="/static/public/wordmark-ko.png" alt="Chordential">
@@ -678,7 +682,7 @@
     <video class="sr-video" src="{{ a.picture.url }}" preload="metadata" playsinline muted></video>
     <span class="picture-note">CUT {{ a.picture.n }}{% if a.picture.orig %} · {{ a.picture.orig|upper }}{% endif %}
       · <a href="{{ a.picture.url }}" download="{{ a.picture.orig or 'cut.mp4' }}"
-           style="color:var(--orange);pointer-events:auto">⇓ DOWNLOAD FOR YOUR DAW</a></span>
+           style="color:var(--orange);pointer-events:auto">⇓ {{ 'DOWNLOAD YOUR CUT' if voice == 'client' else 'DOWNLOAD FOR YOUR DAW' }}</a></span>
     {% else %}
     <canvas class="sr-poster"></canvas>
     <div class="poster-title">
@@ -688,29 +692,71 @@
          none, so the line rendered as a bare "Your role:" with nothing after it. #}
       {% if a.role %}<span class="pt-sub">Your role: {{ a.role }}</span>{% endif %}
     </div>
-    <span class="picture-note">PICTURE ARRIVES WITH THE CLIENT'S CUT</span>
+    <span class="picture-note">{{ 'YOUR CUT PLAYS HERE ONCE IT IS IN' if voice == 'client'
+      else "PICTURE ARRIVES WITH THE CLIENT'S CUT" }}</span>
     {% endif %}
     <span class="tc sr-tc">00:00:00:00</span>
     <div class="bigplay"><button class="sr-bigplay" aria-label="Play">▶</button></div>
+    {# ── The room's one voice, and it speaks to WHOEVER IS IN IT. ─────────────────
+       Every line here was written to the composer, and then the room started serving
+       three roles from one template — so a client on their own cut was told *"The room
+       is current. Write."* Reported live, and the operator's second point is the one
+       that matters more: *"even that is not a nice message to send to someone who is
+       working for you."* It was an instruction, in the imperative, to a person doing the
+       work. A studio talks to the people writing for it the way it wants to be talked
+       to, and it does not tell its buyer to write anything. ── #}
     <div class="whisper sr-whisper">
       <span class="w-dot"></span>
       <span>
-        {% if closed %}
-          Delivered. The studio takes it from here. Thank you for the music.
-        {% elif request.query_params.get('submitted') == a.project_id|string %}
-          Version received. The studio has been notified and is reviewing it. The client's notes will appear here once it's published.
-        {% elif a.creative_lock %}
-          Master approved. The room is in delivery: {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
-        {% elif a.pending and not a.versions %}
-          Your first take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %}. You'll get an email when it's published or notes land.
-        {% elif a.pending %}
-          Your updated take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %}. You'll get an email when it's published or notes land.
-        {% elif open_ct %}
-          {{ open_ct }} client note{{ 's' if open_ct != 1 }} waiting on the timeline. Press N.
-        {% elif not a.versions %}
-          Everything is ready. This room is waiting for your music.
+        {% if voice == 'client' %}
+          {% if closed %}
+            Delivered. Everything you signed off is in your package, ready to download.
+          {% elif a.creative_lock %}
+            Master approved — thank you. We're producing the rest of the deliverables now
+            ({{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} in),
+            and you'll sign off each one.
+          {% elif a.versions %}
+            {{ a.version_state or 'Your music' }} is here. Press play, and leave a note at any
+            moment — we'll see it.
+          {% elif a.picture %}
+            Your cut is loaded and the music is being written. We'll email you the moment
+            there's a take to hear.
+          {% else %}
+            This is where you'll hear the music. We'll email you the moment there's
+            something to play.
+          {% endif %}
+        {% elif voice == 'operator' %}
+          {% if closed %}
+            Delivered.
+          {% elif a.creative_lock %}
+            Master approved. In delivery: {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
+          {% elif a.pending %}
+            {{ a.pending.label or 'A take' }} is waiting on your call — publish it or send it back.
+          {% elif open_ct %}
+            {{ open_ct }} client note{{ 's' if open_ct != 1 }} on the timeline.
+          {% elif not a.versions %}
+            No takes yet. The room is dressed and waiting for the composer.
+          {% else %}
+            Up to date.
+          {% endif %}
         {% else %}
-          The room is current. Write.
+          {% if closed %}
+            Delivered. The studio takes it from here — thank you for the music.
+          {% elif request.query_params.get('submitted') == a.project_id|string %}
+            Version received. The studio has been notified and is listening. The client's notes will appear here once it's published.
+          {% elif a.creative_lock %}
+            Master approved — nice work. The room is in delivery: {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
+          {% elif a.pending and not a.versions %}
+            Your first take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %}. You'll get an email when it's published or notes land.
+          {% elif a.pending %}
+            Your updated take is with the studio{% if a.pending.at %} (since {{ a.pending.at[:10] }}){% endif %}. You'll get an email when it's published or notes land.
+          {% elif open_ct %}
+            {{ open_ct }} client note{{ 's' if open_ct != 1 }} on the timeline — press N to read them.
+          {% elif not a.versions %}
+            Everything you need is here: the brief, the picture, the notes. Take your time.
+          {% else %}
+            You're up to date — nothing is waiting on you.
+          {% endif %}
         {% endif %}
       </span>
     </div>
@@ -785,7 +831,9 @@
     {% endif %}
     {# Mobile Companion (§13): the phone is for Listen/Know, not delivering work —
        uploading a take happens at the desk. Shown only on the phone breakpoint. #}
-    <p class="companion-note">Companion mode: listen and check in here; upload your take from the studio at your desk.</p>
+    <p class="companion-note">{% if voice == 'client' %}Companion mode: listen and leave
+      notes here; the full room is best on a larger screen.{% else %}Companion mode: listen
+      and check in here; upload your take from the studio at your desk.{% endif %}</p>
   </div>
 
   {# ── What this playback is, and is NOT. ──────────────────────────────────────
@@ -962,7 +1010,7 @@
     <p class="brief-body">{{ a.brief.references }}</p>
     {% endif %}
     <div class="brief-meta">
-      <span class="chip">Your role: {{ a.role }}</span>
+      {% if a.role %}<span class="chip">Your role: {{ a.role }}</span>{% endif %}
       {% if a.deadline_rel and not closed %}<span class="chip">{{ a.deadline_rel|capitalize }}</span>{% endif %}
       {% if a.feedback and a.feedback.round_phrase %}
       <span class="chip">{{ a.feedback.round_phrase }}</span>
@@ -1036,13 +1084,19 @@
     {% elif not (a.brief and a.brief.deliverables_needed) %}
       <div class="spec-row"><span class="k">MASTER</span><span>The approved master completes this delivery.</span></div>
     {% endif %}
-    <p class="fineprint">The music is always yours to write; this room organizes, documents, and delivers it.
-      A human presses every approve button; nothing here auto-decides.</p>
+    <p class="fineprint">{% if voice == 'client' %}Every note of this is written by people;
+      the room organizes, documents and delivers it. A human presses every approve button;
+      nothing here auto-decides.{% else %}The music is always yours to write; this room
+      organizes, documents, and delivers it. A human presses every approve button; nothing
+      here auto-decides.{% endif %}</p>
   </div>
 
   <!-- ── LAYER: Notes ── -->
-  <div class="sheet sr-sheet" data-sheet="notes" role="dialog" aria-modal="true" aria-label="Client feedback" tabindex="-1">
-    <div class="sheet-head"><h2>Client feedback</h2><button class="esc sr-close">ESC</button></div>
+  {# "Client feedback" is what these notes are to US. To the client they are their own
+     words, and to everyone they are the conversation about a take. #}
+  {% set notes_title = 'Notes on this take' if voice == 'client' else 'Client feedback' %}
+  <div class="sheet sr-sheet" data-sheet="notes" role="dialog" aria-modal="true" aria-label="{{ notes_title }}" tabindex="-1">
+    <div class="sheet-head"><h2>{{ notes_title }}</h2><button class="esc sr-close">ESC</button></div>
     {% if a.conform_pending %}
     <div class="conform"><b>A newer cut ({{ a.conform_pending.n }}) has landed and is not
       conformed yet.</b> This room is still playing cut {{ a.picture.n if a.picture else 1 }} —
@@ -1058,7 +1112,7 @@
     <div class="fb-top">
       <span class="open-ct">{{ a.feedback.open_count }} to address</span>
       {% if a.feedback.round_phrase %}<span>· {{ a.feedback.round_phrase }}</span>{% endif %}
-      <span>· "addressed" is your working state; the client's list only changes when the studio publishes</span>
+      {% if voice != 'client' %}<span>· "addressed" is your working state; the client's list only changes when the studio publishes</span>{% endif %}
     </div>
     {# A note belongs to the TAKE it was written against. Every take's notes are here,
        tagged; the room shows the selected take's and hides the rest, so switching to v1
@@ -1126,14 +1180,17 @@
     </div>
     {% endfor %}
     {% else %}
-    <p style="color:var(--dim)">No notes yet. When the client reviews a published take, their timecoded notes
-      land here, and as pins on the timeline.</p>
+    <p style="color:var(--dim)">{% if voice == 'client' %}No notes yet. Play the take and say
+      anything at the moment you hear it — your note lands on that exact bar, and everyone
+      working on this sees it.{% else %}No notes yet. When the client reviews a published
+      take, their timecoded notes land here, and as pins on the timeline.{% endif %}</p>
     {% endif %}
   </div>
 
   <!-- ── LAYER: Takes + upload ── -->
-  <div class="sheet sr-sheet" data-sheet="takes" role="dialog" aria-modal="true" aria-label="Your takes" tabindex="-1">
-    <div class="sheet-head"><h2>Your takes</h2><button class="esc sr-close">ESC</button></div>
+  {% set takes_title = 'The takes' if voice == 'client' else 'Your takes' %}
+  <div class="sheet sr-sheet" data-sheet="takes" role="dialog" aria-modal="true" aria-label="{{ takes_title }}" tabindex="-1">
+    <div class="sheet-head"><h2>{{ takes_title }}</h2><button class="esc sr-close">ESC</button></div>
 
     <!-- Capture (Phase 4 §13): the composer's own private shelf — jot a motif/idea;
          never the client's (spec: "never visible to the client"). -->
@@ -1183,7 +1240,8 @@
     </div>
     {% endfor %}
     {% if not a.versions and not a.pending %}
-    <p style="color:var(--dim)">No takes yet. This room is waiting for your first one.</p>
+    <p style="color:var(--dim)">{{ "No takes yet. We'll email you the moment there is one to hear."
+      if voice == 'client' else 'No takes yet. This room is waiting for your first one.' }}</p>
     {% endif %}
 
     {% if a.creative_lock %}
@@ -1355,8 +1413,9 @@
   {% set arr = (assignments|first) if assignments else None %}
   <div class="sr-arrival-line">{% if arr and (arr.versions or arr.pending) %}Everything is
       here.<br>{{ arr.pending.label if arr.pending else (arr.version_state or 'The latest take')
-      }} is loaded, with its notes.{% else %}Everything is ready.<br>This room is waiting
-      for your music.{% endif %}</div>
+      }} is loaded, with its notes.{% elif (room_role|default('talent')) == 'client'
+      %}Welcome.<br>This is where you'll hear the music.{% else %}Everything is ready.<br>This
+      room is waiting for your music.{% endif %}</div>
   <button class="sr-begin" type="button" id="sr-begin">Begin</button>
   <button class="sr-skip" type="button" id="sr-skip">Skip intro</button>
 </div>
@@ -1373,12 +1432,18 @@
 <button class="mini-exit" id="mini-exit" type="button" title="Expand the room (⌘M)">⤢ Expand</button>
 
 <div class="veil" id="veil"></div>
+{# The drag-anywhere target only exists for a hand that may upload. The JS already
+   refused to raise it without an upload form, so it never appeared for a client — but
+   "Drop your take · LANDS WITH THE STUDIO FIRST" was still sitting in their page,
+   waiting for one line of CSS to go wrong. Absent, not hidden (ADR-0068). #}
+{% if 'upload_take' in (caps|default(['upload_take'])) %}
 <div class="dropveil" id="dropveil">
   <div class="drop-box">
     <div class="d1">Drop your take</div>
     <div class="d2">WAV / AIFF / MP3 · LANDS WITH THE STUDIO FIRST</div>
   </div>
 </div>
+{% endif %}
 <div class="toast" id="toast"></div>
 
 {# Escape stopped closing the sheets when B/N/V became toggles; a footer that still
@@ -2475,22 +2540,25 @@
   //    under the cursor would refuse the drop and the browser would navigate
   //    to the file — so the veil is pointer-events:none and the document owns
   //    the whole drag lifecycle with an enter/leave counter. ──
+  // The veil is only RENDERED for a hand that may upload, so every touch of it is
+  // guarded — a room without one still has to survive a stray drag.
   var dv = document.getElementById("dropveil"), dragDepth = 0;
+  function dvClass(on){ if (dv) dv.classList[on ? "add" : "remove"]("on"); }
   function dragHasFiles(e){
     var ts = e.dataTransfer && e.dataTransfer.types;
     return !!ts && Array.prototype.indexOf.call(ts, "Files") !== -1;
   }
-  function dragReset(){ dragDepth = 0; dv.classList.remove("on"); }
+  function dragReset(){ dragDepth = 0; dvClass(false); }
   document.addEventListener("dragenter", function(e){
     if (!dragHasFiles(e)) return;                       // text/link drags: not ours
     e.preventDefault(); dragDepth++;
-    if (rooms.some(function(r){ return r.upForm; })) dv.classList.add("on");
+    if (rooms.some(function(r){ return r.upForm; })) dvClass(true);
   });
   document.addEventListener("dragover", function(e){ if (dragHasFiles(e)) e.preventDefault(); });
   document.addEventListener("dragleave", function(e){
     if (!dragHasFiles(e)) return;
     e.preventDefault(); dragDepth = Math.max(0, dragDepth - 1);
-    if (!dragDepth) dv.classList.remove("on");
+    if (!dragDepth) dvClass(false);
   });
   document.addEventListener("dragend", dragReset);      // Esc mid-drag: never strand the veil
   document.addEventListener("drop", function(e){

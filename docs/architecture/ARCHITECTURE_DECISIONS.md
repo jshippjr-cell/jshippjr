@@ -1664,6 +1664,39 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0073 — The room speaks to whoever is in it
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
+Source: `creator_portal.html` (the `voice` variable),
+`tests/test_the_room_speaks_to_whoever_is_in_it.py`
+
+**Decision.** Copy is capability-gated like everything else in the room. `voice`
+(operator / talent / client) is set once where the room opens, and every line addressed
+to a particular reader branches on it: the whisper, the cut's download link, the sheet
+titles, the empty states, the phone note, the brief's closing line. The drag-and-drop
+upload target is not rendered at all for a role that may not upload.
+
+**Why.** *"I entered the room as a client and the note at the bottom left of the video is
+'the room is current. write' … that is not how we speak to our clients. im sure that was
+not meant for the client it was meant for the composer, but even that is not a nice
+message to send to someone who is working for you."*
+
+Both halves. The first is the ADR-0068 leak one layer up from data: the buyer was handed
+a line addressed to someone else, telling them to write music. The second is the sharper
+one — it was an imperative, to a person doing the work, from the people paying them. A
+studio talks to the writers it hires the way it wants to be talked to.
+
+And it was never one line. The template was written in the composer's voice and then
+started serving three roles, so a client on their own cut was offered "⇓ DOWNLOAD FOR
+YOUR DAW", told a room was "waiting for your music", shown "Your takes", and given the
+composer's working-state vocabulary in a sheet titled "Client feedback" about their own
+notes.
+
+**Consequences.** A new line of copy in the room asks who is reading it before it is
+written. The gate is `voice`, not a `{% if %}` on some other fact that happens to
+correlate. Tone is part of the product: an imperative to a contractor and a leaked
+instruction to a buyer are the same defect wearing different clothes, and neither shows
+up in a test that only checks what data a role receives — this one reads the words.
+
 ### ADR-0072 — The taste gate has a door where the listening happens
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0003, ADR-0068 ·
 Source: `project_routes.delivery_publish`, `creator_portal.html` (the `.gate` block),
