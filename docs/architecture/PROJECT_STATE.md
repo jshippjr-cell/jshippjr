@@ -105,7 +105,9 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 - **A deliverable lane holds a folder** (ADR-0074, 2026-08-19). A lane took one file and
   closed itself, so a twelve-stem package was a row reading "under review" with one stem
   in it. Lanes now take many files, in as many batches as it takes, stay open, and report
-  their count; one press sends every filled lane. And the **approved master is
+  their count and LIST THEIR FILENAMES, and accept a drag-and-drop onto the row; one
+  press sends every filled lane. Files waiting to be vetted raise the Queue badge, carry
+  a queue card, and can be published or sent back from the room. And the **approved master is
   downloadable from the room** for anyone with `download_source` — the missing first step
   of the hand-off, since a mixer was being asked to mix a version they could only stream.
   The creative-approval email now names the locked version and what is still owed.

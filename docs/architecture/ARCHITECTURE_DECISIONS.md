@@ -1709,10 +1709,15 @@ Source: `creator_routes.creator_submit_deliverable`, `creator_routes._room_field
 `delivery_ops._approve_version_core`, `tests/test_a_stem_package_is_not_a_file.py`
 
 **Decision.** (1) A scoped deliverable is a LANE, not a file. Each lane accepts many
-files, in as many batches as it takes, and stays open for the life of the delivery; the
-row reports how many are in it. One press sends every lane that has files queued. A file
-that fails to read is skipped and the rest of the batch still lands — the response reports
-what actually persisted.
+files — chosen or **dropped on the row** — in as many batches as it takes, and stays open
+for the life of the delivery; the row reports how many are in it and **lists them by
+name**, because a count answers "did anything land" and not "did I send all twelve". One
+press sends every lane that has files queued. A file that fails to read is skipped and the
+rest of the batch still lands — the response reports what actually persisted.
+
+(1b) **The gate reaches the deliverables.** Files waiting are counted in the Queue nav
+badge, carry their own card in the queue, are named in the operator's room whisper, and
+can be published or sent back **from the room**, on the file, where they sit.
 
 (2) The APPROVED MASTER is downloadable from the room by anyone holding `download_source`
 (operator + talent), and `room_view` removes it for the client. The creative-approval

@@ -171,9 +171,12 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 f"{na.get('detail', '')} ({opp['need']})", na["url"],
                 age_key=na.get("since") or "", post=bool(na.get("post"))))
 
-    # 5 — composer submissions waiting at the taste gate (publish gate).
+    # 5 — creator work waiting at the taste gate (publish gate): the TAKE, and the
+    #     DELIVERABLES. Both wait for the same press and only the take had a card, so a
+    #     stem package sat in the building with nothing on any page saying so.
     for prow in db.list_projects(conn):
-        pv = db.get_delivery(conn, prow["id"]).get("pending_version")
+        delivery = db.get_delivery(conn, prow["id"])
+        pv = delivery.get("pending_version")
         if pv:
             cards.append(_card(
                 6, "submission",
@@ -182,6 +185,21 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 f"{(pv.get('at') or '')[:10]}. Publish it or send it back — the "
                 "client never sees unvetted work.",
                 f"/project/{prow['id']}/delivery", age_key=pv.get("at") or ""))
+        pending_assets = delivery.get("pending_assets") or []
+        if pending_assets:
+            lanes = {}
+            for a in pending_assets:
+                lanes.setdefault((a.get("label") or "a deliverable"), []).append(a)
+            who = next((a.get("by") for a in pending_assets if a.get("by")), "A creator")
+            newest = max((a.get("at") or "") for a in pending_assets)
+            what = ", ".join(f"{label} ({len(items)})" for label, items in lanes.items())
+            cards.append(_card(
+                6, "submission",
+                f"{len(pending_assets)} deliverable file"
+                f"{'s' if len(pending_assets) != 1 else ''} to vet — {prow['client']}",
+                f"{who} delivered {what}. Publish each to the client or send it back — "
+                "the same gate the master gets.",
+                f"/project/{prow['id']}/delivery#assets", age_key=newest))
 
     # 6 — REVIEW-tier opportunities: qualified-enough volume the precision-biased
     #     alert tier deliberately keeps quiet (funnel audit, Finding 1).

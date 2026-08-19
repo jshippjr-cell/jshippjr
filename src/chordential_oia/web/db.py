@@ -3496,7 +3496,13 @@ def incoming_unactioned_count(conn: sqlite3.Connection) -> int:
 
 
 def pending_submission_count(conn: sqlite3.Connection) -> int:
-    """Creator submissions waiting at the taste gate — the Queue nav badge.
+    """Everything waiting at the taste gate — the Queue nav badge.
+
+    A creator's TAKE and a creator's DELIVERABLES both wait here and both need the same
+    press, but only the take was counted — so a stem package could sit in the building
+    with nothing anywhere saying so: *"The files have been uploaded for the studio to
+    review.. but the dashboard doesnt tell me there are files to review"* (operator,
+    2026-08-19). Counted per FILE, because twelve stems are twelve things to listen to.
 
     A composer uploaded a take and the whole system said so by email and by a card on a
     page nobody was looking at: *"the alert went out to approve which is great, no badge
@@ -3509,13 +3515,16 @@ def pending_submission_count(conn: sqlite3.Connection) -> int:
     """
     n = 0
     for row in conn.execute(
-            "SELECT delivery_json FROM projects WHERE delivery_json LIKE ?",
-            ("%pending_version%",)):
+            "SELECT delivery_json FROM projects WHERE delivery_json LIKE ?"
+            " OR delivery_json LIKE ?",
+            ("%pending_version%", "%pending_assets%")):
         try:
-            if (json.loads(row["delivery_json"] or "{}") or {}).get("pending_version"):
-                n += 1
+            d = json.loads(row["delivery_json"] or "{}") or {}
         except (ValueError, TypeError):
             continue                    # a malformed blob is not a submission
+        if d.get("pending_version"):
+            n += 1
+        n += len(d.get("pending_assets") or [])
     return n
 
 

@@ -212,11 +212,22 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
                         for x in (delivery.get("pending_assets") or []))
     published_n = Counter((a.get("label") or a.get("filename") or "").strip().lower()
                           for a in (delivery.get("assets") or []))
-    published_files = {}
+    published_files, pending_files = {}, {}
     for asset in (delivery.get("assets") or []):
         key = (asset.get("label") or asset.get("filename") or "").strip().lower()
         published_files.setdefault(key, []).append(
             {"url": asset.get("url") or "",
+             "name": asset.get("orig") or asset.get("filename") or "file"})
+    # WHAT IS ACTUALLY IN THE LANE, by name. A count answers "did anything land"; it does
+    # not answer "did I send all twelve", which is the question someone bouncing stems at
+    # 2am is asking (operator, 2026-08-19).
+    for asset in (delivery.get("pending_assets") or []):
+        key = (asset.get("label") or "").strip().lower()
+        pending_files.setdefault(key, []).append(
+            {"url": asset.get("url") or "",
+             # the storage name is the KEY the studio's publish/send-back posts
+             "filename": asset.get("filename") or "",
+             "by": asset.get("by") or "",
              "name": asset.get("orig") or asset.get("filename") or "file"})
     # WHOSE LANE, and what it is made FROM (ADR-0075). The composer writes and bounces
     # the stems; the mixer works from the approved master; the editor cuts down the
@@ -246,6 +257,7 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
             # mixer's mix, so knowing it exists is half an answer — they need the file.
             # `room.room_view` strips these for the client, who receives the package.
             "files": published_files.get(key, []),
+            "waiting_files": pending_files.get(key, []),
             # Ready = nothing upstream, or the upstream craft has published something.
             "ready": (not waits_on) or bool(published_by_owner.get(waits_on)),
         })
@@ -911,6 +923,9 @@ async def creator_submit_deliverable(
     if xhr:
         # `count` is what is now in THIS LANE, so the row can say "3 files with the
         # studio" rather than a running total of everything ever submitted.
+        # `count` is what is now in THIS LANE, and `names` are the files just added —
+        # the row lists them so twelve stems can be checked at a glance without a reload.
         return JSONResponse({"ok": True, "label": deliverable,
-                             "added": added, "count": count})
+                             "added": added, "count": count,
+                             "names": [f.filename for f in uploads_in][:added]})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)

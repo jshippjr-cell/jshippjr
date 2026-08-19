@@ -2741,7 +2741,7 @@ def review_note_disposition(request: Request, project_id: int, comment_id: int,
 
 @router.post("/project/{project_id}/delivery/asset/publish")
 def delivery_publish_asset(project_id: int, filename: str = Form(""),
-                           action: str = Form("publish")):
+                           action: str = Form("publish"), origin: str = Form("")):
     """Jon's disposition of a creator's pending DELIVERABLE (stems, cutdowns,
     verticals): publish it into the client-visible assets, or discard it. The same
     gate the master gets — uniform, per the EP review (unvetted stems on delivery
@@ -2756,7 +2756,7 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
         pending = list(delivery.get("pending_assets") or [])
         hit = next((a for a in pending if a.get("filename") == filename), None)
         if hit is None:
-            return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
+            return _asset_redirect(project_id, origin)
         pending = [a for a in pending if a.get("filename") != filename]
         db.update_delivery(conn, project_id, "pending_assets", pending)
         if action == "discard":
@@ -2804,6 +2804,13 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
             body_text=(f"The {label} for {campaign} is published, which is what your "
                        "work is made from.\n\nOpen your room: the mix is there to "
                        "download, and your lanes are open."))
+    return _asset_redirect(project_id, origin)
+
+
+def _asset_redirect(project_id: int, origin: str):
+    """Back where the decision was made — the room now has this gate too."""
+    if (origin or "").strip() == "room":
+        return RedirectResponse(f"/room/{project_id}#p{project_id}", status_code=303)
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
 
 

@@ -175,7 +175,8 @@ def room_view(conn, db, project_id: int, role: str, *,
         # what they signed off, in the package, once it is paid for — and the same is
         # true of the individual deliverable files a craft downloads to work from.
         room["master"] = None
-        room["deliverables"] = [dict(d, files=[]) for d in (room.get("deliverables") or [])]
+        room["deliverables"] = [dict(d, files=[], waiting_files=[])
+                                for d in (room.get("deliverables") or [])]
     if role == TALENT:
         # A creator is handed only what has been priced (ADR-0069).
         room["feedback"] = priced_notes_only(room.get("feedback") or {})

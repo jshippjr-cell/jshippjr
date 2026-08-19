@@ -219,3 +219,172 @@ def test_the_hand_off_email_names_the_master_and_what_is_owed():
     assert "Still owed" in body, "the email does not say what is left to deliver"
     assert "Your room has it to download" in body, (
         "the email does not point at the master everything else is made from")
+
+
+# ── the lane you can still add to ───────────────────────────────────────────────────
+def test_the_lane_never_deletes_its_own_form():
+    """*"once i click upload in the lane it doesnt allow me to upload more. what if i
+    missed 1 file and i need to add it?"* (operator, 2026-08-19).
+
+    The in-page handler deleted the form on success and appended its own badge — so the
+    first upload closed the lane, and the row showed TWO badges: the server's count and
+    the JS's bare one. The server-rendered template had already been taught to keep the
+    lane open; the JS had not, so a reload showed the right thing and the page you were
+    standing on did not.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia"
+           / "web" / "templates" / "creator_portal.html").read_text(encoding="utf-8")
+    fn = src[src.index("document.querySelectorAll(\"form.deliv-form\")"):]
+    fn = fn[:fn.index("DROP FILES ON A LANE")]
+    assert "f.remove()" not in fn, "the lane deletes its own upload form again"
+    assert 'btn.textContent = "Add more"' in fn, (
+        "the lane does not invite the file you missed")
+    assert "row.querySelector(\".lane-count\")" in fn, (
+        "the handler makes a second badge instead of updating the one that is there")
+
+
+def test_the_lane_lists_what_is_in_it(crew):
+    """A count says something landed. It does not say whether all twelve stems did."""
+    c, _db, pid, toks, _k, _a = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package",
+          ["kick.wav", "snare.wav", "bass.wav"])
+    page = c.get(f"/room/{pid}?t={toks['composer']}").text
+    lane = re.search(r'data-lane="Mix-ready stem package".*?</ul>', page, re.S)
+    assert lane, "the lane renders no file list"
+    names = re.findall(r'download="([^"]+)"', lane.group(0))
+    assert names == ["kick.wav", "snare.wav", "bass.wav"], names
+
+
+def test_the_file_you_missed_joins_the_list(crew):
+    c, _db, pid, toks, _k, _a = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["perc.wav"])
+    page = c.get(f"/room/{pid}?t={toks['composer']}").text
+    lane = re.search(r'data-lane="Mix-ready stem package".*?</ul>', page, re.S)
+    assert re.findall(r'download="([^"]+)"', lane.group(0)) == \
+        ["kick.wav", "snare.wav", "perc.wav"]
+    assert 'class="deliv-form"' in lane.group(0), "the lane closed after the first upload"
+    assert "Add more" in lane.group(0)
+
+
+def test_the_upload_reports_the_names_it_took(crew):
+    """So the page can list them without a reload."""
+    c, _db, pid, toks, _k, _a = crew
+    got = _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav", "b.wav"])
+    assert got["names"] == ["a.wav", "b.wav"], got
+
+
+def test_only_your_startable_lanes_take_a_drop(crew):
+    """`data-drop` is set by the SERVER, so a drag cannot offer a lane the room has
+    already said belongs to someone else or is waiting on the mix."""
+    c, _db, pid, toks, _k, _a = crew
+    page = c.get(f"/room/{pid}?t={toks['editor']}").text
+    lanes = dict(re.findall(r'data-lane="([^"]+)"([^>]*)>', page))
+    assert "data-drop" not in lanes[":30 / :15 / :06 cutdowns"], (
+        "a blocked lane accepts a drop")
+    assert "data-drop" not in lanes["Mix-ready stem package"], (
+        "the editor can drop stems into the composer's lane")
+    comp = dict(re.findall(r'data-lane="([^"]+)"([^>]*)>',
+                           c.get(f"/room/{pid}?t={toks['composer']}").text))
+    assert 'data-drop="1"' in comp["Mix-ready stem package"]
+
+
+def test_a_drop_on_a_lane_is_not_read_as_a_new_master():
+    """The page-wide drop handler behind the take uploader would otherwise take a stem
+    dropped on a lane and submit it as the next version."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia"
+           / "web" / "templates" / "creator_portal.html").read_text(encoding="utf-8")
+    fn = src[src.index("DROP FILES ON A LANE"):]
+    fn = fn[:fn.index("…and one press for everything")]
+    assert "e.stopPropagation()" in fn, "a lane drop bubbles to the take uploader"
+    assert "dragReset()" in fn, "the page-wide drop veil is left standing after a drop"
+
+
+# ── and something has to SAY they are waiting ───────────────────────────────────────
+def _badge(page):
+    m = re.search(r'id="queue-badge"[^>]*style="display:([a-z-]+)[^>]*>([^<]*)<', page)
+    return None if not m else (m.group(1), m.group(2).strip())
+
+
+def test_delivered_files_raise_the_badge(crew):
+    """*"The files have been uploaded for the studio to review.. but the dashboard
+    doesnt tell me there are files to review"* (operator, 2026-08-19).
+
+    The gate counted the composer's TAKE and not their deliverables, though both wait
+    for the same press — so a stem package could sit in the building with nothing on any
+    page saying so. Counted per FILE: twelve stems are twelve things to listen to.
+    """
+    c, _db, pid, toks, _k, admin = crew
+    c.cookies.set(*admin)
+    assert _badge(c.get("/dashboard").text) == ("none", "")
+    c.cookies.clear()
+    _send(c, pid, toks["composer"], "Mix-ready stem package",
+          ["kick.wav", "snare.wav", "bass.wav", "perc.wav"])
+    c.cookies.set(*admin)
+    assert _badge(c.get("/dashboard").text) == ("inline-block", "4")
+
+
+def test_the_queue_has_a_card_for_them(crew):
+    c, _db, pid, toks, _k, admin = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    c.cookies.set(*admin)
+    q = c.get("/queue").text
+    assert "deliverable files to vet" in q, "the queue never mentions them"
+    assert "Mix-ready stem package (2)" in q, "the card does not say what or how many"
+
+
+def test_the_room_says_what_is_waiting_on_you(crew):
+    """*"nor do i see anything to review when i log into 'the room'"*. The whisper read
+    "In delivery: 0 of 4 assets in" — true, and useless, while four stems sat unvetted."""
+    c, _db, pid, toks, _k, admin = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav", "b.wav", "c.wav"])
+    c.cookies.set(*admin)
+    page = c.get(f"/room/{pid}").text
+    whisper = re.search(r'class="whisper sr-whisper">.*?<span>(.*?)</span>', page, re.S)
+    said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", whisper.group(1))).strip()
+    assert "3 deliverable files waiting on your call" in said, said
+
+
+def test_the_studio_can_vet_a_file_where_it_sits(crew):
+    """Deliverables waited for the same press as the master and could only be pressed on
+    the console — so the studio opened the room, found nothing to review, and the files
+    stayed put."""
+    c, db, pid, toks, _k, admin = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav", "b.wav"])
+    c.cookies.set(*admin)
+    page = c.get(f"/room/{pid}").text
+    assert page.count('class="lf-gate"') == 2, "the room offers no gate on the files"
+    conn = db.connect()
+    pend = db.get_delivery(conn, pid)["pending_assets"]
+    conn.close()
+    r = c.post(f"/project/{pid}/delivery/asset/publish",
+               data={"filename": pend[0]["filename"], "action": "publish",
+                     "origin": "room"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith(f"/room/{pid}")
+    conn = db.connect()
+    d = db.get_delivery(conn, pid)
+    conn.close()
+    assert len(d["assets"]) == 1 and len(d["pending_assets"]) == 1
+
+
+def test_the_console_still_returns_to_the_console(crew):
+    c, db, pid, toks, _k, admin = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav"])
+    conn = db.connect()
+    pend = db.get_delivery(conn, pid)["pending_assets"]
+    conn.close()
+    c.cookies.set(*admin)
+    r = c.post(f"/project/{pid}/delivery/asset/publish",
+               data={"filename": pend[0]["filename"], "action": "publish"},
+               follow_redirects=False)
+    assert r.headers["location"] == f"/project/{pid}/delivery#assets"
+
+
+def test_only_the_studio_is_offered_the_file_gate(crew):
+    c, _db, pid, toks, ktok, _a = crew
+    _send(c, pid, toks["composer"], "Mix-ready stem package", ["a.wav"])
+    for who, page in (("composer", c.get(f"/room/{pid}?t={toks['composer']}").text),
+                      ("client", c.get(f"/room/{pid}?k={ktok}").text)):
+        assert 'class="lf-gate"' not in page, f"the {who} can publish their own work"

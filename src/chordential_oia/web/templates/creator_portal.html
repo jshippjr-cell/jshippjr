@@ -489,8 +489,25 @@
     border:1px solid var(--hair2);border-radius:999px;padding:2px 7px;color:var(--dim2);
     margin-left:7px;white-space:nowrap}
   .lane-owner.yours{border-color:rgba(240,119,44,.55);color:var(--orange)}
-  .deliv-row.not-mine{opacity:.62}
   .lane-wait{font:11.5px var(--sans);color:var(--dim2);font-style:italic;white-space:nowrap}
+  /* Every file in the lane, by name — the only way to check twelve stems at a glance. */
+  .deliv-lane{border-top:1px solid var(--hair)}
+  .deliv-lane .deliv-row{border-top:0}
+  .deliv-lane.not-mine{opacity:.62}
+  .deliv-lane.drop-on{background:var(--orange-soft);box-shadow:inset 0 0 0 1px rgba(240,119,44,.5);
+    border-radius:9px}
+  .lane-files{list-style:none;margin:0 0 8px;padding:0 0 0 2px;display:flex;flex-wrap:wrap;gap:4px 14px}
+  .lane-files li{display:flex;align-items:center;gap:6px;font:11.5px var(--mono);color:var(--dim2)}
+  .lane-files a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--hair2)}
+  .lane-files a:hover{color:var(--text)}
+  .lf-state{color:var(--dim2);font-size:10px}
+  .lf-state.ok{color:#79b47a}
+  .lf-gate{display:inline-flex;gap:3px;margin:0 0 0 2px}
+  .lf-btn{width:20px;height:20px;border-radius:5px;border:1px solid var(--hair2);
+    background:transparent;color:var(--dim2);cursor:pointer;font-size:11px;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0}
+  .lf-btn.ok:hover{border-color:#79b47a;color:#79b47a}
+  .lf-btn.no:hover{border-color:var(--wine);color:#c25667}
   /* The file the rest of the work is made from. */
   .work-from{margin:0 0 8px;padding:8px 11px;border:1px solid rgba(240,119,44,.35);
     border-radius:9px;background:var(--orange-soft)}
@@ -740,12 +757,19 @@
             something to play.
           {% endif %}
         {% elif voice == 'operator' %}
+          {# The number that matters is what is waiting on YOU. "In delivery: 0 of 4
+             assets in" was true and useless while four stems sat in the building
+             unvetted — reported live, 2026-08-19. #}
+          {% set waiting_n = (a.deliverables|map(attribute='pending_n')|sum) %}
           {% if closed %}
             Delivered.
-          {% elif a.creative_lock %}
-            Master approved. In delivery: {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
           {% elif a.pending %}
             {{ a.pending.label or 'A take' }} is waiting on your call — publish it or send it back.
+          {% elif waiting_n %}
+            {{ waiting_n }} deliverable file{{ 's' if waiting_n != 1 }} waiting on your call —
+            publish each to the client or send it back. Press V.
+          {% elif a.creative_lock %}
+            Master approved. In delivery: {{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} assets in.
           {% elif open_ct %}
             {{ open_ct }} client note{{ 's' if open_ct != 1 }} on the timeline.
           {% elif not a.versions %}
@@ -1288,7 +1312,9 @@
        With no hats known (the studio, or an unmapped role) every lane is offered, which
        is the behaviour every room had before this. #}
     {% set owned = (not mine) or (d.owner in mine) or not d.owner %}
-    <div class="deliv-row{{ ' not-mine' if not owned }}">
+    <div class="deliv-lane{{ ' not-mine' if not owned }}"
+         data-lane="{{ d.asset }}"{% if d.ready and owned %} data-drop="1"{% endif %}>
+    <div class="deliv-row">
       <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}
         {% if d.owner and (mine or (room_role|default('')) == 'operator') %}<span class="lane-owner{{ ' yours' if owned and mine }}">{{
           'yours' if (owned and mine) else d.owner }}</span>{% endif %}</span>
@@ -1314,6 +1340,37 @@
         <button class="btn tiny" type="submit">{{ 'Add more' if (d.pending_n or d.uploaded) else 'Upload' }}</button>
       </form>
       {% endif %}
+    </div>
+    {# EVERY FILE IN THE LANE, BY NAME. A count says something landed; it does not say
+       whether all twelve stems did, which is the only question worth asking at the end
+       of a bounce. Published files are downloadable — that is how the next craft in the
+       chain gets them. #}
+    {% if d.waiting_files or d.files %}
+    <ul class="lane-files">
+      {% for f in d.files %}
+      <li><span class="lf-state ok">✓</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a></li>
+      {% endfor %}
+      {% for f in d.waiting_files %}
+      <li><span class="lf-state">⧗</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+        {# THE GATE, ON THE FILE. Deliverables waited for the same press as the master and
+           could only be pressed on the delivery console — so the studio opened the room,
+           found nothing to review, and the files sat there. The same two decisions, where
+           the work is (operator, 2026-08-19). #}
+        {% if 'publish' in (caps|default([])) and f.filename %}
+        <form method="post" action="/project/{{ a.project_id }}/delivery/asset/publish" class="lf-gate">
+          <input type="hidden" name="filename" value="{{ f.filename }}">
+          <input type="hidden" name="origin" value="room">
+          <button type="submit" name="action" value="publish" class="lf-btn ok"
+                  title="Publish to the client for sign-off">✓</button>
+          <button type="submit" name="action" value="discard" class="lf-btn no"
+                  title="Send it back to {{ f.by or 'the creator' }}"
+                  onclick="return confirm('Send {{ f.name|e }} back to {{ (f.by or 'the creator')|e }}?');">↩</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     </div>
     {% endfor %}
     {# …or fill several lanes and send them together. #}
@@ -2761,11 +2818,38 @@
           .then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
           .then(function(data){
             if (data && data.ok){
-              var row = f.parentNode; f.remove();
-              var ok = document.createElement("span");
-              // honest state: it's with the studio (publish gate), not yet delivered
-              ok.className = "pend-badge"; ok.textContent = "With the studio · under review";
-              row.appendChild(ok);
+              /* THE LANE STAYS. This handler used to delete its own form and drop a
+                 bare badge in its place, so the first upload closed the lane — "once i
+                 click upload in the lane it doesnt allow me to upload more. what if i
+                 missed 1 file" (operator, 2026-08-19) — and left two badges side by
+                 side, its own and the server's. The row now reports what is in it, by
+                 name, and asks for more. */
+              var row = f.parentNode, lane = row.parentNode;
+              var badge = row.querySelector(".lane-count");
+              if (!badge){
+                badge = document.createElement("span");
+                badge.className = "pend-badge lane-count";
+                row.insertBefore(badge, f);
+              }
+              var n = data.count || 0;
+              badge.textContent = n + " file" + (n === 1 ? "" : "s")
+                + " with the studio · under review";
+              var list = lane.querySelector(".lane-files");
+              if (!list){
+                list = document.createElement("ul");
+                list.className = "lane-files";
+                lane.appendChild(list);
+              }
+              (data.names || []).forEach(function(nm){
+                var li = document.createElement("li");
+                li.innerHTML = '<span class="lf-state">⧗</span>';
+                var nameEl = document.createElement("span");
+                nameEl.textContent = nm;
+                li.appendChild(nameEl);
+                list.appendChild(li);
+              });
+              input.value = "";
+              btn.disabled = false; btn.textContent = "Add more";
             } else {
               btn.disabled = false; btn.textContent = orig;
               toast("Upload failed" + (data && data.error ? ": " + data.error : "") + ". Re-select the file and try again.");
@@ -2773,6 +2857,46 @@
           })
           .catch(function(){ btn.disabled = false; btn.textContent = orig; toast("Upload failed. Check your connection and try again."); });
       });
+    });
+  });
+
+  /* DROP FILES ON A LANE. Twelve stems selected through a file picker is twelve rows in
+     a dialog; dragging the folder's contents onto the row they belong to is the gesture
+     the work actually has (operator, 2026-08-19). Only lanes that are YOURS and startable
+     accept a drop — `data-drop` is set by the server, so this cannot offer a lane the
+     room has already said is waiting on someone else.
+
+     `stopPropagation` matters: the document-level handler behind the take uploader
+     would otherwise treat a stem dropped on a lane as a new master. */
+  document.querySelectorAll(".deliv-lane[data-drop]").forEach(function(lane){
+    var form = lane.querySelector("form.deliv-form");
+    if (!form) return;
+    var input = form.querySelector("input[type=file]");
+    function stop(e){ e.preventDefault(); e.stopPropagation(); }
+    lane.addEventListener("dragenter", function(e){
+      if (!dragHasFiles(e)) return;
+      stop(e); lane.classList.add("drop-on");
+    });
+    lane.addEventListener("dragover", function(e){
+      if (!dragHasFiles(e)) return;
+      stop(e); lane.classList.add("drop-on");
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    });
+    lane.addEventListener("dragleave", function(e){
+      if (!lane.contains(e.relatedTarget)) lane.classList.remove("drop-on");
+    });
+    lane.addEventListener("drop", function(e){
+      if (!dragHasFiles(e)) return;
+      stop(e);
+      lane.classList.remove("drop-on");
+      dragReset();                       // the page-wide veil never saw a drop of its own
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (!files || !files.length) return;
+      // Hand the drop to the lane's own input so ONE path does the upload — the
+      // fetch below reads the form, not the event.
+      try { input.files = files; }
+      catch (err) { toast("This browser can't take a dropped file here — use Choose files."); return; }
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
   });
 
