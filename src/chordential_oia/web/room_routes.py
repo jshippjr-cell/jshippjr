@@ -51,7 +51,7 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         return HTMLResponse("Not found", status_code=404)
     conn = db.connect()
     try:
-        role, who = _session_role(conn, project_id, k, r, t)
+        role, who = _session_role(conn, project_id, k, r, t, request)
         if role is None:
             return HTMLResponse("Not found", status_code=404)
         view = room.room_view(conn, db, project_id, role,
@@ -66,8 +66,15 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
             view["roles"] = list(dict.fromkeys(hats))
             view["role"] = " · ".join(view["roles"]) or "Creator"
             viewer = db.talent_from_row(trow) if trow is not None else None
+            # The standing agreement belongs to the CREATOR. Passing None made the banner
+            # render its unsigned copy — so a client opening the room was told to read and
+            # sign a Composer Agreement, and the studio was told the same. Reported live.
+            agr_signed = db.latest_talent_signature(
+                conn, trow["id"], signing.DOC_COMPOSER_AGREEMENT) if trow else None
+            agr_counter = db.latest_talent_signature(
+                conn, trow["id"], signing.DOC_COMPOSER_COUNTERSIGN) if trow else None
         else:
-            viewer = None
+            viewer, agr_signed, agr_counter = None, None, None
         contributors = {project_id: [
             dict(c, signed=db.latest_contributor_signature(
                 conn, c["id"], signing.DOC_CONTRIBUTOR_RELEASE) is not None)
@@ -75,14 +82,24 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         ]} if "see_contributors" in view["caps"] else {project_id: []}
     finally:
         conn.close()
+    # The note route needs a real name+email. A creator and the studio have one; a client
+    # on a share link may not, so the bar asks — once — and the cookie remembers.
+    from .project_routes import _reviewer_identity
+    _kn, _km = _reviewer_identity(request)
+    needs_identity = (role == room.CLIENT and not (_kn and _km))
     return render(
         request, "creator_portal.html", nav="",
+        needs_identity=needs_identity, known_name=_kn, known_email=_km,
         # The room's own door for each role — the token it must keep presenting.
         token=(t or ""), room_token=(t or k or r), room_token_kind=("t" if t else
                                                                    ("r" if r else "k")),
         t=viewer, completeness=(profile_completeness(viewer) if viewer else 100),
         assignments=[view], all_rooms=[view], focused=project_id,
         contributors=contributors, contributor_roles=contributor_release.ROLES,
-        agr_signed=None, agr_counter=None,
+        agr_signed=agr_signed, agr_counter=agr_counter,
+        # The name presence should show for this viewer — resolved by
+        # `_session_role`, not re-derived from the role, which is why the
+        # operator appeared twice as "Studio" and "Operator".
+        room_who=who,
         room_role=view["role_in_room"], caps=view["caps"],
     )

@@ -1832,17 +1832,24 @@ def _notify_reviewers_new_version(project_id: int, campaign: str, label: str,
 
 
 def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = "",
-                     r: str = "", flag: str = ""):
+                     r: str = "", flag: str = "", creator: str = ""):
     """Bounce back to the portal after an action. A verified reviewer link (``r``)
     is preserved so the reviewer stays verified; otherwise the share token (``k``).
 
     ``flag`` (e.g. ``incomplete``) surfaces a portal notice — used by the
     delivery-completeness gate to explain why an approve did NOT deliver."""
     extra = f"&gate={flag}" if (flag or "").strip() else ""
-    if (r or "").strip():
+    if (creator or "").strip():
+        # A creator posting from THE room (ADR-0068). Sending them to the client portal
+        # with an empty ?k= landed them on a 404 — the redirect ejected the very callers
+        # the route had just been taught to accept.
+        url = f"/room/{project_id}?t={creator}{extra}#p{project_id}"
+    elif (r or "").strip():
         url = f"/project/{project_id}/delivery-portal?r={r}{extra}#review"
-    else:
+    elif (k or "").strip():
         url = f"/project/{project_id}/delivery-portal?k={k}{extra}#review"
+    else:
+        url = f"/room/{project_id}{extra}#p{project_id}"      # the studio, on its session
     resp = RedirectResponse(url, status_code=303)
     # Only remember a *guest's* self-typed identity in the cookie — a verified
     # reviewer's identity lives on the roster, not the device.
@@ -1856,6 +1863,7 @@ def review_comment(
     request: Request, project_id: int, k: str = Form(""), author: str = Form(""),
     email: str = Form(""), t: str = Form(""), body: str = Form(""),
     parent_id: str = Form(""), r: str = Form(""), t_end: str = Form(""),
+    creator_token: str = Form(""),
 ):
     """A timecoded comment pinned to the version under review (Frame.io-style).
 
@@ -1867,13 +1875,38 @@ def review_comment(
     a reply answers its parent so it carries no timecode of its own."""
     conn = db.connect()
     try:
-        ok, reviewer = _access_ok(conn, project_id, k, r)
-        if not ok:
-            return HTMLResponse("Not found", status_code=404)
-        if reviewer is not None:
-            name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
+        # THE room posts here too (ADR-0068): a creator on their portal token, or the
+        # studio on its session. Their identity is known — a creator IS a talent row and
+        # the studio is the studio — so neither is asked to type a name into a box for
+        # people who already know who they are.
+        room_name = room_mail = ""
+        if creator_token:
+            trow = db.get_talent_by_portal_token(conn, creator_token)
+            assigned = trow is not None and any(
+                int(a["talent_id"] or 0) == int(trow["id"])
+                for a in db.list_assignments(conn, project_id))
+            if not assigned:
+                return HTMLResponse("Not found", status_code=404)
+            room_name = (trow["name"] or "Creator")
+            room_mail = (trow["email"] or "") or f"creator+{trow['id']}@chordential.local"
+        elif not (k or r):
+            # No token at all. This path is gate-exempt for the client's sake, so the
+            # tokenless arm has to prove itself rather than be assumed to be the studio.
+            if not _admin_authed(request):
+                return HTMLResponse("Not found", status_code=404)
+            from . import meeting_scheduler as _ms
+            room_name, room_mail = "Studio", (_ms._operator_email()
+                                              or "studio@chordential.local")
+        if room_name:
+            reviewer, name, mail = None, room_name, room_mail
         else:
-            name, mail = _reviewer_identity(request, author, email)
+            ok, reviewer = _access_ok(conn, project_id, k, r)
+            if not ok:
+                return HTMLResponse("Not found", status_code=404)
+            if reviewer is not None:
+                name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
+            else:
+                name, mail = _reviewer_identity(request, author, email)
         # Identity is required so events attribute to a real person, not free text.
         if body.strip() and name and mail:
             # A reply nests under its parent (no timecode); a top-level note carries
@@ -1933,13 +1966,15 @@ def review_comment(
             )
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail, r=r)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r,
+                            creator=creator_token)
 
 
 _PRESENCE_TTL = 90            # seconds; single-worker deployment, honest scope
 
 
-def _session_role(conn, project_id: int, k: str, r: str, t: str = ""):
+def _session_role(conn, project_id: int, k: str, r: str, t: str = "",
+                  request: Optional[Request] = None):
     """Resolve the caller's room role.
 
     A talent portal token → **talent**, but only for a project they are actually
@@ -1966,15 +2001,23 @@ def _session_role(conn, project_id: int, k: str, r: str, t: str = ""):
         if not ok:
             return None, ""
         return "client", ((reviewer or {}).get("name") or "Client")
+    # NO CREDENTIAL. This used to mean "the operator, because the login gate already
+    # vouched for you" — true only while every caller sat behind that gate. Two of the
+    # three do not: `session.json` and `presence` are exempt so a client and a creator
+    # can reach them, so an anonymous request was being handed the operator-audience
+    # event stream (note bodies, author names, the presence roster) and could inject a
+    # forged participant. Proving it HERE is what stops the fourth caller re-opening it.
+    if request is not None and not _admin_authed(request):
+        return None, ""
     return "operator", "Studio"
 
 
 @router.get("/project/{project_id}/session.json")
-def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = "",
-                      t: str = ""):
+def session_room_poll(request: Request, project_id: int, after: int = 0, k: str = "",
+                      r: str = "", t: str = ""):
     conn = db.connect()
     try:
-        role, _name = _session_role(conn, project_id, k, r, t)
+        role, _name = _session_role(conn, project_id, k, r, t, request)
         if role is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         events = [
@@ -1996,11 +2039,11 @@ def session_room_poll(project_id: int, after: int = 0, k: str = "", r: str = "",
 
 
 @router.post("/project/{project_id}/presence")
-def session_room_presence(project_id: int, k: str = Form(""), r: str = Form(""),
-                          t: str = Form(""), name: str = Form("")):
+def session_room_presence(request: Request, project_id: int, k: str = Form(""),
+                          r: str = Form(""), t: str = Form(""), name: str = Form("")):
     conn = db.connect()
     try:
-        role, fallback = _session_role(conn, project_id, k, r, t)
+        role, fallback = _session_role(conn, project_id, k, r, t, request)
     finally:
         conn.close()
     if role is None:
@@ -2296,9 +2339,16 @@ def review_approve(
     try:
         # Access still resolves on either token (so a stale ?k= form 404s vs no-ops
         # consistently with the other actions); the *approve gate* is stricter below.
-        ok, reviewer = _access_ok(conn, project_id, k, r)
-        if not ok:
-            return HTMLResponse("Not found", status_code=404)
+        if not (k or r):
+            # The studio, from THE room, on its session. `room.CAPS` grants the operator
+            # `approve`, so the button exists; without this it 404'd on every press.
+            if not _admin_authed(request):
+                return HTMLResponse("Not found", status_code=404)
+            reviewer = None
+        else:
+            ok, reviewer = _access_ok(conn, project_id, k, r)
+            if not ok:
+                return HTMLResponse("Not found", status_code=404)
         # Identity gate (ADR-0020): the client can approve from their OWN share link —
         # a captured name + email is intent enough (ESIGN/UETA-sufficient), and it's their
         # durable token. A verified reviewer link is the STRONGER path (locked roster
@@ -2331,6 +2381,14 @@ def review_reopen(request: Request, project_id: int, k: str = Form(""), r: str =
             ok, _rev = _access_ok(conn, project_id, k, r)
             if not ok:
                 return HTMLResponse("Not found", status_code=404)
+        elif not _admin_authed(request):
+            # No token at all. `reopen` is in `_REVIEW_ACTIONS`, so this path is EXEMPT
+            # from the admin gate for the client's sake — which meant "no credential"
+            # was read as "the studio". An anonymous POST cleared the creative lock,
+            # un-shipped a Delivered package and revoked a paid client's download, and
+            # logged itself as "Studio". A gate exemption is only ever granted to a route
+            # that makes its own stricter check; this route was not making one.
+            return HTMLResponse("Not found", status_code=404)
         row = db.get_project(conn, project_id)
         if row is None:
             return HTMLResponse("Project not found", status_code=404)
@@ -2521,17 +2579,29 @@ def _notify_client_new_version(email: str, name: str, campaign: str, label: str,
 def review_changes(
     request: Request, project_id: int, k: str = Form(""),
     author: str = Form(""), email: str = Form(""), note: str = Form(""),
-    r: str = Form(""),
+    r: str = Form(""), body: str = Form(""),
 ):
     """The agency requests changes — logs the request and bumps the revision count.
+
+    ``body`` is the room's field name and ``note`` the portal's. Reading only ``note``
+    meant a change request raised in the room logged "Requested changes.", notified with
+    an empty note, and STILL incremented the round counter: a round spent with no record
+    of what was asked for. Accept both; the one that carries words wins.
     Accepts a share token (``k``, guest) or a verified reviewer token (``r``);
     requires a complete identity (name + email) so the request is attributable."""
     conn = db.connect()
     name, mail = "", ""
     try:
-        ok, reviewer = _access_ok(conn, project_id, k, r)
-        if not ok:
-            return HTMLResponse("Not found", status_code=404)
+        if not (k or r):
+            # The studio, from THE room, on its session. `room.CAPS` grants the operator
+            # `approve`, so the button exists; without this it 404'd on every press.
+            if not _admin_authed(request):
+                return HTMLResponse("Not found", status_code=404)
+            reviewer = None
+        else:
+            ok, reviewer = _access_ok(conn, project_id, k, r)
+            if not ok:
+                return HTMLResponse("Not found", status_code=404)
         if reviewer is not None:
             name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
         else:
@@ -2540,7 +2610,10 @@ def review_changes(
             return _review_redirect(project_id, k, name=name, email=mail, r=r)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
-        note_text = note.strip() or "Requested changes."
+        # `body` is the room's field name, `note` the portal's — whichever carries
+        # words wins. Reading only `note` burned a revision round and recorded
+        # nothing the client said.
+        note_text = (note or "").strip() or (body or "").strip() or "Requested changes."
         db.add_review_comment(
             conn, project_id, version=_current_version_tag(delivery),
             author=name, email=mail, body=note_text, kind="change_request",
