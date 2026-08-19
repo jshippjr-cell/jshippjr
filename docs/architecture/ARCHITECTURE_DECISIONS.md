@@ -1664,6 +1664,46 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0074 — A deliverable lane holds a folder, and the hand-off starts with the master
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
+Source: `creator_routes.creator_submit_deliverable`, `creator_routes._room_fields`,
+`delivery_ops._approve_version_core`, `tests/test_a_stem_package_is_not_a_file.py`
+
+**Decision.** (1) A scoped deliverable is a LANE, not a file. Each lane accepts many
+files, in as many batches as it takes, and stays open for the life of the delivery; the
+row reports how many are in it. One press sends every lane that has files queued. A file
+that fails to read is skipped and the rest of the batch still lands — the response reports
+what actually persisted.
+
+(2) The APPROVED MASTER is downloadable from the room by anyone holding `download_source`
+(operator + talent), and `room_view` removes it for the client. The creative-approval
+email names the locked version, lists what is still owed and to what spec, and carries
+each creator's own room link.
+
+**Why.** *"The mix ready stems, cues, cuts, mixes are going to be multiple files because
+they're stems. so each lane will need to be able to house multiple files."* The lane took
+one upload and then closed itself, so a twelve-stem package was a row reading "with the
+studio · under review" with one stem in it and nowhere to put the other eleven.
+
+And: *"if i had individual people assuming the individual role its at this point where
+they will be invited to download the composer's approved final version and mix it … i
+want to make sure that has been built."* Most of it was — per-role assignment, a room and
+token each, the uniform publish gate on every deliverable, per-asset client sign-off, and
+delivery that ships only when all of it is approved. What did not exist is the first step:
+the room knew which version was approved and offered no way to get it, so a mixer was
+being asked to mix something they could only stream.
+
+**Consequences.** `pending_assets` may hold many entries under one label; anything
+counting deliverables counts FILES, not lanes, and `pending`/`uploaded` booleans are kept
+beside the counts rather than replaced. The source master is `download_source`-gated
+everywhere: a client receives what they signed off, in the package, once it is paid for.
+
+**Not built, deliberately:** lanes are not scoped to a ROLE. Every assigned creator sees
+every lane, because nothing in the data says which role owes which deliverable —
+`scoped_deliverables` groups by asset category (Masters, Cutdowns, Social verticals,
+Production assets), not by who makes it. Inventing that mapping is a product decision, not
+a refactor; until it is taken, the mixer sees the editor's cutdown lane and vice versa.
+
 ### ADR-0073 — The room speaks to whoever is in it
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068 ·
 Source: `creator_portal.html` (the `voice` variable),

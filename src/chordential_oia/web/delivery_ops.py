@@ -19,8 +19,8 @@ from typing import Optional
 
 from .. import mailer
 from ..delivery import (
-    build_delivery_zip, current_version, delivery_completeness, state_on_client_approved,
-    version_label, versions_list,
+    build_delivery_zip, current_version, delivery_completeness, scoped_deliverables,
+    state_on_client_approved, version_label, versions_list,
 )
 from ..storage import get_object_store
 from . import db, production, signals, webpush
@@ -308,10 +308,25 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
         project_id, project, title=f"{_campaign_label(project)} · creative approved by {name}",
         body=f"v{approved_n} creative approved.{remaining}")
     campaign = _campaign_label(project)
+    # THE HAND-OFF. Creative approval is the moment the mixer and the music editor are
+    # up: they work FROM the approved master, and until now this email thanked everyone
+    # and told them we would handle it. It names the version, names what is owed and to
+    # what spec, and `_notify_assigned_creators` appends each person's own room link —
+    # where the master is now downloadable.
+    owed = [d for d in scoped_deliverables(project, db.get_delivery(conn, project_id))
+            if not d.get("is_master") and not d.get("uploaded")]
+    lines = "\n".join(
+        f"  · {d['asset']}" + (f" — {d['spec']}" if d.get("spec") else "") for d in owed)
     signals.fire_and_forget(
         _notify_assigned_creators, project_id, project, subject=f"Creative approved · {campaign}",
-        body_text=(f"Good news: the client approved the creative on {campaign}. Thank you. "
-                   "We'll finish preparing the deliverables for sign-off."))
+        body_text=(
+            f"The client approved the creative on {campaign} — thank you.\n\n"
+            f"That locks v{approved_n} as the master, and it is the file everything else "
+            "is made from. Your room has it to download.\n\n"
+            + (f"Still owed:\n{lines}\n\n" if lines else "")
+            + "Upload each into its own lane — a lane takes as many files as it needs, so "
+              "a stem package can arrive whole. Everything lands with the studio for "
+              "review first; we publish it to the client for sign-off."))
     return approved_n
 
 

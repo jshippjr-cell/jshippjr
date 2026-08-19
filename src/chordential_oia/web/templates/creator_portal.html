@@ -483,6 +483,13 @@
   .progress i{display:block;height:100%;width:0;background:var(--orange);transition:width .2s linear}
   .ok-line{color:var(--text);font-weight:700;font-size:11px;border:1px solid var(--hair2);border-radius:4px;padding:3px 8px}
   .deliv-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--hair)}
+  .lane-count{white-space:nowrap}
+  /* The file the rest of the work is made from. */
+  .work-from{margin:0 0 8px;padding:8px 11px;border:1px solid rgba(240,119,44,.35);
+    border-radius:9px;background:var(--orange-soft)}
+  .work-from b{color:var(--text)}
+  .deliv-all{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;
+    padding-top:10px;border-top:1px solid var(--hair)}
   .deliv-row span.what{flex:1 1 180px;font-size:12.5px}
   .deliv-row .spec{font:10.5px var(--mono);color:var(--dim2)}
 
@@ -1246,24 +1253,44 @@
 
     {% if a.creative_lock %}
     <h3>✓ Master approved. Now deliver the remaining assets</h3>
-    <p class="fineprint" style="margin:0 0 6px">Upload each below. It lands with the studio for review first, then we publish it to the client for sign-off.</p>
+    {# THE FILE THE REST OF THE WORK IS MADE FROM. A mixer or an editor is invited at
+       exactly this moment — to mix the approved master, or cut it to :30 and :15 — and
+       the room, which knows which version is approved, gave them no way to get it. Only
+       for a hand that may hold the source (`room.CAPS`). #}
+    {% if a.master and a.master.url and 'download_source' in (caps|default(['download_source'])) %}
+    <p class="fineprint work-from">Work from <b>{{ a.master.label or 'the approved master' }}</b> —
+      <a href="{{ a.master.url }}" download="{{ a.master.name or a.master.filename or 'master' }}"
+         style="color:var(--orange)">⇓ download the approved master</a></p>
+    {% endif %}
+    <p class="fineprint" style="margin:0 0 6px">Upload each below — a lane takes as many
+      files as it needs, so a stem package arrives whole. Everything lands with the studio
+      for review first, then we publish it to the client for sign-off.</p>
     {% for d in a.deliverables %}
     <div class="deliv-row">
       <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
-      {% if d.uploaded %}
+      {% if d.published_n %}
+      <span class="ok-line">✓ Delivered{% if d.published_n > 1 %} · {{ d.published_n }} files{% endif %}</span>
+      {% elif d.uploaded %}
       <span class="ok-line">✓ Delivered</span>
-      {% elif d.pending %}
-      <span class="pend-badge">With the studio · under review</span>
-      {% else %}
+      {% endif %}
+      {% if d.pending_n %}
+      <span class="pend-badge lane-count">{{ d.pending_n }} file{{ 's' if d.pending_n != 1 }} with the studio · under review</span>
+      {% endif %}
+      {# The lane STAYS OPEN. It used to close on the first file, so a twelve-stem package
+         was a row reading "under review" with one stem in it and nowhere to put the rest. #}
       <form class="deliv-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/deliverable"
             enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0">
         <input type="hidden" name="label" value="{{ d.asset }}">
-        <input type="file" name="file" required style="font-size:11.5px;max-width:180px">
-        <button class="btn tiny" type="submit">Upload</button>
+        <input type="file" name="file" multiple required style="font-size:11.5px;max-width:180px">
+        <button class="btn tiny" type="submit">{{ 'Add more' if (d.pending_n or d.uploaded) else 'Upload' }}</button>
       </form>
-      {% endif %}
     </div>
     {% endfor %}
+    {# …or fill several lanes and send them together. #}
+    <div class="deliv-all">
+      <button class="btn tiny" type="button" id="deliv-all">⇪ Upload every lane you've filled</button>
+      <span class="fineprint deliv-all-note"></span>
+    </div>
     {% if not a.deliverables %}<p class="fineprint">No additional deliverables scoped. The master completes this delivery.</p>{% endif %}
     {% if 'upload_take' in (caps|default(['upload_take'])) %}
     <details style="margin-top:14px">
@@ -2718,6 +2745,32 @@
       });
     });
   });
+
+  /* …and one press for everything you have queued up. Filling four lanes and pressing
+     four buttons is four chances to think you pressed the fourth. The forms already
+     upload independently and in series, so this is the same path fired for every lane
+     that has files in it. */
+  (function(){
+    var all = document.getElementById("deliv-all");
+    if (!all) return;
+    var note = document.querySelector(".deliv-all-note");
+    all.addEventListener("click", function(){
+      var ready = Array.prototype.filter.call(
+        document.querySelectorAll("form.deliv-form"), function(f){
+          var i = f.querySelector("input[type=file]");
+          return i && i.files && i.files.length;
+        });
+      if (!ready.length){
+        if (note) note.textContent = "Choose files in a lane first — nothing is queued.";
+        return;
+      }
+      if (note) note.textContent = "Sending " + ready.length + " lane"
+        + (ready.length === 1 ? "" : "s") + "…";
+      ready.forEach(function(f){
+        f.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    });
+  })();
 
   // ── Arrival (Phase 4 §Act 1): house-lights-up, once per engagement ──
   (function(){

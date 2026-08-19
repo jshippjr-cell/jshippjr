@@ -20,7 +20,7 @@ approves, never releases, never sets a price.
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -204,16 +204,25 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     # Scoped deliverables + specs are DAY-ONE knowledge (composer review P1-8:
     # "I bounce to spec from take one if you tell me on day one"), not a
     # post-approval surprise. Pending = submitted, with the studio (EP P0-3).
-    pending_labels = {(x.get("label") or "").strip().lower()
-                      for x in (delivery.get("pending_assets") or [])}
+    # HOW MANY files are in each lane, not merely whether any are. A stem package is a
+    # folder; a lane that could only say "something is in here" closed itself after the
+    # first file and left no way to add the rest (reported live, 2026-08-19).
+    from collections import Counter
+    pending_n = Counter((x.get("label") or "").strip().lower()
+                        for x in (delivery.get("pending_assets") or []))
+    published_n = Counter((a.get("label") or a.get("filename") or "").strip().lower()
+                          for a in (delivery.get("assets") or []))
     deliverables = []
     for d in scoped_deliverables(prow, delivery):
         if d.get("is_master"):
             continue
+        key = (d["asset"] or "").strip().lower()
         deliverables.append({
             "asset": d["asset"], "group": d["group"],
             "spec": d.get("spec", ""), "uploaded": bool(d.get("uploaded")),
-            "pending": (d["asset"] or "").strip().lower() in pending_labels,
+            "pending": bool(pending_n.get(key)),
+            "pending_n": pending_n.get(key, 0),
+            "published_n": published_n.get(key, 0),
         })
     return {
         "project_id": project_id,
@@ -240,6 +249,13 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
                     if delivery.get("pending_version") else None),
         "feedback": _creator_feedback(conn, project_id, delivery),
         "creative_lock": locked,
+        # THE APPROVED MASTER, as a file. A mixer or a music editor is invited at exactly
+        # this moment and has to work from it — and the room, which knows which version is
+        # approved, offered no way to get it. They were being asked to mix something they
+        # could only stream (reported live, 2026-08-19). Only for a hand that may have the
+        # source (`download_source`); `room.room_view` subtracts it from the client, who
+        # gets their files through the delivery package.
+        "master": (versions_list(delivery)[-1] if versions_list(delivery) else None),
         "deliverables": deliverables,
         # The room's Brief layer renders the REAL creative brief (the same
         # effective brief the console shows), not a restatement of the title.
@@ -774,12 +790,18 @@ async def creator_submit_version(
 @router.post("/creator/{token}/project/{project_id}/deliverable")
 async def creator_submit_deliverable(
     request: Request, token: str, project_id: int, label: str = Form(""),
-    file: Optional[UploadFile] = File(None),
+    file: Optional[List[UploadFile]] = File(None),
 ):
-    """A creator uploads a scoped DELIVERABLE (instrumental / TV mix, cutdowns, verticals,
-    stems) AFTER the master is approved. Lands in ``delivery_json['assets']`` under its
-    label so the client can sign it off, and pings the operator. Mirrors the operator
-    Assets-agent storage; guarded by a valid portal token AND an assignment to the project.
+    """A creator uploads scoped DELIVERABLES (instrumental / TV mix, cutdowns, verticals,
+    stems) AFTER the master is approved. They land in ``delivery_json['pending_assets']``
+    under the lane's label so the studio can vet them, and ping the operator. Guarded by a
+    valid portal token AND an assignment to the project.
+
+    MANY FILES PER LANE. A stem package is not a file, it is a folder — and the lane took
+    one upload and then closed itself, so the row read "with the studio · under review"
+    with a single stem in it and no way to add the other eleven (reported live,
+    2026-08-19). Each file lands as its own asset under the same label; a lane stays open
+    for as long as the delivery does, so they can arrive together or over three days.
 
     Returns an HONEST result: for an AJAX upload (``X-Requested-With`` header) it returns
     JSON ``{ok, count}`` reflecting what actually persisted, so the portal only marks a row
@@ -802,40 +824,53 @@ async def creator_submit_deliverable(
             return _fail("not found", 404)
         if not db.talent_is_assigned(conn, row["id"], project_id):
             return _fail("not assigned", 403)
-        if file is None or not (file.filename or "").strip():
+        uploads_in = [f for f in (file or []) if f is not None and (f.filename or "").strip()]
+        if not uploads_in:
             return _fail("no file", 400)
         who = row["name"]
-        ext = os.path.splitext(file.filename)[1].lower()
-        ctype = (file.content_type or "").lower()
-        kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
-        data = await _read_capped(file, _SUBMISSION_MAX_BYTES)
-        if not data:                              # empty OR over cap — never buffer unbounded
-            return _fail("file missing or too large", 400)
-        # Collision-proof on-disk name (random suffix) so nothing can overwrite another
-        # upload's file — no counter to race on.
-        safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
-        safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
-        _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)  # ADR-0026
-        delivery = db.get_delivery(conn, project_id)
-        # EP review P0-3: deliverables get the SAME studio gate as the master.
-        # The upload lands PENDING — the studio vets and publishes it before the
-        # client can ever see it (uniform publish gate, stems included).
         from datetime import datetime as _dt, timezone as _tz
+        delivery = db.get_delivery(conn, project_id)
         pending = list(delivery.get("pending_assets") or [])
-        deliverable = (label.strip() or file.filename)
-        pending.append({"label": deliverable, "url": f"/uploads/{safe_name}",
-                        "filename": safe_name, "orig": file.filename,
-                        "kind": kind, "by": who,
-                        "at": _dt.now(_tz.utc).isoformat()})
+        deliverable = (label.strip() or uploads_in[0].filename)
+        names = []
+        for up in uploads_in:
+            ext = os.path.splitext(up.filename)[1].lower()
+            ctype = (up.content_type or "").lower()
+            kind = "audio" if (ext in _AUDIO_EXTS or ctype.startswith("audio/")) else "file"
+            data = await _read_capped(up, _SUBMISSION_MAX_BYTES)
+            if not data:            # empty OR over cap — never buffer unbounded
+                continue            # one bad file in twelve must not lose the other eleven
+            # Collision-proof on-disk name (random suffix) so nothing can overwrite
+            # another upload's file — no counter to race on.
+            safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
+            safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
+            _persist_upload(conn, safe_name, data,
+                            mirror=len(data) <= _CUT_MIRROR_BYTES)   # ADR-0026
+            # EP review P0-3: deliverables get the SAME studio gate as the master. The
+            # upload lands PENDING — the studio vets and publishes it before the client
+            # can ever see it (uniform publish gate, stems included).
+            pending.append({"label": deliverable, "url": f"/uploads/{safe_name}",
+                            "filename": safe_name, "orig": up.filename,
+                            "kind": kind, "by": who,
+                            "at": _dt.now(_tz.utc).isoformat()})
+            names.append(safe_name)
+        if not names:
+            return _fail("file missing or too large", 400)
         db.update_delivery(conn, project_id, "pending_assets", pending)
-        # CONFIRM it actually persisted before telling the composer it landed.
+        # CONFIRM they actually persisted before telling the composer they landed. A
+        # partial save is reported as a partial save.
         stored = db.get_delivery(conn, project_id).get("pending_assets") or []
-        landed = any(a.get("filename") == safe_name for a in stored)
-        count = len(stored)
+        stored_names = {a.get("filename") for a in stored}
+        added = sum(1 for n in names if n in stored_names)
+        landed = added > 0
+        count = sum(1 for a in stored
+                    if (a.get("label") or "").strip().lower() == deliverable.strip().lower())
         prow = db.get_project(conn, project_id)
         campaign = (prow["need"] if prow is not None else "") or "Campaign"
-        db.add_update(conn, project_id,
-                      f"{who} submitted '{deliverable}' · with the studio for review.")
+        db.add_update(
+            conn, project_id,
+            f"{who} submitted {added} file{'s' if added != 1 else ''} for "
+            f"'{deliverable}' · with the studio for review.")
     finally:
         conn.close()
     if not landed:
@@ -844,5 +879,8 @@ async def creator_submit_deliverable(
         _notify_operator_review, project_id, None, f"Deliverable submitted · {campaign}",
         f"{who} submitted a deliverable. Vet it in the delivery console, then publish.")
     if xhr:
-        return JSONResponse({"ok": True, "label": deliverable, "count": count})
+        # `count` is what is now in THIS LANE, so the row can say "3 files with the
+        # studio" rather than a running total of everything ever submitted.
+        return JSONResponse({"ok": True, "label": deliverable,
+                             "added": added, "count": count})
     return RedirectResponse(f"/creator/{token}#p{project_id}", status_code=303)

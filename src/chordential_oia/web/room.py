@@ -170,6 +170,10 @@ def room_view(conn, db, project_id: int, role: str, *,
         room["captures"] = []
     if "see_deliverable_specs" not in allowed:
         room["deliverables"] = []
+    if "download_source" not in allowed:
+        # The source master is the working file, not the deliverable. A client receives
+        # what they signed off, in the package, once it is paid for.
+        room["master"] = None
     if role == TALENT:
         # A creator is handed only what has been priced (ADR-0069).
         room["feedback"] = priced_notes_only(room.get("feedback") or {})

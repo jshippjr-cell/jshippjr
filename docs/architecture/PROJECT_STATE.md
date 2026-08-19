@@ -94,6 +94,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A deliverable lane holds a folder** (ADR-0074, 2026-08-19). A lane took one file and
+  closed itself, so a twelve-stem package was a row reading "under review" with one stem
+  in it. Lanes now take many files, in as many batches as it takes, stay open, and report
+  their count; one press sends every filled lane. And the **approved master is
+  downloadable from the room** for anyone with `download_source` — the missing first step
+  of the hand-off, since a mixer was being asked to mix a version they could only stream.
+  The creative-approval email now names the locked version and what is still owed.
+  **Still open:** lanes are not scoped to a role — every creator sees every lane, because
+  nothing in the data says which role owes which deliverable.
+
 - **The room spoke in one voice to three audiences** (ADR-0073, 2026-08-19). A client
   opening their own cut was told *"The room is current. Write."* — a line written for the
   composer, and an imperative even for them. Copy is `voice`-gated now (operator / talent
