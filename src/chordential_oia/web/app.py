@@ -383,7 +383,7 @@ _DELIVERY_PORTAL_RE = re.compile(r"^/project/\d+/delivery-portal/?$")
 # were added without updating the matcher, bouncing clients to the admin login). When
 # you add a review action, add it here — and it MUST token-validate in-route.
 _REVIEW_ACTIONS = ("comment", "approve", "changes", "resolve", "asset", "reopen",
-                   "picture", "reference", "assets")
+                   "picture", "reference", "assets", "address")
 _REVIEW_ACTION_RE = re.compile(
     r"^/project/\d+/review/(?:" + "|".join(_REVIEW_ACTIONS) + r")/?$")
 # Payment-gated deliverable download — opened from the token-gated portal; the route

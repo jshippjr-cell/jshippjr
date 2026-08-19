@@ -237,7 +237,10 @@ def test_the_router_carries_the_whole_group():
     ("opportunity_routes.py", "/opportunity", 65),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post)
-    ("project_routes.py", "/project", 65),
+    # +1: /project/{id}/review/address — marking a note addressed moved off the
+    # creator portal's door, because the room serves three roles and only one of them
+    # holds a creator token (see test_addressed_is_ours_not_theirs.py).
+    ("project_routes.py", "/project", 66),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -297,8 +300,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 285, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 285 — "
+    assert len(decls) == 286, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 286 — "
         f"a slice lost or gained a URL")
 
 

@@ -104,13 +104,16 @@ a{color:inherit;text-decoration:none}
 /* layout */
 .shell{display:flex;min-height:100vh}
 .sidebar{
-  width:250px;flex-shrink:0;
+  width:272px;flex-shrink:0;
   background:linear-gradient(180deg,#262322,#1F1E1E 60%,#191817);
   color:#E9E3D6;
   border-right:1px solid #2c2826;padding:22px 14px;position:sticky;top:0;height:100vh;
   display:flex;flex-direction:column;gap:6px;
 }
-.brand{display:block;padding:8px 10px 2px}
+/* The mark fills the rail. It was inset 10px a side inside a 250px sidebar already
+   padded 14px, so the wordmark rendered ~200px wide and read as a label rather than
+   the mark (operator, 2026-08-19). The rail widened with it so the nav still breathes. */
+.brand{display:block;padding:10px 2px 4px}
 .brand-plate{display:block}
 .brand-plate img{display:block;width:100%;height:auto}
 .brand-tag{padding:8px 10px 18px;font-size:10.5px;color:#9d9a8e;text-transform:uppercase;letter-spacing:1.6px}
@@ -767,7 +770,7 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
   /* brand + hamburger on one row; nav collapses into a dropdown */
   .side-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 4px}
   .brand{padding:0}
-  .brand-plate img{width:auto;height:24px}
+  .brand-plate img{width:auto;height:31px}
   .sidebar-burger{
     display:inline-flex;align-items:center;justify-content:center;width:44px;height:40px;
     border-radius:9px;color:#E9E3D6;font-size:20px;line-height:1;cursor:pointer;

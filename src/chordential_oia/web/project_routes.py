@@ -2386,6 +2386,44 @@ def review_resolve(
     return _review_redirect(project_id, k, name=name, email=mail, r=r)
 
 
+@router.post("/project/{project_id}/review/address")
+def review_address(
+    request: Request, project_id: int, comment_id: str = Form(""),
+    k: str = Form(""), r: str = Form(""), t: str = Form(""),
+):
+    """Mark a note ADDRESSED — or reopen it. Our side's working state, never the
+    client's.
+
+    "Addressed" says *this note has been dealt with in the take I am about to submit*.
+    It is deliberately not the client's `resolved` flag (EP P0-1): a buyer must never
+    see their note flip to resolved because we worked on it — only because they said so,
+    after hearing the take.
+
+    The room reached this through `/creator/{token}/…`, which meant the STUDIO'S copy of
+    the room — and the client's — rendered `/creator//…` with an empty token and every
+    press failed ("Couldn't update the note. Try again.", reported live). The state
+    belongs to the room, so the door is the room's: whichever credential got you in
+    (`?t=`, `?k=`, `?r=`, or an admin session) is the one that works here, and
+    `room.CAPS` decides whether your role may press it at all. A client may not: they
+    hold `resolved`, and pressing ours would let them close a note nobody had worked.
+    """
+    conn = db.connect()
+    try:
+        role, _who = _session_role(conn, project_id, k, r, t, request)
+        if role is None or not room.can(role, "address_note"):
+            return HTMLResponse("Not found", status_code=404)
+        if not str(comment_id).strip().isdigit():
+            return HTMLResponse("No such note", status_code=404)
+        row = db.get_review_comment(conn, int(comment_id))
+        if row is None or row["project_id"] != project_id:
+            return HTMLResponse("No such note", status_code=404)
+        db.toggle_comment_addressed(conn, project_id, int(comment_id))
+    finally:
+        conn.close()
+    cred = f"?t={t}" if t else (f"?k={k}" if k else (f"?r={r}" if r else ""))
+    return RedirectResponse(f"/room/{project_id}{cred}#p{project_id}", status_code=303)
+
+
 @router.post("/project/{project_id}/review/approve")
 def review_approve(
     request: Request, project_id: int, k: str = Form(""),

@@ -48,16 +48,22 @@ CAPS = {
         # under clause 6A, and the control belongs where the obligation is. The studio
         # still sees who is outstanding — on the delivery console, where the clearance
         # certificate is signed.
+        # NOT `upload_take`. Submitting a take is the CREATOR's channel and its door is
+        # the creator's token — rendered in the studio's room it produced
+        # `/creator//project/N/version`, an upload that could only fail. The studio's own
+        # path to the ladder is the delivery console, which is where publishing happens
+        # anyway; a second one here would be a second way to do one thing, through a
+        # door the studio does not hold.
         "see_pending", "see_internal", "see_captures",
-        "see_deliverable_specs", "see_money", "upload_take", "comment",
-        "download_source", "publish", "see_who",
+        "see_deliverable_specs", "see_money", "comment",
+        "download_source", "publish", "see_who", "address_note",
     },
     TALENT: {
         # Their own pending submission — they uploaded it; hiding it made the portal
         # look like nothing had happened (reported live, and fixed once already).
         "see_pending", "see_internal", "see_contributors", "see_captures",
         "see_deliverable_specs", "upload_take", "comment", "download_source",
-        "see_who",
+        "see_who", "address_note", "ask_studio", "capture",
     },
     CLIENT: {
         # PUBLISHED VERSIONS ONLY. A client who can hear an unreviewed take makes the
@@ -73,6 +79,12 @@ CAPS = {
         # freelancer said it, nor that a freelancer exists. The exec review made this
         # the condition on putting the room in front of a real client, and they were
         # right: the roster is the business, and it walks out of the door with the name.
+        # No `address_note`: "addressed" is OUR working state — this note is dealt with
+        # in the take being submitted. The buyer holds `resolved`, which they set after
+        # HEARING the take. One button that closes a note nobody has worked yet, sitting
+        # on the buyer's own screen, is how a round gets spent on nothing.
+        # No `ask_studio` either: the talk-back channel is composer↔studio and internal
+        # by definition — a client asking the studio just leaves a note.
         "comment", "client_verdict",
     },
 }

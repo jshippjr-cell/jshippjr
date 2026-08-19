@@ -103,7 +103,10 @@
      was the one place drawing the logo out of a serif face and a coloured <b>, which is
      a different mark to anyone who knows the one they paid for. Knockout, because this
      room is dark. */
-  .wordmark{display:block;height:17px;width:auto}
+  /* 17px was a caption. The room is the surface a client and a composer spend an
+     hour in, and the mark on it should carry the weight of the one they paid for
+     (operator, 2026-08-19). Sized to sit level with the role badge beside it. */
+  .wordmark{display:block;height:30px;width:auto}
   /* Presence faces — initials on a colour derived from the name, so one person is the
      same colour on every screen with nothing stored anywhere. */
   .sr-faces{display:inline-flex;align-items:center}
@@ -968,18 +971,38 @@
         {% if n.t is not none %}
         <button type="button" class="nc-jump sr-jump" data-t="{{ n.t }}">▶ Play this moment</button>
         {% endif %}
-        {% if n.kind == 'change_request' or not n.resolved %}
-        <form method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/note/{{ n.id }}/address" style="margin:0">
+        {# "Addressed" is OUR state — this note is dealt with in the take being
+           submitted — and it goes through the ROOM's door, not the creator portal's.
+           It used to post to /creator/{{ '{token}' }}/…, so the studio's copy of the room and
+           the client's rendered an EMPTY token and every press failed. Reported live.
+           A client never sees it at all: they hold `resolved`, which they set after
+           hearing the take (room.CAPS). #}
+        {% if (n.kind == 'change_request' or not n.resolved)
+              and 'address_note' in (caps|default(['address_note'])) %}
+        <form method="post" action="/project/{{ a.project_id }}/review/address" style="margin:0">
+          <input type="hidden" name="comment_id" value="{{ n.id }}">
+          <input type="hidden" name="t" value="{{ room_token_kind|default('t') == 't' and room_token or '' }}">
+          <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+          <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
           <button type="submit" class="nc-addr">{{ 'Reopen' if n.addressed else '✓ Mark addressed' }}</button>
         </form>
         {% endif %}
+        {# The talk-back channel is composer↔studio and internal by definition. #}
+        {% if 'ask_studio' in (caps|default(['ask_studio'])) %}
         <button type="button" class="nc-addr sr-ask" data-note="{{ n.id }}">Ask the studio</button>
+        {% endif %}
       </div>
+      {# The FORM goes with its button. Left ungated it rendered `/creator//…` in the
+         studio's room and the client's — the same empty-token defect, one element
+         lower — and put a "goes to the studio, never the client" box on the client's
+         own screen. `ask_studio` is talent-only, so the token here is always real. #}
+      {% if 'ask_studio' in (caps|default(['ask_studio'])) %}
       <form class="ask-form" method="post" hidden
             action="/creator/{{ token }}/project/{{ a.project_id }}/note/{{ n.id }}/reply">
         <input type="text" name="body" maxlength="600" placeholder="Your question or read on this note. Goes to the studio, never the client">
         <button class="btn tiny" type="submit">Send to the studio</button>
       </form>
+      {% endif %}
     </div>
     {% endfor %}
     {% else %}
@@ -996,10 +1019,17 @@
          never the client's (spec: "never visible to the client"). -->
     <div class="shelf" data-project="{{ a.project_id }}">
       <h3 style="margin-top:0">Capture <span class="fineprint">· yours alone, never the client's</span></h3>
+      {# WRITING to the shelf is the composer's — the studio may read it (`see_captures`,
+         so a jotted motif is not lost when the composer is asleep) and has no business
+         adding to someone else's notebook. It also posted `/creator/{{ '{token}' }}/…`, which
+         in the studio's room is an empty token: the same broken door as Mark addressed,
+         one sheet over. #}
+      {% if 'capture' in (caps|default(['capture'])) %}
       <form class="shelf-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/capture">
         <input type="text" name="text" maxlength="600" placeholder="Hum a motif at 2am? Jot it here: timestamped, just for you and the studio." autocomplete="off">
         <button class="btn tiny" type="submit">Keep</button>
       </form>
+      {% endif %}
       <div class="shelf-list">
         {% for cap in a.captures %}
         <div class="shelf-item"><span class="fineprint mono">{{ cap.at[:16]|replace('T',' ') }}</span> {{ cap.text }}</div>
@@ -1179,7 +1209,7 @@
 <div class="sr-arrival" id="sr-arrival" hidden>
   <div class="sr-arrival-sub">
     <img src="/static/public/wordmark-ko.png" alt="Chordential"
-         style="height:15px;width:auto;display:inline-block;vertical-align:-2px;margin-right:9px">
+         style="height:23px;width:auto;display:inline-block;vertical-align:-4px;margin-right:11px">
     Session Room</div>
   <div class="sr-arrival-line">Everything is ready.<br>This room is waiting for your music.</div>
   <button class="sr-begin" type="button" id="sr-begin">Begin</button>

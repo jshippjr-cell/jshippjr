@@ -333,6 +333,13 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
         assignments = [a for a in assignments if a["project_id"] == p] or all_rooms
     return render(
         request, "creator_portal.html", nav="", token=token, t=t,
+        # THE ROOM'S CREDENTIAL, on the composer's own door too. The template posts
+        # every room action with `room_token`, and this page never set it — so the note
+        # bar submitted an empty creator token, the route read that as "no credential",
+        # and a composer writing a note from their own portal had it dropped with
+        # "That note did not send". One name for the credential, set wherever the room
+        # renders.
+        room_token=token, room_token_kind="t",
         completeness=profile_completeness(t), assignments=assignments,
         all_rooms=all_rooms, focused=p, contributors=contributors,
         contributor_roles=contributor_release.ROLES,
