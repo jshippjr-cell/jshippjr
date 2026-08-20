@@ -194,23 +194,34 @@ def test_the_editor_is_handed_the_mix_not_just_told_about_it(crew):
         "those to find out which is the kick")
 
 
-def test_the_client_is_handed_none_of_the_working_files(crew):
+def test_the_client_is_handed_none_of_the_SOURCE_files(crew):
+    """Written when the client's room held no files at all. It holds one class of them
+    now: PUBLISHED deliverables, which are what they audition and sign off (ADR-0076).
+    What stays theirs-never is the source master the crafts work from, and anything
+    still with the studio.
+    """
     c, db, pid, toks, ktok, admin = crew
     c.post(f"/creator/{toks['mixer']}/project/{pid}/deliverable",
            data={"label": "Instrumental / TV mix"},
            files=[("file", ("tvmix.wav", io.BytesIO(b"RIFF0000WAVE" + os.urandom(40)),
+                            "audio/wav")),
+                  ("file", ("unvetted.wav", io.BytesIO(b"RIFF0000WAVE" + os.urandom(40)),
                             "audio/wav"))],
            headers={"X-Requested-With": "fetch"})
     conn = db.connect()
     pend = db.get_delivery(conn, pid)["pending_assets"]
     conn.close()
     c.cookies.set(*admin)
+    first = next(a for a in pend if a["orig"] == "tvmix.wav")
     c.post(f"/project/{pid}/delivery/asset/publish",
-           data={"filename": pend[0]["filename"], "action": "publish"},
+           data={"filename": first["filename"], "action": "publish"},
            follow_redirects=False)
     c.cookies.clear()
     page = c.get(f"/room/{pid}?k={ktok}").text
-    assert "tvmix.wav" not in page and "download the approved master" not in page
+    assert "download the approved master" not in page, "the source master reached the buyer"
+    assert "unvetted.wav" not in page, "a file still with the studio reached the buyer"
+    assert "tvmix.wav" in page, (
+        "the published deliverable is not there to sign off — which is the whole stage")
 
 
 def test_the_hand_off_email_goes_to_the_craft_that_is_up():

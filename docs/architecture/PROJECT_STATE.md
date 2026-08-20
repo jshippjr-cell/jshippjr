@@ -98,7 +98,8 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   published deliverables and the buyer's room said nothing — the sign-off half of the
   delivery stage only existed on the old portal. Now: one derivation
   (`delivery_ops.scoped_signoff`) read by console, portal and room; per-deliverable
-  Approve / Request changes; the balance and the download behind `see_invoice` (the
+  Approve / Request changes over EVERY file in a lane in one press; the balance and the
+  download behind `see_invoice` (the
   client's and the studio's, never a creator's); an approved version stops being a
   button; and vetting a stem answers in place instead of reloading the room and shutting
   the Takes sheet.

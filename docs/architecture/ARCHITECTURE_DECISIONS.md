@@ -1676,9 +1676,12 @@ Source: `delivery_ops.scoped_signoff`, `creator_routes._room_fields`,
 landed, and has the client signed it off". The delivery console, the client's portal and
 the room all read it — extracted verbatim from `_delivery_view`, which now calls it.
 
-(2) **The client's room carries the sign-off**, keyed by `sign_off_asset`: every scoped
-deliverable with Approve / Request changes on the ones delivered, "not delivered yet" on
-the ones outstanding. This is the OTHER HALF of `deliverables`, which is the lane view
+(2) **The client's room carries the sign-off**, keyed by `sign_off_asset`, IN THE ROOM
+and not inside a sheet: every scoped deliverable with Approve / Request changes on the
+ones delivered, "not delivered yet" on the ones outstanding. A lane shows EVERY file it
+holds — each auditionable and named — and one press signs off all of them, because "I
+approve the stems" is the decision a person is making, not twelve of them. A lane counts
+as approved only when every file in it is, since that rollup drives the paywall. This is the OTHER HALF of `deliverables`, which is the lane view
 (specs, craft, upload boxes) and is correctly subtracted from the buyer.
 
 (3) **`see_invoice` is the client's and the studio's**, never a creator's. What the buyer

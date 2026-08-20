@@ -289,3 +289,124 @@ def test_a_creator_is_shown_neither_the_balance_nor_the_package(stage):
     db.update_delivery(conn, pid, "delivery_zip", {"url": "/uploads/pkg.zip"})
     conn.close()
     assert "/uploads/pkg.zip" not in c.get(f"/room/{pid}?t={ttok}").text
+
+
+# ── and "below" has to mean below ───────────────────────────────────────────────────
+def test_the_sign_off_is_in_the_room_not_buried_in_a_sheet(stage):
+    """*"im in the client view and it still not show the deliverables for review, if it
+    does its misleading becasue it say sign off below"* (operator, 2026-08-19).
+
+    It was built inside the Takes sheet, beside the lanes it mirrors — so the verdict
+    said "sign each one off below" and below was nothing, two clicks away in a sheet
+    called The takes. The buyer's last action in the room is not a drawer.
+    """
+    c, db, pid, ttok, ktok, admin = stage
+    _deliver_and_publish(c, db, pid, ttok, admin)
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    sign = page.index("Sign off your deliverables")
+    for sheet in ("takes", "brief", "notes"):
+        assert sign < page.index(f'<div class="sheet sr-sheet" data-sheet="{sheet}"'), (
+            f"the sign-off is inside (or after) the {sheet} sheet")
+    assert sign > page.index("You approved"), (
+        "the verdict says 'below' and points above itself")
+
+
+def test_the_whisper_counts_the_clients_own_list(stage):
+    """It read from `a.deliverables` — the lane view, subtracted from the buyer — so it
+    always said "0 of 0 in" at the exact moment they had things to sign off."""
+    c, db, pid, ttok, ktok, admin = stage
+    _deliver_and_publish(c, db, pid, ttok, admin)
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    whisper = re.search(r'class="whisper sr-whisper">.*?<span>(.*?)</span>', page, re.S)
+    said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", whisper.group(1))).strip()
+    assert "0 of 0" not in said, said
+    assert re.search(r"1 of \d+ signed off", said), said
+
+
+# ── a lane is a folder here too ─────────────────────────────────────────────────────
+def _publish_many(c, db, pid, ttok, admin, label, names):
+    c.post(f"/creator/{ttok}/project/{pid}/deliverable", data={"label": label},
+           files=[("file", (n, io.BytesIO(b"RIFF0000WAVE" + os.urandom(40)), "audio/wav"))
+                  for n in names],
+           headers={"X-Requested-With": "fetch"})
+    conn = db.connect()
+    pend = db.get_delivery(conn, pid)["pending_assets"]
+    conn.close()
+    c.cookies.set(*admin)
+    for a in pend:
+        c.post(f"/project/{pid}/delivery/asset/publish",
+               data={"filename": a["filename"], "action": "publish"},
+               follow_redirects=False)
+    c.cookies.clear()
+
+
+def _lane(page, label):
+    seg = page[page.index(label):]
+    end = seg.find("</form>")
+    return seg[:end + 7] if end > 0 else seg[:2000]
+
+
+def test_a_lane_shows_every_file_it_holds(stage):
+    """*"it only showcases 1 file for each lane when in fact there were multiple files
+    pushed per lane for approval"* (operator, 2026-08-19). `scoped_signoff` kept the
+    FIRST asset under a label — the injective match — so a twelve-stem package was one
+    player and one Approve."""
+    c, db, pid, ttok, ktok, admin = stage
+    stems = ["kick.wav", "snare.wav", "bass.wav", "gtr.wav", "keys.wav", "vox.wav"]
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package", stems)
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    assert re.findall(r'class="so-name">([^<]+)<', lane) == stems, lane[:400]
+    assert lane.count("<audio") == 6, "not every file can be auditioned"
+
+
+def test_one_press_signs_off_the_whole_lane(stage):
+    """"I approve the stems" is the decision a person is making — not twelve of them."""
+    c, db, pid, ttok, ktok, admin = stage
+    stems = ["kick.wav", "snare.wav", "bass.wav"]
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package", stems)
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    keys = re.findall(r'name="filename" value="([^"]+)"', lane)
+    assert len(keys) == 3, keys
+    assert "✓ Approve all 3" in lane
+    r = c.post(f"/project/{pid}/review/asset",
+               data={"k": ktok, "author": "Marta Ruiz", "email": "m@a.com",
+                     "origin": "room", "action": "approve", "filename": keys},
+               follow_redirects=False)
+    assert r.status_code == 303
+    conn = db.connect()
+    d = db.get_delivery(conn, pid)
+    states = [db.get_asset_approval(d, a)["status"] for a in d["assets"]]
+    conn.close()
+    assert states == ["Approved"] * 3, states
+
+
+def test_a_partly_approved_lane_says_how_many_are_left(stage):
+    c, db, pid, ttok, ktok, admin = stage
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package",
+                  ["kick.wav", "snare.wav", "bass.wav"])
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    keys = re.findall(r'name="filename" value="([^"]+)"', lane)
+    c.post(f"/project/{pid}/review/asset",
+           data={"k": ktok, "author": "Marta Ruiz", "email": "m@a.com", "origin": "room",
+                 "action": "approve", "filename": keys[:1]}, follow_redirects=False)
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    assert "2 of 3 awaiting your sign-off" in lane, lane[:400]
+    assert "✓ Approve all 2" in lane, "the second press re-approves what is already signed"
+
+
+def test_a_lane_is_only_approved_when_every_file_is(stage):
+    """The rollup drives the paywall. One approved stem out of twelve must not read as
+    a signed-off deliverable."""
+    c, db, pid, ttok, ktok, admin = stage
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package",
+                  ["kick.wav", "snare.wav"])
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    lane = _lane(page, "Mix-ready stem package")
+    keys = re.findall(r'name="filename" value="([^"]+)"', lane)
+    first = re.search(r"(\d+)\s+of\s+(\d+)\s+approved", page).groups()
+    c.post(f"/project/{pid}/review/asset",
+           data={"k": ktok, "author": "M", "email": "m@a.com", "origin": "room",
+                 "action": "approve", "filename": keys[:1]}, follow_redirects=False)
+    after = re.search(r"(\d+)\s+of\s+(\d+)\s+approved",
+                      c.get(f"/room/{pid}?k={ktok}").text).groups()
+    assert after == first, f"half a lane counted as a signed-off deliverable: {first} → {after}"

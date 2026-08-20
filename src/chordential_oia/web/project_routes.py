@@ -2965,7 +2965,7 @@ def review_changes(
 @router.post("/project/{project_id}/review/asset")
 def review_asset(
     request: Request, project_id: int, k: str = Form(""),
-    filename: str = Form(""), action: str = Form(""), note: str = Form(""),
+    filename: List[str] = Form([]), action: str = Form(""), note: str = Form(""),
     r: str = Form(""), author: str = Form(""), email: str = Form(""),
     origin: str = Form(""),
 ):
@@ -2977,7 +2977,9 @@ def review_asset(
     read-only — this route no-ops for them, so they cannot change a per-asset state.
 
     ``filename`` is the asset's stable key (its filename, or ``label:<slug>`` for a
-    referenced-only asset). ``action`` is ``approve`` or ``changes``. The status is
+    referenced-only asset), and it may be REPEATED: a deliverable lane holds as many
+    files as it needs (ADR-0074), so signing off "the stem package" is one press over
+    twelve keys rather than twelve presses. ``action`` is ``approve`` or ``changes``. The status is
     recorded with the roster identity + current version + date, logged into the
     review tape (kind ``asset_approval`` / ``asset_change``, body naming the asset),
     and the operator push fires."""
@@ -2996,28 +2998,34 @@ def review_asset(
             mail = (reviewer.get("email") or "").strip()
         else:
             name, mail = _reviewer_identity(request, author, email)
-        key = (filename or "").strip()
-        if not name or not key:
+        keys = [x.strip() for x in (filename or []) if (x or "").strip()]
+        if not name or not keys:
             return _review_redirect(project_id, k, r=r, origin=origin)
         delivery = db.get_delivery(conn, project_id)
-        # Resolve the asset's display label for the tape (fall back to the key).
-        label = key
+        # Resolve the LANE's display label for the tape (fall back to the first key).
+        # One press over twelve stems is one line in the tape, not twelve.
+        label = keys[0]
         for a in (delivery.get("assets") or []):
-            if db.asset_key(a) == key:
-                label = (a.get("label") or a.get("filename") or key)
+            if db.asset_key(a) in keys:
+                label = (a.get("label") or a.get("filename") or keys[0])
                 break
         version = _current_version_tag(delivery)
         if action == "changes":
             status, kind = "Changes requested", "asset_change"
             note_text = note.strip() or "Requested changes."
-            body = f"Changes requested on {label}: {note_text}"
+            body = (f"Changes requested on {label}"
+                    + (f" ({len(keys)} files)" if len(keys) > 1 else "")
+                    + f": {note_text}")
         else:
             status, kind = "Approved", "asset_approval"
-            body = f"Approved {label}."
-        rec = db.set_asset_approval(
-            conn, project_id, key, status=status, by=name, email=mail,
-            version=version,
-        )
+            body = (f"Approved {label}"
+                    + (f" — all {len(keys)} files." if len(keys) > 1 else "."))
+        rec = None
+        for one in keys:
+            rec = db.set_asset_approval(
+                conn, project_id, one, status=status, by=name, email=mail,
+                version=version,
+            ) or rec
         if rec is not None:
             project = db.get_project(conn, project_id)
             db.add_review_comment(

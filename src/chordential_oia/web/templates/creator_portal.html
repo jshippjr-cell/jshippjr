@@ -517,6 +517,11 @@
     padding-top:10px;border-top:1px solid var(--hair)}
   /* The client's sign-off, and what stands between them and their files. */
   .so-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
+  .so-files{list-style:none;margin:6px 0 4px;padding:0;flex:1 1 100%;display:flex;
+    flex-direction:column;gap:5px}
+  .so-files li{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .so-name{font:11.5px var(--mono);color:var(--dim2);min-width:120px}
+  .so-audio{height:30px;flex:1;min-width:200px;max-width:420px}
   .so-note{flex:1;min-width:150px;background:rgba(255,255,255,.05);border:1px solid var(--hair2);
     border-radius:8px;padding:7px 11px;color:var(--paper,#EDE6DC);font:12.5px var(--sans);outline:none}
   .so-note:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(240,119,44,.16)}
@@ -753,9 +758,12 @@
           {% if closed %}
             Delivered. Everything you signed off is in your package, ready to download.
           {% elif a.creative_lock %}
+            {# Counted from the client's OWN list. This read from `a.deliverables`, which
+               is the lane view and is subtracted from them entirely — so it always said
+               "0 of 0 in" (reported live, 2026-08-19). #}
             Master approved — thank you. We're producing the rest of the deliverables now
-            ({{ a.deliverables|selectattr('uploaded')|list|length }} of {{ a.deliverables|length }} in),
-            and you'll sign off each one.
+            ({{ a.signoff_rollup.approved|default(0) }} of {{ a.signoff_rollup.total|default(0) }}
+            signed off), and you'll sign off each one below.
           {% elif a.versions %}
             {{ a.version_state or 'Your music' }} is here. Press play, and leave a note at any
             moment — we'll see it.
@@ -1053,6 +1061,112 @@
   </div>
   {% endif %}
 
+  {# ── THE CLIENT'S SIGN-OFF, AND THE FILES. ─────────────────────────────────────
+   IN THE ROOM, not inside the Takes sheet. It was built there, beside the lanes it
+   mirrors — so the verdict said "sign each one off below" and below was nothing,
+   two clicks away in a sheet called The takes. *"im in the client view and it still
+   not show the deliverables for review, if it does its misleading becasue it say
+   sign off below"* (operator, 2026-08-19). Below now means below.
+     The studio published four deliverables and the client's room said nothing about
+     them: `deliverables` is the lane view and is subtracted from the buyer entirely,
+     so there was no other half. Reported live, 2026-08-19. This is it — each published
+     asset with Approve / Request changes, and, once they are all signed off, the
+     balance and the download. Same routes the delivery portal posts to; one
+     derivation of the list (`delivery_ops.scoped_signoff`). ── #}
+  {% if 'sign_off_asset' in (caps|default([])) and a.creative_lock and a.signoff %}
+  <h3 style="margin-top:18px">Sign off your deliverables</h3>
+  <p class="fineprint" style="margin:0 0 8px">{{ a.signoff_rollup.approved }} of
+    {{ a.signoff_rollup.total }} approved. Your files unlock when every one is signed off
+    and the balance is settled.</p>
+  {% for d in a.signoff %}
+  <div class="deliv-row so-row">
+    <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
+    {% if d.files and (d.files|rejectattr('status', 'equalto', 'Approved')|list|length == 0) %}
+    <span class="ok-line">✓ Approved{% if d.files|length > 1 %} · all {{ d.files|length }} files{% endif %}{%
+      if d.approval and d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+    {% elif not d.files and (d.approval and d.approval.status) == 'Approved' %}
+    <span class="ok-line">✓ Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+    {% elif d.files %}
+    <span class="pend-badge">{{ d.files|rejectattr('status', 'equalto', 'Approved')|list|length }} of {{ d.files|length }} awaiting your sign-off</span>
+    {% elif not d.uploaded %}
+    <span class="lane-wait">not delivered yet — we'll email you</span>
+    {% elif (d.approval and d.approval.status) == 'Changes requested' %}
+    <span class="pend-badge">Changes requested — with the studio</span>
+    {% endif %}
+    {# EVERY FILE IN THE LANE. A stem package is twelve files and this showed one player
+       and one Approve — *"it only showcases 1 file for each lane when in fact there were
+       multiple files pushed per lane"* (operator, 2026-08-19). Each file is auditionable
+       and named; the sign-off is for the LANE, one press over all of its keys, because
+       "I approve the stems" is the decision a person is actually making. #}
+    {% set waiting = d.files|rejectattr('status', 'equalto', 'Approved')|list %}
+    {% if d.files %}
+    <ul class="so-files">
+      {% for f in d.files %}
+      <li>
+        <span class="lf-state{{ ' ok' if f.status == 'Approved' }}">{{ '✓' if f.status == 'Approved' else '·' }}</span>
+        <span class="so-name">{{ f.name }}</span>
+        {% if f.url and f.kind == 'audio' %}
+        <audio controls preload="none" src="{{ f.url }}" class="so-audio"></audio>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% elif d.url and d.kind == 'audio' %}
+    <audio controls preload="none" src="{{ d.url }}" style="flex:1 1 100%;height:34px;margin:4px 0 0"></audio>
+    {% endif %}
+    {% if waiting %}
+    <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
+      <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+      <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+      <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
+      <input type="hidden" name="email" value="{{ known_email|default('') }}">
+      {% for f in waiting %}<input type="hidden" name="filename" value="{{ f.asset_key }}">{% endfor %}
+      <input type="hidden" name="origin" value="room">
+      <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve{%
+        if waiting|length > 1 %} all {{ waiting|length }}{% endif %}</button>
+      <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
+      <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
+    </form>
+    {% elif d.asset_key and (d.approval and d.approval.status) != 'Approved' %}
+    <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
+      <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+      <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+      <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
+      <input type="hidden" name="email" value="{{ known_email|default('') }}">
+      <input type="hidden" name="filename" value="{{ d.asset_key }}">
+      <input type="hidden" name="origin" value="room">
+      <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve</button>
+      <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
+      <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# THE PAYOFF. What stands between them and their files, said plainly. #}
+  <div class="payoff">
+    {% if a.download_unlocked and a.delivery_zip %}
+    <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
+    <span class="fineprint">Yours to keep.</span>
+    {% elif a.signoff_rollup.approved < a.signoff_rollup.total %}
+    <span class="fineprint">Approve every deliverable above and your package is assembled.
+      {% if a.invoice_balance and a.invoice_balance.outstanding %}The remaining balance of
+      <b>${{ '%.2f'|format(a.invoice_balance.outstanding) }}</b> is due at that point.{% endif %}</span>
+    {% elif a.invoice_balance and a.invoice_balance.outstanding %}
+    <form method="post" action="/project/{{ a.project_id }}/pay" style="margin:0">
+      <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+      <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+      <input type="hidden" name="kind" value="final">
+      <button type="submit" class="btn">Pay ${{ '%.2f'|format(a.invoice_balance.outstanding) }} to unlock your files →</button>
+    </form>
+    <span class="fineprint">Everything is signed off. Streaming stays open either way.</span>
+    {% else %}
+    <span class="fineprint">Everything is signed off. Your package is being assembled —
+      the download appears here.</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- ── LAYER: Brief (the REAL brief — objective, references, tone) ── -->
   <div class="sheet sr-sheet" data-sheet="brief" role="dialog" aria-modal="true" aria-label="The brief" tabindex="-1">
     <div class="sheet-head"><h2>The brief</h2><button class="esc sr-close">ESC</button></div>
@@ -1308,71 +1422,6 @@
     {% if not a.versions and not a.pending %}
     <p style="color:var(--dim)">{{ "No takes yet. We'll email you the moment there is one to hear."
       if voice == 'client' else 'No takes yet. This room is waiting for your first one.' }}</p>
-    {% endif %}
-
-    {# ── THE CLIENT'S SIGN-OFF, AND THE FILES. ─────────────────────────────────────
-       The studio published four deliverables and the client's room said nothing about
-       them: `deliverables` is the lane view and is subtracted from the buyer entirely,
-       so there was no other half. Reported live, 2026-08-19. This is it — each published
-       asset with Approve / Request changes, and, once they are all signed off, the
-       balance and the download. Same routes the delivery portal posts to; one
-       derivation of the list (`delivery_ops.scoped_signoff`). ── #}
-    {% if 'sign_off_asset' in (caps|default([])) and a.creative_lock and a.signoff %}
-    <h3 style="margin-top:18px">Sign off your deliverables</h3>
-    <p class="fineprint" style="margin:0 0 8px">{{ a.signoff_rollup.approved }} of
-      {{ a.signoff_rollup.total }} approved. Your files unlock when every one is signed off
-      and the balance is settled.</p>
-    {% for d in a.signoff %}
-    <div class="deliv-row so-row">
-      <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
-      {% if (d.approval and d.approval.status) == 'Approved' %}
-      <span class="ok-line">✓ Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
-      {% elif not d.uploaded %}
-      <span class="lane-wait">not delivered yet — we'll email you</span>
-      {% elif (d.approval and d.approval.status) == 'Changes requested' %}
-      <span class="pend-badge">Changes requested — with the studio</span>
-      {% endif %}
-      {% if d.url and d.kind == 'audio' %}
-      <audio controls preload="none" src="{{ d.url }}" style="flex:1 1 100%;height:34px;margin:4px 0 0"></audio>
-      {% endif %}
-      {% if d.asset_key and (d.approval and d.approval.status) != 'Approved' %}
-      <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
-        <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
-        <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
-        <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
-        <input type="hidden" name="email" value="{{ known_email|default('') }}">
-        <input type="hidden" name="filename" value="{{ d.asset_key }}">
-        <input type="hidden" name="origin" value="room">
-        <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve</button>
-        <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
-        <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
-      </form>
-      {% endif %}
-    </div>
-    {% endfor %}
-
-    {# THE PAYOFF. What stands between them and their files, said plainly. #}
-    <div class="payoff">
-      {% if a.download_unlocked and a.delivery_zip %}
-      <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
-      <span class="fineprint">Yours to keep.</span>
-      {% elif a.signoff_rollup.approved < a.signoff_rollup.total %}
-      <span class="fineprint">Approve every deliverable above and your package is assembled.
-        {% if a.invoice_balance and a.invoice_balance.outstanding %}The remaining balance of
-        <b>${{ '%.2f'|format(a.invoice_balance.outstanding) }}</b> is due at that point.{% endif %}</span>
-      {% elif a.invoice_balance and a.invoice_balance.outstanding %}
-      <form method="post" action="/project/{{ a.project_id }}/pay" style="margin:0">
-        <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
-        <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
-        <input type="hidden" name="kind" value="final">
-        <button type="submit" class="btn">Pay ${{ '%.2f'|format(a.invoice_balance.outstanding) }} to unlock your files →</button>
-      </form>
-      <span class="fineprint">Everything is signed off. Streaming stays open either way.</span>
-      {% else %}
-      <span class="fineprint">Everything is signed off. Your package is being assembled —
-        the download appears here.</span>
-      {% endif %}
-    </div>
     {% endif %}
 
     {# The LANE view — specs, whose craft, upload boxes. Studio and creators only; the

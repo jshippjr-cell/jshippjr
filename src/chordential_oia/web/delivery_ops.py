@@ -358,10 +358,19 @@ def scoped_signoff(row, delivery: dict) -> tuple:
         a2["approval"] = db.get_asset_approval(delivery, a)
         a2["asset_key"] = db.asset_key(a)
         assets_with_approval.append(a2)
-    by_label = {}
+    # EVERY asset under a label, not just the first. A stem package is twelve files in
+    # one lane (ADR-0074) and this kept one of them, so the buyer was shown one player
+    # and one Approve for a folder they had been sent whole — *"it only showcases 1 file
+    # for each lane when in fact there were multiple files pushed per lane"* (operator,
+    # 2026-08-19). The FIRST still drives `match`/`url` (the injective matching upstream
+    # is per-label), and `all` carries the rest.
+    by_label, all_by_label = {}, {}
     for a in assets_with_approval:
         lbl = (a.get("label") or a.get("filename") or "").strip()
-        if lbl and lbl not in by_label:
+        if not lbl:
+            continue
+        all_by_label.setdefault(lbl, []).append(a)
+        if lbl not in by_label:
             by_label[lbl] = a
     clock = production.creative_lock(delivery)
     items, approved = [], 0
@@ -373,7 +382,17 @@ def scoped_signoff(row, delivery: dict) -> tuple:
             item["approval"] = match_asset.get("approval")
             item["url"] = match_asset.get("url")
             item["kind"] = match_asset.get("kind")
-            if (match_asset.get("approval") or {}).get("status") == "Approved":
+            # The whole lane, each file with its own key so one press can sign off all
+            # of them and a partly-approved lane can say which are still outstanding.
+            item["files"] = [
+                {"name": (f.get("orig") or f.get("filename") or "file"),
+                 "url": f.get("url") or "", "kind": f.get("kind") or "",
+                 "asset_key": f.get("asset_key") or "",
+                 "status": (f.get("approval") or {}).get("status") or "Pending"}
+                for f in all_by_label.get(d.get("match") or "", [])
+            ]
+            # A lane counts as approved only when EVERY file in it is.
+            if item["files"] and all(f["status"] == "Approved" for f in item["files"]):
                 approved += 1
         elif d.get("from_version"):
             # The primary master is the review version itself — it has no per-row
@@ -391,6 +410,7 @@ def scoped_signoff(row, delivery: dict) -> tuple:
         else:
             item["asset_key"] = ""
             item["approval"] = None
+        item.setdefault("files", [])
         items.append(item)
     rollup = {"approved": approved, "total": len(items),
               "uploaded": sum(1 for s in items if s.get("uploaded"))}
