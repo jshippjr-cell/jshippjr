@@ -99,6 +99,48 @@ def _payment_request_email(kind: str, amount: float, client: str, need: str,
     return {"subject": subject, "body": body}
 
 
+def final_invoice_block(conn, project_id: int) -> str:
+    """Why this delivery cannot be paid for yet — "" when it can.
+
+    A delivery reaches the paywall by being Delivered with an outstanding Final invoice.
+    Every path that RAISES that invoice needs a stored proposal, and returns silently
+    when there is none — so a project without one sails through the whole delivery,
+    assembles its package, locks the download behind a balance that does not exist, and
+    tells the client their files are "being assembled". Reported live (2026-08-19):
+    everything signed off, and no way to pay.
+
+    Money is never invented here. This only NAMES the block, so the client sees something
+    true and the operator sees an action.
+    """
+    inv = next((i for i in db.list_invoices(conn, project_id)
+                if (i["kind"] or "") == "Final"), None)
+    if inv is not None:
+        if (inv["status"] or "").lower() in ("", "draft"):
+            return "draft"          # raised but never issued — not owed yet
+        if not (inv["amount"] or 0):
+            return "zero"           # issued for nothing
+        return ""
+    return "" if db.proposal_for_project(conn, project_id) is not None else "noproposal"
+
+
+#: What each ``final_invoice_block`` reason means to each side. The client is told the
+#: truth without our plumbing; the operator is told what to press.
+INVOICE_BLOCK_CLIENT = {
+    "noproposal": ("Chordential is preparing your invoice for the balance — you'll get it "
+                   "by email, and your files unlock the moment it's settled."),
+    "draft": ("Chordential is finalising your invoice for the balance — you'll get it by "
+              "email, and your files unlock the moment it's settled."),
+    "zero": "Nothing further is due. Chordential is releasing your files.",
+}
+INVOICE_BLOCK_OPERATOR = {
+    "noproposal": ("This delivery is signed off and the client CANNOT PAY: there is no "
+                   "proposal on the project, so no balance invoice can be raised from "
+                   "one. Raise it by hand below."),
+    "draft": "The balance invoice is still a draft — issue it so the client is asked for it.",
+    "zero": "The balance invoice is for zero, so nothing gates the download.",
+}
+
+
 #: What each ``?pay=`` bounce means, in the client's language. Every failure path off
 #: ``/project/<id>/pay`` used to redirect with a flag and only ONE of them was rendered
 #: anywhere — so a client pressed Pay, the page reloaded, and nothing said why: *"i click

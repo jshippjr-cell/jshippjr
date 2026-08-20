@@ -94,6 +94,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A delivery nobody could be billed for** (ADR-0078, 2026-08-19). Everything signed off,
+  package assembled, state Delivered — and no invoice, because every path that raises one
+  needs a stored proposal and returns silently without it. The client was told their files
+  were "being assembled", forever. Now named (`billing.final_invoice_block`), said truly to
+  the client, shown to the operator with a **raise-the-balance-by-hand** control whose
+  amount is typed and never inferred.
+
 - **Pressing Pay did nothing** (ADR-0077, 2026-08-19). `/pay` required a proposal even
   when the invoice already existed — which it does by ship time — and bounced with a flag
   that nothing rendered. Every bounce now carries a sentence (`billing.PAY_NOTICES`) shown

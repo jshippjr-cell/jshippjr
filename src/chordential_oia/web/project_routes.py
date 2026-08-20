@@ -52,7 +52,7 @@ from ..storage import get_object_store
 from . import actor, campaigns, db, production, room, signals
 from .billing import (
     _client_portal_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
-    _proposal_from_row,
+    _proposal_from_row, _send_invoice_pay_link, final_invoice_block,
 )
 from .delivery_ops import (
     scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
@@ -627,6 +627,9 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         "creative_lock": production.creative_lock(delivery),
         "download_unlocked": download_unlocked,
         "invoice_balance": balance,
+        # Why the client cannot be asked for the balance, when they cannot. The console
+        # is where the operator can do something about it.
+        "invoice_block": final_invoice_block(conn, project_id),
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
         # ADR-0019/0036: the client-facing production experience answers the court
@@ -3135,6 +3138,57 @@ def project_create_invoice(project_id: int, kind: str = Form(...)):
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
+
+
+@router.post("/project/{project_id}/invoice/balance")
+def project_raise_balance(project_id: int, amount: str = Form(""), note: str = Form("")):
+    """Raise the BALANCE invoice by hand, for a delivery that has no proposal to raise it
+    from — and issue it, so the client is actually asked.
+
+    Every other invoice path derives the amount from a stored proposal and returns
+    silently when there is none. A project that reached delivery another way (a deal
+    entered by hand, a signature path that never wrote one) then sails through the whole
+    flow, assembles its package, locks the download behind a balance that does not exist,
+    and tells the client their files are "being assembled". Reported live, 2026-08-19.
+
+    The amount is TYPED, never inferred. What the work is worth is the operator's
+    decision — "the machine proposes, Jon disposes" is at its sharpest where money is.
+    """
+    from ..invoicing import Invoice
+    conn = db.connect()
+    try:
+        prow = db.get_project(conn, project_id)
+        if prow is None:
+            return RedirectResponse("/projects", status_code=303)
+        try:
+            value = float(str(amount).replace(",", "").replace("$", "").strip())
+        except (TypeError, ValueError):
+            value = 0.0
+        if value <= 0:
+            return RedirectResponse(
+                f"/project/{project_id}/delivery?invoice=amount#assets", status_code=303)
+        inv = next((i for i in db.list_invoices(conn, project_id)
+                    if (i["kind"] or "") == "Final"), None)
+        if inv is None:
+            new_id = db.insert_invoice(
+                conn, project_id, None,
+                Invoice(client=prow["client"] or "", need=prow["need"] or "",
+                        kind="Final", amount=value,
+                        note=(note or "").strip() or "Balance due on delivery."))
+            inv = db.get_invoice(conn, new_id)
+        if inv is not None and (inv["status"] or "").lower() in ("", "draft"):
+            db.update_invoice_status(conn, inv["id"], "Issued")
+        db.add_update(conn, project_id,
+                      f"Balance invoice raised by hand: {value:,.2f}.", "invoice")
+        if inv is not None:
+            try:
+                _send_invoice_pay_link(conn, inv["id"])
+            except Exception:  # noqa: BLE001 — the send never blocks the raise
+                pass
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery?invoice=raised#assets",
+                            status_code=303)
 
 
 @router.post("/project/{project_id}/pay")

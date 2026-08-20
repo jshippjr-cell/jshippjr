@@ -240,7 +240,7 @@ def test_the_router_carries_the_whole_group():
     # +1: /project/{id}/review/address — marking a note addressed moved off the
     # creator portal's door, because the room serves three roles and only one of them
     # holds a creator token (see test_addressed_is_ours_not_theirs.py).
-    ("project_routes.py", "/project", 66),
+    ("project_routes.py", "/project", 67),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -300,8 +300,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 286, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 286 — "
+    assert len(decls) == 287, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 287 — "
         f"a slice lost or gained a URL")
 
 

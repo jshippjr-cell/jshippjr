@@ -1171,6 +1171,12 @@
       <button type="submit" class="btn">Pay ${{ '%.2f'|format(a.invoice_balance.outstanding) }} to unlock your files →</button>
     </form>
     <span class="fineprint">Everything is signed off. Streaming stays open either way.</span>
+    {% elif a.invoice_block %}
+    {# TRUE, rather than reassuring. "Your package is being assembled" was said to a
+       client whose package WAS assembled and whose download was locked behind a balance
+       that could not be raised — a dead end dressed as progress (reported live,
+       2026-08-19). #}
+    <span class="fineprint">{{ invoice_block_client(a.invoice_block) }}</span>
     {% else %}
     <span class="fineprint">Everything is signed off. Your package is being assembled —
       the download appears here.</span>

@@ -1664,6 +1664,39 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0078 — A delivery nobody can be billed for must say so, and be billable
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0077 ·
+Source: `billing.final_invoice_block` / `INVOICE_BLOCK_CLIENT` / `INVOICE_BLOCK_OPERATOR`,
+`project_routes.project_raise_balance`, `tests/test_a_delivery_nobody_can_pay_for.py`
+
+**Decision.** (1) `billing.final_invoice_block` names why a finished delivery cannot be
+paid for — `noproposal`, `draft`, `zero`, or `""` for none. One derivation; the room and
+the delivery console both read it and say it in their own words.
+
+(2) The client is told the TRUTH ("Chordential is preparing your invoice for the
+balance"), never our plumbing and never a comfortable lie about assembly.
+
+(3) The operator can **raise the balance by hand** (`POST /project/<id>/invoice/balance`)
+for a delivery with no proposal to raise it from. The amount is TYPED. Nothing infers a
+price from the budget, the estimate or the quote.
+
+**Why.** *"everything was approved by the client but nothing came up for the client to pay
+remaining balance."* Reproduced exactly: creative lock ✓, every scoped deliverable
+uploaded ✓, every file signed off ✓, `_ready_to_deliver` True, state **Delivered**,
+package assembled — and then nothing. Every invoice path derives its amount from a stored
+proposal and returns SILENTLY when there is none (`_ensure_final_invoice_issued`,
+`project_create_invoice`, `client_pay`). A project that reached delivery any other way —
+a deal entered by hand, a signature path that never wrote a proposal — locks its download
+behind a balance that cannot exist and tells the client their files are "being assembled",
+forever.
+
+**Consequences.** The price is the operator's decision and stays that way; a route that
+invents an amount to unblock itself would be the constitution's one prohibition
+(§"the machine proposes, Jon disposes") broken at the exact place it matters most. Any
+new state that stops a client paying belongs in `final_invoice_block` with words for both
+sides — a delivery that cannot be billed is a business failure, and the only thing worse
+than reaching it is reaching it quietly.
+
 ### ADR-0077 — A payment that cannot start says so
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0076 ·
 Source: `billing.PAY_NOTICES` / `pay_notice`, `project_routes.client_pay`,

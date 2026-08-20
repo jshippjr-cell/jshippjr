@@ -33,6 +33,7 @@ from ..delivery import (
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
 from . import db, production, room
+from .billing import final_invoice_block
 from .delivery_ops import (
     scoped_signoff, _campaign_label, _notify_operator_review, _project_estimate,
     _sync_role_milestones,
@@ -238,6 +239,8 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     signoff_items, signoff_rollup, _assets = scoped_signoff(prow, delivery)
     balance = db.invoice_balance(conn, project_id)
     unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
+    # Why the balance cannot be asked for, when it cannot. "" = it can.
+    invoice_block = final_invoice_block(conn, project_id)
     rows = [d for d in scoped_deliverables(prow, delivery) if not d.get("is_master")]
     published_by_owner = {}
     for d in rows:
@@ -312,6 +315,7 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         "signoff_rollup": signoff_rollup,
         "download_unlocked": unlocked,
         "invoice_balance": balance,
+        "invoice_block": invoice_block,
         "delivery_zip": delivery.get("delivery_zip") or None,
         # The room's Brief layer renders the REAL creative brief (the same
         # effective brief the console shows), not a restatement of the title.

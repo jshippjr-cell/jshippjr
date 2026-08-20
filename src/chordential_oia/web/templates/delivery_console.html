@@ -198,6 +198,33 @@
     <div class="small">
       <b>Client downloads:</b>
       {% if download_unlocked %}<span class="ok">unlocked</span>{% else %}<span class="pend">🔒 locked</span>{% endif %}
+      {# THE DELIVERY IS DONE AND THE CLIENT CANNOT PAY. Every invoice path in the system
+         derives its amount from a stored proposal and returns silently when there is
+         none, so this state was reachable and invisible: package assembled, download
+         locked, client told their files were "being assembled". #}
+      {% if invoice_block %}
+      <div class="warn-box" style="margin:10px 0;padding:11px 13px;border:1px solid #e5a24d;
+           border-radius:9px;background:rgba(229,162,77,.08)">
+        <b>{{ invoice_block_operator(invoice_block) }}</b>
+        {% if invoice_block == 'noproposal' %}
+        <form method="post" action="/project/{{ project['id'] }}/invoice/balance"
+              style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px">
+          <label class="small muted">Balance due $</label>
+          <input class="input" type="text" name="amount" inputmode="decimal"
+                 placeholder="4200" style="max-width:120px" required>
+          <input class="input" type="text" name="note" placeholder="Note on the invoice (optional)"
+                 style="flex:1;min-width:180px">
+          <button class="btn primary" type="submit">Raise &amp; send it</button>
+        </form>
+        <p class="small muted" style="margin:6px 0 0">The amount is yours to set — nothing
+          here infers a price. Raising it emails the client their pay link.</p>
+        {% endif %}
+      </div>
+      {% elif request.query_params.get('invoice') == 'raised' %}
+      <p class="small" style="color:#5a8f5a">Balance invoice raised and sent.</p>
+      {% elif request.query_params.get('invoice') == 'amount' %}
+      <p class="small" style="color:#c0553f">That amount didn't parse — enter a number.</p>
+      {% endif %}
       {% if invoice_balance %}
         · billed ${{ '%.0f'|format(invoice_balance.billed) }}, paid ${{ '%.0f'|format(invoice_balance.paid) }}{% if invoice_balance.outstanding %}, <b>outstanding ${{ '%.0f'|format(invoice_balance.outstanding) }}</b>{% endif %}
       {% endif %}
