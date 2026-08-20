@@ -109,12 +109,21 @@
          stands on. The manual "mark executed" tick is still here BELOW it, because a
          paper agreement signed before this existed is a real agreement; but a signature
          in the portal is what it now looks like when the system has seen the document. #}
-      {% if composer_sig %}
+      {% if agreement_unknown %}
+      {# Two standing agreements now exist, and which one governs is read from the
+         creator's disciplines (ADR-0082). With none recorded there is no honest answer,
+         so the page asks for the evidence instead of picking the writer's agreement by
+         default and conveying a publishing share to a mixer. #}
+      <div style="border:1px dashed var(--ember,#b34a21);border-radius:10px;padding:12px 14px">
+        <div style="font-weight:700">No standing agreement can be issued yet</div>
+        <p class="muted small" style="margin:4px 0 0">{{ agreement_unknown }}</p>
+      </div>
+      {% elif composer_sig %}
       <div style="border:1px solid {{ '#bcdcc7' if composer_sig_valid else '#e6c8b0' }};
                   background:{{ '#f2f9f4' if composer_sig_valid else '#fbeee6' }};
                   border-radius:10px;padding:12px 14px">
         <div style="font-weight:750">
-          {{ '✓ Composer Agreement SIGNED' if composer_sig_valid
+          {{ '✓ ' + agreement_label + ' SIGNED' if composer_sig_valid
              else '⚠ Signed — the agreement has since changed' }}
           by {{ composer_sig['typed_name'] }}
           {%- if composer_sig['signer_email'] %} · {{ composer_sig['signer_email'] }}{% endif %}</div>
@@ -151,7 +160,7 @@
          question the operator has regardless, and hiding the answer behind a token they
          had not issued meant the page said nothing at all about the agreement. #}
       <div style="border:1px dashed var(--ember,#b34a21);border-radius:10px;padding:12px 14px">
-        <div style="font-weight:700">Composer Agreement not signed yet</div>
+        <div style="font-weight:700">{{ agreement_label }} not signed yet</div>
         {# One button. We have their address — asking the operator to copy a link out of
            the page and paste it into a mail client is the step where "I'll do it later"
            happens, and it is exactly the work this product exists to remove. Minting the
@@ -163,6 +172,10 @@
         <p class="muted small" style="margin:4px 0 8px">Couldn't send{% if not t.email %} —
           no email on file for them{% elif not mail_configured %} — no mail provider is
           configured{% endif %}. The link below still works.</p>
+        {% elif agr_result == 'nocraft' %}
+        <p class="muted small" style="margin:4px 0 8px">Nothing was sent — no craft is
+          recorded for them, so the studio cannot tell which standing agreement applies.
+          Add a discipline above and try again.</p>
         {% elif agr_result %}
         <p class="muted small" style="margin:4px 0 8px">Send reported
           <b>{{ agr_result }}</b> — the link below still works.</p>
@@ -187,11 +200,11 @@
 
       <form method="post" action="/talent/{{ t.id }}/agreement" style="margin-top:10px">
         {% if agreement_executed_at %}
-        <span class="pill sv-door">✓ Composer Agreement executed ({{ agreement_executed_at }}{% if agreement_ref %} — {{ agreement_ref }}{% endif %})</span>
+        <span class="pill sv-door">✓ {{ agreement_label }} executed ({{ agreement_executed_at }}{% if agreement_ref %} — {{ agreement_ref }}{% endif %})</span>
         <input type="hidden" name="executed" value="0">
         <button class="btn tiny" type="submit">Clear</button>
         {% else %}
-        <span class="muted small">Composer Agreement + rate required before assignment — the rights chain starts here.</span>
+        <span class="muted small">{{ agreement_label }} + rate required before assignment — the rights chain starts here.</span>
         <input type="hidden" name="executed" value="1">
         <input type="text" name="ref" placeholder="Signed on paper? Note where it lives" style="max-width:220px">
         <button class="btn tiny" type="submit">Mark executed by hand</button>

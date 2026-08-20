@@ -238,6 +238,15 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
 - **Bind a signature to its document:** `signing.py` (ADR-0059) stores a SHA-256 of the
   exact text signed and reports `SUPERSEDED` when it stops matching. Signature rows are
   append-only; withdrawal marks, never deletes.
+- **Two standing agreements, one router** (ADR-0082): `composer_agreement.py` for people
+  who AUTHOR music, `service_agreement.py` for people paid for craft on music somebody
+  else wrote (mixer, editor, sound designer, supervisor) — no publishing, a fee per
+  engagement, a grant of only what they themselves make. **Which one governs is
+  `agreements.kind_for` and nowhere else**, read from the creator's disciplines; no craft
+  recorded means NEITHER document, never the writer's by default. Every "has this person
+  signed?" reader goes through `agreements`; a test fails the build if one pins itself to
+  `DOC_COMPOSER_AGREEMENT` again. Terms shared by both agreements are **imported** from
+  `composer_agreement`, never restated.
 - **Deterministic doc builders:** `capabilities.py` / `delivery.py` assemble docs from
   engine data; the client doc + delivery package are editable via overrides.
 - **One recipe, several recorders** (ADR-0062): where the front door's world goes is

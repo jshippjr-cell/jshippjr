@@ -1664,6 +1664,60 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0082 — The mixer is not the writer, and signs a different document
+**Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0024 (the assignment
+gate) and ADR-0059 (signatures) · Source: `service_agreement.py`, `agreements.py`,
+`signing.DOC_SERVICE_AGREEMENT` / `DOC_SERVICE_COUNTERSIGN`,
+`tests/test_the_agreement_a_mixer_should_be_asked_to_sign.py`,
+`tests/test_a_mixer_signs_the_right_document.py`
+
+**Decision.** The studio has TWO standing agreements, and **which one governs a creator is
+decided in exactly one place** — `agreements.kind_for`, read from their disciplines.
+
+- **Composer Agreement** — anyone who authors music (composition, sonic branding,
+  arrangement). Unchanged.
+- **Service Agreement** — anyone paid for craft on music somebody else wrote (mixing,
+  sound design, supervision, licensing). New. No publishing; a fee stated per engagement;
+  a grant of only what they themselves make; the production chain as a clause; an AI
+  warranty that forbids *generating* and names the permitted processing chain explicitly.
+- **Neither, when nothing says which.** A creator with no craft recorded gets no document
+  and the surfaces say what is missing.
+
+Any authoring discipline wins over a service one: the writer's agreement is the broader
+instrument, it is what the Clearance Certificate stands on, and it does not stop someone
+being booked to mix. The reverse cannot work — a Service Agreement carries no publishing.
+
+Every reader of "has this person signed?" goes through `agreements`; a grep tripwire fails
+the build if a surface pins itself to `DOC_COMPOSER_AGREEMENT` again.
+
+**Why.** *"do i need to build out agreements for the audio engineers and editors for them
+to sign?"* Yes — and the honest answer was worse than a gap.
+`db.talent_assignment_blockers` is **role-blind**, refusing every assignment without
+`agreement_executed_at`, and the only thing that set that field was the Composer
+Agreement. Measured on a mixer's own row: a document naming them "the writer" on 45 lines,
+conveying a **30% publishing share**, and landing clause 6A — collect a release from
+everyone who *played* — on someone who engaged nobody. Not a missing feature. The wrong
+instrument, required. Signing it would have handed publishing to a non-author and put a
+grant of rights they do not hold into the chain of title the certificate warrants.
+
+The Contributor Release already existed and its `ROLES` already contained "Engineer", but
+it is the wrong shape: composer-issued, per project, about a performance on a recording,
+and explicitly not about money. It is not a standing engagement agreement.
+
+**Consequences.** Two documents means two ways to be wrong about which, so the routing is
+a single function with a tripwire rather than a convention. The commercial terms shared by
+both — the acceptance window, the kill fee, the 120-day payment backstop, the liability
+cap, the governing law — are **imported from `composer_agreement`, never restated**; two
+copies of a backstop is one backstop and one drift. The Service Agreement's clause 5 is
+the deliberate soft edge: a sound designer who invents original material HAS authored
+something, so they raise it before delivering and it is settled as authorship under the
+Composer Agreement or it is not used — never quietly absorbed, because an unclaimed writer
+on a cue sheet is a defect in our own chain of title. Known rough edge: `MusicDiscipline`
+has no EDITING value, so a music editor is recorded under mixing or sound design today;
+adding one touches `label`/`fit_weight`/`team_shape` and is a separate pass. Like the
+Composer Agreement, this is plain-language standing terms and **not counsel-reviewed** —
+that review is the operator's to commission.
+
 ### ADR-0081 — A record, not a flag; and a board you can take something off
 **Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0043 (the write door)
 and ADR-0059 (signatures are append-only) · Source: `db.set_talent_w9_file`,

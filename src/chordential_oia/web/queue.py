@@ -110,23 +110,29 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
     #     email is not a queue — reported live: "when the talent signs the composer
     #     agreement and sends it back the chordential dashboard needs to get a
     #     notification." A signature is a pending DECISION, which is what this surface is.
-    from .. import signing as _signing
-    for r in conn.execute(
-            """SELECT s.talent_id, s.typed_name, s.signed_at, t.name AS talent_name
-               FROM signature s JOIN talent t ON t.id = s.talent_id
-               WHERE s.doc_kind = ? AND s.voided_at IS NULL AND s.talent_id > 0
-                 AND NOT EXISTS (SELECT 1 FROM signature c
-                                 WHERE c.talent_id = s.talent_id
-                                   AND c.doc_kind = ? AND c.voided_at IS NULL)
-               ORDER BY s.signed_at ASC LIMIT 25""",
-            (_signing.DOC_COMPOSER_AGREEMENT, _signing.DOC_COMPOSER_COUNTERSIGN)
-    ).fetchall():
-        cards.append(_card(
-            3, "composer_countersign",
-            f"Countersign — {r['talent_name'] or r['typed_name']}",
-            "They signed the Composer Agreement. Countersign to bind it both ways.",
-            f"/talent/{r['talent_id']}#access", age_key=r["signed_at"] or "",
-            evidence=f"signed {(r['signed_at'] or '')[:10]}"))
+    #     BOTH standing agreements are asked for (ADR-0082) — the Composer Agreement and
+    #     the Service Agreement the mixers and editors sign. Querying only the composer's
+    #     kind would have left every engineer's signature waiting on a countersignature
+    #     nobody was ever told about.
+    from .. import agreements as _agreements, signing as _signing
+    for _kind in (_agreements.COMPOSER, _agreements.SERVICE):
+        _label = _agreements.LABELS[_kind]
+        for r in conn.execute(
+                """SELECT s.talent_id, s.typed_name, s.signed_at, t.name AS talent_name
+                   FROM signature s JOIN talent t ON t.id = s.talent_id
+                   WHERE s.doc_kind = ? AND s.voided_at IS NULL AND s.talent_id > 0
+                     AND NOT EXISTS (SELECT 1 FROM signature c
+                                     WHERE c.talent_id = s.talent_id
+                                       AND c.doc_kind = ? AND c.voided_at IS NULL)
+                   ORDER BY s.signed_at ASC LIMIT 25""",
+                (_agreements.DOC_KINDS[_kind], _agreements.COUNTERSIGN_KINDS[_kind])
+        ).fetchall():
+            cards.append(_card(
+                3, "composer_countersign",
+                f"Countersign — {r['talent_name'] or r['typed_name']}",
+                f"They signed the {_label}. Countersign to bind it both ways.",
+                f"/talent/{r['talent_id']}#access", age_key=r["signed_at"] or "",
+                evidence=f"signed {(r['signed_at'] or '')[:10]}"))
     for r in conn.execute(
             """SELECT s.opportunity_id, s.typed_name, s.signed_at,
                       o.client AS client, o.need AS need

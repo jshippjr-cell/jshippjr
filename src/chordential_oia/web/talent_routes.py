@@ -25,7 +25,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
-from .. import composer_agreement, mailer, recruiting, signing
+from .. import agreements, composer_agreement, mailer, recruiting, signing
 from ..models import MusicDiscipline
 from ..talent import Talent, normalize_url, profile_completeness
 from . import actor, db
@@ -184,12 +184,20 @@ def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str =
         # NOT named `agr` — that is the query parameter carrying the send status, and a
         # local of the same name shadowed it, so the page rendered a dataclass repr where
         # the operator expected "sent to dale@example.com".
-        _agreement = composer_agreement.build_agreement(row)
-        agreement_text = _agreement.signable_text()
-        composer_sig = db.latest_talent_signature(
-            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT)
-        composer_counter = db.latest_talent_signature(
-            conn, talent_id, signing.DOC_COMPOSER_COUNTERSIGN)
+        # WHICH agreement governs them is `agreements.kind_for`'s call (ADR-0082) — a
+        # mixer is not shown a writer's agreement here any more than in their portal.
+        agreement_kind = agreements.kind_for(row)
+        agreement_label = agreements.label_for(row)
+        _agreement = agreements.build_for(row)
+        agreement_text = _agreement.signable_text() if _agreement is not None else ""
+        agreement_unknown = (agreements.UNKNOWN_REASON
+                             if _agreement is None else "")
+        composer_sig = composer_counter = None
+        if _agreement is not None:
+            composer_sig = db.latest_talent_signature(
+                conn, talent_id, agreements.DOC_KINDS[agreement_kind])
+            composer_counter = db.latest_talent_signature(
+                conn, talent_id, agreements.COUNTERSIGN_KINDS[agreement_kind])
     finally:
         conn.close()
     sig_state = signing.verify(
@@ -210,7 +218,8 @@ def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str =
         agreement_executed_at=agreement_at, agreement_ref=agreement_ref,
         assignment_blockers=assignment_blockers,
         agreement_text=agreement_text, composer_sig=composer_sig,
-        composer_counter=composer_counter,
+        composer_counter=composer_counter, agreement_label=agreement_label,
+        agreement_kind=agreement_kind, agreement_unknown=agreement_unknown,
         composer_sig_note=signing.verdict_note(
             sig_state, dict(composer_sig) if composer_sig is not None else None),
         composer_sig_valid=(sig_state == signing.VALID),
@@ -419,33 +428,50 @@ def talent_send_agreement(talent_id: int):
             return RedirectResponse("/talent", status_code=303)
         name = (row["name"] or "").strip()
         email = ((row["email"] if "email" in row.keys() else "") or "").strip()
-        already = db.latest_talent_signature(
-            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT) is not None
+        kind = agreements.kind_for(row)
+        doc_kind = agreements.DOC_KINDS.get(kind)
+        already = (doc_kind is not None and db.latest_talent_signature(
+            conn, talent_id, doc_kind) is not None)
         token = db.ensure_talent_portal_token(conn, talent_id)
     finally:
         conn.close()
     if already:
         return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
+    # Nothing on the record says which agreement governs them (ADR-0082) — sending the
+    # writer's terms to a mixer is the defect, not the fallback.
+    if doc_kind is None:
+        return RedirectResponse(f"/talent/{talent_id}?agr=nocraft#access", status_code=303)
     if not email or not mailer.mail_configured() or not token:
         # No address or no mail provider → say so; the link is on the page to copy.
         return RedirectResponse(f"/talent/{talent_id}?agr=manual#access", status_code=303)
     base = _public_base()
     url = f"{base}/creator/{token}/agreement"
     first = (name.split(" ")[0] if name else "there")
+    label = agreements.LABELS[kind]
+    # The selling point differs because the DEAL differs, and a mixer told they "keep
+    # 100% of their writer's share" has been sent a sentence about somebody else's job.
+    pitch = (
+        "And you keep 100% of your writer's share, plus half the publisher's share, "
+        "which is better than most houses will offer you."
+        if kind == agreements.COMPOSER else
+        "Your fee is agreed per engagement before you accept it, it isn't reduced if we "
+        "discount a client, and you're paid whether or not they've paid us yet."
+    )
+    what = ("what you're paid, what you keep, and what you warrant about the music"
+            if kind == agreements.COMPOSER else
+            "what you're paid, what you're delivering, and what you warrant about it")
     body = (
         f"Hi {first},\n\n"
-        f"Before we can put you on paid work, we need our Composer Agreement signed. "
-        f"It's the standing terms — what you're paid, what you keep, and what you "
-        f"warrant about the music.\n\n"
+        f"Before we can put you on paid work, we need our {label} signed. "
+        f"It's the standing terms — {what}.\n\n"
         f"Read and sign it here:\n{url}\n\n"
         f"Two things worth knowing before you open it. It commits you to no work and "
         f"guarantees you none — every engagement is offered and accepted separately. "
-        f"And you keep 100% of your writer's share, plus half the publisher's share, "
-        f"which is better than most houses will offer you.\n\n"
+        f"{pitch}\n\n"
         f"It takes about five minutes. Any questions, just reply to this.\n\n"
         f"— Chordential"
     )
-    status = mailer.send_email(email, "Your Composer Agreement — Chordential", body,
+    status = mailer.send_email(email, f"Your {label} — Chordential", body,
                                html=mailer.branded_html(base, body))
     return RedirectResponse(f"/talent/{talent_id}?agr={status}#access", status_code=303)
 
@@ -453,12 +479,14 @@ def talent_send_agreement(talent_id: int):
 @router.post("/talent/{talent_id}/agreement/countersign")
 def talent_countersign_agreement(request: Request, talent_id: int,
                                  typed_name: str = Form("")):
-    """The studio's half of the Composer Agreement.
+    """The studio's half of whichever standing agreement governs this creator.
 
-    Refused before the writer has signed, and refused once the document has MOVED since
-    they signed it — the same two rules the client proposal's countersignature follows.
+    Refused before they have signed, and refused once the document has MOVED since they
+    signed it — the same two rules the client proposal's countersignature follows.
     Countersigning a text they never read would leave the two parties bound to different
-    documents, which is precisely what the digest exists to catch.
+    documents, which is precisely what the digest exists to catch. Which document it is
+    comes from `agreements.kind_for` (ADR-0082), so the countersignature can never land
+    on the other one.
     """
     who = actor.identify(request).get("label", "") or ""
     conn = db.connect()
@@ -466,21 +494,26 @@ def talent_countersign_agreement(request: Request, talent_id: int,
         row = db.get_talent(conn, talent_id)
         if row is None:
             return HTMLResponse("Talent not found", status_code=404)
+        kind = agreements.kind_for(row)
+        agr = agreements.build_for(row)
+        if agr is None:
+            return RedirectResponse(f"/talent/{talent_id}?flag=not-signed#access",
+                                    status_code=303)
         theirs = db.latest_talent_signature(
-            conn, talent_id, signing.DOC_COMPOSER_AGREEMENT)
+            conn, talent_id, agreements.DOC_KINDS[kind])
         if theirs is None:
             return RedirectResponse(f"/talent/{talent_id}?flag=not-signed#access",
                                     status_code=303)
         if db.latest_talent_signature(
-                conn, talent_id, signing.DOC_COMPOSER_COUNTERSIGN) is not None:
+                conn, talent_id, agreements.COUNTERSIGN_KINDS[kind]) is not None:
             return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)
-        text = composer_agreement.build_agreement(row).signable_text()
+        text = agr.signable_text()
         if signing.verify(theirs["digest"], text) != signing.VALID:
             return RedirectResponse(f"/talent/{talent_id}?flag=superseded#access",
                                     status_code=303)
         try:
             sig = signing.build_signature(
-                doc_kind=signing.DOC_COMPOSER_COUNTERSIGN,
+                doc_kind=agreements.COUNTERSIGN_KINDS[kind],
                 talent_id=talent_id,
                 document_text=text,
                 signer_name=who or "Chordential",

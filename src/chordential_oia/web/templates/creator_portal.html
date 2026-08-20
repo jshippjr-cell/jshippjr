@@ -658,7 +658,7 @@
      style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;text-decoration:none;
             border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px 16px;
             color:inherit">
-    <span style="font-weight:750">Composer Agreement</span>
+    <span style="font-weight:750">{{ agr_label|default('Composer Agreement') }}</span>
     {% if agr_signed %}
     <span style="opacity:.72;font-size:13.5px;flex:1;min-width:200px">
       {% if agr_counter %}Signed by you and countersigned by us on
@@ -668,8 +668,9 @@
     <span style="font-weight:700;opacity:.85">✓ Read your copy →</span>
     {% else %}
     <span style="opacity:.72;font-size:13.5px;flex:1;min-width:200px">
-      The standing terms — what you're paid, what you keep, what you warrant. Signing it
-      is what lets us put you on paid work. It books you for nothing.</span>
+      The standing terms — what you're paid, what you're delivering, and what you
+      warrant about it. Signing it is what lets us put you on paid work. It books you
+      for nothing.</span>
     <span style="font-weight:700;opacity:.85">Read &amp; sign →</span>
     {% endif %}
   </a>

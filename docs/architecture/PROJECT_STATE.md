@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The mixer is not the writer** (ADR-0082, 2026-08-20). The assignment gate was
+  role-blind, so the only way to make an engineer or an editor assignable was to have them
+  sign the **Composer Agreement** — 45 lines calling them "the writer", a 30% publishing
+  share, and clause 6A's duty to collect releases from performers they never engaged.
+  There is now a **Service Agreement** for everyone paid for craft on music somebody else
+  wrote: no publishing (said out loud, with a clause for the case where they DID write
+  something), a fee stated per engagement, a grant of only what they themselves make, the
+  composer→mixer→editor chain as a contractual clause, and an AI warranty that forbids
+  generating while naming the permitted processing chain. Which document governs is one
+  function (`agreements.kind_for`), read from the creator's disciplines; nothing recorded
+  means **neither** document, not the writer's by default.
+
 - **A record, not a flag; and a board you can take something off** (ADR-0081, 2026-08-20).
   Three defects of one shape. The **W-9** was a date the operator typed by pressing a
   button — it is now the FILE, written through the same door as every other upload,

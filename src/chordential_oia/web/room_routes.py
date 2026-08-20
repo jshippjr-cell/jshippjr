@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from .. import contributor_release, delivery, signing
+from .. import agreements, contributor_release, delivery, signing
 from ..talent import profile_completeness
 from . import db, room
 from .creator_routes import _room_for_project
@@ -72,12 +72,18 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
             # The standing agreement belongs to the CREATOR. Passing None made the banner
             # render its unsigned copy — so a client opening the room was told to read and
             # sign a Composer Agreement, and the studio was told the same. Reported live.
+            # …and WHICH standing agreement is theirs depends on their craft (ADR-0082):
+            # a mixer's is the Service Agreement, and reading the composer's kind here
+            # would tell someone who had signed that they had not.
+            _kind = agreements.kind_for(trow) if trow is not None else None
             agr_signed = db.latest_talent_signature(
-                conn, trow["id"], signing.DOC_COMPOSER_AGREEMENT) if trow else None
+                conn, trow["id"], agreements.DOC_KINDS[_kind]
+            ) if (trow is not None and _kind in agreements.DOC_KINDS) else None
             agr_counter = db.latest_talent_signature(
-                conn, trow["id"], signing.DOC_COMPOSER_COUNTERSIGN) if trow else None
+                conn, trow["id"], agreements.COUNTERSIGN_KINDS[_kind]
+            ) if (trow is not None and _kind in agreements.COUNTERSIGN_KINDS) else None
         else:
-            viewer, agr_signed, agr_counter = None, None, None
+            viewer, agr_signed, agr_counter, _kind = None, None, None, None
         contributors = {project_id: [
             dict(c, signed=db.latest_contributor_signature(
                 conn, c["id"], signing.DOC_CONTRIBUTOR_RELEASE) is not None)
@@ -100,6 +106,8 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         assignments=[view], all_rooms=[view], focused=project_id,
         contributors=contributors, contributor_roles=contributor_release.ROLES,
         agr_signed=agr_signed, agr_counter=agr_counter,
+        # …and NAMED, so a mixer's banner does not offer them a writer's agreement.
+        agr_label=agreements.LABELS.get(_kind, "Standing agreement"),
         # The name presence should show for this viewer — resolved by
         # `_session_role`, not re-derived from the role, which is why the
         # operator appeared twice as "Studio" and "Operator".

@@ -288,7 +288,9 @@ def test_signing_is_the_assignment_gate(gated):
     finally:
         conn.close()
     assert "agreement" not in app_mod.db.talent_assignment_blockers(row)
-    assert (row["agreement_ref"] or "").startswith("Signed in portal")
+    # The reference NAMES the document since ADR-0082 — "signed" has two answers now, and
+    # a roster showing a date without saying which one is back to a bare flag.
+    assert (row["agreement_ref"] or "").startswith("Composer Agreement signed in portal")
 
 
 def test_a_drawn_mark_is_kept_and_a_hostile_one_is_not(gated):

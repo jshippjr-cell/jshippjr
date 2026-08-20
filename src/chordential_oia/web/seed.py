@@ -317,9 +317,13 @@ def seed_delivery_demo(conn: sqlite3.Connection) -> bool:
             conn, "Ezra Cole", "ezra@coleaudio.com",
             [_MD.COMPOSITION, _MD.SONIC_BRANDING],
             "Composer + sonic-branding lead for national spots.")
+        # MIXING, not composition. Her own line says "mix engineer" and she is only ever
+        # assigned as the Mixer — carrying COMPOSITION made the demo route her to the
+        # Composer Agreement (ADR-0082), which is the exact confusion the split exists to
+        # end, demonstrated on our own seed data.
         mixer = _demo_talent_id(
             conn, "Priya Nair", "priya@nairmix.com",
-            [_MD.SOUND_DESIGN, _MD.COMPOSITION],
+            [_MD.MIXING, _MD.SOUND_DESIGN],
             "Mix engineer; broadcast masters and stem delivery.")
 
         # ----------------------------------------------------------------- #

@@ -69,13 +69,23 @@ DOC_PROPOSAL_COUNTERSIGN = "discovery_proposal_countersign"
 # document the system had never seen.
 DOC_COMPOSER_AGREEMENT = "composer_agreement"
 DOC_COMPOSER_COUNTERSIGN = "composer_agreement_countersign"
+# The same floor for everyone who is paid for their work and does not author it — the
+# mixer, the editor, the sound designer, the supervisor. A SEPARATE kind, not a second
+# use of the composer's, because the assignment gate reads "has this person signed the
+# agreement that governs them" and the answer depends on which one that is. Until this
+# existed the gate was role-blind and a mixer had to sign a writer's agreement — 45
+# lines calling them the writer, a 30% publishing share, and the duty to collect
+# releases from performers they never engaged.
+DOC_SERVICE_AGREEMENT = "service_agreement"
+DOC_SERVICE_COUNTERSIGN = "service_agreement_countersign"
 # Everyone who is not the composer. Clause 6A of the Composer Agreement obliges the
 # writer to collect this, and for a while it obliged them to collect a document that did
 # not exist anywhere — which reads as diligence and delivers none.
 DOC_CONTRIBUTOR_RELEASE = "contributor_release"
 DOC_KINDS = (DOC_CLEARANCE, DOC_CLEARANCE_EXECUTED, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
              DOC_PROPOSAL_COUNTERSIGN, DOC_COMPOSER_AGREEMENT,
-             DOC_COMPOSER_COUNTERSIGN, DOC_CONTRIBUTOR_RELEASE)
+             DOC_COMPOSER_COUNTERSIGN, DOC_SERVICE_AGREEMENT,
+             DOC_SERVICE_COUNTERSIGN, DOC_CONTRIBUTOR_RELEASE)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
@@ -85,6 +95,8 @@ DOC_LABELS = {
     DOC_PROPOSAL_COUNTERSIGN: "Discovery Summary & Proposal (countersigned)",
     DOC_COMPOSER_AGREEMENT: "Composer Agreement",
     DOC_COMPOSER_COUNTERSIGN: "Composer Agreement (countersigned)",
+    DOC_SERVICE_AGREEMENT: "Service Agreement",
+    DOC_SERVICE_COUNTERSIGN: "Service Agreement (countersigned)",
     DOC_CONTRIBUTOR_RELEASE: "Contributor Release",
 }
 

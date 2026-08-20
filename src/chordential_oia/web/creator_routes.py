@@ -30,7 +30,7 @@ from ..delivery import (
     current_version, deliverable_owner, merge_license, owed_after, revision_status,
     role_key, scoped_deliverables, seed_brief, version_label, versions_list,
 )
-from .. import composer_agreement, contributor_release, signing
+from .. import agreements, composer_agreement, contributor_release, signing
 from ..talent import InviteStatus, profile_completeness
 from . import db, production, room
 from .billing import _ensure_final_invoice_issued, final_invoice_block
@@ -428,10 +428,16 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
         # countersigned, was still told to "Read & sign" the agreement and that signing
         # "is what lets us put you on paid work" — while working. Same class of error as
         # the client being told to release a proposal already released.
-        agr_signed = db.latest_talent_signature(
-            conn, row["id"], signing.DOC_COMPOSER_AGREEMENT)
-        agr_counter = db.latest_talent_signature(
-            conn, row["id"], signing.DOC_COMPOSER_COUNTERSIGN)
+        # …and it is THEIR standing agreement, which for a mixer or an editor is the
+        # Service Agreement (ADR-0082). Reading the composer's kind here would tell
+        # someone who had signed, and been countersigned, to go and sign.
+        _kind = agreements.kind_for(row)
+        agr_signed = (db.latest_talent_signature(
+            conn, row["id"], agreements.DOC_KINDS[_kind])
+            if _kind in agreements.DOC_KINDS else None)
+        agr_counter = (db.latest_talent_signature(
+            conn, row["id"], agreements.COUNTERSIGN_KINDS[_kind])
+            if _kind in agreements.COUNTERSIGN_KINDS else None)
     finally:
         conn.close()
     all_rooms = assignments
@@ -450,14 +456,21 @@ def creator_portal(request: Request, token: str, p: Optional[int] = None):
         all_rooms=all_rooms, focused=p, contributors=contributors,
         contributor_roles=contributor_release.ROLES,
         agr_signed=agr_signed, agr_counter=agr_counter,
+        # …and NAMED, so a mixer's banner does not offer them a writer's agreement.
+        agr_label=agreements.LABELS.get(_kind, "Standing agreement"),
     )
 
 
 @router.get("/creator/{token}/agreement", response_class=HTMLResponse)
 def creator_agreement(request: Request, token: str):
-    """The Composer Agreement, for the writer to read and sign.
+    """The standing agreement that governs this creator, for them to read and sign.
 
-    On the composer's own token-gated portal, because that is where they already are and
+    WHICH one is `agreements.kind_for`'s call and nobody else's (ADR-0082). This route
+    used to build the Composer Agreement for everybody, so a mixer was asked to sign a
+    writer's agreement — publishing share, authorship, and clause 6A's duty to collect
+    releases from performers they never engaged.
+
+    On the creator's own token-gated portal, because that is where they already are and
     because the per-creator token IS the credential (same model as the client workspace).
     Nothing here is admin-gated; the route validates the token itself.
     """
@@ -466,28 +479,44 @@ def creator_agreement(request: Request, token: str):
         row = db.get_talent_by_portal_token(conn, token)
         if row is None:
             return HTMLResponse("Not found", status_code=404)
-        agr = composer_agreement.build_agreement(row)
-        sig = db.latest_talent_signature(conn, row["id"], signing.DOC_COMPOSER_AGREEMENT)
-        counter = db.latest_talent_signature(
-            conn, row["id"], signing.DOC_COMPOSER_COUNTERSIGN)
+        kind = agreements.kind_for(row)
+        agr = agreements.build_for(row)
+        sig = counter = None
+        if agr is not None:
+            sig = db.latest_talent_signature(
+                conn, row["id"], agreements.DOC_KINDS[kind])
+            counter = db.latest_talent_signature(
+                conn, row["id"], agreements.COUNTERSIGN_KINDS[kind])
         composer_name = row["name"]
     finally:
         conn.close()
+    # No craft on the record is a GAP, not a default (ADR-0082). Rendering the writer's
+    # agreement "just in case" is the defect, so the page says what is missing instead.
+    if agr is None:
+        return render(
+            request, "composer_agreement.html", nav="", token=token,
+            composer_name=composer_name, doc_title="Standing agreement",
+            agreement=None, agreement_text="", signature=None, countersignature=None,
+            signature_note="", signature_valid=False, sign_url="",
+            blocked_reason=agreements.UNKNOWN_REASON,
+            acceptance_text="", acceptance_limits="", consent_text=signing.CONSENT_TEXT,
+        )
+    mod = agreements.module_for(kind)
     text = agr.signable_text()
     state = signing.verify(sig["digest"] if sig is not None else "", text)
     return render(
         request, "composer_agreement.html", nav="", token=token,
-        composer_name=composer_name,
+        composer_name=composer_name, doc_title=agreements.LABELS[kind],
         agreement=agr, agreement_text=text, signature=sig, countersignature=counter,
         signature_note=signing.verdict_note(state, dict(sig) if sig is not None else None),
         signature_valid=(state == signing.VALID),
         # Not signable without a governing law — the document says so rather than
         # collecting a signature on a cross-border assignment with no stated forum.
         sign_url=(f"/creator/{token}/agreement/sign"
-                  if sig is None and composer_agreement.is_signable(agr) else ""),
-        blocked_reason=composer_agreement.blocked_reason(agr),
-        acceptance_text=composer_agreement.ACCEPTANCE_TEXT,
-        acceptance_limits=composer_agreement.ACCEPTANCE_LIMITS,
+                  if sig is None and mod.is_signable(agr) else ""),
+        blocked_reason=mod.blocked_reason(agr),
+        acceptance_text=mod.ACCEPTANCE_TEXT,
+        acceptance_limits=mod.ACCEPTANCE_LIMITS,
         consent_text=signing.CONSENT_TEXT,
     )
 
@@ -496,12 +525,17 @@ def creator_agreement(request: Request, token: str):
 def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(""),
                            signer_email: str = Form(""), consent: str = Form(""),
                            drawn_signature: str = Form("")):
-    """The writer signs. This IS the assignment gate (ADR-0024).
+    """The creator signs the standing agreement that governs them. This IS the
+    assignment gate (ADR-0024).
 
     The gate used to turn on `agreement_executed_at`, a date an operator typed to say a
     document existed somewhere the system had never seen. Signing now stamps it — so the
-    thing that unblocks assigning someone to paid work is the writer's own signature over
-    a text we can still produce, not a memory of a conversation.
+    thing that unblocks assigning someone to paid work is their own signature over a text
+    we can still produce, not a memory of a conversation.
+
+    WHICH agreement is `agreements.kind_for`'s call (ADR-0082), and the doc kind the
+    signature is filed under follows it — so "has this person signed?" is answered
+    against the document they were actually shown, never against the other one.
     """
     conn = db.connect()
     try:
@@ -512,17 +546,29 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
         if not consent.strip() or not typed_name.strip():
             return RedirectResponse(f"/creator/{token}/agreement?flag=incomplete",
                                     status_code=303)
+        kind = agreements.kind_for(row)
+        agr = agreements.build_for(row)
+        if agr is None:                 # nothing says which document governs — see above
+            return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
+        doc_kind = agreements.DOC_KINDS[kind]
         # Already signed → the existing one stands. Signing again is not an edit, and the
         # append-only table would otherwise grow a row per refresh.
-        if db.latest_talent_signature(
-                conn, talent_id, signing.DOC_COMPOSER_AGREEMENT) is not None:
+        if db.latest_talent_signature(conn, talent_id, doc_kind) is not None:
             return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
-        agr = composer_agreement.build_agreement(row)
-        if not composer_agreement.is_signable(agr):
+        mod = agreements.module_for(kind)
+        if not mod.is_signable(agr):
             return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
+        # The commercial terms as they stood at signing. A Service Agreement conveys no
+        # publishing, so its snapshot says that in as many words rather than carrying a
+        # writer's fields at zero — a 0% share and no share at all are different claims.
+        terms = ({"share_pct": agr.share_pct,
+                  "share_with_session_pct": agr.share_with_session_pct,
+                  "publisher_to_writers_pct": agr.publisher_to_writers_pct}
+                 if kind == agreements.COMPOSER else
+                 {"publishing": "none", "basis": "fee stated per engagement"})
         try:
             sig = signing.build_signature(
-                doc_kind=signing.DOC_COMPOSER_AGREEMENT,
+                doc_kind=doc_kind,
                 talent_id=talent_id,
                 document_text=agr.signable_text(),
                 signer_name=(row["name"] or "").strip(),
@@ -534,16 +580,17 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
                 token=token,
                 drawn_mark=drawn_signature,
                 certified_version=agr.version,
-                terms_snapshot={"share_pct": agr.share_pct,
-                                "share_with_session_pct": agr.share_with_session_pct,
-                                "publisher_to_writers_pct": agr.publisher_to_writers_pct},
+                terms_snapshot=terms,
             )
         except ValueError as exc:
             return HTMLResponse(str(exc), status_code=400)
         db.record_signature(conn, sig)
         # The gate, satisfied by the signature rather than by an assertion about one.
+        # The reference NAMES the document, because "signed" now has two answers and a
+        # roster that shows a date without saying which one is back to a bare flag.
         db.set_talent_agreement(conn, talent_id, sig.signed_at[:10],
-                                f"Signed in portal · {sig.digest[:12]}")
+                                f"{agreements.LABELS[kind]} signed in portal · "
+                                f"{sig.digest[:12]}")
         # AND THE FUNNEL MOVES. Signing the standing agreement IS joining the roster —
         # it is the moment they become assignable — and nothing in the live flow ever
         # advanced `invite_status` past Invited: only the seeder ever wrote Joined, so a
@@ -553,9 +600,11 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
             db.update_talent_invite(conn, talent_id, InviteStatus.JOINED.value)
         signer_mail = sig.signer_email
         doc_text = agr.signable_text()
+        doc_title = agreements.LABELS[kind]
     finally:
         conn.close()
-    _mail_signed_copy(signer_mail, sig, doc_text, row_name=sig.signer_name)
+    _mail_signed_copy(signer_mail, sig, doc_text, row_name=sig.signer_name,
+                      doc_title=doc_title)
     return RedirectResponse(f"/creator/{token}/agreement", status_code=303)
 
 

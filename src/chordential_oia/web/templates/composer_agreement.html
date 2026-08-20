@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Composer Agreement · Chordential</title>
+  <title>{{ doc_title or 'Composer Agreement' }} · Chordential</title>
   <link rel="icon" href="/static/public/wordmark-dark.png">
   <style>
     /* A contract the writer is asked to sign, set like one. No operator chrome: the
@@ -68,10 +68,10 @@
 <body>
   <div class="top">
     <img src="/static/public/wordmark-dark.png" alt="Chordential">
-    <span class="ph">Composer Agreement</span>
+    <span class="ph">{{ doc_title or 'Composer Agreement' }}</span>
   </div>
   <div class="wrap">
-    <h1>Composer Agreement</h1>
+    <h1>{{ doc_title or 'Composer Agreement' }}</h1>
     <p class="sub">Between Chordential and {{ composer_name or 'you' }}. Read it, and sign at the
       bottom if you agree. Nothing here books you for any work.</p>
 

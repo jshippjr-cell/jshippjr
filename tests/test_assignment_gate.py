@@ -36,8 +36,15 @@ def _win_and_make_project(client, opp_id=1):
     return int(re.search(r"/project/(\d+)", r.headers["location"]).group(1))
 
 
-def _unsigned_talent_id(client):
-    """A brand-new approved creator with NO agreement and NO rate — blocked."""
+def _unsigned_talent_id(client, disciplines=None):
+    """A brand-new approved creator with NO agreement and NO rate — blocked.
+
+    They carry a CRAFT by default, because since ADR-0082 the craft is what decides which
+    of the two standing agreements governs them. A profile with none gets neither
+    document, which is a different (and also correct) screen — see
+    `test_a_creator_with_no_craft_gets_neither_agreement`.
+    """
+    from chordential_oia.models import MusicDiscipline
     db = _db()
     from chordential_oia.talent import InviteStatus, ReviewStatus, Talent
     conn = db.connect()
@@ -46,6 +53,8 @@ def _unsigned_talent_id(client):
             name="Gate Testcase", email="gate@example.com",
             credits="Test credits", review_status=ReviewStatus.APPROVED,
             invite_status=InviteStatus.JOINED,
+            disciplines=([MusicDiscipline.COMPOSITION] if disciplines is None
+                         else list(disciplines)),
         ))
     finally:
         conn.close()
@@ -127,7 +136,12 @@ def test_talent_page_shows_agreement_state(client):
     """The manual tick survives as the FALLBACK — a paper agreement signed before the
     portal existed is a real agreement. It is relabelled "Mark executed by hand" because
     the primary path is now the composer signing it in their portal, where the system can
-    still produce the text they agreed to."""
+    still produce the text they agreed to.
+
+    The creator carries a DISCIPLINE now: since ADR-0082 there are two standing
+    agreements and which one governs is read from their craft, so a blank profile gets
+    neither (asserted in the test below). This one is about a writer.
+    """
     tid = _unsigned_talent_id(client)
     page = client.get(f"/talent/{tid}").text
     assert "Mark executed by hand" in page
@@ -145,6 +159,19 @@ def test_talent_page_shows_agreement_state(client):
     page = client.get(f"/talent/{tid}").text
     assert "Mark executed by hand" in page
     assert "Drive/agr.pdf" not in page
+
+
+def test_a_creator_with_no_craft_gets_neither_agreement(client):
+    """The gate's other half, since ADR-0082. The Composer Agreement conveys a publishing
+    share and the Service Agreement conveys none, so serving one to a blank profile is a
+    guess about what someone does for a living — the exact defect that made mixers sign
+    a writer's agreement. The page asks for the evidence instead."""
+    tid = _unsigned_talent_id(client, disciplines=[])
+    page = client.get(f"/talent/{tid}").text
+    assert "No standing agreement can be issued yet" in page
+    assert "Add at least one discipline" in page
+    assert "Composer Agreement not signed yet" not in page
+    assert "Not assignable yet" in page
 
 
 def test_seeded_demo_composers_clear_the_gate(client):
