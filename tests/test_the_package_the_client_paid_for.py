@@ -1,0 +1,237 @@
+"""A client paid thousands and downloaded a package with no audio in it.
+
+Reported live (operator, 2026-08-20): *"I downloaded everything and it doesnt have the
+audio files in there."*
+
+The packager is not the fault — it bundles every asset whose file is on disk and marks
+the rest "referenced (not bundled)". The fault is that it only ever RUNS ONCE.
+``_maybe_finalize_delivery`` returns early when the state is already Delivered, so the
+ZIP is assembled at whatever moment the delivery first reached that state and every
+asset published afterwards stays outside it — listed in the manifest as delivered, and
+absent from the file.
+
+Two more from the same download:
+
+* the closing seal read **IN PROGRESS** on a finished, paid-for delivery, and spelled the
+  studio's name in 9px caps where the wordmark belongs;
+* the Clearance Certificate read **DRAFT · pending confirmation** — *"Dont i need to have
+  an actual clearance signature on the certificate? i was never asked for that in the
+  whole process."* Confirming the licence gated *Release*, which is a state after the
+  client already has the package.
+"""
+import io
+import os
+import re
+import zipfile
+
+import pytest
+from fastapi.testclient import TestClient
+
+from chordential_oia.models import MusicDiscipline
+from chordential_oia.talent import Talent
+
+
+@pytest.fixture()
+def shipped(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "t.db"))
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "up"))
+    monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "letmein")
+    monkeypatch.delenv("CHORDENTIAL_SEED_DEMO", raising=False)
+    import importlib
+    importlib.reload(importlib.import_module("chordential_oia.web.db"))
+    from chordential_oia.web import app as app_mod
+    importlib.reload(app_mod)
+    from chordential_oia.web import db, production
+    from chordential_oia.web.shell import ADMIN_COOKIE, admin_cookie_value
+    c = TestClient(app_mod.app)
+    conn = db.connect()
+    db.init_db(conn)
+    pid = db.insert_project(conn, None, "The Larkspur Trust", "Sand Castle",
+                            1000, 2000, ["Composer"])
+    tid = db.insert_talent(conn, Talent(name="Jon Shipp", email="j@x.com",
+                                        disciplines=[MusicDiscipline.COMPOSITION]))
+    db.add_assignment(conn, pid, "Composer", tid)
+    ttok = db.ensure_talent_portal_token(conn, tid)
+    up = str(tmp_path / "up")
+    os.makedirs(up, exist_ok=True)
+    with open(os.path.join(up, "v.wav"), "wb") as fh:
+        fh.write(b"RIFF0000WAVE" + os.urandom(300))
+    db.update_delivery(conn, pid, "versions",
+                       [{"n": 1, "label": "v2 FINAL", "url": "/uploads/v.wav",
+                         "filename": "v.wav"}])
+    production.set_creative_lock(conn, db, pid, version_n=2, by="Marta Ruiz")
+    conn.close()
+    return (c, db, pid, ttok, up,
+            (ADMIN_COOKIE, admin_cookie_value("letmein")))
+
+
+def _publish(c, db, pid, ttok, admin, label, names):
+    c.post(f"/creator/{ttok}/project/{pid}/deliverable", data={"label": label},
+           files=[("file", (n, io.BytesIO(b"RIFF0000WAVE" + os.urandom(300)), "audio/wav"))
+                  for n in names], headers={"X-Requested-With": "fetch"})
+    conn = db.connect()
+    pend = db.get_delivery(conn, pid)["pending_assets"]
+    conn.close()
+    c.cookies.set(*admin)
+    for a in pend:
+        c.post(f"/project/{pid}/delivery/asset/publish",
+               data={"filename": a["filename"], "action": "publish"},
+               follow_redirects=False)
+    c.cookies.clear()
+
+
+def _satisfy_uploads(db, conn, pid):
+    """Give every scoped deliverable an uploaded, approved asset, so the only thing
+    left holding the delivery is the licence."""
+    from chordential_oia.delivery import scoped_deliverables
+    prow = db.get_project(conn, pid)
+    assets = []
+    for d in scoped_deliverables(prow, db.get_delivery(conn, pid)):
+        if d.get("is_master"):
+            continue
+        assets.append({"label": d["asset"], "filename": "v.wav",
+                       "url": "/uploads/v.wav", "kind": "audio"})
+    db.update_delivery(conn, pid, "assets", assets)
+    for a in assets:
+        db.set_asset_approval(conn, pid, db.asset_key(a), status="Approved",
+                              by="Marta Ruiz", email="m@a.com", version="2")
+
+
+def _zip_of(db, pid, up):
+    conn = db.connect()
+    z = db.get_delivery(conn, pid).get("delivery_zip") or {}
+    conn.close()
+    assert z, "no package was built"
+    return zipfile.ZipFile(os.path.join(up, z["filename"])), z
+
+
+# ── the audio has to be in it ───────────────────────────────────────────────────────
+def test_the_package_contains_the_audio(shipped):
+    c, db, pid, ttok, up, admin = shipped
+    _publish(c, db, pid, ttok, admin, "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    conn = db.connect()
+    _build_delivery_package(conn, pid)
+    conn.close()
+    z, _d = _zip_of(db, pid, up)
+    audio = [n for n in z.namelist() if n.lower().endswith((".wav", ".mp3"))]
+    assert len(audio) >= 3, z.namelist()      # two stems + the master
+    assert any(n.startswith("Stems/") for n in audio), z.namelist()
+    assert any(n.startswith("Masters/") for n in audio), z.namelist()
+
+
+def test_a_package_built_before_the_work_is_rebuilt(shipped):
+    """THE reported bug. The ZIP was assembled once, at whatever moment the delivery
+    first reached Delivered, and everything published afterwards stayed outside it."""
+    c, db, pid, ttok, up, admin = shipped
+    from chordential_oia.web.delivery_ops import _build_delivery_package, _package_is_stale
+    conn = db.connect()
+    db.update_delivery(conn, pid, "state", "Delivered")
+    _build_delivery_package(conn, pid)        # built EARLY — before the stems land
+    conn.close()
+    z, _d = _zip_of(db, pid, up)
+    assert not [n for n in z.namelist() if n.startswith("Stems/")], (
+        "the fixture is wrong — the early package already has stems")
+
+    _publish(c, db, pid, ttok, admin, "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    conn = db.connect()
+    delivery = db.get_delivery(conn, pid)
+    assert _package_is_stale(delivery), "a package older than its own contents reads fresh"
+    from chordential_oia.web.delivery_ops import _maybe_finalize_delivery
+    _maybe_finalize_delivery(conn, pid)       # the shortcut that used to just return True
+    conn.close()
+    z, _d = _zip_of(db, pid, up)
+    assert [n for n in z.namelist() if n.startswith("Stems/")], (
+        "the package still has no audio in it — the client pays for this file")
+
+
+def test_the_descriptor_records_what_it_could_not_bundle(shipped):
+    """`referenced_count` is the number of files the client will NOT find in the ZIP.
+    Non-zero means a package with holes, which nothing was counting."""
+    c, db, pid, ttok, up, admin = shipped
+    conn = db.connect()
+    db.update_delivery(conn, pid, "assets", [
+        {"label": "Ghost", "filename": "not-on-disk.wav", "url": "/uploads/x.wav",
+         "kind": "audio"}])
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    pkg = _build_delivery_package(conn, pid)
+    conn.close()
+    assert pkg["referenced_count"] == 1, pkg
+    assert pkg["asset_count"] == 1
+
+
+# ── the seal ────────────────────────────────────────────────────────────────────────
+def _package_html(db, pid, up):
+    z, _d = _zip_of(db, pid, up)
+    return z.read("Docs/Delivery-Package.html").decode()
+
+
+def test_a_delivered_package_is_not_stamped_in_progress(shipped):
+    c, db, pid, _t, up, _a = shipped
+    conn = db.connect()
+    db.update_delivery(conn, pid, "state", "Delivered")
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _build_delivery_package(conn, pid)
+    conn.close()
+    html = _package_html(db, pid, up)
+    seals = re.findall(r'<div class="seal"[^>]*>(.*?)</div>', html, re.S)
+    closing = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", seals[-1])).strip()
+    assert "DELIVERED" in closing, closing
+    assert "IN PROGRESS" not in closing
+
+
+def test_every_seal_carries_the_mark(shipped):
+    """It spelled "Chordential" in 9px caps where the wordmark belongs."""
+    c, db, pid, _t, up, _a = shipped
+    conn = db.connect()
+    db.update_delivery(conn, pid, "state", "Delivered")
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _build_delivery_package(conn, pid)
+    conn.close()
+    z, _d = _zip_of(db, pid, up)
+    for doc in ("Docs/Delivery-Package.html", "Docs/Clearance-Certificate.html"):
+        html = z.read(doc).decode()
+        for seal in re.findall(r'<div class="seal"[^>]*>(.*?)</div>', html, re.S):
+            assert "seal-mark" in seal, f"{doc}: a seal without the wordmark"
+            assert "data:image/png;base64," in seal, f"{doc}: the mark did not embed"
+
+
+# ── and the certificate that certifies nothing ──────────────────────────────────────
+def test_an_unconfirmed_licence_is_reported_as_a_hold(shipped):
+    """*"i was never asked for that in the whole process."* Confirming the licence gates
+    RELEASE — a state after the client already has the package — so a Delivered package
+    can carry a DRAFT grant. It is not hard-gated here (that would strand every delivery
+    already in flight); it is NAMED, on the console and in the queue."""
+    c, db, pid, _t, _up, admin = shipped
+    from chordential_oia.web.delivery_ops import DELIVERY_HELD, delivery_held_by
+    conn = db.connect()
+    _satisfy_uploads(db, conn, pid)
+    db.update_delivery(conn, pid, "state", "Delivered")
+    delivery, prow = db.get_delivery(conn, pid), db.get_project(conn, pid)
+    # the licence is reported LAST — everything else about this delivery is done
+    assert delivery_held_by(delivery, prow) == "licence"
+    from chordential_oia.web.queue import compute_queue
+    cards = compute_queue(conn, db)
+    conn.close()
+    hit = [x for x in cards if "DRAFT" in (x["title"] or "")]
+    assert hit, "nothing tells the operator the certificate certifies nothing"
+    assert DELIVERY_HELD["licence"] in hit[0]["detail"]
+    c.cookies.set(*admin)
+    console = c.get(f"/project/{pid}/delivery").text
+    assert "Held:" in console and "Clearance Certificate" in console
+
+
+def test_confirming_the_licence_clears_the_hold(shipped):
+    c, db, pid, _t, _up, admin = shipped
+    from chordential_oia.web.delivery_ops import delivery_held_by
+    conn = db.connect()
+    _satisfy_uploads(db, conn, pid)
+    db.update_delivery(conn, pid, "state", "Delivered")
+    conn.close()
+    c.cookies.set(*admin)
+    c.post(f"/project/{pid}/delivery/license/confirm", data={"by": "Jon Shipp"},
+           follow_redirects=False)
+    conn = db.connect()
+    held = delivery_held_by(db.get_delivery(conn, pid), db.get_project(conn, pid))
+    conn.close()
+    assert held == "", held

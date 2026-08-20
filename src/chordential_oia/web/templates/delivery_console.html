@@ -137,6 +137,15 @@
       {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
       <button class="btn" type="submit">📦 Build delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
     </form>
+    {# WHAT IS HOLDING THE DELIVERY, said out loud. The licence gate used to sit on
+       Release only — so a package assembled, a client paid and downloaded it, and the
+       Clearance Certificate inside read "DRAFT · pending confirmation". It now holds
+       DELIVERY, which is where it matters, and says so here. #}
+    {% if delivery_held %}
+    <p class="small" style="margin:8px 0;padding:9px 12px;border:1px solid #e5a24d;
+       border-radius:8px;background:rgba(229,162,77,.08)">
+      <b>Held:</b> {{ delivery_held_text(delivery_held) }}</p>
+    {% endif %}
     {% if not license_confirmed %}
     <form method="post" action="/project/{{ project['id'] }}/delivery/license/confirm" class="inline">
       <input type="hidden" name="by" value="{{ signatory.signer }}">

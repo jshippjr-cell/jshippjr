@@ -43,6 +43,9 @@ templates.env.globals["pay_notice"] = (
     lambda flag: __import__("chordential_oia.web.billing",
                             fromlist=["x"]).pay_notice(flag))
 # …and why a balance cannot be asked for at all, said to each side in its own words.
+templates.env.globals["delivery_held_text"] = (
+    lambda why: __import__("chordential_oia.web.delivery_ops",
+                          fromlist=["x"]).DELIVERY_HELD.get(why or "", ""))
 templates.env.globals["invoice_block_client"] = (
     lambda why: __import__("chordential_oia.web.billing",
                            fromlist=["x"]).INVOICE_BLOCK_CLIENT.get(why or "", ""))

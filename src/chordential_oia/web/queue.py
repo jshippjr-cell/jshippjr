@@ -31,7 +31,7 @@ from __future__ import annotations
 from datetime import date
 from typing import List
 
-from . import billing, next_action, opportunity_ops
+from . import billing, delivery_ops, next_action, opportunity_ops
 
 # The rung labels, indexable by urgency — the template renders these as section
 # headings so the queue reads as priorities, not a jumble.
@@ -197,6 +197,17 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                     f"The client cannot pay — {prow['client']}",
                     billing.INVOICE_BLOCK_OPERATOR.get(why, "The balance cannot be raised."),
                     f"/project/{prow['id']}/delivery#assets",
+                    age_key=delivery.get("released_at") or ""))
+        # A DELIVERED package whose Clearance Certificate still reads DRAFT. The client
+        # has it in hand; the grant it is supposed to certify was never asserted.
+        if (delivery.get("state") or "") in ("Delivered", "Released"):
+            held = delivery_ops.delivery_held_by(delivery, prow)
+            if held == "licence":
+                cards.append(_card(
+                    2, "money",
+                    f"Clearance certificate says DRAFT — {prow['client']}",
+                    delivery_ops.DELIVERY_HELD["licence"],
+                    f"/project/{prow['id']}/delivery#delivery",
                     age_key=delivery.get("released_at") or ""))
         pending_assets = delivery.get("pending_assets") or []
         if pending_assets:

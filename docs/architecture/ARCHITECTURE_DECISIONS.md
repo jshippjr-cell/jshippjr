@@ -1664,6 +1664,43 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0079 — The package is rebuilt when it is older than the work
+**Status:** Accepted (2026-08-20, operator directive) · Source:
+`delivery_ops._package_is_stale` / `delivery_held_by` / `DELIVERY_HELD`,
+`delivery._seal_word`, `tests/test_the_package_the_client_paid_for.py`
+
+**Decision.** (1) `_maybe_finalize_delivery` **rebuilds the ZIP when it predates its own
+contents** instead of returning early on an already-Delivered project. The descriptor
+records `asset_count` and `referenced_count`, so a package with holes is countable.
+
+(2) A **seal states what the thing it is stamped on IS** — `DELIVERED` on a delivered
+package — and carries the wordmark, not the studio's name typed in 9px caps.
+
+(3) `delivery_held_by` names what is stopping a delivery, `licence` last and
+**non-blocking**: the console and the queue say the Clearance Certificate reads DRAFT.
+
+**Why.** *"I downloaded everything and it doesnt have the audio files in there."* The
+packager was never the fault — it bundles every asset whose file is on disk. It only ever
+RAN ONCE: the early return on `state in (Delivered, Released)` meant the ZIP was assembled
+at whatever moment the delivery first reached that state, and every asset published
+afterwards stayed outside it, listed in the manifest as delivered and absent from the
+file. A client paid thousands and downloaded documents.
+
+**Consequences.** Anything that changes what a delivery CONTAINS must leave the package
+stale-able — compare against `built_at`, never assume the file on disk matches the record.
+And the licence hold is deliberately a REPORT, not a gate: confirming it gates Release
+(a tested contract), and hard-gating Delivered on it would have stranded every delivery
+already in flight the moment it shipped. The operator is told loudly instead, in both
+places they look.
+
+**Still open after this** (named so it is not mistaken for done): the Clearance
+Certificate's signature line is a wet-sign blank, not the in-house electronic signature
+ADR-0059 already provides; the branded HTML docs are not rendered to PDF unless a
+headless browser happens to be importable; a lane holding twelve files shows twelve
+identical labels in the manifest rather than their filenames; and `Docs/For-filing/`
+lands a client in a folder of raw .txt/.csv before they find the branded documents one
+level up.
+
 ### ADR-0078 — A delivery nobody can be billed for must say so, and be billable
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0077 ·
 Source: `billing.final_invoice_block` / `INVOICE_BLOCK_CLIENT` / `INVOICE_BLOCK_OPERATOR`,

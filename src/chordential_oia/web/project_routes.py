@@ -56,7 +56,8 @@ from .billing import (
 )
 from .delivery_ops import (
     scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
-    _gate_banner, _maybe_finalize_delivery, _notify_assigned_creators,
+    delivery_held_by, DELIVERY_HELD, _gate_banner, _maybe_finalize_delivery,
+    _notify_assigned_creators,
     _notify_operator_review, _project_estimate, _sync_role_milestones,
 )
 from .estimate import estimate_for
@@ -631,6 +632,9 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # is where the operator can do something about it.
         "invoice_block": final_invoice_block(conn, project_id,
                                              heal=_ensure_proposal_for_project),
+        # …and what is holding the delivery itself, said rather than left as a
+        # button that quietly does nothing.
+        "delivery_held": delivery_held_by(delivery, row),
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
         # ADR-0019/0036: the client-facing production experience answers the court

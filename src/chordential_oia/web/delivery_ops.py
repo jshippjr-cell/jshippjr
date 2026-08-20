@@ -19,7 +19,8 @@ from typing import Optional
 
 from .. import mailer
 from ..delivery import (
-    build_delivery_zip, current_version, delivery_completeness, role_key,
+    build_delivery_zip, current_version, delivery_completeness, license_confirmation,
+    role_key,
     scoped_deliverables, state_on_client_approved, version_label, versions_list,
 )
 from ..storage import get_object_store
@@ -154,6 +155,39 @@ def _notify_operator_review(project_id: int, project, title: str, body: str) -> 
         pass
 
 
+def delivery_held_by(delivery: dict, project) -> str:
+    """What is stopping this delivery from shipping ("" when nothing is).
+
+    `_ready_to_deliver` is a boolean, and a boolean cannot tell the operator that the
+    thing they are waiting on is a button they have not pressed. Same shape as
+    `billing.final_invoice_block`: name it once, report it everywhere.
+    """
+    if not production.creative_lock(delivery):
+        return "master"
+    if not delivery_completeness(project, delivery)["complete"]:
+        return "uploads"
+    roll = db.asset_approval_rollup(delivery)
+    if roll["total"] and roll["approved"] != roll["total"]:
+        return "signoff"
+    # The licence is reported LAST and does not block: confirming it gates Release
+    # (tested contract), and hard-gating Delivered on it would strand every delivery
+    # already in flight the moment this shipped. So the operator is TOLD — on the
+    # console and in the queue — while the certificate goes on saying DRAFT honestly.
+    if not license_confirmation(delivery):
+        return "licence"
+    return ""
+
+
+#: What each hold means to the operator — the client never sees these.
+DELIVERY_HELD = {
+    "master": "The client has not approved the master yet.",
+    "uploads": "Not every scoped deliverable has been uploaded.",
+    "licence": ("Confirm the licence terms. Until you do, the Clearance Certificate "
+                "reads DRAFT — it certifies nothing, and the package will not ship."),
+    "signoff": "The client has not signed off every delivered file yet.",
+}
+
+
 def _ready_to_deliver(delivery: dict, project) -> bool:
     """The gate to the full download (Option 1 model): the master is approved (Creative Lock),
     every scoped deliverable is UPLOADED, AND every uploaded derivative is SIGNED OFF by the
@@ -248,6 +282,32 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     return pkg
 
 
+def _package_is_stale(delivery: dict) -> bool:
+    """Does the built ZIP predate the work it is supposed to contain?
+
+    Compares the newest delivered thing — an asset, a version — against the package's
+    own ``built_at``. Anything landing after the build is simply not in the file the
+    client downloads, and nothing said so: the manifest cheerfully listed it as
+    "Delivered · referenced (not bundled)".
+    """
+    zip_obj = delivery.get("delivery_zip") or {}
+    built = (zip_obj.get("built_at") or "").strip()
+    if not zip_obj:
+        return True                       # never built at all
+    if not built:
+        return True                       # unknown age → assume stale
+    newest = ""
+    for a in (delivery.get("assets") or []):
+        newest = max(newest, (a.get("at") or a.get("created_at") or ""))
+    for v in (delivery.get("versions") or []):
+        newest = max(newest, (v.get("created_at") or v.get("at") or ""))
+    # An asset with no timestamp cannot be compared; count the set instead, which is
+    # the case that matters (a file was added after the build).
+    if not newest:
+        return len(delivery.get("assets") or []) != int(zip_obj.get("asset_count") or -1)
+    return newest > built
+
+
 def _maybe_finalize_delivery(conn, project_id: int) -> bool:
     """Ship the delivery package + mark Delivered ONLY when the creative is approved (Creative
     Lock) AND every deliverable is uploaded + signed off. This is the SINGLE door to the full
@@ -258,6 +318,13 @@ def _maybe_finalize_delivery(conn, project_id: int) -> bool:
         return False
     if (delivery.get("state") or "") in ("Delivered", "Released"):
         _ensure_final_invoice_issued(conn, project_id)   # self-heal older Delivered deals
+        # …AND REBUILD THE PACKAGE IF IT IS STALE. This returned here unconditionally, so
+        # the ZIP was assembled exactly ONCE — at whatever moment the delivery first
+        # reached Delivered — and every asset published afterwards stayed outside it. A
+        # client paid and downloaded a package with no audio in it (reported live,
+        # 2026-08-20). Cheap to check, and the rebuild is idempotent.
+        if _package_is_stale(delivery):
+            _build_delivery_package(conn, project_id)
         return True
     if not _ready_to_deliver(delivery, project):
         return False

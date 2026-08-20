@@ -1664,8 +1664,13 @@ _BRANDED_CSS = """
   .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .seal{width:96px;height:96px;border-radius:50%%;border:3px solid %(orange)s;color:%(wine)s;
     display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5}
+    font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;line-height:1.5;
+    gap:2px}
   .seal b{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:15px;letter-spacing:0}
+  /* The MARK, not the word. A seal spelling out the studio's name in 9px caps is a
+     placeholder that shipped; the wordmark is what a certificate is stamped with
+     (reported live, 2026-08-20). Wine-on-cream, so the dark-ground knockout is wrong here. */
+  .seal img.seal-mark{height:11px;width:auto;display:block;opacity:.9}
   .cover{background:radial-gradient(120%% 90%% at 20%% 0%%, #3a1219 0%%, #1f1013 60%%, #160c0e 100%%);
     color:%(cream)s;padding:0;display:flex;flex-direction:column;justify-content:space-between}
   .cover .inner{position:relative;z-index:1;padding:30mm 22mm}
@@ -1737,6 +1742,28 @@ def _esc(value) -> str:
 
 # Cache the embedded-wordmark data URI so we read the PNG off disk at most once.
 _WORDMARK_CACHE: dict = {}
+
+
+def _seal_word(state: str) -> str:
+    """What the package's seal says. It said IN PROGRESS on anything that was not
+    Released — including a **Delivered** package the client had just paid for and
+    downloaded (reported live, 2026-08-20). A seal is a statement about the thing it is
+    stamped on; stamping "in progress" on a finished delivery is simply wrong."""
+    st = (state or "").strip()
+    if st == "Released":
+        return "RELEASED"
+    if st == "Delivered":
+        return "DELIVERED"
+    return "IN PROGRESS"
+
+
+def _seal_sub(state: str) -> str:
+    st = (state or "").strip()
+    if st == "Released":
+        return "for release"
+    if st == "Delivered":
+        return "complete"
+    return st or "in progress"
 
 
 def _wordmark_data_uri(variant: str = "ko") -> str:
@@ -1846,7 +1873,8 @@ def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
         {confirmed}
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
-        <div class="seal"><span>Chordential</span><b>{_esc(seal_label)}</b><span>{_esc(pkgid)}</span></div>
+        <div class="seal"><img class="seal-mark" src="{_wordmark_data_uri('dark')}"
+             alt="Chordential"><b>{_esc(seal_label)}</b><span>{_esc(pkgid)}</span></div>
         <p style="font-size:10.5px;color:#7a756d;margin:12px 0 0;max-width:230px">{_esc(cert.clearance_line)}</p>
       </div>
     </div>
@@ -2095,8 +2123,9 @@ def delivery_package_html(
     {brief_section}
     <div class="panel" style="text-align:center;padding:26px 22px;margin-top:24px;border-color:{_BRAND['orange']}">
       <div class="seal" style="margin:0 auto 14px;width:100px;height:100px">
-        <span>Chordential</span><b>{'RELEASED' if state == 'Released' else 'IN PROGRESS'}</b>
-        <span>{_esc('for release' if state == 'Released' else (state or 'in progress'))}</span></div>
+        <img class="seal-mark" src="{_wordmark_data_uri('dark')}" alt="Chordential">
+        <b>{_seal_word(state)}</b>
+        <span>{_esc(_seal_sub(state))}</span></div>
       <p class="serif" style="font-size:20px;color:{_BRAND['wine']};margin:0 0 4px">{_esc(cert.campaign)}</p>
       <p style="color:#7a756d;font-size:12px;margin:0">{_esc(cert.client)}</p>
       {f'<p style="margin:12px 0 0;font-size:12.5px">Released <b>{_esc(released_at)}</b></p>' if released_at else ''}
@@ -2421,6 +2450,13 @@ def build_delivery_zip(
         "filename": zip_name,
         "url": f"/uploads/{zip_name}",
         "built_at": built_at,
+        # How many assets this build actually saw — so a later finalize can tell whether
+        # the package predates the work (`delivery_ops._package_is_stale`) even when the
+        # assets carry no timestamps of their own.
+        "asset_count": len(assets),
+        # …and how many of them had no local file to bundle. Non-zero means the client
+        # is downloading a package with holes in it, which nobody was being told.
+        "referenced_count": len(referenced),
         "checklist": checklist,
         "items": items,
         "converted": converted,

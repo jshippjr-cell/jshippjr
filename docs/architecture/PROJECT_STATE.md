@@ -94,6 +94,14 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The delivery package had no audio in it** (ADR-0079, 2026-08-20). The ZIP was built
+  once — when the delivery first reached Delivered — and everything published afterwards
+  stayed outside it, listed in the manifest as delivered and absent from the file. It is
+  rebuilt when it predates its own contents. Also: seals say **DELIVERED** on a delivered
+  package and carry the wordmark, and an unconfirmed licence is reported (console + queue)
+  rather than left silent — a paying client was sent a Clearance Certificate reading
+  "DRAFT · pending confirmation".
+
 - **A delivery nobody could be billed for** (ADR-0078, 2026-08-19). Everything signed off,
   package assembled, state Delivered — and no invoice, because every path that raises one
   needs a stored proposal and returns silently without it. The client was told their files
