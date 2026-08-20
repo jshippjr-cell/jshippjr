@@ -209,6 +209,16 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                     delivery_ops.DELIVERY_HELD["licence"],
                     f"/project/{prow['id']}/delivery#delivery",
                     age_key=delivery.get("released_at") or ""))
+        zip_obj = delivery.get("delivery_zip") or {}
+        if zip_obj.get("referenced_count"):
+            cards.append(_card(
+                1, "money",
+                f"The package has no audio in it — {prow['client']}",
+                f"{zip_obj['referenced_count']} of {zip_obj.get('asset_count') or '?'} "
+                "files are not on the server, so the ZIP holds only documents. Rebuild it; "
+                "anything the mirror has lost has to be re-uploaded.",
+                f"/project/{prow['id']}/delivery#delivery",
+                age_key=zip_obj.get("built_at") or ""))
         pending_assets = delivery.get("pending_assets") or []
         if pending_assets:
             lanes = {}

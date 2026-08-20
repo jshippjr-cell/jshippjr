@@ -1686,6 +1686,16 @@ at whatever moment the delivery first reached that state, and every asset publis
 afterwards stayed outside it, listed in the manifest as delivered and absent from the
 file. A client paid thousands and downloaded documents.
 
+**Amended (2026-08-20, same day).** Rebuilding on finalize was not enough: an
+already-Delivered project has no NEXT approval to trigger it, so the client went on
+downloading the same hollow ZIP however many times they tried. The **download itself**
+rebuilds a stale package before handing it over. And the counts are PERSISTED onto
+`delivery_json['delivery_zip']` — they were computed and dropped, which is why a ZIP
+holding only documents looked identical to a finished delivery on every screen. A package
+with `referenced_count > 0` is not offered to the client as "Download everything"; they
+are told it is being re-assembled, and the operator gets a queue card and a console
+warning naming how many files are missing.
+
 **Consequences.** Anything that changes what a delivery CONTAINS must leave the package
 stale-able — compare against `built_at`, never assume the file on disk matches the record.
 And the licence hold is deliberately a REPORT, not a gate: confirming it gates Release

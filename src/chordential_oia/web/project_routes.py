@@ -57,6 +57,7 @@ from .billing import (
 from .delivery_ops import (
     scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
     delivery_held_by, DELIVERY_HELD, _gate_banner, _maybe_finalize_delivery,
+    _package_is_stale,
     _notify_assigned_creators,
     _notify_operator_review, _project_estimate, _sync_role_milestones,
 )
@@ -131,6 +132,21 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
         elif not _admin_authed(request):
             # No client token and not the operator → no access.
             return PlainTextResponse("not found", status_code=404)
+        # A STALE PACKAGE IS REBUILT BEFORE IT IS HANDED OVER. The rebuild otherwise
+        # only fires on the next approval — and an already-Delivered project has no
+        # next approval, so the client goes on downloading the same hollow ZIP however
+        # many times they try: *"i unzip the file, and i see this... no audio files just
+        # docs"* (operator, 2026-08-20). Cheap, idempotent, and the last chance to get
+        # it right before it is in their hands.
+        if (name or "").lower().endswith(".zip") and _package_is_stale(delivery):
+            try:
+                _build_delivery_package(conn, project_id)
+                delivery = db.get_delivery(conn, project_id)
+                fresh = (delivery.get("delivery_zip") or {}).get("filename") or ""
+                if fresh:
+                    name = fresh
+            except Exception:  # noqa: BLE001 — never 500 a paid download over a rebuild
+                pass
     finally:
         conn.close()
     # ADR-0043: the gate above has already passed, so it is safe to hand the client

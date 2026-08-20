@@ -135,8 +135,25 @@
     <form method="post" action="/project/{{ project['id'] }}/delivery/build" class="inline"
           {% if completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Build a PARTIAL delivery package anyway? It ships only what\'s uploaded.')"{% endif %}>
       {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}
-      <button class="btn" type="submit">📦 Build delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
+      <button class="btn" type="submit">📦 {{ 'Rebuild' if delivery_zip else 'Build' }} delivery package{% if completeness and not completeness.complete %} (partial){% endif %}</button>
     </form>
+    {# A PACKAGE WITH NOTHING IN IT. The ZIP always builds — the docs are generated — so
+       a delivery whose source audio is missing from disk produces a perfectly valid file
+       containing only `Docs/`, and hands it to a client who paid thousands: *"i unzip the
+       file, and i see this... no audio files just docs"* (operator, 2026-08-20). The
+       count was in the descriptor and on nobody's screen. #}
+    {% if delivery_zip and delivery_zip.referenced_count %}
+    <p class="small" style="margin:8px 0;padding:9px 12px;border:1px solid #c0553f;
+       border-radius:8px;background:rgba(192,85,63,.09)">
+      <b>{{ delivery_zip.referenced_count }} of {{ delivery_zip.asset_count }} file{{ 's' if delivery_zip.asset_count != 1 }}
+      could not be put in the package</b> — the audio is not on the server, so the ZIP
+      holds only the documents. Rebuilding restores anything still in the durable mirror;
+      anything older than that has to be re-uploaded by the creator before this package is
+      worth sending.</p>
+    {% elif delivery_zip and not delivery_zip.get('asset_count') %}
+    <p class="small muted" style="margin:8px 0">This package contains the documents only —
+      no deliverable files have been published yet.</p>
+    {% endif %}
     {# WHAT IS HOLDING THE DELIVERY, said out loud. The licence gate used to sit on
        Release only — so a package assembled, a client paid and downloaded it, and the
        Clearance Certificate inside read "DRAFT · pending confirmation". It now holds

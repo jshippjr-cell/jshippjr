@@ -1155,7 +1155,13 @@
   {% set _notice = pay_notice(request.query_params.get('pay')) %}
   {% if _notice %}<p class="pay-notice">{{ _notice }}</p>{% endif %}
   <div class="payoff">
-    {% if a.download_unlocked and a.delivery_zip %}
+    {% if a.download_unlocked and a.delivery_zip and a.delivery_zip.referenced_count %}
+    {# The package built and the audio is not in it. Offering "Download everything" for a
+       ZIP of documents is the one thing worse than offering nothing (reported live,
+       2026-08-20: *"i unzip the file, and i see this... no audio files just docs"*). #}
+    <span class="fineprint">Your package is being re-assembled — some of the audio did not
+      make it into the last build. Chordential has been told, and you'll have it shortly.</span>
+    {% elif a.download_unlocked and a.delivery_zip %}
     <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
     <span class="fineprint">Yours to keep.</span>
     {% elif a.signoff_rollup.approved < a.signoff_rollup.total %}

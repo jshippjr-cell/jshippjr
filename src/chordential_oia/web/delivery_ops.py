@@ -277,6 +277,11 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
         "partial": pkg.get("partial", False),
         "descriptor": pkg.get("descriptor", ""),
         "completeness": pkg.get("completeness", {}),
+        # How many assets this build saw, and how many it could NOT bundle. Both were
+        # computed and then dropped on the floor here, which is why a ZIP holding only
+        # documents looked identical to a finished delivery on every screen.
+        "asset_count": pkg.get("asset_count", 0),
+        "referenced_count": pkg.get("referenced_count", 0),
     })
     db.update_delivery(conn, project_id, "delivery_checklist", pkg["checklist"])
     return pkg

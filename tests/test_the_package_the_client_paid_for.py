@@ -235,3 +235,73 @@ def test_confirming_the_licence_clears_the_hold(shipped):
     held = delivery_held_by(db.get_delivery(conn, pid), db.get_project(conn, pid))
     conn.close()
     assert held == "", held
+
+
+# ── the download itself is the last chance to get it right ──────────────────────────
+def test_downloading_a_stale_package_rebuilds_it_first(shipped):
+    """*"i unzip the file, and i see this... no audio files just docs"* — again, after
+    the rebuild-on-finalize fix, because an already-Delivered project has no NEXT
+    approval to trigger it. The client could download the same hollow ZIP forever."""
+    c, db, pid, ttok, up, admin = shipped
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    conn = db.connect()
+    db.update_delivery(conn, pid, "state", "Delivered")
+    db.update_delivery(conn, pid, "download_unlocked", True)
+    _build_delivery_package(conn, pid)               # built before the stems land
+    ktok = db.ensure_project_share_token(conn, pid)
+    conn.close()
+    z, _d = _zip_of(db, pid, up)
+    assert not [n for n in z.namelist() if n.startswith("Stems/")]
+
+    _publish(c, db, pid, ttok, admin, "Mix-ready stem package", ["kick.wav", "snare.wav"])
+    conn = db.connect()
+    zip_name = (db.get_delivery(conn, pid)["delivery_zip"] or {})["filename"]
+    conn.close()
+    c.cookies.clear()
+    r = c.get(f"/project/{pid}/dl/{zip_name}", params={"k": ktok},
+              follow_redirects=False)
+    assert r.status_code == 200, r.status_code
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert [n for n in z.namelist() if n.startswith("Stems/")], (
+        "the client downloaded the stale package again")
+
+
+def test_a_hollow_package_is_not_offered_as_a_download(shipped):
+    """A ZIP of documents handed over as "Download everything" is worse than offering
+    nothing — it looks like the delivery."""
+    c, db, pid, _t, _up, _a = shipped
+    conn = db.connect()
+    db.update_delivery(conn, pid, "assets", [
+        {"label": "Ghost", "filename": "gone.wav", "url": "/uploads/gone.wav",
+         "kind": "audio"}])
+    db.update_delivery(conn, pid, "state", "Delivered")
+    db.update_delivery(conn, pid, "download_unlocked", True)
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _build_delivery_package(conn, pid)
+    from chordential_oia.web import production
+    ktok = db.ensure_project_share_token(conn, pid)
+    conn.close()
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    payoff = re.search(r'class="payoff">(.*?)</div>', page, re.S)
+    if payoff:
+        assert "Download everything" not in payoff.group(1), (
+            "a package with no audio is offered as the finished delivery")
+        assert "being re-assembled" in payoff.group(1)
+
+
+def test_the_operator_is_told_the_package_is_hollow(shipped):
+    c, db, pid, _t, _up, admin = shipped
+    conn = db.connect()
+    db.update_delivery(conn, pid, "assets", [
+        {"label": "Ghost", "filename": "gone.wav", "url": "/uploads/gone.wav",
+         "kind": "audio"}])
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _build_delivery_package(conn, pid)
+    from chordential_oia.web.queue import compute_queue
+    cards = compute_queue(conn, db)
+    conn.close()
+    hit = [x for x in cards if "no audio in it" in (x["title"] or "")]
+    assert hit, "the queue never mentions a package with nothing in it"
+    c.cookies.set(*admin)
+    console = c.get(f"/project/{pid}/delivery").text
+    assert "could not be put in the package" in console
