@@ -2,6 +2,16 @@
 {% block title %}{{ t.name }}{% endblock %}
 {% block heading %}<a class="crumb" href="/talent">Talent</a> / {{ t.name }}{% endblock %}
 {% block content %}
+{# REMOVING A CREATOR. Refused with a reason when it would leave a real record pointing
+   at nobody — an assignment, or a signature (ADR-0059: signatures are append-only). #}
+{% if request.query_params.get('delete') %}
+<section class="card" style="border-left:3px solid #c0553f">
+  <p style="margin:0"><b>Not removed.</b>
+    {{ {'assigned': 'This creator is assigned to a project. Remove them from it first — the crew, the chain of title and the payout ledger all point at them.',
+        'signed': 'This creator has signed an agreement. Signatures are a permanent record (they can be withdrawn, never deleted), so the person who signed stays.'}.get(request.query_params.get('delete'), 'It could not be removed.') }}</p>
+</section>
+{% endif %}
+
 
 <div class="detail-head card">
   <div>
@@ -16,6 +26,10 @@
   <div class="detail-fit">
     <div class="big-num">{{ completeness }}%</div>
     <div class="muted">profile complete</div>
+    <form method="post" action="/talent/{{ t.id }}/delete" style="margin-top:10px"
+          onsubmit="return confirm('Remove {{ t.name|e }} from the roster?\n\nThis is permanent. It is refused if they are assigned to a project or have signed anything.');">
+      <button class="btn tiny ghost" type="submit" title="Remove from the roster">Remove from roster</button>
+    </form>
   </div>
 </div>
 

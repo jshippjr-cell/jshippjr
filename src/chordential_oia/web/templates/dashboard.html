@@ -152,36 +152,10 @@
   </div>
 </section>
 
-{# ── In flight — deals moving now that don't need the operator: pure situational
-   awareness so "0 waiting on you" never reads as "nothing is happening". ── #}
-{% if in_flight %}
-<section class="card" data-arrive>
-  <div class="card-head"><h2>✈ In flight</h2>
-    <span class="muted small">moving now — no action needed from you</span></div>
-  <ul class="machine-feed">
-    {% for f in in_flight %}
-    <li><span class="mf-ico">{% if f.court == 'client' %}⏳{% elif f.court == 'scheduled' %}📅{% else %}🎧{% endif %}</span>
-      <span class="mf-tx"><a class="link" href="{{ f.url }}"><b>{{ f.campaign }}</b></a> — {{ f.label }}{% if f.detail %} · <span class="muted">{{ f.detail }}</span>{% endif %}</span></li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-{# ── Machine running — only real recorded events, real timestamps (council). ── #}
-<section class="card" data-arrive>
-  <div class="card-head"><h2>⚙ Machine running</h2>
-    <span class="muted small">what the engines did, from the record</span></div>
-  {% if machine_feed %}
-  <ul class="machine-feed">
-    {% for e in machine_feed %}
-    <li><span class="mf-ico">{{ e.icon }}</span><span class="mf-tx">{{ e.text }}</span>
-      <span class="mf-at">{{ e.at[:16]|replace('T',' ') }}</span></li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="muted">The machine has nothing new to report.</p>
-  {% endif %}
-</section>
+{# THE PIPELINE, UNDER THE DECISIONS. It sat above 'In flight' and 'Machine
+   running', so the page opened on three columns of deal state before the one
+   thing only the operator can do (operator, 2026-08-20). Mission Control owns
+   the top; everything else reports beneath it. #}
 
 <div class="pipeline-grid" data-arrive>
 
@@ -283,6 +257,37 @@
   </section>
 
 </div>
+
+{# ── In flight — deals moving now that don't need the operator: pure situational
+   awareness so "0 waiting on you" never reads as "nothing is happening". ── #}
+{% if in_flight %}
+<section class="card" data-arrive>
+  <div class="card-head"><h2>✈ In flight</h2>
+    <span class="muted small">moving now — no action needed from you</span></div>
+  <ul class="machine-feed">
+    {% for f in in_flight %}
+    <li><span class="mf-ico">{% if f.court == 'client' %}⏳{% elif f.court == 'scheduled' %}📅{% else %}🎧{% endif %}</span>
+      <span class="mf-tx"><a class="link" href="{{ f.url }}"><b>{{ f.campaign }}</b></a> — {{ f.label }}{% if f.detail %} · <span class="muted">{{ f.detail }}</span>{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{# ── Machine running — only real recorded events, real timestamps (council). ── #}
+<section class="card" data-arrive>
+  <div class="card-head"><h2>⚙ Machine running</h2>
+    <span class="muted small">what the engines did, from the record</span></div>
+  {% if machine_feed %}
+  <ul class="machine-feed">
+    {% for e in machine_feed %}
+    <li><span class="mf-ico">{{ e.icon }}</span><span class="mf-tx">{{ e.text }}</span>
+      <span class="mf-at">{{ e.at[:16]|replace('T',' ') }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">The machine has nothing new to report.</p>
+  {% endif %}
+</section>
 
 {% if spotlight %}
 <section class="card spotlight">

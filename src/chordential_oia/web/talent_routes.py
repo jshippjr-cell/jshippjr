@@ -19,6 +19,7 @@ talent block, and `_parse_rate` is also used by `/opportunity` and `/proposal` �
 from __future__ import annotations
 
 from typing import List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -237,6 +238,28 @@ def talent_edit(
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+@router.post("/talent/{talent_id}/delete")
+def talent_delete(talent_id: int):
+    """Remove a creator from the roster permanently — chiefly for clearing demo rows.
+
+    Refuses, with a reason, when the delete would leave a real record pointing at
+    nobody: an assignment on a live project, or a signature. See
+    ``db.talent_delete_block`` — the refusals are the feature, not obstacles to it.
+    """
+    conn = db.connect()
+    try:
+        out = db.delete_talent(conn, talent_id)
+    finally:
+        conn.close()
+    if out["deleted"]:
+        return RedirectResponse(f"/talent?removed={quote(out['name'] or 'creator')}",
+                                status_code=303)
+    if out["reason"] == "missing":
+        return RedirectResponse("/talent", status_code=303)
+    return RedirectResponse(f"/talent/{talent_id}?delete={out['reason']}",
+                            status_code=303)
 
 
 @router.post("/talent/{talent_id}/review")

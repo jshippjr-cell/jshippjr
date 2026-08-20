@@ -232,7 +232,7 @@ def test_the_router_carries_the_whole_group():
 
 @pytest.mark.parametrize("module,prefix,count", [
     ("agencies_routes.py", "/agencies", 26),
-    ("talent_routes.py", None, 17),          # two prefixes: /talent + /payouts
+    ("talent_routes.py", None, 18),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 65),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
@@ -300,8 +300,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 289, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 289 — "
+    assert len(decls) == 290, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 290 — "
         f"a slice lost or gained a URL")
 
 

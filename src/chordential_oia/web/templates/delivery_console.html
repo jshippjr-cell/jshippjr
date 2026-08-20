@@ -162,7 +162,9 @@
         {% endfor %}
       </ul>
       <form method="post" action="/project/{{ project['id'] }}/delivery/asset/restore"
-            enctype="multipart/form-data"
+            enctype="multipart/form-data" data-upload
+            data-after="#delivery"
+            data-note="Restored and rebuilt the package."
             style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="file" name="file" multiple required style="font-size:12px;max-width:260px">
         <button class="btn primary" type="submit">Restore &amp; rebuild</button>

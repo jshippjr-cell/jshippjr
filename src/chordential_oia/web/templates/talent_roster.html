@@ -2,6 +2,16 @@
 {% block title %}Talent Roster{% endblock %}
 {% block heading %}Talent Roster{% endblock %}
 {% block content %}
+<style>
+  /* The remove control sits in the card's corner without being part of the link. */
+  .tc-wrap{position:relative}
+  .tc-del{position:absolute;top:8px;right:8px;z-index:2;margin:0}
+  .tc-del button{width:22px;height:22px;border-radius:6px;border:1px solid var(--border,#e6ded2);
+    background:var(--card,#fff);color:var(--muted,#8a8580);cursor:pointer;font-size:11px;
+    line-height:1;padding:0;opacity:0;transition:opacity .12s ease,color .12s ease,border-color .12s ease}
+  .tc-wrap:hover .tc-del button,.tc-del button:focus{opacity:1}
+  .tc-del button:hover{color:#c0553f;border-color:#c0553f}
+</style>
 
 <div class="detail-head card">
   <div>
@@ -73,7 +83,19 @@
 </form>
 
 <div class="spotlight-grid">
+  {% if request.query_params.get('removed') %}
+  <p class="small" style="grid-column:1/-1;color:#3f7a45;margin:0">
+    Removed {{ request.query_params.get('removed') }} from the roster.</p>
+  {% endif %}
   {% for c in cards %}
+  {# The card is an <a>, so the remove control is its SIBLING — a form inside an anchor
+     is invalid and behaves differently in every browser. Wrapped so the ✕ can sit in
+     the corner without swallowing the click that opens the creator. #}
+  <div class="tc-wrap">
+  <form method="post" action="/talent/{{ c.t.id }}/delete" class="tc-del"
+        onsubmit="return confirm('Remove {{ c.t.name|e }} from the roster?\n\nThis is permanent. It is refused if they are assigned to a project or have signed anything.');">
+    <button type="submit" title="Remove from the roster" aria-label="Remove {{ c.t.name|e }}">✕</button>
+  </form>
   <a class="spot-card talent-card" href="/talent/{{ c.t.id }}">
     <div class="pill-row">
       <span class="pill rev-{{ c.t.review_status.value|lower }}">{{ c.t.review_status.value }}</span>
@@ -87,6 +109,7 @@
     <div class="mini-meter"><div class="mini-fill" style="width: {{ c.completeness }}%"></div></div>
     <div class="muted small">{{ c.completeness }}% profile complete</div>
   </a>
+  </div>
   {% else %}
   <p class="muted">No talent on the roster yet. <a class="link" href="/talent/new">Add the first creator →</a></p>
   {% endfor %}

@@ -6272,6 +6272,65 @@ def delete_media_blob(conn, name: str) -> None:
         pass
 
 
+def talent_delete_block(conn: sqlite3.Connection, talent_id: int) -> str:
+    """Why this creator cannot be deleted ("" when they can).
+
+    Two refusals, and both are the point of the feature rather than obstacles to it:
+
+    ``assigned``  they are on a project. Deleting them would leave assignments pointing
+                  at nobody — the crew on a delivery, the chain of title on its clearance
+                  certificate, the payout ledger. Take them off the project first, which
+                  is a decision, not a side effect.
+    ``signed``    they have SIGNED something. ADR-0059: signature rows are append-only and
+                  withdrawal marks rather than deletes. A person who signed a composer
+                  agreement is a fact about a deal, and deleting the human to tidy a list
+                  would quietly remove the counterparty from a contract.
+    """
+    if conn.execute("SELECT 1 FROM assignments WHERE talent_id = ? LIMIT 1",
+                    (talent_id,)).fetchone():
+        return "assigned"
+    try:
+        if conn.execute("SELECT 1 FROM signature WHERE talent_id = ? LIMIT 1",
+                        (talent_id,)).fetchone():
+            return "signed"
+    except sqlite3.OperationalError:            # older DB without the table
+        pass
+    return ""
+
+
+#: What each refusal means, and what to do instead.
+TALENT_DELETE_BLOCK = {
+    "assigned": ("This creator is assigned to a project. Remove them from it first — "
+                 "the crew, the chain of title and the payout ledger all point at them."),
+    "signed": ("This creator has signed an agreement. Signatures are a permanent record "
+               "(they can be withdrawn, never deleted), so the person who signed stays."),
+}
+
+
+def delete_talent(conn: sqlite3.Connection, talent_id: int) -> dict:
+    """Permanently delete a creator who is safe to delete. Irreversible.
+
+    Built for the same job as :func:`delete_opportunity` — clearing the demo roster —
+    and refuses on the same principle: anything that would leave a real record pointing
+    at nobody is a refusal with a reason, not a cascade. Returns
+    ``{"deleted": bool, "name": str, "reason": str}``.
+    """
+    row = conn.execute("SELECT name FROM talent WHERE id = ?", (talent_id,)).fetchone()
+    if row is None:
+        return {"deleted": False, "name": "", "reason": "missing"}
+    block = talent_delete_block(conn, talent_id)
+    if block:
+        return {"deleted": False, "name": row["name"] or "", "reason": block}
+    for table in ("contributors", "talent_payouts"):
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE talent_id = ?", (talent_id,))
+        except sqlite3.OperationalError:
+            pass                                # absent in an older DB — best effort
+    conn.execute("DELETE FROM talent WHERE id = ?", (talent_id,))
+    conn.commit()
+    return {"deleted": True, "name": row["name"] or "", "reason": ""}
+
+
 def delete_opportunity(conn: sqlite3.Connection, opp_id: int) -> dict:
     """Permanently delete an opportunity and EVERYTHING anchored to it — the whole account:
     its projects (+ assignments, milestones, review comments, updates, invoices, payouts,
