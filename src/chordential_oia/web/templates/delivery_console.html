@@ -147,9 +147,37 @@
        border-radius:8px;background:rgba(192,85,63,.09)">
       <b>{{ delivery_zip.referenced_count }} of {{ delivery_zip.asset_count }} file{{ 's' if delivery_zip.asset_count != 1 }}
       could not be put in the package</b> — the audio is not on the server, so the ZIP
-      holds only the documents. Rebuilding restores anything still in the durable mirror;
-      anything older than that has to be re-uploaded by the creator before this package is
-      worth sending.</p>
+      holds only the documents. Rebuilding restores anything still in the durable mirror.
+      Anything older than that is gone and has to be put back here.</p>
+    {# THE FIX, WHERE THE PROBLEM IS. Rebuild re-zips what we still have; when the files
+       themselves are gone it cannot help, and the operator was left pressing it: *"im
+       clicking rebuild package and nothing comes up for me to input the assets"*. The
+       only upload was a single-file form eight screens down, unconnected to any of this. #}
+    {% if missing_assets %}
+    <div style="margin:8px 0 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+      <p class="small" style="margin:0 0 6px"><b>Missing from the server:</b></p>
+      <ul class="small muted" style="margin:0 0 8px;padding-left:18px">
+        {% for a in missing_assets %}
+        <li>{{ a.orig or a.filename }} <span class="k">· {{ a.label }}</span></li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="/project/{{ project['id'] }}/delivery/asset/restore"
+            enctype="multipart/form-data"
+            style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" name="file" multiple required style="font-size:12px;max-width:260px">
+        <button class="btn primary" type="submit">Restore &amp; rebuild</button>
+      </form>
+      <p class="small muted" style="margin:6px 0 0">Each file goes back into the
+        deliverable it belongs to — matched by its original name where it matches, then in
+        order. Labels and the client's sign-off are kept.</p>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('restore') == 'none' %}
+    <p class="small" style="color:#c0553f;margin:6px 0">Choose the files to restore.</p>
+    {% elif request.query_params.get('restore') and request.query_params.get('restore') != '0' %}
+    <p class="small" style="color:#3f7a45;margin:6px 0">Restored
+      {{ request.query_params.get('restore') }} file(s) and rebuilt the package.</p>
+    {% endif %}
     {% elif delivery_zip and not delivery_zip.get('asset_count') %}
     <p class="small muted" style="margin:8px 0">This package contains the documents only —
       no deliverable files have been published yet.</p>

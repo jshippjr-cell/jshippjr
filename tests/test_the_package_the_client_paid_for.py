@@ -314,3 +314,110 @@ def test_the_operator_is_told_the_package_is_hollow(shipped):
     c.cookies.set(*admin)
     console = c.get(f"/project/{pid}/delivery").text
     assert "could not be put in the package" in console
+
+
+# ── and a way to put the missing files BACK ─────────────────────────────────────────
+def _gone(db, pid, pairs):
+    """Assets that were published and approved, whose files are no longer on the server."""
+    conn = db.connect()
+    assets = [{"label": label, "filename": f"gone-{orig}", "orig": orig,
+               "url": f"/uploads/gone-{orig}", "kind": "audio"}
+              for label, orig in pairs]
+    db.update_delivery(conn, pid, "assets", assets)
+    for a in assets:
+        db.set_asset_approval(conn, pid, db.asset_key(a), status="Approved",
+                              by="Marta Ruiz", email="m@a.com", version="2")
+    db.update_delivery(conn, pid, "state", "Delivered")
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _build_delivery_package(conn, pid)
+    conn.close()
+
+
+def _restore(c, pid, names):
+    return c.post(f"/project/{pid}/delivery/asset/restore",
+                  files=[("file", (n, io.BytesIO(b"RIFF" + os.urandom(400)), "audio/wav"))
+                         for n in names], follow_redirects=False)
+
+
+def test_the_console_names_the_missing_files_and_offers_to_take_them(shipped):
+    """*"im clicking rebuild package and nothing comes up for me to input the assets"*
+    (operator, 2026-08-20). Rebuild re-zips what we still have; when the files are gone
+    it cannot help, and the only upload was a single-file form eight screens down."""
+    c, db, pid, _t, _up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav"),
+                    ("Mix-ready stem package", "snare.wav")])
+    c.cookies.set(*admin)
+    page = c.get(f"/project/{pid}/delivery").text
+    assert "Missing from the server" in page
+    assert "kick.wav" in page and "snare.wav" in page, "it does not say WHICH"
+    assert "/delivery/asset/restore" in page
+    assert 'name="file" multiple' in page, "one file at a time for a twelve-stem package"
+
+
+def test_restoring_puts_them_back_in_place(shipped):
+    c, db, pid, _t, up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav"),
+                    ("Mix-ready stem package", "snare.wav")])
+    c.cookies.set(*admin)
+    r = _restore(c, pid, ["kick.wav", "snare.wav"])
+    assert r.status_code == 303 and "restore=2" in r.headers["location"]
+    conn = db.connect()
+    d = db.get_delivery(conn, pid)
+    conn.close()
+    assert len(d["assets"]) == 2, "restoring APPENDED instead of replacing"
+    assert all(os.path.isfile(os.path.join(up, a["filename"])) for a in d["assets"])
+    assert [a["orig"] for a in d["assets"]] == ["kick.wav", "snare.wav"]
+
+
+def test_the_clients_sign_off_survives_the_restore(shipped):
+    """`db.asset_key` IS the filename, so a naive replace silently un-approves a
+    deliverable the client already signed."""
+    c, db, pid, _t, _up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav")])
+    c.cookies.set(*admin)
+    _restore(c, pid, ["kick.wav"])
+    conn = db.connect()
+    d = db.get_delivery(conn, pid)
+    conn.close()
+    states = [db.get_asset_approval(d, a)["status"] for a in d["assets"]]
+    assert states == ["Approved"], states
+
+
+def test_restoring_rebuilds_the_package_with_the_audio_in_it(shipped):
+    """The point of the whole exercise."""
+    c, db, pid, _t, up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav"),
+                    ("Mix-ready stem package", "snare.wav")])
+    conn = db.connect()
+    before = db.get_delivery(conn, pid)["delivery_zip"]
+    conn.close()
+    assert before["referenced_count"] == 2
+    c.cookies.set(*admin)
+    _restore(c, pid, ["kick.wav", "snare.wav"])
+    z, after = _zip_of(db, pid, up)
+    assert after["referenced_count"] == 0, after
+    assert len([n for n in z.namelist() if n.startswith("Stems/")]) == 2, z.namelist()
+
+
+def test_files_are_matched_to_the_deliverable_they_belong_to(shipped):
+    """By original name where it matches — not by upload order, which would put the
+    cutdown in the stem package."""
+    c, db, pid, _t, _up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav"),
+                    (":30 / :15 / :06 cutdowns", "cut30.wav")])
+    c.cookies.set(*admin)
+    _restore(c, pid, ["cut30.wav", "kick.wav"])          # deliberately reversed
+    conn = db.connect()
+    d = db.get_delivery(conn, pid)
+    conn.close()
+    by_label = {a["label"]: a["orig"] for a in d["assets"]}
+    assert by_label["Mix-ready stem package"] == "kick.wav"
+    assert by_label[":30 / :15 / :06 cutdowns"] == "cut30.wav"
+
+
+def test_restoring_nothing_says_so(shipped):
+    c, db, pid, _t, _up, admin = shipped
+    _gone(db, pid, [("Mix-ready stem package", "kick.wav")])
+    c.cookies.set(*admin)
+    r = c.post(f"/project/{pid}/delivery/asset/restore", files=[], follow_redirects=False)
+    assert "restore=none" in r.headers["location"]

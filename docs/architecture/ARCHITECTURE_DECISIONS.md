@@ -1730,6 +1730,16 @@ with `referenced_count > 0` is not offered to the client as "Download everything
 are told it is being re-assembled, and the operator gets a queue card and a console
 warning naming how many files are missing.
 
+**Amended again (2026-08-20).** Rebuild re-zips what the system still HAS; when the files
+themselves are gone it produces the same package of documents, and the operator is left
+pressing a button that cannot help — *"im clicking rebuild package and nothing comes up
+for me to input the assets"*. The console now NAMES the missing files and takes them
+back: `POST /project/<id>/delivery/asset/restore`, multi-file, matching each upload to
+the deliverable it belongs to by its original name (then in order), editing the asset row
+IN PLACE and **moving the client's approval to the new key** — `db.asset_key` is the
+filename, so a naive replace silently un-approves a deliverable they already signed. It
+rebuilds the package on the way out.
+
 **Consequences.** Anything that changes what a delivery CONTAINS must leave the package
 stale-able — compare against `built_at`, never assume the file on disk matches the record.
 And the licence hold is deliberately a REPORT, not a gate: confirming it gates Release

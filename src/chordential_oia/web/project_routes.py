@@ -475,6 +475,18 @@ def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
     return RedirectResponse(f"/project/{project_id}", status_code=303)
 
 
+def _missing_asset_files(delivery: dict) -> list:
+    """The assets whose file is not on the server — what "referenced (not bundled)" means
+    in the package, named so the operator can restore exactly those."""
+    store = get_object_store(upload_dir())
+    out = []
+    for a in (delivery.get("assets") or []):
+        fname = os.path.basename((a.get("filename") or "").strip())
+        if not fname or not store.exists(fname):
+            out.append(a)
+    return out
+
+
 def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = False):
     """Assemble the Delivery OS data for a project (engine docs + state), or None.
 
@@ -650,6 +662,9 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # is where the operator can do something about it.
         "invoice_block": final_invoice_block(conn, project_id,
                                              heal=_ensure_proposal_for_project),
+        # …and WHICH files are gone, so the console can offer to put those back rather
+        # than a button that re-zips the same hole.
+        "missing_assets": _missing_asset_files(delivery),
         # …and what is holding the delivery itself, said rather than left as a
         # button that quietly does nothing.
         "delivery_held": delivery_held_by(delivery, row),
@@ -2788,6 +2803,76 @@ def review_note_disposition(request: Request, project_id: int, comment_id: int,
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/asset/restore")
+async def delivery_restore_assets(
+    project_id: int, file: Optional[List[UploadFile]] = File(None),
+):
+    """Put the missing deliverable files BACK, in place, keeping their sign-off.
+
+    "Rebuild package" re-zips what the system still has; when the audio is gone from the
+    server it produces the same package of documents, and the operator is left pressing a
+    button that cannot help: *"im clicking rebuild package and nothing comes up for me to
+    input the assets"* (operator, 2026-08-20). There was a way — a single-file "Upload a
+    deliverable" form eight screens further down — and nothing connected the two.
+
+    Each uploaded file is matched to an asset whose file is missing: by its ORIGINAL
+    name where that matches, otherwise in order. The asset row is edited in place rather
+    than appended, so the label, the folder and the client's approval survive — and the
+    approval is MOVED to the new key, because `db.asset_key` is the filename and a naive
+    replace would silently drop a sign-off the client already gave.
+    """
+    ups = [f for f in (file or []) if f is not None and (f.filename or "").strip()]
+    if not ups:
+        return RedirectResponse(
+            f"/project/{project_id}/delivery?restore=none#delivery", status_code=303)
+    conn = db.connect()
+    restored = 0
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        assets = [dict(a) for a in (delivery.get("assets") or [])]
+        approvals = dict(delivery.get("asset_approvals") or {})
+        store = get_object_store(upload_dir())
+        missing = [a for a in assets
+                   if not (a.get("filename") and store.exists(
+                       os.path.basename(a["filename"])))]
+        for up in ups:
+            data = await _read_capped(up, _CUT_MAX_BYTES)
+            if not data:
+                continue
+            orig = os.path.basename(up.filename or "")
+            target = next(
+                (a for a in missing if (a.get("orig") or "") == orig), None)
+            if target is None:
+                target = missing[0] if missing else None
+            if target is None:
+                break                       # nothing left to restore
+            missing.remove(target)
+            ext = os.path.splitext(orig)[1].lower() or ".bin"
+            safe_name = f"proj{project_id}-{os.urandom(5).hex()}{ext}"
+            _persist_upload(conn, safe_name, data,
+                            mirror=len(data) <= _CUT_MIRROR_BYTES)
+            old_key = db.asset_key(target)
+            target["filename"] = safe_name
+            target["url"] = f"/uploads/{safe_name}"
+            target["orig"] = orig
+            # Carry the client's sign-off across to the new key. Losing it here would
+            # silently un-approve a deliverable they have already signed.
+            if old_key and old_key in approvals:
+                approvals[db.asset_key(target)] = approvals.pop(old_key)
+            restored += 1
+        if restored:
+            db.update_delivery(conn, project_id, "assets", assets)
+            db.update_delivery(conn, project_id, "asset_approvals", approvals or None)
+            db.add_update(conn, project_id,
+                          f"Restored {restored} missing deliverable file"
+                          f"{'s' if restored != 1 else ''}.", "delivery")
+            _build_delivery_package(conn, project_id)
+    finally:
+        conn.close()
+    return RedirectResponse(
+        f"/project/{project_id}/delivery?restore={restored}#delivery", status_code=303)
 
 
 @router.post("/project/{project_id}/delivery/asset/publish")
