@@ -6261,9 +6261,22 @@ def prime_project_reads(memo, project_ids) -> int:
     return primed
 
 
-def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> None:
+def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> bool:
     """Mirror an uploaded file's bytes into the DB (durable across redeploys). Keyed by the
-    same basename the /uploads route serves; best-effort (never blocks the upload)."""
+    same basename the /uploads route serves.
+
+    Returns whether the bytes are ACTUALLY THERE, confirmed by reading the stored size
+    back — not whether the INSERT raised. It stays best-effort in that it never blocks
+    an upload, but "best-effort" must not mean "unknowable": the caller stamps a file as
+    durable on the strength of this answer, and a mirror that silently did nothing would
+    make that stamp a lie of exactly the kind this whole pass exists to remove.
+
+    The exception clause used to be ``sqlite3.Error``, which on Postgres catches nothing
+    — psycopg raises its own hierarchy. A mirror failure in production would therefore
+    have escaped into the upload route as a 500 instead of degrading. Both are caught
+    now, and the transaction is rolled back so a poisoned Postgres connection cannot
+    take the rest of the request down with it.
+    """
     try:
         conn.execute(
             "INSERT INTO media_blob (name, content, content_type, size, created_at) "
@@ -6271,8 +6284,31 @@ def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> 
             "content_type=excluded.content_type, size=excluded.size",
             (name, sqlite3.Binary(content), content_type, len(content), _now()))
         conn.commit()
-    except sqlite3.Error:
-        pass
+    except Exception:                            # noqa: BLE001 — see docstring
+        try:
+            conn.rollback()
+        except Exception:                        # noqa: BLE001
+            pass
+        return False
+    return media_blob_size(conn, name) == len(content)
+
+
+def media_blob_size(conn, name: str) -> Optional[int]:
+    """Bytes held in the mirror for ``name``, or None. Reads the SIZE column, never the
+    blob — asking "is it there" must not cost a copy of the file in memory."""
+    try:
+        row = conn.execute(
+            "SELECT size FROM media_blob WHERE name = ?", (name,)).fetchone()
+    except Exception:                            # noqa: BLE001
+        return None
+    return None if row is None else int(row["size"] or 0)
+
+
+def is_postgres(conn) -> bool:
+    """Is this connection talking to Postgres? The mirror's ceiling depends on it
+    (``uploads.mirror_cap``), because a 400 MB blob is routine for Postgres and
+    ruinous for a SQLite file."""
+    return _is_pg(conn)
 
 
 def get_media_blob(conn, name: str):

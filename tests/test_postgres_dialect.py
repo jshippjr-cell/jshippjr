@@ -366,3 +366,79 @@ def test_the_json_merge_is_atomic_on_real_postgres(monkeypatch):
         assert losses == [], f"rounds that lost a write on Postgres: {losses}"
     finally:
         db_mod.close_pool()
+
+
+@live
+def test_a_large_take_survives_a_deploy_on_real_postgres(monkeypatch, tmp_path):
+    """The operator's actual constraint, against the database production actually runs.
+
+    *"i dont want to take the steps to setup more storage i want to use the storage i
+    have and not lose files"* — and the storage they have is this. The mirror was already
+    doing the job for small files; the 64 MB ceiling (ADR-0026, reasoning about SQLite)
+    was what dropped everything bigger onto a disk Render replaces.
+
+    Deliberately sized ABOVE the old ceiling. Under the previous policy this file was
+    accepted, stored once, and returned 404 after the next deploy.
+    """
+    import importlib
+    import shutil
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("CHORDENTIAL_DB", _fresh_db())
+    up = tmp_path / "up"
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(up))
+    monkeypatch.delenv("CHORDENTIAL_MIRROR_MB", raising=False)
+    monkeypatch.delenv("CHORDENTIAL_STORAGE", raising=False)
+    for m in ("db", "uploads", "app"):
+        importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
+    from chordential_oia.web import app as app_mod, db as db_mod, uploads
+
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    try:
+        assert db_mod.is_postgres(conn), "this test is meaningless off Postgres"
+        cap = uploads.mirror_cap(conn)
+        assert cap > uploads.SQLITE_MIRROR_BYTES, (
+            "Postgres is still being held to the SQLite ceiling")
+        payload = b"ID3" + os.urandom(70 * 1024 * 1024)   # over the OLD 64 MB limit
+        stored = uploads._persist_upload(conn, "big-take.mp3", payload, "audio/mpeg")
+        assert stored.ok and stored.durable, stored
+    finally:
+        conn.close()
+
+    shutil.rmtree(up)                     # Render replaces the container
+    up.mkdir(parents=True, exist_ok=True)
+
+    with TestClient(app_mod.app) as c:
+        r = c.get("/uploads/big-take.mp3")
+    assert r.status_code == 200, "a 70 MB take is still lost on deploy"
+    assert r.content == payload, "it came back corrupted"
+
+
+@live
+def test_the_mirror_reports_failure_instead_of_raising_on_real_postgres(monkeypatch, tmp_path):
+    """`save_media_blob` caught `sqlite3.Error`, which on Postgres catches NOTHING —
+    psycopg raises its own hierarchy. A mirror failure in production would have escaped
+    into the upload route as a 500 rather than degrading, and the connection would have
+    been left poisoned for the rest of the request."""
+    import importlib
+
+    monkeypatch.setenv("CHORDENTIAL_DB", _fresh_db())
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "up"))
+    for m in ("db", "uploads", "app"):
+        importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
+    from chordential_oia.web import db as db_mod
+
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    try:
+        # Dropping the table is a stand-in for any driver error at all; the point is
+        # that it comes back as False rather than as an exception through the route.
+        assert db_mod.save_media_blob(conn, "ok.mp3", b"bytes", "audio/mpeg") is True
+        conn.execute("DROP TABLE media_blob")
+        conn.commit()
+        assert db_mod.save_media_blob(conn, "gone.mp3", b"bytes", "audio/mpeg") is False
+        # …and the connection is still usable, because the failure rolled back.
+        assert conn.execute("SELECT 1 AS n").fetchone()["n"] == 1
+    finally:
+        conn.close()

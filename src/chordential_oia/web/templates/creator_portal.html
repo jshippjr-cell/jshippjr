@@ -508,6 +508,10 @@
      like a download and opens an empty container is worse than one that admits it. */
   .lf-gone .lf-name{text-decoration:line-through;opacity:.55}
   .lf-note{font-size:10.5px;color:#c25667;opacity:.85}
+  /* Present but not durable — amber, not red: nothing is lost YET, and raising the
+     mirror ceiling or configuring a bucket clears it without touching the file. */
+  .lf-state.warn{color:#c8913f}
+  .lf-warn{font-size:10.5px;color:#c8913f;opacity:.9;cursor:help}
   .lf-gate{display:inline-flex;gap:3px;margin:0 0 0 2px}
   .lf-btn{width:20px;height:20px;border-radius:5px;border:1px solid var(--hair2);
     background:transparent;color:var(--dim2);cursor:pointer;font-size:11px;line-height:1;
@@ -1541,7 +1545,11 @@
         {% endif %}
       </li>
       {% else %}
-      <li><span class="lf-state ok">✓</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+      <li><span class="lf-state{{ ' warn' if f.at_risk else ' ok' }}">{{ '!' if f.at_risk else '✓' }}</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+        {# PRESENT, but not backed up. It downloads today and is gone after the next
+           deploy — which is the only window in which saying so is any use. Measured
+           live, never stamped: raising the mirror ceiling clears this on its own. #}
+        {% if f.at_risk %}<span class="lf-warn" title="This file is on the server but not in the durable store, so it will not survive the next deploy.">not backed up</span>{% endif %}
         {% if 'publish' in (caps|default([])) and f.filename %}
         <form method="post" action="/project/{{ a.project_id }}/delivery/asset/remove" class="lf-gate">
           <input type="hidden" name="filename" value="{{ f.filename }}">
@@ -1558,7 +1566,9 @@
       <li{{ ' class="lf-gone"'|safe if f.gone }}><span class="lf-state{{ ' no' if f.gone }}">{{ '✕' if f.gone else '⧗' }}</span>
         {% if f.gone %}<span class="lf-name">{{ f.name }}</span>
         <span class="lf-note">file is no longer on the server</span>
-        {% else %}<a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>{% endif %}
+        {% else %}<a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+        {% if f.at_risk %}<span class="lf-warn" title="This file is on the server but not in the durable store, so it will not survive the next deploy.">not backed up</span>{% endif %}
+        {% endif %}
         {# THE GATE, ON THE FILE. Deliverables waited for the same press as the master and
            could only be pressed on the delivery console — so the studio opened the room,
            found nothing to review, and the files sat there. The same two decisions, where

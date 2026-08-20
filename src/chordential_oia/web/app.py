@@ -143,17 +143,7 @@ async def lifespan(app: FastAPI):
     # turned object storage on" must not be something discovered by losing a master,
     # and a half-configured switch (CHORDENTIAL_STORAGE=s3 with a missing key) falls
     # back to disk — silently, unless it announces itself here.
-    _st = storage_status(UPLOAD_DIR)
-    if _st["misconfigured"]:
-        print(f"[storage] WARNING: CHORDENTIAL_STORAGE={_st['requested']} was requested "
-              f"but the bucket is not fully configured — falling back to the LOCAL disk "
-              f"at {UPLOAD_DIR}. Uploads are NOT durable.", flush=True)
-    elif not _st["durable"]:
-        print(f"[storage] local disk at {UPLOAD_DIR} — not durable across a disk "
-              f"removal; set CHORDENTIAL_STORAGE=s3 before the Postgres cutover.",
-              flush=True)
-    else:
-        print("[storage] object storage active — uploads are durable.", flush=True)
+    print(uploads.boot_line(), flush=True)
     # The same honesty the storage line owes: on Postgres, say whether connections are
     # actually pooled. `psycopg_pool` is an optional package, and a declared dependency
     # that production never installed is exactly how uploads once landed with zero copies

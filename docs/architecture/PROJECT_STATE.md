@@ -94,6 +94,19 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Whatever we accept, we must be willing to keep** (ADR-0084, 2026-08-20). The durable
+  store was already there and half-wired: every upload is mirrored into Postgres and
+  `serve_upload` rehydrates from it, but the ceiling was **64 MB** — ADR-0026's number,
+  set when the mirror was SQLite and never revisited at the cutover. Measured on a real
+  Postgres 16 with the disk wiped: a 5 MB stem came back whole, a 70 MB cut 404'd. The
+  ceiling is now `uploads.mirror_cap()` and on Postgres equals the largest file the doors
+  will accept, so **everything accepted survives a deploy on the storage already being
+  paid for**. Over-ceiling files are still stored but announced at upload and marked
+  *"not backed up"* in the room while they can still be saved; durability is measured,
+  never stamped. Found on the way: `save_media_blob` caught `sqlite3.Error`, which on
+  Postgres catches nothing, and confirmed nothing. **Object storage (S3/R2) stays
+  deferred, not urgent** — still the better answer for egress and for >512 MB.
+
 - **A link is only a link if something is behind it** (ADR-0083, 2026-08-20). A lane
   listed files whose bytes the ephemeral disk had eaten, as ordinary downloads, with no
   way to remove one — and pressing ✓ on a row that had already moved on answered with a

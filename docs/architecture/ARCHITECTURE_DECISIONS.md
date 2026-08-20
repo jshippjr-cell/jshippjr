@@ -1664,6 +1664,64 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0084 — Whatever we accept, we must be willing to keep
+**Status:** Accepted (2026-08-20, operator directive) · Supersedes the ceiling set by
+ADR-0026 · Extends ADR-0043 (the write door) · Source: `uploads.mirror_cap` /
+`Stored` / `media_durable` / `boot_line`, `db.save_media_blob` / `media_blob_size` /
+`is_postgres`, `tests/test_the_storage_you_already_have.py`,
+`tests/test_postgres_dialect.py::test_a_large_take_survives_a_deploy_on_real_postgres`
+
+**Decision.** The database mirror's ceiling is no longer one hardcoded number. It is
+`uploads.mirror_cap(conn)`, decided in one place, and on Postgres it equals **the largest
+file the upload doors will accept** (512 MB). The rule it expresses:
+
+> Whatever we are willing to accept, we must be willing to keep.
+
+Three consequences follow. `_persist_upload` returns `Stored(ok, durable, reason)` instead
+of a bare bool, so the one door every upload passes through can finally answer *will these
+bytes survive a deploy?* — a question nothing in the system could previously ask. A file
+over the ceiling is still **stored** (refusing real work to protect a policy is worse) but
+is announced at the moment it happens and marked on the surface while it is still there to
+save. And durability is **measured** (`media_durable`), never stamped: the ceiling can be
+raised and a bucket can be configured, so a flag written at upload time would eventually
+warn about a file that is fine and stay silent about one that is not.
+
+On SQLite the old ceiling and ADR-0026's reasoning both stand — a feature-length cut
+blobbed into a SQLite file really is worse than the risk it covers. The number was never a
+fact about Postgres.
+
+**Why.** *"i dont want to take the steps to setup more storage i want to use the storage i
+have and not lose files."* The durable store was already there and only half-wired.
+Measured against a real Postgres 16, with the container's disk removed the way Render
+removes it:
+
+| | before the deploy | after |
+|---|---|---|
+| 5 MB stem | 200 | **200 — every byte back** |
+| 70 MB cut | 200 | **404** |
+
+Both were accepted by the same door, on the same day, with the same success message.
+ADR-0026 set the ceiling at 64 MB and said why: *SQLite*. Production cut over to Postgres
+on 2026-08-06; the premise died and the number outlived it. That gap is where the files
+went.
+
+Two things were found on the way and are part of this decision. `save_media_blob` caught
+`sqlite3.Error`, which on Postgres catches **nothing** — psycopg raises its own hierarchy —
+so a mirror failure in production would have escaped into the upload route as a 500 with
+the connection left poisoned for the rest of the request; both are caught now, rolled back,
+and reported. And it returned nothing at all, so "mirrored" was an assumption: it now
+confirms by reading the stored size back, because the caller stamps durability on the
+strength of that answer.
+
+**Consequences.** Everything the doors accept now survives a deploy on the storage already
+being paid for, and object storage (S3/R2) stays deferred rather than urgent — it remains
+the better answer for egress and for files beyond 512 MB, and the seam is still there. The
+cost moves onto the Postgres bill, which is metered and more expensive per GB than a
+bucket; `CHORDENTIAL_MIRROR_MB` is the dial if that becomes the binding constraint. The
+boot line stops advising an operator to prepare for a cutover that already happened and
+names the ceiling instead, because that is the number that decides whether their work
+survives the night.
+
 ### ADR-0083 — A link is only a link if something is behind it
 **Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0043 (the write door)
 and ADR-0074 (a lane holds a folder) · Source: `uploads.media_present` /

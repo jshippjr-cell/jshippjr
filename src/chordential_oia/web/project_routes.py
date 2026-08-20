@@ -69,7 +69,7 @@ from .shell import (
     signed_in_user as _signed_in_user,
 )
 from .uploads import (
-    _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _read_capped,
+    _AUDIO_EXTS, _persist_upload, _read_capped,
     _store_pending_submission, forget_media, media_present, upload_dir,
 )
 
@@ -2233,8 +2233,7 @@ async def _store_picture(conn, project_id: int, file: UploadFile, by: str,
     safe_name = f"proj{project_id}-cut-{os.urandom(5).hex()}{ext}"
     # ADR-0026: cuts mirror into the DB only under the threshold; larger cuts are
     # disk-only until the object-storage seam ships.
-    _persist_upload(conn, safe_name, data, content_type=file.content_type or "",
-                    mirror=len(data) <= _CUT_MIRROR_BYTES)
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
     delivery = db.get_delivery(conn, project_id)
     prior = delivery.get("picture") or None
     from datetime import datetime as _dt, timezone as _tz
@@ -2310,8 +2309,7 @@ async def _store_reference(conn, project_id: int, file: UploadFile, by: str,
     # ADR-0026 mirror cap applies to references too — a 128MB video reference must
     # not blob into SQLite (eng P0: this path defaulted mirror=True, defeating the
     # ADR). Disk always; DB mirror only under the same threshold as a cut.
-    _persist_upload(conn, safe_name, data, content_type=file.content_type or "",
-                    mirror=len(data) <= _CUT_MIRROR_BYTES)
+    _persist_upload(conn, safe_name, data, content_type=file.content_type or "")
     delivery = db.get_delivery(conn, project_id)
     refs = list(delivery.get("references") or [])
     from datetime import datetime as _dt, timezone as _tz
@@ -2851,8 +2849,7 @@ async def delivery_restore_assets(
             missing.remove(target)
             ext = os.path.splitext(orig)[1].lower() or ".bin"
             safe_name = f"proj{project_id}-{os.urandom(5).hex()}{ext}"
-            _persist_upload(conn, safe_name, data,
-                            mirror=len(data) <= _CUT_MIRROR_BYTES)
+            _persist_upload(conn, safe_name, data)
             old_key = db.asset_key(target)
             target["filename"] = safe_name
             target["url"] = f"/uploads/{safe_name}"

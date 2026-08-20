@@ -20,7 +20,7 @@ from typing import Optional
 
 from fastapi import UploadFile
 
-from ..storage import get_object_store
+from ..storage import get_object_store, storage_status
 from . import db
 
 _HERE = os.path.dirname(__file__)
@@ -35,23 +35,91 @@ def upload_dir() -> str:
 _AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
 
-_CUT_MIRROR_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MIRROR_MB", "64")) * 1024 * 1024
+#: Env override for the mirror ceiling, in megabytes. ``0`` disables the mirror.
+MIRROR_MB_ENV = "CHORDENTIAL_MIRROR_MB"
+
+#: What the DATABASE MIRROR will take when the database is **SQLite**. ADR-0026's number,
+#: and ADR-0026's reasoning still holds here: a feature-length cut blobbed into a SQLite
+#: file is worse than the risk it covers.
+SQLITE_MIRROR_BYTES = 64 * 1024 * 1024
+
+#: What the mirror will take when the database is **Postgres** — which production has
+#: been since 2026-08-06. Deliberately the same as the largest file the upload routes
+#: will ACCEPT (``CHORDENTIAL_SUBMISSION_MAX_MB`` / ``CHORDENTIAL_CUT_MAX_MB``, both
+#: 512 MB), because that is the rule this constant exists to express:
+#:
+#:     **Whatever we are willing to accept, we must be willing to keep.**
+#:
+#: The old code carried ONE number, 64 MB, chosen when the mirror was SQLite. The
+#: premise changed at the cutover and the number did not — so a 70 MB picture cut was
+#: accepted, written to exactly one place (a container disk Render replaces on every
+#: deploy) and silently lost, while a 5 MB stem beside it survived. Measured against a
+#: real Postgres 16: 5 MB back after a wipe, 70 MB a 404.
+#:
+#: This costs no memory that has not already been spent — ``_read_capped`` buffers the
+#: whole upload to enforce the accept cap in the first place, so a file big enough to
+#: worry about is already resident when we decide whether to keep it.
+PG_MIRROR_BYTES = 512 * 1024 * 1024
+
+
+def mirror_cap(conn) -> int:
+    """The largest file the durable database mirror will take, in bytes.
+
+    THE one place this is decided (one derivation, many reporters). Resolved per call
+    rather than frozen at import, for the same reason as :func:`upload_dir` — test
+    modules set the environment and reload only ``db`` and ``app``.
+    """
+    raw = (os.environ.get(MIRROR_MB_ENV) or "").strip()
+    if raw:
+        try:
+            return max(0, int(float(raw))) * 1024 * 1024
+        except ValueError:
+            pass                                # a typo must not silently disable the net
+    return PG_MIRROR_BYTES if db.is_postgres(conn) else SQLITE_MIRROR_BYTES
+
+
+class Stored:
+    """What actually happened to the bytes.
+
+    ``ok``       the object store accepted them — what the old bare ``bool`` return
+                 meant. ``__bool__`` still answers it, so ``if _persist_upload(...)``
+                 is unchanged; an ``is True`` / ``is False`` identity check is not, and
+                 three tests had to move to ``.ok``.
+    ``durable``  they will survive this container being replaced. THE question, and
+                 until now nothing anywhere could answer it — which is why files were
+                 discovered missing rather than reported at risk.
+    ``reason``   why not, when not: ``too-large`` | ``mirror-failed`` | ``opted-out``.
+    """
+
+    __slots__ = ("ok", "durable", "reason")
+
+    def __init__(self, ok: bool, durable: bool, reason: str = ""):
+        self.ok, self.durable, self.reason = bool(ok), bool(durable), reason
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def __repr__(self) -> str:                  # pragma: no cover - debugging aid
+        return f"Stored(ok={self.ok}, durable={self.durable}, reason={self.reason!r})"
 
 
 def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
-                    mirror: bool = True) -> bool:
+                    mirror: bool = True) -> Stored:
     """THE place client media is written (ADR-0043). Every upload route goes through
     here; none may open a file under ``upload_dir()`` itself.
 
     Bytes go to the configured object store — the local disk by default, an
-    S3-compatible bucket when ``CHORDENTIAL_STORAGE=s3``. The SQLite mirror is the
-    net under a store that ISN'T durable, so it is written only then: with a real
-    bucket configured, mirroring would double every master into the database for no
-    benefit, and the Postgres cutover is partly motivated by that bloat.
+    S3-compatible bucket when ``CHORDENTIAL_STORAGE=s3``. A real bucket is durable on
+    its own, so the database mirror is skipped: doubling every master into the database
+    would buy nothing.
 
-    ``mirror=False`` is the VIDEO policy (ADR-0026): cuts above the threshold skip
-    the mirror even on local, because a feature-length cut in SQLite is worse than
-    the risk it covers. The client door says so honestly.
+    Without a bucket, **the database IS the durable store** and the mirror is not a
+    "net" — it is the only copy that outlives a deploy. So the mirror is written for
+    everything up to :func:`mirror_cap`, and a file over that cap is REPORTED rather
+    than quietly accepted: the caller gets ``durable=False`` and can say so on the
+    surface, which is the difference between a warning and a discovery.
+
+    ``mirror=False`` remains for callers that genuinely do not want a second copy.
 
     This docstring used to claim to be "the single place that persists media, so
     every write site is durable" while three routes wrote to the directory directly
@@ -64,7 +132,7 @@ def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
         content_type = mimetypes.guess_type(name)[0] or ""
     key = os.path.basename(name)
     store = get_object_store(upload_dir())
-    durable = bool(getattr(store, "durable", False))
+    durable_store = bool(getattr(store, "durable", False))
 
     # The write is CONFIRMED, not assumed. `put()` returning False — or returning True
     # for bytes that are not actually retrievable — used to be invisible here: the
@@ -73,7 +141,7 @@ def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
     # pointing at it. The client's player fetched a missing object and played silence.
     # Reported live, 2026-08-05, on the first upload after the R2 switch.
     ok = bool(store.put(key, data, content_type))
-    if ok and durable:
+    if ok and durable_store:
         # One HEAD against a bucket we have just written to is nothing next to the
         # upload itself, and it is the difference between "we sent it" and "it is there".
         ok = bool(store.exists(key))
@@ -84,13 +152,31 @@ def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
               f"bytes in the database mirror instead. Client media is NOT on the bucket; "
               f"re-run the migration from /settings/storage once the store is healthy.",
               flush=True)
-        db.save_media_blob(conn, key, data, content_type)
-        return False
+        saved = db.save_media_blob(conn, key, data, content_type)
+        return Stored(False, saved, "" if saved else "mirror-failed")
 
-    if not mirror or durable:
-        return True
-    db.save_media_blob(conn, key, data, content_type)
-    return True
+    if durable_store:
+        return Stored(True, True)
+    if not mirror:
+        return Stored(True, False, "opted-out")
+
+    cap = mirror_cap(conn)
+    if len(data) > cap:
+        # Said out loud, at the moment it happens. This is the file that disappears on
+        # the next deploy, and the whole point is that nobody should have to find that
+        # out by clicking a dead link weeks later.
+        print(f"[storage] WARNING: {key!r} is {len(data) / 1048576:.0f} MB, over the "
+              f"{cap / 1048576:.0f} MB database-mirror limit — it exists ONLY on this "
+              f"container's disk and will NOT survive the next deploy. Raise "
+              f"{MIRROR_MB_ENV}, or configure an object store.", flush=True)
+        return Stored(True, False, "too-large")
+
+    saved = db.save_media_blob(conn, key, data, content_type)
+    if not saved:
+        print(f"[storage] WARNING: the database mirror refused {key!r} — it exists ONLY "
+              f"on this container's disk and will NOT survive the next deploy.",
+              flush=True)
+    return Stored(True, saved, "" if saved else "mirror-failed")
 
 
 def _store_pending_submission(conn, project_id: int, data: bytes,
@@ -107,9 +193,10 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     # live only in the durable DB mirror after a redeploy — a new submission overwrote the
     # previous version's blob under the same key, so v1/v2 ended up pointing at one file.
     safe_name = f"proj{project_id}-v{os.urandom(5).hex()}{safe_ext}"
-    # ADR-0026: disk always; DB mirror only under threshold (a large take must not
-    # blob into SQLite).
-    _persist_upload(conn, safe_name, data, mirror=len(data) <= _CUT_MIRROR_BYTES)
+    # The door decides whether the mirror can take it (`mirror_cap`) and says so;
+    # the take records the answer so the room can warn before a deploy rather than
+    # after one.
+    stored = _persist_upload(conn, safe_name, data)
     # WHICH CUT this take was written against. Music is written to a picture, and the
     # picture moves — so a take is only ever in sync with one of them. Without this the
     # room could play v2 (scored to cut 1) against cut 2 and look entirely normal while
@@ -124,6 +211,44 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
         "at": _dt.now(_tz.utc).isoformat(),
         "cut": int(pic.get("n") or 0) or None,
     })
+    return stored
+
+
+def boot_line() -> str:
+    """What every boot says about where client media goes (ADR-0043).
+
+    "We never actually turned object storage on" must not be something discovered by
+    losing a master, and a half-configured switch falls back to disk silently unless it
+    announces itself. Lives here rather than in ``app.py`` because it reports THIS
+    module's policy — and because ``app.py`` is under a line ratchet whose whole point
+    is that logic goes where it belongs.
+
+    The no-bucket line used to read "not durable across a disk removal; set
+    CHORDENTIAL_STORAGE=s3 before the Postgres cutover" — advice for a cutover that
+    happened on 2026-08-06, and silence about the thing actually eating files. Without a
+    bucket the DATABASE is the durable store, so the number that matters is the CEILING:
+    under it a file survives a deploy, over it there is one copy on a disk Render
+    replaces.
+    """
+    st = storage_status(upload_dir())
+    if st["misconfigured"]:
+        return (f"[storage] WARNING: CHORDENTIAL_STORAGE={st['requested']} was requested "
+                f"but the bucket is not fully configured — falling back to the LOCAL disk "
+                f"at {upload_dir()}. Uploads are NOT durable.")
+    if st["durable"]:
+        return "[storage] object storage active — uploads are durable."
+    conn = db.connect()
+    try:
+        cap = mirror_cap(conn)
+        kind = "Postgres" if db.is_postgres(conn) else "SQLite"
+    finally:
+        conn.close()
+    if cap <= 0:
+        return (f"[storage] WARNING: local disk at {upload_dir()} and the database mirror "
+                f"is DISABLED ({MIRROR_MB_ENV}=0) — no upload survives a deploy.")
+    return (f"[storage] local disk at {upload_dir()}, mirrored into {kind} up to "
+            f"{cap // 1048576} MB — files at or under that survive a deploy, larger ones "
+            f"do NOT. Raise {MIRROR_MB_ENV} or set CHORDENTIAL_STORAGE=s3.")
 
 
 def media_present(conn, name: str) -> bool:
@@ -144,6 +269,30 @@ def media_present(conn, name: str) -> bool:
         return False
     if get_object_store(upload_dir()).exists(key):
         return True
+    return db.media_blob_exists(conn, key)
+
+
+def media_durable(conn, name: str) -> bool:
+    """Will the bytes behind ``/uploads/<name>`` survive this container being replaced?
+
+    The companion to :func:`media_present`, and MEASURED for the same reason: a flag
+    stamped at upload time records what was true that day, and the answer moves — the
+    mirror ceiling can be raised, a bucket can be configured, a migration can run. A
+    surface that warns "this will be lost" must be reading the state of the world now,
+    or it will eventually warn about a file that is fine and stay silent about one that
+    is not.
+
+    Present-but-not-durable is the interesting state: the file downloads perfectly
+    today and is gone after the next deploy. That is precisely the window in which
+    telling someone is still useful.
+    """
+    key = os.path.basename((name or "").strip())
+    if not key:
+        return False
+    store = get_object_store(upload_dir())
+    if bool(getattr(store, "durable", False)):
+        return bool(store.exists(key))
+    # No bucket: the DATABASE is the durable store, so the mirror row is the answer.
     return db.media_blob_exists(conn, key)
 
 

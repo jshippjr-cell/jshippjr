@@ -264,10 +264,25 @@ Render, from `render.yaml` (service `chordential`, `autoDeploy: true` on the dev
 → every push deploys; ~2-min blip until the Postgres cutover removes the persistent
 disk). PWA + Web Push configured.
 
+## Where uploaded bytes live (ADR-0043 + ADR-0084)
+`uploads._persist_upload` is the ONE write door and `uploads.forget_media` the one way
+out. With no bucket configured, **the DATABASE is the durable store**: every upload is
+mirrored into `media_blob` and `serve_upload` rehydrates from it when the container's
+disk comes back empty (Render replaces it on every deploy). The ceiling is
+**`uploads.mirror_cap(conn)`** — 512 MB on Postgres, matching the largest file the doors
+accept, because *whatever we accept we must be willing to keep*; still 64 MB on SQLite,
+where ADR-0026's reasoning holds. Dial with `CHORDENTIAL_MIRROR_MB` (`0` disables it).
+Never hardcode the ceiling at a call site — five routes used to, which is how it went
+un-reviewed through the Postgres cutover and quietly ate every file over 64 MB. Ask
+`media_present` / `media_durable`; both MEASURE, and a stamped flag would go stale.
+
 ## Deferred / known gaps (don't assume these exist)
-DocuSign e-signature (placeholder only); durable object storage for uploads (S3/R2 —
-currently local disk); the zero-downtime Postgres cutover (code ready, ops not run);
+DocuSign e-signature (placeholder only); durable object storage for uploads (S3/R2 — the
+seam is built and tested, `CHORDENTIAL_STORAGE=s3`, but not switched on; **deferred, not
+urgent** since ADR-0084 — still the better answer for egress and for files >512 MB);
 server-side PDF rendering of the branded delivery docs (best-effort only).
+**`/pay/return` is an unauthenticated GET that marks an invoice Paid** with no
+verification against Stripe — known, live, unfixed.
 
 ## Docs index
 - **`docs/architecture/`** — the **canonical source of truth** (read first):

@@ -585,7 +585,11 @@ def test_a_failed_remote_write_keeps_the_bytes_in_the_mirror(app_mod, monkeypatc
         blob = db.get_media_blob(conn, "lost-master.mp3")
     finally:
         conn.close()
-    assert ok is False, "a failed write must report itself"
+    # `.ok` since ADR-0084: the door returns `Stored(ok, durable, reason)` so it can
+    # also answer "will these bytes survive a deploy" — here they will, because the
+    # mirror caught them, which is exactly what a refusing bucket must not cost us.
+    assert ok.ok is False, "a failed write must report itself"
+    assert ok.durable is True, "the mirror caught it — that IS durable"
     assert blob is not None and blob[0] == b"ID3" + b"M" * 500, (
         "the bytes were lost — this is the silence the operator heard")
 
@@ -612,7 +616,8 @@ def test_a_write_that_reports_success_but_did_not_land_is_caught(app_mod, monkey
         blob = db.get_media_blob(conn, "phantom.mp3")
     finally:
         conn.close()
-    assert ok is False
+    assert ok.ok is False
+    assert ok.durable is True, "the mirror caught it"
     assert blob is not None, "a lying store still must not cost us the bytes"
 
 
@@ -640,7 +645,7 @@ def test_a_healthy_durable_store_still_skips_the_mirror(app_mod, monkeypatch):
         blob = db.get_media_blob(conn, "healthy.mp3")
     finally:
         conn.close()
-    assert ok is True
+    assert ok.ok is True and ok.durable is True
     assert store.items.get("healthy.mp3") is not None
     assert blob is None, "a durable store must not also mirror — that is the bloat"
 

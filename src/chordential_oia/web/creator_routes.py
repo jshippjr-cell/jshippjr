@@ -41,8 +41,8 @@ from .delivery_ops import (
 )
 from .shell import render
 from .uploads import (
-    _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _read_capped,
-    _store_pending_submission, media_present,
+    _AUDIO_EXTS, _persist_upload, _read_capped,
+    _store_pending_submission, media_durable, media_present,
 )
 
 router = APIRouter(tags=["creator"])
@@ -222,15 +222,28 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     # gone — and rendering those as ordinary downloads is the honesty rule broken, not a
     # cosmetic miss. Cached per render: twelve stems in a lane are twelve rows, and the
     # same key can appear in more than one of them.
+    #
+    # And the question BEFORE that one: will it still be there tomorrow? A file that is
+    # present but not mirrored downloads perfectly today and is gone after the next
+    # deploy — which is the only window in which saying so is still useful. Measured,
+    # never stamped: the mirror's ceiling can move (`uploads.mirror_cap`).
     _seen: dict = {}
 
-    def _present(fname: str) -> bool:
+    def _state(fname: str) -> tuple:
         fname = (fname or "").strip()
         if not fname:
-            return False
+            return (False, False)
         if fname not in _seen:
-            _seen[fname] = media_present(conn, fname)
+            here = media_present(conn, fname)
+            _seen[fname] = (here, here and media_durable(conn, fname))
         return _seen[fname]
+
+    def _present(fname: str) -> bool:
+        return _state(fname)[0]
+
+    def _at_risk(fname: str) -> bool:
+        here, durable = _state(fname)
+        return here and not durable
 
     for asset in (delivery.get("assets") or []):
         key = (asset.get("label") or asset.get("filename") or "").strip().lower()
@@ -238,6 +251,7 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
             {"url": asset.get("url") or "",
              "filename": asset.get("filename") or "",
              "gone": not _present(asset.get("filename") or ""),
+             "at_risk": _at_risk(asset.get("filename") or ""),
              "name": asset.get("orig") or asset.get("filename") or "file"})
     # WHAT IS ACTUALLY IN THE LANE, by name. A count answers "did anything land"; it does
     # not answer "did I send all twelve", which is the question someone bouncing stems at
@@ -250,6 +264,7 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
              "filename": asset.get("filename") or "",
              "by": asset.get("by") or "",
              "gone": not _present(asset.get("filename") or ""),
+             "at_risk": _at_risk(asset.get("filename") or ""),
              "name": asset.get("orig") or asset.get("filename") or "file"})
     # WHOSE LANE, and what it is made FROM (ADR-0075). The composer writes and bounces
     # the stems; the mixer works from the approved master; the editor cuts down the
@@ -991,8 +1006,7 @@ async def creator_submit_deliverable(
             # another upload's file — no counter to race on.
             safe_ext = ext if ext else (".mp3" if kind == "audio" else ".bin")
             safe_name = f"proj{project_id}-{os.urandom(5).hex()}{safe_ext}"
-            _persist_upload(conn, safe_name, data,
-                            mirror=len(data) <= _CUT_MIRROR_BYTES)   # ADR-0026
+            _persist_upload(conn, safe_name, data)
             # EP review P0-3: deliverables get the SAME studio gate as the master. The
             # upload lands PENDING — the studio vets and publishes it before the client
             # can ever see it (uniform publish gate, stems included).
