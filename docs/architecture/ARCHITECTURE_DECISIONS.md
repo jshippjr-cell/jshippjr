@@ -1664,6 +1664,57 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0083 — A link is only a link if something is behind it
+**Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0043 (the write door)
+and ADR-0074 (a lane holds a folder) · Source: `uploads.media_present` /
+`uploads.forget_media`, `db.media_blob_exists`,
+`project_routes.delivery_remove_asset` / `_asset_answer`,
+`tests/test_a_lane_full_of_dead_links.py`
+
+**Decision.** Three rules about a file in a deliverable lane.
+
+1. **Presence is measured against BOTH copies.** `media_present(conn, name)` asks the
+   object store and the durable DB mirror, because `serve_upload` answers from either. A
+   row whose bytes are in neither is rendered struck through and unlinked, saying *"file
+   is no longer on the server"* — never as a download.
+2. **A file can be taken off a lane**, published or waiting, by the studio only. The row
+   leaves `assets` and `pending_assets`, its per-asset approval goes with it (an approval
+   of a file that no longer exists is the sign-off rollup counting nothing, and that
+   rollup opens the paywall), the bytes are forgotten from both copies through the one
+   door out (`forget_media`), and the project log says what went and why.
+3. **A per-file press ANSWERS, truthfully, in the shape the caller can read.** The room
+   vets over `fetch`; a press the server could not honour now returns `409` with
+   `{"ok": false, "reason": "gone"}` instead of a redirect. A plain form post still gets
+   its 303.
+
+**Why.** Two reports, one sitting. *"it is still listing the individual track but they are
+links to an empty container … i need a way to delete these useless links if they dont have
+a function anymore."* And, pressing ✓ on a stem as the studio: **"That didn't go through.
+Check your connection and try again."**
+
+Both are the same defect. Production's disk is rebuilt on every deploy, so a lane
+accumulates rows whose bytes are gone; nothing could remove one, because the per-file gate
+only ever existed on files still WAITING and a published row had no control at all. And
+when the studio pressed a row that had already moved on, the route answered with a
+redirect — which `fetch` follows to an HTML page, so the JSON parse threw and the page
+blamed the network. The operator went looking for a connection problem that was never
+there. **A surface that reports the wrong cause is worse than one that reports nothing**:
+it spends someone's afternoon.
+
+**Consequences.** A gone file is not publishable — approving it would put a dead link in
+front of a client — so its only press is remove. Send-back now forgets the mirror too; it
+unlinked the disk path and left the mirror, and `serve_upload` reads the mirror, so a
+rejected deliverable kept downloading. `_missing_asset_files` learned the same lesson in
+reverse: it asked only the store, so a file that survives a redeploy in the mirror and
+downloads perfectly was listed as lost and offered for re-upload. Presence is checked once
+per render and cached per key — twelve stems are twelve rows and a key can appear in more
+than one lane. On a durable store each check is a HEAD; if that ever bites, cache it, do
+not stop asking.
+
+None of this makes the underlying problem go away: **durable object storage is still
+deferred**, and until it lands the disk keeps eating files on every deploy. This makes the
+loss legible and clearable instead of silent.
+
 ### ADR-0082 — The mixer is not the writer, and signs a different document
 **Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0024 (the assignment
 gate) and ADR-0059 (signatures) · Source: `service_agreement.py`, `agreements.py`,

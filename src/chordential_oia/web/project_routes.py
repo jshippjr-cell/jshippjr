@@ -70,7 +70,7 @@ from .shell import (
 )
 from .uploads import (
     _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _read_capped,
-    _store_pending_submission, upload_dir,
+    _store_pending_submission, forget_media, media_present, upload_dir,
 )
 
 router = APIRouter(tags=["project"])
@@ -475,16 +475,16 @@ def project_milestone_delete(project_id: int, milestone_id: int = Form(...)):
     return RedirectResponse(f"/project/{project_id}", status_code=303)
 
 
-def _missing_asset_files(delivery: dict) -> list:
+def _missing_asset_files(conn, delivery: dict) -> list:
     """The assets whose file is not on the server — what "referenced (not bundled)" means
-    in the package, named so the operator can restore exactly those."""
-    store = get_object_store(upload_dir())
-    out = []
-    for a in (delivery.get("assets") or []):
-        fname = os.path.basename((a.get("filename") or "").strip())
-        if not fname or not store.exists(fname):
-            out.append(a)
-    return out
+    in the package, named so the operator can restore exactly those.
+
+    Asks `media_present`, which checks the object store AND the durable DB mirror. It
+    used to ask only the store, so a file that survives a redeploy in the mirror — and
+    downloads perfectly — was listed as lost and offered for re-upload.
+    """
+    return [a for a in (delivery.get("assets") or [])
+            if not media_present(conn, a.get("filename") or "")]
 
 
 def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = False):
@@ -664,7 +664,7 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
                                              heal=_ensure_proposal_for_project),
         # …and WHICH files are gone, so the console can offer to put those back rather
         # than a button that re-zips the same hole.
-        "missing_assets": _missing_asset_files(delivery),
+        "missing_assets": _missing_asset_files(conn, delivery),
         # …and what is holding the delivery itself, said rather than left as a
         # button that quietly does nothing.
         "delivery_held": delivery_held_by(delivery, row),
@@ -2892,18 +2892,20 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
         pending = list(delivery.get("pending_assets") or [])
         hit = next((a for a in pending if a.get("filename") == filename), None)
         if hit is None:
-            return _asset_redirect(project_id, origin)
+            # Not waiting any more — already actioned, or the same stored file was
+            # listed in a second lane and the first press took it out of both. This
+            # answered with a redirect, which over `fetch` reads as a dead connection.
+            return _asset_answer(request, project_id, origin, ok=False, reason="gone",
+                                 action=action, filename=filename)
         pending = [a for a in pending if a.get("filename") != filename]
         db.update_delivery(conn, project_id, "pending_assets", pending)
         if action == "discard":
-            # A rejected deliverable must not stay downloadable: remove the blob
-            # (best-effort, path-guarded inside upload_dir() — engineering P2).
-            try:
-                blob = os.path.realpath(os.path.join(upload_dir(), hit.get("filename") or ""))
-                if blob.startswith(os.path.realpath(upload_dir()) + os.sep) and os.path.isfile(blob):
-                    os.remove(blob)
-            except OSError:
-                pass
+            # A rejected deliverable must not stay downloadable. This used to unlink the
+            # path under `upload_dir()` directly, which removes the DISK copy and leaves
+            # the durable DB mirror — and `serve_upload` answers from the mirror, so a
+            # sent-back file kept downloading. `forget_media` is the one door out, and it
+            # closes both.
+            forget_media(conn, hit.get("filename") or "")
             db.add_update(conn, project_id,
                           f"Sent back the pending deliverable '{hit.get('label')}'.")
         else:
@@ -2944,9 +2946,8 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
     # redirect reloads the page and shuts the sheet, so approving four stems meant
     # opening it four times (reported live, 2026-08-19). An in-page press gets an answer,
     # not a new page.
-    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
-        return JSONResponse({"ok": True, "action": action, "filename": filename})
-    return _asset_redirect(project_id, origin)
+    return _asset_answer(request, project_id, origin, ok=True, action=action,
+                         filename=filename)
 
 
 def _asset_redirect(project_id: int, origin: str):
@@ -2954,6 +2955,83 @@ def _asset_redirect(project_id: int, origin: str):
     if (origin or "").strip() == "room":
         return RedirectResponse(f"/room/{project_id}#p{project_id}", status_code=303)
     return RedirectResponse(f"/project/{project_id}/delivery#assets", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/asset/remove")
+def delivery_remove_asset(request: Request, project_id: int, filename: str = Form(""),
+                          origin: str = Form("")):
+    """Take a deliverable file OFF a lane — record, bytes and sign-off together.
+
+    Reported live, 2026-08-20: *"it is still listing the individual track but they are
+    links to an empty container … i need a way to delete these useless links if they
+    dont have a function anymore."* Production's disk is rebuilt on every deploy, so a
+    lane accumulates names whose bytes are gone, and until now nothing could remove one:
+    the per-file gate (`asset/publish`) only ever existed on files still WAITING, and a
+    published row had no control at all.
+
+    Removing is deliberately whole. The row leaves `assets` and `pending_assets`, any
+    per-file sign-off recorded against it goes with it — a client's approval of a file
+    that no longer exists is not an approval of anything — the bytes are forgotten from
+    both the store and the mirror, and the package is left older than the work so
+    ADR-0079 rebuilds it without the file rather than shipping a manifest that still
+    names it.
+
+    Operator-only: it is behind the admin gate, and the room renders the control only
+    with the `publish` capability.
+    """
+    conn = db.connect()
+    try:
+        delivery = db.get_delivery(conn, project_id)
+        assets = list(delivery.get("assets") or [])
+        pending = list(delivery.get("pending_assets") or [])
+        hit = next((a for a in assets + pending
+                    if (a.get("filename") or "") == filename and filename), None)
+        if hit is None:
+            return _asset_answer(request, project_id, origin, ok=False,
+                                 reason="gone", action="remove", filename=filename)
+        was_present = media_present(conn, filename)
+        db.update_delivery(conn, project_id, "assets",
+                           [a for a in assets if (a.get("filename") or "") != filename])
+        db.update_delivery(conn, project_id, "pending_assets",
+                           [a for a in pending if (a.get("filename") or "") != filename])
+        # The approval goes with the file. Per-asset approvals are keyed by the stored
+        # name (`db.asset_key`), so leaving one behind has the sign-off rollup counting
+        # an approval of nothing — and that rollup is what opens the paywall.
+        approvals = dict(delivery.get("asset_approvals") or {})
+        if db.asset_key(hit) in approvals:
+            approvals.pop(db.asset_key(hit), None)
+            db.update_delivery(conn, project_id, "asset_approvals", approvals)
+        forget_media(conn, filename)
+        label = hit.get("label") or "a deliverable"
+        name = hit.get("orig") or filename
+        db.add_update(
+            conn, project_id,
+            (f"Removed '{name}' from {label} — the file was no longer on the server."
+             if not was_present else
+             f"Removed '{name}' from {label}."))
+    finally:
+        conn.close()
+    return _asset_answer(request, project_id, origin, ok=True, action="remove",
+                         filename=filename)
+
+
+def _asset_answer(request: Request, project_id: int, origin: str, *, ok: bool,
+                  action: str, filename: str = "", reason: str = ""):
+    """One answer for a per-file press, in the shape the caller can read.
+
+    The room vets files INSIDE the Takes sheet over `fetch`, and a redirect there is
+    read as a failed request: the browser follows it, the handler gets HTML where it
+    expected JSON, and the page says *"That didn't go through. Check your connection and
+    try again."* — which is a lie about the connection and sent the operator hunting for
+    a network problem (reported live, 2026-08-20). A press that could not do anything now
+    SAYS so, and a press with no JavaScript still gets its redirect.
+    """
+    if (request.headers.get("x-requested-with") or "").lower() in ("fetch",
+                                                                   "xmlhttprequest"):
+        return JSONResponse({"ok": ok, "action": action, "filename": filename,
+                             "reason": reason},
+                            status_code=200 if ok else 409)
+    return _asset_redirect(project_id, origin)
 
 
 @router.post("/project/{project_id}/delivery/publish")

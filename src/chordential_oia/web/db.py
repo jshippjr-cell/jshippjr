@@ -6284,6 +6284,19 @@ def get_media_blob(conn, name: str):
     return bytes(row["content"]), (row["content_type"] or "")
 
 
+def media_blob_exists(conn, name: str) -> bool:
+    """Is this key in the mirror? Asked WITHOUT loading the bytes — the room asks it
+    once per file in every lane, and pulling a 40 MB stem out of the database to
+    discover that it is there would be its own defect."""
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM media_blob WHERE name = ? AND content IS NOT NULL LIMIT 1",
+            (name,)).fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None
+
+
 def delete_media_blob(conn, name: str) -> None:
     try:
         conn.execute("DELETE FROM media_blob WHERE name = ?", (name,))

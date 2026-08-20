@@ -503,6 +503,11 @@
   .lane-files a:hover{color:var(--text)}
   .lf-state{color:var(--dim2);font-size:10px}
   .lf-state.ok{color:#79b47a}
+  .lf-state.no{color:#c25667}
+  /* A row whose bytes are gone. Struck through and unlinked, because a name that looks
+     like a download and opens an empty container is worse than one that admits it. */
+  .lf-gone .lf-name{text-decoration:line-through;opacity:.55}
+  .lf-note{font-size:10.5px;color:#c25667;opacity:.85}
   .lf-gate{display:inline-flex;gap:3px;margin:0 0 0 2px}
   .lf-btn{width:20px;height:20px;border-radius:5px;border:1px solid var(--hair2);
     background:transparent;color:var(--dim2);cursor:pointer;font-size:11px;line-height:1;
@@ -1518,15 +1523,59 @@
     {% if d.waiting_files or d.files %}
     <ul class="lane-files">
       {% for f in d.files %}
-      <li><span class="lf-state ok">✓</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a></li>
+      {# A file whose bytes are GONE is not a download. Production's disk is rebuilt on
+         every deploy, so a lane can list a full set of names that all lead to an empty
+         container (operator, 2026-08-20) — rendering those as ordinary links is the
+         honesty rule broken. It says so, and the studio can take the row off. #}
+      {% if f.gone %}
+      <li class="lf-gone"><span class="lf-state no">✕</span><span class="lf-name">{{ f.name }}</span>
+        <span class="lf-note">file is no longer on the server</span>
+        {% if 'publish' in (caps|default([])) and f.filename %}
+        <form method="post" action="/project/{{ a.project_id }}/delivery/asset/remove" class="lf-gate">
+          <input type="hidden" name="filename" value="{{ f.filename }}">
+          <input type="hidden" name="origin" value="room">
+          <button type="submit" name="action" value="remove" class="lf-btn no"
+                  title="Take this row off the lane"
+                  onclick="return confirm('Remove {{ f.name|e }} from {{ d.asset|e }}?\n\nThe file is not on the server, so this only clears the row — and the package will be rebuilt without it.');">✕</button>
+        </form>
+        {% endif %}
+      </li>
+      {% else %}
+      <li><span class="lf-state ok">✓</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+        {% if 'publish' in (caps|default([])) and f.filename %}
+        <form method="post" action="/project/{{ a.project_id }}/delivery/asset/remove" class="lf-gate">
+          <input type="hidden" name="filename" value="{{ f.filename }}">
+          <input type="hidden" name="origin" value="room">
+          <button type="submit" name="action" value="remove" class="lf-btn no"
+                  title="Remove this file from the lane"
+                  onclick="return confirm('Remove {{ f.name|e }} from {{ d.asset|e }}?\n\nThis deletes the file, drops any sign-off on it, and the package is rebuilt without it.');">✕</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endif %}
       {% endfor %}
       {% for f in d.waiting_files %}
-      <li><span class="lf-state">⧗</span><a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>
+      <li{{ ' class="lf-gone"'|safe if f.gone }}><span class="lf-state{{ ' no' if f.gone }}">{{ '✕' if f.gone else '⧗' }}</span>
+        {% if f.gone %}<span class="lf-name">{{ f.name }}</span>
+        <span class="lf-note">file is no longer on the server</span>
+        {% else %}<a href="{{ f.url }}" download="{{ f.name }}">{{ f.name }}</a>{% endif %}
         {# THE GATE, ON THE FILE. Deliverables waited for the same press as the master and
            could only be pressed on the delivery console — so the studio opened the room,
            found nothing to review, and the files sat there. The same two decisions, where
            the work is (operator, 2026-08-19). #}
         {% if 'publish' in (caps|default([])) and f.filename %}
+        {# A waiting file whose bytes are gone must not be publishable: approving it puts
+           a dead link in front of the client. The only honest press left is to clear the
+           row and ask for the file again. #}
+        {% if f.gone %}
+        <form method="post" action="/project/{{ a.project_id }}/delivery/asset/remove" class="lf-gate">
+          <input type="hidden" name="filename" value="{{ f.filename }}">
+          <input type="hidden" name="origin" value="room">
+          <button type="submit" name="action" value="remove" class="lf-btn no"
+                  title="Take this row off the lane"
+                  onclick="return confirm('Remove {{ f.name|e }} from {{ d.asset|e }}?\n\nThe file is not on the server, so this only clears the row.');">✕</button>
+        </form>
+        {% else %}
         <form method="post" action="/project/{{ a.project_id }}/delivery/asset/publish" class="lf-gate">
           <input type="hidden" name="filename" value="{{ f.filename }}">
           <input type="hidden" name="origin" value="room">
@@ -1536,6 +1585,7 @@
                   title="Send it back to {{ f.by or 'the creator' }}"
                   onclick="return confirm('Send {{ f.name|e }} back to {{ (f.by or 'the creator')|e }}?');">↩</button>
         </form>
+        {% endif %}
         {% endif %}
       </li>
       {% endfor %}
@@ -3114,14 +3164,25 @@
       f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
       fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-Requested-With": "fetch" } })
-        .then(function(r){ if (!r.ok) throw new Error("no"); return r.json(); })
-        .then(function(){
+        /* The server ANSWERS, in JSON, whether or not it could act — a press it could
+           not honour used to come back as a redirect, which fetch follows to an HTML
+           page, so the parse failed and the page blamed the network. The operator went
+           looking for a connection problem that was never there (2026-08-20). */
+        .then(function(r){ return r.json().catch(function(){ throw new Error("net"); }); })
+        .then(function(data){
+          if (data && data.ok === false){
+            f.querySelectorAll("button").forEach(function(b){ b.disabled = false; });
+            toast(data.reason === "gone"
+              ? "That file is no longer waiting — it was already handled. Reload to see the lane as it stands."
+              : "That press didn't take. Reload and try again.");
+            return;
+          }
           if (act === "publish"){
             var mark = li.querySelector(".lf-state");
             if (mark){ mark.textContent = "✓"; mark.classList.add("ok"); }
             f.remove();
           } else {
-            li.remove();
+            li.remove();          // sent back, or removed from the lane entirely
           }
           // the count is of what is still WAITING, so it drops either way
           var badge = lane.querySelector(".lane-count");

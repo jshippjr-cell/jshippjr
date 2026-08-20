@@ -126,6 +126,41 @@ def _store_pending_submission(conn, project_id: int, data: bytes,
     })
 
 
+def media_present(conn, name: str) -> bool:
+    """Is there ANYTHING behind ``/uploads/<name>``?
+
+    Asked of both places `serve_upload` answers from — the object store and the durable
+    DB mirror. Asking only the store reports a file as lost while it is still serving
+    (the mirror is what keeps a published take playable across a redeploy that wiped the
+    disk); asking neither is how a lane ends up listing a link to an empty container,
+    which is the state reported live on 2026-08-20: *"they are links to an empty
+    container … i need a way to delete these useless links"*.
+
+    A missing file is a fact about the SERVER, not about the record — so this reports it
+    and nothing here deletes anything. What to do about it is the operator's call.
+    """
+    key = os.path.basename((name or "").strip())
+    if not key:
+        return False
+    if get_object_store(upload_dir()).exists(key):
+        return True
+    return db.media_blob_exists(conn, key)
+
+
+def forget_media(conn, name: str) -> None:
+    """Remove an upload from BOTH copies. The one door out, mirroring
+    ``_persist_upload`` as the one door in — deleting the file off the disk while the
+    mirror still holds it leaves a link that works for reasons nobody remembers."""
+    key = os.path.basename((name or "").strip())
+    if not key:
+        return
+    try:
+        get_object_store(upload_dir()).delete(key)
+    except Exception:                       # noqa: BLE001 — best-effort, like every seam
+        pass
+    db.delete_media_blob(conn, key)
+
+
 async def _read_capped(file: UploadFile, cap: int) -> Optional[bytes]:
     """Read an upload in chunks up to ``cap`` bytes; None if it exceeds the cap
     (never buffer an unbounded body — Phase-2 review P1-3)."""

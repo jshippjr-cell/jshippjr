@@ -94,6 +94,17 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A link is only a link if something is behind it** (ADR-0083, 2026-08-20). A lane
+  listed files whose bytes the ephemeral disk had eaten, as ordinary downloads, with no
+  way to remove one — and pressing ✓ on a row that had already moved on answered with a
+  redirect, which the room's `fetch` read as **"That didn't go through. Check your
+  connection"**. Presence is now measured against the object store AND the durable mirror
+  (the two places `serve_upload` answers from); a gone row says so and is not publishable;
+  the studio can take any file off a lane, taking its approval and both copies of the
+  bytes with it; and every per-file press answers in JSON with a real reason. Does **not**
+  fix the cause — durable object storage is still deferred — but the loss is now legible
+  and clearable instead of silent.
+
 - **The mixer is not the writer** (ADR-0082, 2026-08-20). The assignment gate was
   role-blind, so the only way to make an engineer or an editor assignable was to have them
   sign the **Composer Agreement** — 45 lines calling them "the writer", a 30% publishing

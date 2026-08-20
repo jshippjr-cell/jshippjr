@@ -42,7 +42,7 @@ from .delivery_ops import (
 from .shell import render
 from .uploads import (
     _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _read_capped,
-    _store_pending_submission,
+    _store_pending_submission, media_present,
 )
 
 router = APIRouter(tags=["creator"])
@@ -216,10 +216,28 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     published_n = Counter((a.get("label") or a.get("filename") or "").strip().lower()
                           for a in (delivery.get("assets") or []))
     published_files, pending_files = {}, {}
+    # IS THERE ANYTHING BEHIND THE LINK? Reported live, 2026-08-20: *"it is still listing
+    # the individual track but they are links to an empty container"*. Production's disk
+    # is rebuilt on every deploy, so a lane can carry a full list of names whose bytes are
+    # gone — and rendering those as ordinary downloads is the honesty rule broken, not a
+    # cosmetic miss. Cached per render: twelve stems in a lane are twelve rows, and the
+    # same key can appear in more than one of them.
+    _seen: dict = {}
+
+    def _present(fname: str) -> bool:
+        fname = (fname or "").strip()
+        if not fname:
+            return False
+        if fname not in _seen:
+            _seen[fname] = media_present(conn, fname)
+        return _seen[fname]
+
     for asset in (delivery.get("assets") or []):
         key = (asset.get("label") or asset.get("filename") or "").strip().lower()
         published_files.setdefault(key, []).append(
             {"url": asset.get("url") or "",
+             "filename": asset.get("filename") or "",
+             "gone": not _present(asset.get("filename") or ""),
              "name": asset.get("orig") or asset.get("filename") or "file"})
     # WHAT IS ACTUALLY IN THE LANE, by name. A count answers "did anything land"; it does
     # not answer "did I send all twelve", which is the question someone bouncing stems at
@@ -231,6 +249,7 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
              # the storage name is the KEY the studio's publish/send-back posts
              "filename": asset.get("filename") or "",
              "by": asset.get("by") or "",
+             "gone": not _present(asset.get("filename") or ""),
              "name": asset.get("orig") or asset.get("filename") or "file"})
     # WHOSE LANE, and what it is made FROM (ADR-0075). The composer writes and bounces
     # the stems; the mixer works from the approved master; the editor cuts down the
