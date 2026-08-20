@@ -11,9 +11,23 @@
   <a class="seg {{ 'on' if active_status=='Delivered' }}" href="/projects?status=Delivered">Delivered <span class="muted small">{{ counts.Delivered }}</span></a>
 </div>
 
+{% if request.query_params.get('deleted') %}
+<p class="small" style="color:#3f7a45;margin:0 0 10px">Deleted {{ request.query_params.get('deleted') }}.</p>
+{% elif request.query_params.get('kept') %}
+<p class="small" style="margin:0 0 10px;padding:9px 12px;border:1px solid #c0553f;border-radius:8px;background:rgba(192,85,63,.07)">
+  <b>Not deleted.</b>
+  {{ delete_refusal('project', request.query_params.get('kept')) or 'It could not be deleted.' }}</p>
+{% endif %}
+<style>
+  .pj-del{width:22px;height:22px;border-radius:6px;border:1px solid transparent;background:transparent;
+    color:var(--muted,#8a8580);cursor:pointer;font-size:11px;line-height:1;padding:0;opacity:.35;
+    transition:opacity .12s ease,color .12s ease,border-color .12s ease}
+  tr:hover .pj-del{opacity:1}
+  .pj-del:hover{color:#c0553f;border-color:#c0553f}
+</style>
 <div class="card no-pad">
 <table class="table">
-  <thead><tr><th>Project</th><th>Client</th><th>Roles</th><th>Crew</th><th>Progress</th><th>Deadline</th><th>Budget</th><th>Status</th></tr></thead>
+  <thead><tr><th>Project</th><th>Client</th><th>Roles</th><th>Crew</th><th>Progress</th><th>Deadline</th><th>Budget</th><th>Status</th><th></th></tr></thead>
   <tbody>
     {% for p in projects %}
     <tr class="{{ 'row-flag' if p.understaffed or p.overdue }}">
@@ -31,9 +45,17 @@
       <td class="small {{ 'stale' if p.overdue }}">{{ p.row['deadline'] or '—' }}</td>
       <td>{{ (p.row['budget_max'] or p.row['budget_min'])|money if (p.row['budget_max'] or p.row['budget_min']) else '—' }}</td>
       <td><span class="pill {{ 'st-won' if p.row['status']=='Delivered' else 'st-pursuing' }}">{{ p.row['status'] }}</span></td>
+      {# Removing a project, chiefly for clearing demo rows. Refused with a reason when
+         money moved, something was signed, or it shipped — see db.project_delete_block. #}
+      <td style="width:28px">
+        <form method="post" action="/project/{{ p.row['id'] }}/delete" style="margin:0"
+              onsubmit="return confirm('Delete “{{ p.row['need']|e }}”?\n\nThis is permanent and takes its assignments, milestones and notes with it. The opportunity it came from is kept. Refused if money moved, anything was signed, or it was delivered.');">
+          <button class="pj-del" type="submit" title="Delete this project" aria-label="Delete {{ p.row['need']|e }}">✕</button>
+        </form>
+      </td>
     </tr>
     {% else %}
-    <tr><td colspan="8" class="muted">No projects yet. Win an opportunity, then "Spin up project" from its Overview tab.</td></tr>
+    <tr><td colspan="9" class="muted">No projects yet. Win an opportunity, then "Spin up project" from its Overview tab.</td></tr>
     {% endfor %}
   </tbody>
 </table>

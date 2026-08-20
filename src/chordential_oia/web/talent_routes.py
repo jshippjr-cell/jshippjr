@@ -18,10 +18,11 @@ talent block, and `_parse_rate` is also used by `/opportunity` and `/proposal` �
 
 from __future__ import annotations
 
+import os
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from .. import composer_agreement, mailer, recruiting, signing
@@ -29,8 +30,12 @@ from ..models import MusicDiscipline
 from ..talent import Talent, normalize_url, profile_completeness
 from . import actor, db
 from .shell import public_base as _public_base, render, safe_local as _safe_local
+from .uploads import _persist_upload, _read_capped
 
 router = APIRouter(tags=["talent"])
+
+#: A tax form is a page or two — anything larger is not a W-9.
+_W9_MAX_BYTES = 16 * 1024 * 1024
 
 
 # Disciplines offered in talent forms (exclude the disqualified NON_CRAFT bucket).
@@ -200,6 +205,8 @@ def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str =
         completeness=profile_completeness(t), disciplines=FORM_DISCIPLINES,
         review_states=db.REVIEW_STATES, invite_states=db.INVITE_STATES,
         portal_token=portal_token, portal_url=portal_url, w9_received_at=w9_at,
+        w9_filename=(row["w9_filename"] if "w9_filename" in row.keys() else "") or "",
+        w9_orig=(row["w9_orig"] if "w9_orig" in row.keys() else "") or "",
         agreement_executed_at=agreement_at, agreement_ref=agreement_ref,
         assignment_blockers=assignment_blockers,
         agreement_text=agreement_text, composer_sig=composer_sig,
@@ -359,13 +366,38 @@ def talent_issue_portal(talent_id: int):
 
 
 @router.post("/talent/{talent_id}/w9")
-def talent_set_w9(talent_id: int, received: str = Form("")):
-    """Record/clear the creator's W-9-on-file date (the payout-ledger gate)."""
+async def talent_set_w9(talent_id: int, received: str = Form(""),
+                        file: Optional[UploadFile] = File(None)):
+    """Attach the creator's W-9, or clear it. The payout ledger's gate.
+
+    A FILE, not a checkbox. This recorded a date the operator typed by pressing a
+    button — an assertion that a form exists somewhere — and *"right now i just see a
+    button"* (operator, 2026-08-20). A W-9 is the document you produce when a payment is
+    questioned; a date proving nothing is worse than an empty field, because it reads as
+    done. Marking it received by hand still works (a W-9 that arrived by post is still a
+    W-9), and says which it is.
+    """
     from datetime import date as _date
     conn = db.connect()
     try:
-        db.set_talent_w9(conn, talent_id,
-                         _date.today().isoformat() if received == "1" else None)
+        up = file if (file is not None and (file.filename or "").strip()) else None
+        if up is not None:
+            data = await _read_capped(up, _W9_MAX_BYTES)
+            if data is None:
+                return RedirectResponse(f"/talent/{talent_id}?w9=big#access",
+                                        status_code=303)
+            if not data:
+                return RedirectResponse(f"/talent/{talent_id}?w9=empty#access",
+                                        status_code=303)
+            ext = os.path.splitext(up.filename or "")[1].lower() or ".pdf"
+            safe_name = f"w9-{talent_id}-{os.urandom(5).hex()}{ext}"
+            _persist_upload(conn, safe_name, data, content_type=up.content_type or "")
+            db.set_talent_w9_file(conn, talent_id, filename=safe_name,
+                                  orig=os.path.basename(up.filename or ""),
+                                  received_at=_date.today().isoformat())
+        else:
+            db.set_talent_w9(conn, talent_id,
+                             _date.today().isoformat() if received == "1" else None)
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}#access", status_code=303)

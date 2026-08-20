@@ -94,6 +94,18 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A record, not a flag; and a board you can take something off** (ADR-0081, 2026-08-20).
+  Three defects of one shape. The **W-9** was a date the operator typed by pressing a
+  button — it is now the FILE, written through the same door as every other upload,
+  behind the admin gate because it carries a taxpayer ID, with "marked received by hand"
+  kept and *labelled* rather than shown as the same green tick. **Signing the standing
+  agreement now moves the recruiting funnel to Joined** — only `seed.py` had ever written
+  it, so a creator with a signature on file sat there as someone we were still chasing.
+  And **a project can be deleted**, chiefly for clearing rehearsals: refused with a reason
+  when money moved, something was signed (ADR-0059) or it shipped, taking its own
+  assignments/milestones/notes and **keeping the opportunity**, since a project is one
+  delivery of a deal.
+
 - **Chordential signs its own Clearance Certificate** (ADR-0080, 2026-08-20). It shipped
   with a ruled blank signature line and nothing ever asked anyone to fill it — a warranty
   nobody signed. The studio now executes it (`DOC_CLEARANCE_EXECUTED`), consent required,

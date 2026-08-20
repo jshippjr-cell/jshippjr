@@ -52,6 +52,12 @@ templates.env.globals["invoice_block_client"] = (
 templates.env.globals["invoice_block_operator"] = (
     lambda why: __import__("chordential_oia.web.billing",
                            fromlist=["x"]).INVOICE_BLOCK_OPERATOR.get(why or "", ""))
+# Why a delete was refused. The RULE lives in `db.*_delete_block()`; the sentence
+# explaining it lives next to the rule, not inline in a template — two copies of a
+# refusal is how the page ends up saying something the code no longer does.
+templates.env.globals["delete_refusal"] = (
+    lambda kind, why: (db.PROJECT_DELETE_BLOCK if kind == "project"
+                       else db.TALENT_DELETE_BLOCK).get(why or "", ""))
 
 
 def render(request: Request, name: str, **kw):

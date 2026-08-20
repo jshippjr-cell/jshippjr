@@ -447,6 +447,12 @@ _TALENT_COLUMNS = {
     # W-9 status for the payout ledger: collected before a first payout can be
     # marked Paid. Stored as an ISO date (when received) — null = not on file.
     "w9_received_at": "TEXT",
+    # The W-9 ITSELF. `w9_received_at` was a date the operator typed by pressing a
+    # button — an assertion that a form exists somewhere, which is not the same as
+    # having it when a payout is questioned (operator, 2026-08-20). Stored through the
+    # write door like every other piece of media (ADR-0043).
+    "w9_filename": "TEXT",
+    "w9_orig": "TEXT",
     # Standing Composer Agreement (ADR-0024, the supply-side floor): the executed
     # work-assignment + rights-conveyance instrument this creator works under.
     # ISO date when executed — null = not on file. Together with a rate, this
@@ -4782,11 +4788,25 @@ def get_talent_by_portal_token(conn: sqlite3.Connection, token: str) -> Optional
     ).fetchone()
 
 
+def set_talent_w9_file(conn: sqlite3.Connection, talent_id: int, *,
+                       filename: str, orig: str, received_at: str) -> None:
+    """Attach the stored W-9 to a creator, and stamp the date from the file's arrival
+    rather than from a button press."""
+    conn.execute(
+        "UPDATE talent SET w9_filename = ?, w9_orig = ?, w9_received_at = ? WHERE id = ?",
+        (filename or None, orig or None, received_at or None, talent_id))
+    conn.commit()
+
+
 def set_talent_w9(conn: sqlite3.Connection, talent_id: int, received_at: Optional[str]) -> None:
     """Record (or clear) the W-9-on-file date — the payout-ledger compliance gate."""
     conn.execute(
         "UPDATE talent SET w9_received_at = ? WHERE id = ?", (received_at, talent_id)
     )
+    if received_at is None:                 # clearing the flag clears the file with it
+        conn.execute(
+            "UPDATE talent SET w9_filename = NULL, w9_orig = NULL WHERE id = ?",
+            (talent_id,))
     conn.commit()
 
 
@@ -6329,6 +6349,68 @@ def delete_talent(conn: sqlite3.Connection, talent_id: int) -> dict:
     conn.execute("DELETE FROM talent WHERE id = ?", (talent_id,))
     conn.commit()
     return {"deleted": True, "name": row["name"] or "", "reason": ""}
+
+
+def project_delete_block(conn: sqlite3.Connection, project_id: int) -> str:
+    """Why this project cannot be deleted ("" when it can).
+
+    ``paid``      money changed hands on it. A paid invoice is an accounting record and
+                  deleting the project would delete the reason it exists.
+    ``signed``    something on it was signed — the clearance certificate, a client's
+                  acceptance. ADR-0059: signatures are append-only.
+    ``delivered`` it shipped. A delivered project is the record of work a client has,
+                  and "clear the demos" must never be able to take one with it.
+    """
+    for row in list_invoices(conn, project_id):
+        if (row["status"] or "").lower() in ("paid", "settled"):
+            return "paid"
+    try:
+        if conn.execute("SELECT 1 FROM signature WHERE project_id = ? LIMIT 1",
+                        (project_id,)).fetchone():
+            return "signed"
+    except sqlite3.OperationalError:
+        pass
+    if (get_delivery(conn, project_id).get("state") or "") in ("Delivered", "Released"):
+        return "delivered"
+    return ""
+
+
+#: What each refusal means, and what it protects.
+PROJECT_DELETE_BLOCK = {
+    "paid": ("Money changed hands on this project. A paid invoice is an accounting "
+             "record and deleting the project deletes the reason it exists."),
+    "signed": ("Something on this project was signed. Signatures are a permanent record "
+               "(they can be withdrawn, never deleted), so the project they cover stays."),
+    "delivered": ("This project was delivered. It is the record of work a client has in "
+                  "hand — reopen it first if it really needs to go."),
+}
+
+
+def delete_project(conn: sqlite3.Connection, project_id: int) -> dict:
+    """Permanently delete a project and its own children. Irreversible.
+
+    For clearing demo rows, and refusing on the same principle as
+    :func:`delete_talent`: anything that would leave a real record pointing at nobody is
+    a refusal with a reason. The linked OPPORTUNITY is untouched — a project is one
+    delivery of a deal, and deleting the delivery must not delete the deal.
+    """
+    row = conn.execute("SELECT need, client FROM projects WHERE id = ?",
+                       (project_id,)).fetchone()
+    if row is None:
+        return {"deleted": False, "name": "", "reason": "missing"}
+    block = project_delete_block(conn, project_id)
+    if block:
+        return {"deleted": False, "name": row["need"] or "", "reason": block}
+    for table in ("assignments", "milestones", "review_comments", "project_updates",
+                  "invoices", "talent_payouts", "project_events", "proposals",
+                  "contributors"):
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
+        except sqlite3.OperationalError:
+            pass                            # absent in an older DB — best effort
+    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
+    return {"deleted": True, "name": row["need"] or "", "reason": ""}
 
 
 def delete_opportunity(conn: sqlite3.Connection, opp_id: int) -> dict:

@@ -1664,6 +1664,51 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0081 — A record, not a flag; and a board you can take something off
+**Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0043 (the write door)
+and ADR-0059 (signatures are append-only) · Source: `db.set_talent_w9_file`,
+`talent_routes.talent_set_w9`, `creator_routes.creator_sign_agreement`,
+`db.project_delete_block` / `PROJECT_DELETE_BLOCK` / `delete_project`,
+`shell.templates.env.globals["delete_refusal"]`,
+`tests/test_the_w9_is_a_document_not_a_date.py`, `tests/test_deleting_a_demo_project.py`
+
+**Decision.** Three rules, one shape.
+
+1. **Compliance state names the artefact, never asserts it.** The W-9 is a FILE, written
+   through `_persist_upload` like every other piece of media, and `w9_received_at` is
+   stamped from its arrival. Marking it received by hand stays — one that came by post is
+   still a W-9 — and the surface says which of the two it is rather than showing one
+   green tick for both. The stored form lives at `/uploads/{name}`, which is behind the
+   admin gate: a document carrying a taxpayer ID never travels the token-scoped
+   `/project/{id}/dl/` road that client media takes.
+2. **A funnel stage is moved by the act that changes it.** Signing the standing agreement
+   IS joining the roster — it is the moment a creator becomes assignable — so the
+   signature advances `invite_status` to `Joined`. It never demotes.
+3. **Anything that can be created can be removed, and the refusals are the feature.**
+   `delete_project` refuses on `paid` (a paid invoice is an accounting record), `signed`
+   (ADR-0059) and `delivered` (the record of work a client holds), and says which. It
+   takes the project's own children and **keeps the opportunity** — a project is one
+   delivery of a deal, and clearing the delivery must not clear the deal. The sentence
+   explaining a refusal lives beside the check that produces it (`*_DELETE_BLOCK`),
+   reported to templates through one `delete_refusal` global.
+
+**Why.** *"is there a way for me to store the w-9 attached to each particular talent?
+right now i just see a button. after the talent has signed their agreement shouldn't the
+recruiting funnel move to 'joined'. I need a way to delete demo projects."* All three were
+the same defect wearing different clothes: a **flag standing in for the thing itself**.
+`w9_received_at` was a date the operator typed, proving nothing at the moment a payment is
+questioned, and reading as done. `invite_status` was written only by the seeder, so a
+creator with a signature on file sat in the funnel as someone we were still chasing. And
+the board had no delete at all, so every rehearsal of the funnel left a demo in the
+pipeline looking exactly like work.
+
+**Consequences.** A "received" tick with no file behind it is now a legible state, not an
+invisible one. Delete is deliberately narrow: it clears rehearsals, and the moment a
+project acquires a real record it stops being deletable — which means the way to remove a
+delivered project is to reopen it first, on purpose. The same refusal grammar now serves
+the roster and the board, so a third one has a pattern to copy rather than a template to
+paste.
+
 ### ADR-0080 — Chordential signs its own Clearance Certificate
 **Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0059 ·
 Source: `signing.DOC_CLEARANCE_EXECUTED`, `ClearanceCertificate.executed` /

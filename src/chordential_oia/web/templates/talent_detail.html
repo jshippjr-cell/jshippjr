@@ -7,8 +7,7 @@
 {% if request.query_params.get('delete') %}
 <section class="card" style="border-left:3px solid #c0553f">
   <p style="margin:0"><b>Not removed.</b>
-    {{ {'assigned': 'This creator is assigned to a project. Remove them from it first — the crew, the chain of title and the payout ledger all point at them.',
-        'signed': 'This creator has signed an agreement. Signatures are a permanent record (they can be withdrawn, never deleted), so the person who signed stays.'}.get(request.query_params.get('delete'), 'It could not be removed.') }}</p>
+    {{ delete_refusal('talent', request.query_params.get('delete')) or 'It could not be removed.' }}</p>
 </section>
 {% endif %}
 
@@ -69,17 +68,41 @@
     </form>
     {% endif %}
     <div style="margin-top:12px">
-      <form method="post" action="/talent/{{ t.id }}/w9">
-        {% if w9_received_at %}
+      {# THE FORM ITSELF, not a date someone typed. A W-9 is the document you produce
+         when a payment is questioned; a "received" flag with no file behind it reads as
+         done and proves nothing. Marking it by hand still works — a W-9 that arrived by
+         post is still a W-9 — and the page says which of the two it is. #}
+      {% if w9_received_at %}
+      <p style="margin:0 0 6px">
         <span class="pill sv-door">✓ W-9 on file ({{ w9_received_at }})</span>
-        <input type="hidden" name="received" value="0">
-        <button class="btn tiny" type="submit">Clear</button>
+        {% if w9_filename %}
+        <a class="link" href="/uploads/{{ w9_filename }}" download="{{ w9_orig or 'w9.pdf' }}">⇓ {{ w9_orig or 'download' }}</a>
         {% else %}
-        <span class="muted small">W-9 needed before first payout.</span>
+        <span class="muted small">— marked received by hand; no file attached.</span>
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="muted small" style="margin:0 0 6px">W-9 needed before first payout.</p>
+      {% endif %}
+      <form method="post" action="/talent/{{ t.id }}/w9" enctype="multipart/form-data"
+            style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg" style="font-size:12px;max-width:200px">
+        <button class="btn tiny" type="submit">{{ 'Replace the W-9' if w9_filename else 'Attach the W-9' }}</button>
+      </form>
+      <form method="post" action="/talent/{{ t.id }}/w9" style="margin-top:6px">
+        {% if w9_received_at %}
+        <input type="hidden" name="received" value="0">
+        <button class="btn tiny ghost" type="submit">Clear</button>
+        {% else %}
         <input type="hidden" name="received" value="1">
-        <button class="btn tiny" type="submit">Mark W-9 received</button>
+        <button class="btn tiny ghost" type="submit">Mark received without a file</button>
         {% endif %}
       </form>
+      {% if request.query_params.get('w9') == 'empty' %}
+      <p class="small" style="color:#c0553f;margin:6px 0 0">That file was empty — nothing was attached.</p>
+      {% elif request.query_params.get('w9') == 'big' %}
+      <p class="small" style="color:#c0553f;margin:6px 0 0">That file is over 16&nbsp;MB. A W-9 is a page or two — check you picked the right file.</p>
+      {% endif %}
     </div>
     <div style="margin-top:12px">
       {# The agreement the writer actually signed — the thing the clearance certificate

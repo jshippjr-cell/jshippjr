@@ -3320,6 +3320,28 @@ def project_create_invoice(project_id: int, kind: str = Form(...)):
     return RedirectResponse(f"/project/{project_id}/proposal", status_code=303)
 
 
+@router.post("/project/{project_id}/delete")
+def project_delete(project_id: int):
+    """Remove a project permanently — chiefly for clearing demo rows.
+
+    Refused, with a reason, when it would delete a real record: money that moved, a
+    signature, or a delivery a client has in hand (``db.project_delete_block``). The
+    linked OPPORTUNITY is kept — a project is one delivery of a deal, and clearing the
+    delivery must not clear the deal.
+    """
+    conn = db.connect()
+    try:
+        out = db.delete_project(conn, project_id)
+    finally:
+        conn.close()
+    if out["deleted"]:
+        return RedirectResponse(f"/projects?deleted={quote(out['name'] or 'project')}",
+                                status_code=303)
+    if out["reason"] == "missing":
+        return RedirectResponse("/projects", status_code=303)
+    return RedirectResponse(f"/projects?kept={out['reason']}", status_code=303)
+
+
 @router.post("/project/{project_id}/invoice/balance")
 def project_raise_balance(project_id: int, amount: str = Form(""), note: str = Form("")):
     """Raise the BALANCE invoice by hand, for a delivery that has no proposal to raise it

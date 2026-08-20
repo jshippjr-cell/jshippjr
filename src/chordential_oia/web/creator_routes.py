@@ -31,7 +31,7 @@ from ..delivery import (
     role_key, scoped_deliverables, seed_brief, version_label, versions_list,
 )
 from .. import composer_agreement, contributor_release, signing
-from ..talent import profile_completeness
+from ..talent import InviteStatus, profile_completeness
 from . import db, production, room
 from .billing import _ensure_final_invoice_issued, final_invoice_block
 from .opportunity_ops import _ensure_proposal_for_project
@@ -544,6 +544,13 @@ def creator_sign_agreement(request: Request, token: str, typed_name: str = Form(
         # The gate, satisfied by the signature rather than by an assertion about one.
         db.set_talent_agreement(conn, talent_id, sig.signed_at[:10],
                                 f"Signed in portal · {sig.digest[:12]}")
+        # AND THE FUNNEL MOVES. Signing the standing agreement IS joining the roster —
+        # it is the moment they become assignable — and nothing in the live flow ever
+        # advanced `invite_status` past Invited: only the seeder ever wrote Joined, so a
+        # real creator sat at "Invited" forever while their signature was on file
+        # (operator, 2026-08-20). Never demotes: someone already Joined stays Joined.
+        if (row["invite_status"] or "") != InviteStatus.JOINED.value:
+            db.update_talent_invite(conn, talent_id, InviteStatus.JOINED.value)
         signer_mail = sig.signer_email
         doc_text = agr.signable_text()
     finally:

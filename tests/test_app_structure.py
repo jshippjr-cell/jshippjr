@@ -240,7 +240,9 @@ def test_the_router_carries_the_whole_group():
     # +1: /project/{id}/review/address — marking a note addressed moved off the
     # creator portal's door, because the room serves three roles and only one of them
     # holds a creator token (see test_addressed_is_ours_not_theirs.py).
-    ("project_routes.py", "/project", 69),
+    # +1: /project/{id}/delete — a demo project you can take off the board, refused
+    # when the deal was signed, paid or delivered (see test_deleting_a_demo_project.py).
+    ("project_routes.py", "/project", 70),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -289,7 +291,9 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     +1 for conforming a parked cut (ADR-0069) — a re-cut moves every note with the
     picture instead of leaving them pointing at frames that moved,
     +2 for adding a deal by hand — a form and its post, and until they existed there was no
-    way to create an opportunity at all except promoting an inbound lead.
+    way to create an opportunity at all except promoting an inbound lead,
+    +1 for taking a project off the board, because the demo set could be created and
+    never removed and a rehearsal project sat in the pipeline looking like work.
     Retiring
     /samples and /capabilities did NOT change it — both stayed as 301s so no indexed
     link dies. Change this number only when you mean to add or remove a URL, never to
@@ -300,8 +304,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 290, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 290 — "
+    assert len(decls) == 291, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 291 — "
         f"a slice lost or gained a URL")
 
 
