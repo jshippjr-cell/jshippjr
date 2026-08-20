@@ -3047,6 +3047,13 @@ def review_asset(
                 _maybe_finalize_delivery(conn, project_id)
     finally:
         conn.close()
+    # Signing off happens item by item, down a list. A redirect reloads the room and puts
+    # you back at the top of it, so approving five deliverables meant scrolling back five
+    # times (reported live, 2026-08-19). An in-page press gets an answer and the row
+    # updates where it is.
+    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
+        return JSONResponse({"ok": True, "action": action or "approve",
+                             "by": name, "keys": keys})
     return _review_redirect(project_id, k, name=name, email=mail, r=r,
                             origin=origin)
 
@@ -3131,7 +3138,8 @@ def project_create_invoice(project_id: int, kind: str = Form(...)):
 
 
 @router.post("/project/{project_id}/pay")
-def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str = Form("final")):
+def client_pay(project_id: int, k: str = Form(""), r: str = Form(""),
+               kind: str = Form("final"), origin: str = Form("")):
     """Client-facing, token-gated: begin payment for the deposit or final invoice. Ensures the
     invoice exists, opens a provider checkout, and — with Stripe configured — redirects the
     client to the HOSTED checkout page. With the unconfigured Null provider it bounces back
@@ -3142,6 +3150,12 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str 
     # Where to bounce back on the honest null-provider fallback / errors: the deposit is
     # paid from the workspace, the final from the delivery portal.
     def _back(flag):
+        # Back where it was pressed. The Pay button now lives in the ROOM (ADR-0076) and
+        # every bounce landed on the delivery portal, which is a different page about the
+        # same money.
+        if (origin or "").strip() == "room":
+            cred = f"?k={k}" if k else (f"?r={r}" if r else "?")
+            return f"/room/{project_id}{cred}&{flag}#p{project_id}"
         if kind == "Deposit":
             prow0 = db.get_project(conn, project_id)
             if prow0 is not None and prow0["opp_id"]:
@@ -3153,10 +3167,18 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""), kind: str 
             return HTMLResponse("Not found", status_code=404)
         prow = db.get_project(conn, project_id)
         prop = db.proposal_for_project(conn, project_id)
-        if prow is None or prop is None:
+        if prow is None:
             return RedirectResponse(_back("pay=error"), status_code=303)
+        # THE PROPOSAL IS ONLY NEEDED TO RAISE AN INVOICE THAT DOES NOT EXIST YET. It was
+        # required unconditionally, so a delivery whose final invoice had already been
+        # issued (`_ensure_final_invoice_issued`, at ship time) bounced silently off this
+        # line: *"i click it and it does nothing"* (operator, 2026-08-19). The client
+        # pressed Pay, the page reloaded, and nothing on it said why.
         if not db.has_invoice(conn, project_id, kind):
-            db.insert_invoice(conn, project_id, prop["id"], _invoice_from_proposal_row(prow, prop, kind))
+            if prop is None:
+                return RedirectResponse(_back("pay=noinvoice"), status_code=303)
+            db.insert_invoice(conn, project_id, prop["id"],
+                              _invoice_from_proposal_row(prow, prop, kind))
         invoice = next((i for i in db.list_invoices(conn, project_id)
                         if (i["kind"] or "") == kind), None)
         if invoice is None:

@@ -355,7 +355,7 @@ def test_a_lane_shows_every_file_it_holds(stage):
     stems = ["kick.wav", "snare.wav", "bass.wav", "gtr.wav", "keys.wav", "vox.wav"]
     _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package", stems)
     lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
-    assert re.findall(r'class="so-name">([^<]+)<', lane) == stems, lane[:400]
+    assert re.findall(r'class="so-name"[^>]*>([^<]+)<', lane) == stems, lane[:400]
     assert lane.count("<audio") == 6, "not every file can be auditioned"
 
 
@@ -410,3 +410,63 @@ def test_a_lane_is_only_approved_when_every_file_is(stage):
     after = re.search(r"(\d+)\s+of\s+(\d+)\s+approved",
                       c.get(f"/room/{pid}?k={ktok}").text).groups()
     assert after == first, f"half a lane counted as a signed-off deliverable: {first} → {after}"
+
+
+# ── signing off must not throw you back to the top ──────────────────────────────────
+def test_signing_off_answers_in_place(stage):
+    """*"clicking approve refreshes the page and take me to the top of the page"*
+    (operator, 2026-08-19). Sign-off happens item by item down a list; a redirect meant
+    scrolling back for every one of them."""
+    c, db, pid, ttok, ktok, admin = stage
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package", ["a.wav", "b.wav"])
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    keys = re.findall(r'name="filename" value="([^"]+)"', lane)
+    r = c.post(f"/project/{pid}/review/asset",
+               data={"k": ktok, "author": "Marta Ruiz", "email": "m@a.com",
+                     "origin": "room", "action": "approve", "filename": keys},
+               headers={"X-Requested-With": "fetch"})
+    assert r.status_code == 200, "the press still answers with a page"
+    body = r.json()
+    assert body["ok"] and body["by"] == "Marta Ruiz" and len(body["keys"]) == 2
+
+
+def test_a_plain_sign_off_still_redirects(stage):
+    """No JS is not a broken sign-off."""
+    c, db, pid, ttok, ktok, admin = stage
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package", ["a.wav"])
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    keys = re.findall(r'name="filename" value="([^"]+)"', lane)
+    r = c.post(f"/project/{pid}/review/asset",
+               data={"k": ktok, "author": "M", "email": "m@a.com", "origin": "room",
+                     "action": "approve", "filename": keys}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith(f"/room/{pid}")
+
+
+def test_the_row_updates_rather_than_the_page_reloading():
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia"
+           / "web" / "templates" / "creator_portal.html").read_text(encoding="utf-8")
+    fn = src[src.index('document.querySelectorAll("form.so-form")'):]
+    fn = fn[:fn.index("function bumpSignoff")]
+    assert "e.preventDefault()" in fn and "X-Requested-With" in fn
+    assert "location.reload" not in fn, "it reloads anyway, which is the report"
+    assert "✓ Approved" in fn, "the row does not say what just happened"
+
+
+def test_the_players_line_up(stage):
+    """*"have the play buttons line up straight, you dont have to show the whole file
+    name next to it"* — the name column was auto-width, so every transport started at a
+    different x."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia"
+           / "web" / "templates" / "creator_portal.html").read_text(encoding="utf-8")
+    css = src[src.index(".so-name{"):]
+    css = css[:css.index("}")]
+    assert "flex:0 0 " in css, "the name column is still auto-width"
+    assert "text-overflow:ellipsis" in css and "white-space:nowrap" in css
+    c, db, pid, ttok, ktok, admin = stage
+    _publish_many(c, db, pid, ttok, admin, "Mix-ready stem package",
+                  ["a-very-long-stem-name-that-would-push-the-player-right.wav"])
+    lane = _lane(c.get(f"/room/{pid}?k={ktok}").text, "Mix-ready stem package")
+    assert 'title="a-very-long-stem-name' in lane, (
+        "the name is clipped with no way to read the whole thing")

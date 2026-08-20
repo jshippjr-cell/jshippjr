@@ -99,6 +99,28 @@ def _payment_request_email(kind: str, amount: float, client: str, need: str,
     return {"subject": subject, "body": body}
 
 
+#: What each ``?pay=`` bounce means, in the client's language. Every failure path off
+#: ``/project/<id>/pay`` used to redirect with a flag and only ONE of them was rendered
+#: anywhere — so a client pressed Pay, the page reloaded, and nothing said why: *"i click
+#: it and it does nothing"* (operator, 2026-08-19). A payment that cannot start must say
+#: so; silence reads as a broken button, and on a payment button that is the worst thing
+#: it can read as.
+PAY_NOTICES = {
+    "unavailable": ("Online card payment isn't switched on yet. Chordential will send you "
+                    "a secure payment link — nothing is owed twice."),
+    "already": "That invoice is already settled. Nothing further is due.",
+    "noinvoice": ("We couldn't raise this invoice automatically. Chordential has been "
+                  "told and will send it to you directly."),
+    "error": ("Something went wrong starting that payment, and nothing was charged. "
+              "Chordential has been told."),
+}
+
+
+def pay_notice(flag: str) -> str:
+    """The sentence for a ``?pay=`` flag, or "" when there is nothing to say."""
+    return PAY_NOTICES.get((flag or "").strip().lower(), "")
+
+
 def _client_portal_url(project_id: int, k: str, extra: str = "") -> str:
     q = f"?k={k}" if k else ""
     if extra:

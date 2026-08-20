@@ -94,6 +94,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Pressing Pay did nothing** (ADR-0077, 2026-08-19). `/pay` required a proposal even
+  when the invoice already existed — which it does by ship time — and bounced with a flag
+  that nothing rendered. Every bounce now carries a sentence (`billing.PAY_NOTICES`) shown
+  by the room, the portal and the workspace, and a Pay pressed in the room returns there.
+  Alongside: signing off answers in place instead of reloading to the top of the room, and
+  the sign-off file list has a fixed-width name column so the players line up.
+
 - **The client signs off and settles in the room** (ADR-0076, 2026-08-19). The studio
   published deliverables and the buyer's room said nothing — the sign-off half of the
   delivery stage only existed on the old portal. Now: one derivation

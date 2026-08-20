@@ -265,9 +265,14 @@
         <b>${{ '%.2f'|format(invoice_balance.outstanding) }}</b> is{% else %}your invoice is{% endif %}
         due. You can keep streaming and reviewing the work above; downloads unlock the
         moment it's paid in full.</p>
-      {% if request.query_params.get('pay') == 'unavailable' %}
-      <p class="paywall-sub" style="margin-top:10px;color:#ffd9c2">Online card payment isn't switched on yet. Chordential will send you a secure payment link.</p>
-      {% else %}
+      {# EVERY bounce speaks. Four flags leave `/pay` and only `unavailable` was ever
+         rendered, so the other three reloaded the page in silence — which on a payment
+         button reads as broken. #}
+      {% set _notice = pay_notice(request.query_params.get('pay')) %}
+      {% if _notice %}
+      <p class="paywall-sub" style="margin-top:10px;color:#ffd9c2">{{ _notice }}</p>
+      {% endif %}
+      {% if request.query_params.get('pay') != 'unavailable' %}
       <form method="post" action="/project/{{ project['id'] }}/pay" style="margin-top:12px">
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">

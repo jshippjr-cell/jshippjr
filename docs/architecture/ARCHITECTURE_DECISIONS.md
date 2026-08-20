@@ -1664,6 +1664,33 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0077 — A payment that cannot start says so
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0076 ·
+Source: `billing.PAY_NOTICES` / `pay_notice`, `project_routes.client_pay`,
+`tests/test_pressing_pay_says_something.py`
+
+**Decision.** (1) `/project/<id>/pay` needs a PROPOSAL only to raise an invoice that does
+not exist yet. An invoice already issued (which is what `_ensure_final_invoice_issued`
+does at ship time) is enough on its own.
+
+(2) **Every bounce off that route has a sentence**, in one place (`billing.PAY_NOTICES`,
+exposed as the `pay_notice` Jinja global), rendered by the room, the delivery portal and
+the workspace: `unavailable`, `already`, `noinvoice`, `error`. An unknown flag says
+nothing rather than guessing.
+
+(3) A Pay pressed in the room returns to the room (`origin=room`).
+
+**Why.** *"when it click it it does nothing."* Two faults compounding: the route required
+a proposal unconditionally, so a delivery that had reached the paywall the normal way
+bounced off that check — and it bounced with `pay=error`, which nothing anywhere
+rendered. The client pressed Pay, the page reloaded, and not one thing on it had changed.
+
+**Consequences.** On a payment button, silence is the worst possible reading: it is
+indistinguishable from a broken system and from a charge that may or may not have
+happened. Any new failure path off a payment route adds its flag to `PAY_NOTICES` in the
+same commit, and the message says whether money moved — every one of these four says
+plainly that it did not.
+
 ### ADR-0076 — The client signs off and settles in the room
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068, ADR-0074 ·
 Source: `delivery_ops.scoped_signoff`, `creator_routes._room_fields`,

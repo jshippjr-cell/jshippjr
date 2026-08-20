@@ -36,6 +36,12 @@ templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 # opens a REAL Stripe checkout. Callable, so a test that flips the env sees it.
 templates.env.globals["payments_live"] = (
     lambda: __import__("chordential_oia.payments", fromlist=["x"]).payments_status()["live"])
+# Why a payment bounced, in one place — the room, the delivery portal and the workspace
+# render the same sentence. Lazily imported for the same reason as the line above: this
+# module is the bottom of the import order and must not reach up into a helper.
+templates.env.globals["pay_notice"] = (
+    lambda flag: __import__("chordential_oia.web.billing",
+                            fromlist=["x"]).pay_notice(flag))
 
 
 def render(request: Request, name: str, **kw):
