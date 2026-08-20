@@ -29,3 +29,23 @@ class PaymentProvider(Protocol):
         """Interpret a provider webhook into a normalized event dict, e.g.
         ``{"invoice_ref": ..., "status": "Paid"}``. Returns ``{}`` if irrelevant."""
         ...
+
+    def verify_return(self, params: Mapping) -> dict:
+        """Did the payer who landed on our success URL actually pay?
+
+        ``params`` is the query string of the return. Returns the same normalized
+        shape as :meth:`handle_webhook` — ``{"invoice_id", "status", "external_ref"}``
+        — and ``{}`` when payment cannot be PROVEN, which includes every error.
+
+        This exists because a success URL is not evidence. ``/pay/return?invoice=7``
+        was a plain GET, exempt from the admin gate, that marked invoice 7 Paid,
+        unlocked the client's downloads, queued crew payouts and emailed a receipt —
+        for anyone who typed it. The browser belongs to the payer, and the payer is
+        not a trusted party; only the provider that issued a checkout can say what
+        became of it.
+
+        A provider that cannot verify returns ``{}`` rather than assume. The
+        signature-verified webhook is the authoritative door and is untouched, so
+        "not confirmed here" costs a few seconds, never a payment.
+        """
+        ...

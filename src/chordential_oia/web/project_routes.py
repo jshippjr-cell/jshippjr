@@ -38,6 +38,7 @@ from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet, build_manifest,
     build_timeline, current_version, delivery_completeness,
     deliverable_owner as D_deliverable_owner, license_confirmation,
+    owner_for_asset_label as D_owner_for_label,
     merge_signatory, reconcile_brief, revision_status,
     scoped_deliverables, seed_brief, version_label, version_name, versions_list,
     ASSIGNABLE_FOLDERS, BRIEF_FIELDS, CONTENT_ID_HONEST, DELIVERY_STATES, VERSION_STATES,
@@ -2874,7 +2875,8 @@ async def delivery_restore_assets(
 
 @router.post("/project/{project_id}/delivery/asset/publish")
 def delivery_publish_asset(request: Request, project_id: int, filename: str = Form(""),
-                           action: str = Form("publish"), origin: str = Form("")):
+                           action: str = Form("publish"), origin: str = Form(""),
+                           note: str = Form("")):
     """Jon's disposition of a creator's pending DELIVERABLE (stems, cutdowns,
     verticals): publish it into the client-visible assets, or discard it. The same
     gate the master gets — uniform, per the EP review (unvetted stems on delivery
@@ -2884,6 +2886,7 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
     finished mix (ADR-0075), so the mix landing is the moment they are up."""
     conn = db.connect()
     invite = None
+    back = None
     try:
         delivery = db.get_delivery(conn, project_id)
         pending = list(delivery.get("pending_assets") or [])
@@ -2896,15 +2899,33 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
                                  action=action, filename=filename)
         pending = [a for a in pending if a.get("filename") != filename]
         db.update_delivery(conn, project_id, "pending_assets", pending)
-        if action == "discard":
+        if action in ("discard", "send_back"):
             # A rejected deliverable must not stay downloadable. This used to unlink the
             # path under `upload_dir()` directly, which removes the DISK copy and leaves
             # the durable DB mirror — and `serve_upload` answers from the mirror, so a
             # sent-back file kept downloading. `forget_media` is the one door out, and it
             # closes both.
             forget_media(conn, hit.get("filename") or "")
+            # …AND THE PERSON WHO MADE IT IS TOLD. The master's send-back carries a
+            # reason, emails the crew and lands in the room's event stream (ADR-0072);
+            # this one wrote a line into the project's own updates and told the mixer
+            # NOTHING — their stems simply stopped existing. The same judgement deserves
+            # the same courtesy, and a rejection nobody hears cannot be acted on.
+            sent_back = (note or "").strip() or "No reason given."
+            label = hit.get("label") or "a deliverable"
+            who = hit.get("by") or "the creator"
+            name = hit.get("orig") or hit.get("filename") or "the file"
             db.add_update(conn, project_id,
-                          f"Sent back the pending deliverable '{hit.get('label')}'.")
+                          f"Sent back '{name}' from {label}: {sent_back}")
+            db.add_project_event(
+                conn, project_id, "sent_back", actor_role="operator",
+                actor_name="Studio",
+                body=f"'{name}' ({label}) sent back to {who}: {sent_back}"[:200],
+                audience="operator,talent")
+            # Addressed to the lane's OWNER — the mixer's stems go back to the mixer, not
+            # to everyone who has ever touched the project (ADR-0075).
+            back = (db.get_project(conn, project_id), label, name, sent_back,
+                    D_owner_for_label(db.get_project(conn, project_id), delivery, label))
         else:
             assets = list(delivery.get("assets") or [])
             was_published = {(a.get("label") or "").strip().lower()
@@ -2923,13 +2944,29 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             # nobody was telling them. Only on the FIRST published file of that lane;
             # twelve stems must not send twelve emails.
             if (hit.get("label") or "").strip().lower() not in was_published:
-                owner = D_deliverable_owner(hit.get("label") or "")
+                # Resolved through the project's scoped list, because the owner keys off
+                # (asset, GROUP) and a lane label is the asset alone — asking with the
+                # label only returned "" for every deliverable, so this email had never
+                # once fired since ADR-0075 shipped.
+                project = db.get_project(conn, project_id)
+                owner = D_owner_for_label(project, delivery, hit.get("label") or "")
                 downstream = [k for k, up in (("editor", "mixer"),) if up == owner]
                 if downstream:
-                    project = db.get_project(conn, project_id)
                     invite = (project, downstream[0], hit.get("label") or "the mix")
     finally:
         conn.close()
+    # The reason, by email, to whoever owns that lane — the mixer's stems go back to the
+    # mixer. Off the request thread, best-effort, exactly like the master's send-back.
+    if back is not None:
+        project, label, name, sent_back, craft = back
+        campaign = _campaign_label(project)
+        signals.fire_and_forget(
+            _notify_assigned_creators, project_id, project, only_craft=craft or "",
+            subject=f"'{name}' needs another pass · {campaign}",
+            body_text=(f"The studio reviewed the {label} you delivered for {campaign} "
+                       f"and is sending '{name}' back before the client sees it.\n\n"
+                       f"\"{sent_back}\"\n\n"
+                       "Open your room — the lane is open for the replacement."))
     if invite is not None:
         project, craft, label = invite
         campaign = _campaign_label(project)
@@ -3241,12 +3278,31 @@ def review_asset(
     recorded with the roster identity + current version + date, logged into the
     review tape (kind ``asset_approval`` / ``asset_change``, body naming the asset),
     and the operator push fires."""
+    # A REFUSAL MUST NEVER LOOK LIKE A NETWORK FAILURE. Every non-JSON answer on this
+    # route — the 404 below, the silent redirect when identity or keys are missing —
+    # reached the room as a failed `fetch`, and the room's only vocabulary for that was
+    # "Check your connection and try again." The operator went hunting for a connection
+    # problem that was never there, twice (2026-08-19, 2026-08-20). An in-page press
+    # gets an in-page answer.
+    xhr = (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest")
+
+    def _no(reason: str, code: int = 403):
+        if xhr:
+            return JSONResponse({"ok": False, "reason": reason}, status_code=code)
+        if reason == "denied":
+            return HTMLResponse("Not found", status_code=404)
+        return _review_redirect(project_id, k, r=r, origin=origin)
+
     conn = db.connect()
     name, mail = "", ""
     try:
         ok, reviewer = _access_ok(conn, project_id, k, r)
         if not ok:
-            return HTMLResponse("Not found", status_code=404)
+            # No client credential. The commonest way to arrive here is the STUDIO
+            # pressing a control that was never theirs — signing off a deliverable is
+            # the buyer accepting the work (room.CAPS: `sign_off_asset` is client-only).
+            # The room no longer renders that button for them; this is the floor under it.
+            return _no("denied", 404)
         # Per-deliverable sign-off is open to the identified client on their own share link
         # (operator feedback: the client approves each itemized deliverable before the full
         # download unlocks) — same captured-intent rule as the whole-version Approve. A
@@ -3257,8 +3313,10 @@ def review_asset(
         else:
             name, mail = _reviewer_identity(request, author, email)
         keys = [x.strip() for x in (filename or []) if (x or "").strip()]
-        if not name or not keys:
-            return _review_redirect(project_id, k, r=r, origin=origin)
+        if not name:
+            return _no("noname", 400)
+        if not keys:
+            return _no("nokeys", 400)
         delivery = db.get_delivery(conn, project_id)
         # Resolve the LANE's display label for the tape (fall back to the first key).
         # One press over twelve stems is one line in the tape, not twelve.
@@ -3309,7 +3367,7 @@ def review_asset(
     # you back at the top of it, so approving five deliverables meant scrolling back five
     # times (reported live, 2026-08-19). An in-page press gets an answer and the row
     # updates where it is.
-    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
+    if xhr:
         return JSONResponse({"ok": True, "action": action or "approve",
                              "by": name, "keys": keys})
     return _review_redirect(project_id, k, name=name, email=mail, r=r,

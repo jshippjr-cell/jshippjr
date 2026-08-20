@@ -68,7 +68,12 @@ def test_create_checkout_builds_session_and_returns_url(fake_stripe):
     # Payer lands on a PUBLIC page, never the admin-gated project route.
     # /pay/return is the public (admin-gate-exempt) landing that applies the
     # payment — see the pay-link redesign; the payer never hits a gated route.
-    assert c["success_url"] == "https://chordential.com/pay/return?invoice=7"
+    # ADR-0085: the session id is what makes the return VERIFIABLE. Without it
+    # `/pay/return` has only an invoice number the payer could have typed — which is
+    # exactly how a plain GET came to mark invoices Paid.
+    assert c["success_url"] == (
+        "https://chordential.com/pay/return?invoice=7"
+        "&session_id={CHECKOUT_SESSION_ID}")
     assert c["cancel_url"] == "https://chordential.com/?canceled=7"
 
 

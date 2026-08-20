@@ -94,6 +94,21 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A success URL is not a receipt** (ADR-0085, 2026-08-20). `GET /pay/return?invoice=7`
+  was gate-exempt and applied the payment on sight — Paid, downloads unlocked, payouts
+  queued, receipt emailed — for anyone who typed a small integer; and its redirect carried
+  the project's share token, so guessing a number also handed out the client's portal key.
+  Payments now settle only on a provider-verified session (`verify_return`), with the
+  invoice id taken from the session rather than the URL; an unverified return lands on
+  `/pay/confirming`, holding nothing. Also: the client's sign-off form was rendering for
+  **every role** with no capability check, so the studio pressed a button whose route
+  always 404s and the room reported it as *"Check your connection"* — the control is
+  subtracted now and every refused press answers in JSON with a reason. And **sending a
+  deliverable back** finally carries a reason, an event the creator sees, and an email to
+  the craft that owns the lane. Wiring that exposed an older silent bug: `deliverable_owner`
+  needs *(asset, group)* and both callers passed the label alone, so the ADR-0075 hand-off
+  email to the editor **had never once fired**.
+
 - **Whatever we accept, we must be willing to keep** (ADR-0084, 2026-08-20). The durable
   store was already there and half-wired: every upload is mirrored into Postgres and
   `serve_upload` rehydrates from it, but the ceiling was **64 MB** — ADR-0026's number,

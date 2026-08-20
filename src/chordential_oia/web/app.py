@@ -433,6 +433,10 @@ def _is_delivery_portal_path(path: str) -> bool:
         or _SESSION_ROOM_RE.match(path)
         or _CLIENT_PAY_RE.match(path)
         or path == "/pay/return"
+        # Where an unverifiable return lands (ADR-0085). It is a payer-facing page that
+        # holds no token, names no project and reads nothing from the database — but it
+        # is reached by a customer's browser, so it cannot sit behind the admin login.
+        or path == "/pay/confirming"
     )
 
 

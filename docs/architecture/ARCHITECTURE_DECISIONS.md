@@ -1664,6 +1664,65 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0085 — A success URL is not a receipt, and a refusal is not a network error
+**Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0068 (capability
+gating) and ADR-0072 (the taste gate carries a reason) · Source:
+`payments.base.PaymentProvider.verify_return`, `payments/stripe.py`, `payments/null.py`,
+`billing_routes.pay_return` / `pay_confirming`, `project_routes.review_asset`,
+`project_routes.delivery_publish_asset`, `delivery.owner_for_asset_label`,
+`tests/test_a_success_url_is_not_a_receipt.py`,
+`tests/test_sending_a_deliverable_back_reaches_someone.py`
+
+**Decision.** Three rules.
+
+1. **Only the provider that issued a checkout may say it was paid.** `verify_return` joins
+   the provider contract; Stripe's `success_url` carries `{CHECKOUT_SESSION_ID}` and the
+   session is retrieved server-side. The invoice id is taken from the **verified session**,
+   never from the query string. Anything unproven — no session, unpaid status, unknown id,
+   network error — returns `{}` and applies nothing. The signature-verified webhook remains
+   the authoritative door, so an unconfirmed landing costs seconds, never a payment.
+2. **An unverified return is told nothing and given nothing.** It lands on `/pay/confirming`,
+   which holds no token, names no project and reads no database. It must also never read as
+   a failure: the common case is a real payer whose webhook is a second behind their browser.
+3. **A refusal must be legible as a refusal.** Every press the room makes over `fetch`
+   answers in JSON with a reason. A redirect or an HTML 404 is indistinguishable from a
+   dead connection once `fetch` has followed it.
+
+**Why.** `GET /pay/return?invoice=7` was exempt from the admin gate and applied the payment
+on sight — marking it Paid, unlocking the client's downloads, queueing the crew's payouts
+and emailing a receipt, for anyone who typed a small integer. The same request answered with
+a redirect whose `Location` carried `ensure_project_share_token(pid)`, so guessing a number
+also handed out the credential that opens that client's delivery portal. One request, two
+holes, same cause: **input the payer controls was treated as proof of something only the
+provider knows.**
+
+The third rule came from the operator, twice in two days: *"Im still getting this error
+trying to approve a composer's upload and push to client"* — **"That didn't go through.
+Check your connection and try again."** There was no connection problem. The client's
+per-deliverable sign-off form rendered for **every role with no capability check**, though
+`sign_off_asset` is client-only in `room.CAPS`; the studio pressed a button that was never
+theirs, the token-gated route answered 404, and `fetch` had no vocabulary but the network.
+The control is now subtracted for anyone without the capability and replaced with the honest
+state — *published, waiting on the client* — which is what the studio actually wanted to know.
+
+**And the rejection nobody heard.** The master's send-back has carried a reason since
+ADR-0072. The DELIVERABLE gate had not: `discard` deleted the mixer's stems from both copies,
+wrote a line only the studio reads, and told the mixer nothing. It now takes a reason,
+records a `sent_back` event the creator's room shows (audience `operator,talent` — the buyer
+never sees us rejecting our own supplier), and emails the craft that owns the lane.
+
+Wiring that surfaced an **older, silent defect**: `deliverable_owner` keys off *(asset,
+group)*, but both callers passed the lane's label — the asset alone — so every lookup
+returned `""`. The ADR-0075 hand-off telling the editor their mix had landed had therefore
+**never fired since the day it shipped**. `owner_for_asset_label` resolves the label through
+the project's scoped list, where the group lives, and both callers use it.
+
+**Consequences.** Checkout sessions created before this change land unverified and settle via
+the webhook — correct, a few seconds slower. The Null provider never vouches, which is right:
+it never takes a payment and no payer is ever sent to a success URL under it. The room's
+error vocabulary now distinguishes *refused*, *not yours*, *already handled* and *actually
+offline*; a fourth press that cannot be honoured should add a reason, not reuse "network".
+
 ### ADR-0084 — Whatever we accept, we must be willing to keep
 **Status:** Accepted (2026-08-20, operator directive) · Supersedes the ceiling set by
 ADR-0026 · Extends ADR-0043 (the write door) · Source: `uploads.mirror_cap` /

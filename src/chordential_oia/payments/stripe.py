@@ -60,9 +60,15 @@ class StripePaymentProvider:
         # them on an admin-gated route. (Phase 2 adds a branded receipt page.)
         domain = (self.domain or "https://chordential.com").rstrip("/")
 
+        # `{CHECKOUT_SESSION_ID}` is substituted by Stripe on the redirect, and it is
+        # what makes the return VERIFIABLE: `verify_return` hands it back to Stripe and
+        # asks what actually happened. Without it the success URL was a bare invoice id
+        # that anyone could type — see `verify_return` and ADR-0085. The invoice id
+        # stays on the URL for navigation only; it decides nothing about money.
         session = stripe.checkout.Session.create(
             mode="payment",
-            success_url=f"{domain}/pay/return?invoice={inv_id}",
+            success_url=(f"{domain}/pay/return?invoice={inv_id}"
+                         f"&session_id={{CHECKOUT_SESSION_ID}}"),
             cancel_url=f"{domain}/?canceled={inv_id}",
             client_reference_id=str(inv_id),
             metadata={"invoice_id": str(inv_id), "kind": str(kind)},
@@ -79,6 +85,42 @@ class StripePaymentProvider:
             }],
         )
         return session.url
+
+    def verify_return(self, params: Mapping) -> dict:
+        """Ask Stripe what became of the checkout the payer just came back from.
+
+        The ``session_id`` on the success URL is written by Stripe, not by the payer,
+        and is unguessable — but it is not treated as a secret here either. It is a
+        LOOKUP KEY: the session is retrieved server-side and the answer comes from
+        Stripe's copy, so a forged or stale id proves nothing and yields ``{}``.
+
+        The invoice id is taken from the SESSION (``client_reference_id`` /
+        ``metadata``), never from the query string. That is the difference between
+        "this payer paid for this invoice" and "this payer paid for something, and
+        also typed an invoice number".
+        """
+        session_id = str((params or {}).get("session_id") or "").strip()
+        if not session_id:
+            return {}
+        try:
+            session = self._client().checkout.Session.retrieve(session_id)
+        except Exception:      # noqa: BLE001 — unknown id, network, bad key: unproven
+            return {}
+        get = session.get if hasattr(session, "get") else (lambda k, d=None: getattr(session, k, d))
+        if get("payment_status") not in _PAID_STATUSES:
+            return {}
+        ref = get("client_reference_id") or (get("metadata") or {}).get("invoice_id")
+        if ref is None:
+            return {}
+        try:
+            invoice_id = int(ref)
+        except (TypeError, ValueError):
+            return {}
+        return {
+            "invoice_id": invoice_id,
+            "status": "Paid",
+            "external_ref": get("payment_intent") or get("id") or session_id,
+        }
 
     def handle_webhook(self, payload: Mapping) -> dict:
         """Verify + interpret a Stripe webhook. ``payload`` carries the raw

@@ -512,6 +512,9 @@
      mirror ceiling or configuring a bucket clears it without touching the file. */
   .lf-state.warn{color:#c8913f}
   .lf-warn{font-size:10.5px;color:#c8913f;opacity:.9;cursor:help}
+  /* What the studio sees where the client's sign-off button used to be offered to
+     them by mistake: the honest state, not a control they cannot use. */
+  .so-await{margin:6px 0 0;font-size:11.5px;color:var(--dim2);font-style:italic}
   .lf-gate{display:inline-flex;gap:3px;margin:0 0 0 2px}
   .lf-btn{width:20px;height:20px;border-radius:5px;border:1px solid var(--hair2);
     background:transparent;color:var(--dim2);cursor:pointer;font-size:11px;line-height:1;
@@ -1132,6 +1135,20 @@
     {% elif d.url and d.kind == 'audio' %}
     <audio controls preload="none" src="{{ d.url }}" style="flex:1 1 100%;height:34px;margin:4px 0 0"></audio>
     {% endif %}
+    {# WHOSE PRESS THIS IS. `sign_off_asset` is the CLIENT's capability and only theirs
+       (room.CAPS) — signing off a deliverable is the buyer accepting the work, not a
+       decision the studio can take for them. This form used to render for EVERY role
+       with no check, so the studio saw an Approve button on the client's behalf, pressed
+       it, and got a 404 back: the route is token-gated and the studio holds no client
+       token. `fetch` read the 404 as a failure and the room said **"That didn't go
+       through. Check your connection"** — a network error that was never there
+       (operator, 2026-08-20, second report of this shape).
+
+       So the control is subtracted for anyone without the capability, and what replaces
+       it is the honest state: the studio's job on these files is done, and the deal is
+       waiting on the buyer. #}
+    {% set unsigned = waiting or (d.asset_key and (d.approval and d.approval.status) != 'Approved') %}
+    {% if 'sign_off_asset' in (caps|default([])) %}
     {% if waiting %}
     <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
@@ -1157,6 +1174,9 @@
       <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
       <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
     </form>
+    {% endif %}
+    {% elif unsigned and d.files %}
+    <p class="so-await">Published to the client · waiting on their sign-off.</p>
     {% endif %}
   </div>
   {% endfor %}
@@ -1591,9 +1611,14 @@
           <input type="hidden" name="origin" value="room">
           <button type="submit" name="action" value="publish" class="lf-btn ok"
                   title="Publish to the client for sign-off">✓</button>
-          <button type="submit" name="action" value="discard" class="lf-btn no"
-                  title="Send it back to {{ f.by or 'the creator' }}"
-                  onclick="return confirm('Send {{ f.name|e }} back to {{ (f.by or 'the creator')|e }}?');">↩</button>
+          {# A REASON, because a rejection nobody hears cannot be acted on. The master's
+             send-back has carried one since ADR-0072; this one deleted the file and told
+             the mixer nothing. Asked for here rather than as an input per row: a stem
+             lane is twelve rows, and twelve text boxes is a form, not a gate. #}
+          <input type="hidden" name="note" value="">
+          <button type="submit" name="action" value="send_back" class="lf-btn no"
+                  title="Send it back to {{ f.by or 'the creator' }}, with a reason"
+                  data-sendback="{{ f.name|e }}" data-who="{{ (f.by or 'the creator')|e }}">↩</button>
         </form>
         {% endif %}
         {% endif %}
@@ -3112,8 +3137,22 @@
       f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
       fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-Requested-With": "fetch" } })
-        .then(function(r){ if (!r.ok) throw new Error("no"); return r.json(); })
+        /* READ THE ANSWER BEFORE DECIDING IT WAS THE NETWORK. This threw on any
+           non-2xx, so a refusal the route could not honour — a 404 for a press the
+           studio was never entitled to make — surfaced as "Check your connection".
+           The route now always answers this press in JSON, so the only thing left in
+           .catch() is an actual transport failure. */
+        .then(function(r){ return r.json().catch(function(){ throw new Error("net"); }); })
         .then(function(data){
+          if (data && data.ok === false){
+            f.querySelectorAll("button").forEach(function(b){ b.disabled = false; });
+            toast(data.reason === "denied"
+                    ? "Signing off a deliverable is the client's call — open the room with their link to do it on their behalf."
+                  : data.reason === "noname"
+                    ? "Add your name first, so the sign-off is attributable."
+                  : "That press didn't take. Reload and try again.");
+            return;
+          }
           var state = row.querySelector(".ok-line, .pend-badge");
           if (act === "changes"){
             if (state){ state.className = "pend-badge";
@@ -3167,10 +3206,21 @@
     f.addEventListener("submit", function(e){
       if (!window.fetch || !window.FormData) return;
       var act = (e.submitter && e.submitter.value) || "publish";
+      /* Ask for the reason on the way out. It is what the creator reads, and it is the
+         whole difference between "your work was rejected" and a note they can act on. */
+      var why = "";
+      if (act === "send_back"){
+        var b = e.submitter;
+        why = window.prompt("Send " + (b ? b.getAttribute("data-sendback") : "this file")
+                + " back to " + (b ? b.getAttribute("data-who") : "the creator")
+                + ".\n\nWhat needs another pass? This is what they read.", "");
+        if (why === null) { e.preventDefault(); return; }   /* cancelled — nothing happens */
+      }
       e.preventDefault();
       var li = f.closest("li"), lane = f.closest(".deliv-lane");
       var fd = new FormData(f);
       fd.set("action", act);
+      if (act === "send_back") fd.set("note", why);
       f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
       fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-Requested-With": "fetch" } })

@@ -294,6 +294,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     picture instead of leaving them pointing at frames that moved,
     +2 for adding a deal by hand — a form and its post, and until they existed there was no
     way to create an opportunity at all except promoting an inbound lead,
+    +1 for /pay/confirming — where a payment return that could NOT be verified lands,
+    holding no token and naming no project (ADR-0085),
     +1 for taking a project off the board, because the demo set could be created and
     never removed and a rehearsal project sat in the pipeline looking like work,
     +1 for taking a FILE off a deliverable lane — a published row had no control at all,
@@ -308,8 +310,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 292, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 292 — "
+    assert len(decls) == 293, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 293 — "
         f"a slice lost or gained a URL")
 
 

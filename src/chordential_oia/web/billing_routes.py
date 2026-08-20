@@ -113,16 +113,45 @@ def invoice_send_pay_link(invoice_id: int):
 
 
 @router.get("/pay/return", response_class=HTMLResponse)
-def pay_return(request: Request, invoice: int = 0):
-    """Stripe ``success_url`` target — the payer lands here after a COMPLETED checkout. Applies
-    the payment (idempotent — the signature-verified webhook may have beaten the browser here)
-    and returns to the workspace/portal with a thank-you."""
-    conn = db.connect()
-    dest = "/"
+def pay_return(request: Request, invoice: int = 0, session_id: str = ""):
+    """Stripe ``success_url`` target — where the payer's browser lands after checkout.
+
+    **The landing is not the evidence; the provider is.** This route used to take
+    ``?invoice=7`` at its word: a plain GET, exempt from the admin gate, that marked the
+    invoice Paid, unlocked the client's downloads, queued the crew's payouts and emailed
+    a receipt — for anyone who typed a number. It also answered with a redirect whose
+    Location carried ``ensure_project_share_token(pid)``, so guessing an invoice id
+    handed out the credential that opens that client's delivery portal. Two holes, one
+    cause: a URL the payer controls was treated as proof of something only the payment
+    provider knows.
+
+    So the provider is asked (``verify_return``), the invoice id is taken from the
+    VERIFIED session rather than the query string, and nothing happens without it. An
+    unverified landing is not an error and is not accused of anything — it is simply not
+    paid *yet*: the signature-verified webhook is the authoritative door and lands within
+    seconds, so the payer is sent somewhere neutral that says we are confirming, holding
+    no token and naming no project.
+
+    ``?invoice=`` survives for navigation only, and only once the verified session agrees
+    with it. It decides nothing about money.
+    """
+    verified = {}
     try:
-        inv = db.get_invoice(conn, invoice) if invoice else None
+        verified = get_payment_provider().verify_return(dict(request.query_params)) or {}
+    except Exception:                      # noqa: BLE001 — never 500 a paying customer
+        verified = {}
+    paid_id = verified.get("invoice_id") if (verified.get("status") or "").lower() == "paid" else None
+    if paid_id is None:
+        # Unconfirmed. No payment applied, and — just as important — no share token in
+        # the Location header. The webhook will settle it; the page says so.
+        return RedirectResponse("/pay/confirming", status_code=303)
+
+    conn = db.connect()
+    dest = "/pay/confirming"
+    try:
+        inv = db.get_invoice(conn, int(paid_id))
         if inv is not None and inv["project_id"]:
-            _apply_invoice_payment(conn, invoice)
+            _apply_invoice_payment(conn, int(paid_id), verified.get("external_ref") or "")
             pid = inv["project_id"]
             prow = db.get_project(conn, pid)
             if inv["kind"] == "Final":
@@ -132,6 +161,31 @@ def pay_return(request: Request, invoice: int = 0):
     finally:
         conn.close()
     return RedirectResponse(dest, status_code=303)
+
+
+@router.get("/pay/confirming", response_class=HTMLResponse)
+def pay_confirming(request: Request):
+    """Where an unconfirmed return lands. Deliberately knows nothing.
+
+    No project, no token, no invoice — because the whole point is that we could not
+    establish who this is. It must also never read as an accusation or as a failure: the
+    overwhelmingly common case is a real payer whose webhook is a second behind their
+    browser, and telling them their payment failed would be both wrong and alarming.
+    """
+    return HTMLResponse(
+        "<!doctype html><meta charset=utf-8><title>Confirming your payment</title>"
+        "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<style>body{margin:0;min-height:100vh;display:grid;place-items:center;"
+        "background:#FCF7F8;color:#2b2724;font:16px/1.55 ui-serif,Georgia,serif;padding:24px}"
+        "div{max-width:30rem;text-align:center}h1{font-size:1.35rem;margin:0 0 .6rem}"
+        "p{margin:.5rem 0;color:#6b6560}</style>"
+        "<div><h1>Confirming your payment</h1>"
+        "<p>Thank you — we're waiting on confirmation from our payment provider. "
+        "This usually takes a few seconds.</p>"
+        "<p>You don't need to pay again or keep this page open. As soon as it clears, "
+        "your receipt arrives by email and your project page updates on its own.</p>"
+        "<p>If anything looks wrong, reply to your invoice email and we'll sort it.</p>"
+        "</div>")
 
 
 @router.post("/webhooks/stripe")

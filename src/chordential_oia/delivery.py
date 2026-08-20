@@ -1014,6 +1014,28 @@ def deliverable_owner(asset: str, group: str = "") -> str:
     return _GROUP_OWNER.get((group or "").strip().lower(), "")
 
 
+def owner_for_asset_label(project, delivery: Optional[dict], label: str) -> str:
+    """Which craft owes the lane a file was uploaded to ("" when it cannot be told).
+
+    :func:`deliverable_owner` keys off (asset, GROUP) — "Instrumental" is the mixer's
+    because it sits in *Masters*, and the group is what carries that. A lane in the room
+    is labelled with the ASSET alone, so callers that had only a label were resolving
+    every deliverable to "" and silently doing nothing: the ADR-0075 hand-off email to
+    the editor could never fire, because the mix it waits on never resolved to `mixer`.
+
+    The label is matched back through the project's own scoped list, which is where the
+    group lives, and only then asked whose it is.
+    """
+    want = (label or "").strip().lower()
+    if not want:
+        return ""
+    for d in scoped_deliverables(project, delivery or {}):
+        if want in ((d.get("asset") or "").strip().lower(),
+                    (d.get("match") or "").strip().lower()):
+            return deliverable_owner(d.get("asset") or "", d.get("group") or "")
+    return deliverable_owner(label)
+
+
 def owed_after(owner: str) -> str:
     """The craft whose published work this one is made FROM ("" = nothing upstream)."""
     return _OWED_AFTER.get(owner or "", "")
