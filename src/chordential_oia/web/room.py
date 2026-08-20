@@ -55,7 +55,7 @@ CAPS = {
         # anyway; a second one here would be a second way to do one thing, through a
         # door the studio does not hold.
         "see_pending", "see_internal", "see_captures",
-        "see_deliverable_specs", "see_money", "comment",
+        "see_deliverable_specs", "see_money", "see_invoice", "comment",
         "download_source", "publish", "see_who", "address_note",
     },
     TALENT: {
@@ -85,7 +85,11 @@ CAPS = {
         # on the buyer's own screen, is how a round gets spent on nothing.
         # No `ask_studio` either: the talk-back channel is composer↔studio and internal
         # by definition — a client asking the studio just leaves a note.
-        "comment", "client_verdict",
+        #
+        # `see_invoice` is theirs because it is THEIR invoice: what is outstanding, and
+        # the button that clears it. `see_money` — what the work cost us — is not the
+        # same thing and stays with the studio.
+        "comment", "client_verdict", "see_invoice", "sign_off_asset",
     },
 }
 
@@ -170,6 +174,12 @@ def room_view(conn, db, project_id: int, role: str, *,
         room["captures"] = []
     if "see_deliverable_specs" not in allowed:
         room["deliverables"] = []
+    if "see_invoice" not in allowed:
+        # A creator has no business with the buyer's balance, and the package is not
+        # theirs to hand out.
+        room["invoice_balance"] = None
+        room["delivery_zip"] = None
+        room["download_unlocked"] = False
     if "download_source" not in allowed:
         # The source master is the working file, not the deliverable. A client receives
         # what they signed off, in the package, once it is paid for — and the same is

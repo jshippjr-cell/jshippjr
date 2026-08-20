@@ -55,7 +55,7 @@ from .billing import (
     _proposal_from_row,
 )
 from .delivery_ops import (
-    _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
+    scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
     _gate_banner, _maybe_finalize_delivery, _notify_assigned_creators,
     _notify_operator_review, _project_estimate, _sync_role_milestones,
 )
@@ -549,58 +549,11 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     # Per-asset approval (granular sign-off): attach each deliverable asset's
     # current per-asset status + stable key so the portal/console can render a
     # badge and the reviewer can Approve / Request changes one asset at a time.
+    # ONE derivation of "what is there and has the client signed it off"
+    # (`delivery_ops.scoped_signoff`) — the console, the client's portal and the room all
+    # read it, so they cannot come to disagree about whether a delivery is finished.
+    scoped_list, scoped_rollup, assets_with_approval = scoped_signoff(row, delivery)
     assets_for_approval = list(delivery.get("assets") or [])
-    assets_with_approval = []
-    for a in assets_for_approval:
-        a2 = dict(a)
-        a2["approval"] = db.get_asset_approval(delivery, a)
-        a2["asset_key"] = db.asset_key(a)
-        assets_with_approval.append(a2)
-
-    # Make per-asset approval discoverable on the client portal: surface EVERY
-    # scoped deliverable with a clear status — ✓ uploaded (carrying the matching
-    # asset's per-asset-approval row + stable key, so verified reviewers get the
-    # Approve / Request-changes controls) vs ⧗ not uploaded yet ("waiting on
-    # Chordential"). Most demo deliverables are referenced-only, so showing only
-    # uploaded assets hid the per-deliverable controls; this surfaces the full list.
-    _by_label = {}
-    for a in assets_with_approval:
-        lbl = (a.get("label") or a.get("filename") or "").strip()
-        if lbl and lbl not in _by_label:
-            _by_label[lbl] = a
-    _clock = production.creative_lock(delivery)
-    scoped_list = []
-    n_scoped_approved = 0
-    for d in scoped_deliverables(row, delivery):
-        item = dict(d)
-        match_asset = _by_label.get(d.get("match") or "")
-        if match_asset is not None:
-            item["asset_key"] = match_asset.get("asset_key")
-            item["approval"] = match_asset.get("approval")
-            item["url"] = match_asset.get("url")
-            item["kind"] = match_asset.get("kind")
-            if (match_asset.get("approval") or {}).get("status") == "Approved":
-                n_scoped_approved += 1
-        elif d.get("from_version"):
-            # The primary master is the review version itself — it has no per-row
-            # Approve control; the main "Approve the master" button IS its sign-off,
-            # so its status simply mirrors the creative lock.
-            if _clock:
-                item["approval"] = {"status": "Approved", "by": (_clock.get("by") or ""),
-                                    "email": "", "date": "", "version": str(_clock.get("version_n") or "")}
-                n_scoped_approved += 1
-            else:
-                item["approval"] = {"status": "Pending", "by": "", "email": "", "date": "", "version": ""}
-            item["asset_key"] = ""              # approved via the main button, not a row button
-        else:
-            item["asset_key"] = ""
-            item["approval"] = None
-        scoped_list.append(item)
-    scoped_rollup = {
-        "approved": n_scoped_approved,
-        "total": len(scoped_list),
-        "uploaded": sum(1 for s in scoped_list if s.get("uploaded")),
-    }
 
     current_n = int(current["n"]) if current else 0
 
@@ -2740,7 +2693,7 @@ def review_note_disposition(request: Request, project_id: int, comment_id: int,
 
 
 @router.post("/project/{project_id}/delivery/asset/publish")
-def delivery_publish_asset(project_id: int, filename: str = Form(""),
+def delivery_publish_asset(request: Request, project_id: int, filename: str = Form(""),
                            action: str = Form("publish"), origin: str = Form("")):
     """Jon's disposition of a creator's pending DELIVERABLE (stems, cutdowns,
     verticals): publish it into the client-visible assets, or discard it. The same
@@ -2804,6 +2757,12 @@ def delivery_publish_asset(project_id: int, filename: str = Form(""),
             body_text=(f"The {label} for {campaign} is published, which is what your "
                        "work is made from.\n\nOpen your room: the mix is there to "
                        "download, and your lanes are open."))
+    # Vetting from the room happens INSIDE the Takes sheet, one file at a time. A
+    # redirect reloads the page and shuts the sheet, so approving four stems meant
+    # opening it four times (reported live, 2026-08-19). An in-page press gets an answer,
+    # not a new page.
+    if (request.headers.get("x-requested-with") or "").lower() in ("fetch", "xmlhttprequest"):
+        return JSONResponse({"ok": True, "action": action, "filename": filename})
     return _asset_redirect(project_id, origin)
 
 
@@ -3008,6 +2967,7 @@ def review_asset(
     request: Request, project_id: int, k: str = Form(""),
     filename: str = Form(""), action: str = Form(""), note: str = Form(""),
     r: str = Form(""), author: str = Form(""), email: str = Form(""),
+    origin: str = Form(""),
 ):
     """Per-asset approval: a VERIFIED reviewer signs off (or requests changes on) a
     single deliverable — the :60 master Approved while the :30 cutdown still awaits.
@@ -3038,7 +2998,7 @@ def review_asset(
             name, mail = _reviewer_identity(request, author, email)
         key = (filename or "").strip()
         if not name or not key:
-            return _review_redirect(project_id, k, r=r)
+            return _review_redirect(project_id, k, r=r, origin=origin)
         delivery = db.get_delivery(conn, project_id)
         # Resolve the asset's display label for the tape (fall back to the key).
         label = key
@@ -3079,7 +3039,8 @@ def review_asset(
                 _maybe_finalize_delivery(conn, project_id)
     finally:
         conn.close()
-    return _review_redirect(project_id, k, name=name, email=mail, r=r)
+    return _review_redirect(project_id, k, name=name, email=mail, r=r,
+                            origin=origin)
 
 
 @router.post("/project/{project_id}/proposal")

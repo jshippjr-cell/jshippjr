@@ -238,6 +238,7 @@
     font:700 13px var(--sans);cursor:pointer;background:transparent;color:inherit;
     white-space:nowrap}
   .v-approve{background:var(--orange);border-color:var(--orange);color:#fff}
+  .v-done{font:600 12.5px var(--sans);color:#79b47a;flex:1 1 100%}
   .commits{margin:14px 0 0;padding:12px 14px;border:1px solid rgba(255,255,255,.14);
     border-radius:12px;background:rgba(255,255,255,.03)}
   .commits-h{font:700 9.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
@@ -514,6 +515,15 @@
   .work-from b{color:var(--text)}
   .deliv-all{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;
     padding-top:10px;border-top:1px solid var(--hair)}
+  /* The client's sign-off, and what stands between them and their files. */
+  .so-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
+  .so-note{flex:1;min-width:150px;background:rgba(255,255,255,.05);border:1px solid var(--hair2);
+    border-radius:8px;padding:7px 11px;color:var(--paper,#EDE6DC);font:12.5px var(--sans);outline:none}
+  .so-note:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(240,119,44,.16)}
+  .btn.ghost{background:transparent;border:1px solid var(--hair2);color:var(--dim2)}
+  .payoff{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;
+    padding:12px 14px;border:1px solid rgba(240,119,44,.35);border-radius:11px;
+    background:var(--orange-soft)}
   .deliv-row span.what{flex:1 1 180px;font-size:12.5px}
   .deliv-row .spec{font:10.5px var(--mono);color:var(--dim2)}
 
@@ -1005,10 +1015,21 @@
     </ul>
   </div>
   <div class="verdict">
+    {# ALREADY APPROVED IS NOT A BUTTON. The creative lock is set the moment the client
+       approves, and this row went on offering "✓ Approve v2 FINAL" afterwards — a
+       one-tap irreversible-sounding action for something already done. Reported live,
+       2026-08-19. Request changes STAYS: approval is reversible on purpose, and taking
+       the only way back would be worse than the stale button. #}
+    {% if a.creative_lock %}
+    <span class="v-done">✓ You approved {{ a.version_state or 'this version' }}{%
+      if a.creative_lock.by %} — thank you{% endif %}. We're producing the deliverables;
+      sign each one off below.</span>
+    {% endif %}
     {# `origin=room` keeps the verdict IN the room. Without it the client pressed
        Request changes on the take they were listening to and landed on the delivery
        portal — a different page about the same version, with none of what they had
        just been doing on it. Reported live. #}
+    {% if not a.creative_lock %}
     <form method="post" action="/project/{{ a.project_id }}/review/approve" class="v-yes">
       <input type="hidden" name="origin" value="room">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
@@ -1018,6 +1039,7 @@
       <button type="submit" class="v-btn v-approve"
               onclick="return confirm('Approve {{ (a.version_state or 'this version')|e }} as the selected master?\n\nWe produce the remaining deliverables from it and you sign off each one. This does not spend a revision round.');">✓ Approve {{ a.version_state or 'this version' }}</button>
     </form>
+    {% endif %}
     <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no">
       <input type="hidden" name="origin" value="room">
       <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
@@ -1232,6 +1254,11 @@
 
     <!-- Capture (Phase 4 §13): the composer's own private shelf — jot a motif/idea;
          never the client's (spec: "never visible to the client"). -->
+    {# The shelf ITSELF, not just its form. The client was shown the heading — "Capture ·
+       yours alone, never the client's" — on their own screen: an empty notebook labelled
+       with a promise that they are not allowed to read it. Reported live, 2026-08-19.
+       Gate the block on being able to hold one (`see_captures`). #}
+    {% if 'see_captures' in (caps|default(['see_captures'])) %}
     <div class="shelf" data-project="{{ a.project_id }}">
       <h3 style="margin-top:0">Capture <span class="fineprint">· yours alone, never the client's</span></h3>
       {# WRITING to the shelf is the composer's — the studio may read it (`see_captures`,
@@ -1251,6 +1278,7 @@
         {% endfor %}
       </div>
     </div>
+    {% endif %}
 
     {% if a.pending %}
     <div class="take-row sr-take-row" data-src="{{ a.pending.url or '' }}" data-version=""
@@ -1282,7 +1310,76 @@
       if voice == 'client' else 'No takes yet. This room is waiting for your first one.' }}</p>
     {% endif %}
 
-    {% if a.creative_lock %}
+    {# ── THE CLIENT'S SIGN-OFF, AND THE FILES. ─────────────────────────────────────
+       The studio published four deliverables and the client's room said nothing about
+       them: `deliverables` is the lane view and is subtracted from the buyer entirely,
+       so there was no other half. Reported live, 2026-08-19. This is it — each published
+       asset with Approve / Request changes, and, once they are all signed off, the
+       balance and the download. Same routes the delivery portal posts to; one
+       derivation of the list (`delivery_ops.scoped_signoff`). ── #}
+    {% if 'sign_off_asset' in (caps|default([])) and a.creative_lock and a.signoff %}
+    <h3 style="margin-top:18px">Sign off your deliverables</h3>
+    <p class="fineprint" style="margin:0 0 8px">{{ a.signoff_rollup.approved }} of
+      {{ a.signoff_rollup.total }} approved. Your files unlock when every one is signed off
+      and the balance is settled.</p>
+    {% for d in a.signoff %}
+    <div class="deliv-row so-row">
+      <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>
+      {% if (d.approval and d.approval.status) == 'Approved' %}
+      <span class="ok-line">✓ Approved{% if d.approval.by %} · {{ d.approval.by }}{% endif %}</span>
+      {% elif not d.uploaded %}
+      <span class="lane-wait">not delivered yet — we'll email you</span>
+      {% elif (d.approval and d.approval.status) == 'Changes requested' %}
+      <span class="pend-badge">Changes requested — with the studio</span>
+      {% endif %}
+      {% if d.url and d.kind == 'audio' %}
+      <audio controls preload="none" src="{{ d.url }}" style="flex:1 1 100%;height:34px;margin:4px 0 0"></audio>
+      {% endif %}
+      {% if d.asset_key and (d.approval and d.approval.status) != 'Approved' %}
+      <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
+        <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+        <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+        <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
+        <input type="hidden" name="email" value="{{ known_email|default('') }}">
+        <input type="hidden" name="filename" value="{{ d.asset_key }}">
+        <input type="hidden" name="origin" value="room">
+        <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve</button>
+        <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
+        <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {# THE PAYOFF. What stands between them and their files, said plainly. #}
+    <div class="payoff">
+      {% if a.download_unlocked and a.delivery_zip %}
+      <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
+      <span class="fineprint">Yours to keep.</span>
+      {% elif a.signoff_rollup.approved < a.signoff_rollup.total %}
+      <span class="fineprint">Approve every deliverable above and your package is assembled.
+        {% if a.invoice_balance and a.invoice_balance.outstanding %}The remaining balance of
+        <b>${{ '%.2f'|format(a.invoice_balance.outstanding) }}</b> is due at that point.{% endif %}</span>
+      {% elif a.invoice_balance and a.invoice_balance.outstanding %}
+      <form method="post" action="/project/{{ a.project_id }}/pay" style="margin:0">
+        <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+        <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+        <input type="hidden" name="kind" value="final">
+        <button type="submit" class="btn">Pay ${{ '%.2f'|format(a.invoice_balance.outstanding) }} to unlock your files →</button>
+      </form>
+      <span class="fineprint">Everything is signed off. Streaming stays open either way.</span>
+      {% else %}
+      <span class="fineprint">Everything is signed off. Your package is being assembled —
+        the download appears here.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# The LANE view — specs, whose craft, upload boxes. Studio and creators only; the
+       client's half of this stage is the sign-off block below, not the loading dock.
+       They were being shown "Now deliver the remaining assets" and how a lane takes
+       files (reported live, 2026-08-19). #}
+    {% if a.creative_lock and 'see_deliverable_specs' in (caps|default(['see_deliverable_specs'])) %}
     <h3>✓ Master approved. Now deliver the remaining assets</h3>
     {# THE FILE THE REST OF THE WORK IS MADE FROM. A mixer or an editor is invited at
        exactly this moment — to mix the approved master, or cut the mix to :30 and :15 —
@@ -2857,6 +2954,47 @@
           })
           .catch(function(){ btn.disabled = false; btn.textContent = orig; toast("Upload failed. Check your connection and try again."); });
       });
+    });
+  });
+
+  /* Vetting a file WITHOUT leaving the sheet you are vetting it in. These forms used to
+     post and redirect, which reloads the room and shuts the Takes sheet — so approving
+     four stems meant opening it four times (operator, 2026-08-19). The row answers in
+     place: an approved file joins the delivered list, a sent-back one leaves. No JS →
+     the form still posts and the redirect still works. */
+  document.querySelectorAll("form.lf-gate").forEach(function(f){
+    f.addEventListener("submit", function(e){
+      if (!window.fetch || !window.FormData) return;
+      var act = (e.submitter && e.submitter.value) || "publish";
+      e.preventDefault();
+      var li = f.closest("li"), lane = f.closest(".deliv-lane");
+      var fd = new FormData(f);
+      fd.set("action", act);
+      f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
+      fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
+                        headers: { "X-Requested-With": "fetch" } })
+        .then(function(r){ if (!r.ok) throw new Error("no"); return r.json(); })
+        .then(function(){
+          if (act === "publish"){
+            var mark = li.querySelector(".lf-state");
+            if (mark){ mark.textContent = "✓"; mark.classList.add("ok"); }
+            f.remove();
+          } else {
+            li.remove();
+          }
+          // the count is of what is still WAITING, so it drops either way
+          var badge = lane.querySelector(".lane-count");
+          var left = lane.querySelectorAll(".lf-gate").length;
+          if (badge){
+            if (!left) badge.remove();
+            else badge.textContent = left + " file" + (left === 1 ? "" : "s")
+              + " with the studio · under review";
+          }
+        })
+        .catch(function(){
+          f.querySelectorAll("button").forEach(function(b){ b.disabled = false; });
+          toast("That didn't go through. Check your connection and try again.");
+        });
     });
   });
 

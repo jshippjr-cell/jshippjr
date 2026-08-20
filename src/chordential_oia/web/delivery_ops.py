@@ -340,6 +340,63 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
 # client-facing portal. Deterministic assembly; Jon presses the human buttons
 # (license terms, log a revision, approve, release). See chordential_oia.delivery.
 # --------------------------------------------------------------------------- #
+def scoped_signoff(row, delivery: dict) -> tuple:
+    """Every scoped deliverable with its per-asset approval state, and the rollup.
+
+    ONE derivation, three reporters (ADR-0029 applied to sign-off): the delivery console,
+    the client's portal and now the ROOM all ask "what is there and has the client signed
+    it off", and a second answer is how two pages come to disagree about whether a
+    delivery is finished. Extracted verbatim from `_delivery_view`, which now calls it.
+
+    Returns ``(items, rollup)``. Each item is a scoped deliverable plus ``asset_key``
+    (the stable handle the Approve button posts), ``approval``, and the uploaded asset's
+    ``url``/``kind`` when one satisfies it.
+    """
+    assets_with_approval = []
+    for a in list(delivery.get("assets") or []):
+        a2 = dict(a)
+        a2["approval"] = db.get_asset_approval(delivery, a)
+        a2["asset_key"] = db.asset_key(a)
+        assets_with_approval.append(a2)
+    by_label = {}
+    for a in assets_with_approval:
+        lbl = (a.get("label") or a.get("filename") or "").strip()
+        if lbl and lbl not in by_label:
+            by_label[lbl] = a
+    clock = production.creative_lock(delivery)
+    items, approved = [], 0
+    for d in scoped_deliverables(row, delivery):
+        item = dict(d)
+        match_asset = by_label.get(d.get("match") or "")
+        if match_asset is not None:
+            item["asset_key"] = match_asset.get("asset_key")
+            item["approval"] = match_asset.get("approval")
+            item["url"] = match_asset.get("url")
+            item["kind"] = match_asset.get("kind")
+            if (match_asset.get("approval") or {}).get("status") == "Approved":
+                approved += 1
+        elif d.get("from_version"):
+            # The primary master is the review version itself — it has no per-row
+            # Approve control; the main "Approve the master" button IS its sign-off, so
+            # its status simply mirrors the creative lock.
+            if clock:
+                item["approval"] = {"status": "Approved", "by": (clock.get("by") or ""),
+                                    "email": "", "date": "",
+                                    "version": str(clock.get("version_n") or "")}
+                approved += 1
+            else:
+                item["approval"] = {"status": "Pending", "by": "", "email": "",
+                                    "date": "", "version": ""}
+            item["asset_key"] = ""
+        else:
+            item["asset_key"] = ""
+            item["approval"] = None
+        items.append(item)
+    rollup = {"approved": approved, "total": len(items),
+              "uploaded": sum(1 for s in items if s.get("uploaded"))}
+    return items, rollup, assets_with_approval
+
+
 def _project_estimate(conn, row):
     """The estimate behind a project (for scoped revision rounds), or None.
 

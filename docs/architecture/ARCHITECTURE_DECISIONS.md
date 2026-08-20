@@ -1664,6 +1664,49 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0076 — The client signs off and settles in the room
+**Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0068, ADR-0074 ·
+Source: `delivery_ops.scoped_signoff`, `creator_routes._room_fields`,
+`room.CAPS['see_invoice','sign_off_asset']`,
+`tests/test_the_client_signs_off_and_pays_in_the_room.py`
+
+**Decision.** The delivery stage finishes where the work is heard.
+
+(1) **`delivery_ops.scoped_signoff` is the one derivation** of "what is scoped, what has
+landed, and has the client signed it off". The delivery console, the client's portal and
+the room all read it — extracted verbatim from `_delivery_view`, which now calls it.
+
+(2) **The client's room carries the sign-off**, keyed by `sign_off_asset`: every scoped
+deliverable with Approve / Request changes on the ones delivered, "not delivered yet" on
+the ones outstanding. This is the OTHER HALF of `deliverables`, which is the lane view
+(specs, craft, upload boxes) and is correctly subtracted from the buyer.
+
+(3) **`see_invoice` is the client's and the studio's**, never a creator's. What the buyer
+owes is not a creator's business and the package is not theirs to hand out. It is not
+`see_money` — what the work cost us is a different fact and stays with the studio.
+
+(4) **An approved version is not a button.** Once the creative lock is set the room says
+so; **Request changes stays**, because approval is reversible on purpose and taking the
+only way back would be worse than a stale button.
+
+(5) **Vetting answers in place.** `delivery/asset/publish` returns JSON to an
+`X-Requested-With: fetch` press so the Takes sheet stays open — approving four stems must
+not mean opening it four times. No JS still posts and still redirects.
+
+**Why.** *"The studio approved deliverables to push to the client but nothing went to the
+client in the room view. also the room view still has an approve v2 button active … We
+should be at the stage where the client clicks approve on the deliverables and they get
+prompted to pay the remaining deposit."* All of it existed on the delivery portal; none
+of it existed in the room, which is where ADR-0068 put the client. And the client's Takes
+window was still showing the loading dock — the composer's private capture shelf,
+labelled "yours alone, never the client's", and instructions for uploading into lanes.
+
+**Consequences.** Money in the room is `see_invoice`-gated and shows only the buyer's own
+outstanding balance and their package — never our cost, never to a creator. New copy in
+the deliverables area asks which of the two views it belongs to: the lane (studio +
+crafts) or the sign-off (the buyer). A second derivation of scoped sign-off state is a
+defect: three surfaces agreeing about whether a delivery is finished is the whole point.
+
 ### ADR-0075 — Composer → mixer → editor is a chain, and the room knows it
 **Status:** Accepted (2026-08-19, operator directive) · Extends ADR-0074 ·
 Source: `delivery.role_key` / `deliverable_owner` / `owed_after`,

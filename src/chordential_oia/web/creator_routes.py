@@ -34,7 +34,8 @@ from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
 from . import db, production, room
 from .delivery_ops import (
-    _campaign_label, _notify_operator_review, _project_estimate, _sync_role_milestones,
+    scoped_signoff, _campaign_label, _notify_operator_review, _project_estimate,
+    _sync_role_milestones,
 )
 from .shell import render
 from .uploads import (
@@ -234,6 +235,9 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     # mixer's finished mix. A lane whose upstream has not been published yet is not work
     # anyone can start, and saying so is better than an empty upload box that looks like
     # a missed deadline.
+    signoff_items, signoff_rollup, _assets = scoped_signoff(prow, delivery)
+    balance = db.invoice_balance(conn, project_id)
+    unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
     rows = [d for d in scoped_deliverables(prow, delivery) if not d.get("is_master")]
     published_by_owner = {}
     for d in rows:
@@ -298,6 +302,17 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         # gets their files through the delivery package.
         "master": (versions_list(delivery)[-1] if versions_list(delivery) else None),
         "deliverables": deliverables,
+        # WHAT THE CLIENT SIGNS OFF, and what stands between them and their files. The
+        # studio published four stems and the client's room said nothing — because
+        # `deliverables` is the LANE view (specs, uploads, whose craft) and is subtracted
+        # from them entirely. This is the other half: the same scoped list with its
+        # per-asset approval state, the balance, and the package. One derivation
+        # (`delivery_ops.scoped_signoff`), read by the console, the portal and here.
+        "signoff": signoff_items,
+        "signoff_rollup": signoff_rollup,
+        "download_unlocked": unlocked,
+        "invoice_balance": balance,
+        "delivery_zip": delivery.get("delivery_zip") or None,
         # The room's Brief layer renders the REAL creative brief (the same
         # effective brief the console shows), not a restatement of the title.
         "brief": seed_brief(

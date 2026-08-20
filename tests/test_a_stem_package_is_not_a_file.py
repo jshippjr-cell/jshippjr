@@ -236,7 +236,9 @@ def test_the_lane_never_deletes_its_own_form():
     src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia"
            / "web" / "templates" / "creator_portal.html").read_text(encoding="utf-8")
     fn = src[src.index("document.querySelectorAll(\"form.deliv-form\")"):]
-    fn = fn[:fn.index("DROP FILES ON A LANE")]
+    # end at the NEXT block — the vetting handler legitimately removes its own two
+    # buttons once a file is published, and it sits between here and the drop code
+    fn = fn[:fn.index("Vetting a file WITHOUT leaving the sheet")]
     assert "f.remove()" not in fn, "the lane deletes its own upload form again"
     assert 'btn.textContent = "Add more"' in fn, (
         "the lane does not invite the file you missed")
