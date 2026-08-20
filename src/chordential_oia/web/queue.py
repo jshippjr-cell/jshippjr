@@ -31,7 +31,7 @@ from __future__ import annotations
 from datetime import date
 from typing import List
 
-from . import next_action
+from . import billing, next_action, opportunity_ops
 
 # The rung labels, indexable by urgency — the template renders these as section
 # headings so the queue reads as priorities, not a jumble.
@@ -185,6 +185,19 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 f"{(pv.get('at') or '')[:10]}. Publish it or send it back — the "
                 "client never sees unvetted work.",
                 f"/project/{prow['id']}/delivery", age_key=pv.get("at") or ""))
+        # A DELIVERY NOBODY CAN BE BILLED FOR. Signed off, packaged, download locked —
+        # and no invoice to unlock it with. It is the end of a job with the money still
+        # out, and it had no card and no badge: *"that did not show up in my dashboard
+        # to do with a red badge"* (operator, 2026-08-19).
+        if (delivery.get("state") or "") in ("Delivered", "Released"):
+            why = billing.final_invoice_block(conn, prow["id"])
+            if why:
+                cards.append(_card(
+                    2, "money",
+                    f"The client cannot pay — {prow['client']}",
+                    billing.INVOICE_BLOCK_OPERATOR.get(why, "The balance cannot be raised."),
+                    f"/project/{prow['id']}/delivery#assets",
+                    age_key=delivery.get("released_at") or ""))
         pending_assets = delivery.get("pending_assets") or []
         if pending_assets:
             lanes = {}

@@ -579,7 +579,11 @@
      scaffolding stays folded away. Reported live: "the list is wayy too long." #}
   {% for sec in ci_view.sections %}
   {% set _filled = sec['items'] | selectattr('id') | list | length %}
-  <details class="ci-section ci-acc"{% if _filled %} open{% endif %}>
+  {# CLOSED ON ARRIVAL, all of them. Opening the filled ones meant a page that landed
+     a screen and a half deep with everything already unrolled — *"way too much
+     scrolling"* (operator, 2026-08-19). The count in each summary is what you read at a
+     glance; the contents are what you open when you want them. #}
+  <details class="ci-section ci-acc">
     <summary>
       <h3>{{ sec.label }}</h3>
       <span class="ci-acc-count">{{ _filled }}/{{ sec['items'] | length }}</span>
@@ -615,8 +619,11 @@
   {# The canonical ten are the fields EVERY campaign has — never the only fields a
      campaign may have. A check-in cadence, a legal lead time, a stakeholder with no slot:
      storage and the view already carried arbitrary facts, and nothing could make one. #}
-  <div class="ci-section">
-    <h3>Anything else that matters</h3>
+  <details class="ci-section ci-acc">
+    <summary>
+      <h3>Anything else that matters</h3>
+      <span class="ci-acc-count">add</span>
+    </summary>
     <form class="ci-inline" method="post"
           action="/opportunity/{{ row['id'] }}/intelligence/field"
           style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -634,7 +641,7 @@
     <p class="muted small" style="margin:6px 0 0">Anything you add here is yours — a human
       value the engine will not overwrite, and the extractor learns from the fields you
       reach for that it never proposed.</p>
-  </div>
+  </details>
 
 
   {# Observed Facts — the EP's working-memory scratchpad (ADR-0021): every meaningful
@@ -668,8 +675,12 @@
 
   {# The Producer's read — interpretation, kept distinct from fact. #}
   {% if ci_view.producer_read %}
-  <div class="ci-section">
-    <h3>The producer's read</h3>
+  {% set _open_q = ci_view.producer_read | selectattr('open') | list | length %}
+  <details class="ci-section ci-acc">
+    <summary>
+      <h3>The producer's read</h3>
+      <span class="ci-acc-count">{{ ci_view.producer_read | length }}{% if _open_q %} · {{ _open_q }} open{% endif %}</span>
+    </summary>
     <ul class="ci-read" style="margin:0;padding:0">
       {% for it in ci_view.producer_read %}
       <li id="ci-{{ it.id }}">
@@ -707,7 +718,7 @@
       </li>
       {% endfor %}
     </ul>
-  </div>
+  </details>
   {% endif %}
 
   {# Follow-up questions the pipeline raised for missing required facts. #}

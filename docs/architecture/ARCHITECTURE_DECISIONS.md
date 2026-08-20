@@ -1669,6 +1669,18 @@ of every file it touched rather than a grep. A mechanical edit needs a mechanica
 Source: `billing.final_invoice_block` / `INVOICE_BLOCK_CLIENT` / `INVOICE_BLOCK_OPERATOR`,
 `project_routes.project_raise_balance`, `tests/test_a_delivery_nobody_can_pay_for.py`
 
+**Amended the same day (ADR-0078a).** The first answer — type the amount by hand — was
+answering the wrong question. *"i thought that was already agreed upon when i got the
+signature."* It was: the signed Discovery Summary carries the fee and the deposit, and
+ADR-0067 writes them into `proposals` at countersign. A deal countersigned BEFORE that
+code landed has the document and no row. So `billing._heal_proposal` writes it from the
+SIGNED band via the same `_ensure_proposal_for_project`, a **Delivered** room raises and
+issues its own Final invoice on open, and the hand-raise control is left for the case it
+was actually for — a deal whose summary was never priced. The healer is **injected**
+(`heal=`), because `billing` sits below `opportunity_ops` in the helper DAG and reaching
+up would make the load order load-bearing again; every route surface passes it, and the
+nav badge deliberately does not — a badge is the wrong place to be writing rows.
+
 **Decision.** (1) `billing.final_invoice_block` names why a finished delivery cannot be
 paid for — `noproposal`, `draft`, `zero`, or `""` for none. One derivation; the room and
 the delivery console both read it and say it in their own words.

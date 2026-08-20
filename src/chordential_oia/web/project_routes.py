@@ -52,7 +52,7 @@ from ..storage import get_object_store
 from . import actor, campaigns, db, production, room, signals
 from .billing import (
     _client_portal_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
-    _proposal_from_row, _send_invoice_pay_link, final_invoice_block,
+    _proposal_from_row, _heal_proposal, _send_invoice_pay_link, final_invoice_block,
 )
 from .delivery_ops import (
     scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
@@ -61,7 +61,7 @@ from .delivery_ops import (
 )
 from .estimate import estimate_for
 from .evaluate import evaluate
-from .opportunity_ops import _load, _quote_band_for
+from .opportunity_ops import _ensure_proposal_for_project, _load, _quote_band_for
 from .shell import (
     admin_authed as _admin_authed, public_base as _public_base, render,
 )
@@ -629,7 +629,8 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         "invoice_balance": balance,
         # Why the client cannot be asked for the balance, when they cannot. The console
         # is where the operator can do something about it.
-        "invoice_block": final_invoice_block(conn, project_id),
+        "invoice_block": final_invoice_block(conn, project_id,
+                                             heal=_ensure_proposal_for_project),
         "state": delivery.get("state") or DELIVERY_STATES[0],
         "version_state": revisions["state"],
         # ADR-0019/0036: the client-facing production experience answers the court
@@ -3220,7 +3221,8 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""),
         if not ok:
             return HTMLResponse("Not found", status_code=404)
         prow = db.get_project(conn, project_id)
-        prop = db.proposal_for_project(conn, project_id)
+        prop = (db.proposal_for_project(conn, project_id)
+                or _heal_proposal(conn, project_id, _ensure_proposal_for_project))
         if prow is None:
             return RedirectResponse(_back("pay=error"), status_code=303)
         # THE PROPOSAL IS ONLY NEEDED TO RAISE AN INVOICE THAT DOES NOT EXIST YET. It was
@@ -3239,6 +3241,12 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""),
             return RedirectResponse(_back("pay=error"), status_code=303)
         if (invoice["status"] or "").lower() in ("paid", "settled"):
             return RedirectResponse(_back("pay=already"), status_code=303)
+        # An invoice the client is actively trying to pay is OWED. Raised lazily here it
+        # arrived as a Draft, which `invoice_balance` correctly treats as not-yet-owed —
+        # so the balance stayed 0 and the room went on saying nothing was due.
+        if (invoice["status"] or "").lower() in ("", "draft") and (invoice["amount"] or 0):
+            db.update_invoice_status(conn, invoice["id"], "Issued")
+            invoice = db.get_invoice(conn, invoice["id"]) or invoice
         try:
             ref = get_payment_provider().create_checkout(invoice) or ""
         except Exception:  # noqa: BLE001 — never 500 the payer

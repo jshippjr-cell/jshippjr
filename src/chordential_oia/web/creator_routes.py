@@ -33,7 +33,8 @@ from ..delivery import (
 from .. import composer_agreement, contributor_release, signing
 from ..talent import profile_completeness
 from . import db, production, room
-from .billing import final_invoice_block
+from .billing import _ensure_final_invoice_issued, final_invoice_block
+from .opportunity_ops import _ensure_proposal_for_project
 from .delivery_ops import (
     scoped_signoff, _campaign_label, _notify_operator_review, _project_estimate,
     _sync_role_milestones,
@@ -240,7 +241,17 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
     balance = db.invoice_balance(conn, project_id)
     unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
     # Why the balance cannot be asked for, when it cannot. "" = it can.
-    invoice_block = final_invoice_block(conn, project_id)
+    # The healer is passed in, not imported by `billing` — the helper DAG runs one way
+    # (ADR-0044), and a route module may know both sides.
+    # A DELIVERED project self-heals its balance: write the proposal row from the signed
+    # agreement if it is missing, and issue the Final invoice from it. Idempotent, and the
+    # only way a deal that shipped before ADR-0067 ever becomes payable — the ship-time
+    # call cannot heal, because `delivery_ops` sits below `opportunity_ops` in the DAG.
+    if (delivery.get("state") or "") in ("Delivered", "Released"):
+        _ensure_final_invoice_issued(conn, project_id, heal=_ensure_proposal_for_project)
+        balance = db.invoice_balance(conn, project_id)
+        unlocked = bool(delivery.get("download_unlocked")) or balance["paid_in_full"]
+    invoice_block = final_invoice_block(conn, project_id, heal=_ensure_proposal_for_project)
     rows = [d for d in scoped_deliverables(prow, delivery) if not d.get("is_master")]
     published_by_owner = {}
     for d in rows:

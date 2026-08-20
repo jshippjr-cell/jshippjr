@@ -51,14 +51,48 @@ def _invoice_from_proposal_row(prow, prop_row, kind: str):
     return build_invoice(obj, kind)
 
 
-def _ensure_final_invoice_issued(conn, project_id: int) -> None:
+def _heal_proposal(conn, project_id: int, heal=None):
+    """Write the missing ``proposals`` row from the SIGNED agreement, and return it.
+
+    Countersigning writes this row (ADR-0067) — but only since the day that code landed.
+    A deal countersigned before it has a signature, a countersignature and a document
+    stating the fee, the deposit and "balance due on delivery", and no row anywhere for
+    the money surfaces to read. The operator's reaction was the right one: *"i thought
+    that was already agreed upon when i got the signature."* It was. Nothing here decides
+    a price — `_ensure_proposal_for_project` reads the band out of the document the
+    client actually signed, and refuses if it is not priced.
+
+    ``heal`` is ``opportunity_ops._ensure_proposal_for_project``, PASSED IN rather than
+    imported: this module sits below that one in the helper DAG (ADR-0044), and reaching
+    up for it would make the load order load-bearing again. Same arrangement as
+    ``room.room_view(build=…)``. Without one, nothing is healed and the block is reported
+    as it stands — the callers that can supply it are the route modules.
+
+    Idempotent, best-effort, and silent on failure: a heal that could 500 the delivery it
+    is trying to unblock would be worse than the gap.
+    """
+    if heal is None:
+        return None
+    prow = db.get_project(conn, project_id)
+    opp_id = prow["opp_id"] if prow is not None and "opp_id" in prow.keys() else None
+    if not opp_id:
+        return None
+    try:
+        heal(conn, opp_id, project_id)
+    except Exception:  # noqa: BLE001 — see docstring
+        return None
+    return db.proposal_for_project(conn, project_id)
+
+
+def _ensure_final_invoice_issued(conn, project_id: int, heal=None) -> None:
     """When the package is finalized, raise the balance (Final) invoice as *Issued* so it is a
     real outstanding amount. Without this, the download gate treats a paid DEPOSIT as
     "paid in full" (the balance invoice is created lazily, so nothing shows outstanding) and
     the files unlock without the balance ever being paid — reported live. Idempotent; needs a
     stored proposal and a non-zero balance."""
     prow = db.get_project(conn, project_id)
-    prop = db.proposal_for_project(conn, project_id)
+    prop = (db.proposal_for_project(conn, project_id)
+            or _heal_proposal(conn, project_id, heal))
     if prow is None or prop is None:
         return
     inv = next((i for i in db.list_invoices(conn, project_id)
@@ -99,7 +133,7 @@ def _payment_request_email(kind: str, amount: float, client: str, need: str,
     return {"subject": subject, "body": body}
 
 
-def final_invoice_block(conn, project_id: int) -> str:
+def final_invoice_block(conn, project_id: int, heal=None) -> str:
     """Why this delivery cannot be paid for yet — "" when it can.
 
     A delivery reaches the paywall by being Delivered with an outstanding Final invoice.
@@ -120,7 +154,11 @@ def final_invoice_block(conn, project_id: int) -> str:
         if not (inv["amount"] or 0):
             return "zero"           # issued for nothing
         return ""
-    return "" if db.proposal_for_project(conn, project_id) is not None else "noproposal"
+    if db.proposal_for_project(conn, project_id) is not None:
+        return ""
+    # A deal countersigned before ADR-0067 has the money in its SIGNED document and no
+    # row for it. Heal from the signature before calling it unbillable.
+    return "" if _heal_proposal(conn, project_id, heal) is not None else "noproposal"
 
 
 #: What each ``final_invoice_block`` reason means to each side. The client is told the

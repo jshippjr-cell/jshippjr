@@ -3515,9 +3515,9 @@ def pending_submission_count(conn: sqlite3.Connection) -> int:
     """
     n = 0
     for row in conn.execute(
-            "SELECT delivery_json FROM projects WHERE delivery_json LIKE ?"
-            " OR delivery_json LIKE ?",
-            ("%pending_version%", "%pending_assets%")):
+            "SELECT id, delivery_json FROM projects WHERE delivery_json LIKE ?"
+            " OR delivery_json LIKE ? OR delivery_json LIKE ?",
+            ("%pending_version%", "%pending_assets%", "%Delivered%")):
         try:
             d = json.loads(row["delivery_json"] or "{}") or {}
         except (ValueError, TypeError):
@@ -3525,6 +3525,20 @@ def pending_submission_count(conn: sqlite3.Connection) -> int:
         if d.get("pending_version"):
             n += 1
         n += len(d.get("pending_assets") or [])
+        # …and a finished delivery the client cannot be billed for. It is not a
+        # submission, but it IS the same thing to the operator: nothing moves until
+        # they press something, and nobody was telling them.
+        if (d.get("state") or "") in ("Delivered", "Released"):
+            from .billing import final_invoice_block
+            try:
+                # No healer here on purpose: a nav badge on every page render is the
+                # wrong place to be writing proposal rows. It over-counts a healable
+                # deal by one until the operator opens the page that heals it — a badge
+                # pointing at real work either way.
+                if final_invoice_block(conn, row["id"]):
+                    n += 1
+            except Exception:  # noqa: BLE001 — a badge never breaks a page render
+                pass
     return n
 
 

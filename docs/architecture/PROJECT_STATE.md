@@ -99,7 +99,10 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   needs a stored proposal and returns silently without it. The client was told their files
   were "being assembled", forever. Now named (`billing.final_invoice_block`), said truly to
   the client, shown to the operator with a **raise-the-balance-by-hand** control whose
-  amount is typed and never inferred.
+  amount is typed and never inferred — kept for the case it is actually for. Amended the
+  same day: a deal countersigned before ADR-0067 has the money in its SIGNED document, so
+  the proposal row heals from that band and a Delivered room raises its own balance. The
+  operator only types a number when the summary was never priced.
 
 - **Pressing Pay did nothing** (ADR-0077, 2026-08-19). `/pay` required a proposal even
   when the invoice already existed — which it does by ship time — and bounced with a flag
