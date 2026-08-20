@@ -66,6 +66,7 @@ from .evaluate import evaluate
 from .opportunity_ops import _ensure_proposal_for_project, _load, _quote_band_for
 from .shell import (
     admin_authed as _admin_authed, public_base as _public_base, render,
+    signed_in_user as _signed_in_user,
 )
 from .uploads import (
     _AUDIO_EXTS, _CUT_MIRROR_BYTES, _persist_upload, _read_capped,
@@ -503,6 +504,7 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         license_confirmed=license_conf,
         certified_version=certified_version,
         certified_date=_date.today().isoformat(),
+        executed=delivery.get("certificate_executed"),
     )
     # ADR-0059 — is the certificate signed, and does the signature still describe it?
     # The document text is rebuilt from live data every render, so a term changed after
@@ -1394,6 +1396,78 @@ def delivery_approve(
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery", status_code=303)
+
+
+@router.post("/project/{project_id}/delivery/certificate/execute")
+def delivery_execute_certificate(
+    request: Request, project_id: int,
+    typed_name: str = Form(...), consent: str = Form(""),
+):
+    """CHORDENTIAL SIGNS ITS OWN CLEARANCE CERTIFICATE (ADR-0080).
+
+    The certificate is the studio warranting the chain of title — it is the thing that
+    makes the delivery worth what a client pays for it. It shipped with
+    ``Signature: ______`` on it and nothing in the whole flow ever asked anyone to fill
+    that in: *"Dont i need to have an actual clearance signature on the certificate? i
+    was never asked for that in the whole process"* (operator, 2026-08-20). A warranty
+    nobody signed is a letterhead.
+
+    Operator-only, behind the admin gate — this is the studio's own commitment and there
+    is no token that should ever produce it. Consent is required and unticked by default,
+    the same ESIGN/UETA rule the client's signature follows: the studio does not get a
+    weaker standard than the person it is asking to sign.
+
+    Binds to ``cert.signable_text()`` at this instant. Confirming the licence CHANGES
+    that text (the grant stops reading DRAFT), so signing first and confirming after
+    reports SUPERSEDED — which is correct, and is why the console asks for the licence
+    first.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_project(conn, project_id)
+        if row is None:
+            return HTMLResponse("Not found", status_code=404)
+        if not consent:
+            return RedirectResponse(
+                f"/project/{project_id}/delivery?cert=consent#license", status_code=303)
+        view = _delivery_view(conn, project_id)
+        cert = view["cert"]
+        user = _signed_in_user(request)
+        who = ((user["name"] if user is not None and "name" in user.keys() else "")
+               or "").strip()
+        try:
+            sig = signing.build_signature(
+                doc_kind=signing.DOC_CLEARANCE_EXECUTED,
+                project_id=project_id,
+                document_text=cert.signable_text(),
+                signer_name=(who or cert.signatory.get("signer") or "").strip(),
+                signer_email="",
+                typed_name=typed_name,
+                ip=(request.client.host if request.client else ""),
+                user_agent=request.headers.get("user-agent", ""),
+                certified_version=cert.certified_version,
+                terms_snapshot=dict(cert.license or {}),
+            )
+        except ValueError as exc:                       # empty doc / empty mark
+            return RedirectResponse(
+                f"/project/{project_id}/delivery?cert=empty#license", status_code=303)
+        db.record_signature(conn, sig)
+        # The render summary. The signatures table stays the record; this is what the
+        # packager (which has no connection) prints on the certificate itself.
+        db.update_delivery(conn, project_id, "certificate_executed", {
+            "by": sig.signer_name or typed_name.strip(),
+            "title": cert.signatory.get("title", ""),
+            "entity": cert.signatory.get("entity", ""),
+            "at": sig.signed_at,
+            "digest": sig.digest,
+        })
+        db.add_update(conn, project_id,
+                      f"Clearance Certificate executed by "
+                      f"{sig.signer_name or typed_name.strip()}.", "delivery")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/project/{project_id}/delivery?cert=signed#license",
+                            status_code=303)
 
 
 @router.post("/project/{project_id}/delivery/sign")

@@ -94,6 +94,12 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Chordential signs its own Clearance Certificate** (ADR-0080, 2026-08-20). It shipped
+  with a ruled blank signature line and nothing ever asked anyone to fill it — a warranty
+  nobody signed. The studio now executes it (`DOC_CLEARANCE_EXECUTED`), consent required,
+  bound to the document's digest, reported SUPERSEDED if a term changes afterwards, and
+  the delivered certificate carries the signer, timestamp and SHA-256 instead of a blank.
+
 - **The delivery package had no audio in it** (ADR-0079, 2026-08-20). The ZIP was built
   once — when the delivery first reached Delivered — and everything published afterwards
   stayed outside it, listed in the manifest as delivered and absent from the file. It is

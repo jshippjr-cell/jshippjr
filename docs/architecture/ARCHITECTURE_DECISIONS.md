@@ -1664,6 +1664,40 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0080 — Chordential signs its own Clearance Certificate
+**Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0059 ·
+Source: `signing.DOC_CLEARANCE_EXECUTED`, `ClearanceCertificate.executed` /
+`execution_state`, `project_routes.delivery_execute_certificate`,
+`tests/test_the_certificate_is_actually_signed.py`
+
+**Decision.** The studio EXECUTES the certificate it hands over, under
+`DOC_CLEARANCE_EXECUTED`, held to the same standard as the client's acceptance
+(`DOC_CLEARANCE`): consent unticked by default, bound to `cert.signable_text()` at the
+instant of signing, append-only, reported `SUPERSEDED` the moment a term changes. The
+certificate prints the signer, the timestamp and the SHA-256 in place of the blank
+line — and an UNSIGNED certificate says "NOT YET EXECUTED" rather than ruling a line that
+reads as executed.
+
+Operator-only, behind the admin gate: there is no token that should ever produce
+Chordential's signature on Chordential's own warranty.
+
+Reported as a hold AFTER the licence, deliberately — confirming the licence changes the
+document, so asking for the signature first would guarantee a superseded one.
+
+**Why.** *"Dont i need to have an actual clearance signature on the certificate? i was
+never asked for that in the whole process."* Right on both counts. The certificate is the
+studio warranting the chain of title — the thing that makes the delivery worth what a
+client pays for it — and it shipped with `Signature: ____________` printed on it, with
+nothing in the flow ever asking anyone to fill it. A warranty nobody signed is a
+letterhead, and a ruled blank beneath one reads as executed.
+
+**Consequences.** The signatures table stays the record (ADR-0059); the summary on
+`delivery_json['certificate_executed']` exists only so the packager — which has no
+database connection — can print what was signed. Any new operative term added to
+`signable_text` will supersede existing signatures, which is the point: if it can change
+what the studio warranted, it belongs in the digest. And the studio never gets a weaker
+signing standard than the client it is asking to sign.
+
 ### ADR-0079 — The package is rebuilt when it is older than the work
 **Status:** Accepted (2026-08-20, operator directive) · Source:
 `delivery_ops._package_is_stale` / `delivery_held_by` / `DELIVERY_HELD`,

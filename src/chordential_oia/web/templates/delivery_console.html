@@ -169,6 +169,38 @@
       <button class="btn" type="submit">✍ Confirm license terms</button>
     </form>
     {% endif %}
+    {# CHORDENTIAL SIGNS ITS OWN CERTIFICATE (ADR-0080). It shipped with a ruled blank
+       line and nobody was ever asked to fill it. The licence comes FIRST on purpose:
+       confirming it changes the document, so a signature taken before that is
+       correctly reported superseded. #}
+    {% if cert.execution_state != 'valid' %}
+    <form method="post" action="/project/{{ project['id'] }}/delivery/certificate/execute"
+          class="inline" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"
+          {% if not license_confirmed %}onsubmit="return confirm('The licence is not confirmed yet, so the certificate still reads DRAFT. Signing now will report as SUPERSEDED once you confirm it. Sign anyway?')"{% endif %}>
+      <input class="input" type="text" name="typed_name" required maxlength="80"
+             placeholder="Type your name to sign" style="max-width:190px"
+             value="{{ signatory.signer }}">
+      <label class="small muted" style="display:inline-flex;gap:5px;align-items:center">
+        <input type="checkbox" name="consent" value="1"> I agree to sign electronically
+      </label>
+      <button class="btn" type="submit">✒ {{ 'Re-sign' if cert.execution_state == 'superseded' else 'Sign' }} the clearance certificate</button>
+    </form>
+    {% endif %}
+    {% if request.query_params.get('cert') == 'consent' %}
+    <p class="small" style="color:#c0553f;margin:6px 0">Tick the consent box — an
+      electronic signature needs your agreement to sign electronically.</p>
+    {% elif request.query_params.get('cert') == 'signed' %}
+    <p class="small" style="color:#3f7a45;margin:6px 0">Clearance Certificate executed.</p>
+    {% elif request.query_params.get('cert') == 'empty' %}
+    <p class="small" style="color:#c0553f;margin:6px 0">Type your name to sign.</p>
+    {% endif %}
+    {% if cert.execution_state == 'valid' %}
+    <p class="small" style="color:#3f7a45;margin:6px 0">✓ Certificate signed by
+      {{ cert.executed.by }}{% if cert.executed.at %} · {{ cert.executed.at[:10] }}{% endif %}.</p>
+    {% elif cert.execution_state == 'superseded' %}
+    <p class="small" style="color:#c0553f;margin:6px 0">The certificate has CHANGED since
+      {{ cert.executed.by }} signed it — the signature covers the earlier version. Re-sign it.</p>
+    {% endif %}
     <form method="post" action="/project/{{ project['id'] }}/delivery/release" class="inline"
           {% if not license_confirmed %}onsubmit="return confirm('The license has not been confirmed. Release will be refused until you press “Confirm license terms”. Continue anyway?')"{% elif completeness and not completeness.complete %}onsubmit="return confirm('{{ completeness.missing|join(', ') }} {{ 'is' if completeness.missing|length == 1 else 'are' }} not uploaded yet. Mark this PARTIAL package released anyway?')"{% endif %}>
       {% if completeness and not completeness.complete %}<input type="hidden" name="deliver_partial" value="1">{% endif %}

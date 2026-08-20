@@ -221,7 +221,10 @@ def test_an_unconfirmed_licence_is_reported_as_a_hold(shipped):
     assert "Held:" in console and "Clearance Certificate" in console
 
 
-def test_confirming_the_licence_clears_the_hold(shipped):
+def test_confirming_the_licence_moves_the_hold_to_the_signature(shipped):
+    """The chain, in the order it has to happen (ADR-0080): confirm the licence — which
+    CHANGES the document — then sign it. Signing first would guarantee a superseded
+    signature, so the holds are reported in that order."""
     c, db, pid, _t, _up, admin = shipped
     from chordential_oia.web.delivery_ops import delivery_held_by
     conn = db.connect()
@@ -231,6 +234,12 @@ def test_confirming_the_licence_clears_the_hold(shipped):
     c.cookies.set(*admin)
     c.post(f"/project/{pid}/delivery/license/confirm", data={"by": "Jon Shipp"},
            follow_redirects=False)
+    conn = db.connect()
+    held = delivery_held_by(db.get_delivery(conn, pid), db.get_project(conn, pid))
+    conn.close()
+    assert held == "unsigned", held
+    c.post(f"/project/{pid}/delivery/certificate/execute",
+           data={"typed_name": "Jon Shipp", "consent": "1"}, follow_redirects=False)
     conn = db.connect()
     held = delivery_held_by(db.get_delivery(conn, pid), db.get_project(conn, pid))
     conn.close()

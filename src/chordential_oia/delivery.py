@@ -393,6 +393,12 @@ class ClearanceCertificate:
     license_confirmed: Optional[dict] = None  # {by, date} once explicitly confirmed
     certified_version: str = ""         # the version label this certificate attaches to
     certified_date: str = ""            # the date stamped at render/release
+    # CHORDENTIAL'S SIGNATURE on this certificate, when it has been executed:
+    # ``{by, title, entity, at, digest}``. Rendered in place of the blank signature
+    # line, and checked against the current text so a certificate edited after signing
+    # says SUPERSEDED rather than carrying a signature for a document that changed
+    # (ADR-0059). Empty = not signed, which every surface now says out loud.
+    executed: dict = field(default_factory=dict)
     # NOTE: there is intentionally NO indemnification field/clause/mention here.
 
     @property
@@ -404,6 +410,19 @@ class ClearanceCertificate:
     def license_draft(self) -> bool:
         """True while the grant is unconfirmed — render it as a draft, not a grant."""
         return self.license_confirmed is None
+
+    @property
+    def execution_state(self) -> str:
+        """``""`` (unsigned) · ``signing.VALID`` · ``signing.SUPERSEDED``.
+
+        Derived here so the text renderer, the HTML renderer and the console cannot
+        disagree about whether a signature still covers what it is printed beside.
+        """
+        digest = (self.executed or {}).get("digest") or ""
+        if not digest:
+            return ""
+        from .signing import verify
+        return verify(digest, self.signable_text())
 
     def signable_text(self) -> str:
         """The certificate as the plain text a signature binds to (ADR-0059).
@@ -446,6 +465,7 @@ def build_clearance_certificate(
     project, assignments, license: Optional[dict] = None,
     *, signatory: Optional[dict] = None, license_confirmed: Optional[dict] = None,
     certified_version: str = "", certified_date: str = "",
+    executed: Optional[dict] = None,
 ) -> ClearanceCertificate:
     """Assemble the Clearance Certificate from real project + assignment data.
 
@@ -486,6 +506,7 @@ def build_clearance_certificate(
         if license_confirmed else None,
         certified_version=(certified_version or "").strip(),
         certified_date=(certified_date or "").strip(),
+        executed=dict(executed or {}),
     )
 
 
@@ -1424,7 +1445,22 @@ def rights_certificate_text(cert: ClearanceCertificate) -> str:
     title = cert.signatory.get("title", "")
     signer_line = signer + (f", {title}" if title else "")
     lines.append(f"  Authorized:  {signer_line}")
-    lines.append(f"  Signature:   ________________________________")
+    # THE SIGNATURE, or an honest blank. A warranty printed under a ruled line nobody
+    # signed reads as executed and is not — so an unsigned certificate says so.
+    ex = cert.executed or {}
+    state = cert.execution_state
+    if ex and state == "valid":
+        lines.append(f"  Signed:      {ex.get('by', '')}"
+                     + (f", {ex.get('title', '')}" if ex.get("title") else ""))
+        lines.append(f"  Signed at:   {(ex.get('at') or '')[:19].replace('T', ' ')} UTC")
+        lines.append(f"  SHA-256:     {ex.get('digest', '')}")
+    elif ex and state == "superseded":
+        lines.append(f"  Signed:      {ex.get('by', '')} on "
+                     f"{(ex.get('at') or '')[:10]} — SUPERSEDED")
+        lines.append("               This certificate has CHANGED since it was signed;")
+        lines.append("               the signature covers the earlier version.")
+    else:
+        lines.append("  Signature:   NOT YET EXECUTED")
     if cert.certified_date:
         lines.append(f"  Date:        {cert.certified_date}")
     else:
@@ -1887,9 +1923,36 @@ def _certificate_body_html(cert: "ClearanceCertificate", pkgid: str,
         <li><b>Authorized:</b> {signer_line}</li>
         {sig_extra}
       </ul>
-      <p style="margin:14px 0 0;font-size:11px;color:#7a756d">Signature: ________________________________</p>
+      {_execution_block(cert)}
     </div>
     """
+
+
+def _execution_block(cert: "ClearanceCertificate") -> str:
+    """The signature line of the branded certificate — signed, superseded, or honestly
+    blank. The blank used to be a ruled line, which reads as "sign here" on a document
+    the client has already been handed."""
+    ex = cert.executed or {}
+    state = cert.execution_state
+    if ex and state == "valid":
+        return (
+            '<p style="margin:14px 0 0;font-size:11.5px;color:#3f7a45">'
+            f'<b>Signed electronically by {_esc(ex.get("by", ""))}'
+            + (f', {_esc(ex.get("title", ""))}' if ex.get("title") else "")
+            + '</b><br>'
+            f'<span style="color:#7a756d;font-size:10.5px">'
+            f'{_esc((ex.get("at") or "")[:19].replace("T", " "))} UTC · SHA-256 '
+            f'{_esc(ex.get("digest", ""))}</span></p>')
+    if ex and state == "superseded":
+        return (
+            '<p style="margin:14px 0 0;font-size:11.5px;color:#b5500f">'
+            f'<b>Signed by {_esc(ex.get("by", ""))} on {_esc((ex.get("at") or "")[:10])} '
+            '— but this certificate HAS CHANGED since.</b><br>'
+            '<span style="color:#7a756d;font-size:10.5px">The signature covers the '
+            'earlier version, not the one shown.</span></p>')
+    return ('<p style="margin:14px 0 0;font-size:11.5px;color:#b5500f">'
+            '<b>Not yet executed.</b> <span style="color:#7a756d">This certificate has '
+            'not been signed by Chordential.</span></p>')
 
 
 def clearance_certificate_html(
@@ -2280,6 +2343,9 @@ def build_delivery_zip(
         license_confirmed=license_confirmation(delivery),
         certified_version=certified_version,
         certified_date=built_at[:10],
+        # The studio's execution, carried on delivery_json so the packager stays pure —
+        # it has no connection, and the signatures table remains the record (ADR-0059).
+        executed=delivery.get("certificate_executed"),
     )
     manifest = build_manifest(project, assets=assets, versions=versions)
     cue_rows_for_docs = build_cue_sheet(project, assignments, delivery=delivery)

@@ -41,6 +41,13 @@ from typing import Any, Dict, List, Optional
 # What can be signed. Kept as data so a new signable document is one line here rather
 # than a new branch in the routes.
 DOC_CLEARANCE = "clearance_certificate"
+#: CHORDENTIAL'S OWN EXECUTION of the certificate — the studio warranting the chain of
+#: title, which is the thing the client is actually being given. `DOC_CLEARANCE` above is
+#: the CLIENT's acceptance of it. The certificate shipped with "Signature: ______" on it
+#: and nobody was ever asked to fill it: *"Dont i need to have an actual clearance
+#: signature on the certificate? i was never asked for that in the whole process"*
+#: (operator, 2026-08-20). A warranty nobody signed is a letterhead.
+DOC_CLEARANCE_EXECUTED = "clearance_certificate_executed"
 DOC_DELIVERY_ACCEPTANCE = "delivery_acceptance"
 # The discovery summary, once it carries the commercial close. It is the FIRST thing a
 # client signs and the only signable document that hangs off an opportunity rather than
@@ -66,12 +73,13 @@ DOC_COMPOSER_COUNTERSIGN = "composer_agreement_countersign"
 # writer to collect this, and for a while it obliged them to collect a document that did
 # not exist anywhere — which reads as diligence and delivers none.
 DOC_CONTRIBUTOR_RELEASE = "contributor_release"
-DOC_KINDS = (DOC_CLEARANCE, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
+DOC_KINDS = (DOC_CLEARANCE, DOC_CLEARANCE_EXECUTED, DOC_DELIVERY_ACCEPTANCE, DOC_PROPOSAL,
              DOC_PROPOSAL_COUNTERSIGN, DOC_COMPOSER_AGREEMENT,
              DOC_COMPOSER_COUNTERSIGN, DOC_CONTRIBUTOR_RELEASE)
 
 DOC_LABELS = {
     DOC_CLEARANCE: "Clearance Certificate",
+    DOC_CLEARANCE_EXECUTED: "Clearance Certificate · executed by Chordential",
     DOC_DELIVERY_ACCEPTANCE: "Delivery acceptance",
     DOC_PROPOSAL: "Discovery Summary & Proposal",
     DOC_PROPOSAL_COUNTERSIGN: "Discovery Summary & Proposal (countersigned)",

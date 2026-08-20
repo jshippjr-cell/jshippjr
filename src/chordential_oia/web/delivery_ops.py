@@ -175,6 +175,12 @@ def delivery_held_by(delivery: dict, project) -> str:
     # console and in the queue — while the certificate goes on saying DRAFT honestly.
     if not license_confirmation(delivery):
         return "licence"
+    # …and the certificate itself. Reported after the licence because confirming the
+    # licence CHANGES the document, so asking for the signature first would guarantee a
+    # superseded one (ADR-0080).
+    ex = delivery.get("certificate_executed") or {}
+    if not ex.get("digest"):
+        return "unsigned"
     return ""
 
 
@@ -184,6 +190,8 @@ DELIVERY_HELD = {
     "uploads": "Not every scoped deliverable has been uploaded.",
     "licence": ("Confirm the licence terms. Until you do, the Clearance Certificate "
                 "reads DRAFT — it certifies nothing, and the package will not ship."),
+    "unsigned": ("Sign the Clearance Certificate. It is Chordential warranting the chain "
+                 "of title, and it ships with a blank signature line until you do."),
     "signoff": "The client has not signed off every delivered file yet.",
 }
 
