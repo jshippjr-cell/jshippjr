@@ -56,6 +56,7 @@ from .billing import (
     _proposal_from_row, _heal_proposal, _send_invoice_pay_link, final_invoice_block,
 )
 from .delivery_ops import (
+    client_visibility,
     scoped_signoff, _approve_version_core, _build_delivery_package, _campaign_label, _current_version_tag,
     delivery_held_by, DELIVERY_HELD, _gate_banner, _maybe_finalize_delivery,
     _package_is_stale,
@@ -631,6 +632,8 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     # (`delivery_ops.scoped_signoff`) — the console, the client's portal and the room all
     # read it, so they cannot come to disagree about whether a delivery is finished.
     scoped_list, scoped_rollup, assets_with_approval = scoped_signoff(row, delivery)
+    # WHERE DID MY PUSH GO. Measured, not asserted (ADR-0088).
+    visibility = client_visibility(row, delivery)
     assets_for_approval = list(delivery.get("assets") or [])
 
     current_n = int(current["n"]) if current else 0
@@ -790,6 +793,7 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # The FULL scoped deliverable list with per-item upload status (✓/⧗) +
         # per-asset approval controls on the uploaded ones, + an N-of-M rollup.
         "scoped_deliverables": scoped_list,
+        "visibility": visibility,
         "scoped_rollup": scoped_rollup,
         "versions": versions,
         "current_version": current,

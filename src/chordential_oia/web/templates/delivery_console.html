@@ -565,6 +565,50 @@
         </li>
     {% endmacro %}
 
+    {# ── WHERE DID MY PUSH GO (ADR-0088). ───────────────────────────────────────
+       Reported four times running: a file pushed from the studio that the client's room
+       never showed. Every reproduction on a clean instance put it on their screen, which
+       is precisely why this exists — a fifth guess was worth less than one measurement.
+       It compares what is STORED against what the client's own sign-off list renders, and
+       names anything that is in one and not the other. ── #}
+    {% if visibility %}
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">What the client can see</h3>
+    {% if visibility.hidden %}
+    <div class="card" style="border-left:3px solid #c0553f;margin:0 0 10px">
+      <p style="margin:0 0 6px"><b>{{ visibility.hidden|length }} published file{{ '' if visibility.hidden|length == 1 else 's' }} the client cannot see.</b>
+        Stored and published, but not on any lane their room renders — so pushing it
+        again will not help. The lane name is what decides:</p>
+      <ul style="margin:0;padding-left:18px">
+        {% for h in visibility.hidden %}
+        <li class="small"><span class="mono">{{ h.name }}</span> — filed under
+          <b>{{ h.label or '(no lane)' }}</b>, which matches none of:
+          {{ visibility.lane_labels|join(' · ') }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if visibility.lost %}
+    <div class="card" style="border-left:3px solid #c8913f;margin:0 0 10px">
+      <p style="margin:0 0 6px"><b>{{ visibility.lost|length }} file{{ '' if visibility.lost|length == 1 else 's' }} listed here with no bytes on the server.</b>
+        These cannot be published, heard or packaged — re-upload them into their lane:</p>
+      <ul style="margin:0;padding-left:18px">
+        {% for h in visibility.lost %}<li class="small"><span class="mono">{{ h.name }}</span> · {{ h.label or '—' }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <p class="small muted" style="margin:0 0 14px">
+      <b>{{ visibility.published|length }}</b> on the client's screen ·
+      <b>{{ visibility.waiting|length }}</b> still at your taste gate{% if visibility.waiting %} (they see nothing until you publish){% endif %} ·
+      <b>{{ visibility.hidden|length }}</b> published but unreachable.
+      {% if visibility.ok and not visibility.waiting and not visibility.lost %}Everything stored is in front of them.{% endif %}
+    </p>
+    {% if visibility.waiting %}
+    <ul style="margin:-8px 0 14px;padding-left:18px">
+      {% for w in visibility.waiting %}<li class="small muted"><span class="mono">{{ w.name }}</span> · {{ w.label or '—' }} — waiting on you</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
+
     <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Version &amp; review activity</h3>
 
     {% set ns = namespace(seen=[]) %}

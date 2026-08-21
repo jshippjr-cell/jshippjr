@@ -420,6 +420,67 @@ def _approve_version_core(conn, project_id: int, name: str, mail: str) -> str:
 # client-facing portal. Deterministic assembly; Jon presses the human buttons
 # (license terms, log a revision, approve, release). See chordential_oia.delivery.
 # --------------------------------------------------------------------------- #
+def client_visibility(row, delivery: dict) -> dict:
+    """Which stored files actually REACH the client, and which quietly do not.
+
+    Reported live four times running: *"im in the client room and there is no new
+    deliverables, i pushed it from the studio side. the client should be seeing it and i
+    dont"* (operator, 2026-08-21). Every reproduction of that flow on a clean instance put
+    the file in front of the client, which is exactly why it needed a measurement instead
+    of another guess: the failure is in one project's DATA, and nothing on any screen
+    compared what is STORED against what is SHOWN.
+
+    The comparison is deliberately dumb and therefore trustworthy: take the filenames the
+    client's own sign-off list would render, and subtract them from the filenames in
+    ``assets``. Anything left over is stored, published, and invisible — which is the
+    shape of the bug and cannot be argued with. It makes no assumption about WHY the
+    lane matching missed, so it keeps working when the matching rules change.
+    """
+    from .uploads import media_present
+    lanes, _rollup, _awa = scoped_signoff(row, delivery)
+    shown = set()
+    for lane in lanes:
+        for fobj in (lane.get("files") or []):
+            nm = (fobj.get("name") or "").strip()
+            if nm:
+                shown.add(nm)
+    conn = _conn_for_presence()
+    try:
+        def _rec(a):
+            fn = a.get("filename") or ""
+            return {"name": (a.get("orig") or fn or "").strip(), "filename": fn,
+                    "label": (a.get("label") or "").strip(),
+                    # Bytes, not a row. A lane entry whose file is gone cannot be
+                    # published (the gate refuses it) and cannot be heard — and looked
+                    # identical to a healthy one until this said so.
+                    "here": bool(conn is None or not fn or media_present(conn, fn))}
+        published, hidden = [], []
+        for a in (delivery.get("assets") or []):
+            rec = _rec(a)
+            (published if rec["name"] in shown else hidden).append(rec)
+        waiting = [_rec(a) for a in (delivery.get("pending_assets") or [])]
+    finally:
+        if conn is not None:
+            conn.close()
+    return {
+        "published": published,      # stored AND on the client's screen
+        "hidden": hidden,            # stored, published, and not reaching them
+        "waiting": waiting,          # still at the taste gate — correctly unseen
+        "lane_labels": sorted({(x.get("asset") or "") for x in lanes}),
+        "lost": [r for r in published + hidden + waiting if not r["here"]],
+        "ok": not hidden,
+    }
+
+
+def _conn_for_presence():
+    """Its own connection: this is a read-only diagnostic and must never depend on, or
+    interfere with, whatever transaction the caller is in."""
+    try:
+        return db.connect()
+    except Exception:      # noqa: BLE001 — a diagnostic may never break the page
+        return None
+
+
 def scoped_signoff(row, delivery: dict) -> tuple:
     """Every scoped deliverable with its per-asset approval state, and the rollup.
 

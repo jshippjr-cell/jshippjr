@@ -1664,6 +1664,36 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0088 — When four reproductions disagree with the operator, measure
+**Status:** Accepted (2026-08-21, operator directive) · Source:
+`delivery_ops.client_visibility`, the "What the client can see" panel on
+`delivery_console.html`, `tests/test_where_did_my_push_go.py`
+
+**Decision.** The delivery console states, per project, which stored files reach the
+client, which are still at the taste gate, which are published but on no lane the client's
+room renders, and which are listed with no bytes behind them. The comparison is the dumbest
+one available — the filenames the client's own sign-off list would render, subtracted from
+the filenames in `assets` — so it assumes nothing about WHY lane matching missed and keeps
+working when those rules change.
+
+**Why.** Reported four times running: *"im in the client room and there is no new
+deliverables, i pushed it from the studio side. the client should be seeing it and i
+dont."* Four reproductions were built against a clean instance — publishing into an empty
+lane, into a lane already fully approved, under a deliberately mismatched lane label, and
+into a project already Delivered — and **all four put the file in front of the client.**
+
+That is the finding, and it is not "works for me". When the reproductions and the person
+looking at the screen disagree, the difference is in that project's DATA, and no surface
+compared what is stored against what is shown. "I pushed it" and "they can't see it" could
+both be true with nothing able to locate the gap. A fifth guess was worth less than one
+measurement.
+
+**Consequences.** This does not fix the reported bug — it makes the bug self-identifying,
+and it distinguishes the three innocent explanations that look identical from the console
+(never published; published but unreachable; listed with its bytes gone) from each other.
+The panel is read-only and degrades rather than raising: a diagnostic that can 500 the
+busiest operator screen is worse than the bug it explains.
+
 ### ADR-0087 — A client can hear what they are asked to approve
 **Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0068 (subtractive
 room) and ADR-0043 (the write door) · Source: `room.route_media` / `room_view(media_token=)`,
