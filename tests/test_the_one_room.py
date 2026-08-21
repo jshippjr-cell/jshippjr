@@ -191,7 +191,11 @@ def test_the_clients_page_never_carries_the_pending_take(rooms):
     with TestClient(app_mod.app) as anon:
         page = anon.get(f"/room/{pid}", params={"k": ktok}).text
     assert "secret-take.wav" not in page
-    assert "/uploads/cut-1.mp4" in page, "the client lost the picture too"
+    # ADR-0087: a client never gets `/uploads/…` — it is admin-gated, so their player
+    # fetched a login page and rendered silence. They get their own door instead, and
+    # the picture must still reach them through it.
+    assert "/uploads/" not in page
+    assert "/dl/cut-1.mp4?k=" in page, "the client lost the picture too"
 
 
 def test_the_client_is_not_offered_the_creators_controls(rooms):

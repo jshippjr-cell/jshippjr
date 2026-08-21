@@ -1664,6 +1664,61 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0087 — A client can hear what they are asked to approve
+**Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0068 (subtractive
+room) and ADR-0043 (the write door) · Source: `room.route_media` / `room_view(media_token=)`,
+`room_routes.one_room`, `project_routes._is_stream_request` / `delivery_download`,
+`db.delete_project(force=)` / `PROJECT_DELETE_OVERRIDE`, `delivery_console.html`,
+`tests/test_the_client_can_hear_what_they_sign.py`,
+`tests/test_one_history_and_a_door_out.py`
+
+**Decision.** Three rules.
+
+1. **A client's room routes every media URL through the client's own door.**
+   `/uploads/{name}` is behind the admin gate; the buyer travels
+   `/project/{id}/dl/{name}?k=…&stream=1`. Done as a **blanket walk** of the finished room
+   (`route_media`), not field by field — the surfaces carrying media keep multiplying, and
+   a per-field list is one someone has to remember to extend. It runs **after** the
+   subtraction, so a URL that was removed cannot be routed back in.
+2. **Streaming is not the paywall's business.** A valid client token plays media inline
+   whether or not the balance is settled. The package and every real download stay gated —
+   that is what the balance buys.
+3. **A delete refusal must name a door that exists.** Each refusal is overridable with an
+   explicit second press that states what it destroys (`PROJECT_DELETE_OVERRIDE`).
+
+**Why.** *"I pushed the approved newly uploaded stems from the studio to the client, and i
+dont see the clients ability to download or listen to the new uploads that were pushed."*
+Measured, it was worse than the stems: **every media URL in the client's room 303'd to the
+admin login**, so a buyer's player rendered silence for the master they were reviewing as
+well as the deliverables they were signing off. Timed notes still worked, which is what hid
+it — you can leave a note at 0:12 on a player that never played.
+
+The second half was the paywall. `/dl/` answered a client token with 402 for everything
+until the balance was settled, while its own message read *"You can still stream and review
+the work."* You could not. **Asking someone to approve a file they are forbidden to hear is
+not a paywall, it is a broken review.** The trade is deliberate and worth stating: a
+determined listener can capture a stream, every review platform in this industry accepts
+that, and the alternative is a client approving work unheard.
+
+The third came from the same screen: *"what does it mean to reopen, i dont know how to do
+that and this is a demo project if i want to delete it, let me delete it."* The refusal for
+a Delivered project advised reopening it first. **There is no reopen.** Advice naming an
+action the product does not have reads as though the door exists and the reader is too
+stupid to find it. The refusals are a speed bump, not a wall: each protects a record that
+matters on a real deal, and each is wrong about a rehearsal.
+
+**And one history.** The console carried an Activity feed and a Campaign timeline — the
+same events twice, differing only in that the timeline also named the version uploads. Two
+renderings of one history is how they drift (ADR-0029, ADR-0033), and the page had grown
+long enough that neither could be read to the bottom. One list now, folded by the version
+each note was left against, current take open, counts on every shut summary — because a
+collapsed section that hides its own count is why people stop opening them.
+
+**Consequences.** `dl_url` is deliberately excluded from the rewrite: it is the real
+download and must not become a streaming URL. The stream mode relaxes the paywall, never
+the credential — a bad token still 404s. And a forced delete is still a second, deliberate
+press: overridable is not the same as absent.
+
 ### ADR-0086 — Every send is recorded, sent or not
 **Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0066 (the branded
 shell IS the email) · Source: `mailer.set_recorder` / `_record`, `web/outbox.py`,

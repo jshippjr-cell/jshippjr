@@ -558,14 +558,18 @@ def test_console_anchor_redirects_per_card(client):
 
 
 def test_console_brief_card_below_versions_and_timeline(client):
-    """FIX 2: the Creative brief card sits AFTER the Versions/timeline section."""
+    """FIX 2: the Creative brief card sits AFTER the version/review history.
+
+    The anchor moved with ADR-0087 — the Campaign timeline was the review history told a
+    second time and was removed — but the ORDER this test protects did not: the brief is
+    reference material and belongs below the thing you came to the page to do.
+    """
     pid = _win_and_make_project(client, 1)
     html = client.get(f"/project/{pid}/delivery").text
-    timeline_pos = html.find("Campaign timeline")
+    history_pos = html.find("Version &amp; review activity")
     brief_pos = html.find("Creative brief")
-    assert timeline_pos != -1 and brief_pos != -1
-    # The campaign-timeline marker appears before the creative-brief marker.
-    assert timeline_pos < brief_pos
+    assert history_pos != -1 and brief_pos != -1
+    assert history_pos < brief_pos
 
 
 def test_console_version_rail_has_no_doubled_v_prefix(client):
@@ -1213,7 +1217,7 @@ def test_console_shows_client_review_link_and_version_rail(client):
     assert "Version history" in page
     assert "current" in page
     # The campaign timeline is present.
-    assert "Campaign timeline" in page
+    assert "Version &amp; review activity" in page   # ADR-0087: one history, folded
 
 
 # --------------------------------------------------------------------------- #

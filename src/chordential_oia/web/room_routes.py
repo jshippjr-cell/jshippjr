@@ -54,8 +54,16 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         role, who = _session_role(conn, project_id, k, r, t, request)
         if role is None:
             return HTMLResponse("Not found", status_code=404)
+        # A CLIENT'S MEDIA HAS TO TRAVEL THEIR OWN DOOR. `/uploads/…` is admin-gated, so
+        # the room used to hand a buyer URLs that answered with a login page — silence in
+        # the player, for the master AND for the stems they were asked to sign off.
+        # The creator's `?t=` is not a project credential the `/dl/` route accepts, and
+        # the studio holds no token at all; both keep the direct path, which their own
+        # session already opens.
+        _mt, _mk = ((k, "k") if k else (r, "r")) if role == room.CLIENT else ("", "k")
         view = room.room_view(conn, db, project_id, role,
-                              build=_room_for_project)
+                              build=_room_for_project,
+                              media_token=_mt, media_kind=_mk)
         if view is None:
             return HTMLResponse("Not found", status_code=404)
         # The hats, for a creator who is in the room as one.

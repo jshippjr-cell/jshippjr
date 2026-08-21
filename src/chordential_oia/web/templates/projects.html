@@ -16,7 +16,21 @@
 {% elif request.query_params.get('kept') %}
 <p class="small" style="margin:0 0 10px;padding:9px 12px;border:1px solid #c0553f;border-radius:8px;background:rgba(192,85,63,.07)">
   <b>Not deleted.</b>
-  {{ delete_refusal('project', request.query_params.get('kept')) or 'It could not be deleted.' }}</p>
+  {{ delete_refusal('project', request.query_params.get('kept')) or 'It could not be deleted.' }}
+  {# THE OVERRIDE, on the row that was refused. The first version of this said "reopen it
+     first" — an action the product does not have, which reads as though the door exists
+     and you cannot find it. If the answer is "you may, but be sure", then say that and
+     put the door here. #}
+  {% if request.query_params.get('id') %}
+  <span style="display:block;margin-top:8px">
+    <form method="post" action="/project/{{ request.query_params.get('id') }}/delete" style="display:inline"
+          onsubmit="return confirm('Delete “{{ request.query_params.get('name')|e }}” anyway?\n\n{{ delete_override(request.query_params.get('kept'))|e }}\n\nThis cannot be undone.');">
+      <input type="hidden" name="force" value="1">
+      <button class="btn tiny" type="submit">Delete it anyway</button>
+    </form>
+    <span class="muted small" style="margin-left:8px">{{ delete_override(request.query_params.get('kept')) }}</span>
+  </span>
+  {% endif %}</p>
 {% endif %}
 <style>
   .pj-del{width:22px;height:22px;border-radius:6px;border:1px solid transparent;background:transparent;

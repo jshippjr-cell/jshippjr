@@ -36,7 +36,7 @@ from .. import mailer, recruiting, reviewers, signing
 from ..estimation import ROLE_RATES, stated_length
 from ..delivery import (
     brief_rollup, build_clearance_certificate, build_cue_sheet, build_manifest,
-    build_timeline, current_version, delivery_completeness,
+    current_version, delivery_completeness,
     deliverable_owner as D_deliverable_owner, license_confirmation,
     owner_for_asset_label as D_owner_for_label,
     merge_signatory, reconcile_brief, revision_status,
@@ -96,8 +96,30 @@ _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 _CUT_MAX_BYTES = int(os.environ.get("CHORDENTIAL_CUT_MAX_MB", "512")) * 1024 * 1024
 
 
+#: Media a client may AUDITION before the balance is settled. Deliberately narrow: only
+#: the types a browser plays in place, never a ZIP and never an arbitrary attachment.
+_STREAMABLE = ("audio", "video", "image")
+
+
+def _is_stream_request(stream: str, name: str) -> bool:
+    """Is this a request to PLAY the file rather than to take it away?
+
+    Both halves must hold: the caller asked for a stream, and the file is something a
+    browser plays inline. A ZIP is never streamable however it is asked for — it is the
+    package, and the package is what the balance buys.
+    """
+    if not (stream or "").strip():
+        return False
+    if (name or "").lower().endswith(".zip"):
+        return False
+    import mimetypes as _mt
+    guess = _mt.guess_type(name or "")[0] or ""
+    return guess.split("/")[0] in _STREAMABLE and not guess.endswith("svg+xml")
+
+
 @router.get("/project/{project_id}/dl/{name}")
-def delivery_download(request: Request, project_id: int, name: str, k: str = "", r: str = ""):
+def delivery_download(request: Request, project_id: int, name: str, k: str = "",
+                      r: str = "", stream: str = ""):
     """Payment-gated deliverable download (ZIP + per-asset masters/docs).
 
     Two access modes, distinguished by whether a share/reviewer TOKEN is presented:
@@ -126,7 +148,21 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
         if has_client_token:
             unlocked = (bool(delivery.get("download_unlocked"))
                         or db.invoice_balance(conn, project_id)["paid_in_full"])
-            if not unlocked:
+            # STREAMING IS NOT THE PAYWALL'S BUSINESS. This route's own 402 has always
+            # said "You can still stream and review the work" — and it was not true. The
+            # only URL the room gave a client was `/uploads/…`, which is behind the ADMIN
+            # gate, so a buyer's player fetched the login page and rendered silence: they
+            # could not hear the master they were reviewing, nor the stems they were being
+            # asked to sign off. *"i dont see the clients ability to download or listen to
+            # the new uploads that were pushed"* (operator, 2026-08-21).
+            #
+            # Asking someone to approve a file they are forbidden to hear is not a
+            # paywall, it is a broken review. So a client token streams media INLINE
+            # whether or not the balance is settled; the package and every real download
+            # stay gated. The trade is deliberate: a determined listener can capture a
+            # stream, and every review platform in this industry accepts that, because
+            # the alternative is a client approving work unheard.
+            if not unlocked and not _is_stream_request(stream, name):
                 return PlainTextResponse(
                     "Payment required: your deliverables unlock once your invoice is "
                     "paid in full. You can still stream and review the work.",
@@ -157,6 +193,10 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
     _key = os.path.basename(name or "")
     path = _store.local_path(_key) if _key and _key == name else None
     if path is not None:
+        if _is_stream_request(stream, name):
+            # Inline, so the browser's own player handles Range/seek natively — which is
+            # what makes a long cut scrub instead of re-downloading on every drag.
+            return FileResponse(path, headers={"X-Content-Type-Options": "nosniff"})
         return FileResponse(path, filename=os.path.basename(path))
     if _key and _key == name and getattr(_store, "durable", False):
         signed = _store.url(_key)
@@ -184,6 +224,9 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
             # bucket configured it repairs the missing object instead of writing a
             # local file nothing would serve.
             get_object_store(upload_dir()).put(base, data, ctype)
+            if _is_stream_request(stream, name):
+                return Response(content=data, media_type=ctype or "application/octet-stream",
+                                headers={"X-Content-Type-Options": "nosniff"})
             return Response(content=data, media_type=ctype or "application/zip",
                             headers={"Content-Disposition": f'attachment; filename="{base}"'})
     return PlainTextResponse("not found", status_code=404)
@@ -559,7 +602,10 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     # principle applied to words); the console sees everything.
     comments = db.list_review_comments(conn, project_id,
                                        include_internal=not client_view)
-    timeline = build_timeline(row, delivery, comments)
+    # The Campaign timeline is gone (ADR-0087) — it was the review history told a second
+    # time, and the console now folds that history by version instead. Computing it on
+    # every console load for nobody to read is the dead weight that follows a removal if
+    # nobody looks; `delivery.build_timeline` itself stays, with its own unit tests.
     # Tie conform classification to the cue that changed (EP P0): map each
     # timecoded change request to the cue its timecode falls under, and name the
     # cues the current cut touches. Both read the live cue list — the once-dead
@@ -766,7 +812,6 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # Brief-as-contract: the reconciliation list + the "N of M" rollup.
         "brief_items": brief_recon,
         "brief_rollup": brief_roll,
-        "timeline": timeline,
         "version_states": VERSION_STATES,
     }
 
@@ -3454,7 +3499,7 @@ def project_create_invoice(project_id: int, kind: str = Form(...)):
 
 
 @router.post("/project/{project_id}/delete")
-def project_delete(project_id: int):
+def project_delete(project_id: int, force: str = Form("")):
     """Remove a project permanently — chiefly for clearing demo rows.
 
     Refused, with a reason, when it would delete a real record: money that moved, a
@@ -3464,7 +3509,7 @@ def project_delete(project_id: int):
     """
     conn = db.connect()
     try:
-        out = db.delete_project(conn, project_id)
+        out = db.delete_project(conn, project_id, force=bool((force or "").strip()))
     finally:
         conn.close()
     if out["deleted"]:
@@ -3472,7 +3517,10 @@ def project_delete(project_id: int):
                                 status_code=303)
     if out["reason"] == "missing":
         return RedirectResponse("/projects", status_code=303)
-    return RedirectResponse(f"/projects?kept={out['reason']}", status_code=303)
+    # Carry the id back so the refusal can offer the override on the very row it
+    # refused, instead of describing a door somewhere else.
+    return RedirectResponse(f"/projects?kept={out['reason']}&id={project_id}"
+                            f"&name={quote(out['name'] or 'project')}", status_code=303)
 
 
 @router.post("/project/{project_id}/invoice/balance")

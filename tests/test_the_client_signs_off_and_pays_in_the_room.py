@@ -271,7 +271,11 @@ def test_the_download_replaces_the_paywall_once_paid(stage):
         conn.close()
         payoff = re.search(r'class="payoff">(.*?)</div>',
                            c.get(f"/room/{pid}?k={ktok}").text, re.S).group(1)
-        assert "Download everything" in payoff and "/uploads/pkg.zip" in payoff
+        # ADR-0087: the client's copy routes media through THEIR door. `/uploads/…`
+        # would have answered a buyer with the admin login — this link is the fix, and it
+        # carries no `stream=1`, because a package is not streamable.
+        assert "Download everything" in payoff
+        assert "/dl/pkg.zip?k=" in payoff and "stream=1" not in payoff
         assert "Pay $" not in payoff
     finally:
         cr.scoped_signoff = real

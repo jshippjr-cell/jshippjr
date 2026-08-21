@@ -117,7 +117,8 @@ def test_a_project_money_moved_on_is_refused(board):
     assert db.project_delete_block(conn, paid) == "paid"
     conn.close()
     r = c.post(f"/project/{paid}/delete", follow_redirects=False)
-    assert r.headers["location"] == "/projects?kept=paid"
+    # …and carries the id/name so the override can be offered on that very row (ADR-0087).
+    assert r.headers["location"].startswith("/projects?kept=paid&id=")
     conn = db.connect()
     assert db.get_project(conn, paid) is not None, "deleted anyway"
     conn.close()
@@ -149,7 +150,7 @@ def test_a_project_something_was_signed_on_is_refused(board):
     assert db.project_delete_block(conn, signed) == "signed"
     conn.close()
     r = c.post(f"/project/{signed}/delete", follow_redirects=False)
-    assert r.headers["location"] == "/projects?kept=signed"
+    assert r.headers["location"].startswith("/projects?kept=signed&id=")
     conn = db.connect()
     assert db.get_project(conn, signed) is not None
     conn.close()
@@ -162,7 +163,7 @@ def test_a_delivered_project_is_refused(board):
     assert db.project_delete_block(conn, shipped) == "delivered"
     conn.close()
     r = c.post(f"/project/{shipped}/delete", follow_redirects=False)
-    assert r.headers["location"] == "/projects?kept=delivered"
+    assert r.headers["location"].startswith("/projects?kept=delivered&id=")
     conn = db.connect()
     assert db.get_project(conn, shipped) is not None
     conn.close()

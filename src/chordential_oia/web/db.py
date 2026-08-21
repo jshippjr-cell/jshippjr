@@ -6505,11 +6505,27 @@ PROJECT_DELETE_BLOCK = {
     "signed": ("Something on this project was signed. Signatures are a permanent record "
                "(they can be withdrawn, never deleted), so the project they cover stays."),
     "delivered": ("This project was delivered. It is the record of work a client has in "
-                  "hand — reopen it first if it really needs to go."),
+                  "hand, so it is kept by default."),
+}
+
+#: The refusals are a SPEED BUMP, not a wall. Every one of them protects a record that
+#: matters on a real deal — and every one of them is wrong about a rehearsal. The first
+#: version of this told the operator to "reopen it first", which is not a thing the
+#: product can do and not a thing they knew how to do: *"what does it mean to reopen, i
+#: dont know how to do that and this is a demo project if i want to delete it, let me
+#: delete it"* (operator, 2026-08-21). Advice that names a non-existent action is worse
+#: than no advice — it reads as though the door exists and you are too stupid to find it.
+#: So the door is real, it is one press, and it states plainly what it destroys.
+PROJECT_DELETE_OVERRIDE = {
+    "paid": "This deletes the record of money that changed hands on it.",
+    "signed": "This deletes a project covered by a signature. The signature itself is "
+              "append-only and stays.",
+    "delivered": "This deletes a delivery a client has in hand.",
 }
 
 
-def delete_project(conn: sqlite3.Connection, project_id: int) -> dict:
+def delete_project(conn: sqlite3.Connection, project_id: int, *,
+                   force: bool = False) -> dict:
     """Permanently delete a project and its own children. Irreversible.
 
     For clearing demo rows, and refusing on the same principle as
@@ -6522,7 +6538,7 @@ def delete_project(conn: sqlite3.Connection, project_id: int) -> dict:
     if row is None:
         return {"deleted": False, "name": "", "reason": "missing"}
     block = project_delete_block(conn, project_id)
-    if block:
+    if block and not force:
         return {"deleted": False, "name": row["need"] or "", "reason": block}
     for table in ("assignments", "milestones", "review_comments", "project_updates",
                   "invoices", "talent_payouts", "project_events", "proposals",

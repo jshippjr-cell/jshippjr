@@ -94,6 +94,16 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **A client can hear what they are asked to approve** (ADR-0087, 2026-08-21). Every media
+  URL in the client's room pointed at `/uploads/`, which is admin-gated — so the buyer's
+  player fetched a login page and played **silence**, for the master under review and the
+  stems awaiting sign-off alike. Timed notes still worked, which hid it. The room now
+  routes all media through the client's own token door (a blanket walk, after the
+  subtraction), and that door **streams** media whether or not the balance is settled; the
+  package stays paywalled. Also: the Campaign timeline is gone — one history, folded by
+  version — and a delete refusal now offers a real override instead of advising a "reopen"
+  the product does not have.
+
 - **Every send is recorded, sent or not** (ADR-0086, 2026-08-21). 27 call sites send mail
   and nothing recorded one of them; on the null provider a send was a single log line with
   no body. `/outbox` now holds every message — recipient, subject, text and the **branded

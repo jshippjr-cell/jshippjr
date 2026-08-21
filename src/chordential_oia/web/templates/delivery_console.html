@@ -63,6 +63,17 @@
   .scope .sc-no{background:#f5efe6;color:#9a6a18}
   .scope-roll{font-size:12px;color:var(--slate,#546671);margin:0;font-weight:700}
   .scope-roll b{color:#44161E}
+  /* The version accordion (ADR-0087). A shut fold still has to report what is in
+     it — a collapsed section that hides its own count is why people stop opening them. */
+  .vfold{border:1px solid var(--line,#e6e1dc);border-radius:10px;margin:0 0 8px;background:var(--card,#fff)}
+  .vfold>summary{cursor:pointer;list-style:none;padding:9px 12px;display:flex;gap:10px;
+    align-items:center;flex-wrap:wrap;user-select:none}
+  .vfold>summary::-webkit-details-marker{display:none}
+  .vfold>summary::before{content:"▸";color:var(--dim2,#8a8580);font-size:11px;transition:transform .12s ease}
+  .vfold[open]>summary::before{transform:rotate(90deg)}
+  .vfold>summary:hover{background:rgba(0,0,0,.02)}
+  .vfold .vfold-n{margin-left:auto}
+  .vfold .rc-feed{padding:0 12px 10px;margin:0}
 </style>
 {% endblock %}
 {% block content %}
@@ -516,55 +527,83 @@
     <p class="muted small">No versions logged yet — upload the first master below.</p>
     {% endif %}
 
-    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Activity feed</h3>
-    <ul class="rc-feed">
-      {% for c in comments %}
-      <li class="rc-ev">
-        <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
-        {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}{% if c['t_end'] is not none %}–{{ (c['t_end']|int//60) }}:{{ '%02d'|format(c['t_end']|int%60) }}{% endif %}</span>{% endif %}
-        <span class="rc-a">{{ c['author'] }}</span>
-        <span class="rc-b">{{ c['body'] }}{% if c['version'] %} <span class="muted small">· v{{ c['version'] }}</span>{% endif %}
-          {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
-          {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
-          {# The cue this note falls under (EP P0): any timecoded note is tagged
-             with its cue, so when the operator weighs conform-vs-revision the cue
-             that changed is on screen, not recalled from memory. #}
-          {% if note_cue.get(c['id']) %}<span class="mono muted small" title="This note's timecode falls inside cue {{ note_cue[c['id']] }}">under {{ note_cue[c['id']] }}</span>{% endif %}
-          {% if c['kind'] == 'change_request' %}
-          {# species classification (EP P1-1): conform = picture-caused, free;
-             revision = counts against rounds. The operator decides, per note. #}
-          <form method="post" action="/project/{{ project['id'] }}/review/note/{{ c['id'] }}/species" class="inline" style="display:inline">
-            <button class="btn tiny" type="submit"
-                    title="Flip this note's species — conforms never count against rounds"
-                    style="{% if c['conform'] %}color:var(--slate);border-color:var(--slate){% endif %}">
-              {{ 'conform (free)' if c['conform'] else 'revision' }}</button>
-          </form>
-          {% endif %}
-        </span>
-      </li>
-      {% else %}
-      <li class="muted small">No review activity yet — share the client link to start the conversation.</li>
-      {% endfor %}
-    </ul>
-  </section>
+    {# ── ONE HISTORY, GROUPED BY VERSION. ───────────────────────────────────────
+       There were two lists of the same events on this page — an Activity feed and a
+       Campaign timeline — differing only in that the timeline also named the version
+       uploads. *"campaign time line and activity feed is redundant remove the campaign
+       time line, create an accordion view of the version and review activiy"* (operator,
+       2026-08-21). Two renderings of one history is how they drift, and this page had
+       already grown long enough that neither could be read.
 
-  <!-- CAMPAIGN TIMELINE -->
-  <section class="card">
-    <div class="card-head"><h2>Campaign timeline</h2></div>
-    <ul class="timeline">
-      {% for e in timeline %}
-      <li class="tl-row">
-        <span class="tl-ico">{{ e.icon }}</span>
-        <div class="tl-body">
-          <div class="tl-label">{{ e.label }}</div>
-          {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
-        </div>
-        <span class="tl-when">{% if e.when %}{{ e.when[:16]|replace('T',' ') }}{% endif %}</span>
-      </li>
-      {% else %}
-      <li class="muted small">The timeline fills in as the campaign progresses.</li>
-      {% endfor %}
-    </ul>
+       So: one list, folded by the version each note was left against. The current take
+       is open; earlier ones are one click away, with their counts on the summary so a
+       shut fold still tells you whether anything is in it. The version upload itself is
+       the fold's header — which is the only thing the timeline said that this did not. ── #}
+{% macro activity_row(c, project, note_cue) %}
+        <li class="rc-ev">
+          <span class="rc-kind k-{{ c['kind'] }}">{% if c['kind'] == 'approval' %}Approved{% elif c['kind'] == 'change_request' %}Changes{% else %}Comment{% endif %}</span>
+          {% if c['t_seconds'] is not none %}<span class="rc-t">{{ (c['t_seconds']|int//60) }}:{{ '%02d'|format(c['t_seconds']|int%60) }}{% if c['t_end'] is not none %}–{{ (c['t_end']|int//60) }}:{{ '%02d'|format(c['t_end']|int%60) }}{% endif %}</span>{% endif %}
+          <span class="rc-a">{{ c['author'] }}</span>
+          <span class="rc-b">{{ c['body'] }}{% if c['version'] %} <span class="muted small">· v{{ c['version'] }}</span>{% endif %}
+            {% if c['internal'] %}<span class="pend" title="Composer↔studio only — never shown to the client">internal</span>{% endif %}
+            {% if c['composer_addressed'] and not c['resolved'] %}<span class="pend" title="The composer marked this addressed — review before resolving for the client">composer: addressed</span>{% endif %}
+            {# The cue this note falls under (EP P0): any timecoded note is tagged
+               with its cue, so when the operator weighs conform-vs-revision the cue
+               that changed is on screen, not recalled from memory. #}
+            {% if note_cue.get(c['id']) %}<span class="mono muted small" title="This note's timecode falls inside cue {{ note_cue[c['id']] }}">under {{ note_cue[c['id']] }}</span>{% endif %}
+            {% if c['kind'] == 'change_request' %}
+            {# species classification (EP P1-1): conform = picture-caused, free;
+               revision = counts against rounds. The operator decides, per note. #}
+            <form method="post" action="/project/{{ project['id'] }}/review/note/{{ c['id'] }}/species" class="inline" style="display:inline">
+              <button class="btn tiny" type="submit"
+                      title="Flip this note's species — conforms never count against rounds"
+                      style="{% if c['conform'] %}color:var(--slate);border-color:var(--slate){% endif %}">
+                {{ 'conform (free)' if c['conform'] else 'revision' }}</button>
+            </form>
+            {% endif %}
+          </span>
+        </li>
+    {% endmacro %}
+
+    <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">Version &amp; review activity</h3>
+
+    {% set ns = namespace(seen=[]) %}
+    {% for v in versions|reverse %}
+      {% set vkey = (v.n if v.n is defined and v.n else loop.revindex)|string %}
+      {% set rows = comments|selectattr('version','equalto',vkey)|list %}
+      {% set ns.seen = ns.seen + [vkey] %}
+      <details class="vfold"{% if loop.first %} open{% endif %}>
+        <summary>
+          <span class="vchip{% if loop.first %} cur{% endif %}">{{ v.label or ('v' ~ vkey) }}{% if loop.first %} · current{% endif %}</span>
+          <span class="muted small">{% if v.at %}{{ v.at[:16]|replace('T',' ') }}{% endif %}{% if v.by %} · {{ v.by }}{% endif %}</span>
+          <span class="vfold-n muted small">{{ rows|length }} note{{ '' if rows|length == 1 else 's' }}{%
+            set chg = rows|selectattr('kind','equalto','change_request')|list|length %}{%
+            if chg %} · {{ chg }} change request{{ '' if chg == 1 else 's' }}{% endif %}</span>
+        </summary>
+        <ul class="rc-feed">
+          {% for c in rows %}{{ activity_row(c, project, note_cue) }}{% else %}
+          <li class="muted small">Nothing was said against this take.</li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endfor %}
+
+    {# Anything whose version we cannot place — older notes from before takes were
+       numbered. Shown rather than dropped: a note nobody can find is a note nobody
+       answers. #}
+    {% set orphans = comments|rejectattr('version','in',ns.seen)|list %}
+    {% if orphans %}
+    <details class="vfold">
+      <summary><span class="vchip">Before the takes were numbered</span>
+        <span class="vfold-n muted small">{{ orphans|length }} note{{ '' if orphans|length == 1 else 's' }}</span>
+      </summary>
+      <ul class="rc-feed">{% for c in orphans %}{{ activity_row(c, project, note_cue) }}{% endfor %}</ul>
+    </details>
+    {% endif %}
+
+    {% if not comments %}
+    <p class="muted small">No review activity yet — share the client link to start the conversation.</p>
+    {% endif %}
   </section>
 </div>
 

@@ -148,14 +148,79 @@ def priced_notes_only(feedback: dict) -> dict:
     return fb
 
 
+#: Where uploaded media lives, and the reason a client may not fetch it directly.
+_UPLOADS = "/uploads/"
+
+
+def _streamable(name: str) -> bool:
+    """Is this something a browser plays in place?
+
+    The flag is decided per FILE, not per room. Stamping `stream=1` on everything sent
+    the paid client's "Download everything" button to `…/pkg.zip?stream=1`, and the
+    download route refuses a streamed ZIP by design — so fixing the buyer's silence broke
+    the buyer's download. Same door either way; the flag is what differs.
+    """
+    import mimetypes
+    guess = mimetypes.guess_type(name or "")[0] or ""
+    return (guess.split("/")[0] in ("audio", "video", "image")
+            and not guess.endswith("svg+xml"))
+
+
+def _client_media(url: str, project_id: int, token: str, kind: str) -> str:
+    """One `/uploads/…` URL, rewritten to the door a client actually holds."""
+    if not url.startswith(_UPLOADS):
+        return url
+    base = url[len(_UPLOADS):].split("?")[0].split("/")[-1]
+    if not base:
+        return url
+    q = f"?{kind}={token}"
+    return f"/project/{project_id}/dl/{base}{q}" + ("&stream=1" if _streamable(base) else "")
+
+
+def route_media(value, project_id: int, token: str, kind: str = "k"):
+    """Rewrite EVERY media URL in a room to the token-scoped, streamable door.
+
+    `/uploads/{name}` sits behind the ADMIN gate — client media is meant to travel the
+    per-project `/dl/` road instead. The room handed the client `/uploads/…` anyway, so a
+    buyer's `<audio>` fetched a login page and played silence: they could hear neither
+    the master they were reviewing nor the stems they were being asked to sign off
+    (operator, 2026-08-21).
+
+    Done as a BLANKET WALK of the room rather than field by field, for the same reason
+    `send_email` wraps the branded shell centrally: the surfaces that carry media keep
+    multiplying — versions, the picture, the master, every file in every deliverable lane
+    — and a per-field rewrite is a list someone has to remember to extend. A new surface
+    cannot forget this one.
+
+    Only the plain ``url`` key is rewritten. ``dl_url`` is the real download and stays
+    exactly as it was: payment-gated, and not something streaming may quietly open.
+    """
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k == "url" and isinstance(v, str):
+                out[k] = _client_media(v, project_id, token, kind)
+            else:
+                out[k] = route_media(v, project_id, token, kind)
+        return out
+    if isinstance(value, list):
+        return [route_media(v, project_id, token, kind) for v in value]
+    return value
+
+
 def room_view(conn, db, project_id: int, role: str, *,
-              talent_id: Optional[int] = None, build) -> Optional[dict]:
+              talent_id: Optional[int] = None, build,
+              media_token: str = "", media_kind: str = "k") -> Optional[dict]:
     """THE engagement, shaped for one role.
 
     ``build`` is the existing per-project builder (``creator_routes._room_for_project``)
     passed in rather than imported, because that module imports this one — the dependency
     runs one way. This function's whole job is the SUBTRACTION: take the full room and
     remove what this role may not have.
+
+    ``media_token`` is the caller's own credential. Given one, every media URL in the
+    finished room is rewritten to the door that credential opens (:func:`route_media`) —
+    AFTER the subtraction, so a URL that was removed cannot be routed back in.
     """
     room = build(conn, project_id)
     if room is None:
@@ -221,4 +286,9 @@ def room_view(conn, db, project_id: int, role: str, *,
         # before one does, because the next person adding a "delivered by" line to the
         # Takes sheet will find the name already sitting in the dict.
         room["versions"] = [dict(v, from_creator="") for v in (room.get("versions") or [])]
+    if media_token:
+        # Last, and deliberately: subtract first, then route what survived. Routing
+        # before the subtraction would mint a working client URL for a take the client
+        # is not allowed to have.
+        room = route_media(room, project_id, media_token, media_kind)
     return room
