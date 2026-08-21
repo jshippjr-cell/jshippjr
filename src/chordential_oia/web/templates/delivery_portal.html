@@ -426,7 +426,9 @@
       e.preventDefault();
       send.disabled = true; send.textContent = 'Sending…'; bar.style.display = 'block';
       var xhr = new XMLHttpRequest();
-      xhr.open('POST', form.action);
+      /* getAttribute, not the property: a <button name="action"> shadows `form.action`
+         and the upload posts to `[object HTMLButtonElement]` (see ADR-0089). */
+      xhr.open('POST', form.getAttribute('action') || location.pathname);
       xhr.upload.addEventListener('progress', function(ev){
         if (ev.lengthComputable) bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + '%';
       });

@@ -1820,6 +1820,17 @@
 <div class="foot">Session Room · space plays · B/N/V open a layer, and close it again</div>
 
 <script>
+  /* THE FORM'S URL, NOT ITS CONTROL NAMED "action".
+     A form with <button name="action"> has that control SHADOW the form's own
+     `action` property: `f.action` returns the element (or a RadioNodeList when there
+     are two, as on every gate here), so `fetch(formURL(f), …)` posted to
+     `/room/[object%20RadioNodeList]` and got a 405. The row still updated itself
+     optimistically, so the press looked like it worked and nothing ever reached the
+     server: *"I approved it once again inside the room and nothing pushed to the
+     clients side"* (operator, 2026-08-21, seventh report). getAttribute cannot be
+     shadowed. */
+  function formURL(f){ return f.getAttribute("action") || location.pathname; }
+
 (function(){
   "use strict";
   var veil = document.getElementById("veil");
@@ -2512,7 +2523,7 @@
       var input = shelfForm.querySelector("input"), text = (input.value || "").trim();
       if (!text) return;
       var btn = shelfForm.querySelector("button"); btn.disabled = true;
-      fetch(shelfForm.action, { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(shelfForm) })
+      fetch(formURL(shelfForm), { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(shelfForm) })
         .then(function(r){ return r.json(); })
         .then(function(d){
           if (d && d.ok){
@@ -2537,7 +2548,7 @@
         var input = f.querySelector("input"), text = (input.value || "").trim();
         if (!text) return;
         var btn = f.querySelector("button"); btn.disabled = true;
-        fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
+        fetch(formURL(f), { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
           .then(function(r){ return r.json(); })
           .then(function(d){
             if (d && d.ok){
@@ -2562,7 +2573,7 @@
         e.preventDefault();
         var card = f.closest(".sr-note"), btn = f.querySelector("button");
         btn.disabled = true;
-        fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" } })
+        fetch(formURL(f), { method:"POST", headers:{ "X-Requested-With":"fetch" } })
           .then(function(r){
             if (!r.ok) throw new Error("failed");
             var nowDone = !card.classList.contains("done");
@@ -2642,7 +2653,7 @@
         var btn = f.querySelector(".btn"), bar = f.querySelector(".progress");
         btn.disabled = true; btn.textContent = "Uploading…"; bar.classList.add("on");
         var xhr = new XMLHttpRequest();
-        xhr.open("POST", f.action);
+        xhr.open("POST", formURL(f));
         xhr.upload.addEventListener("progress", function(ev){
           if (ev.lengthComputable) bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + "%";
         });
@@ -2851,7 +2862,7 @@
         if (!text) return;
         var fd = new FormData(bar);
         send.disabled = true; send.textContent = "Sending…";
-        fetch(bar.action, { method: "POST", body: fd, redirect: "follow",
+        fetch(formURL(bar), { method: "POST", body: fd, redirect: "follow",
                             credentials: "same-origin" })
           .then(function(resp){
             if (!resp.ok) throw new Error("post failed");
@@ -3069,7 +3080,7 @@
       btn.disabled = true; btn.textContent = "Queued…";
       chain = chain.then(function(){
         btn.textContent = "Uploading…";
-        return fetch(f.action, { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
+        return fetch(formURL(f), { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(f) })
           .then(function(r){ return r.json().catch(function(){ return { ok:r.ok }; }); })
           .then(function(data){
             if (data && data.ok){
@@ -3135,7 +3146,7 @@
       var fd = new FormData(f);
       fd.set("action", act);
       f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
-      fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
+      fetch(formURL(f), { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-Requested-With": "fetch" } })
         /* READ THE ANSWER BEFORE DECIDING IT WAS THE NETWORK. This threw on any
            non-2xx, so a refusal the route could not honour — a 404 for a press the
@@ -3222,7 +3233,7 @@
       fd.set("action", act);
       if (act === "send_back") fd.set("note", why);
       f.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
-      fetch(f.action, { method: "POST", body: fd, credentials: "same-origin",
+      fetch(formURL(f), { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-Requested-With": "fetch" } })
         /* The server ANSWERS, in JSON, whether or not it could act — a press it could
            not honour used to come back as a redirect, which fetch follows to an HTML

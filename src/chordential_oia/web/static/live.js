@@ -1,3 +1,14 @@
+/* THE FORM'S URL, NOT ITS CONTROL NAMED "action".
+   A <button name="action"> SHADOWS the form's own `action` property — `form.action`
+   returns that element, or a RadioNodeList when there are two. Dispatching to that
+   value posts to a URL like `/room/[object%20RadioNodeList]` and gets a 405, while the
+   page's optimistic update makes the press look like it worked. That is a sitewide
+   hazard here: seven templates carry two or more controls named "action", and this file
+   handles forms on every page. getAttribute cannot be shadowed. */
+function formURL(form) {
+  return form.getAttribute("action") || window.location.pathname;
+}
+
 /* live.js — the Living-OS layer (progressive enhancement only).
  *
  * Philosophy (art-direction bible, "The Living OS principle"): every page
@@ -186,7 +197,7 @@
     var fitEl = document.querySelector("[data-fit-pct]");
     if (fitEl) sessionStorage.setItem(KEY_FIT, fitEl.getAttribute("data-fit-pct"));
     sessionStorage.setItem(KEY_THOUGHT, "1");
-    fetch(form.action, { method: "POST", body: new FormData(form) })
+    fetch(formURL(form), { method: "POST", body: new FormData(form) })
       .then(function (resp) {
         think.done();
         window.location.href = resp.url ? resp.url + "#intelligence" : window.location.href;
@@ -346,7 +357,7 @@
     note.textContent = total ? ("0 of " + human(total)) : "Sending…";
 
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", form.action);
+    xhr.open("POST", formURL(form));
     xhr.upload.addEventListener("progress", function (ev) {
       if (!ev.lengthComputable) { note.textContent = "Sending…"; return; }
       var pct = ev.loaded / ev.total;

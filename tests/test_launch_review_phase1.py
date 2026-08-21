@@ -259,7 +259,10 @@ def test_spend_guard_runs_before_the_request_is_sent():
 
     assert "data-confirm" in live_js, "live.js no longer implements the guard"
     guard = live_js.index("data-confirm")
-    dispatch = live_js.index("fetch(form.action")
+    # ADR-0089 renamed the dispatch: `form.action` is shadowed by a control named
+    # "action", so the URL is read with getAttribute via `formURL()`. The invariant this
+    # test protects — the guard is read BEFORE the request goes out — is unchanged.
+    dispatch = live_js.index("fetch(formURL(form)")
     assert guard < dispatch, "the guard must be read before the request is dispatched"
 
     # The invariant is specifically about forms live.js intercepts. An inline

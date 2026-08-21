@@ -94,6 +94,15 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The press that never left the browser** (ADR-0089, 2026-08-21). Seven reports of
+  "I published it and the client sees nothing", and six route-level reproductions that all
+  passed. Driven in a real browser, the click posted to
+  `/room/[object%20RadioNodeList]` and got a **405**: a `<button name="action">` shadows the
+  form's `action` property, and the publish gate has two of them. Nothing reached the
+  server, while the optimistic row update made the press look successful. Fixed in the
+  room, in `live.js` (sitewide) and in the client's delivery portal; the property read is
+  now banned by a test that scans every template and script.
+
 - **A client can hear what they are asked to approve** (ADR-0087, 2026-08-21). Every media
   URL in the client's room pointed at `/uploads/`, which is admin-gated — so the buyer's
   player fetched a login page and played **silence**, for the master under review and the

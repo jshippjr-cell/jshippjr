@@ -1664,6 +1664,44 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0089 — A form's URL is read, never taken from its own controls
+**Status:** Accepted (2026-08-21, operator directive) · Source:
+`creator_portal.html` `formURL()`, `static/live.js` `formURL()`, `delivery_portal.html`,
+`tests/test_a_press_that_never_left_the_browser.py`
+
+**Decision.** No JavaScript in this codebase may post to `someForm.action`. The URL is read
+with `getAttribute("action")` — via a `formURL()` helper where one is used more than once —
+and the rule is enforced by a test that reads every template and script, not by convention.
+
+**Why.** Reported seven times over three days, always some version of *"I approved it
+inside the room and nothing pushed to the client's side"*. Six reproductions had been built
+against the route and **all six passed, because every one of them posted to the route
+directly. The bug was never in the route — it was in the click.**
+
+A `<button name="action">` **shadows the form's own `action` property**. The publish gate
+carries two of them (publish / send back), so `f.action` returned a `RadioNodeList`. Driven
+in a real browser, the press did this:
+
+```
+POST /room/[object%20RadioNodeList]   →   405 Method Not Allowed
+```
+
+Nothing ever reached the server. And because the handler updates optimistically — removing
+the gate and re-counting what is left — the lane went from "3 files under review" to "2",
+so **the press looked like it worked**. Every symptom followed: the studio saw progress,
+the client saw nothing, and the server had no record of a request. The operator was right
+seven times and the reproductions were wrong seven times, because they all skipped the
+layer that was broken.
+
+The same defect was live in two more places the test found immediately: `live.js`, which
+handles forms on **every page**, and the client's own delivery portal upload.
+
+**Consequences.** The property read is banned outright rather than permitted "where it is
+currently safe" — the shadowing control is added by whoever edits the template later, not
+by whoever wrote the fetch, so a conditional rule would decay. The lesson beyond the rule:
+**a reproduction that skips the layer the user is touching is not a reproduction.** When
+the operator says a button does nothing and the route works, drive the button.
+
 ### ADR-0088 — When four reproductions disagree with the operator, measure
 **Status:** Accepted (2026-08-21, operator directive) · Source:
 `delivery_ops.client_visibility`, the "What the client can see" panel on
