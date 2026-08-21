@@ -1664,6 +1664,35 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0090 — What you owe and what you may take are answered separately
+**Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0077 / ADR-0078 ·
+Source: the payoff block in `creator_portal.html`, `bumpSignoff()`,
+`tests/test_the_balance_is_not_hidden_by_the_package.py`
+
+**Decision.** The client's payoff block answers **money first, files second, and neither
+hides the other.** An outstanding balance always renders its Pay control, whatever state
+the package is in; the package's own state is a separate line beside it. And the browser
+never composes a sentence about either — after the last sign-off it says the page is
+refreshing, and reloads onto the server's real answer.
+
+**Why.** *"I clicked reload to reload and settle my balance and it took me no where."*
+
+The block was a single `{% if %}/{% elif %}` ladder whose FIRST branch was the stale
+package — the state the ephemeral disk keeps producing. A client with a real outstanding
+balance and an incomplete build matched that branch and got "your package is being
+re-assembled" and **nothing else**: no Pay, no download, no next step. The money was
+unreachable because a fact about files was asked first.
+
+The second half was the browser lying on the server's behalf. `bumpSignoff()` replaced the
+payoff with *"Reload to pick up your package and settle the balance"* — a promise written
+by a script that can see neither the package nor the balance. Reloading landed on the dead
+branch above, so the press did exactly nothing, which is what "took me nowhere" describes.
+
+**Consequences.** A dead end dressed as progress is the defect this block already existed
+to prevent (ADR-0078); it had simply moved. The ordering is now pinned structurally — a
+test reads the template and fails if `download_unlocked` is asked about before
+`invoice_balance` — because the next person to add a branch will add it at the top.
+
 ### ADR-0089 — A form's URL is read, never taken from its own controls
 **Status:** Accepted (2026-08-21, operator directive) · Source:
 `creator_portal.html` `formURL()`, `static/live.js` `formURL()`, `delivery_portal.html`,

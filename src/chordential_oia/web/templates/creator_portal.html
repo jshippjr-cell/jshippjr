@@ -1184,17 +1184,21 @@
   {# THE PAYOFF. What stands between them and their files, said plainly. #}
   {% set _notice = pay_notice(request.query_params.get('pay')) %}
   {% if _notice %}<p class="pay-notice">{{ _notice }}</p>{% endif %}
+  {# THE PAYOFF. What stands between them and their files, said plainly.
+
+     TWO FACTS, NOT ONE CHAIN. This was a single {% if %}/{% elif %} ladder, so the
+     package's state could swallow the balance: a client whose package was stale and
+     whose balance was outstanding got "your package is being re-assembled" and **no way
+     to pay at all** — *"I clicked reload to reload and settle my balance and it took me
+     no where"* (operator, 2026-08-21). What you OWE and what you may TAKE are
+     independent, and a dead end dressed as progress is the defect this block already
+     exists to prevent. So money is answered first, files second, and neither hides the
+     other. #}
   <div class="payoff">
-    {% if a.download_unlocked and a.delivery_zip and a.delivery_zip.referenced_count %}
-    {# The package built and the audio is not in it. Offering "Download everything" for a
-       ZIP of documents is the one thing worse than offering nothing (reported live,
-       2026-08-20: *"i unzip the file, and i see this... no audio files just docs"*). #}
-    <span class="fineprint">Your package is being re-assembled — some of the audio did not
-      make it into the last build. Chordential has been told, and you'll have it shortly.</span>
-    {% elif a.download_unlocked and a.delivery_zip %}
-    <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
-    <span class="fineprint">Yours to keep.</span>
-    {% elif a.signoff_rollup.approved < a.signoff_rollup.total %}
+    {# ── 1. WHERE THE DEAL IS. Progress, then money — the original order, which the
+       first attempt at this split broke: a client with sign-off outstanding and no
+       raisable invoice lost "approve every deliverable" to the invoice-block notice. ── #}
+    {% if a.signoff_rollup.approved < a.signoff_rollup.total %}
     <span class="fineprint">Approve every deliverable above and your package is assembled.
       {% if a.invoice_balance and a.invoice_balance.outstanding %}The remaining balance of
       <b>${{ '%.2f'|format(a.invoice_balance.outstanding) }}</b> is due at that point.{% endif %}</span>
@@ -1213,7 +1217,26 @@
        that could not be raised — a dead end dressed as progress (reported live,
        2026-08-19). #}
     <span class="fineprint">{{ invoice_block_client(a.invoice_block) }}</span>
-    {% else %}
+    {% endif %}
+
+    {# ── 2. WHAT THEY MAY TAKE. Pulled OUT of the ladder above, because the package's
+       state was its first branch and therefore swallowed the balance: a client who owed
+       money and whose build was missing audio got "being re-assembled" and no way to pay
+       at all — *"I clicked reload to reload and settle my balance and it took me no
+       where"* (operator, 2026-08-21). What you owe and what you may take are independent
+       facts and are now said independently. ── #}
+    {% if a.download_unlocked and a.delivery_zip and a.delivery_zip.referenced_count %}
+    {# The package built and the audio is not in it. Offering "Download everything" for a
+       ZIP of documents is the one thing worse than offering nothing (reported live,
+       2026-08-20: *"i unzip the file, and i see this... no audio files just docs"*). #}
+    <span class="fineprint">Your package is being re-assembled — some of the audio did not
+      make it into the last build. Chordential has been told, and you'll have it shortly.</span>
+    {% elif a.download_unlocked and a.delivery_zip %}
+    <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
+    <span class="fineprint">Yours to keep.</span>
+    {% elif a.signoff_rollup.approved >= a.signoff_rollup.total
+            and not (a.invoice_balance and a.invoice_balance.outstanding)
+            and not a.invoice_block %}
     <span class="fineprint">Everything is signed off. Your package is being assembled —
       the download appears here.</span>
     {% endif %}
@@ -3202,9 +3225,13 @@
     if (done === parseInt(m[2], 10)){
       var payoff = document.querySelector(".payoff");
       if (payoff) payoff.innerHTML =
-        '<span class="fineprint">Everything is signed off. Reload to pick up your '
-        + 'package and settle the balance.</span> '
-        + '<button class="btn tiny" type="button" onclick="location.reload()">Reload</button>';
+        '<span class="fineprint">That was the last one. Reloading to show what happens '
+        + 'next\u2026</span>';
+      // Say what the SERVER says, rather than guessing. The old copy promised a package
+      // and a balance to settle, then reloaded onto a page that offered neither — the
+      // press "took me nowhere" because the sentence before it was written by the
+      // browser, which does not know (operator, 2026-08-21).
+      setTimeout(function(){ location.reload(); }, 600);
     }
   }
 

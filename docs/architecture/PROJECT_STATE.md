@@ -94,6 +94,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The balance is no longer hidden by the package** (ADR-0090, 2026-08-21). The client's
+  payoff was one if/elif ladder whose first branch was the stale package, so a client who
+  owed money and whose build was missing audio got "being re-assembled" and **no way to
+  pay at all**. Money is answered first now, files second, neither hiding the other — and
+  the browser stopped writing "Reload to settle the balance", a promise it could not see
+  well enough to make.
+
 - **The press that never left the browser** (ADR-0089, 2026-08-21). Seven reports of
   "I published it and the client sees nothing", and six route-level reproductions that all
   passed. Driven in a real browser, the click posted to
