@@ -174,3 +174,66 @@ def test_the_diagnostic_never_breaks_the_page(project):
         assert v["published"], "the diagnostic gave up entirely rather than degrading"
     finally:
         delivery_ops._conn_for_presence = real
+
+
+# ── and the press itself reports what the client can see ────────────────────────────
+def _lane_setup(db, pid, lane="Instrumental / TV mix"):
+    from chordential_oia.web.uploads import _persist_upload
+    conn = db.connect()
+    try:
+        _persist_upload(conn, "a1.wav", b"RIFFx", "audio/wav")
+        db.update_delivery(conn, pid, "assets", [{
+            "label": lane, "url": "/uploads/a1.wav", "filename": "a1.wav",
+            "orig": "One.wav", "kind": "audio"}])
+        _persist_upload(conn, "n1.wav", b"RIFFx", "audio/wav")
+        db.update_delivery(conn, pid, "pending_assets", [{
+            "label": lane, "url": "/uploads/n1.wav", "filename": "n1.wav",
+            "orig": "Two.wav", "kind": "audio", "by": "Ada", "at": "x"}])
+    finally:
+        conn.close()
+
+
+def test_publishing_answers_with_the_clients_own_count(project):
+    """Six reproductions of "I published it and they can't see it" all worked, so the
+    press stopped asserting success and started REPORTING it: the number is read back
+    after the write, from the same derivation the client's room renders. A seventh
+    disagreement is then a number against a number."""
+    c, _app, db, pid = project
+    _lane_setup(db, pid)
+    out = c.post(f"/project/{pid}/delivery/asset/publish",
+                 data={"filename": "n1.wav", "action": "publish", "origin": "room"},
+                 headers={"X-Requested-With": "fetch"}).json()
+    assert out["ok"] is True
+    assert out["client_n"] == 2, "the press cannot say what the client ended up with"
+    assert out["label"] == "Instrumental / TV mix"
+
+
+def test_the_room_says_the_number_out_loud(project):
+    from pathlib import Path
+    _c, app_mod, _db, _pid = project
+    tpl = (Path(app_mod.__file__).parent / "templates" / "creator_portal.html"
+           ).read_text(encoding="utf-8")
+    assert "the client now sees" in tpl
+    assert "shows NOTHING in" in tpl, (
+        "a publish that reaches nobody still congratulates the operator")
+
+
+def test_the_read_back_never_fails_the_write(project, monkeypatch):
+    """It runs after the file is already published. A diagnostic that can turn a
+    successful publish into a 500 is worse than the confusion it removes."""
+    from chordential_oia.web import project_routes
+    c, _app, db, pid = project
+    _lane_setup(db, pid)
+    monkeypatch.setattr(project_routes, "scoped_signoff",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    out = c.post(f"/project/{pid}/delivery/asset/publish",
+                 data={"filename": "n1.wav", "action": "publish", "origin": "room"},
+                 headers={"X-Requested-With": "fetch"}).json()
+    assert out["ok"] is True and out["client_n"] == -1
+    conn = db.connect()
+    try:
+        assert any(a["filename"] == "n1.wav"
+                   for a in (db.get_delivery(conn, pid).get("assets") or [])), \
+            "the publish was rolled back by its own read-back"
+    finally:
+        conn.close()

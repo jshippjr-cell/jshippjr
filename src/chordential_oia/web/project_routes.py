@@ -2936,6 +2936,7 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
     conn = db.connect()
     invite = None
     back = None
+    seen_n, lane_label = -1, ""
     try:
         delivery = db.get_delivery(conn, project_id)
         pending = list(delivery.get("pending_assets") or [])
@@ -3002,6 +3003,12 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
                 downstream = [k for k, up in (("editor", "mixer"),) if up == owner]
                 if downstream:
                     invite = (project, downstream[0], hit.get("label") or "the mix")
+            # READ BACK WHAT THE CLIENT CAN NOW SEE, after the write and from the same
+            # derivation their room renders. The press answered `ok: true` and the row
+            # updated itself, so "it worked" and "they still cannot see it" were both on
+            # screen with nothing to separate them (operator, 2026-08-21, sixth report).
+            lane_label = hit.get("label") or ""
+            seen_n = _client_lane_count(conn, project_id, lane_label)
     finally:
         conn.close()
     # The reason, by email, to whoever owns that lane — the mixer's stems go back to the
@@ -3030,7 +3037,7 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
     # opening it four times (reported live, 2026-08-19). An in-page press gets an answer,
     # not a new page.
     return _asset_answer(request, project_id, origin, ok=True, action=action,
-                         filename=filename)
+                         filename=filename, client_n=seen_n, label=lane_label)
 
 
 def _asset_redirect(project_id: int, origin: str):
@@ -3098,8 +3105,37 @@ def delivery_remove_asset(request: Request, project_id: int, filename: str = For
                          filename=filename)
 
 
+def _client_lane_count(conn, project_id: int, label: str) -> int:
+    """How many files the CLIENT can see in this lane, read back from the same
+    derivation their room renders (`scoped_signoff`).
+
+    Reported after six failed reproductions: *"i approve both of them and nothing goes to
+    the clients side of the room"* (operator, 2026-08-21). The press answered `ok: true`
+    and the room updated itself optimistically, so "it worked" and "they still cannot see
+    it" were both on screen with nothing to separate them. The press now reports the
+    NUMBER, measured after the write — so the next disagreement is a number against a
+    number instead of a feeling against an assumption.
+    """
+    try:
+        row = db.get_project(conn, project_id)
+        lanes, _r, _a = scoped_signoff(row, db.get_delivery(conn, project_id))
+        want = (label or "").strip().lower()
+        for lane in lanes:
+            files = lane.get("files") or []
+            if any((f.get("name") or "") for f in files) and (
+                    (lane.get("asset") or "").strip().lower() == want
+                    or (lane.get("match") or "").strip().lower() == want):
+                return len(files)
+        # No lane claimed it — that is the "published but unreachable" case, and 0 is the
+        # honest answer rather than a number from some other lane.
+        return 0
+    except Exception:      # noqa: BLE001 — a read-back may never fail the write
+        return -1
+
+
 def _asset_answer(request: Request, project_id: int, origin: str, *, ok: bool,
-                  action: str, filename: str = "", reason: str = ""):
+                  action: str, filename: str = "", reason: str = "",
+                  client_n: int = -1, label: str = ""):
     """One answer for a per-file press, in the shape the caller can read.
 
     The room vets files INSIDE the Takes sheet over `fetch`, and a redirect there is
@@ -3112,7 +3148,7 @@ def _asset_answer(request: Request, project_id: int, origin: str, *, ok: bool,
     if (request.headers.get("x-requested-with") or "").lower() in ("fetch",
                                                                    "xmlhttprequest"):
         return JSONResponse({"ok": ok, "action": action, "filename": filename,
-                             "reason": reason},
+                             "reason": reason, "client_n": client_n, "label": label},
                             status_code=200 if ok else 409)
     return _asset_redirect(project_id, origin)
 

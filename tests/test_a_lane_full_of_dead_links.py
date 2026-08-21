@@ -240,8 +240,13 @@ def test_a_press_on_a_file_that_moved_on_answers_json_not_a_redirect(lane):
                filename="not-waiting.wav", origin="room", action="publish")
     assert r.status_code == 409, "still a redirect — fetch reads that as a dead connection"
     assert r.headers["content-type"].startswith("application/json")
-    assert r.json() == {"ok": False, "action": "publish",
-                        "filename": "not-waiting.wav", "reason": "gone"}
+    # The press also reports what the CLIENT ends up seeing (ADR-0088). On a refusal
+    # there is nothing to report, so the subset that carries the meaning is asserted
+    # rather than the whole envelope — a diagnostic field must not break a contract test.
+    body = r.json()
+    assert {k: body[k] for k in ("ok", "action", "filename", "reason")} == {
+        "ok": False, "action": "publish",
+        "filename": "not-waiting.wav", "reason": "gone"}
 
 
 def test_removing_the_same_row_twice_says_gone_rather_than_failing(lane):
