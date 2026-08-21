@@ -36,6 +36,37 @@ logger = logging.getLogger(__name__)
 PROVIDER_ENV = "CHORDENTIAL_MAIL_PROVIDER"
 
 
+#: THE OUTBOX SEAM. Every send is reported to this hook — installed by the web layer at
+#: boot (`web.outbox.install`), never imported from here: this module is the engine
+#: layer and must not reach up into `web` (ADR-0044's direction rule), so the recorder
+#: is injected exactly as `room_view(build=…)` and `final_invoice_block(heal=…)` are.
+#:
+#: Why it exists: 27 call sites send mail and NOTHING recorded any of them. With the
+#: null provider — the default, and what a rehearsal runs on — a send was one line of
+#: `logger.info` carrying the recipient and subject and no body at all. So "what does my
+#: client actually receive?" could not be answered from inside the product, and "did the
+#: pay link go out?" could not be answered at all.
+_recorder = None
+
+
+def set_recorder(fn) -> None:
+    """Install (or clear, with ``None``) the hook that records every send."""
+    global _recorder
+    _recorder = fn
+
+
+def _record(**kw) -> None:
+    """Report one send to the outbox. Best-effort in the strictest sense: recording a
+    send must never be able to fail the send, so every error here is swallowed."""
+    fn = _recorder
+    if fn is None:
+        return
+    try:
+        fn(**kw)
+    except Exception:      # noqa: BLE001 — an audit trail may never break the thing it audits
+        logger.debug("mailer: outbox recorder failed", exc_info=True)
+
+
 def _provider() -> str:
     return (os.environ.get(PROVIDER_ENV, "null") or "null").strip().lower()
 
@@ -211,12 +242,18 @@ def send_email(to: str, subject: str, text: str, html: Optional[str] = None,
         # switch: a half-set env (e.g. provider=smtp but no host yet) must be a
         # clean no-op, never a blind connection attempt that could hang.
         if mail_configured():
-            return _send_smtp(to, subject, text, html, ics, files)
-        # Null / unconfigured provider (default): log the intent, send nothing.
-        logger.info("mailer(null): would send to=%s subject=%r", to, subject)
-        return "logged"
+            status = _send_smtp(to, subject, text, html, ics, files)
+        else:
+            # Null / unconfigured provider (default): log the intent, send nothing.
+            logger.info("mailer(null): would send to=%s subject=%r", to, subject)
+            status = "logged"
+        _record(to=to, subject=subject, text=text, html=html, status=status,
+                attachments=len(files or []) + (1 if ics else 0))
+        return status
     except Exception:  # noqa: BLE001 — defensive; send_email must never raise
         logger.exception("mailer: send to %s crashed", to)
+        _record(to=to, subject=subject, text=text, html=html, status="error",
+                attachments=0)
         return "error"
 
 

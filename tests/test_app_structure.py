@@ -42,7 +42,8 @@ ROUTERS = ["agencies_routes.py", "discovery_routes.py",
 # `app.py` if either group is ever to move; the single-group helpers travel with their
 # own routes later. The closure fell into these four files on its own — its dependency
 # graph has ten components and none of them straddles a file boundary.
-HELPERS = ["uploads.py", "billing.py", "delivery_ops.py", "opportunity_ops.py"]
+HELPERS = ["uploads.py", "billing.py", "delivery_ops.py", "opportunity_ops.py",
+           "outbox.py"]      # ADR-0086 — records every send; reaches only `db`
 
 MODULES = ROUTERS + HELPERS
 
@@ -296,6 +297,9 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     way to create an opportunity at all except promoting an inbound lead,
     +1 for /pay/confirming — where a payment return that could NOT be verified lands,
     holding no token and naming no project (ADR-0085),
+    +3 for the outbox (ADR-0086) — the list, one message, and clearing it; 27 send sites
+    and nothing had ever recorded one, so "what does my client receive?" and "did the pay
+    link go out?" were both unanswerable from inside the product,
     +1 for taking a project off the board, because the demo set could be created and
     never removed and a rehearsal project sat in the pipeline looking like work,
     +1 for taking a FILE off a deliverable lane — a published row had no control at all,
@@ -310,8 +314,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    assert len(decls) == 293, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 293 — "
+    assert len(decls) == 296, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 296 — "
         f"a slice lost or gained a URL")
 
 
@@ -337,6 +341,10 @@ def test_the_helper_layer_flows_one_way():
         "billing.py": set(),
         "delivery_ops.py": {"billing", "uploads"},
         "opportunity_ops.py": set(),
+        # The outbox sits at the BOTTOM with `uploads`: it reaches `db` and nothing
+        # else. It is written to from a fire-and-forget mail thread, so a dependency on
+        # any helper above it would drag that helper into a background thread too.
+        "outbox.py": set(),
     }
     helper_names = {h[:-3] for h in HELPERS}
     for name in HELPERS:

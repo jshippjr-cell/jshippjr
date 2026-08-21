@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Outbox{% endblock %}
+{% block heading %}Outbox{% endblock %}
+{% block content %}
+{# What the system sent, or would have sent (ADR-0086). The point of the page is the
+   SECOND half of that sentence: with no mail provider configured, every send is recorded
+   and nothing leaves the building — so a whole deal can be rehearsed and the client's
+   emails still read, which is the one part of their experience that could never be
+   looked at before. #}
+<section class="card" style="margin-bottom:14px">
+  {% if live %}
+  <p style="margin:0"><span class="pill sv-door">Mail is live</span>
+    These were handed to your mail server and really went to the people named.</p>
+  {% else %}
+  <p style="margin:0"><span class="pill">Mail is off</span>
+    No mail provider is configured, so <b>nothing left the building</b>. Every row below
+    is what the recipient <i>would</i> have received — open one to read it exactly as it
+    would land.</p>
+  {% endif %}
+</section>
+
+<div class="seg-row" style="margin-bottom:10px">
+  <span class="seg on">All <span class="muted small">{{ counts.all }}</span></span>
+  <span class="seg">Sent <span class="muted small">{{ counts.sent }}</span></span>
+  <span class="seg">Recorded only <span class="muted small">{{ counts.logged }}</span></span>
+  {% if counts.error %}<span class="seg">Failed <span class="muted small">{{ counts.error }}</span></span>{% endif %}
+</div>
+
+<div class="card no-pad">
+<table class="table">
+  <thead><tr><th>When</th><th>To</th><th>Subject</th><th></th><th></th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td class="small muted" style="white-space:nowrap">{{ (r.created_at or '')[:16]|replace('T',' ') }}</td>
+      <td class="small">
+        {% if r.channel != 'email' %}<span class="pill">{{ r.channel }}</span>{% endif %}
+        {{ r.recipient or '—' }}
+      </td>
+      <td><a class="link" href="/outbox/{{ r.id }}">{{ r.subject or '(no subject)' }}</a>
+        {% if r.attachments %}<span class="muted small">· {{ r.attachments }} attachment{{ '' if r.attachments == 1 else 's' }}</span>{% endif %}
+        {% if r.rehearsal %}<span class="pill" title="Produced during a rehearsal walk-through">rehearsal</span>{% endif %}
+      </td>
+      <td><span class="pill {{ 'sv-door' if r.status == 'sent' else '' }}"
+                title="{{ statuses.get(r.status, '') }}">{{ r.status }}</span></td>
+      <td class="small"><a class="link" href="/outbox/{{ r.id }}">Read →</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Nothing sent yet. Walk a deal and the messages it
+      produces land here — including the ones that only got as far as being recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if rows %}
+<form method="post" action="/outbox/clear" style="margin-top:12px"
+      onsubmit="return confirm('Clear the outbox?\n\nThis deletes the record of what was sent. It does not unsend anything.');">
+  <button class="btn tiny ghost" type="submit">Clear the outbox</button>
+  <span class="muted small">Deliberately manual — a record that tidies itself is not a record.</span>
+</form>
+{% endif %}
+{% endblock %}

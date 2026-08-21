@@ -1664,6 +1664,51 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0086 — Every send is recorded, sent or not
+**Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0066 (the branded
+shell IS the email) · Source: `mailer.set_recorder` / `_record`, `web/outbox.py`,
+`db.record_outbound` / `list_outbox` / `OUTBOX_STATUS`, `signals._record_alert`,
+`console_routes.outbox_page` / `outbox_one` / `outbox_clear`,
+`tests/test_what_the_client_actually_receives.py`
+
+**Decision.** Every outbound message — email and phone/web alert alike — is recorded to an
+`outbox` table with its recipient, subject, plain text, **rendered branded HTML**, status
+and attachment count, whether it was actually sent (`sent`), recorded only because no
+provider is configured (`logged`), attempted and failed (`error`), or had no channel at all
+(`unset`). `/outbox` reads them; one message can be previewed exactly as it lands.
+
+Storing the HTML is the load-bearing part. The branded shell is what the recipient sees
+(ADR-0066); keeping only the plain text would answer *"what does my client receive?"* with
+something the client never sees — the original defect, one layer down.
+
+The recorder is **injected, not imported**: `mailer` is the engine layer and must not reach
+up into `web` (ADR-0044), so it exposes `set_recorder` and `web.outbox.install()` fills it
+at boot — the same shape as `room_view(build=…)` and `final_invoice_block(heal=…)`.
+`outbox.py` sits at the bottom of the helper DAG beside `uploads`, reaching only `db`,
+because it is written from a fire-and-forget mail thread and must not drag a higher helper
+into one.
+
+**Why.** Asked how to test the product end to end without borrowing a person to play the
+client: *"will this rehearsal console demo emails sends, and alerts?"* It could not have.
+**Twenty-seven call sites send mail and nothing recorded any of them.** On the null
+provider — the default, and what any rehearsal runs on — a send was one line of
+`logger.info` carrying a recipient and a subject and no body at all.
+
+So the emails were the one part of the client's experience that could not be looked at.
+Every other defect in that experience this month was found by sitting a real person in
+front of a real screen; the emails could only be inspected by configuring SMTP and mailing
+a real inbox, which during a rehearsal is worse than not testing — a rehearsal deal that
+borrowed a real contact would mail a real client. And in production, *"did the pay link go
+out, and to whom?"* had no answer at all: a notification is best-effort and silent by
+design, which is right for the request and wrong for the record.
+
+**Consequences.** The outbox holds every client's address and the full text of what we told
+them, so it stays behind the admin gate; the preview is framed with `sandbox`, a
+`default-src 'none'` CSP and `nosniff`, because replaying stored content is not the same as
+rendering a page we wrote today. Clearing is manual — a record that tidies itself is not a
+record — and says plainly that it does not unsend anything. Recording may never fail a
+send: every path swallows its own errors, the same rule `_log_decision` follows.
+
 ### ADR-0085 — A success URL is not a receipt, and a refusal is not a network error
 **Status:** Accepted (2026-08-20, operator directive) · Extends ADR-0068 (capability
 gating) and ADR-0072 (the taste gate carries a reason) · Source:

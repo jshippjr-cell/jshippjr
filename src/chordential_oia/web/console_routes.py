@@ -17,8 +17,10 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import (HTMLResponse, PlainTextResponse,
+                               RedirectResponse)
 
+from .. import mailer
 from ..matching import match_talent
 from ..talent import profile_completeness
 from . import (db, next_action, queue as queue_mod, rehearsal, relationships,
@@ -848,3 +850,77 @@ def rehearsal_create():
     finally:
         conn.close()
     return RedirectResponse(f"/opportunity/{opp_id}?rehearsal=1", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# The outbox (ADR-0086) — what the system sent, or would have sent.
+# --------------------------------------------------------------------------- #
+@router.get("/outbox", response_class=HTMLResponse)
+def outbox_page(request: Request, project: Optional[int] = None):
+    """Every outbound message, newest first.
+
+    This is the surface that lets a whole deal be walked with mail switched OFF and the
+    client's experience still be READ — the emails were the one part of that experience
+    nobody could look at without configuring SMTP and mailing a real person. It is also
+    the production answer to "did the pay link go out, and to whom?", which nothing could
+    answer before, because a notification is best-effort and silent by design.
+    """
+    conn = db.connect()
+    try:
+        rows = [dict(r) for r in db.list_outbox(conn, limit=200, project_id=project)]
+    finally:
+        conn.close()
+    live = mailer.mail_configured()
+    return render(request, "outbox.html", nav="settings", rows=rows, live=live,
+                  statuses=db.OUTBOX_STATUS, project=project,
+                  counts={
+                      "all": len(rows),
+                      "sent": sum(1 for r in rows if r["status"] == "sent"),
+                      "logged": sum(1 for r in rows if r["status"] == "logged"),
+                      "error": sum(1 for r in rows if r["status"] == "error"),
+                  })
+
+
+@router.get("/outbox/{outbox_id}", response_class=HTMLResponse)
+def outbox_one(request: Request, outbox_id: int, raw: str = ""):
+    """One message. ``?raw=1`` serves the stored HTML BODY ALONE, so the branded shell
+    can be previewed in an iframe exactly as a mail client renders it — which is the
+    only honest way to answer "what does the client see".
+
+    Served with a restrictive CSP and `nosniff`: this is stored content being replayed
+    into a same-origin frame behind the admin gate, and a mail body is not a page we
+    wrote today. Nothing in it may fetch, script, or frame anything.
+    """
+    conn = db.connect()
+    try:
+        row = db.get_outbound(conn, outbox_id)
+        row = dict(row) if row is not None else None
+    finally:
+        conn.close()
+    if row is None:
+        return HTMLResponse("Not found", status_code=404)
+    if raw:
+        body = row["body_html"] or ""
+        if not body:
+            return PlainTextResponse(row["body_text"] or "",
+                                     headers={"X-Content-Type-Options": "nosniff"})
+        return HTMLResponse(body, headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": (
+                "default-src 'none'; img-src data: https:; style-src 'unsafe-inline'"),
+        })
+    return render(request, "outbox_one.html", nav="settings", row=row,
+                  statuses=db.OUTBOX_STATUS)
+
+
+@router.post("/outbox/clear")
+def outbox_clear(project: str = Form("")):
+    """Empty the outbox, or one project's — for clearing a rehearsal's noise before the
+    next run. Deliberately not automatic: a record that tidies itself is not a record."""
+    pid = int(project) if (project or "").strip().isdigit() else None
+    conn = db.connect()
+    try:
+        db.clear_outbox(conn, project_id=pid)
+    finally:
+        conn.close()
+    return RedirectResponse("/outbox", status_code=303)

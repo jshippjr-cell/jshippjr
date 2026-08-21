@@ -1380,6 +1380,24 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # identity (kind:url) and EXPIRES. Nothing is deleted and nothing is hidden for ever:
     # a decision that still needs making comes back, which is the only way a "waiting on
     # you" list stays trustworthy after you have cleared it.
+    # THE OUTBOX (ADR-0086). Every outbound message the system produces — email and
+    # phone/web alert alike — recorded whether it was actually SENT or merely logged
+    # because no provider is configured. Two jobs: a rehearsal can be walked end to end
+    # with mail switched OFF and you can still read exactly what the client would have
+    # received, and in production it answers "did the pay link go out, and to whom?",
+    # which nothing could answer before.
+    #
+    # `body_html` is stored because the branded shell IS what the recipient sees; storing
+    # only the plain text would reproduce the original defect one layer down.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT, channel TEXT,
+            recipient TEXT, subject TEXT, body_text TEXT, body_html TEXT,
+            status TEXT, attachments INTEGER DEFAULT 0, project_id INTEGER,
+            rehearsal INTEGER DEFAULT 0
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox(created_at)")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS queue_snooze (
             key TEXT PRIMARY KEY, until_at TEXT, snoozed_at TEXT, actor TEXT
@@ -6259,6 +6277,62 @@ def prime_project_reads(memo, project_ids) -> int:
     for pid, rs in by_project.items():
         memo.remember(_SQL_INVOICES_BY_PROJECT, (pid,), rs)
     return primed
+
+
+#: What each outbox status means, in one place so a page cannot invent a third reading.
+OUTBOX_STATUS = {
+    "sent": "Handed to the mail server.",
+    "logged": "Recorded only — no mail provider is configured, so nothing left the "
+              "building. This is what the recipient WOULD have received.",
+    "error": "The send was attempted and failed.",
+    "unset": "No alert channel is configured, so nothing was pushed.",
+}
+
+
+def record_outbound(conn, *, channel: str, recipient: str, subject: str,
+                    body_text: str = "", body_html: str = "", status: str = "",
+                    attachments: int = 0, project_id=None,
+                    rehearsal: int = 0) -> int:
+    """Record one outbound message. Never raises — see `mailer._record`."""
+    cur = conn.execute(
+        "INSERT INTO outbox (created_at, channel, recipient, subject, body_text, "
+        "body_html, status, attachments, project_id, rehearsal) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (_now(), channel or "email", recipient or "", subject or "", body_text or "",
+         body_html or "", status or "", int(attachments or 0), project_id,
+         1 if rehearsal else 0))
+    conn.commit()
+    return int(cur.lastrowid or 0)
+
+
+def list_outbox(conn, *, limit: int = 100, since_id: int = 0,
+                project_id=None) -> List[sqlite3.Row]:
+    """Newest first — what the system has sent, or would have."""
+    sql = "SELECT * FROM outbox WHERE id > ?"
+    params: list = [int(since_id or 0)]
+    if project_id is not None:
+        sql += " AND project_id = ?"
+        params.append(int(project_id))
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(int(limit))
+    return conn.execute(sql, tuple(params)).fetchall()
+
+
+def get_outbound(conn, outbox_id: int):
+    return conn.execute("SELECT * FROM outbox WHERE id = ?", (outbox_id,)).fetchone()
+
+
+def clear_outbox(conn, *, project_id=None) -> int:
+    """Empty the outbox (or one project's). For clearing a rehearsal's noise."""
+    if project_id is None:
+        n = conn.execute("SELECT COUNT(*) c FROM outbox").fetchone()["c"]
+        conn.execute("DELETE FROM outbox")
+    else:
+        n = conn.execute("SELECT COUNT(*) c FROM outbox WHERE project_id = ?",
+                         (project_id,)).fetchone()["c"]
+        conn.execute("DELETE FROM outbox WHERE project_id = ?", (project_id,))
+    conn.commit()
+    return int(n or 0)
 
 
 def save_media_blob(conn, name: str, content: bytes, content_type: str = "") -> bool:

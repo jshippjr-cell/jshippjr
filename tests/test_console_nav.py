@@ -70,7 +70,11 @@ def test_the_nav_has_no_duplicate_destinations(app_mod):
         links = _nav_links(c.get("/dashboard").text)
     paths = [h.split("?")[0] for h in links]
     assert len(paths) == len(set(paths)), f"duplicate nav destinations: {paths}"
-    assert len(links) <= 16, f"the nav is growing again ({len(links)} links)"
+    # Raised 16 → 17 (2026-08-21) for the Outbox (ADR-0086). Held to the same bar the
+    # diet sets: it is not a saved search or a filter over a page already in the nav —
+    # it is a destination that exists nowhere else, and it is where the client's own
+    # experience gets read. Raise this again only for something that clears that bar.
+    assert len(links) <= 17, f"the nav is growing again ({len(links)} links)"
 
 
 def test_the_deal_list_still_does_everything_the_board_did(app_mod):

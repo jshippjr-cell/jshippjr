@@ -302,13 +302,27 @@ def fire_and_forget(fn: Callable, *args, **kwargs) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _record_alert(title: str, body: str, status: str, channel: str = "push") -> None:
+    """Report an alert to the outbox (ADR-0086), never failing the alert."""
+    try:
+        from . import outbox
+        outbox.record_alert(title=title, body=body, status=status, channel=channel)
+    except Exception:      # noqa: BLE001 — an audit trail may never break its subject
+        pass
+
+
 def send_push(title: str, body: str = "", click_url: str = "") -> str:
     """Send one ntfy.sh phone push. Returns a status: 'unset' (no topic
     configured), 'sent' (delivered to ntfy), or 'error' (network/ntfy failed).
-    Best-effort — never raises."""
+    Best-effort — never raises.
+
+    Recorded either way. 'unset' is the interesting one: an alert nobody configured a
+    channel for looks identical, from the request's side, to one that fired — and the
+    outbox is where that difference becomes visible."""
     global _LAST_PUSH_ERROR
     topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
     if not topic:
+        _record_alert(title, body, "unset")
         return "unset"
     url = topic if topic.startswith("http") else f"https://ntfy.sh/{topic}"
     try:
@@ -323,9 +337,11 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
         )
         urllib.request.urlopen(req, timeout=8)  # noqa: S310
         _LAST_PUSH_ERROR = ""
+        _record_alert(title, body, "sent")
         return "sent"
     except Exception as e:                       # noqa: BLE001 — best-effort push
         _LAST_PUSH_ERROR = f"{type(e).__name__}: {e}"[:200]
+        _record_alert(title, body, "error")
         return "error"
 
 

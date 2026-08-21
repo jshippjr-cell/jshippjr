@@ -104,6 +104,10 @@
     <div class="nav-section">Intelligence</div>
     <nav class="nav">
       <a href="/simulator" class="{{ 'active' if nav=='simulator' }}"><span class="ico">🎙</span> Call simulator</a>
+      {# The outbox (ADR-0086). Sits here rather than in a settings drawer because it is
+         how the client's experience gets READ — the emails were the one surface nobody
+         could look at without mailing a real person. #}
+      <a href="/outbox" class="{{ 'active' if nav=='settings' }}"><span class="ico">✉</span> Outbox</a>
     </nav>
     <div class="sidebar-foot">
       <span>Music procurement intelligence</span>

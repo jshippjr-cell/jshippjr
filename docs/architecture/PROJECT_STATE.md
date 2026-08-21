@@ -94,6 +94,13 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **Every send is recorded, sent or not** (ADR-0086, 2026-08-21). 27 call sites send mail
+  and nothing recorded one of them; on the null provider a send was a single log line with
+  no body. `/outbox` now holds every message — recipient, subject, text and the **branded
+  HTML the recipient sees** — so a whole deal can be walked with mail switched off and the
+  client's emails still read, and production can finally answer "did the pay link go out?".
+  Alerts too, including the `unset` case where nothing was configured to receive them.
+
 - **A success URL is not a receipt** (ADR-0085, 2026-08-20). `GET /pay/return?invoice=7`
   was gate-exempt and applied the payment on sight — Paid, downloads unlocked, payouts
   queued, receipt emailed — for anyone who typed a small integer; and its redirect carried

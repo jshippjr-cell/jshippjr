@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ row.subject or 'Message' }}{% endblock %}
+{% block heading %}<a class="crumb" href="/outbox">Outbox</a> / {{ row.subject or 'Message' }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="pill-row" style="margin-bottom:8px">
+    <span class="pill {{ 'sv-door' if row.status == 'sent' else '' }}">{{ row.status }}</span>
+    {% if row.channel != 'email' %}<span class="pill">{{ row.channel }}</span>{% endif %}
+    {% if row.rehearsal %}<span class="pill">rehearsal</span>{% endif %}
+  </div>
+  <p class="small muted" style="margin:0 0 4px">{{ statuses.get(row.status, '') }}</p>
+  <table class="table" style="margin-top:10px">
+    <tr><td class="small muted" style="width:110px">To</td><td class="small">{{ row.recipient or '—' }}</td></tr>
+    <tr><td class="small muted">Subject</td><td class="small">{{ row.subject or '—' }}</td></tr>
+    <tr><td class="small muted">When</td><td class="small">{{ (row.created_at or '')[:19]|replace('T',' ') }}</td></tr>
+    {% if row.attachments %}<tr><td class="small muted">Attachments</td><td class="small">{{ row.attachments }}</td></tr>{% endif %}
+  </table>
+</section>
+
+{% if row.body_html %}
+{# THE BRANDED SHELL IS WHAT THE RECIPIENT SEES, so this is the only honest preview.
+   Framed rather than inlined: a stored mail body is not a page we are writing today, and
+   it must not inherit the console's styles or reach the console's DOM. `sandbox` with no
+   allow-* tokens gives it its own opaque origin and no scripting; the route adds a
+   restrictive CSP and nosniff on top. #}
+<section class="card" style="margin-top:14px">
+  <p class="small muted" style="margin:0 0 8px">As it lands in their inbox:</p>
+  <iframe src="/outbox/{{ row.id }}?raw=1" sandbox
+          title="Message preview"
+          style="width:100%;height:70vh;border:1px solid var(--line,#ddd);border-radius:10px;background:#fff"></iframe>
+</section>
+{% endif %}
+
+<section class="card" style="margin-top:14px">
+  <p class="small muted" style="margin:0 0 8px">Plain text{% if row.body_html %} (what a
+    mail client shows when it will not render HTML){% endif %}:</p>
+  <pre style="white-space:pre-wrap;margin:0;font:13px/1.55 ui-monospace,Menlo,monospace">{{ row.body_text or '—' }}</pre>
+</section>
+{% endblock %}
