@@ -1234,6 +1234,13 @@
     {% elif a.download_unlocked and a.delivery_zip %}
     <a class="btn" href="{{ a.delivery_zip.dl_url or a.delivery_zip.url }}">⤓ Download everything</a>
     <span class="fineprint">Yours to keep.</span>
+    {% elif a.download_unlocked %}
+    {# Unlocked and there is no package. Measured live, 2026-08-21: `download_unlocked`
+       True, `delivery_zip` None — the client's room fell through every branch and said
+       NOTHING about their files. Silence is the dead end this block exists to prevent,
+       and "no package yet" is a real state that has to have a sentence. #}
+    <span class="fineprint">Your download is open — the package is being assembled and
+      appears here as soon as it is ready.</span>
     {% elif a.signoff_rollup.approved >= a.signoff_rollup.total
             and not (a.invoice_balance and a.invoice_balance.outstanding)
             and not a.invoice_block %}

@@ -39,6 +39,7 @@ def room(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     from chordential_oia.invoicing import Invoice
     from chordential_oia.web import app as app_mod, db, production
+    from chordential_oia.web.shell import ADMIN_COOKIE, admin_cookie_value
     from chordential_oia.web.delivery_ops import scoped_signoff
     from chordential_oia.web.uploads import _persist_upload
     with TestClient(app_mod.app):
@@ -73,11 +74,21 @@ def room(tmp_path, monkeypatch):
         tok = db.ensure_project_share_token(conn, pid)
     finally:
         conn.close()
-    return TestClient(app_mod.app), db, pid, tok
+    c = TestClient(app_mod.app)
+    # The unlock override is an OPERATOR control behind the admin gate; without the
+    # cookie the gate answers 303 to the login, which is indistinguishable from the
+    # route's own 303 and made this fixture assert a redirect that never unlocked.
+    c.cookies.set(ADMIN_COOKIE, admin_cookie_value("passphrase"))
+    return c, db, pid, tok
 
 
 def _payoff(client, pid, tok):
-    page = client.get(f"/room/{pid}", params={"k": tok}).text
+    """The CLIENT's copy. Fetched on a bare client so the admin cookie the fixture holds
+    for the unlock control cannot quietly turn this into the studio's room."""
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as anon:
+        page = anon.get(f"/room/{pid}", params={"k": tok}).text
     i = page.index('class="payoff"')
     return page[i:i + 1800]
 
@@ -177,3 +188,64 @@ def test_the_payoff_answers_money_before_files():
     money = block.index("invoice_balance")
     files = block.index("download_unlocked")
     assert money < files, "the package's state is being asked about before the balance"
+
+
+# ── unlocking has to produce something to download ──────────────────────────────────
+def test_unlocking_builds_the_package_when_there_is_none(room):
+    """Measured live, 2026-08-21: `download_unlocked` True, `delivery_zip` None. The
+    operator pressed "Unlock downloads anyway" and the client got no download and no
+    explanation — the state a delivery sits in whenever the finalize step never ran.
+    A button that opens a door onto an empty room is a broken promise."""
+    c, db, pid, tok = room
+    conn = db.connect()
+    try:
+        assert not db.get_delivery(conn, pid).get("delivery_zip"), "fixture already built one"
+    finally:
+        conn.close()
+    assert c.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"},
+                  follow_redirects=False).status_code == 303
+    conn = db.connect()
+    try:
+        d = db.get_delivery(conn, pid)
+        assert d.get("download_unlocked") is True
+        assert d.get("delivery_zip"), "unlocked with nothing to download"
+    finally:
+        conn.close()
+    assert "Download everything" in _payoff(c, pid, tok)
+
+
+def test_relocking_still_works(room):
+    c, db, pid, tok = room
+    c.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"})
+    c.post(f"/project/{pid}/delivery/unlock", data={"unlock": "0"})
+    conn = db.connect()
+    try:
+        assert not db.get_delivery(conn, pid).get("download_unlocked")
+    finally:
+        conn.close()
+    assert "Download everything" not in _payoff(c, pid, tok)
+
+
+def test_an_unlocked_delivery_with_no_package_is_never_silent(room):
+    """The branch that produced the report. Unlocked, nothing built yet, a balance still
+    outstanding — every condition false, so the block rendered NOTHING about their files.
+    Silence is the dead end this whole section exists to prevent."""
+    c, db, pid, tok = room
+    conn = db.connect()
+    try:
+        db.update_delivery(conn, pid, "download_unlocked", True)   # no package built
+    finally:
+        conn.close()
+    block = _payoff(c, pid, tok)
+    assert "being assembled" in block, "the client is told nothing about their files"
+    assert f"/project/{pid}/pay" in block, "and the balance vanished with it"
+
+
+def test_an_override_does_not_pretend_the_balance_is_gone(room):
+    """Unlocking is the operator overriding the paywall, not the client paying. Both
+    facts stay on screen: here is your package, and here is what is still owed."""
+    c, db, pid, tok = room
+    c.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"})
+    block = _payoff(c, pid, tok)
+    assert "Download everything" in block
+    assert "Pay $4200.00" in block

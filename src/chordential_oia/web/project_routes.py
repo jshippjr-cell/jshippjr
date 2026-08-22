@@ -237,11 +237,24 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
 def delivery_unlock(project_id: int, unlock: str = Form("1")):
     """Operator override (admin-only via the gate): manually unlock/relock the
     client's deliverable downloads independent of payment. Machine proposes (pay in
-    full → unlock); Jon disposes (release anyway, or hold)."""
+    full → unlock); Jon disposes (release anyway, or hold).
+
+    **Unlocking BUILDS the package if there isn't one.** Pressing "unlock downloads
+    anyway" and finding nothing to download is a broken promise, and it is the state a
+    delivery sits in whenever the finalize step never ran — measured live, 2026-08-21:
+    `download_unlocked: True`, `delivery_zip: None`, and a client's room with no download
+    and nothing said about why. The build is idempotent and cheap; refusing to guess
+    whether one already exists is what left the hole.
+    """
     conn = db.connect()
     try:
         db.update_delivery(conn, project_id, "download_unlocked",
                            True if unlock == "1" else None)
+        if unlock == "1" and not (db.get_delivery(conn, project_id).get("delivery_zip")):
+            try:
+                _build_delivery_package(conn, project_id)
+            except Exception:      # noqa: BLE001 — the unlock itself must still stand
+                pass
     finally:
         conn.close()
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
