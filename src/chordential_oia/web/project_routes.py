@@ -184,8 +184,20 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
                 fresh = (delivery.get("delivery_zip") or {}).get("filename") or ""
                 if fresh:
                     name = fresh
-            except Exception:  # noqa: BLE001 — never 500 a paid download over a rebuild
-                pass
+            except Exception as exc:  # noqa: BLE001 — never 500 a paid download
+                # …BUT NEVER SILENTLY. This swallowed the failure and served the STALE
+                # package, so a rebuild that could not run looked exactly like a rebuild
+                # that had nothing to do: the client downloaded documents again and
+                # nothing anywhere recorded why (operator, 2026-08-22). The download must
+                # still succeed — a broken rebuild is not the payer's problem — but the
+                # reason is written where the operator will find it.
+                try:
+                    db.add_update(
+                        conn, project_id,
+                        f"The package could not be rebuilt for the client's download: "
+                        f"{type(exc).__name__}: {exc}"[:400], "delivery")
+                except Exception:      # noqa: BLE001
+                    pass
     finally:
         conn.close()
     # ADR-0043: the gate above has already passed, so it is safe to hand the client

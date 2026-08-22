@@ -2564,6 +2564,12 @@ def build_delivery_zip(
         # …and how many of them had no local file to bundle. Non-zero means the client
         # is downloading a package with holes in it, which nobody was being told.
         "referenced_count": len(referenced),
+        # WHICH ONES. A count cannot be checked against anything. Naming them makes the
+        # build's own answer comparable with the live presence check — and when those two
+        # disagree, that disagreement IS the bug, instead of another round of guessing
+        # (operator, 2026-08-22, after a fourth docs-only download).
+        "referenced_names": [
+            (a.get("orig") or a.get("filename") or "?") for a in referenced],
         "checklist": checklist,
         "items": items,
         "converted": converted,

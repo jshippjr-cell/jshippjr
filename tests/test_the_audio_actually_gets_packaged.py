@@ -500,3 +500,77 @@ def test_a_lane_with_one_file_still_gets_the_campaign_name(delivery):
         conn.close()
     names = zipfile.ZipFile(os.path.join(upload_dir(), pkg["filename"])).namelist()
     assert any("ORIGINAL_" in n for n in names), names
+
+
+# ── when it still fails, it has to say WHICH and WHY ────────────────────────────────
+def test_the_build_records_which_files_it_could_not_find(delivery):
+    """A count cannot be checked against anything. After a fourth docs-only download the
+    console and the build were still trading numbers, so the build now NAMES what it
+    missed — and that list is directly comparable with the live presence check."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        db.update_delivery(conn, pid, "assets", [{
+            "label": "Mix-ready stem package", "filename": "vanished.wav",
+            "url": "/uploads/vanished.wav", "orig": "SAND CASTLE_9_Ghost.wav",
+            "kind": "audio", "at": BEFORE}])
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 1
+    assert pkg["referenced_names"] == ["SAND CASTLE_9_Ghost.wav"], (
+        "the build knows what it missed and still will not say")
+
+
+def test_the_console_names_them(delivery):
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        db.update_delivery(conn, pid, "assets", [{
+            "label": "Mix-ready stem package", "filename": "vanished.wav",
+            "url": "/uploads/vanished.wav", "orig": "SAND CASTLE_9_Ghost.wav",
+            "kind": "audio", "at": BEFORE}])
+        _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    page = c.get(f"/project/{pid}/delivery").text
+    assert "SAND CASTLE_9_Ghost.wav" in page
+    # the phrase wraps in the template, so match the half that cannot break
+    assert "not find:" in page
+
+
+def test_a_rebuild_that_throws_is_recorded_not_swallowed(delivery, monkeypatch):
+    """The download must still succeed — a broken rebuild is not the payer's problem —
+    but it swallowed the failure and served the STALE package, so a rebuild that COULD
+    NOT RUN looked exactly like one with nothing to do."""
+    from chordential_oia.web import project_routes
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, pid)
+        db.update_delivery(conn, pid, "state", "Delivered")
+        db.update_delivery(conn, pid, "download_unlocked", True)
+        db.update_delivery(conn, pid, "delivery_zip",
+                           dict(pkg, asset_count=99))     # forces "stale"
+        tok = db.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+
+    def _boom(*a, **k):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(project_routes, "_build_delivery_package", _boom)
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as anon:
+        r = anon.get(f"/project/{pid}/dl/{pkg['filename']}", params={"k": tok})
+    assert r.status_code == 200, "the client's download was broken by a failed rebuild"
+    conn = db.connect()
+    try:
+        said = " ".join((u["body"] or "") for u in db.list_updates(conn, pid))
+    finally:
+        conn.close()
+    assert "could not be rebuilt" in said and "disk on fire" in said

@@ -167,7 +167,13 @@
       <b>{{ missing_assets|length }} of {{ delivery_zip.asset_count }} file{{ 's' if delivery_zip.asset_count != 1 }}
       {{ 'is' if missing_assets|length == 1 else 'are' }} not on the server</b> — so the ZIP
       holds only the documents. Rebuilding cannot help with these; put them back below and
-      the package is rebuilt with them.</p>
+      the package is rebuilt with them.
+      {% if delivery_zip.referenced_names %}
+      <span class="muted small" style="display:block;margin-top:6px">The last build could
+        not find: {{ delivery_zip.referenced_names[:8]|join(', ') }}{%
+        if delivery_zip.referenced_names|length > 8 %} …and
+        {{ delivery_zip.referenced_names|length - 8 }} more{% endif %}.</span>
+      {% endif %}</p>
     {% else %}
     <p class="small" style="margin:8px 0;padding:9px 12px;border:1px solid #c8913f;
        border-radius:8px;background:rgba(200,145,63,.10)">
@@ -175,7 +181,16 @@
       documents. Every file is back on the server now, so press
       <b>Rebuild delivery package</b> and it will be assembled with the audio in it.
       <span class="muted">You are covered either way: the client's next download rebuilds
-      it first, so they cannot receive the empty one.</span></p>
+      it first, so they cannot receive the empty one.</span>
+      {# WHICH FILES THE BUILD ITSELF COULD NOT FIND. Named so the build's answer can be
+         compared with the live presence check above — when the two disagree, that
+         disagreement is the bug rather than the start of another guess. #}
+      {% if delivery_zip.referenced_names %}
+      <span class="muted small" style="display:block;margin-top:6px">That build could not
+        find: {{ delivery_zip.referenced_names[:8]|join(', ') }}{%
+        if delivery_zip.referenced_names|length > 8 %} …and
+        {{ delivery_zip.referenced_names|length - 8 }} more{% endif %}.</span>
+      {% endif %}</p>
     {% endif %}
     {# THE FIX, WHERE THE PROBLEM IS. Rebuild re-zips what we still have; when the files
        themselves are gone it cannot help, and the operator was left pressing it: *"im

@@ -290,6 +290,10 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
         # documents looked identical to a finished delivery on every screen.
         "asset_count": pkg.get("asset_count", 0),
         "referenced_count": pkg.get("referenced_count", 0),
+        # …and WHICH ones. Dropped here exactly as `at` was dropped when publishing
+        # copied an asset into a narrower dict — the same shape of bug twice in one
+        # delivery. A count cannot be checked against anything; the names can.
+        "referenced_names": pkg.get("referenced_names", []),
     })
     db.update_delivery(conn, project_id, "delivery_checklist", pkg["checklist"])
     return pkg
