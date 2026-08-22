@@ -313,7 +313,12 @@ def test_the_operator_is_told_the_package_is_hollow(shipped):
     assert hit, "the queue never mentions a package with nothing in it"
     c.cookies.set(*admin)
     console = c.get(f"/project/{pid}/delivery").text
-    assert "could not be put in the package" in console
+    # The wording moved with ADR-0079's amendment: the banner reads the LIVE server
+    # rather than the count stored at build time, so it now distinguishes "these files
+    # are gone" from "they are back — rebuild". This asset was never persisted, so it is
+    # the former. What the test protects — the operator is TOLD — is unchanged.
+    assert "is not on the server" in console
+    assert "gone.wav" in console, "it does not name the file that is missing"
 
 
 # ── and a way to put the missing files BACK ─────────────────────────────────────────

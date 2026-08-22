@@ -178,3 +178,62 @@ def test_unlocking_heals_a_holed_package(delivery):
     finally:
         conn.close()
     assert z["referenced_count"] == 0, "the override handed back the holed package"
+
+
+# ── the console must not report two eras at once ────────────────────────────────────
+def _console(c, pid):
+    return c.get(f"/project/{pid}/delivery").text
+
+
+def test_a_holed_build_whose_files_are_back_says_press_rebuild(delivery):
+    """The contradiction the operator hit: a red banner reading "17 of 17 files could not
+    be put in the package" over a live "missing from the server" list that was EMPTY,
+    while the client's room reported every file present. The banner was reading
+    `referenced_count` — a number stored at BUILD TIME — and the list was reading the
+    server now. One question, two eras."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    _hole_it(db, pid, referenced=4)          # the last build had holes…
+    page = _console(c, pid)                  # …but every file is on the server now
+    assert "The package was built while the audio was missing" in page
+    assert "press" in page and "Rebuild delivery package" in page
+    assert "are not on the server" not in page, (
+        "it is still claiming files are missing that are demonstrably here")
+
+
+def test_files_that_really_are_gone_are_still_named(delivery):
+    """The other half. When the bytes are genuinely absent, rebuilding cannot help and
+    the banner must say so and name them."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import forget_media
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        _build_delivery_package(conn, pid)
+        gone = (db.get_delivery(conn, pid).get("assets") or [])[0]
+        forget_media(conn, gone["filename"])
+    finally:
+        conn.close()
+    _hole_it(db, pid, referenced=4)
+    page = _console(c, pid)
+    assert "is not on the server" in page or "are not on the server" in page
+    assert gone["orig"] in page, "the operator cannot tell WHICH file to put back"
+    assert "Restore &amp; rebuild" in page
+
+
+def test_a_clean_package_says_nothing_at_all(delivery):
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    page = _console(c, pid)
+    assert "could not be put in the package" not in page
+    assert "built while the audio was missing" not in page

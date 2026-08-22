@@ -296,6 +296,46 @@ def media_durable(conn, name: str) -> bool:
     return db.media_blob_exists(conn, key)
 
 
+def rehydrate_media(conn, name: str) -> bool:
+    """Put a file back on the LOCAL DISK from wherever it actually survives.
+
+    The packager resolves assets with ``os.path.isfile`` — the disk and nothing else —
+    so a file living only in the durable DB mirror reads to it as gone, and the ZIP it
+    builds holds documents and no audio. That is precisely the state a deploy leaves
+    behind, and it is what produced *"17 of 17 files could not be put in the package —
+    the audio is not on the server"* on a project whose files were all still there
+    (operator, 2026-08-22). Two surfaces were asking two different questions about the
+    same seventeen files: ``media_present`` asks both places, the packager asked one.
+
+    Rather than teach the packager about the database — it is the engine layer and has no
+    connection — the bytes are restored before it runs, which also repairs the disk copy
+    for every later read. Same move ``serve_upload`` already makes on a cache miss.
+
+    Returns True when the file is on disk afterwards.
+    """
+    key = os.path.basename((name or "").strip())
+    if not key:
+        return False
+    store = get_object_store(upload_dir())
+    try:
+        if store.local_path(key):
+            return True                     # already there; nothing to do
+    except Exception:                       # noqa: BLE001 — a probe may never raise
+        pass
+    blob = db.get_media_blob(conn, key)
+    if blob is None:
+        return False                        # genuinely gone from both places
+    data, ctype = blob
+    try:
+        store.put(key, data, ctype or "")
+    except Exception:                       # noqa: BLE001 — best-effort, like every seam
+        return False
+    try:
+        return bool(store.local_path(key))
+    except Exception:                       # noqa: BLE001
+        return False
+
+
 def forget_media(conn, name: str) -> None:
     """Remove an upload from BOTH copies. The one door out, mirroring
     ``_persist_upload`` as the one door in — deleting the file off the disk while the
