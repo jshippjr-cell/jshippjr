@@ -177,7 +177,7 @@ def delivery_download(request: Request, project_id: int, name: str, k: str = "",
         # many times they try: *"i unzip the file, and i see this... no audio files just
         # docs"* (operator, 2026-08-20). Cheap, idempotent, and the last chance to get
         # it right before it is in their hands.
-        if (name or "").lower().endswith(".zip") and _package_is_stale(delivery):
+        if (name or "").lower().endswith(".zip") and _package_is_stale(delivery, conn):
             try:
                 _build_delivery_package(conn, project_id)
                 delivery = db.get_delivery(conn, project_id)
@@ -250,7 +250,9 @@ def delivery_unlock(project_id: int, unlock: str = Form("1")):
     try:
         db.update_delivery(conn, project_id, "download_unlocked",
                            True if unlock == "1" else None)
-        if unlock == "1" and not (db.get_delivery(conn, project_id).get("delivery_zip")):
+        _d = db.get_delivery(conn, project_id)
+        if unlock == "1" and (not _d.get("delivery_zip")
+                              or _package_is_stale(_d, conn)):
             try:
                 _build_delivery_package(conn, project_id)
             except Exception:      # noqa: BLE001 — the unlock itself must still stand

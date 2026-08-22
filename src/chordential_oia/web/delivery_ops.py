@@ -295,13 +295,25 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     return pkg
 
 
-def _package_is_stale(delivery: dict) -> bool:
-    """Does the built ZIP predate the work it is supposed to contain?
+def _package_is_stale(delivery: dict, conn=None) -> bool:
+    """Does the built ZIP predate — or fail to contain — the work it is supposed to hold?
 
     Compares the newest delivered thing — an asset, a version — against the package's
     own ``built_at``. Anything landing after the build is simply not in the file the
     client downloads, and nothing said so: the manifest cheerfully listed it as
     "Delivered · referenced (not bundled)".
+
+    **A package with HOLES is stale too, the moment its missing bytes are back.** A build
+    made while the ephemeral disk had eaten the audio produces a docs-only ZIP with
+    ``referenced_count > 0`` — and it is not "old", so nothing rebuilt it, while the
+    client's room said *"Chordential has been told, and you'll have it shortly."* That
+    promise had nothing behind it: *"the 1st test i was able to download, it had the text
+    files but no audio.. we are re testing to see if the audio gets packaged correctly"*
+    (operator, 2026-08-22). Now that the files survive a deploy (ADR-0084), the rebuild
+    that makes the sentence true can actually fire.
+
+    Checked against the bytes, and only with a ``conn`` to check with: if the audio is
+    STILL missing a rebuild changes nothing, and saying stale would loop forever.
     """
     zip_obj = delivery.get("delivery_zip") or {}
     built = (zip_obj.get("built_at") or "").strip()
@@ -309,6 +321,12 @@ def _package_is_stale(delivery: dict) -> bool:
         return True                       # never built at all
     if not built:
         return True                       # unknown age → assume stale
+    if conn is not None and int(zip_obj.get("referenced_count") or 0) > 0:
+        from .uploads import media_present
+        names = [(a.get("filename") or "") for a in (delivery.get("assets") or [])
+                 if (a.get("filename") or "")]
+        if names and all(media_present(conn, n) for n in names):
+            return True                   # holes, and the bytes to fill them are here
     newest = ""
     for a in (delivery.get("assets") or []):
         newest = max(newest, (a.get("at") or a.get("created_at") or ""))
@@ -336,7 +354,7 @@ def _maybe_finalize_delivery(conn, project_id: int) -> bool:
         # reached Delivered — and every asset published afterwards stayed outside it. A
         # client paid and downloaded a package with no audio in it (reported live,
         # 2026-08-20). Cheap to check, and the rebuild is idempotent.
-        if _package_is_stale(delivery):
+        if _package_is_stale(delivery, conn):
             _build_delivery_package(conn, project_id)
         return True
     if not _ready_to_deliver(delivery, project):
