@@ -1225,10 +1225,16 @@
        at all — *"I clicked reload to reload and settle my balance and it took me no
        where"* (operator, 2026-08-21). What you owe and what you may take are independent
        facts and are now said independently. ── #}
-    {% if a.download_unlocked and a.delivery_zip and a.delivery_zip.referenced_count %}
-    {# The package built and the audio is not in it. Offering "Download everything" for a
-       ZIP of documents is the one thing worse than offering nothing (reported live,
-       2026-08-20: *"i unzip the file, and i see this... no audio files just docs"*). #}
+    {% if a.download_unlocked and a.delivery_zip and a.delivery_zip.referenced_count
+          and not a.package_recoverable %}
+    {# The package built and the audio is not in it, AND the files are not on the server
+       to fix it with. Offering "Download everything" for a ZIP of documents is the one
+       thing worse than offering nothing (2026-08-20: *"i unzip the file, and i see
+       this... no audio files just docs"*).
+       Withholding it when the audio IS recoverable is worse still, and was: the rebuild
+       that fills the holes runs inside the download route, so hiding the link left the
+       client with no way to trigger it — *"THERE IS NO WHERE INSIDE THE ROOM THAT ALLOWS
+       FOR ME TO DOWNLOAD"* (2026-08-22, fifth report). That case now gets the link. #}
     <span class="fineprint">Your package is being re-assembled — some of the audio did not
       make it into the last build. Chordential has been told, and you'll have it shortly.</span>
     {% elif a.download_unlocked and a.delivery_zip %}

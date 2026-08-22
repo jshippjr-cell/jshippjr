@@ -362,6 +362,18 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         "invoice_balance": balance,
         "invoice_block": invoice_block,
         "delivery_zip": delivery.get("delivery_zip") or None,
+        # CAN THE HOLES STILL BE FILLED? A package built while the audio was missing must
+        # not silently become a ZIP of paperwork — but withholding the download when the
+        # files are BACK is worse: the rebuild that fixes it lives in the download route,
+        # so hiding the link is a deadlock the client cannot break from inside the room.
+        # Reported five times, finally in plain terms: *"THERE IS NO WHERE INSIDE THE ROOM
+        # THAT ALLOWS FOR ME TO DOWNLOAD"* (operator, 2026-08-22). Measured per file, so
+        # the answer moves when the bytes come back.
+        "package_recoverable": bool(
+            (delivery.get("delivery_zip") or {}).get("referenced_count")
+            and (delivery.get("assets") or [])
+            and all(media_present(conn, (a.get("filename") or ""))
+                    for a in (delivery.get("assets") or []) if a.get("filename"))),
         # The room's Brief layer renders the REAL creative brief (the same
         # effective brief the console shows), not a restatement of the title.
         "brief": seed_brief(

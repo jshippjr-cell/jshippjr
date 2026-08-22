@@ -114,7 +114,29 @@ def test_a_stale_package_no_longer_swallows_the_balance(room):
     assert f"/project/{pid}/pay" in block, (
         "the client owes money and has no way to pay it — the package note took the page")
     assert "Pay $4200.00" in block
-    assert "re-assembled" in block, "the honest package note was lost instead"
+    # …and the FILES half is still answered beside it. Since ADR-0087's amendment this
+    # package is RECOVERABLE (its bytes are on the server), so the files half is the
+    # download link rather than a warning — the rebuild runs inside that route. What this
+    # test protects is that both halves are present, not which sentence the second is.
+    assert "Download everything" in block, "the files half of the payoff vanished"
+
+
+def test_an_unrecoverable_package_says_so_beside_the_balance(room):
+    """The other half: when the audio is genuinely gone, the client gets the honest note
+    AND the balance — never the note alone."""
+    from chordential_oia.web.uploads import forget_media
+    c, db, pid, tok = room
+    _stale_package(db, pid)
+    conn = db.connect()
+    try:
+        for a in (db.get_delivery(conn, pid).get("assets") or []):
+            forget_media(conn, a["filename"])
+    finally:
+        conn.close()
+    block = _payoff(c, pid, tok)
+    assert "re-assembled" in block
+    assert "Download everything" not in block
+    assert f"/project/{pid}/pay" in block
 
 
 def test_a_healthy_package_still_offers_the_download(room):

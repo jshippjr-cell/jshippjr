@@ -291,3 +291,84 @@ def test_the_banner_says_they_are_covered(delivery):
     # than a phrase that only exists in the source.
     assert "You are covered either way" in page
     assert "cannot receive the empty one" in page
+
+
+# ── the deadlock: no link, so the heal could never fire ─────────────────────────────
+def _client_payoff(pid, tok):
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as anon:
+        page = anon.get(f"/room/{pid}", params={"k": tok}).text
+    i = page.index('class="payoff"')
+    return page[i:i + 1600]
+
+
+def _delivered_with_holes(db, pid, *, recoverable):
+    """A package built while the audio was missing. ``recoverable`` decides whether the
+    bytes are back on the server now."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import forget_media
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, pid)
+        z = dict(pkg)
+        z["referenced_count"] = 4
+        db.update_delivery(conn, pid, "delivery_zip", z)
+        db.update_delivery(conn, pid, "state", "Delivered")
+        db.update_delivery(conn, pid, "download_unlocked", True)
+        if not recoverable:
+            for a in (db.get_delivery(conn, pid).get("assets") or []):
+                forget_media(conn, a["filename"])
+        return db.ensure_project_share_token(conn, pid), z["filename"]
+    finally:
+        conn.close()
+
+
+def test_a_recoverable_package_still_gives_the_client_the_download(delivery):
+    """THE deadlock, reported five times: *"THERE IS NO WHERE INSIDE THE ROOM THAT ALLOWS
+    FOR ME TO DOWNLOAD"*.
+
+    A holed package replaced the download with "being re-assembled" — and the rebuild
+    that fills the holes runs inside the DOWNLOAD ROUTE. Hiding the link therefore
+    removed the only thing that could fix it. The client could not break out from inside
+    the room, and the operator could not see why.
+    """
+    _c, db, pid = delivery
+    tok, _zip = _delivered_with_holes(db, pid, recoverable=True)
+    block = _client_payoff(pid, tok)
+    assert "Download everything" in block, "the client still has no way to download"
+    assert "being re-assembled" not in block
+
+
+def test_clicking_it_hands_them_the_audio(delivery):
+    """And the link is not decorative: the download rebuilds first, so what arrives has
+    the audio in it."""
+    import io
+    import re as _re
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    _c, db, pid = delivery
+    tok, _zip = _delivered_with_holes(db, pid, recoverable=True)
+    block = _client_payoff(pid, tok)
+    m = _re.search(r'href="(/project/\d+/dl/[^"]+)"', block)
+    assert m, "no download URL rendered"
+    with TestClient(app_mod.app) as anon:
+        r = anon.get(m.group(1).replace("&amp;", "&"))
+    assert r.status_code == 200
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    assert len([n for n in names if n.lower().endswith((".wav", ".mp3"))]) == 5, names
+    conn = db.connect()
+    try:
+        assert db.get_delivery(conn, pid)["delivery_zip"]["referenced_count"] == 0
+    finally:
+        conn.close()
+
+
+def test_an_unrecoverable_package_is_still_withheld(delivery):
+    """The other half stands. When the audio is genuinely gone, a ZIP of paperwork
+    labelled "Download everything" is worse than offering nothing."""
+    _c, db, pid = delivery
+    tok, _zip = _delivered_with_holes(db, pid, recoverable=False)
+    block = _client_payoff(pid, tok)
+    assert "being re-assembled" in block
+    assert "Download everything" not in block
