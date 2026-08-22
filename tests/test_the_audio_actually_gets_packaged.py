@@ -237,3 +237,57 @@ def test_a_clean_package_says_nothing_at_all(delivery):
     page = _console(c, pid)
     assert "could not be put in the package" not in page
     assert "built while the audio was missing" not in page
+
+
+def test_the_client_download_heals_a_holed_package_by_itself(delivery):
+    """Asked directly: *"why is this coming up, when the client approve 2 more audio
+    stems… at very least there should be 2 audio files in the delivery package"*.
+
+    The banner reports the LAST build, so it can be alarming about a package that is
+    already recoverable. What matters is that the client cannot receive the empty one:
+    the download route rebuilds a stale package before serving it, so the audio reaches
+    them whether or not the operator presses anything.
+    """
+    import io
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, pid)
+        z = dict(pkg)
+        z["referenced_count"] = 4                 # built while the audio was missing
+        db.update_delivery(conn, pid, "delivery_zip", z)
+        db.update_delivery(conn, pid, "state", "Delivered")
+        db.update_delivery(conn, pid, "download_unlocked", True)
+        tok = db.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    with TestClient(app_mod.app) as anon:
+        r = anon.get(f"/project/{pid}/dl/{z['filename']}", params={"k": tok})
+    assert r.status_code == 200
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    audio = [n for n in names if n.lower().endswith((".wav", ".mp3"))]
+    assert len(audio) == 5, f"the client still received a package with no audio: {names}"
+    conn = db.connect()
+    try:
+        assert db.get_delivery(conn, pid)["delivery_zip"]["referenced_count"] == 0
+    finally:
+        conn.close()
+
+
+def test_the_banner_says_they_are_covered(delivery):
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    _hole_it(db, pid, referenced=4)
+    page = _console(c, pid)
+    # The sentence wraps in the template, so match either side of the line break rather
+    # than a phrase that only exists in the source.
+    assert "You are covered either way" in page
+    assert "cannot receive the empty one" in page
