@@ -2948,6 +2948,7 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
 
     Publishing is also a HAND-OFF: the editor's cutdowns are made from the mixer's
     finished mix (ADR-0075), so the mix landing is the moment they are up."""
+    from datetime import datetime as _dt, timezone as _tz
     conn = db.connect()
     invite = None
     back = None
@@ -2998,9 +2999,19 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             # Carry the ORIGINAL name through. Without it a published deliverable
             # downloads as `proj7-0bb762d8b1.wav`, and the next person in the chain has
             # to open twelve of those to find out which is the kick.
+            # CARRY THE TIMESTAMP. Publishing built a fresh dict and dropped `at`, so a
+            # newly published file had NO DATE — and `_package_is_stale` compares the
+            # newest asset date against the package's `built_at`. With the new files
+            # dateless and the old ones older than the build, the package read as FRESH,
+            # nothing rebuilt, and the client downloaded the previous ZIP: *"the download
+            # did not have the two new audio files"* (operator, 2026-08-22). Stamped now
+            # if the pending record somehow lacks one, because "no date" is the value
+            # that broke it.
             assets.append({"label": hit.get("label"), "url": hit.get("url"),
                            "filename": hit.get("filename"), "orig": hit.get("orig") or "",
-                           "kind": hit.get("kind")})
+                           "kind": hit.get("kind"),
+                           "at": hit.get("at") or _dt.now(_tz.utc).isoformat(),
+                           "by": hit.get("by") or ""})
             db.update_delivery(conn, project_id, "assets", assets)
             db.add_update(conn, project_id,
                           f"Published '{hit.get('label')}' · ready for client sign-off.")

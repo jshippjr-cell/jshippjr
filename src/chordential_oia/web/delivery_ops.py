@@ -327,6 +327,13 @@ def _package_is_stale(delivery: dict, conn=None) -> bool:
                  if (a.get("filename") or "")]
         if names and all(media_present(conn, n) for n in names):
             return True                   # holes, and the bytes to fill them are here
+    # THE COUNT, FIRST AND ALWAYS. This was only consulted when NO asset carried a
+    # timestamp, so a package that had seen 2 assets and a delivery now holding 4 read as
+    # fresh the moment any one of them had a date. Publishing dropped `at`, which put
+    # exactly that mix on the board and shipped the previous ZIP to the client. A
+    # different number of files is stale on its own — no dates required.
+    if len(delivery.get("assets") or []) != int(zip_obj.get("asset_count") or -1):
+        return True
     newest = ""
     for a in (delivery.get("assets") or []):
         newest = max(newest, (a.get("at") or a.get("created_at") or ""))

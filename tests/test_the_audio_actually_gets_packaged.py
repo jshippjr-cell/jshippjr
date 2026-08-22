@@ -372,3 +372,131 @@ def test_an_unrecoverable_package_is_still_withheld(delivery):
     block = _client_payoff(pid, tok)
     assert "being re-assembled" in block
     assert "Download everything" not in block
+
+
+# ── two new stems, published into a lane that already shipped ────────────────────────
+def _lane_of(db, pid):
+    from chordential_oia.web.delivery_ops import scoped_signoff
+    conn = db.connect()
+    try:
+        lanes, _r, _a = scoped_signoff(db.get_project(conn, pid),
+                                       db.get_delivery(conn, pid))
+        return next(L["asset"] for L in lanes if not L.get("from_version"))
+    finally:
+        conn.close()
+
+
+def _ship_then_publish_two_more(c, db, pid):
+    """The operator's sequence: a package already delivered, then two more stems
+    published into a lane that is already in it."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import _persist_upload
+    lane = _lane_of(db, pid)
+    conn = db.connect()
+    try:
+        assets = [{"label": lane, "url": f"/uploads/o{i}.wav", "filename": f"o{i}.wav",
+                   "at": BEFORE, "orig": n, "kind": "audio"}
+                  for i, n in enumerate(("SAND CASTLE_1_Vocal.wav",
+                                         "SAND CASTLE_2_Drums.wav"))]
+        for a in assets:
+            _persist_upload(conn, a["filename"], b"RIFF" + b"\x00" * 5000, "audio/wav")
+        db.update_delivery(conn, pid, "assets", assets)
+        for a in assets:
+            db.set_asset_approval(conn, pid, a["filename"], status="Approved",
+                                  by="Marta", email="m@x.com", version="1")
+        db.update_delivery(conn, pid, "state", "Delivered")
+        db.update_delivery(conn, pid, "download_unlocked", True)
+        _build_delivery_package(conn, pid)
+        pend = []
+        for i, n in enumerate(("SAND CASTLE_5_Guitar.wav", "SAND CASTLE_6_Piano.wav")):
+            fn = f"n{i}.wav"
+            _persist_upload(conn, fn, b"RIFF" + b"\x00" * 7000, "audio/wav")
+            pend.append({"label": lane, "url": f"/uploads/{fn}", "filename": fn,
+                         "orig": n, "kind": "audio", "by": "Ada",
+                         "at": "2026-08-22T10:00:00+00:00"})
+        db.update_delivery(conn, pid, "pending_assets", pend)
+        tok = db.ensure_project_share_token(conn, pid)
+        zipname = db.get_delivery(conn, pid)["delivery_zip"]["filename"]
+    finally:
+        conn.close()
+    for i in range(2):
+        c.post(f"/project/{pid}/delivery/asset/publish",
+               data={"filename": f"n{i}.wav", "action": "publish", "origin": "room"},
+               headers={"X-Requested-With": "fetch"})
+    return tok, zipname
+
+
+def test_publishing_carries_the_timestamp(delivery):
+    """The cause. Publishing built a fresh dict and dropped `at`, so a newly published
+    file had NO DATE — and staleness compares the newest asset date against the package's
+    `built_at`. Dateless new files plus older dated ones read as FRESH."""
+    c, db, pid = delivery
+    _ship_then_publish_two_more(c, db, pid)
+    conn = db.connect()
+    try:
+        assets = db.get_delivery(conn, pid)["assets"]
+    finally:
+        conn.close()
+    assert len(assets) == 4
+    assert all((a.get("at") or "").strip() for a in assets), (
+        "a published asset still has no timestamp")
+
+
+def test_a_different_number_of_files_is_stale_on_its_own(delivery):
+    """Belt and braces: the count check only ran when NO asset had a date, so one dated
+    asset was enough to hide three new ones. It is now asked first, always."""
+    from chordential_oia.web.delivery_ops import _package_is_stale
+    c, db, pid = delivery
+    _ship_then_publish_two_more(c, db, pid)
+    conn = db.connect()
+    try:
+        d = db.get_delivery(conn, pid)
+        d["delivery_zip"] = dict(d["delivery_zip"], built_at="2099-01-01T00:00:00+00:00")
+        assert _package_is_stale(d, conn) is True, (
+            "4 assets against a package that saw 2 reads as fresh")
+    finally:
+        conn.close()
+
+
+def test_the_client_downloads_the_two_new_stems_by_name(delivery):
+    """THE report: *"the download did not have the two new audio files"*.
+
+    Both halves had to be fixed for this to pass. The package has to REBUILD (it read as
+    fresh), and the files have to be DISTINGUISHABLE — naming every file in a lane after
+    the lane produced `CAMPAIGN_Lane.wav`, `-2`, `-3`, `-4`, which is one name four times
+    with a counter. All four were in the ZIP the whole time and none of them could be
+    told apart.
+    """
+    import io
+    c, db, pid = delivery
+    tok, zipname = _ship_then_publish_two_more(c, db, pid)
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    conn = db.connect()
+    try:
+        zipname = db.get_delivery(conn, pid)["delivery_zip"]["filename"]
+    finally:
+        conn.close()
+    with TestClient(app_mod.app) as anon:
+        r = anon.get(f"/project/{pid}/dl/{zipname}", params={"k": tok})
+    assert r.status_code == 200
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    for want in ("SAND CASTLE_5_Guitar.wav", "SAND CASTLE_6_Piano.wav"):
+        assert any(n.endswith(want) for n in names), f"{want} is not in the package: {names}"
+    for want in ("SAND CASTLE_1_Vocal.wav", "SAND CASTLE_2_Drums.wav"):
+        assert any(n.endswith(want) for n in names), f"{want} was lost: {names}"
+
+
+def test_a_lane_with_one_file_still_gets_the_campaign_name(delivery):
+    """The rename is right when a lane holds ONE file — `CAMPAIGN_Instrumental.wav` beats
+    a random upload id. It only had to stop when the lane became a folder."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import upload_dir
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, pid)   # fixture: one file per lane
+    finally:
+        conn.close()
+    names = zipfile.ZipFile(os.path.join(upload_dir(), pkg["filename"])).namelist()
+    assert any("ORIGINAL_" in n for n in names), names

@@ -2411,6 +2411,18 @@ def build_delivery_zip(
     # HTML docs can reference each bundled audio by its relative in-ZIP path before
     # we write the bytes. Mirrors the asset-write loop's folder + uniqueness logic.
     asset_arcs: List[tuple] = []   # (asset, src, arc) for the writable assets
+    # HOW MANY FILES SHARE THIS LANE. A lane holds a folder now (ADR-0074): ten stems
+    # under "Mix-ready stem package". Naming each one after the LANE turns them into
+    # `CAMPAIGN_Mix_ready_stem_package.wav`, `-2`, `-3` … `-10`, which is the same file
+    # name ten times with a counter — the client cannot tell the kick from the vocal, and
+    # a re-delivery looks identical to the one before it: *"the download did not have the
+    # two new audio files"* (operator, 2026-08-22), when in fact all four were in there
+    # under one name. Where a lane holds more than one file, the CREATOR's own filename
+    # is the meaningful one and is kept.
+    _per_label: dict = {}
+    for _a in assets:
+        _k = (_a.get("label") or "").strip().lower()
+        _per_label[_k] = _per_label.get(_k, 0) + 1
     for asset in assets:
         fname = os.path.basename((asset.get("filename") or "").strip())
         src = os.path.join(upload_dir, fname) if fname else ""
@@ -2420,9 +2432,16 @@ def build_delivery_zip(
         folder = asset_folder(asset)
         # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
         # the package is self-describing. Falls back to the original name when unlabeled.
-        nice = (deliverable_filename(_val(project, "need"), asset.get("label") or "",
-                                     os.path.splitext(fname)[1])
-                if (asset.get("label") or "").strip() else fname)
+        _label = (asset.get("label") or "").strip()
+        _shared = _per_label.get(_label.lower(), 0) > 1
+        if _label and not _shared:
+            nice = deliverable_filename(_val(project, "need"), _label,
+                                        os.path.splitext(fname)[1])
+        else:
+            # Keep what the creator called it — that is the only thing that tells a kick
+            # from a vocal. Falls back to the stored name when there is no original.
+            _orig = os.path.basename((asset.get("orig") or "").strip())
+            nice = _orig or fname
         arc = _unique(f"{folder}/{nice}")
         asset_arcs.append((asset, src, arc))
         items.append(asset.get("label") or fname)
