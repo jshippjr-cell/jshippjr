@@ -639,3 +639,70 @@ def test_without_a_reader_it_still_reports_honestly(delivery):
         conn.close()
     assert pkg["referenced_count"] == 4
     assert pkg["referenced_names"], "it cannot say which files it could not find"
+
+
+# ── and whether any of it survives the next deploy ──────────────────────────────────
+def test_the_boot_line_stops_claiming_sqlite_survives_a_deploy(tmp_path, monkeypatch):
+    """It said "files at or under N MB survive a deploy" whatever the database was. A
+    SQLite file inside the container is wiped by the same rebuild that wipes the uploads,
+    so the sentence was FALSE in exactly the configuration where someone would lean on
+    it — and a fresh upload could vanish between being made and being packaged:
+    *"not even the fresh 2 new ones i just pushed through"* (operator, 2026-08-22).
+    """
+    import importlib
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "here.db"))
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "up"))
+    monkeypatch.delenv("CHORDENTIAL_STORAGE", raising=False)
+    for m in ("db", "uploads"):
+        importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
+    from chordential_oia.web.uploads import boot_line, storage_warning
+    line = boot_line()
+    assert "survive a deploy" not in line or "NOTHING here survives" in line
+    assert "NOTHING here survives a deploy" in line
+    assert storage_warning(), "the surface is told nothing"
+
+
+def test_a_persistent_sqlite_path_is_not_maligned(tmp_path, monkeypatch):
+    """The warning has to be about WHERE the file is, not about SQLite. A database on a
+    persistent disk is a real durable mirror and must not be called broken."""
+    from chordential_oia.web import db as dbm
+    monkeypatch.setenv("CHORDENTIAL_DB", "/var/data/chordential.db")
+    assert dbm.sqlite_is_durable() is True
+    monkeypatch.setenv("CHORDENTIAL_DB", "/app/chordential.db")
+    assert dbm.sqlite_is_durable() is False
+    monkeypatch.setenv("CHORDENTIAL_DB", "postgresql://x/y")
+    assert dbm.sqlite_path() == "" and dbm.sqlite_is_durable() is False
+
+
+def test_the_console_says_it_where_the_operator_is_looking(delivery):
+    c, _db, pid = delivery
+    page = c.get(f"/project/{pid}/delivery").text
+    assert "Nothing here is backed up." in page
+    assert "on the same disk as the uploads" in page
+
+
+def test_the_ROOM_says_it_too_because_that_is_where_the_work_happens(delivery):
+    """*"you keep referencing the delivery console, but im testing things in the room"*
+    (operator, 2026-08-22). A warning on a page nobody is on is not a warning.
+
+    It first landed INSIDE the client-only sign-off block, where the studio never renders
+    at all — so it was invisible to the one role that can act on it."""
+    c, db, pid = delivery
+    studio = c.get(f"/room/{pid}").text
+    assert "Nothing here is backed up." in studio
+
+
+def test_the_client_is_not_shown_our_storage_problem(delivery):
+    """Subtracted by room.CAPS. The buyer can do nothing with this but worry."""
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import app as app_mod
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        tok = db.ensure_project_share_token(conn, pid)
+    finally:
+        conn.close()
+    with TestClient(app_mod.app) as anon:
+        page = anon.get(f"/room/{pid}", params={"k": tok}).text
+    assert "Nothing here is backed up." not in page
+    assert "backed up" not in page

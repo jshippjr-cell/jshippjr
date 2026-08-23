@@ -42,7 +42,7 @@ from .delivery_ops import (
 from .shell import render
 from .uploads import (
     _AUDIO_EXTS, _persist_upload, _read_capped,
-    _store_pending_submission, media_durable, media_present,
+    _store_pending_submission, media_durable, media_present, storage_warning,
 )
 
 router = APIRouter(tags=["creator"])
@@ -362,6 +362,11 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         "invoice_balance": balance,
         "invoice_block": invoice_block,
         "delivery_zip": delivery.get("delivery_zip") or None,
+        # WILL ANY OF THIS SURVIVE THE NEXT DEPLOY. Said in THE ROOM, because that is
+        # where the work is actually done: *"you keep referencing the delivery console,
+        # but im testing things in the room"* (operator, 2026-08-22). Subtracted for the
+        # client by `room.CAPS` — our infrastructure is not the buyer's business.
+        "storage_warn": storage_warning(),
         # CAN THE HOLES STILL BE FILLED? A package built while the audio was missing must
         # not silently become a ZIP of paperwork — but withholding the download when the
         # files are BACK is worse: the rebuild that fixes it lives in the download route,

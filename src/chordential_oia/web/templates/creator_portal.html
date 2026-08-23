@@ -1094,6 +1094,18 @@
      asset with Approve / Request changes, and, once they are all signed off, the
      balance and the download. Same routes the delivery portal posts to; one
      derivation of the list (`delivery_ops.scoped_signoff`). ── #}
+  {# NOTHING HERE IS BACKED UP. In the ROOM, because this is where the work is done and
+     where the loss is noticed — a file can be uploaded, published, approved and packaged
+     inside one sitting and be gone from the next, which from here looks exactly like a
+     packager that does not work: *"you keep referencing the delivery console, but im
+     testing things in the room"* (operator, 2026-08-22). Studio only (room.CAPS subtracts
+     it): the buyer and the creator can do nothing with this but worry. #}
+  {% if a.storage_warn %}
+  <p class="fineprint" style="margin:12px 0 0;padding:10px 12px;border:1px solid #c0553f;
+     border-radius:10px;background:rgba(192,85,63,.10)">
+    <b>Nothing here is backed up.</b> {{ a.storage_warn }}</p>
+  {% endif %}
+
   {% if 'sign_off_asset' in (caps|default([])) and a.creative_lock and a.signoff %}
   <h3 style="margin-top:18px">Sign off your deliverables</h3>
   <p class="fineprint so-count" style="margin:0 0 8px">{{ a.signoff_rollup.approved }} of
@@ -1181,9 +1193,9 @@
   </div>
   {% endfor %}
 
-  {# THE PAYOFF. What stands between them and their files, said plainly. #}
   {% set _notice = pay_notice(request.query_params.get('pay')) %}
   {% if _notice %}<p class="pay-notice">{{ _notice }}</p>{% endif %}
+
   {# THE PAYOFF. What stands between them and their files, said plainly.
 
      TWO FACTS, NOT ONE CHAIN. This was a single {% if %}/{% elif %} ladder, so the

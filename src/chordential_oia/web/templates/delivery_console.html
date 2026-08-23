@@ -603,6 +603,14 @@
        is precisely why this exists — a fifth guess was worth less than one measurement.
        It compares what is STORED against what the client's own sign-off list renders, and
        names anything that is in one and not the other. ── #}
+    {# WILL ANY OF THIS SURVIVE THE NEXT DEPLOY. Said on the screen, not only in a boot
+       log: a file uploaded, approved and packaged inside one sitting can be gone from the
+       next, and from here that is indistinguishable from a packager that does not work. #}
+    {% if storage_warn %}
+    <p class="small" style="margin:8px 0;padding:9px 12px;border:1px solid #c0553f;
+       border-radius:8px;background:rgba(192,85,63,.09)"><b>Nothing here is backed up.</b>
+      {{ storage_warn }}</p>
+    {% endif %}
     {% if visibility %}
     <h3 class="small muted" style="margin:16px 0 4px;text-transform:uppercase;letter-spacing:.6px">What the client can see</h3>
     {% if visibility.hidden %}

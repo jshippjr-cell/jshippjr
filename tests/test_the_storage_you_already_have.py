@@ -242,9 +242,23 @@ def test_the_boot_line_names_the_ceiling(studio):
     was actually eating files."""
     _app, _db, uploads = studio
     line = uploads.boot_line()
-    assert "mirrored into" in line and "MB" in line
-    assert "survive a deploy" in line
+    assert "mirrored into" in line
     assert "before the Postgres cutover" not in line, "the stale advice is back"
+    # This fixture's SQLite file sits beside the uploads, so the ceiling is beside the
+    # point — the mirror dies with the disk. Naming a survivable size there was the
+    # false promise fixed on 2026-08-22; what it must do is say NOTHING survives.
+    assert "NOTHING here survives a deploy" in line
+
+
+def test_the_ceiling_is_named_when_the_mirror_really_is_durable(studio, monkeypatch):
+    """The other half: on Postgres the mirror outlives the container, so the MB ceiling
+    is the number that matters and must still be stated."""
+    _app, db, uploads = studio
+    monkeypatch.setattr(db, "is_postgres", lambda conn: True)
+    line = uploads.boot_line()
+    assert "mirrored into Postgres" in line and "MB" in line
+    assert "survive a deploy" in line
+    assert "NOTHING here survives" not in line
 
 
 def test_a_disabled_mirror_says_so_loudly(studio, monkeypatch):

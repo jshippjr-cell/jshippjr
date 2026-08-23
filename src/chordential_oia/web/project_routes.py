@@ -661,6 +661,13 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
     scoped_list, scoped_rollup, assets_with_approval = scoped_signoff(row, delivery)
     # WHERE DID MY PUSH GO. Measured, not asserted (ADR-0088).
     visibility = client_visibility(row, delivery)
+    # …AND WILL ANYTHING SURVIVE THE NEXT DEPLOY. The boot line knows; nobody reads logs
+    # while testing a delivery. On a box where the mirror is a SQLite file beside the
+    # uploads, a file can be uploaded, approved and packaged inside one sitting and be
+    # gone from the next — which is indistinguishable, from the console, from a packager
+    # that does not work.
+    from .uploads import storage_warning
+    storage_warn = storage_warning()
     assets_for_approval = list(delivery.get("assets") or [])
 
     current_n = int(current["n"]) if current else 0
@@ -821,6 +828,7 @@ def _delivery_view(conn, project_id: int, selected_v=None, client_view: bool = F
         # per-asset approval controls on the uploaded ones, + an N-of-M rollup.
         "scoped_deliverables": scoped_list,
         "visibility": visibility,
+        "storage_warn": storage_warn,
         "scoped_rollup": scoped_rollup,
         "versions": versions,
         "current_version": current,

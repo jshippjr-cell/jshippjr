@@ -6378,6 +6378,31 @@ def media_blob_size(conn, name: str) -> Optional[int]:
     return None if row is None else int(row["size"] or 0)
 
 
+def sqlite_path() -> str:
+    """Where the SQLite file lives ("" when the DB is Postgres).
+
+    Needed to answer a question the boot line was ANSWERING WRONGLY: whether the mirror
+    survives a deploy. The mirror is only as durable as the database holding it, and a
+    SQLite file inside the container is wiped by exactly the same rebuild that wipes the
+    uploads — so "files under N MB survive a deploy" was false in precisely the setup
+    where somebody would rely on it.
+    """
+    path = os.environ.get("CHORDENTIAL_DB", DEFAULT_DB_PATH) or DEFAULT_DB_PATH
+    return "" if _is_pg_url(path) else os.path.abspath(path)
+
+
+#: Paths a deploy does NOT rebuild. Render's persistent disks mount under /var/data;
+#: anything else on that box is replaced with the container.
+_PERSISTENT_PREFIXES = ("/var/data", "/data", "/mnt/data")
+
+
+def sqlite_is_durable() -> bool:
+    """Does the SQLite file sit somewhere a deploy will not replace? False for Postgres
+    callers too — they should ask :func:`is_postgres` instead."""
+    path = sqlite_path()
+    return bool(path) and path.startswith(_PERSISTENT_PREFIXES)
+
+
 def is_postgres(conn) -> bool:
     """Is this connection talking to Postgres? The mirror's ceiling depends on it
     (``uploads.mirror_cap``), because a 400 MB blob is routine for Postgres and

@@ -239,6 +239,10 @@ def room_view(conn, db, project_id: int, role: str, *,
         room["captures"] = []
     if "see_deliverable_specs" not in allowed:
         room["deliverables"] = []
+    if "publish" not in allowed:
+        # Whether OUR storage keeps files is a studio problem, not the buyer's and not
+        # the creator's. They would be able to do nothing with it but worry.
+        room["storage_warn"] = ""
     if "see_invoice" not in allowed:
         # A creator has no business with the buyer's balance, and the package is not
         # theirs to hand out.

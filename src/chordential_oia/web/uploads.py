@@ -246,9 +246,43 @@ def boot_line() -> str:
     if cap <= 0:
         return (f"[storage] WARNING: local disk at {upload_dir()} and the database mirror "
                 f"is DISABLED ({MIRROR_MB_ENV}=0) — no upload survives a deploy.")
+    # THE MIRROR IS ONLY AS DURABLE AS THE DATABASE HOLDING IT. This said "files at or
+    # under N MB survive a deploy" whatever the database was — and a SQLite file inside
+    # the container is wiped by the same rebuild that wipes the uploads. So the sentence
+    # was FALSE in exactly the configuration where someone would lean on it, and a fresh
+    # upload could vanish between being made and being packaged (operator, 2026-08-22:
+    # *"not even the fresh 2 new ones i just pushed through"*).
+    if kind == "SQLite" and not db.sqlite_is_durable():
+        return (f"[storage] WARNING: local disk at {upload_dir()}, mirrored into a SQLite "
+                f"file at {db.sqlite_path()} — which is on the SAME disk. NOTHING here "
+                f"survives a deploy. Point CHORDENTIAL_DB at Postgres (or a persistent "
+                f"path), or set CHORDENTIAL_STORAGE=s3.")
     return (f"[storage] local disk at {upload_dir()}, mirrored into {kind} up to "
             f"{cap // 1048576} MB — files at or under that survive a deploy, larger ones "
             f"do NOT. Raise {MIRROR_MB_ENV} or set CHORDENTIAL_STORAGE=s3.")
+
+
+def storage_warning() -> str:
+    """One sentence for a SURFACE when uploads will not survive a deploy ("" when they
+    will). The boot line says this once, into a log nobody reads while testing."""
+    st = storage_status(upload_dir())
+    if st["durable"]:
+        return ""
+    conn = db.connect()
+    try:
+        cap = mirror_cap(conn)
+        pg = db.is_postgres(conn)
+    finally:
+        conn.close()
+    if cap <= 0:
+        return ("Uploads are not backed up on this instance — the database mirror is "
+                "switched off, so nothing here survives a deploy.")
+    if not pg and not db.sqlite_is_durable():
+        return ("Uploads are not backed up on this instance: the mirror is a SQLite file "
+                "on the same disk as the uploads, so a deploy replaces BOTH. A file can "
+                "be uploaded, approved and packaged in one sitting and be gone from the "
+                "next. Point CHORDENTIAL_DB at Postgres, or set CHORDENTIAL_STORAGE=s3.")
+    return ""
 
 
 def media_present(conn, name: str) -> bool:
