@@ -22,6 +22,16 @@ class ObjectStore(Protocol):
         a storage backend that throws must not take an upload request down with it."""
         ...
 
+    def put_file(self, key: str, path: str, content_type: str = "") -> bool:
+        """Store the file AT ``path`` without reading it into memory.
+
+        The delivery package is the one object here that can be a gigabyte, and storing
+        it used to mean ``fh.read()`` — the whole archive resident, on top of the archive
+        already on disk. That is what took the web service down the first time the
+        packager could actually see the audio (2026-08-22). Implementations stream.
+        """
+        ...
+
     def get(self, key: str) -> Optional[bytes]:
         """The bytes, or None when the key isn't there."""
         ...

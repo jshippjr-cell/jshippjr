@@ -179,6 +179,45 @@ def _persist_upload(conn, name: str, data: bytes, content_type: str = "",
     return Stored(True, saved, "" if saved else "mirror-failed")
 
 
+def persist_file(conn, name: str, path: str, content_type: str = "") -> bool:
+    """THE write door for something already ON DISK (ADR-0043), without reading it.
+
+    `_persist_upload` takes bytes, which is right for an upload arriving over HTTP and
+    wrong for the delivery package: that one artefact can be a gigabyte, and `fh.read()`
+    on it put the whole archive in memory on top of the copy already on disk. The web
+    service was killed for exactly that the first time the packager could see the audio
+    (operator, 2026-08-22). Same door, same rules — the bytes just never come through
+    Python when the store can take a path.
+    """
+    key = os.path.basename(name or "")
+    if not key:
+        return False
+    store = get_object_store(upload_dir())
+    durable = bool(getattr(store, "durable", False))
+    put_file = getattr(store, "put_file", None)
+    ok = False
+    try:
+        if callable(put_file):
+            ok = bool(put_file(key, path, content_type))
+        else:
+            with open(path, "rb") as fh:      # an older store: correct, just costly
+                ok = bool(store.put(key, fh.read(), content_type))
+    except OSError:
+        return False
+    if not ok:
+        print(f"[storage] WARNING: the object store did not accept {key!r}.", flush=True)
+    # The mirror is the net under a store that is NOT durable — and it is the one place
+    # the bytes must pass through Python, so it is skipped exactly where the file is
+    # largest (a bucket instance).
+    if ok and not durable:
+        try:
+            with open(path, "rb") as fh:
+                db.save_media_blob(conn, key, fh.read(), content_type)
+        except OSError:
+            pass
+    return ok
+
+
 def _store_pending_submission(conn, project_id: int, data: bytes,
                               src_filename: str, who: str) -> None:
     """A creator's submission lands here — NOT in the client-visible version ladder.

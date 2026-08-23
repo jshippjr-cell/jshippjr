@@ -2325,7 +2325,7 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
 
 def build_delivery_zip(
     project, assignments, delivery: dict, upload_dir: str,
-    *, generated_at: Optional[str] = None, fetch=None,
+    *, generated_at: Optional[str] = None, fetch=None, has=None,
 ) -> dict:
     """Assemble the delivery ZIP and write it to ``upload_dir``; return its descriptor.
 
@@ -2449,18 +2449,22 @@ def build_delivery_zip(
             referenced.append(asset)
             continue
         if not os.path.isfile(src):
-            # Not on this container's disk. Ask for the bytes rather than declaring the
-            # file lost — the disk is the copy that does not survive.
-            blob = fetch(fname) if fetch else None
-            if blob is None:
+            # Not on this container's disk. ASK WHETHER IT EXISTS — do not pull it yet.
+            # Planning used to fetch every file here and hold them all until the write
+            # loop, so a 21-stem delivery meant a gigabyte resident before a single byte
+            # was compressed, and Render killed the service. Existence is cheap; the
+            # bytes are pulled one at a time below and dropped immediately.
+            elsewhere = bool(has(fname)) if has else False
+            if not elsewhere:
                 # WHY, not just THAT. Three different failures were reported as one
                 # number, so five rounds of "no audio in the package" could not be told
                 # apart: no filename, no reader wired, or a reader that came back empty.
-                why["no reader" if fetch is None else "mirror empty"] = (
-                    why.get("no reader" if fetch is None else "mirror empty", 0) + 1)
+                why["no reader" if has is None else "mirror empty"] = (
+                    why.get("no reader" if has is None else "mirror empty", 0) + 1)
                 referenced.append(asset)
                 continue
             from_mirror += 1
+            blob = True                     # a marker: pull it at write time
             src = None
         folder = asset_folder(asset)
         # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
@@ -2476,7 +2480,7 @@ def build_delivery_zip(
             _orig = os.path.basename((asset.get("orig") or "").strip())
             nice = _orig or fname
         arc = _unique(f"{folder}/{nice}")
-        asset_arcs.append((asset, src, arc, blob))
+        asset_arcs.append((asset, src, arc, blob, fname))
         items.append(asset.get("label") or fname)
         if (asset.get("kind") or "") == "audio":
             # Docs/ live one level deep, so the relative path back out is "../<arc>".
@@ -2525,18 +2529,30 @@ def build_delivery_zip(
     pdf_bytes = _render_pdf_from_html(package_html)
     pdf_written = False
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    # STRAIGHT TO DISK, never into memory. The archive used to be assembled in a
+    # `BytesIO` and then written out, so the whole delivery existed in RAM twice — and
+    # for as long as the packager could not see the files at all, that cost nothing,
+    # because it was zipping documents. The moment it could read them, a 21-stem delivery
+    # took the web service down: *"render sent me an email saying the web service
+    # exceeded its memory limit"* (operator, 2026-08-22). Writing to the path bounds the
+    # archive to the disk it was always going to live on.
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # 1) The uploaded deliverables — the actual LOCAL files, organised into
         # named (operator-assigned, else heuristic) folders. An asset with a blank
         # filename or no on-disk file (e.g. a remote-URL-only demo seed) is NOT
         # silently dropped — it's recorded for the Docs/README.txt as
         # "referenced, not bundled" so "download everything" is honest.
-        for asset, src, arc, blob in asset_arcs:
+        for asset, src, arc, blob, fname_of_arc in asset_arcs:
             if src is not None:
                 zf.write(src, arc)
             else:
-                zf.writestr(arc, blob)
+                # Pulled HERE, written, and dropped. One file resident at a time is the
+                # difference between a package and an out-of-memory kill.
+                data = fetch(fname_of_arc) if fetch else None
+                if data is None:
+                    continue
+                zf.writestr(arc, data)
+                del data
             fname = os.path.basename(arc)
             # Best-effort: WAV → MP3 320 alongside under Cutdowns/ (never fails). Only
             # for a file on disk — the converter needs a path, and a mirror-only file
@@ -2575,9 +2591,6 @@ def build_delivery_zip(
         # client's top-level Docs/ folder shows only the branded HTML documents.
         zf.writestr("Docs/For-filing/README.txt", _readme_text(
             project, items, referenced, built_at, completeness=completeness))
-
-    with open(zip_path, "wb") as fh:
-        fh.write(buf.getvalue())
 
     # The founder's payoff checklist: the deliverables + the generated docs + ZIP.
     checklist = list(items)

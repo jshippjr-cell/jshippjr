@@ -297,8 +297,25 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
             return None
         return blob[0] if blob else None
 
+    def _has(name: str) -> bool:
+        """Does this file exist anywhere — WITHOUT pulling it. The planning pass asks
+        this; only the write pass asks for bytes. Fetching during planning held every
+        stem in memory at once and took the service down."""
+        key = os.path.basename(name or "")
+        if not key:
+            return False
+        try:
+            if get_object_store(upload_dir()).exists(key):
+                return True
+        except Exception:      # noqa: BLE001
+            pass
+        try:
+            return db.media_blob_exists(conn, key)
+        except Exception:      # noqa: BLE001
+            return False
+
     pkg = build_delivery_zip(row, assignments, delivery, upload_dir(),
-                             fetch=_bytes_for)
+                             fetch=_bytes_for, has=_has)
     # The built ZIP goes through the write door (ADR-0043), not straight into the DB
     # mirror. It used to call `db.save_media_blob` directly, which meant that with a
     # bucket configured the delivery package — the single artefact the client pays for —
@@ -306,10 +323,13 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     # ephemeral disk plus a SQLite blob, which is exactly the bloat the Postgres cutover
     # is meant to end.
     try:
-        from .uploads import _persist_upload
-        with open(os.path.join(upload_dir(), os.path.basename(pkg["filename"])), "rb") as fh:
-            _persist_upload(conn, os.path.basename(pkg["filename"]), fh.read(),
-                            "application/zip")
+        from .uploads import persist_file
+        # ONE WRITE DOOR (ADR-0043) — the streaming one, because this is the artefact
+        # that can be a gigabyte. Reaching for the store directly here bypassed the door
+        # and, with it, the seam every test and every future backend depends on.
+        persist_file(conn, os.path.basename(pkg["filename"]),
+                     os.path.join(upload_dir(), os.path.basename(pkg["filename"])),
+                     "application/zip")
     except (OSError, KeyError):
         pass
     db.update_delivery(conn, project_id, "delivery_zip", {

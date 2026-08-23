@@ -14,6 +14,7 @@ worth its weight while this store is the one in use.
 from __future__ import annotations
 
 import os
+import shutil
 from typing import Optional
 
 
@@ -50,6 +51,20 @@ class LocalObjectStore:
             os.makedirs(self.root, exist_ok=True)
             with open(path, "wb") as fh:
                 fh.write(data)
+            return True
+        except OSError:
+            return False
+
+    def put_file(self, key: str, path: str, content_type: str = "") -> bool:
+        """Copy on the filesystem — no bytes through Python."""
+        dest = self._path(key)
+        if dest is None:
+            return False
+        try:
+            os.makedirs(self.root, exist_ok=True)
+            if os.path.abspath(path) == os.path.abspath(dest):
+                return True                 # already exactly where it belongs
+            shutil.copyfile(path, dest)
             return True
         except OSError:
             return False

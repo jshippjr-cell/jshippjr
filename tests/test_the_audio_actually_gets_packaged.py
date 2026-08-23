@@ -789,6 +789,11 @@ class _Bucket:
             fh.write(d)
         return True
 
+    def put_file(self, k, path, c=""):
+        import shutil
+        shutil.copyfile(path, self._p(k))
+        return True
+
     def get(self, k):
         p = self._p(k)
         return open(p, "rb").read() if os.path.exists(p) else None
@@ -876,3 +881,85 @@ def test_the_reader_prefers_the_store_and_falls_back_to_the_database(delivery, t
     finally:
         conn.close()
     assert pkg["referenced_count"] == 0, pkg["why"]
+
+
+# ── and it must not take the service down doing it ──────────────────────────────────
+def test_the_build_does_not_hold_the_whole_delivery_in_memory(delivery, tmp_path,
+                                                              monkeypatch):
+    """*"When i press rebuild i get a error and render sent me an email saying the web
+    service exceeded its memory limit"* (operator, 2026-08-22).
+
+    Caused by the previous fix. For as long as the packager could not SEE the files it
+    was zipping documents, so nothing about its memory shape mattered. The moment it
+    could read them, three separate whole-delivery allocations showed up at once: the
+    planning pass fetched every asset and held them all, the archive was assembled in a
+    `BytesIO` before being written, and the finished ZIP was read back whole to store it.
+
+    Now: existence is probed cheaply, bytes are pulled one file at a time and dropped,
+    the archive is written straight to its path, and the package is stored with
+    `put_file`. Peak is bounded by the LARGEST SINGLE FILE, not the delivery.
+    """
+    import tracemalloc
+    from chordential_oia.web import delivery_ops as ops, uploads as up_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    bucket = _Bucket(str(tmp_path / "big"))
+    monkeypatch.setattr(ops, "get_object_store", lambda root=None: bucket)
+    monkeypatch.setattr(up_mod, "get_object_store", lambda root=None: bucket)
+    one = b"RIFF" + os.urandom(4 * 1024 * 1024)          # 4 MB per file
+    conn = db.connect()
+    try:
+        lane = _lane_of(db, pid)
+        assets = []
+        for i in range(12):                              # 48 MB of audio
+            fn = f"big{i}.wav"
+            bucket.put(fn, one)
+            db.delete_media_blob(conn, fn)
+            assets.append({"label": lane, "url": f"/uploads/{fn}", "filename": fn,
+                           "at": BEFORE, "orig": f"BIG_{i}.wav", "kind": "audio"})
+        db.update_delivery(conn, pid, "assets", assets)
+        for v in db.get_delivery(conn, pid)["versions"]:
+            bucket.put(v["filename"], one)
+        import glob
+        for f in glob.glob(os.path.join(up_mod.upload_dir(), "*")):
+            os.remove(f)
+        tracemalloc.start()
+        pkg = _build_delivery_package(conn, pid)
+        _cur, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 0, pkg["why"]
+    total = 13 * len(one)
+    assert peak < total / 2, (
+        f"peak {peak/1048576:.0f} MB against {total/1048576:.0f} MB of audio — the whole "
+        f"delivery is resident again")
+
+
+def test_the_package_is_stored_without_reading_it_back(delivery, tmp_path, monkeypatch):
+    """`fh.read()` on the finished archive was a second full copy, on top of the one
+    already on disk. `put_file` streams — a filesystem copy locally, boto's multipart
+    upload against a bucket."""
+    from chordential_oia.web import delivery_ops as ops, uploads as up_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    bucket = _Bucket(str(tmp_path / "store"))
+    seen = {}
+    real_put_file = bucket.put_file if hasattr(bucket, "put_file") else None
+
+    def _put_file(k, p, c=""):
+        seen["path"] = p
+        import shutil
+        shutil.copyfile(p, bucket._p(k))
+        return True
+
+    bucket.put_file = _put_file
+    monkeypatch.setattr(ops, "get_object_store", lambda root=None: bucket)
+    monkeypatch.setattr(up_mod, "get_object_store", lambda root=None: bucket)
+    conn = db.connect()
+    try:
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert seen.get("path", "").endswith(pkg["filename"]), (
+        "the package was not handed over as a FILE — it went through memory")

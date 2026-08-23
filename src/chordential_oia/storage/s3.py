@@ -108,6 +108,19 @@ class S3ObjectStore:
         except Exception:
             return False
 
+    def put_file(self, key: str, path: str, content_type: str = "") -> bool:
+        """`upload_file` streams (multipart for large objects) — the archive never lands
+        in this process's memory."""
+        c = self._c()
+        if c is None:
+            return False
+        try:
+            extra = {"ContentType": content_type} if content_type else None
+            c.upload_file(path, self.bucket, key, ExtraArgs=extra)
+            return True
+        except Exception:
+            return False
+
     def get(self, key: str) -> Optional[bytes]:
         c = self._c()
         if c is None:
