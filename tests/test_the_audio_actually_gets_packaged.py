@@ -574,3 +574,68 @@ def test_a_rebuild_that_throws_is_recorded_not_swallowed(delivery, monkeypatch):
     finally:
         conn.close()
     assert "could not be rebuilt" in said and "disk on fire" in said
+
+
+# ── when the disk cannot take the files back ────────────────────────────────────────
+def test_the_package_reads_the_mirror_when_the_disk_will_not_take_it(delivery, monkeypatch):
+    """The state the operator's project was actually in.
+
+    The packager resolved every asset with ``os.path.isfile`` and relied on a rehydrate
+    step to put the bytes back first. That step calls ``store.put``, which returns False
+    on a full ephemeral allowance — and nobody read the return value. So on a container
+    whose disk was wiped and could not be refilled, every file was declared missing while
+    the console (which asks the DATABASE) said all of them were present. Two answers to
+    one question, and the client downloaded documents: *"I downloaded again and i got Docs
+    no audio"*, *"the 2 new files arent being packaged either"* (2026-08-22).
+
+    The bytes now go from the durable mirror straight into the archive. The disk is not
+    part of the question.
+    """
+    import glob
+    from chordential_oia.storage import local as local_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import media_present, upload_dir
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        names = [a["filename"] for a in db.get_delivery(conn, pid)["assets"]]
+        for f in glob.glob(os.path.join(upload_dir(), "*")):
+            os.remove(f)                                   # the deploy
+        assert all(media_present(conn, n) for n in names), "fixture lost the mirror too"
+        # …and the disk will not accept them back.
+        monkeypatch.setattr(local_mod.LocalObjectStore, "put",
+                            lambda self, k, d, c="": False)
+        pkg = _build_delivery_package(conn, pid)
+        blob = db.get_media_blob(conn, pkg["filename"])
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 0, (
+        f"the build still could not find {pkg['referenced_names']} — files the database "
+        f"is holding perfectly well")
+    assert blob is not None, "the package itself was not kept"
+    import io
+    names_in = zipfile.ZipFile(io.BytesIO(blob[0])).namelist()
+    audio = [n for n in names_in if n.lower().endswith((".wav", ".mp3"))]
+    assert len(audio) == 5, f"the client would receive documents only: {names_in}"
+
+
+def test_without_a_reader_it_still_reports_honestly(delivery):
+    """The engine keeps working with no `fetch` — it simply has nothing to fall back on,
+    and says so rather than pretending. This is what the web layer's injection replaces,
+    and it is the behaviour every other caller relies on."""
+    import glob
+    from chordential_oia.delivery import build_delivery_zip
+    from chordential_oia.web.uploads import upload_dir
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        row = db.get_project(conn, pid)
+        assignments = db.list_assignments(conn, pid)
+        d = db.get_delivery(conn, pid)
+        for f in glob.glob(os.path.join(upload_dir(), "*")):
+            os.remove(f)
+        pkg = build_delivery_zip(row, assignments, d, upload_dir())     # no fetch
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 4
+    assert pkg["referenced_names"], "it cannot say which files it could not find"

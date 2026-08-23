@@ -264,7 +264,20 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     _rehydrate_delivery_media(conn, project_id)      # source audio back on disk before zipping
     assignments = db.list_assignments(conn, project_id)
     delivery = db.get_delivery(conn, project_id)
-    pkg = build_delivery_zip(row, assignments, delivery, upload_dir())
+    # THE BYTES, from wherever they actually are. The rehydrate above puts what it can
+    # back on disk; this is what happens when it CANNOT — a full ephemeral allowance makes
+    # every `store.put` return False, silently, and the packager then declares files lost
+    # that the database is holding. Handing it a reader removes the disk from the question
+    # entirely (ADR-0079, amended 2026-08-22).
+    def _from_mirror(name: str):
+        try:
+            blob = db.get_media_blob(conn, os.path.basename(name or ""))
+        except Exception:      # noqa: BLE001 — a missing byte is not a broken package
+            return None
+        return blob[0] if blob else None
+
+    pkg = build_delivery_zip(row, assignments, delivery, upload_dir(),
+                             fetch=_from_mirror)
     # The built ZIP goes through the write door (ADR-0043), not straight into the DB
     # mirror. It used to call `db.save_media_blob` directly, which meant that with a
     # bucket configured the delivery package — the single artefact the client pays for —

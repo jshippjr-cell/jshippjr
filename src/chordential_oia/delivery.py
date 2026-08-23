@@ -2325,9 +2325,22 @@ def _readme_text(project, bundled: List[str], referenced: List[dict],
 
 def build_delivery_zip(
     project, assignments, delivery: dict, upload_dir: str,
-    *, generated_at: Optional[str] = None,
+    *, generated_at: Optional[str] = None, fetch=None,
 ) -> dict:
     """Assemble the delivery ZIP and write it to ``upload_dir``; return its descriptor.
+
+    ``fetch(name) -> bytes | None`` is INJECTED (this module has no database) and is asked
+    for any file that is not on the local disk. It exists because the disk is the one
+    place a file is guaranteed NOT to survive: production rebuilds the container on every
+    deploy, and restoring seventeen stems onto a small ephemeral allowance can simply fail
+    for want of space — silently, since ``store.put`` returns False and nobody read it.
+    The result was a package that could not find files the database was holding perfectly
+    well: *"I downloaded again and i got Docs no audio"* (operator, 2026-08-22), on a
+    project whose own console said every file was present.
+
+    With ``fetch``, the bytes go from the durable mirror straight into the archive. No
+    disk round-trip, no space required, and a file is "referenced, not bundled" only when
+    it genuinely exists nowhere.
 
     AUTOMATION, NOT AI. Organises the uploaded deliverables into named folders
     (``Masters/`` ``Cutdowns/`` ``Social/`` ``Stems/`` ``Assets/``), writes the
@@ -2426,9 +2439,18 @@ def build_delivery_zip(
     for asset in assets:
         fname = os.path.basename((asset.get("filename") or "").strip())
         src = os.path.join(upload_dir, fname) if fname else ""
-        if not fname or not os.path.isfile(src):
+        blob = None
+        if not fname:
             referenced.append(asset)
             continue
+        if not os.path.isfile(src):
+            # Not on this container's disk. Ask for the bytes rather than declaring the
+            # file lost — the disk is the copy that does not survive.
+            blob = fetch(fname) if fetch else None
+            if blob is None:
+                referenced.append(asset)
+                continue
+            src = None
         folder = asset_folder(asset)
         # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
         # the package is self-describing. Falls back to the original name when unlabeled.
@@ -2443,7 +2465,7 @@ def build_delivery_zip(
             _orig = os.path.basename((asset.get("orig") or "").strip())
             nice = _orig or fname
         arc = _unique(f"{folder}/{nice}")
-        asset_arcs.append((asset, src, arc))
+        asset_arcs.append((asset, src, arc, blob))
         items.append(asset.get("label") or fname)
         if (asset.get("kind") or "") == "audio":
             # Docs/ live one level deep, so the relative path back out is "../<arc>".
@@ -2499,11 +2521,16 @@ def build_delivery_zip(
         # filename or no on-disk file (e.g. a remote-URL-only demo seed) is NOT
         # silently dropped — it's recorded for the Docs/README.txt as
         # "referenced, not bundled" so "download everything" is honest.
-        for asset, src, arc in asset_arcs:
-            zf.write(src, arc)
+        for asset, src, arc, blob in asset_arcs:
+            if src is not None:
+                zf.write(src, arc)
+            else:
+                zf.writestr(arc, blob)
             fname = os.path.basename(arc)
-            # Best-effort: WAV → MP3 320 alongside under Cutdowns/ (never fails).
-            if fname.lower().endswith(".wav"):
+            # Best-effort: WAV → MP3 320 alongside under Cutdowns/ (never fails). Only
+            # for a file on disk — the converter needs a path, and a mirror-only file
+            # still bundles as itself rather than not at all.
+            if src is not None and fname.lower().endswith(".wav"):
                 mp3 = _convert_wav_to_mp3(src)
                 if mp3:
                     mp3_arc = _unique("Cutdowns/" + os.path.splitext(fname)[0] + ".mp3")
@@ -2515,11 +2542,17 @@ def build_delivery_zip(
             if not fname:
                 continue
             src = os.path.join(upload_dir, fname)
+            vblob = None
             if not os.path.isfile(src):
-                continue
+                vblob = fetch(fname) if fetch else None
+                if vblob is None:
+                    continue
             disp = (v.get("name") or os.path.splitext(fname)[0]) + os.path.splitext(fname)[1]
             arc = _unique(f"Masters/{disp}")
-            zf.write(src, arc)
+            if vblob is None:
+                zf.write(src, arc)
+            else:
+                zf.writestr(arc, vblob)
         # 3) The generated documents.
         for arc, content in docs.items():
             zf.writestr(arc, content)
