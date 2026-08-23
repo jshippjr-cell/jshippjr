@@ -770,3 +770,109 @@ def test_the_console_shows_how_the_build_went(delivery):
     page = c.get(f"/project/{pid}/delivery").text
     assert "read from the durable mirror" in page
     assert "mirror empty" in page
+
+
+# ── the bucket the packager never read ──────────────────────────────────────────────
+class _Bucket:
+    """A durable object store, like R2/S3: bytes live here and nowhere else."""
+    durable = True
+
+    def __init__(self, root):
+        self.root = root
+        os.makedirs(root, exist_ok=True)
+
+    def _p(self, k):
+        return os.path.join(self.root, os.path.basename(k))
+
+    def put(self, k, d, c=""):
+        with open(self._p(k), "wb") as fh:
+            fh.write(d)
+        return True
+
+    def get(self, k):
+        p = self._p(k)
+        return open(p, "rb").read() if os.path.exists(p) else None
+
+    def exists(self, k):
+        return os.path.exists(self._p(k))
+
+    def delete(self, k):
+        return True
+
+    def local_path(self, k):
+        return None                      # a bucket has no path on this box
+
+    def url(self, k, expires=3600):
+        return "https://bucket/" + k
+
+
+def test_a_bucket_only_file_is_still_packaged(delivery, tmp_path, monkeypatch):
+    """The operator's own build line, read off the screen:
+
+        build: 21 assets · 0 read from the durable mirror · 21 not found (21 mirror empty)
+
+    The reader was wired and came back empty for every file, while the same page reported
+    all 21 present. Both are true when a bucket is configured: `_persist_upload` SKIPS the
+    database mirror for a durable store (mirroring to a bucket would double every master
+    into the database), so the bytes live in exactly one place — and the packager's reader
+    only asked the database. Every package shipped documents only.
+    """
+    import io
+    from chordential_oia.web import delivery_ops, uploads as up_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    bucket = _Bucket(str(tmp_path / "bucket"))
+    monkeypatch.setattr(delivery_ops, "get_object_store", lambda root=None: bucket)
+    monkeypatch.setattr(up_mod, "get_object_store", lambda root=None: bucket)
+    conn = db.connect()
+    try:
+        # The bytes exist ONLY in the bucket — the shape a durable store leaves behind.
+        for a in db.get_delivery(conn, pid)["assets"]:
+            bucket.put(a["filename"], b"RIFF" + b"\x00" * 4000)
+            db.delete_media_blob(conn, a["filename"])
+        for v in db.get_delivery(conn, pid)["versions"]:
+            bucket.put(v["filename"], b"ID3" + b"\x00" * 2000)
+            db.delete_media_blob(conn, v["filename"])
+        import glob
+        for f in glob.glob(os.path.join(up_mod.upload_dir(), "*")):
+            os.remove(f)
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 0, (
+        f"the packager still cannot see the bucket: {pkg['why']}")
+    assert pkg["from_mirror"] >= 4, "nothing was read from the durable store"
+    data = bucket.get(pkg["filename"])
+    assert data, "the package was not written where the store lives"
+    audio = [n for n in zipfile.ZipFile(io.BytesIO(data)).namelist()
+             if n.lower().endswith((".wav", ".mp3"))]
+    assert len(audio) == 5, f"documents only: {audio}"
+
+
+def test_the_reader_prefers_the_store_and_falls_back_to_the_database(delivery, tmp_path,
+                                                                     monkeypatch):
+    """Both places, in that order — the same two `media_present` consults. Neither alone
+    is enough: a bucket instance has no mirror, a local instance has no bucket."""
+    from chordential_oia.web import delivery_ops, uploads as up_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    bucket = _Bucket(str(tmp_path / "b2"))
+    monkeypatch.setattr(delivery_ops, "get_object_store", lambda root=None: bucket)
+    monkeypatch.setattr(up_mod, "get_object_store", lambda root=None: bucket)
+    conn = db.connect()
+    try:
+        assets = db.get_delivery(conn, pid)["assets"]
+        # half in the bucket, half only in the database
+        for i, a in enumerate(assets):
+            if i % 2:
+                bucket.put(a["filename"], b"RIFF" + b"\x00" * 3000)
+                db.delete_media_blob(conn, a["filename"])
+        for v in db.get_delivery(conn, pid)["versions"]:
+            bucket.put(v["filename"], b"ID3" + b"\x00" * 2000)
+        import glob
+        for f in glob.glob(os.path.join(up_mod.upload_dir(), "*")):
+            os.remove(f)
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg["referenced_count"] == 0, pkg["why"]

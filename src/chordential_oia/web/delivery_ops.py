@@ -269,15 +269,36 @@ def _build_delivery_package(conn, project_id: int) -> Optional[dict]:
     # every `store.put` return False, silently, and the packager then declares files lost
     # that the database is holding. Handing it a reader removes the disk from the question
     # entirely (ADR-0079, amended 2026-08-22).
-    def _from_mirror(name: str):
+    def _bytes_for(name: str):
+        """The bytes, from WHEREVER they are — the object store first, then the database
+        mirror. Exactly the two places `media_present` looks, which is the whole point: a
+        file the console calls present must be a file the packager can bundle.
+
+        Asking only the database was delivery-stopping on any instance with a bucket
+        configured. `_persist_upload` deliberately SKIPS the mirror when the store is
+        durable — mirroring to a bucket would double every master into the database for
+        no benefit — so with S3/R2 on, every file lives in exactly one place the packager
+        never read, and every package shipped documents only. Measured on the operator's
+        own instance, 2026-08-22: `21 assets · 0 read from the durable mirror · 21 not
+        found (21 mirror empty)`, while the same page reported all 21 present.
+        """
+        key = os.path.basename(name or "")
+        if not key:
+            return None
         try:
-            blob = db.get_media_blob(conn, os.path.basename(name or ""))
+            data = get_object_store(upload_dir()).get(key)
+            if data:
+                return data
+        except Exception:      # noqa: BLE001 — a store that errors is not a broken package
+            pass
+        try:
+            blob = db.get_media_blob(conn, key)
         except Exception:      # noqa: BLE001 — a missing byte is not a broken package
             return None
         return blob[0] if blob else None
 
     pkg = build_delivery_zip(row, assignments, delivery, upload_dir(),
-                             fetch=_from_mirror)
+                             fetch=_bytes_for)
     # The built ZIP goes through the write door (ADR-0043), not straight into the DB
     # mirror. It used to call `db.save_media_blob` directly, which meant that with a
     # bucket configured the delivery package — the single artefact the client pays for —
