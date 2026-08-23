@@ -706,3 +706,67 @@ def test_the_client_is_not_shown_our_storage_problem(delivery):
         page = anon.get(f"/room/{pid}", params={"k": tok}).text
     assert "Nothing here is backed up." not in page
     assert "backed up" not in page
+
+
+# ── the build has to say HOW it went, not just how it ended ─────────────────────────
+def test_the_build_counts_what_it_read_from_the_mirror(delivery, monkeypatch):
+    """`referenced_count: 0` cannot distinguish "the mirror reader worked" from "every
+    file happened to be on disk". After five rounds of *"no audio in the package"* the
+    console still could not tell whether the reader was even wired on that instance.
+    A non-zero `from_mirror` proves it ran AND returned bytes."""
+    import glob
+    from chordential_oia.storage import local as local_mod
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    from chordential_oia.web.uploads import upload_dir
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        for f in glob.glob(os.path.join(upload_dir(), "*.wav")):
+            os.remove(f)                                   # the deploy
+        monkeypatch.setattr(local_mod.LocalObjectStore, "put",
+                            lambda self, k, d, c="": False)   # …and the disk is full
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg["from_mirror"] >= 4, (
+        f"nothing was read from the durable mirror ({pkg['from_mirror']}) — the reader "
+        f"is not doing the job the disk cannot")
+    assert pkg["referenced_count"] == 0
+
+
+def test_each_failure_is_counted_by_kind(delivery):
+    """Three different failures were reported as one number: an asset with no stored
+    filename, a build with no reader wired, and a reader that came back empty. They need
+    different fixes and were indistinguishable."""
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    _c, db, pid = delivery
+    conn = db.connect()
+    try:
+        lane = _lane_of(db, pid)
+        db.update_delivery(conn, pid, "assets", [
+            {"label": lane, "url": "http://elsewhere/x.wav", "filename": "",
+             "orig": "referenced-only.wav", "kind": "audio", "at": BEFORE},
+            {"label": lane, "url": "/uploads/ghost.wav", "filename": "ghost.wav",
+             "orig": "gone-for-good.wav", "kind": "audio", "at": BEFORE},
+        ])
+        pkg = _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    assert pkg["why"] == {"(no filename)": 1, "mirror empty": 1}, pkg["why"]
+
+
+def test_the_console_shows_how_the_build_went(delivery):
+    from chordential_oia.web.delivery_ops import _build_delivery_package
+    c, db, pid = delivery
+    conn = db.connect()
+    try:
+        lane = _lane_of(db, pid)
+        db.update_delivery(conn, pid, "assets", [
+            {"label": lane, "url": "/uploads/ghost.wav", "filename": "ghost.wav",
+             "orig": "gone-for-good.wav", "kind": "audio", "at": BEFORE}])
+        _build_delivery_package(conn, pid)
+    finally:
+        conn.close()
+    page = c.get(f"/project/{pid}/delivery").text
+    assert "read from the durable mirror" in page
+    assert "mirror empty" in page

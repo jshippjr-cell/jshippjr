@@ -190,8 +190,19 @@
         find: {{ delivery_zip.referenced_names[:8]|join(', ') }}{%
         if delivery_zip.referenced_names|length > 8 %} …and
         {{ delivery_zip.referenced_names|length - 8 }} more{% endif %}.</span>
-      {% endif %}</p>
+      {% endif %}
+</p>
     {% endif %}
+    {# HOW the build went, not just how it ended. Three different failures were being
+       reported as one number, so five rounds of "no audio in the package" could not be
+       told apart. Shown on either branch, because it explains either outcome — and
+       `read from the durable mirror` is the only thing that proves the reader is wired
+       and working on THIS instance. #}
+    <p class="mono small" style="margin:0 0 8px;opacity:.8">
+      build: {{ delivery_zip.asset_count or 0 }} assets ·
+      {{ delivery_zip.from_mirror|default(0) }} read from the durable mirror ·
+      {{ delivery_zip.referenced_count or 0 }} not found{%
+      if delivery_zip.why %} ({% for k, n in delivery_zip.why.items() %}{{ n }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}</p>
     {# THE FIX, WHERE THE PROBLEM IS. Rebuild re-zips what we still have; when the files
        themselves are gone it cannot help, and the operator was left pressing it: *"im
        clicking rebuild package and nothing comes up for me to input the assets"*. The

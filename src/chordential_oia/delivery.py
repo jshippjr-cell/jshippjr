@@ -2423,7 +2423,9 @@ def build_delivery_zip(
     # Plan the bundled-file layout up front (which assets land where) so the branded
     # HTML docs can reference each bundled audio by its relative in-ZIP path before
     # we write the bytes. Mirrors the asset-write loop's folder + uniqueness logic.
-    asset_arcs: List[tuple] = []   # (asset, src, arc) for the writable assets
+    asset_arcs: List[tuple] = []   # (asset, src, arc, blob) for the writable assets
+    from_mirror = 0                # how many came from the durable mirror, not the disk
+    why: dict = {}                 # why each unbundled asset could not be found
     # HOW MANY FILES SHARE THIS LANE. A lane holds a folder now (ADR-0074): ten stems
     # under "Mix-ready stem package". Naming each one after the LANE turns them into
     # `CAMPAIGN_Mix_ready_stem_package.wav`, `-2`, `-3` … `-10`, which is the same file
@@ -2441,6 +2443,9 @@ def build_delivery_zip(
         src = os.path.join(upload_dir, fname) if fname else ""
         blob = None
         if not fname:
+            # No stored filename at all — a referenced-by-URL asset. No copy exists to
+            # bundle and no fetch can invent one.
+            why["(no filename)"] = why.get("(no filename)", 0) + 1
             referenced.append(asset)
             continue
         if not os.path.isfile(src):
@@ -2448,8 +2453,14 @@ def build_delivery_zip(
             # file lost — the disk is the copy that does not survive.
             blob = fetch(fname) if fetch else None
             if blob is None:
+                # WHY, not just THAT. Three different failures were reported as one
+                # number, so five rounds of "no audio in the package" could not be told
+                # apart: no filename, no reader wired, or a reader that came back empty.
+                why["no reader" if fetch is None else "mirror empty"] = (
+                    why.get("no reader" if fetch is None else "mirror empty", 0) + 1)
                 referenced.append(asset)
                 continue
+            from_mirror += 1
             src = None
         folder = asset_folder(asset)
         # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
@@ -2603,6 +2614,11 @@ def build_delivery_zip(
         # (operator, 2026-08-22, after a fourth docs-only download).
         "referenced_names": [
             (a.get("orig") or a.get("filename") or "?") for a in referenced],
+        # Read straight from the durable mirror rather than the disk. Non-zero proves the
+        # reader is wired AND working, which "referenced_count: 0" alone cannot.
+        "from_mirror": from_mirror,
+        # …and the reason each unbundled file failed, counted by kind.
+        "why": why,
         "checklist": checklist,
         "items": items,
         "converted": converted,
