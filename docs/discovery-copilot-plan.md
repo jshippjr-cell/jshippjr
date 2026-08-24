@@ -80,6 +80,10 @@ runs, rather than once at the end.
 Each phase is useful on its own and shippable alone. That is deliberate — an unfinished
 copilot must still leave the operator better off than no copilot.
 
+> **Status, 2026-08-24.** Phase 0 **shipped** (`call_prep.py`, `/opportunity/{id}/prep`).
+> Phase 1 **shipped** (`call_prep.score_call`, scored onto the same page). Phase 2 is next
+> and is now judgeable, which was the point of doing them in this order.
+
 ### Phase 0 — The prep sheet *(no live anything; ~half a day)*
 Before the call, render the checklist as a static page from the opportunity: which of the
 ten slots we already know from intake, which we do not, and the exact question for each
@@ -97,6 +101,33 @@ missed licence term, territory, publishing, payment terms."* No live component a
 This is the **measurement** phase, and it exists so Phase 2 can be judged. It answers "does
 detection actually work" using calls that already happened, at zero risk and no new spend.
 It also gives a number worth watching on its own: coverage per call, over time.
+
+**What Phase 1 turned out to be, once built.** Two things the plan did not anticipate, both
+worth carrying into Phase 2:
+
+*Coverage is not one number, it is three.* "Covered" hides the most useful cell. A slot can
+be **answered** (a value reached Campaign Intelligence from this call), **raised** (the
+topic demonstrably came up and nothing landed), or **missed**. *Raised but not answered* is
+the interesting one: the question **was** asked and the answer did not stick, which needs a
+different fix from "nobody asked". Counting CI fields alone cannot see that state at all,
+and it is most of why this phase is worth building rather than skipping to the panel.
+
+*The detector's danger is exactly where the plan said, and it is worse than it looks.* A
+first draft of the cues produced false ticks on ordinary sentences — "the music needs to
+feel **exclusive** and premium" ticked the *exclusivity* term (the single most expensive
+one on the sheet); "reconvene at **2:30**" ticked *deliverables*; "**one year** ago" ticked
+*licence term*; "the **brand team** sits in New York" ticked *the brand*; "the European
+**Union** rules" ticked *musicians*; "**tone of voice** guidelines" ticked *emotional arc*.
+Every one is a plausible line on a real call. The cues are tightened and a bait transcript
+made of exactly those sentences is a permanent test that must score **zero**.
+
+Two rules came out of that and both belong in Phase 2:
+
+- **Every tick carries the sentence that produced it**, printed. A tick you cannot check is
+  worse than no tick, because the whole risk here is manufactured confidence.
+- **`raised` never claims an answer.** A keyword can prove a topic came up. It cannot prove
+  anything was said back, and the moment it pretends otherwise the panel starts lying
+  quietly.
 
 ### Phase 2 — Live, one-way *(the real build)*
 Recall's real-time transcript over a websocket; a rolling window; slot detection on each

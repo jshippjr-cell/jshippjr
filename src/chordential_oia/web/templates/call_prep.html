@@ -47,6 +47,28 @@ details.cp-why summary::before{content:"Why this matters ▾";}
 details.cp-why[open] summary::before{content:"Why this matters ▴";}
 details.cp-why p{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
 
+/* The score (Phase 1). Denser than the prep lines: this is read AFTER, once, sitting
+   down — the opposite posture from the sheet above it. */
+.cp-score{border:1px solid var(--line,#e7e1d8);border-left:3px solid var(--ember,#b34a21);
+  border-radius:9px;padding:13px 14px;background:var(--surface,#fff)}
+.cp-warn{border-left:2px solid var(--ember,#b34a21);padding-left:9px}
+.cp-fine{font-size:12px;opacity:.85}
+.cp-slines{list-style:none;margin:10px 0 6px;padding:0}
+.cp-sline{display:grid;grid-template-columns:18px 1fr;gap:8px;align-items:baseline;
+  padding:5px 0;border-bottom:1px dashed var(--line,#eee7de)}
+.cp-sline:last-child{border-bottom:0}
+.cp-smark{font-weight:700;text-align:center}
+.cp-sline.is-answered .cp-smark{color:var(--ok,#3f6b47)}
+.cp-sline.is-raised .cp-smark{color:var(--ember,#b34a21)}
+.cp-sline.is-missed .cp-smark{color:var(--line,#cfc6bb)}
+.cp-sbody{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.cp-slabel{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;
+  color:var(--muted,#7a6b67);flex:0 0 auto;min-width:14ch}
+.cp-sev{font-size:13px;color:var(--ink,#241016);flex:1 1 22ch;min-width:0;
+  overflow-wrap:anywhere}
+.cp-sline.is-missed .cp-sev{color:var(--muted,#7a6b67);font-style:italic}
+.cp-sask::before{content:"ask next time: "}
+
 /* The price guide. Denser than the question lines because it is scanned before the call
    rather than read during it — the number you want in your head when you ask. */
 .cp-guide{border:1px solid var(--line,#e7e1d8);border-left:3px solid var(--ember,#b34a21);
@@ -100,6 +122,60 @@ details.cp-why p{font-size:13px;color:var(--muted,#7a6b67);margin:5px 0 0}
     <button class="btn tiny" type="button" onclick="window.print()">Print</button>
     <button class="btn tiny" type="button" id="cp-reset">Clear ticks</button>
   </div>
+
+  {# ── HOW THE CALL WENT (Phase 1 of docs/discovery-copilot-plan.md). The same sheet,
+        scored against the transcript once there is one. It is on THIS page and not a
+        separate report because the panel Phase 2 builds is this sheet with the score
+        arriving live — a second surface now would be a second thing to unbuild.
+
+        Three states, and they are not the same claim. `answered` means a value reached
+        Campaign Intelligence from this call. `raised` means a written cue matched a line
+        of the transcript: the topic came up, which is not the same as an answer landing,
+        and the line that matched is printed so the tick can be checked. `missed` means
+        neither — not proof it was skipped, but the direction worth acting on. ── #}
+  {% if score %}
+  <div class="cp-group cp-score">
+    <h3>How the call went</h3>
+    <p class="cp-blurb">{{ score.text }}.
+      {# "raised" is NOT "failed to fill a slot": fourteen of these lines are conversation
+         — the opening, the terms, the wrap-up — and have no Campaign Intelligence slot to
+         land in at all. Saying "raised without an answer landing" here read as twenty
+         failures when most of them were questions doing exactly their job. The slots that
+         genuinely came up empty are named in their own line below, where the claim is
+         true. #}
+      <b>{{ score.answered }}</b> answered · <b>{{ score.raised }}</b> raised ·
+      <b>{{ score.missed }}</b> never came up.
+      Scored from the transcript on file{% if call.at %} ({{ call.at[:10] }}){% endif %} —
+      no model call, nothing sent.</p>
+
+    {% if score.raised_lines %}
+    <p class="cp-sub cp-warn"><b>Asked, but nothing stuck.</b> These came up on the call and
+      still have no value in Campaign Intelligence — which needs a different fix from the
+      ones nobody asked:
+      {% for ln in score.raised_lines %}{{ ln.label }}{{ ", " if not loop.last }}{% endfor %}.</p>
+    {% endif %}
+
+    <ul class="cp-slines">
+      {% for ln in score.lines %}
+      <li class="cp-sline is-{{ ln.state }}">
+        <span class="cp-smark">{% if ln.state == 'answered' %}✓{% elif ln.state == 'raised' %}○{% else %}·{% endif %}</span>
+        <span class="cp-sbody">
+          <span class="cp-slabel">{{ ln.label }}</span>
+          {% if ln.state == 'missed' %}
+          <span class="cp-sev cp-sask">{{ ln.ask }}</span>
+          {% else %}
+          <span class="cp-sev">{{ ln.evidence }}</span>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="cp-sub cp-fine">A ✓ is a value on file. A ○ is the sentence that matched,
+      printed so you can disagree with it. Detection stays deliberately shy: an ambiguous
+      line is left open, because a missed tick costs one repeated question and a wrong tick
+      costs a wrong proposal.</p>
+  </div>
+  {% endif %}
 
   {# ── The price guide (ADR-0065). The four licence questions were already on this
         sheet, and already flagged as the ones that get dropped when a call overruns.

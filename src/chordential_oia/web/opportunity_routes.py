@@ -834,8 +834,13 @@ def discovery_prep_sheet(request: Request, opp_id: int):
 
     A slot we already hold becomes a READ-BACK rather than disappearing: a value captured
     confidently and wrongly is the failure this product keeps having, and the only cheap
-    moment to catch it is while the person who knows is still on the line."""
-    from ..call_prep import coverage, prep_sheet
+    moment to catch it is while the person who knows is still on the line.
+
+    PHASE 1 rides on the same page: once the call has happened and its transcript is on
+    file, the same sheet is scored against it — what was answered, what was merely raised,
+    and what never came up. Same lines, before and after, because the panel Phase 2 builds
+    is this sheet with the score arriving live."""
+    from ..call_prep import coverage, prep_sheet, score_call
     from ..pricing import licence_from_ci, price_guide
     conn = db.connect()
     try:
@@ -849,9 +854,11 @@ def discovery_prep_sheet(request: Request, opp_id: int):
                 campaign_intelligence.brief_view(conn, ci_row["id"]).get("fields") or {})
         meeting = db.meeting_for_opp(conn, opp_id)
         _r, opp, ev = _load(conn, opp_id)
+        call = _scored_call(conn, opp_id)
     finally:
         conn.close()
     groups = prep_sheet(fields)
+    score = score_call(groups, call["transcript"], call["answered"]) if call else None
     # The price of each answer, computed for THIS deal (ADR-0065). The four licence
     # questions were already on the sheet and already flagged as the ones that get
     # dropped when a call overruns; what the sheet could not say was what dropping them
@@ -860,7 +867,43 @@ def discovery_prep_sheet(request: Request, opp_id: int):
     qual, _scored = ev
     guide = price_guide(estimate_for(opp, qual=qual), licence_from_ci(fields))
     return render(request, "call_prep.html", nav="inbox", row=row, meeting=meeting,
-                  groups=groups, cover=coverage(groups), guide=guide)
+                  groups=groups, cover=coverage(groups), guide=guide,
+                  score=score, call=call)
+
+
+def _scored_call(conn, opp_id: int):
+    """The finished call to score against, or ``None`` — the transcript plus what the
+    extraction already took from it (Phase 1, `docs/discovery-copilot-plan.md`).
+
+    READ, never re-run. The capture's extraction has already happened and its results are
+    on file citing that capture; asking a model to read the same transcript twice would
+    spend money to learn something we are holding. Phase 1's entire promise is "at zero
+    risk and no new spend", and that is the line it rests on.
+
+    The newest transcript-bearing capture wins. A second discovery call is a second call,
+    and the sheet is scored against the one that just happened.
+    """
+    newest = None
+    for cap in db.list_captures_for_opp(conn, opp_id):
+        if (cap["modality"] or "") != "transcript":
+            continue
+        if not (cap["raw_text"] or "").strip():
+            continue
+        newest = cap
+        break
+    if newest is None:
+        return None
+    answered = {}
+    for f in db.fields_by_capture(conn, int(newest["id"])):
+        key = (f["key"] or "").strip()
+        value = (f["value"] or "").strip()
+        # `ask_*` rows are the machine's OWN open questions, not answers. Counting one as
+        # a filled slot would tick a line because we noticed it was empty.
+        if key and value and not key.startswith("ask_"):
+            answered.setdefault(key, value)
+    return {"capture_id": int(newest["id"]), "at": newest["created_at"] or "",
+            "lane": newest["lane"] or "", "transcript": newest["raw_text"] or "",
+            "answered": answered}
 
 
 @router.get("/opportunity/{opp_id}/schedule", response_class=HTMLResponse)

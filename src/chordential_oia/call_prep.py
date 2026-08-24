@@ -25,6 +25,7 @@ useful, and this is the cheapest possible way to find that out.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -242,6 +243,207 @@ def prep_sheet(ci_fields: Optional[Dict[str, str]] = None) -> List[PrepGroup]:
     return out
 
 
+# ── Phase 1 · scoring a call that already happened ───────────────────────────────
+# WHY THIS PHASE EXISTS AT ALL. It is the MEASUREMENT step, and its whole job is to make
+# Phase 2 judgeable: "does detection actually work" answered against calls that already
+# happened, at zero risk and no new spend. Building the live panel first would mean
+# discovering the detector is wrong while a client is on the line.
+#
+# TWO SOURCES OF EVIDENCE, and they answer DIFFERENT questions — conflating them is how a
+# tick becomes a lie:
+#
+#   answered — a Campaign Intelligence field cites this capture for that slot. The
+#              extraction already ran; this costs nothing and re-reads its own result.
+#              Only canonical slots can reach this state; the terms and the conversation
+#              questions have no CI slot to land in.
+#   raised   — a written cue matched a line of the transcript. This proves the TOPIC came
+#              up. It does not prove an answer was given, and it never claims to.
+#   missed   — neither. Not proof it was skipped, but it is the actionable direction, and
+#              the plan's own arithmetic applies: a missed tick costs one repeated
+#              question, a wrong tick costs a wrong proposal.
+#
+# The middle state is the interesting one and the reason this is worth building rather
+# than counting CI fields: "raised but not answered" means the question WAS asked and the
+# answer did not stick, which needs a different fix from "never asked".
+#
+# The cues are written, like the bank, and matched against the transcript verbatim with
+# the matching sentence kept as evidence. A tick you cannot check is the thing this
+# repository keeps having to unbuild.
+_CUES: Dict[str, tuple] = {
+    # Open the call
+    "attendees": ("who's with us", "who is with us", "who else is on", "who's on the call",
+                  "introduce yourself", "introduce yourselves", "everyone on the call"),
+    "recording_consent": ("notetaker", "note taker", "note-taker", "recording this",
+                          "record this call", "recording the call", "transcribing this"),
+    "agenda": ("shape of the call", "how this will go", "written summary", "before i start",
+               "cover today", "run you through", "boring commercial"),
+    # The work
+    "business_objective": ("for the business", "business objective", "what's the goal",
+                           "what is the goal", "trying to achieve", "how will you know it worked",
+                           "success looks like"),
+    "campaign_objective": ("music's job", "job of the music", "what the music has to do",
+                           "what the music needs to do", "carrying the whole", "voiceover",
+                           "voice over", "score or a bed", "under the vo"),
+    "deliverables": ("cutdown", "cut-down", "cut down", "stems", "deliverable",
+                     "versions you need", "versions do you need", "socials",
+                     "social cuts", "how many versions"),
+    # The sound
+    "emotional_arc": ("how it should feel", "how should it feel", "emotional", "the arc",
+                      "feel across", "the mood", "builds to", "starts quiet",
+                      "how it feels"),
+    "reference_playlist": ("reference", "listening to", "playlist", "temp track",
+                           "temp music", "sounds like", "wrong direction", "in the vein of"),
+    # The plan
+    "deadline": ("air date", "airdate", "on air", "deadline", "delivery date",
+                 "when do you need", "timeline", "go live", "launch date",
+                 "final delivery"),
+    "budget_band": ("budget", "approved number", "ballpark", "price range",
+                    "what can you spend", "number for music", "allocated for music"),
+    # The people
+    "decision_makers": ("final approval", "signs off", "sign-off", "sign off on",
+                        "approver", "who decides", "decision maker", "who else needs to see"),
+    "brand_notes": ("brand guidelines", "brand is careful", "how the brand",
+                    "brand shows up", "brand safety", "let them down", "brand police"),
+    "agency_notes": ("your side", "your process", "moves paper", "legal team",
+                     "how does your", "procurement"),
+    # The terms — the nine that keep recurring, which is the whole reason for the plan
+    "license_term": ("licence term", "license term", "in perpetuity", "perpetuity",
+                     "how long do you need", "usage to run", "term of the licence",
+                     "term of the license", "buyout", "buy-out", "usage period",
+                     "licence period", "license period", "media term", "how long can we"),
+    "renewal": ("renew", "renewal", "lapse", "extend the licence", "extend the license",
+                "when the term is up"),
+    "territory": ("territory", "territories", "worldwide", "us only", "u.s. only",
+                  "domestic", "north america", "where does it run", "where will it run",
+                  "global rights"),
+    "exclusivity": ("exclusivity", "exclusive use", "exclusive to", "exclusive rights",
+                    "category exclusive", "exclusively to you"),
+    "publishing": ("publishing", "publisher", "who holds the rights", "own the master",
+                   "ownership of the", "copyright"),
+    "pro_registration": ("pro registration", "cue sheet", "ascap", "bmi", "prs", "sesac",
+                         "performing rights"),
+    "payment_terms": ("payment terms", "payment schedule", "net 30", "net 60", "net thirty",
+                      "net sixty", "deposit", "invoice", "when do you pay",
+                      "purchase order"),
+    "musician_status": ("non-union", "nonunion", "union player", "union musician",
+                        "musicians union", "union rate", "afm", "session player",
+                        "session players", "live players"),
+    # Wrap up
+    "recap": ("play back what", "read that back", "read it back", "let me recap",
+              "recap what", "stop me where", "to summarise", "to summarize"),
+    "unasked": ("haven't i asked", "have i not asked", "what haven't i",
+                "anything i should have asked", "anything else i should",
+                "gone wrong on a project"),
+    "next_step": ("what happens next", "next steps", "who else should be on",
+                  "best way to reach you", "send you the summary"),
+}
+
+_ANSWERED, _RAISED, _MISSED = "answered", "raised", "missed"
+
+
+@dataclass
+class ScoredLine:
+    key: str
+    label: str
+    group: str
+    state: str          # answered | raised | missed
+    evidence: str       # the extracted value, or the transcript sentence — verbatim
+    ask: str            # the question, so a missed line reads as something to do
+
+    @property
+    def covered(self) -> bool:
+        return self.state != _MISSED
+
+
+@dataclass
+class CallScore:
+    lines: List[ScoredLine] = field(default_factory=list)
+    total: int = 0
+    answered: int = 0
+    raised: int = 0
+    missed: int = 0
+    pct: int = 0
+    text: str = ""
+
+    @property
+    def missed_lines(self) -> List[ScoredLine]:
+        return [ln for ln in self.lines if ln.state == _MISSED]
+
+    @property
+    def raised_lines(self) -> List[ScoredLine]:
+        """Asked, but nothing landed in a slot. A different failure from never asking, and
+        the one worth reading first."""
+        return [ln for ln in self.lines if ln.state == _RAISED and ln.key in _CANON_SLOTS]
+
+
+_CANON_SLOTS = {key for _t, _b, canonical, rows in _BANK if canonical
+                for key, _l, _a, _f, _w in rows}
+
+
+def _segments(transcript: str) -> List[str]:
+    """The transcript as checkable sentences, speaker prefixes and all.
+
+    Kept verbatim — the evidence for a tick is the line that produced it, and a normalised
+    or reflowed line is no longer quotable back at the operator."""
+    out: List[str] = []
+    for raw in (transcript or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        for part in re.split(r"(?<=[.?!])\s+", line):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def _raised_in(segments: List[str], cues) -> str:
+    for seg in segments:
+        low = seg.lower()
+        for cue in cues:
+            if cue in low:
+                return seg
+    return ""
+
+
+def score_call(groups: List[PrepGroup], transcript: str,
+               answered: Optional[Dict[str, str]] = None) -> CallScore:
+    """Score a FINISHED call against the sheet — Phase 1 of the copilot plan.
+
+    ``answered`` maps a canonical slot key to the value Campaign Intelligence took from
+    THIS call's capture. It is read, never recomputed: the extraction already ran, and
+    running it again would spend money to learn something already on file.
+
+    No model call, no network, no live component. Deterministic, so the same transcript
+    scores the same way twice — which is what makes a coverage number worth watching over
+    time rather than a reading of the weather.
+    """
+    have = {k: _clean(v) for k, v in (answered or {}).items() if _clean(v)}
+    segments = _segments(transcript)
+    score = CallScore()
+    for group in groups:
+        for line in group.lines:
+            value = have.get(line.key, "") if line.canonical else ""
+            if value:
+                state, evidence = _ANSWERED, value
+            else:
+                hit = _raised_in(segments, _CUES.get(line.key, ()))
+                state, evidence = (_RAISED, hit) if hit else (_MISSED, "")
+            score.lines.append(ScoredLine(
+                key=line.key, label=line.label, group=group.title,
+                state=state, evidence=evidence, ask=line.ask))
+    score.total = len(score.lines)
+    score.answered = sum(1 for ln in score.lines if ln.state == _ANSWERED)
+    score.raised = sum(1 for ln in score.lines if ln.state == _RAISED)
+    score.missed = score.total - score.answered - score.raised
+    covered = score.answered + score.raised
+    score.pct = int(round(100.0 * covered / score.total)) if score.total else 0
+    missed = [ln.label.lower() for ln in score.missed_lines]
+    score.text = (f"{covered} of {score.total} covered"
+                  + (f"; missed {', '.join(missed)}" if missed else " — everything came up"))
+    return score
+
+
 def coverage(groups: List[PrepGroup]) -> dict:
     """How much of the sheet intelligence already answers. Reported honestly: this counts
     what we HOLD, not what is right — a read-back on the call is what makes it true."""
@@ -255,4 +457,5 @@ def coverage(groups: List[PrepGroup]) -> dict:
     }
 
 
-__all__ = ["PrepLine", "PrepGroup", "prep_sheet", "coverage"]
+__all__ = ["PrepLine", "PrepGroup", "ScoredLine", "CallScore",
+           "prep_sheet", "coverage", "score_call"]
