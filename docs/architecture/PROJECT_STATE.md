@@ -94,6 +94,25 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
 
 ## Recently completed (this working stretch)
 
+- **The gate that deletes now asks why** (ADR-0092, 2026-08-24). Sending a *deliverable*
+  back told the creator less than sending a *master* back did — while being the more
+  destructive of the two: a sent-back master stays put, this one deletes the file from the
+  disk copy and the durable mirror both. The room asked for the reason with
+  `window.prompt` (which returns `""` on a bare OK, so the file was destroyed and the
+  creator emailed *"No reason given."*), the console had **no note field at all**, and the
+  reason was then sliced at 200 characters on its way to the person who had to act on it.
+  The refusal is server-side now, the note travels whole, and both surfaces state that the
+  file is gone and only a fresh upload replaces it.
+
+- **The manifest names the file you actually get** (ADR-0091, 2026-08-24). Reported as
+  "duplicate labels"; measured, **not one filename on the client's manifest existed in the
+  package it was describing** — `build_manifest` invented a name per *lane* while the
+  packager wrote another, so four stems became four identical rows. One layout
+  (`plan_package_layout`), two reporters. Scoped lines now reconcile against uploads
+  injectively (the loose matcher read "Instrumental / TV mix · Delivered" off the word
+  "mix"), and `START-HERE.txt` moved to the ZIP root from two folders down in
+  `Docs/For-filing/`.
+
 - **The balance is no longer hidden by the package** (ADR-0090, 2026-08-21). The client's
   payoff was one if/elif ladder whose first branch was the stale package, so a client who
   owed money and whose build was missing audio got "being re-assembled" and **no way to

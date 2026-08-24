@@ -1664,6 +1664,80 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0092 — The gate that deletes asks for a reason, and the server is what asks
+**Status:** Accepted (2026-08-24, operator directive) · Extends ADR-0072 / ADR-0075 ·
+Source: `project_routes.delivery_publish_asset`, the `askWhy` panel in
+`creator_portal.html`, the pending-asset gate in `delivery_console.html`,
+`tests/test_the_gate_that_deletes_needs_a_reason.py`
+
+**Decision.** Sending a **deliverable** back requires a reason, refused **server-side**
+before anything is written; the reason travels whole (bounded at 600 where it is taken,
+never truncated on the way out); and the surface states, before the press, that the file
+is deleted and only a fresh upload replaces it.
+
+**Why.** ADR-0072 gave the *master's* send-back a `required` reason, the full note into
+the room's event stream, and an email saying what to do next. The deliverable gate — the
+mixer's stems, the editor's cutdowns — was the weaker of the two in every dimension while
+being **the more destructive of the two**: a sent-back master stays where the composer
+left it, whereas this press calls `forget_media`, which closes the disk copy *and* the
+durable mirror. The file is gone.
+
+Measured against the master's, four gaps. The room asked for the reason with
+`window.prompt`, which returns `""` on a bare OK — so the file was destroyed and the
+creator emailed the words *"No reason given."* The console's version had no note field at
+all, posting the silent `discard` verb from a bare button, ten lines below the master's
+gate that requires one. The note was then sliced at 200 characters on its way into the
+event stream — a self-imposed cut, not a column limit — so the direction the creator
+reads stopped mid-sentence with nothing marking it. And the email said *"the lane is open
+for the replacement"*, which reads like there is something left to revise.
+
+**Consequences.** **The more destructive of two presses may never carry the weaker
+guard.** `required` in a template is a courtesy a browser extends; the refusal belongs on
+the route, where anything that can POST meets it. A bound on a note goes where the note is
+taken, not silently on the path to the person who has to act on it. And a UI that explains
+itself only through `title=` has not explained itself — that attribute does not exist on a
+touch screen, which is where this gate is pressed.
+
+*Process note.* The first version of the test that guards the helper's scope asserted its
+**indentation** and passed while a real browser reported the function `undefined`. Column
+position is not scope. It now measures brace depth against the handler that calls it —
+and the browser is what caught it, which is ADR-0088 again.
+
+### ADR-0091 — One package layout, and the manifest reports it
+**Status:** Accepted (2026-08-24, operator directive) · Extends ADR-0062 / ADR-0074 ·
+Source: `delivery.plan_package_layout`, `delivery.build_manifest`,
+`delivery.build_delivery_zip`, `tests/test_the_manifest_names_the_file_you_get.py`
+
+**Decision.** Where a delivered file lands and what it is called is decided **once**, in
+`plan_package_layout`. The packager and the manifest both *report* that plan; neither
+derives a name of its own. The manifest names the in-package path of every uploaded
+asset, scoped lines reconcile against uploads **injectively**, and the ZIP carries
+`START-HERE.txt` at its root.
+
+**Why.** Reported as *"duplicate labels in the manifest."* Measured, it was worse.
+`build_manifest` invented a name per asset with `version_name(campaign, label, …)` — a
+function of the **lane** — while `build_delivery_zip` wrote something else entirely. So a
+lane holding four stems produced four **identical** manifest rows, and **not one filename
+on the manifest existed in the package it was describing** — which is the whole of that
+document's job. A scoped line also read `[ ] Mix-ready stem package · Scoped` directly
+above four Delivered rows of that very lane: one document, both claims.
+
+This is the same failure as ADR-0062, in the same shape: a second copy of a layout, kept
+by hand, drifting. It is worth noting where it landed. The identical-rows symptom is
+exactly what made *"the download did not have the two new audio files"* so hard to see —
+a re-delivery read precisely like the one before it.
+
+The reconciliation is injective (`_match_deliverables_to_assets`, not the looser
+`_deliverable_uploaded`) because the loose matcher shares a token with everything: stems
+and a :60 master made *"Instrumental / TV mix"* read Delivered off the word "mix". **A
+manifest claiming a deliverable nobody made is worse than one that admits the gap.**
+
+**Consequences.** Never name a delivered file anywhere but `plan_package_layout`. A
+surface that needs to talk about a file in the package asks that function where it is. And
+`START-HERE.txt` — whose first line is "open `Docs/Delivery-Package.html`" — was filed two
+folders deep in `Docs/For-filing/`, under a name that says it is paperwork for a PRO: the
+one file whose job is to orient you cannot be the one you have to go looking for.
+
 ### ADR-0090 — What you owe and what you may take are answered separately
 **Status:** Accepted (2026-08-21, operator directive) · Extends ADR-0077 / ADR-0078 ·
 Source: the payoff block in `creator_portal.html`, `bumpSignoff()`,

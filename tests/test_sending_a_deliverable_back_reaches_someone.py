@@ -90,16 +90,26 @@ def test_the_reason_reaches_the_creators_room(studio):
         "the BUYER can see us rejecting our own supplier's work")
 
 
-def test_a_send_back_with_no_reason_says_so_rather_than_pretending(studio):
+def test_a_send_back_with_no_reason_does_not_happen_at_all(studio):
+    """SUPERSEDED, deliberately. This used to assert that a blank note was recorded as
+    the words "No reason given." — which was an improvement on saying nothing, but the
+    press it accompanies DELETES the file (`forget_media` closes the disk copy and the
+    durable mirror both). Recording that we destroyed a creator's work for no stated
+    reason is not honesty, it is a tidy log of the same silence.
+
+    The press is now refused before anything is written. See
+    `test_the_gate_that_deletes_needs_a_reason.py` for the rest of that parity.
+    """
+    from chordential_oia.web.uploads import media_present
     c, _app, db, pid = studio
-    _send_back(c, pid, note="")
+    assert _send_back(c, pid, note="").json()["reason"] == "no_note"
     conn = db.connect()
     try:
-        sent = [e for e in db.list_project_events(conn, pid, role="talent")
-                if (e["kind"] or "") == "sent_back"]
+        assert not [e for e in db.list_project_events(conn, pid, role="talent")
+                    if (e["kind"] or "") == "sent_back"]
+        assert media_present(conn, "stem-1.wav")
     finally:
         conn.close()
-    assert "No reason given." in (sent[0]["body"] or "")
 
 
 def test_the_project_log_records_it_too(studio):

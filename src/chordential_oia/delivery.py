@@ -677,7 +677,7 @@ def _standard_deliverables(project) -> List[Deliverable]:
 
 
 def build_manifest(
-    project, deliverables=None, assets=None, versions=None
+    project, deliverables=None, assets=None, versions=None, bundled=None
 ) -> List[ManifestRow]:
     """The deliverables manifest: standard asset *types* + the real uploaded assets.
 
@@ -690,9 +690,28 @@ def build_manifest(
     rows under "Versions" — the v1/v2/v3 ladder, latest marked current."""
     campaign = (_val(project, "need") or "Campaign").strip() or "Campaign"
     std = deliverables if deliverables is not None else _standard_deliverables(project)
+    # A SCOPED ROW THAT ARRIVED SAYS SO. Every standard deliverable was stamped "Scoped"
+    # forever, so a package containing four stems still carried the line
+    # "[ ] Mix-ready stem package · Scoped" directly above four Delivered rows of that
+    # very lane — the same document asserting a thing both undelivered and delivered.
+    #
+    # Matched INJECTIVELY (`_match_deliverables_to_assets`), not with the looser
+    # `_deliverable_uploaded`: one uploaded asset satisfies ONE scoped line. The loose
+    # matcher shares a token with everything — a delivery of stems and a :60 master read
+    # "Instrumental / TV mix · Delivered" too, off the word "mix", and a manifest that
+    # claims a deliverable nobody made is worse than one that admits the gap. Evidence
+    # or nothing.
+    _labels, _seen = [], set()
+    for a in assets or []:
+        l = (a.get("label") or a.get("filename") or "").strip()
+        if l and l.lower() not in _seen:
+            _seen.add(l.lower())
+            _labels.append(l)
+    _matched = _match_deliverables_to_assets(list(std), _labels) if _labels else {}
     rows = [
-        ManifestRow(group=d.group, asset=d.asset, spec=d.spec, status="Scoped")
-        for d in std
+        ManifestRow(group=d.group, asset=d.asset, spec=d.spec,
+                    status="Delivered" if i in _matched else "Scoped")
+        for i, d in enumerate(std)
     ]
     versions = versions or []
     last = len(versions)
@@ -713,18 +732,30 @@ def build_manifest(
             group="Versions", asset=f"{name} · {label}{suffix}",
             spec="Audio", status="Delivered",
         ))
-    for asset in assets or []:
+    # EACH ROW NAMES THE FILE THE CLIENT WILL FIND. The name comes from
+    # `plan_package_layout` — the packager's own decision — rather than being invented
+    # here a second time. See that function for what listing a name the ZIP did not
+    # contain, ten identical times, cost.
+    #
+    # ``bundled`` is the set of in-ZIP paths the packager is actually writing. Passed
+    # ONLY by :func:`build_delivery_zip`, and it is the difference between naming where a
+    # file will be and asserting that it is there: an asset whose bytes are on no disk
+    # and in no mirror still has a planned home, and printing that home would be the same
+    # lie this row was rewritten to stop telling. Outside a build (the console, the
+    # marketing page) there is no package yet, so the planned path is the honest answer.
+    for entry in plan_package_layout(project, assets or []):
+        asset = entry["asset"]
         label = (asset.get("label") or asset.get("filename") or "Asset").strip()
         kind = asset.get("kind") or "file"
         spec = "Audio" if kind == "audio" else "File"
-        # Deterministic version name for the uploaded file (campaign + asset + v1).
-        name = version_name(
-            campaign, label, "", "Master" if kind == "audio" else "",
-            1, "MASTER" if kind == "audio" else "FILE",
-        )
+        arc = entry["arc"]
+        if arc and (bundled is None or arc in bundled):
+            where, status = arc, "Delivered"
+        else:
+            where, status = "not in this package · available by link", "Pending"
         rows.append(ManifestRow(
-            group="Uploaded assets", asset=f"{name} · {label}",
-            spec=spec, status="Delivered",
+            group="Uploaded assets", asset=f"{label} · {where}",
+            spec=spec, status=status,
         ))
     return rows
 
@@ -1341,6 +1372,64 @@ def asset_folder(asset: dict) -> str:
     if (asset.get("kind") or "") == "audio":
         return "Masters"
     return "Assets"
+
+
+def plan_package_layout(project, assets) -> List[dict]:
+    """Where every uploaded asset lands in the ZIP: ``[{asset, folder, name, arc}]``.
+
+    **The one place a delivered file is named** (ADR-0062's rule applied to the package:
+    one derivation, many reporters). The packager used to decide this inline while
+    :func:`build_manifest` invented a SECOND name for the same file from
+    :func:`version_name` — so the manifest listed
+    ``AURORA_Mixreadystempackage_MASTER_v1_MASTER`` and the ZIP contained
+    ``Stems/kick_01.wav``. Not one filename on the client's manifest existed in the
+    package it was describing, which is the whole of that document's job. Worse, a lane
+    holding ten stems produced ten IDENTICAL manifest rows, because the invented name is
+    a function of the LANE, not of the file: the client could not tell the kick from the
+    vocal, and a re-delivery read exactly like the one before it.
+
+    Naming rule (unchanged, now stated once): a lane holding a single file is named for
+    what it IS — ``CAMPAIGN_Label.ext``. A lane holding SEVERAL keeps each creator's own
+    filename, because that is the only thing that separates them (ADR-0074).
+
+    Pure — no disk, no network. An asset with no stored filename gets ``arc=""`` (there
+    is no copy to bundle); it is still returned, in order, so callers can report it."""
+    used: set = set()
+
+    def _unique(arcname: str) -> str:
+        if arcname not in used:
+            used.add(arcname)
+            return arcname
+        stem, ext = os.path.splitext(arcname)
+        i = 2
+        while f"{stem}-{i}{ext}" in used:
+            i += 1
+        out = f"{stem}-{i}{ext}"
+        used.add(out)
+        return out
+
+    per_label: dict = {}
+    for a in assets or []:
+        k = (a.get("label") or "").strip().lower()
+        per_label[k] = per_label.get(k, 0) + 1
+
+    plan: List[dict] = []
+    for asset in assets or []:
+        fname = os.path.basename((asset.get("filename") or "").strip())
+        if not fname:
+            plan.append({"asset": asset, "folder": "", "name": "", "arc": ""})
+            continue
+        folder = asset_folder(asset)
+        label = (asset.get("label") or "").strip()
+        shared = per_label.get(label.lower(), 0) > 1
+        if label and not shared:
+            nice = deliverable_filename(_val(project, "need"), label,
+                                        os.path.splitext(fname)[1])
+        else:
+            nice = os.path.basename((asset.get("orig") or "").strip()) or fname
+        arc = _unique(f"{folder}/{nice}")
+        plan.append({"asset": asset, "folder": folder, "name": nice, "arc": arc})
+    return plan
 
 
 def cue_sheet_csv(project, assignments, delivery: Optional[dict] = None) -> str:
@@ -2382,7 +2471,6 @@ def build_delivery_zip(
         # it has no connection, and the signatures table remains the record (ADR-0059).
         executed=delivery.get("certificate_executed"),
     )
-    manifest = build_manifest(project, assets=assets, versions=versions)
     cue_rows_for_docs = build_cue_sheet(project, assignments, delivery=delivery)
 
     # Brief-as-contract: reconcile the brief's deliverables against the delivered
@@ -2402,13 +2490,20 @@ def build_delivery_zip(
     items: List[str] = []          # human labels of everything packaged
     converted: List[str] = []      # which assets also got an MP3 (best-effort)
     referenced: List[dict] = []    # assets present-by-URL but not bundled (no local file)
-    used_names: set = set()
     # filename → relative in-ZIP path (from Docs/) of the bundled audio file, so the
     # branded package HTML can give each bundled audio a playable <audio> player.
     bundled_audio: dict = {}
 
+    # WHERE EVERYTHING LANDS, decided once and shared. `plan_package_layout` holds the
+    # folder + naming + uniqueness rules that used to live inline here, so the manifest
+    # can report the SAME names instead of inventing a parallel set that named no file
+    # in the package. Planned for every asset, whether or not its bytes turn up: a lane's
+    # numbering must not shuffle just because one file was briefly unreachable.
+    layout = plan_package_layout(project, assets)          # index-aligned with `assets`
+    used_names: set = {e["arc"] for e in layout if e["arc"]}
+
     def _unique(arcname: str) -> str:
-        # Guard against two assets landing on the same arcname inside the zip.
+        # Guard against a version or an MP3 landing on a name the plan already took.
         if arcname not in used_names:
             used_names.add(arcname)
             return arcname
@@ -2420,25 +2515,10 @@ def build_delivery_zip(
         used_names.add(out)
         return out
 
-    # Plan the bundled-file layout up front (which assets land where) so the branded
-    # HTML docs can reference each bundled audio by its relative in-ZIP path before
-    # we write the bytes. Mirrors the asset-write loop's folder + uniqueness logic.
     asset_arcs: List[tuple] = []   # (asset, src, arc, blob) for the writable assets
     from_mirror = 0                # how many came from the durable mirror, not the disk
     why: dict = {}                 # why each unbundled asset could not be found
-    # HOW MANY FILES SHARE THIS LANE. A lane holds a folder now (ADR-0074): ten stems
-    # under "Mix-ready stem package". Naming each one after the LANE turns them into
-    # `CAMPAIGN_Mix_ready_stem_package.wav`, `-2`, `-3` … `-10`, which is the same file
-    # name ten times with a counter — the client cannot tell the kick from the vocal, and
-    # a re-delivery looks identical to the one before it: *"the download did not have the
-    # two new audio files"* (operator, 2026-08-22), when in fact all four were in there
-    # under one name. Where a lane holds more than one file, the CREATOR's own filename
-    # is the meaningful one and is kept.
-    _per_label: dict = {}
-    for _a in assets:
-        _k = (_a.get("label") or "").strip().lower()
-        _per_label[_k] = _per_label.get(_k, 0) + 1
-    for asset in assets:
+    for _i, asset in enumerate(assets):
         fname = os.path.basename((asset.get("filename") or "").strip())
         src = os.path.join(upload_dir, fname) if fname else ""
         blob = None
@@ -2466,20 +2546,7 @@ def build_delivery_zip(
             from_mirror += 1
             blob = True                     # a marker: pull it at write time
             src = None
-        folder = asset_folder(asset)
-        # Name the file for what it IS (CAMPAIGN_Label.ext), not its random upload id, so
-        # the package is self-describing. Falls back to the original name when unlabeled.
-        _label = (asset.get("label") or "").strip()
-        _shared = _per_label.get(_label.lower(), 0) > 1
-        if _label and not _shared:
-            nice = deliverable_filename(_val(project, "need"), _label,
-                                        os.path.splitext(fname)[1])
-        else:
-            # Keep what the creator called it — that is the only thing that tells a kick
-            # from a vocal. Falls back to the stored name when there is no original.
-            _orig = os.path.basename((asset.get("orig") or "").strip())
-            nice = _orig or fname
-        arc = _unique(f"{folder}/{nice}")
+        arc = layout[_i]["arc"]
         asset_arcs.append((asset, src, arc, blob, fname))
         items.append(asset.get("label") or fname)
         if (asset.get("kind") or "") == "audio":
@@ -2488,6 +2555,14 @@ def build_delivery_zip(
             bundled_audio[asset.get("filename") or fname] = rel
             label = asset.get("label") or asset.get("filename") or "Asset"
             bundled_audio.setdefault(f"label:{label}", rel)
+
+    # THE MANIFEST IS BUILT HERE, not before the plan, because it now reports what this
+    # build is actually writing rather than what was hoped for. (Exact for anything
+    # missing at planning time — the reported case. A file the mirror claims to hold and
+    # then fails to hand over is written past this point and stays listed; the
+    # descriptor's `why` counts that one.)
+    manifest = build_manifest(project, assets=assets, versions=versions,
+                              bundled={a[2] for a in asset_arcs})
 
     # The branded, self-contained HTML docs (stdlib only — the primary deliverable).
     package_html = delivery_package_html(
@@ -2587,10 +2662,15 @@ def build_delivery_zip(
             zf.writestr("Docs/Delivery-Package.pdf", pdf_bytes)
             pdf_written = True
         # 4) The plain-text README (what's bundled + any referenced-by-URL-only assets, so
-        # nothing is silently dropped) lives in For-filing/ with the other raw records — the
-        # client's top-level Docs/ folder shows only the branded HTML documents.
-        zf.writestr("Docs/For-filing/README.txt", _readme_text(
-            project, items, referenced, built_at, completeness=completeness))
+        # nothing is silently dropped). AT THE ROOT, where an unzipped folder is looked at.
+        # It opens with "START HERE · open Docs/Delivery-Package.html" — and it was filed
+        # inside `Docs/For-filing/`, two folders deep, under a name that says it is
+        # paperwork for a PRO. The one file whose job is to orient you cannot be the one
+        # you have to go looking for; unzipping used to present `Docs/ Masters/ Stems/`
+        # and nothing at all saying which to open first.
+        readme = _readme_text(project, items, referenced, built_at,
+                              completeness=completeness)
+        zf.writestr("START-HERE.txt", readme)
 
     # The founder's payoff checklist: the deliverables + the generated docs + ZIP.
     checklist = list(items)

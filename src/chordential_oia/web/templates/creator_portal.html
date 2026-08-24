@@ -144,6 +144,15 @@
   @media (prefers-reduced-motion:reduce){.nb-mark.armed{animation:none}}
   .nb-mark.set{border-color:var(--orange);background:var(--orange-soft);color:var(--orange)}
   .nb-send{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:700}
+  /* The send-back gate, opened under the row it judges (see `askWhy`). */
+  .sb-ask{margin:8px 0 4px;padding:10px 12px;border:1px solid var(--orange);
+    border-radius:8px;background:var(--orange-soft)}
+  .sb-what{margin:0 0 8px;font-size:12.5px;line-height:1.45;color:var(--ink)}
+  .sb-ask .sb-note{width:100%;box-sizing:border-box;font:inherit;font-size:13px;
+    padding:7px 9px;border:1px solid var(--rule);border-radius:6px;resize:vertical}
+  .sb-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .sb-go{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:700}
+  .sb-err{color:var(--orange);font-weight:600}
   .nb-tc{font-family:var(--mono);font-variant-numeric:tabular-nums}
   .nb-lead{white-space:nowrap}
   .nb-who{flex:0 1 150px;min-width:110px}
@@ -1661,12 +1670,19 @@
                   title="Publish to the client for sign-off">✓</button>
           {# A REASON, because a rejection nobody hears cannot be acted on. The master's
              send-back has carried one since ADR-0072; this one deleted the file and told
-             the mixer nothing. Asked for here rather than as an input per row: a stem
-             lane is twelve rows, and twelve text boxes is a form, not a gate. #}
+             the mixer nothing. Asked for on the way out rather than as an input per row:
+             a stem lane is twelve rows, and twelve text boxes is a form, not a gate — so
+             ONE panel opens under whichever row was pressed (`sb-ask`, built in JS). It
+             replaced a `window.prompt`, which took no length, could not be re-read once
+             dismissed, is suppressed outright by some mobile browsers, and returned ""
+             on a bare OK — sending the file to the incinerator with the words "No reason
+             given." The server refuses that press now; this is the half that makes a
+             considered note easy to write. #}
           <input type="hidden" name="note" value="">
           <button type="submit" name="action" value="send_back" class="lf-btn no"
                   title="Send it back to {{ f.by or 'the creator' }}, with a reason"
-                  data-sendback="{{ f.name|e }}" data-who="{{ (f.by or 'the creator')|e }}">↩</button>
+                  data-sendback="{{ f.name|e }}" data-who="{{ (f.by or 'the creator')|e }}"
+                  data-lane="{{ d.asset|e }}">↩</button>
         </form>
         {% endif %}
         {% endif %}
@@ -3265,21 +3281,74 @@
      four stems meant opening it four times (operator, 2026-08-19). The row answers in
      place: an approved file joins the delivered list, a sent-back one leaves. No JS →
      the form still posts and the redirect still works. */
+  /* THE SEND-BACK GATE, in the page. What this press does is stated before it is
+     pressed — the master's gate has said so since ADR-0072, while this one, which is
+     the MORE destructive of the two (it takes the file off the server; a sent-back
+     master stays put), was two icon buttons whose only explanation was a `title=`
+     attribute that does not exist on a touch screen. One panel, moved to whichever row
+     asked for it, so a twelve-stem lane stays a gate rather than becoming a form. */
+  function askWhy(btn, onSend){
+    var li = btn.closest("li");
+    if (!li) return;
+    var panel = document.getElementById("sb-ask");
+    if (!panel){
+      panel = document.createElement("div");
+      panel.id = "sb-ask";
+      panel.className = "sb-ask";
+      panel.innerHTML =
+        '<p class="sb-what"></p>'
+        + '<textarea class="sb-note" maxlength="600" rows="3" '
+        + 'placeholder="What needs another pass? This is what they read."></textarea>'
+        + '<div class="sb-row"><button type="button" class="btn tiny sb-go">'
+        + '↩ Send it back</button>'
+        + '<button type="button" class="btn tiny sb-no">Cancel</button>'
+        + '<span class="fineprint sb-err"></span></div>';
+    }
+    var who = btn.getAttribute("data-who") || "the creator";
+    var name = btn.getAttribute("data-sendback") || "this file";
+    var lane = btn.getAttribute("data-lane") || "this lane";
+    /* The consequence, in full, before the press: it is deleted, they are emailed, and
+       the only way back is a fresh upload. */
+    panel.querySelector(".sb-what").textContent =
+      "Sending “" + name + "” back removes it from the server and emails "
+      + who + " your reason. It is not recoverable — they re-upload into " + lane
+      + ". The client never sees it, and no revision round is spent.";
+    panel.querySelector(".sb-err").textContent = "";
+    var box = panel.querySelector(".sb-note");
+    box.value = "";
+    li.appendChild(panel);
+    box.focus();
+    panel.querySelector(".sb-no").onclick = function(){ panel.remove(); };
+    panel.querySelector(".sb-go").onclick = function(){
+      var why = box.value.trim();
+      if (!why){
+        /* The same refusal the server makes, said where it can be fixed. */
+        panel.querySelector(".sb-err").textContent =
+          "Say what needs another pass — that is the whole point of sending it back.";
+        box.focus();
+        return;
+      }
+      panel.remove();
+      onSend(why);
+    };
+  }
+
   document.querySelectorAll("form.lf-gate").forEach(function(f){
     f.addEventListener("submit", function(e){
       if (!window.fetch || !window.FormData) return;
       var act = (e.submitter && e.submitter.value) || "publish";
+      e.preventDefault();
       /* Ask for the reason on the way out. It is what the creator reads, and it is the
          whole difference between "your work was rejected" and a note they can act on. */
-      var why = "";
       if (act === "send_back"){
-        var b = e.submitter;
-        why = window.prompt("Send " + (b ? b.getAttribute("data-sendback") : "this file")
-                + " back to " + (b ? b.getAttribute("data-who") : "the creator")
-                + ".\n\nWhat needs another pass? This is what they read.", "");
-        if (why === null) { e.preventDefault(); return; }   /* cancelled — nothing happens */
+        askWhy(e.submitter, function(why){ runGate(f, act, why); });
+        return;
       }
-      e.preventDefault();
+      runGate(f, act, "");
+    });
+  });
+
+  function runGate(f, act, why){
       var li = f.closest("li"), lane = f.closest(".deliv-lane");
       var fd = new FormData(f);
       fd.set("action", act);
@@ -3297,6 +3366,8 @@
             f.querySelectorAll("button").forEach(function(b){ b.disabled = false; });
             toast(data.reason === "gone"
               ? "That file is no longer waiting — it was already handled. Reload to see the lane as it stands."
+              : data.reason === "no_note"
+              ? "Nothing was sent back — a send-back needs a reason, because it deletes the file and the creator only gets what you write."
               : "That press didn't take. Reload and try again.");
             return;
           }
@@ -3332,8 +3403,7 @@
           f.querySelectorAll("button").forEach(function(b){ b.disabled = false; });
           toast("That didn't go through. Check your connection and try again.");
         });
-    });
-  });
+  }
 
   /* DROP FILES ON A LANE. Twelve stems selected through a file picker is twelve rows in
      a dialog; dragging the folder's contents onto the row they belong to is the gesture

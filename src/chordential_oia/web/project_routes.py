@@ -2983,6 +2983,16 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             # answered with a redirect, which over `fetch` reads as a dead connection.
             return _asset_answer(request, project_id, origin, ok=False, reason="gone",
                                  action=action, filename=filename)
+        # NO REASON, NO REJECTION. This press DELETES the file — `forget_media` closes
+        # both the disk copy and the durable mirror — and it was the one gate in the
+        # system that would fire on an empty note and email the creator the words "No
+        # reason given." The master's send-back cannot: its reason is a `required` field
+        # on the form. The more destructive of the two decisions must not have the weaker
+        # guard, so the refusal is here, before anything is written, rather than in the
+        # markup where only a browser with JavaScript would honour it.
+        if action in ("discard", "send_back") and not (note or "").strip():
+            return _asset_answer(request, project_id, origin, ok=False, reason="no_note",
+                                 action=action, filename=filename)
         pending = [a for a in pending if a.get("filename") != filename]
         db.update_delivery(conn, project_id, "pending_assets", pending)
         if action in ("discard", "send_back"):
@@ -2997,7 +3007,7 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             # this one wrote a line into the project's own updates and told the mixer
             # NOTHING — their stems simply stopped existing. The same judgement deserves
             # the same courtesy, and a rejection nobody hears cannot be acted on.
-            sent_back = (note or "").strip() or "No reason given."
+            sent_back = (note or "").strip()[:600]
             label = hit.get("label") or "a deliverable"
             who = hit.get("by") or "the creator"
             name = hit.get("orig") or hit.get("filename") or "the file"
@@ -3006,7 +3016,12 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             db.add_project_event(
                 conn, project_id, "sent_back", actor_role="operator",
                 actor_name="Studio",
-                body=f"'{name}' ({label}) sent back to {who}: {sent_back}"[:200],
+                # WHOLE. This was sliced at 200 characters — a self-imposed cut, not a
+                # column limit — so the note the creator reads in the room stopped
+                # mid-sentence with nothing to say it had. The master's send-back has
+                # never truncated its reason; the note is bounded at 600 where it is
+                # taken, which is where a bound belongs.
+                body=f"'{name}' ({label}) sent back to {who}: {sent_back}",
                 audience="operator,talent")
             # Addressed to the lane's OWNER — the mixer's stems go back to the mixer, not
             # to everyone who has ever touched the project (ADR-0075).
@@ -3068,7 +3083,13 @@ def delivery_publish_asset(request: Request, project_id: int, filename: str = Fo
             body_text=(f"The studio reviewed the {label} you delivered for {campaign} "
                        f"and is sending '{name}' back before the client sees it.\n\n"
                        f"\"{sent_back}\"\n\n"
-                       "Open your room — the lane is open for the replacement."))
+                       # SAY THAT IT IS GONE. Unlike a sent-back master — which stays
+                       # where the composer left it — this press removes the file from
+                       # the server, so "the lane is open" understated what is being
+                       # asked for: not an edit, a fresh upload.
+                       f"'{name}' has been taken off the server, so send the new one up "
+                       f"as a fresh upload into {label} — there is nothing left there to "
+                       "revise. Your lane is open."))
     if invite is not None:
         project, craft, label = invite
         campaign = _campaign_label(project)

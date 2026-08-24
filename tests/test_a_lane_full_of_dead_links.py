@@ -313,8 +313,12 @@ def test_sending_a_deliverable_back_forgets_the_mirror_too(lane):
              "filename": "alive.wav", "orig": "SAND_CASTLE_1_Kick.wav", "kind": "stems"}])
     finally:
         conn.close()
+    # The reason is required now (ADR-0092) — this press deletes the file, and a
+    # send-back that carries no reason is refused before anything is written. What is
+    # under test here is the mirror, so give it one.
     _fetch(c, f"/project/{pid}/delivery/asset/publish",
-           filename="alive.wav", origin="room", action="discard")
+           filename="alive.wav", origin="room", action="discard",
+           note="Wrong session — this is the rehearsal take.")
     conn = db.connect()
     try:
         assert not media_present(conn, "alive.wav"), "the sent-back file still downloads"

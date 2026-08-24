@@ -1596,7 +1596,7 @@ def test_uploaded_local_audio_is_in_the_zip(client):
 
 
 def test_referenced_only_asset_listed_in_zip_readme(client):
-    """IP3: a remote-URL-only asset (blank filename) is listed in Docs/For-filing/README.txt as
+    """IP3: a remote-URL-only asset (blank filename) is listed in START-HERE.txt as
     'referenced, not bundled' rather than silently dropped — and doesn't crash."""
     import os
     import zipfile as _zip
@@ -1621,7 +1621,7 @@ def test_referenced_only_asset_listed_in_zip_readme(client):
         conn.close()
     zip_path = os.path.join(app_mod.UPLOAD_DIR, os.path.basename(url))
     with _zip.ZipFile(zip_path) as zf:
-        readme = zf.read("Docs/For-filing/README.txt").decode("utf-8")
+        readme = zf.read("START-HERE.txt").decode("utf-8")
     assert "REFERENCED, NOT BUNDLED" in readme
     assert "Anthem :60 (demo)" in readme
     assert "https://example.com/a.mp3" in readme

@@ -1050,10 +1050,23 @@
         {% if pa.url %}<audio controls preload="none" src="{{ pa.url }}" style="height:26px;vertical-align:middle;margin-left:6px"></audio>{% endif %}
       </span>
       <span class="inline">
-        <form method="post" action="/project/{{ project['id'] }}/delivery/asset/publish" class="inline">
+        {# THE SAME GATE THE MASTER GETS, including the reason. This was a bare "Send
+           back" posting the silent `discard` verb with no note anywhere on the form —
+           so the console could delete a creator's file (the press calls `forget_media`,
+           which closes the disk copy AND the durable mirror) and email them the words
+           "No reason given." The master's send-back, ten lines up this same page, has
+           required its reason since ADR-0072. The server refuses a blank one now; this
+           is the field that lets it be written. #}
+        <form method="post" action="/project/{{ project['id'] }}/delivery/asset/publish"
+              class="inline" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <input type="hidden" name="filename" value="{{ pa.filename }}">
-          <button class="btn tiny primary" name="action" value="publish" type="submit">Publish to client</button>
-          <button class="btn tiny" name="action" value="discard" type="submit">Send back</button>
+          <button class="btn tiny primary" name="action" value="publish" type="submit"
+                  formnovalidate>Publish to client</button>
+          <input type="text" name="note" maxlength="600" class="input" required
+                 placeholder="What needs another pass? This is what they read."
+                 style="flex:1;min-width:170px">
+          <button class="btn tiny" name="action" value="send_back" type="submit"
+                  title="Removes the file from the server and emails {{ pa.by or 'the creator' }} your reason">Send back</button>
         </form>
       </span>
     </div>
