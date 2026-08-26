@@ -108,6 +108,11 @@ class CapabilitiesDoc:
     show_cost: bool = False
     price_low: Optional[int] = None
     price_high: Optional[int] = None
+    # The licence the band was built on, so the operator can SEE the four levers that
+    # produced it and correct one without leaving the document. Internal: rendered only in
+    # edit mode. What the client reads is the band and, where a lever was assumed rather
+    # than stated, the "What this rests on" note — never the factor table.
+    licence: Optional[object] = None
     show_terms: bool = False
     terms: List[str] = field(default_factory=list)
     show_docusign: bool = False
@@ -556,7 +561,7 @@ DELIVERY_TEMPLATES = {
         "rights": list(_RIGHTS_SUMMARY),
         "assumptions": (
             "Assumed engagement: feature-film score (~20 to 30 cues, delivered to "
-            "picture). Not right? Switch template or edit below."
+            "picture)."
         ),
     },
     "campaign": {
@@ -566,7 +571,7 @@ DELIVERY_TEMPLATES = {
         "rights": list(_RIGHTS_SUMMARY),
         "assumptions": (
             "Assumed engagement: brand/advertising campaign (anthem + cutdowns + "
-            "social). Not right? Switch template or edit below."
+            "social)."
         ),
     },
     "sonic": {
@@ -584,7 +589,7 @@ DELIVERY_TEMPLATES = {
         "rights": list(_RIGHTS_SUMMARY),
         "assumptions": (
             "Assumed engagement: sonic identity / audio branding (logo + variations "
-            "+ application cues). Not right? Switch template or edit below."
+            "+ application cues)."
         ),
     },
     "artist": {
@@ -599,7 +604,7 @@ DELIVERY_TEMPLATES = {
         "rights": list(_RIGHTS_SUMMARY),
         "assumptions": (
             "Assumed engagement: song / artist production (produced master + "
-            "instrumental + TV track + stems). Not right? Switch template or edit below."
+            "instrumental + TV track + stems)."
         ),
     },
 }
@@ -729,6 +734,7 @@ def build_capabilities_doc(
     show_terms = bool(toggles.get("terms"))
 
     price_low = price_high = None
+    licence = None
     if show_cost:
         # ADR-0034: the client brief and the Commercial Review are two documents the
         # SAME buyer reads. They quoted different bands — this one reached straight for
@@ -738,6 +744,10 @@ def build_capabilities_doc(
             opp, estimate, ci_fields=ci_fields,
             commercial_overrides=overrides.get("commercial"),
         )
+        # The same read the band was built from — one derivation, shown rather than
+        # re-derived, so the rail cannot display a licence the price did not use.
+        from .pricing import licence_from_ci as _licence_from_ci
+        licence = _licence_from_ci(ci_fields)
 
     terms: List[str] = []
     assumptions: List[str] = []
@@ -844,6 +854,7 @@ def build_capabilities_doc(
         show_cost=show_cost,
         price_low=price_low,
         price_high=price_high,
+        licence=licence,
         show_terms=show_terms,
         terms=terms,
         # Plus anything the CONTRACT TERMS had to set aside — a scope item the call

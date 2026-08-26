@@ -851,6 +851,14 @@ a.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
   font-family:inherit;color:#1F1E1E;background:#fff;min-width:140px;
 }
 .capdoc-in-wide{flex:1;min-width:220px}
+/* The value editor grows to what is in it. A sentence in a one-line box is a value the
+   operator can read above it and not edit inside it. */
+.capdoc-grow{flex:1 1 100%;min-width:0;resize:vertical;overflow:hidden;line-height:1.5;
+  max-height:2.2em;transition:max-height .12s ease}
+.capdoc-grow:focus,.capdoc-grow.is-open{max-height:32em;overflow:auto}
+.capdoc-clear{border:1px solid #d8c9bb;background:#fff;color:#8a4b1d;border-radius:7px;
+  padding:6px 10px;font-size:13px;font-family:inherit;cursor:pointer}
+.capdoc-clear:hover{border-color:#b34a21;color:#b34a21}
 .capdoc-ta{
   width:100%;border:1px solid #d8c9bb;border-radius:8px;padding:8px 10px;
   font-size:14px;font-family:inherit;color:#1F1E1E;background:#fff;line-height:1.5;
@@ -1099,3 +1107,12 @@ details.ci-intake[open]>summary{opacity:.55}
 .btn.danger:hover, button.danger:hover{background:#f7e9e6;border-color:#d98b78;color:#8a2a19}
 .acts-menu button.danger{color:#a3341f}
 .acts-menu button.danger:hover{background:#f7e9e6}
+
+/* The licence rail on the discovery summary — four levers beside the number they set.
+   Operator only; `no-print` keeps it off the client's PDF. */
+.lever-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+.lever{display:flex;flex-direction:column;gap:2px;margin:0;min-width:0}
+.lever .capdoc-select{margin-left:0}
+.lever-assumed{display:inline-block;margin-left:6px;font-size:9.5px;letter-spacing:.06em;
+  text-transform:uppercase;font-weight:700;color:#8a4b1d;background:#fff6ec;
+  border:1px solid #e6c8b0;border-radius:99px;padding:0 6px}

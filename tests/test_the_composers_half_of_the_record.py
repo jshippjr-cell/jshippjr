@@ -34,16 +34,42 @@ def _view(**fields):
 
 
 # ── the check that did not exist ────────────────────────────────────────────────────
-def test_the_gap_engine_never_looked_at_the_composers_half():
-    """The evidence for why this module exists, kept as a test so it cannot quietly become
-    untrue in either direction — if these ever DO overlap fully, this check is redundant
-    and should be deleted rather than left asserting a fixed hole."""
+def test_everything_we_hand_a_composer_is_chased():
+    """THE RULE, and it is the fix for what started this.
+
+    `REQUIRED` — the only gap engine, and what `understanding_pct` counts — used to be the
+    money, the dates, the assets and the approver. Our side of the table, every one. So a
+    record could report 100% understood while producing a brief with no objective, no
+    feeling and no references in it, because nothing on the list was anything a composer
+    needs.
+
+    This test is the invariant that keeps it fixed: a field added to the composer's brief
+    cannot arrive unguarded, which is exactly how the creative half came to be guarded by
+    nothing. The cost was paid once — the denominator went from four to eight and every
+    percentage in the pipeline dropped, which is the number becoming honest rather than
+    anything getting worse."""
     from chordential_oia.web.campaign_intake import REQUIRED
     required = {k for _f, k, _q in REQUIRED}
-    composer = {k for k, _l in BRIEF_KEYS}
-    unguarded = composer - required
-    assert unguarded, "REQUIRED now covers the brief; brief_readiness may be redundant"
-    assert {"campaign_objective", "emotional_arc", "reference_playlist"} <= unguarded
+    unguarded = {k for k, _l in BRIEF_KEYS} - required
+    assert not unguarded, f"the composer is handed these and nobody chases them: {unguarded}"
+
+
+def test_a_chased_field_is_asked_in_a_sentence_somebody_would_say():
+    """The gap question is what the operator (or the client) actually reads. A slot label
+    dressed as a question — "Emotional arc?" — is a prompt nobody can answer."""
+    from chordential_oia.web.campaign_intake import REQUIRED
+    for _facet, key, question in REQUIRED:
+        assert question.strip().endswith("?"), key
+        assert len(question.split()) >= 5, f"{key}: {question!r} is a label, not a question"
+
+
+def test_a_chased_field_lands_in_the_facet_that_owns_it():
+    """A canonical key has exactly one home. A gap filed to the wrong facet writes an
+    answer into a slot nothing reads — the failure `_canonicalise` exists to stop."""
+    from chordential_oia.web.campaign_intake import REQUIRED
+    from chordential_oia.web.campaign_intelligence import CANONICAL_FACET_FOR_KEY
+    for facet, key, _q in REQUIRED:
+        assert CANONICAL_FACET_FOR_KEY.get(key) == facet, key
 
 
 def test_an_empty_creative_direction_is_reported_not_skipped():

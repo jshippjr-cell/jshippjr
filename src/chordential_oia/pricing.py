@@ -202,6 +202,40 @@ class LicenceTerms:
             EXCLUSIVITY_LABELS.get(self.exclusivity, self.exclusivity),
         ])
 
+    # ── What a surface needs to OFFER these as choices ───────────────────────────
+    # The option lists are built from the factor tables themselves, so a media type added
+    # to `MEDIA_FACTORS` appears in the picker without anybody remembering to add it. Each
+    # option's TEXT is the label the parser reads back (`licence_from_ci`), so a chosen
+    # option round-trips: the rail writes "worldwide", intelligence stores "worldwide", and
+    # the next quote reads global. A picker whose values the parser could not read would
+    # look like it worked and change nothing.
+    @property
+    def media_options(self) -> List[Tuple[str, str]]:
+        return [(k, MEDIA_LABELS.get(k, k)) for k in MEDIA_FACTORS]
+
+    @property
+    def territory_options(self) -> List[Tuple[str, str]]:
+        return [(k, TERRITORY_LABELS.get(k, k)) for k in TERRITORY_FACTORS]
+
+    @property
+    def term_options(self) -> List[Tuple[str, str]]:
+        return [(("perpetual" if k is None else str(k)),
+                 LicenceTerms(term_years=k).term_label) for k in TERM_FACTORS]
+
+    @property
+    def term_key(self) -> str:
+        return "perpetual" if self.term_years is None else str(self.term_years)
+
+    @property
+    def exclusivity_options(self) -> List[Tuple[str, str]]:
+        return [(k, EXCLUSIVITY_LABELS.get(k, k)) for k in EXCLUSIVITY_FACTORS]
+
+    def is_stated(self, name: str) -> bool:
+        """Did the brief actually SAY this one? The rail badges the ones it did not, so
+        the operator can see which parts of the number are a guess before they send it."""
+        return bool(getattr(self, {"license_term": "term_stated"}.get(
+            name, f"{name}_stated"), False))
+
     @property
     def assumed(self) -> List[str]:
         """Which of the four we had to guess, in the client's words."""

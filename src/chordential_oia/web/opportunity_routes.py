@@ -2049,6 +2049,14 @@ _DOC_LIST_FIELDS = {"risks", "open_questions"}
 
 
 def _doc_redirect(opp_id: int):
+    """Back to the document. Deliberately WITHOUT a fragment.
+
+    Keeping the operator's place is already solved on the page: it records `scrollY` on
+    submit and restores it after the reload. Adding an anchor here would put two mechanisms
+    on one job — the browser jumping to the section while the script scrolls to the
+    remembered offset — and the one that won would depend on timing. The control that
+    actually lost its place was calling `form.submit()`, which fires no submit event for
+    the restore to hear (see `submitAndKeepPlace`)."""
     return RedirectResponse(
         f"/opportunity/{opp_id}/capabilities?edit=1", status_code=303
     )
@@ -2102,14 +2110,29 @@ _BRIEF_CI_FIELDS = {
     "brand_notes": ("buyer", "brand_notes"),
     "agency_notes": ("buyer", "agency_notes"),
     "campaign_objective": ("direction", "campaign_objective"),
+    # The four that set the licence fee. Editable HERE because this is the document where
+    # the number is read, and a lever you have to go to another page to correct is one that
+    # stays wrong.
+    "media": ("commercial", "media"),
+    "territory": ("commercial", "territory"),
+    "license_term": ("commercial", "license_term"),
+    "exclusivity": ("commercial", "exclusivity"),
     "emotional_arc": ("direction", "emotional_arc"),
     "reference_playlist": ("direction", "reference_playlist"),
 }
 
 
 @router.post("/opportunity/{opp_id}/doc/ci-field")
-def doc_ci_field(opp_id: int, name: str = Form(""), value: str = Form("")):
-    """Apply a brief edit to Campaign Intelligence itself (ADR-0017)."""
+def doc_ci_field(opp_id: int, name: str = Form(""), value: str = Form(""),
+                 clear: str = Form("")):
+    """Apply a brief edit to Campaign Intelligence itself (ADR-0017).
+
+    ``clear`` empties the field. Emptying the box and saving already did this and always
+    had — but only if you knew, and the box was too small to select a sentence in with any
+    confidence, so in practice the auto-populated value could not be removed. An explicit
+    button is the difference between a capability and a rumour."""
+    if clear.strip():
+        value = ""
     if name in _BRIEF_CI_FIELDS and campaigns.workspace_enabled():
         conn = db.connect()
         try:

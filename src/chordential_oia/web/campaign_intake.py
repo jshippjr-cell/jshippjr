@@ -29,11 +29,42 @@ STANCE_SOURCE = {OBJECTIVE: "notes", DEBRIEF: "producer_debrief"}  # back-compat
 
 # The REQUIRED set that gates follow-up questions (§8): only what the NEXT step (the
 # proposal) needs. A gap here → a conversational follow-up, nothing else.
+# THE MATERIAL GAPS — what the machine chases, and what `understanding_pct` counts.
+#
+# This list was the money, the dates, the assets and the approver: our side of the table,
+# every one. Nothing on it was anything a COMPOSER needs, so a record could report 100%
+# understood while the brief it produced had no objective, no feeling and no references in
+# it — reported live from a real call (2026-08-26): *"the bot failed to capture creative
+# direction which is hyper important to pass over to the composer and talent team… without
+# it the composer doesn't have a foundation on where to start."*
+#
+# THE RULE NOW: everything we hand a composer is chased. `BRIEF_KEYS` is that hand-over,
+# and `tests/test_the_composers_half_of_the_record.py` asserts this list covers all of it —
+# so a field added to the brief cannot arrive unguarded, which is exactly how the creative
+# half came to be guarded by nothing.
+#
+# The percentage DROPPED when these were added, on every deal at once, from four items to
+# eight. Nothing got worse: those deals were always missing the creative half and the
+# number was flattering them. A completeness score that only counts our own side is not
+# measuring completeness, and 100%-with-no-direction is the false confidence that let this
+# through.
+#
+# The questions are the prep sheet's, in the operator's voice — the same sentence that
+# would have been said on the call is the right one to chase with afterwards.
 REQUIRED = [
     ("engagement", "budget_band", "What's the budget for the music?"),
     ("engagement", "deadline", "What's the timeline / deadline?"),
     ("engagement", "deliverables", "What deliverables are needed — spot lengths, cutdowns, stems?"),
     ("buyer", "decision_makers", "Who's the decision-maker / final approver?"),
+    # ── the composer's foundation ────────────────────────────────────────────────
+    ("engagement", "business_objective",
+     "Before the music — what is this campaign trying to do for the business?"),
+    ("direction", "campaign_objective",
+     "What is the music's job inside the film specifically?"),
+    ("direction", "emotional_arc",
+     "How should it feel across the piece, start to end — and what must it not become?"),
+    ("direction", "reference_playlist",
+     "What are you listening to for this, and is anything the wrong direction?"),
 ]
 
 LLM = Callable[[str, str], Optional[List[Dict]]]  # (text, stance) -> candidates | None

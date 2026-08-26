@@ -194,7 +194,7 @@
     {% set ci_ns = namespace(has=false) %}
     {% for key, label in ci_rows %}{% if doc.ci and doc.ci.get(key) %}{% set ci_ns.has = true %}{% endif %}{% endfor %}
     {% if ci_ns.has or edit %}
-    <section class="block">
+    <section class="block" id="discovery">
       <h2 class="sec">{{ 'From the discovery' if doc.met else 'The campaign so far' }}</h2>
       <table class="manifest">
         <tbody>
@@ -205,10 +205,24 @@
             <td style="width:172px"><b>{{ label }}</b></td>
             <td>{{ val or '' }}
               {% if edit %}
+              {# A TEXTAREA, and a CLEAR you can see. What the engine extracts is a
+                 sentence, and a one-line input showed its first few words — so the
+                 operator could read the value above the box and not manipulate it in the
+                 box: *"i can only save my edits, how can i delete the text that's auto
+                 populated… the text runs outside the window and i cant see what's in the
+                 text box"* (2026-08-26).
+
+                 Emptying the box and saving DID delete, and always had. That is folklore,
+                 not an affordance: nothing on screen said so, and the box was too small to
+                 select the text in confidently. The button says it. #}
               <form class="capdoc-inline no-print" method="post" action="/opportunity/{{ row['id'] }}/doc/ci-field">
                 <input type="hidden" name="name" value="{{ key }}">
-                <input type="text" name="value" value="{{ val or '' }}" class="capdoc-in" placeholder="{{ label }}…">
+                <textarea name="value" class="capdoc-in capdoc-grow" rows="1"
+                          placeholder="{{ label }}…">{{ val or '' }}</textarea>
                 <button class="capdoc-add" type="submit">Save</button>
+                {% if val %}<button class="capdoc-clear" type="submit" name="clear" value="1"
+                        title="Empty this field"
+                        onclick="return confirm('Clear {{ label }}?\n\nThis empties the field in Campaign Intelligence — every artifact that reads it goes blank too.');">Clear</button>{% endif %}
               </form>
               {% endif %}
             </td>
@@ -357,25 +371,39 @@
     {% endif %}
 
     {% if doc.show_delivery %}
-    <div class="delivery-head">
+    <div class="delivery-head" id="delivery">
       <div class="delivery-kicker">Delivery Package</div>
       <div class="delivery-title">What your delivery package includes</div>
       <div class="delivery-note">Personalized to {{ doc.client }} · {{ doc.campaign_label }}. The standard your package is built and delivered against.</div>
     </div>
 
-    {# assumptions banner — mandatory, always rendered (§6) #}
+    {# ── assumptions banner — mandatory, always rendered (§6).
+
+          THE CLIENT SHOULD READ THIS. A package built on an assumed engagement is a
+          guess, and a client asked to sign it is entitled to read the guess rather than
+          meet it at delivery — the same rule as "What this rests on" further down.
+
+          What the client should NOT read is the instruction that used to be baked into
+          the same sentence: "Not right? Switch template or edit below." That is a note to
+          the operator about controls only the operator can see, and it travelled on every
+          client copy and every PDF. It lives in the edit rail now, where the controls it
+          refers to actually are. ── #}
     {% if doc.delivery_assumptions %}
     <div class="assume-banner">
       <span class="assume-tag">Assumed engagement</span>
       <span class="assume-text">{{ doc.delivery_assumptions }}</span>
     </div>
+    {% if edit %}
+    <p class="muted small no-print" style="margin:-6px 0 10px">Not right? Switch the
+      template or edit the package below — the client sees the line above, not this one.</p>
+    {% endif %}
     {% endif %}
     {% if edit %}
     <div class="capdoc-edit no-print">
       <form class="capdoc-inline" method="post" action="/opportunity/{{ row['id'] }}/doc/field" style="margin:0 0 6px">
         <input type="hidden" name="name" value="delivery_template">
         <label class="capdoc-rail-label" style="margin:0">Template
-          <select name="value" onchange="this.form.submit()" class="capdoc-select">
+          <select name="value" onchange="submitAndKeepPlace(this.form)" class="capdoc-select">
             {% for key, label in delivery_templates.items() %}
             <option value="{{ key }}" {{ 'selected' if key == doc.delivery_template }}>{{ label }}</option>
             {% endfor %}
@@ -466,10 +494,52 @@
     {# --- Price + terms + sign/pay ALWAYS LAST (§7): Investment → Terms →
            (DocuSign / Pay deposit). Gated on their toggles; off in discovery. --- #}
     {% if doc.show_cost and doc.price_low %}
-    <section class="block">
+    <section class="block" id="investment">
       <h2 class="sec">Indicative investment</h2>
       {# A client who disclosed a single figure gets that figure, not "$12,000–$12,000". #}
       <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %} to ${{ '{:,}'.format(doc.price_high) }}{% endif %} <small>ballpark, firmed up after a scoping call</small></div>
+
+      {# ── THE FOUR LEVERS, where the number is read. Operator only.
+
+            The band is already built from what the discovery call captured — `quote_band`
+            reads the same Campaign Intelligence these controls write, so this rail shows
+            the licence the price actually used rather than a second opinion about it. What
+            it adds is the ability to correct one without leaving the document: a lever you
+            have to go to another page to fix is a lever that stays wrong.
+
+            An `assumed` badge is the honest half. A licence nobody stated is a guess, and
+            the operator is entitled to see WHICH parts of the number are guessed before
+            they send it (ADR-0058). The client never sees this rail — only the band, and
+            the assumptions in "What this rests on". ── #}
+      {% if edit and doc.licence %}
+      <div class="capdoc-edit no-print">
+        <div class="capdoc-rail-label" style="margin:0 0 6px">
+          Licence · <b>{{ doc.licence.summary }}</b> · ×{{ '%.2f'|format(doc.licence.factor) }}
+          {% if doc.licence.capped %}<span class="pill pv-review">at the cap</span>{% endif %}
+        </div>
+        <div class="lever-row">
+          {% for name, label, options, current in [
+              ('media', 'Media', doc.licence.media_options, doc.licence.media),
+              ('territory', 'Territory', doc.licence.territory_options, doc.licence.territory),
+              ('license_term', 'Term', doc.licence.term_options, doc.licence.term_key),
+              ('exclusivity', 'Exclusivity', doc.licence.exclusivity_options, doc.licence.exclusivity)] %}
+          <form class="lever" method="post" action="/opportunity/{{ row['id'] }}/doc/ci-field">
+            <input type="hidden" name="name" value="{{ name }}">
+            <label class="capdoc-rail-label">{{ label }}
+              {% if not doc.licence.is_stated(name) %}<span class="lever-assumed" title="Nobody said this — it is the baseline, and the price is built on it">assumed</span>{% endif %}
+            </label>
+            <select name="value" class="capdoc-select" onchange="submitAndKeepPlace(this.form)">
+              {% for value, text in options %}
+              <option value="{{ text }}" {{ 'selected' if value == current }}>{{ text }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% endfor %}
+        </div>
+        <p class="muted small" style="margin:8px 0 0">These write Campaign Intelligence and
+          re-price everything that reads it. The client sees the band, not this rail.</p>
+      </div>
+      {% endif %}
     </section>
     {% endif %}
 
@@ -722,6 +792,22 @@
     });
   });
 })();
+
+// WHY A HELPER AND NOT `this.form.submit()`. The scroll-restore below listens for the
+// `submit` EVENT — and `HTMLFormElement.submit()` does not fire one. It is the single
+// documented difference between it and `requestSubmit()`, and it meant every control the
+// operator CLICKED kept its place while the two that submit themselves on `change` threw
+// the page back to the masthead: *"when i change the template it takes me to the top of
+// the page"* (2026-08-26). The bug was never in the restore; it was in the one caller that
+// went around it.
+function submitAndKeepPlace(form) {
+  if (!form) { return; }
+  if (typeof form.requestSubmit === "function") { form.requestSubmit(); return; }
+  // Older browsers: fire the event the restore listens for, then submit.
+  try { form.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true})); }
+  catch (e) { /* the restore just misses this one */ }
+  form.submit();
+}
 
 // Every chip/pill/field edit here is a plain form POST that redirects back
 // to this same page — a full page load, which resets scroll to the top.
