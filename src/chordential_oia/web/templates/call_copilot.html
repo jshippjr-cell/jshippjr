@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Copilot · {{ row['need'][:40] }}{% endblock %}
+{% block heading %}<a class="crumb" href="/opportunity/{{ row['id'] }}">← {{ row['need'][:40] }}</a> / Copilot{% endblock %}
+{% block content %}
+<style>
+/* THE PANEL. Read at a glance, mid-sentence, out of the corner of an eye, by somebody
+   whose actual job right now is listening to another person. Every decision below follows
+   from that and from the plan's first named failure — "it becomes a script; a rep reading
+   a form is worse than a rep having a conversation."
+
+   So: the OPEN questions are the largest thing on the page and are printed as sentences
+   ready to say, not as topic labels. Covered lines shrink to a line of receipt. Nothing
+   animates, nothing flashes, nothing makes a sound. A change appears; it does not
+   announce itself. */
+.cop-wrap{max-width:760px}
+.cop-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin:0 0 4px}
+.cop-head h2{margin:0;font-size:19px}
+.cop-clock{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted,#7a6b67)}
+.cop-state{font-size:13px;color:var(--muted,#7a6b67);margin:0 0 16px}
+.cop-state b{color:var(--ink,#241016)}
+
+/* ⚠ — the contradictions. Top of the panel because they cost the most later and take ten
+   seconds to settle while both people are still on the line. */
+.cop-warn{border:1px solid #d98b2b;border-left:3px solid #d98b2b;background:#fff6ec;
+  border-radius:9px;padding:11px 13px;margin:0 0 14px}
+.cop-warn h3{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.12em;
+  text-transform:uppercase;color:#8a4b1d;margin:0 0 6px}
+.cop-warn p{margin:0 0 5px;font-size:14.5px;color:#241016}
+.cop-warn p:last-child{margin:0}
+.cop-warn b{font-weight:700}
+
+/* ○ — the point of the whole exercise. Biggest type on the page. */
+.cop-open{margin:0 0 18px}
+.cop-open h3,.cop-done h3{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ember,#b34a21);margin:0 0 8px}
+.cop-q{display:grid;grid-template-columns:16px 1fr;gap:10px;align-items:start;
+  padding:9px 0;border-bottom:1px dashed var(--line,#eee7de)}
+.cop-q:last-child{border-bottom:0}
+.cop-mark{color:var(--muted,#b0a69c);font-weight:700;line-height:1.5}
+.cop-lab{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted,#7a6b67);margin:0 0 2px}
+.cop-say{margin:0;font-size:16px;line-height:1.45;color:var(--ink,#241016)}
+
+/* ✓ — receipts. Small, quiet, checkable. */
+.cop-done h3{color:var(--ok,#3f6b47)}
+.cop-row{display:grid;grid-template-columns:16px 1fr;gap:10px;align-items:baseline;
+  padding:5px 0;border-bottom:1px dashed var(--line,#f2ece4)}
+.cop-row:last-child{border-bottom:0}
+.cop-row .cop-mark{color:var(--ok,#3f6b47)}
+.cop-body{display:flex;flex-wrap:wrap;gap:3px 9px;align-items:baseline;min-width:0}
+.cop-name{font:700 10px/1.5 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted,#7a6b67);flex:0 0 auto;min-width:13ch}
+.cop-val{font-size:13.5px;color:var(--ink,#241016);font-weight:600;flex:1 1 18ch;
+  min-width:0;overflow-wrap:anywhere}
+.cop-ev{font-size:12px;color:var(--muted,#9a908a);font-style:italic;flex:1 1 100%;
+  overflow-wrap:anywhere}
+.cop-at{font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted,#b0a69c);
+  flex:0 0 auto}
+
+.cop-foot{margin:16px 0 0;padding:9px 11px;border:1px solid var(--line,#e7e1d8);
+  border-radius:8px;background:var(--surface-2,#faf3ee);font-size:12.5px;
+  color:var(--muted,#7a6b67)}
+.cop-foot b{color:var(--ink,#241016)}
+.cop-stopped{color:#8a4b1d;font-weight:600}
+.cop-setup{border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:12px 14px;
+  margin:0 0 16px;font-size:13.5px;line-height:1.5}
+.cop-setup b{color:var(--ink,#241016)}
+.cop-setup code{font-size:12px;background:var(--surface-2,#faf3ee);padding:1px 5px;
+  border-radius:4px}
+</style>
+
+<section class="card cop-wrap">
+  <div class="cop-head">
+    <h2>Copilot · {{ row['client'] }}</h2>
+    <span class="cop-clock" id="cop-clock"></span>
+  </div>
+  <p class="cop-state" id="cop-headline">Waiting for the call to start.</p>
+
+  {# ── Whether this can work AT ALL, said before the call rather than discovered during
+        it. A panel that silently never ticks is indistinguishable from a call where
+        nothing was covered, and that is the worst way to find out the stream was never
+        configured. ── #}
+  {% if not enabled %}
+  <div class="cop-setup"><b>The copilot is switched off.</b>
+    <code>CHORDENTIAL_CALL_COPILOT=0</code> stands it down. The notetaker is unaffected —
+    it still records and still ingests.</div>
+  {% elif not streaming %}
+  <div class="cop-setup"><b>Nothing will stream to this panel yet.</b> The notetaker
+    records and ingests as normal, but live transcript needs all three of:
+    <code>CHORDENTIAL_RECALL_WEBHOOK_SECRET</code> (the token that keeps this endpoint
+    from accepting anyone's audio), <code>CHORDENTIAL_PUBLIC_DOMAIN</code> on real
+    <code>https</code> (Recall posts from the internet, so a laptop cannot receive it), and
+    a bot armed <em>after</em> both were set — a bot already booked was configured without
+    the stream and will not start now.</div>
+  {% endif %}
+
+  <div id="cop-conflicts"></div>
+
+  <div class="cop-open">
+    <h3>Not yet — ask these</h3>
+    <div id="cop-open"><p class="cop-say" style="color:var(--muted,#7a6b67)">…</p></div>
+  </div>
+
+  <div class="cop-done">
+    <h3>Covered</h3>
+    <div id="cop-done"><p class="cop-ev">Nothing heard yet.</p></div>
+  </div>
+
+  <p class="cop-foot" id="cop-foot">
+    Nothing on this panel reaches the client. It is a prompt sheet that keeps score.
+  </p>
+
+  <div class="cp-actions" style="margin-top:14px">
+    <a class="btn tiny" href="/opportunity/{{ row['id'] }}/prep">The full sheet</a>
+    <form method="post" action="/opportunity/{{ row['id'] }}/copilot/reset"
+          style="display:inline"
+          onsubmit="return confirm('Forget this call\\'s panel?\\n\\nClears the streamed lines and any values read from them, so a rehearsal can be run again. The recording and the transcript are untouched.');">
+      <button class="btn tiny" type="submit">Reset for a rehearsal</button>
+    </form>
+  </div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var OPP = {{ row['id'] }};
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(t) {
+    return String(t == null ? "" : t).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function draw(d) {
+    if (!d || !d.ok) {
+      $("cop-headline").textContent = (d && d.reason)
+        ? "No call scheduled on this opportunity yet." : "Waiting…";
+      return;
+    }
+    $("cop-clock").textContent = d.elapsed && d.elapsed !== "00:00" ? d.elapsed + " elapsed" : "";
+    $("cop-headline").innerHTML = esc(d.headline)
+      + (d.heard ? ' <span style="opacity:.7">· ' + d.heard + " lines heard</span>" : "");
+
+    /* ⚠ first. A contradiction is the one thing here worth interrupting yourself for. */
+    $("cop-conflicts").innerHTML = !d.conflicts.length ? "" :
+      '<div class="cop-warn"><h3>Worth resolving now</h3>' +
+      d.conflicts.map(function (c) {
+        return "<p>You have two answers for <b>" + esc(c.label) + "</b> — "
+             + esc(c.question) + " Worth asking which is right.</p>";
+      }).join("") + "</div>";
+
+    /* ○ the questions, printed as sentences to say. */
+    $("cop-open").innerHTML = !d.not_yet.length
+      ? '<p class="cop-say">Everything on the sheet has come up. Read it back before you hang up.</p>'
+      : d.not_yet.map(function (l) {
+          return '<div class="cop-q"><span class="cop-mark">○</span><div>'
+               + '<p class="cop-lab">' + esc(l.label) + "</p>"
+               + '<p class="cop-say">' + esc(l.ask) + "</p></div></div>";
+        }).join("");
+
+    /* ✓ receipts — a value where tier 2 read one, otherwise the sentence that ticked it. */
+    $("cop-done").innerHTML = !d.covered.length
+      ? '<p class="cop-ev">Nothing heard yet.</p>'
+      : d.covered.map(function (l) {
+          return '<div class="cop-row"><span class="cop-mark">✓</span><div class="cop-body">'
+               + '<span class="cop-name">' + esc(l.label) + "</span>"
+               + '<span class="cop-val">' + esc(l.value || "came up") + "</span>"
+               + '<span class="cop-at">' + esc(l.at) + "</span>"
+               + (l.evidence && l.evidence !== l.value
+                    ? '<span class="cop-ev">“' + esc(l.evidence) + '”</span>' : "")
+               + "</div></div>";
+        }).join("");
+
+    /* The money, and — when it stops — WHY, in a sentence. The plan is explicit that the
+       panel must say plainly when it stops rather than going quiet, because open lines on
+       a panel that gave up read as questions still worth asking. */
+    var s = d.spend, foot = "Nothing on this panel reaches the client.";
+    if (s.stopped) {
+      foot = '<span class="cop-stopped">' + esc(s.stopped) + "</span> " + foot;
+    } else if (s.calls) {
+      foot = "Values: <b>$" + s.usd.toFixed(3) + "</b> of $" + s.ceiling.toFixed(2)
+           + " this call, " + s.calls + " read" + (s.calls === 1 ? "" : "s") + ". " + foot;
+    }
+    $("cop-foot").innerHTML = foot;
+  }
+
+  /* POLLED, not pushed. Four seconds is under the time it takes to ask the next question
+     and far above anything that would make the page feel busy. A failed poll is IGNORED —
+     the panel keeps showing what it last knew rather than blanking, because a panel that
+     empties itself mid-call is worse than one that is four seconds stale. */
+  var timer = null;
+  function tick() {
+    fetch("/opportunity/" + OPP + "/copilot.json", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(draw)
+      .catch(function () { /* keep the last good panel on screen */ });
+  }
+  tick();
+  timer = setInterval(tick, 4000);
+  /* Stop asking when nobody is looking. A backgrounded tab polling for forty minutes is
+     work nobody can see the result of, and the paid tier rides on this poll. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { clearInterval(timer); timer = null; }
+    else if (!timer) { tick(); timer = setInterval(tick, 4000); }
+  });
+})();
+</script>
+{% endblock %}

@@ -22,9 +22,10 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
+                               RedirectResponse)
 
-from .. import mailer, signing
+from .. import mailer, meetings as M, signing
 from ..capabilities import (
     DELIVERY_TEMPLATES, SECTION_FAMILY, attach_agreement, build_capabilities_doc,
     build_understanding,
@@ -42,7 +43,7 @@ from ..proposals import build_proposal
 from ..storage import get_object_store
 from ..strategic import assess_strategic_value
 from . import (
-    actor, campaign_intake, campaign_intelligence, campaigns, commercial, db,
+    actor, campaign_intake, campaign_intelligence, campaigns, commercial, copilot, db,
     intake_lanes, meeting_scheduler, next_action, procurement, producer_learning, signals,
 )
 from .estimate import estimate_for
@@ -904,6 +905,99 @@ def _scored_call(conn, opp_id: int):
     return {"capture_id": int(newest["id"]), "at": newest["created_at"] or "",
             "lane": newest["lane"] or "", "transcript": newest["raw_text"] or "",
             "answered": answered}
+
+
+@router.get("/opportunity/{opp_id}/copilot", response_class=HTMLResponse)
+def call_copilot_panel(request: Request, opp_id: int):
+    """THE PANEL — Phase 2 of docs/discovery-copilot-plan.md.
+
+    A window you put beside the call. Not a bot in the meeting, not a second participant,
+    not anything the client sees or hears: the client never knows it exists. It is the prep
+    sheet keeping score, and its one output is the short list of what has not been covered
+    yet, in front of the person who can still ask.
+
+    It draws itself from `copilot.json` every few seconds. Nothing here blocks, nags or
+    beeps — the plan's first named failure is that this becomes a script, and a rep reading
+    a form is worse than a rep having a conversation."""
+    conn = db.connect()
+    try:
+        row = db.get_opportunity(conn, opp_id)
+        if row is None:
+            return HTMLResponse("Opportunity not found", status_code=404)
+        meeting = db.meeting_for_opp(conn, opp_id)
+    finally:
+        conn.close()
+    return render(request, "call_copilot.html", nav="inbox", row=row, meeting=meeting,
+                  enabled=copilot.enabled(), streaming=bool(M.realtime_url()),
+                  ceiling=copilot.call_ceiling_usd())
+
+
+@router.get("/opportunity/{opp_id}/copilot.json")
+def call_copilot_state(opp_id: int):
+    """The panel's state, polled while the call runs. THE POLL IS THE WORKER.
+
+    There is no background thread: detection happens on the request that draws the panel.
+    That is the plan's "only windows containing new speech are examined" taken one step
+    further — work happens only while a human is actually looking, so a call the operator
+    walked away from costs nothing and no worker outlives the bot.
+
+    The free tier runs every time (string matching, no spend). The paid tier runs only if
+    there is new speech, open slots, budget, and room under the per-call ceiling."""
+    conn = db.connect()
+    try:
+        meeting = db.meeting_for_opp(conn, opp_id)
+        if meeting is None:
+            return JSONResponse({"ok": False, "reason": "no meeting scheduled"})
+        held = copilot.on_file(conn, opp_id)
+        panel = copilot.panel_for(conn, meeting, held=held)
+        if copilot.enabled():
+            copilot.value_pass(conn, meeting, panel, held=held)
+        return JSONResponse(_panel_json(panel, meeting))
+    finally:
+        conn.close()
+
+
+def _panel_json(panel, meeting) -> dict:
+    """One shape for the panel, so the page never computes what the engine decides."""
+    def line(ln):
+        return {"key": ln.key, "label": ln.label, "group": ln.group, "ask": ln.ask,
+                "state": ln.state, "evidence": ln.evidence, "value": ln.value,
+                "at": _clock(ln.at_s)}
+    return {
+        "ok": True,
+        "headline": panel.headline,
+        "elapsed": _clock(panel.elapsed_s),
+        "heard": panel.heard_lines,
+        "covered": [line(ln) for ln in panel.covered],
+        "not_yet": [line(ln) for ln in panel.not_yet],
+        "conflicts": [{"key": c.key, "label": c.label, "question": c.question}
+                      for c in panel.conflicts],
+        "spend": {"usd": round(panel.spend.usd, 4), "calls": panel.spend.calls,
+                  "ceiling": panel.spend.ceiling_usd, "stopped": panel.spend.stopped},
+        "status": meeting["status"] if meeting is not None else "",
+    }
+
+
+def _clock(seconds: float) -> str:
+    """Seconds from the head of the recording as mm:ss — the form a covered line is worth
+    reading back at, and the timestamp to jump to in the recording afterwards."""
+    total = int(max(0.0, float(seconds or 0.0)))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+@router.post("/opportunity/{opp_id}/copilot/reset")
+def call_copilot_reset(opp_id: int):
+    """Forget this call's panel — for a rehearsal, where the script gets read twice and the
+    second run would otherwise be scored against both. Touches nothing permanent: the
+    record of a call is its capture, written from the finished transcript (ADR-0014)."""
+    conn = db.connect()
+    try:
+        meeting = db.meeting_for_opp(conn, opp_id)
+        if meeting is not None:
+            copilot.reset(conn, int(meeting["id"]))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/opportunity/{opp_id}/copilot", status_code=303)
 
 
 @router.get("/opportunity/{opp_id}/schedule", response_class=HTMLResponse)

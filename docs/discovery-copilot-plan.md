@@ -80,9 +80,10 @@ runs, rather than once at the end.
 Each phase is useful on its own and shippable alone. That is deliberate — an unfinished
 copilot must still leave the operator better off than no copilot.
 
-> **Status, 2026-08-24.** Phase 0 **shipped** (`call_prep.py`, `/opportunity/{id}/prep`).
-> Phase 1 **shipped** (`call_prep.score_call`, scored onto the same page). Phase 2 is next
-> and is now judgeable, which was the point of doing them in this order.
+> **Status, 2026-08-26.** Phase 0 **shipped** (`call_prep.py`, `/opportunity/{id}/prep`).
+> Phase 1 **shipped** (`call_prep.score_call`, scored onto the same page). Phase 2
+> **shipped** (`call_copilot.py` + `web/copilot.py` + `/opportunity/{id}/copilot`).
+> Phase 3 is next.
 
 ### Phase 0 — The prep sheet *(no live anything; ~half a day)*
 Before the call, render the checklist as a static page from the opportunity: which of the
@@ -144,6 +145,45 @@ Cost control, which matters here because this runs *per minute of call* rather t
 Budget the whole thing against `ai_budget`: a call the operator is sitting in is
 asked-for work by definition (ADR-0023), so this is inside the approved path, not a
 speculative sweep.
+
+**What Phase 2 turned out to be, once built.**
+
+*The detector Phase 1 built made most of the panel free.* When this plan was written there
+was no detector, so a model call per window was the only way to know a topic had come up.
+Phase 1 then wrote one — cues, adversarially tested — and it costs nothing to run. So the
+panel has **two tiers**, and the free one carries it: written cues move a line to ✓ and keep
+the sentence that did it, instantly, with **no API key at all**. The model is only needed to
+turn *"budget came up"* into *"$55–65k, hard ceiling"*, and to spot a ⚠. That inverts the
+cost picture the plan assumed — a call with the model off is still a working panel, which
+is what "an unfinished copilot must leave the operator better off" actually looks like here.
+
+*The poll is the worker.* There is no background thread. Detection runs on the request that
+draws the panel, which is the plan's "only windows containing new speech are examined" taken
+one step further: work happens only while a human is looking. A call the operator walked
+away from costs nothing, and no worker outlives the bot.
+
+*The free half is recomputed, the paid half is stored.* Rebuilding ✓/○ from the transcript
+on every poll costs a millisecond and buys the thing this codebase has repeatedly paid for
+losing — one derivation, so a refresh, a second window and a phone cannot disagree. A value
+that cost money is the opposite and is persisted: recomputing it means paying twice.
+
+*A slot we already hold is not pre-ticked.* Tempting, and wrong. The prep sheet turns a
+known slot into a read-back precisely because a value captured confidently and wrongly is
+this product's recurring failure. What we hold is the material for a ⚠, not a ✓ — and that
+is how the plan's worked example (two names for the approver) actually fires.
+
+One thing the plan did not anticipate needing: **`transcript.data` only, never
+`transcript.partial_data`.** Partials re-send the same sentence as the recogniser changes
+its mind, so a cue can tick on a word that is then withdrawn. A tick that appears and
+vanishes is worse than a tick a second late.
+
+**Operating it.** Live transcript needs all three of `CHORDENTIAL_RECALL_WEBHOOK_SECRET`
+(the token on the callback URL — without it the endpoint would accept anyone's audio, so
+we do not ask for the stream at all), `CHORDENTIAL_PUBLIC_DOMAIN` on real `https` (Recall
+POSTs from the internet; a laptop cannot receive it), and **a bot armed after both were
+set** — a bot already booked was configured without the stream and will not start now.
+`CHORDENTIAL_CALL_COPILOT=0` stands the whole thing down without touching the notetaker.
+`CHORDENTIAL_COPILOT_CALL_CAP` is the per-call ceiling (default $0.10).
 
 ### Phase 3 — Resolve it live
 The ⚠ items become one-click: *"Haiden Jones or Tom Vasquez?"* → pick → the record updates

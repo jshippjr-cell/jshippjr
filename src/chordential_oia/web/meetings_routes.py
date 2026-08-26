@@ -17,7 +17,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import db, meeting_scheduler, meetings_service
+from . import copilot, db, meeting_scheduler, meetings_service
 from .opportunity_ops import _to_utc_iso
 from .shell import render
 
@@ -96,6 +96,38 @@ def meeting_manage_action(meeting_id: int, k: str = Form(""), action: str = Form
     finally:
         conn.close()
     return RedirectResponse(f"/meeting/{meeting_id}/manage?k={k}&done=1", status_code=303)
+
+
+@router.post("/webhooks/capture/{provider}/live/")
+@router.post("/webhooks/capture/{provider}/live")
+async def capture_realtime_webhook(provider: str, request: Request, token: str = ""):
+    """The LIVE transcript door — Phase 2 of docs/discovery-copilot-plan.md.
+
+    Recall posts one finalized utterance here as it is spoken, several times a minute for
+    the length of a call. Separate from the lifecycle webhook next door on purpose: that
+    one verifies a signed body and can afford to fetch and ingest a whole transcript, while
+    this one runs on a cadence where every millisecond is spent during somebody's
+    conversation. It parses, correlates and INSERTs — nothing else.
+
+    Verified by the token on the URL (Recall's own alternative to a workspace signature);
+    without `CHORDENTIAL_RECALL_WEBHOOK_SECRET` set we never asked for the stream in the
+    first place, so nothing should be arriving. Public surface, like its neighbour: the
+    token is the access control, not the admin login.
+
+    Answers 200 to anything it will not act on. A webhook that returns an error teaches the
+    sender to retry, and a stream we are deliberately ignoring must not be re-sent all call.
+    """
+    body = await request.body()
+    headers = dict(request.headers)
+
+    def _work():
+        conn = db.connect()
+        try:
+            return copilot.ingest_line(conn, provider, headers, body, token)
+        finally:
+            conn.close()
+
+    return JSONResponse(await run_in_threadpool(_work))
 
 
 @router.post("/webhooks/capture/{provider}")

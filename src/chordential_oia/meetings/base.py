@@ -101,12 +101,17 @@ class CaptureProvider(Protocol):
     so nothing downstream is coupled to a provider."""
     name: str
 
-    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "") -> str:
+    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "",
+               realtime_url: str = "") -> str:
         """Ask a capture bot to join the meeting; return the bot/session id (external_ref).
 
         ``join_at`` is the call's start time (ISO 8601). Without it a provider is entitled to
         send the bot in NOW — which, for a call booked next Tuesday, means a bot that joins an
-        empty room today and is long gone by the time anyone dials in."""
+        empty room today and is long gone by the time anyone dials in.
+
+        ``realtime_url`` asks the provider to STREAM the transcript there as the call runs
+        (the Call Copilot, Phase 2). Optional and blank by default: a provider that cannot
+        stream ignores it, and a deployment the provider cannot reach must not ask for it."""
         ...
 
     def cancel(self, external_ref: str) -> None:

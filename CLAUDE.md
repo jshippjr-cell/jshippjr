@@ -143,6 +143,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   degrading.
 - `CHORDENTIAL_REVIEWER_LINK_DAYS` (default 90; `0` = never) — how long a NEW client
   review link lasts (ADR-0060). Never applied to links that already exist.
+- **Call Copilot (Phase 2):** the live panel at `/opportunity/{id}/copilot` needs Recall to
+  stream — `CHORDENTIAL_RECALL_WEBHOOK_SECRET` + `CHORDENTIAL_PUBLIC_DOMAIN` on real https,
+  and the bot must be armed AFTER both are set. `CHORDENTIAL_CALL_COPILOT=0` stands it down
+  (the notetaker is unaffected); `CHORDENTIAL_COPILOT_CALL_CAP` is the per-call spend
+  ceiling (default $0.10). The free cue tier works with no API key.
 - Others: `CHORDENTIAL_UPLOAD_DIR`, `CHORDENTIAL_ENABLE_SCRAPE`, `CHORDENTIAL_VAPID_*`,
   `CHORDENTIAL_NTFY_TOPIC`, `CHORDENTIAL_DISCOVERY_CALL_URL`.
 - **Extraction engine (ADR-0023):** with `ANTHROPIC_API_KEY` set, intake captures run the

@@ -1617,6 +1617,32 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             confirmations_json TEXT              -- where each confirmation went, and what happened
         )"""
     )
+    # THE LIVE TRANSCRIPT (Phase 2 of docs/discovery-copilot-plan.md). Recall streams
+    # finalized utterances to the realtime webhook while the call is still running; each
+    # one lands here as its own row.
+    #
+    # A ROW, NOT A JSON BLOB, deliberately — and against this codebase's usual habit. The
+    # per-record blob pattern (`delivery_json`, `doc_overrides`) is for state that is read
+    # and merged occasionally. This arrives several times a MINUTE for forty minutes, and
+    # appending to a growing blob means re-reading and re-writing the whole call on every
+    # utterance. An append-only table also makes `after_id` resumption trivial, which is
+    # how the panel folds in only what is new.
+    #
+    # These rows are working material, not evidence: the CAPTURE is still the permanent
+    # record (ADR-0014), written when the finished transcript arrives.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS live_transcript (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id TEXT, meeting_id INTEGER DEFAULT 0, opp_id INTEGER DEFAULT 0,
+            at_s REAL DEFAULT 0,
+            speaker TEXT, text TEXT, created_at TEXT
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_transcript_meeting "
+                 "ON live_transcript (meeting_id, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_transcript_bot "
+                 "ON live_transcript (bot_id, id)")
+
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
     mtg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(meetings)")}
     for name, decl in {"meeting_type": "TEXT DEFAULT 'zoom'", "request_id": "INTEGER",
@@ -1628,6 +1654,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                        # is re-asked every 30s forever (see `poll_and_ingest`).
                        "poll_attempts": "INTEGER DEFAULT 0",
                        "last_polled_at": "TEXT",
+                       # The copilot's PAID half: the values tier 2 extracted and what it
+                       # cost. The free half is recomputed from `live_transcript` on every
+                       # poll (stateless, so two windows can never disagree), but a value
+                       # that cost money must survive a refresh — recomputing it would
+                       # mean paying for it twice.
+                       "copilot_json": "TEXT",
                        # WHEN the capture bot was booked. A bot armed at booking time is
                        # an ad-hoc bot: it joins immediately, sits in an empty room and
                        # BILLS for the wait. This stamps the moment we armed, so a bot
@@ -6906,6 +6938,47 @@ def list_meetings(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
         (opp_id,)).fetchall()
 
 
+def add_live_line(conn: sqlite3.Connection, *, bot_id: str, meeting_id: int,
+                  opp_id: int, at_s: float, speaker: str, text: str) -> int:
+    """Append one streamed utterance. Phase 2 of the copilot plan.
+
+    Called from the realtime webhook, which fires several times a minute for the length of
+    a call, so this stays a single INSERT and nothing else. No dedupe, no lookup, no
+    read-modify-write: whatever work is done here is done again every few seconds while a
+    human is trying to hold a conversation."""
+    cur = conn.execute(
+        "INSERT INTO live_transcript (bot_id, meeting_id, opp_id, at_s, speaker, text,"
+        " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (bot_id or "", int(meeting_id or 0), int(opp_id or 0), float(at_s or 0.0),
+         (speaker or "")[:120], (text or "")[:4000], _now()))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def live_lines(conn: sqlite3.Connection, meeting_id: int,
+               after_id: int = 0, limit: int = 2000) -> List[sqlite3.Row]:
+    """The call so far, oldest first. ``after_id`` is the resume point — the panel folds in
+    only what it has not seen, which is what keeps a poll cheap on a long call."""
+    return conn.execute(
+        "SELECT * FROM live_transcript WHERE meeting_id = ? AND id > ? "
+        "ORDER BY id LIMIT ?", (int(meeting_id), int(after_id or 0), int(limit))).fetchall()
+
+
+def live_line_count(conn: sqlite3.Connection, meeting_id: int) -> int:
+    row = conn.execute("SELECT COUNT(*) AS n FROM live_transcript WHERE meeting_id = ?",
+                       (int(meeting_id),)).fetchone()
+    return int(row["n"] if row else 0)
+
+
+def clear_live_lines(conn: sqlite3.Connection, meeting_id: int) -> int:
+    """Drop a call's streamed rows. Safe by design: the permanent record of a call is its
+    CAPTURE (ADR-0014), written from the finished transcript. These rows are the working
+    copy the panel was driven from and nothing downstream reads them."""
+    cur = conn.execute("DELETE FROM live_transcript WHERE meeting_id = ?", (int(meeting_id),))
+    conn.commit()
+    return int(cur.rowcount or 0)
+
+
 def meeting_by_external(conn: sqlite3.Connection, bot_id: str) -> Optional[sqlite3.Row]:
     """Correlate a capture-provider webhook back to its Meeting by the bot/session id."""
     if not bot_id:
@@ -6948,7 +7021,8 @@ def update_meeting(conn: sqlite3.Connection, meeting_id: int, **fields) -> None:
     allowed = {"start_at", "join_url", "duration_min", "status", "provider",
                "notetaker_provider", "bot_id", "external_meeting_id",
                "transcript_capture_id", "error", "poll_attempts", "last_polled_at",
-               "bot_armed_at", "ical_sequence", "confirmations_json"}
+               "bot_armed_at", "ical_sequence", "confirmations_json",
+               "copilot_json"}
     unknown = sorted(set(fields) - allowed)
     if unknown:
         raise ValueError(f"update_meeting: no such meeting field(s): {unknown}")

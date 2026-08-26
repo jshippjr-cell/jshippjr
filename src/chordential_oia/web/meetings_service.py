@@ -52,7 +52,8 @@ def schedule(conn, opp, *, start_at: str = "", join_url: str = "", duration_min:
     # Arm the capture bot only if a real provider is configured AND we have a join URL.
     if M.capture_configured() and the_join:
         try:
-            bot_id = cp.invite(join_url=the_join, meeting_ref=str(opp["id"]))
+            bot_id = cp.invite(join_url=the_join, meeting_ref=str(opp["id"]),
+                               realtime_url=M.realtime_url())
             if bot_id:
                 db.update_meeting(conn, mid, bot_id=bot_id, notetaker_provider=cp.name,
                                   status=M.BOT_INVITED)

@@ -9,6 +9,7 @@ Transcript, never a provider-specific event.
 from __future__ import annotations
 
 import os
+from urllib.parse import quote
 
 from .base import (BOT_INVITED, CANCELED, EV_BOT_JOINED, EV_FAILED, EV_IGNORED,
                    EV_TRANSCRIPT_READY, FAILED, INGESTED, IN_PROGRESS, OPEN_STATUSES,
@@ -108,3 +109,36 @@ __all__ = [
     "calendar_configured", "calendar_route", "calendar_problem",
     "CALENDAR_PROVIDER_ENV",
 ]
+
+def realtime_url() -> str:
+    """Where a capture provider should stream the live transcript — or "" to not ask.
+
+    The Call Copilot (Phase 2 of docs/discovery-copilot-plan.md) needs the provider to POST
+    each utterance to us while the call runs. Three things all have to be true, and the
+    guard lives HERE rather than at the three places that arm a bot, because a rule copied
+    into three call sites is a rule that will hold in two of them:
+
+    * **A token.** Recall verifies a realtime webhook with a token on the URL. Without
+      ``CHORDENTIAL_RECALL_WEBHOOK_SECRET`` the endpoint would accept anything anyone
+      posted, so with no secret we do not ask for the stream at all. Refusing to listen
+      beats listening to strangers.
+    * **A public HTTPS host.** The provider POSTs from the internet. A laptop, a preview
+      tunnel, or a `localhost` default cannot receive it, and a bot pointed at an endpoint
+      that refuses the connection is worse than one that never streamed — it retries.
+    * **Not switched off.** ``CHORDENTIAL_CALL_COPILOT=0`` stands the whole thing down
+      without touching the notetaker, which still records and still ingests as before.
+    """
+    if (os.environ.get("CHORDENTIAL_CALL_COPILOT", "1") or "1").strip() == "0":
+        return ""
+    token = (os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "") or "").strip()
+    if not token:
+        return ""
+    base = (os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "") or "").strip().rstrip("/")
+    if not base.startswith("https://"):
+        return ""
+    host = base[len("https://"):].split("/")[0].lower()
+    if host.startswith("localhost") or host.startswith("127.") or not host:
+        return ""
+    # The trailing slash before the query is Recall's own instruction: without it their
+    # fetcher answers 400 on a URL that carries query parameters.
+    return f"{base}/webhooks/capture/recall/live/?token={quote(token, safe='')}"

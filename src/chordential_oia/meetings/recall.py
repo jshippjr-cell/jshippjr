@@ -87,7 +87,8 @@ class RecallCaptureProvider(CaptureProvider):
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "") -> str:
+    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "",
+               realtime_url: str = "") -> str:
         """Send a Recall bot into the meeting with transcription on. Returns the bot id.
 
         Recall's own ASR by default: the platform-captions provider needs the host to turn
@@ -105,6 +106,27 @@ class RecallCaptureProvider(CaptureProvider):
                 },
             },
         }
+        # STREAM IT WHILE IT HAPPENS (Phase 2 of docs/discovery-copilot-plan.md). Recall
+        # posts each finalized utterance to `realtime_endpoints` as the call runs, which is
+        # the one genuinely new thing the copilot needed: the same transcript, arriving in
+        # time to be useful rather than after everyone has hung up.
+        #
+        # Asked for ONLY when the caller hands us a reachable URL. Recall must be able to
+        # POST to it from the public internet, so a laptop cannot receive this, and a bot
+        # configured to stream at an endpoint that refuses the connection is worse than one
+        # that never streamed: it retries. The caller decides; this seam does not guess.
+        #
+        # `transcript.data` only — the FINALIZED utterance. `transcript.partial_data` sends
+        # the same sentence repeatedly as the recogniser changes its mind, which for a panel
+        # that ticks a line off a written cue means ticking on a word that was misheard and
+        # then withdrawn. A tick that appears and vanishes is worse than a tick that is a
+        # second late.
+        if realtime_url:
+            payload["recording_config"]["realtime_endpoints"] = [{
+                "type": "webhook",
+                "url": realtime_url,
+                "events": ["transcript.data"],
+            }]
         # WHEN the bot should turn up. Recall: "You can create ad-hoc bots by omitting the
         # join_at or setting it to a time that is less than 10 minutes in the future." We
         # omitted it, so every bot was ad-hoc — dispatched the moment the call was BOOKED.
@@ -245,6 +267,62 @@ class RecallCaptureProvider(CaptureProvider):
             return MeetingEvent(type=EV_FAILED, external_ref=bot_id, raw_event_id=raw_id,
                                 error=str(data.get("error") or "capture failed"))
         return MeetingEvent(type=EV_IGNORED, external_ref=bot_id, raw_event_id=raw_id)
+
+    def parse_realtime(self, headers: Mapping, body: bytes, *,
+                       token: str = "") -> Optional[dict]:
+        """One streamed utterance, normalized — or ``None`` for anything we will not trust.
+
+        Recall's realtime webhook is verified by a token on the URL rather than a signed
+        body: its docs offer a workspace signature OR a query token, and only the token is
+        available without workspace-level configuration the operator would have to go and
+        do. Compared in constant time; a missing or wrong token is dropped silently, since
+        an endpoint that explains why it rejected you is an endpoint worth probing.
+
+        Shape (docs.recall.ai, real-time event payloads), which is NOT the lifecycle
+        webhook's shape and is the reason this is a separate parser::
+
+            {"event": "transcript.data",
+             "data": {"data": {"words": [{"text": ..,
+                                          "start_timestamp": {"relative": 12.5}}],
+                               "participant": {"name": ..}},
+                      "bot": {"id": ..}}}
+
+        The bot id is at ``data.bot.id`` — two levels deeper than the lifecycle event's,
+        which is exactly the sort of difference that silently correlates nothing.
+        """
+        want = self.webhook_secret
+        if want:
+            if not token or not hmac.compare_digest(str(token), str(want)):
+                return None
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        if str(payload.get("event") or "") != "transcript.data":
+            return None
+        outer = payload.get("data") or {}
+        inner = outer.get("data") or {}
+        words = inner.get("words") or []
+        if isinstance(words, dict):          # a single word, not a list
+            words = [words]
+        text = " ".join(str(w.get("text") or "") for w in words
+                        if isinstance(w, dict)).strip()
+        text = " ".join(text.split())
+        if not text:
+            return None
+        bot_id = str(((outer.get("bot") or {}).get("id")) or "")
+        speaker = str(((inner.get("participant") or {}).get("name")) or "").strip()
+        at_s = 0.0
+        for w in words:
+            if isinstance(w, dict):
+                stamp = w.get("start_timestamp") or {}
+                if isinstance(stamp, dict) and stamp.get("relative") is not None:
+                    try:
+                        at_s = float(stamp["relative"])
+                    except (TypeError, ValueError):
+                        at_s = 0.0
+                    break
+        return {"bot_id": bot_id, "speaker": speaker, "text": text, "at_s": at_s}
 
     # ── HTTP (stdlib; runs off the event loop / in the scheduler thread) ────────
     def _base(self) -> str:

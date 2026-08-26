@@ -134,7 +134,8 @@ def schedule(conn, opp, *, meeting_type: str = ZOOM, start_at: str = "",
             try:
                 cp = M.get_capture_provider()
                 bot_id = cp.invite(join_url=join_url, meeting_ref=str(opp["id"]),
-                                   join_at=start_at or "")
+                                   join_at=start_at or "",
+                                   realtime_url=M.realtime_url())
                 if bot_id:
                     notetaker, status = cp.name, M.BOT_INVITED
                     armed_at = datetime.now(timezone.utc).isoformat()
@@ -264,7 +265,8 @@ def arm_due_meetings(conn) -> int:
                 pass
         try:
             bot_id = cp.invite(join_url=m["join_url"], meeting_ref=str(m["opp_id"]),
-                               join_at=m["start_at"] or "")
+                               join_at=m["start_at"] or "",
+                               realtime_url=M.realtime_url())
         except Exception as e:  # noqa: BLE001
             _log.warning("Arming the notetaker for meeting %s failed (%s: %s)",
                          m["id"], type(e).__name__, e)
