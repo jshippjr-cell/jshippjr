@@ -252,3 +252,203 @@ with open("docs/call-scripts/discovery-call-client.md", "w") as f:
 print("SCORE:", sc.text)
 print("answered", sc.answered, "raised", sc.raised, "missed", sc.missed)
 print("turns:", len(TURNS), "| words:", len(return_transcript.split()))
+
+
+# ── the sendable pair ────────────────────────────────────────────────────────────
+# A PDF, because the point is to TEXT it to whoever reads the other half, and markdown
+# arrives on a phone as either a download nobody opens or a wall of asterisks.
+#
+# Sized 4.25 x 7.5in rather than A4 ON PURPOSE. A letter-width page fitted to a phone
+# screen scales to about half, which turns comfortable body text into something you
+# squint at while trying to act. A narrow page fits at roughly 0.8 and stays readable in
+# the hand — the script is read aloud from the device, not filed.
+CSS = """
+@page { size: 4.25in 7.5in; margin: 0.42in 0.4in 0.5in; }
+* { box-sizing: border-box; }
+body { margin:0; font: 15px/1.5 Georgia,'Times New Roman',serif; color:#241016;
+       -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+h1 { font: 700 20px/1.2 Georgia,serif; margin:0 0 2px; }
+.kicker { font:700 9px/1.4 Helvetica,Arial,sans-serif; letter-spacing:.14em;
+          text-transform:uppercase; color:#b34a21; margin:0 0 10px; }
+.role { font:600 15px/1.4 Georgia,serif; margin:0 0 4px; }
+.meta { font:13px/1.45 Georgia,serif; color:#6f6660; margin:0 0 14px; }
+.rule { border:0; border-top:2px solid #b34a21; margin:14px 0; }
+.how { background:#faf3ee; border:1px solid #e7e1d8; border-radius:8px; padding:11px 12px;
+       margin:0 0 16px; }
+.how h2 { font:700 10px/1.4 Helvetica,Arial,sans-serif; letter-spacing:.12em;
+          text-transform:uppercase; color:#8a4b1d; margin:0 0 7px; }
+.how ol { margin:0; padding-left:17px; font-size:13px; line-height:1.5; }
+.how li { margin:0 0 6px; }
+.how li:last-child { margin:0; }
+.turn { margin:0 0 13px; page-break-inside:avoid; break-inside:avoid; }
+.n { font:700 9px/1 Helvetica,Arial,sans-serif; letter-spacing:.1em;
+     color:#b0a69c; display:block; margin:0 0 3px; }
+.you .n { color:#b34a21; }
+.you p { margin:0; font-size:16.5px; line-height:1.48; font-weight:600; }
+.them { padding-left:11px; border-left:2px solid #e0d8ce; }
+.them p { margin:0; font-size:13.5px; line-height:1.45; color:#6f6660; font-style:italic; }
+.note { margin:6px 0 0; padding:7px 9px; background:#fff6ec; border-left:2px solid #d98b2b;
+        font:12.5px/1.42 Helvetica,Arial,sans-serif; color:#6a4a1c; }
+.back { page-break-before:always; break-before:page; }
+.back h2 { font:700 15px/1.3 Georgia,serif; margin:0 0 4px; }
+.back h3 { font:700 10px/1.4 Helvetica,Arial,sans-serif; letter-spacing:.12em;
+           text-transform:uppercase; color:#b34a21; margin:16px 0 6px; }
+.back p, .back li { font-size:13px; line-height:1.5; }
+.back ul { margin:0 0 10px; padding-left:16px; }
+.back li { margin:0 0 7px; }
+.trap { border:1px solid #e7e1d8; border-radius:8px; padding:9px 11px; margin:0 0 8px;
+        page-break-inside:avoid; }
+.trap .w { font:700 9.5px/1.3 Helvetica,Arial,sans-serif; letter-spacing:.1em;
+           text-transform:uppercase; color:#b34a21; margin:0 0 3px; }
+.trap .t { font-weight:700; margin:0 0 3px; font-size:13px; }
+.trap .f { margin:0; font-size:12.5px; color:#6f6660; }
+.score { background:#faf3ee; border-left:3px solid #b34a21; border-radius:0 8px 8px 0;
+         padding:10px 12px; margin:8px 0 12px; }
+.score .big { font:700 17px/1.3 Georgia,serif; margin:0; }
+"""
+
+HOW = """<div class="how"><h2>How to run it</h2><ol>
+<li>Two readers, one script each. <b>Both are numbered the same</b>, and the other person's
+lines are printed so you never lose your place.</li>
+<li>Schedule the call in Chordential so the notetaker joins, then start the Zoom.</li>
+<li><b>Read at talking pace, not reading pace.</b> Pause, overlap, say &ldquo;um&rdquo;. It is
+being tested against speech &mdash; a flat recitation tests nothing that matters.</li>
+<li>About <b>10&ndash;12 minutes</b>. Don't rush the read-back near the end; it is doing real
+work.</li></ol></div>"""
+
+
+def esc(t):
+    return (t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def turns_html(turns, me, notes):
+    out, other = [], ("MARISA" if me == JON else "JON")
+    for i, (who, line, note) in enumerate(turns, start=1):
+        cls, who_lbl = ("you", "YOU") if who == me else ("them", other)
+        out.append(f'<div class="turn {cls}"><span class="n">{i} &middot; {who_lbl}</span>'
+                   f'<p>{esc(line)}</p>')
+        if note and notes:
+            out.append(f'<div class="note">{esc(note)}</div>')
+        out.append("</div>")
+    return "\n".join(out)
+
+
+TRAPS = [
+    ("Turns 18 &rarr; 68", "Three verticals quietly becomes four, forty turns later.",
+     "The summary must scope FOUR. Three means the deal is under-scoped before it starts."),
+    ("Turns 34 &rarr; 36", "&ldquo;We're around sixty&rdquo; &mdash; a soft number.",
+     "Must land as $55&ndash;65k, hard ceiling, licence inclusive. Never &ldquo;around 60&rdquo;."),
+    ("Turns 38 &rarr; 40", "Two answers to who signs off &mdash; Aziz, then Tom Vasquez.",
+     "The conflict has to surface. Silently keeping whichever was heard last is the bug."),
+    ("Turn 58", "Publishing is asked and NOT answered.",
+     "It must survive as an open question, never a captured fact. Evidence or nothing."),
+    ("Turn 70", "A correction arrives during the read-back.",
+     "The &ldquo;:15 may become :06&rdquo; caveat has to reach the summary."),
+]
+
+
+def back_html(expected):
+    traps = "".join(
+        f'<div class="trap"><p class="w">{w}</p><p class="t">{t}</p><p class="f">{f}</p></div>'
+        for w, t, f in TRAPS)
+    return f"""<div class="back">
+<h2>What this call is engineered to break</h2>
+<p>Five deliberate traps, in the order they arrive. Each is a real failure this system has
+had or could have. The exercise is checking the summary catches them &mdash; not checking the
+transcript is tidy.</p>
+{traps}
+<h3>Two more, easy to lose</h3>
+<ul>
+<li><b>Turn 28 gives two different dates</b> &mdash; air October 3rd, delivery September 12th.
+A summary that collapses them into one has made the schedule mistake the timeline question
+exists to prevent.</li>
+<li><b>Turn 54 is an uncommitted extension</b> to the UK. It must read as a possibility. Priced
+as agreed territory, the quote is wrong in the client's favour and we eat it.</li>
+</ul>
+<h3>Expected score</h3>
+<p>This script asks <b>every question on the sheet</b>, which makes the run a control with a
+known answer. Scored against the script text, Phase&nbsp;1 returns:</p>
+<div class="score"><p class="big">{expected}</p></div>
+<p>So the prep page should read <b>24 of 24 covered</b>. Less than that is a finding:</p>
+<ul>
+<li><b>A line comes back missed that you know you asked.</b> Suspect the transcript first &mdash;
+read what the notetaker actually heard. Only if the words are plainly there is it a gap in the
+cue bank.</li>
+<li><b>A line comes back covered that you know you skipped.</b> That is a false tick, and it is
+the failure that matters, because it manufactures confidence. Note the sentence it printed as
+evidence; that sentence is the fix.</li>
+</ul>
+<h3>The number actually worth reading</h3>
+<p>Not the headline &mdash; the <b>answered / raised</b> split. Ten of the twenty-four lines are
+Campaign Intelligence slots; the other fourteen are conversation and can only ever read
+<i>raised</i>. So watch the <b>&ldquo;Asked, but nothing stuck&rdquo;</b> line. Every slot on it
+was asked on this call and you have the script to prove it, which makes each one a clean
+extraction failure with the right answer sitting in the transcript.</p></div>"""
+
+
+CLIENT_BACK = """<div class="back">
+<h2>Staying in character</h2>
+<ul>
+<li><b>You are the client, not the tester. Don't help.</b> If Jon doesn't ask something, don't
+volunteer it &mdash; half of what this measures is what a real call loses.</li>
+<li><b>Two of your lines are corrections, and they matter.</b> At turn 40 you correct who signs
+off; at turn 70 you correct the cutdown length during the read-back. Deliver both as genuine
+afterthoughts, not as cues.</li>
+<li><b>At turn 58 you don't know the answer.</b> Say so plainly and move on. A question that gets
+no answer has to survive the call as an open question.</li>
+<li>Improvise at the edges &mdash; an &ldquo;um&rdquo;, a false start, a different word &mdash; as
+long as the facts land. Speech that sounds like speech is the point.</li>
+</ul></div>"""
+
+PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>{title}</title><style>{css}</style></head><body>
+<p class="kicker">Discovery call &middot; test script</p>
+<h1>{h1}</h1>
+<p class="role">{role}</p>
+<p class="meta">A Chordential discovery call &middot; HALVARD, &ldquo;Long Way Home&rdquo;
+&middot; agency: Pike &amp; Rowan.<br><b>Every name and brand here is invented.</b> Nothing in
+this call describes real client work.</p>
+<hr class="rule">
+{how}{turns}{back}</body></html>"""
+
+for path, title, h1, role, tn, bk in [
+    ("docs/call-scripts/discovery-call-studio.html",
+     "Discovery call script - the studio (Jon)", "Your half &mdash; the studio",
+     "You are <b>Jon Shipp</b>, Chordential. You run the call.",
+     turns_html(TURNS, JON, notes=True), back_html(expected)),
+    ("docs/call-scripts/discovery-call-client.html",
+     "Discovery call script - the client (Marisa)", "Your half &mdash; the client",
+     "You are <b>Marisa Del Rio</b>, senior producer at Pike &amp; Rowan.",
+     turns_html(TURNS, MAR, notes=False), CLIENT_BACK)]:
+    open(path, "w").write(PAGE.format(css=CSS, title=title, h1=h1, role=role,
+                                      how=HOW, turns=tn, back=bk))
+print("html: 2 files")
+
+# The PDF is the artifact that actually gets sent, so it is built here rather than by
+# hand. Chromium prints it: the page is a designed thing (two voices at two weights) and a
+# generic PDF writer would flatten that back into paragraphs. Skipped with a message when
+# Playwright is absent — the markdown and HTML are still written, and a missing browser
+# must not fail the build.
+def _pdfs():
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("pdf: skipped (no playwright)")
+        return
+    import pathlib
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
+        pg = b.new_page()
+        for name in ("discovery-call-studio", "discovery-call-client"):
+            src = pathlib.Path("docs/call-scripts", name + ".html").resolve()
+            out = os.path.join("docs/call-scripts", name + ".pdf")
+            pg.goto(src.as_uri())
+            pg.wait_for_timeout(300)
+            pg.pdf(path=out, width="4.25in", height="7.5in", print_background=True,
+                   margin={"top": "0.42in", "bottom": "0.5in",
+                           "left": "0.4in", "right": "0.4in"})
+            print(f"pdf: {out} ({os.path.getsize(out) // 1024} KB)")
+        b.close()
+
+
+_pdfs()
