@@ -132,6 +132,10 @@ _KEY_ALIASES = {
     "sonic_references": "reference_playlist", "reference_artists": "reference_playlist",
     "decision_maker": "decision_makers", "approver": "decision_makers",
     "final_approver": "decision_makers",
+    # An approval chain can only mean who approves. On a live call it arrived as its own
+    # field while the canonical slot kept a weaker name scraped off the opportunity.
+    "approval_chain": "decision_makers", "approvers": "decision_makers",
+    "sign_off": "decision_makers", "final_approval": "decision_makers",
     "objective": "business_objective", "brand": "brand_notes", "agency": "agency_notes",
     "mood": "emotional_arc", "emotional_direction": "emotional_arc",
     # The Rights & Licensing worker's own vocabulary (extraction/workers.py names
@@ -206,6 +210,47 @@ def composer_brief(view: dict) -> list:
             val = val[:317].rstrip(" ,;.") + "…"
         out.append({"label": label, "value": val, "key": key})
     return out
+
+
+def brief_readiness(view: dict) -> dict:
+    """Is there enough here to hand a composer? ``{ready, present, missing, text}``.
+
+    THE THING NOTHING WAS DOING. `composer_brief` skips an empty field silently, so a call
+    that captured no creative direction produced a brief with three sections quietly
+    absent — and the composer read it as the whole of what the client said. Reported live
+    (2026-08-26): *"the bot failed to capture creative direction which is hyper important
+    to pass over to the composer and talent team."*
+
+    Nothing checked. `campaign_intake.REQUIRED` — the only gap engine — guards
+    ``budget_band``, ``deadline``, ``deliverables`` and ``decision_makers``: the money, the
+    dates and the approver. Every one of them is OUR side of the table. Four of the six
+    fields a composer actually receives are in nothing at all, so an intelligence record
+    could read "100% understood" while the brief it produces has no objective, no feeling
+    and no references in it.
+
+    Keyed off `BRIEF_KEYS`, deliberately — the same tuple `composer_brief` renders from, so
+    what is checked and what is handed over cannot drift apart. A second list here would go
+    stale the first time the brief changed shape, and the check would then be reassuring
+    about the wrong fields.
+
+    It REPORTS; it does not block. The machine proposes, Jon disposes — a brief may be
+    handed over with a hole in it deliberately, and that is a decision, not an accident.
+    What it must never be is a surprise.
+    """
+    fields = dict((view or {}).get("fields") or {})
+    present, missing = [], []
+    for key, label in BRIEF_KEYS:
+        value = " ".join((fields.get(key) or "").split())
+        (present if value else missing).append({"key": key, "label": label})
+    n = len(BRIEF_KEYS)
+    if not missing:
+        text = f"The composer's brief is complete — all {n} sections."
+    else:
+        names = ", ".join(m["label"].lower() for m in missing)
+        text = (f"The composer's brief is missing {len(missing)} of {n}: {names}. "
+                "A composer reads an absent section as nothing to say.")
+    return {"ready": not missing, "present": present, "missing": missing,
+            "have": len(present), "total": n, "text": text}
 
 
 def arrived_by_alias(key: str) -> bool:

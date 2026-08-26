@@ -151,6 +151,10 @@ def opportunity_detail(request: Request, opp_id: int, understood: str = "",
         if campaigns.workspace_enabled():
             ci = campaign_intelligence.ensure_for_opportunity(conn, row)
             ci_view = campaign_intelligence.fields_view(conn, ci["id"])
+            # Is there enough here to hand a composer? Read from the same BRIEF_KEYS the
+            # composer's brief renders, so the check and the hand-over cannot disagree.
+            ci_view["readiness"] = campaign_intelligence.brief_readiness(
+                campaign_intelligence.brief_view(conn, ci["id"]))
             intake_sync_lanes = intake_lanes.sync_lanes()
         # Discovery lives in the Campaign Brief now; the opp page shows a meeting only
         # CONTEXTUALLY (the "Upcoming Discovery" panel), never a standing widget.

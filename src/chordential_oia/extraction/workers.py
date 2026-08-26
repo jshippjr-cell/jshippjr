@@ -47,7 +47,11 @@ WORKERS: List[WorkerSpec] = [
                 "Nothing else."),
         facets=("engagement", "observed"), default_facet="engagement",
         key_guide=("deadline (the canonical timeline slot — the governing air/delivery date), "
-                   "launch_date, delivery_dates, review_dates, broadcast_dates, "
+                   "launch_date, delivery_dates, "
+                   "review_dates (WHEN reviews happen — dates and cadence only. WHO "
+                   "approves is never yours: that is decision_makers, and filing an "
+                   "approver here hides them inside a schedule), "
+                   "broadcast_dates, "
                    "production_schedule, dependencies, milestones, rush_indicators"),
     ),
     WorkerSpec(
@@ -67,9 +71,18 @@ WORKERS: List[WorkerSpec] = [
                 "supervisor, procurement, legal, approvers, roles, hierarchy, and influence. "
                 "Nothing else."),
         facets=("buyer", "relationship", "observed"), default_facet="buyer",
-        key_guide=("decision_makers (the canonical slot — who signs off / final approver), "
-                   "brand_notes, agency_notes, stakeholders, approval_chain, "
-                   "procurement_contacts, legal_contacts, influence_map"),
+        key_guide=(
+            "decision_makers (the canonical slot — the PEOPLE who approve the music, by "
+            "name and role, and how many times they see it. The person on the call is "
+            "often NOT the approver; say who actually signs off), "
+            "brand_notes (the canonical slot — what the BRAND is and how it behaves: who "
+            "they are, what they make, how long they have done it, what they are careful "
+            "about, whether music has let them down before. NOT the brand's name, and "
+            "never the agency — a name on its own is not a note), "
+            "agency_notes (the canonical slot — how the AGENCY works: who moves paper, "
+            "how slow legal is, what to plan around), "
+            "stakeholders, approval_chain, procurement_contacts, legal_contacts, "
+            "influence_map"),
     ),
     WorkerSpec(
         name="creative", title="Creative Direction Analyst",
@@ -77,9 +90,17 @@ WORKERS: List[WorkerSpec] = [
                 "references, creative adjectives, emotional language, brand voice, desired "
                 "feeling, and creative intent. Nothing else."),
         facets=("direction", "observed"), default_facet="direction",
-        key_guide=("campaign_objective (canonical — what this music is for), emotional_arc "
-                   "(canonical — the feeling/journey), reference_playlist (canonical — every "
-                   "track/artist/commercial cited), mood, genre, instrumentation, tempo, "
+        # THESE THREE ARE THE COMPOSER'S BRIEF. Everything else this worker finds is
+        # context; these are what a person has to write music from, and an empty one is a
+        # brief with a hole in it that nobody downstream can fill.
+        key_guide=("campaign_objective (canonical — what this music is FOR: its job inside "
+                   "the film, whether it carries the whole thing or sits under a "
+                   "voiceover), emotional_arc "
+                   "(canonical — how it should feel across the piece, start to end, "
+                   "INCLUDING what it must not become: \"not triumphant\" is direction), "
+                   "reference_playlist (canonical — every track/artist/commercial cited, "
+                   "and any named as the WRONG direction, which matters more), "
+                   "mood, genre, instrumentation, tempo, "
                    "brand_voice, creative_intent, creative_adjectives"),
     ),
     WorkerSpec(

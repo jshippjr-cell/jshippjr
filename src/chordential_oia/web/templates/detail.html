@@ -474,6 +474,17 @@
 .ci-field{display:grid;grid-template-columns:180px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line,#efe9e0)}
 .ci-field-label{font-weight:600;font-size:13px;padding-top:6px}
 .ci-field-label .k{display:block;color:var(--muted,#8a8580);font-weight:500;font-size:11px}
+/* The composer-readiness line. Amber rather than red: a brief with a hole in it is a
+   thing to look at before assigning, not an error — and the operator may hand it over
+   anyway, knowingly. */
+.ci-brief-gap{border:1px solid #d98b2b;border-left:3px solid #d98b2b;background:#fff6ec;
+  border-radius:9px;padding:11px 13px;margin:0 0 14px}
+.ci-brief-h{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.12em;
+  text-transform:uppercase;color:#8a4b1d;margin:0 0 5px}
+.ci-brief-gap p{margin:0 0 6px;font-size:13.5px;line-height:1.5;color:var(--ink,#241016)}
+.ci-brief-gap p:last-child{margin:0}
+.ci-brief-list{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  font-size:12.5px;color:var(--muted,#7a6b67)}
 .ci-field-body{min-width:0}
 .ci-inline{display:flex;gap:6px;align-items:flex-start}
 .ci-inline input,.ci-inline textarea{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:7px;padding:7px 9px;font:inherit;min-width:0}
@@ -569,6 +580,25 @@
     </p>
   </form>
   </details>
+
+  {# ── WHAT THE COMPOSER WOULD GET, said before they get it. `composer_brief` skips an
+        empty field silently, so a call that captured no creative direction produced a
+        brief with three sections quietly absent and the composer read it as the whole of
+        what the client said. The gap engine never looked: it guards the budget, the dates,
+        the deliverables and the approver — our side of the table — while four of the six
+        fields a composer actually receives were checked by nothing.
+
+        It REPORTS. Handing a brief over with a hole in it can be a decision; it must not
+        be a surprise. ── #}
+  {% if ci_view.readiness and ci_view.readiness.missing %}
+  <div class="ci-brief-gap">
+    <div class="ci-brief-h">For the composer · {{ ci_view.readiness.have }} of {{ ci_view.readiness.total }} sections</div>
+    <p>{{ ci_view.readiness.text }}</p>
+    <p class="ci-brief-list">Missing:
+      {% for m in ci_view.readiness.missing %}<span class="pill pv-review">{{ m.label }}</span>{% endfor %}
+    </p>
+  </div>
+  {% endif %}
 
   {# Conflicts first — a machine value that disagrees with a human one, never silently applied. #}
   {% for it in ci_view.conflicts %}
