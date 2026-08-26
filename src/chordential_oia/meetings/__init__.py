@@ -130,6 +130,14 @@ def realtime_url() -> str:
     """
     if (os.environ.get("CHORDENTIAL_CALL_COPILOT", "1") or "1").strip() == "0":
         return ""
+    # THE ACTIVE PROVIDER HAS TO BE ABLE TO RECEIVE IT. This URL is Recall-shaped — it
+    # names Recall's parser in its own path — and was handed to whatever provider happened
+    # to be configured. A future Zoom-AI or Fireflies provider, or the Null one, would have
+    # been asked to stream to a door that only understands Recall. `parse_realtime` is the
+    # capability, so it is what gets asked about, rather than a name.
+    cp = get_capture_provider()
+    if cp.name != "recall" or not hasattr(cp, "parse_realtime"):
+        return ""
     token = (os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "") or "").strip()
     if not token:
         return ""

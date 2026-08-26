@@ -24,7 +24,11 @@ class NullCaptureProvider(CaptureProvider):
     """No bot joins; transcripts arrive via the manual paste/upload lanes. Honest, not faked."""
     name = "null"
 
-    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "") -> str:
+    def invite(self, *, join_url: str, meeting_ref: str, join_at: str = "",
+               realtime_url: str = "") -> str:
+        # `realtime_url` is accepted and ignored: no bot means nothing to stream. Accepted
+        # rather than omitted because a Protocol implementation that does not match the
+        # Protocol is a crash waiting for the day somebody switches providers.
         return ""
 
     def cancel(self, external_ref: str) -> None:

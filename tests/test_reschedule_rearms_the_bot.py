@@ -41,7 +41,7 @@ class _Capture:
     def __init__(self):
         self.invited, self.cancelled = [], []
 
-    def invite(self, *, join_url, meeting_ref, join_at=""):
+    def invite(self, *, join_url, meeting_ref, join_at="", realtime_url=""):
         self.invited.append(join_at)
         return "bot-%d" % (len(self.invited) + 1)
 

@@ -164,8 +164,18 @@ def test_the_stream_is_only_asked_for_when_it_can_arrive(monkeypatch):
     from chordential_oia import meetings as M
     monkeypatch.setenv("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com")
     monkeypatch.setenv("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "tok")
+    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "recall")
+    monkeypatch.setenv("CHORDENTIAL_RECALL_API_KEY", "k")
     monkeypatch.delenv("CHORDENTIAL_CALL_COPILOT", raising=False)
     assert M.realtime_url().startswith("https://chordential.com/webhooks/capture/recall/live/")
+
+    # …and only from a provider that can receive it. This URL names Recall's parser in its
+    # own path, and was handed to whatever provider happened to be configured — so the Null
+    # provider, or a future Fireflies one, would have been asked to stream to a door that
+    # only understands Recall.
+    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "null")
+    assert M.realtime_url() == ""
+    monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "recall")
 
     monkeypatch.delenv("CHORDENTIAL_RECALL_WEBHOOK_SECRET")
     assert M.realtime_url() == "", "no token — we would accept anyone's audio"
@@ -177,6 +187,21 @@ def test_the_stream_is_only_asked_for_when_it_can_arrive(monkeypatch):
 
     monkeypatch.setenv("CHORDENTIAL_CALL_COPILOT", "0")
     assert M.realtime_url() == ""
+
+
+def test_every_provider_implements_the_seam_it_claims_to():
+    """`realtime_url` was added to the capture Protocol and NOT to the Null provider that
+    implements it, so a deployment on the default provider crashed on arming the moment
+    streaming was configured. A Protocol implementation that does not match the Protocol is
+    a crash waiting for the day somebody switches providers."""
+    import inspect
+    from chordential_oia.meetings.base import CaptureProvider
+    from chordential_oia.meetings.null import NullCaptureProvider
+    from chordential_oia.meetings.recall import RecallCaptureProvider
+    want = set(inspect.signature(CaptureProvider.invite).parameters)
+    for impl in (NullCaptureProvider, RecallCaptureProvider):
+        got = set(inspect.signature(impl.invite).parameters)
+        assert want <= got, f"{impl.__name__}.invite is missing {sorted(want - got)}"
 
 
 def test_a_bot_is_only_configured_to_stream_when_asked():
