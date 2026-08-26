@@ -132,8 +132,41 @@ def _event(words=("Where", "does", "this", "run?"), bot="bot-77", at=41.2,
 def _recall(secret="s3cret"):
     from chordential_oia.meetings.recall import RecallCaptureProvider
     p = RecallCaptureProvider()
-    p.webhook_secret = secret
+    p.realtime_token = secret
     return p
+
+
+def test_switching_the_panel_on_must_not_switch_the_recording_off():
+    """THE FOOTGUN THIS FEATURE SHIPPED WITH FOR ONE COMMIT.
+
+    The realtime stream first reused `CHORDENTIAL_RECALL_WEBHOOK_SECRET` as its URL token,
+    which looked tidy and was a trap. That variable is the LIFECYCLE webhook's HMAC key:
+    `parse_webhook` rejects any event whose signature does not match it, and Recall can
+    only produce that signature once the same value is set in Recall's own workspace
+    settings. So setting it to a random string to turn the panel on would have started
+    rejecting every `transcript.done` event, and transcripts would have quietly stopped
+    being ingested. Turning on a panel must not switch off the recording.
+    """
+    from chordential_oia.meetings.recall import RecallCaptureProvider
+    p = RecallCaptureProvider()
+    p.realtime_token = "invented-by-us"
+    p.webhook_secret = ""                      # Recall was never told about a signing key
+
+    # The panel works…
+    assert p.parse_realtime({}, _event(), token="invented-by-us") is not None
+    # …and the lifecycle door is untouched by it: an unsigned event still gets read,
+    # exactly as it did before the copilot existed.
+    lifecycle = json.dumps({"event": "transcript.done",
+                            "data": {"bot_id": "bot-77"}}).encode()
+    from chordential_oia import meetings as M
+    assert p.parse_webhook({}, lifecycle).type != M.EV_IGNORED
+
+    # And the two secrets do not stand in for one another in either direction.
+    assert p.parse_realtime({}, _event(), token="") is None
+    q = RecallCaptureProvider()
+    q.webhook_secret, q.realtime_token = "lifecycle-hmac", ""
+    assert q.parse_realtime({}, _event(), token="lifecycle-hmac") is None, (
+        "the lifecycle key was accepted as a stream token")
 
 
 def test_the_realtime_payload_is_read_where_recall_actually_puts_it():
@@ -163,7 +196,7 @@ def test_the_stream_is_only_asked_for_when_it_can_arrive(monkeypatch):
     that will hold in two of them."""
     from chordential_oia import meetings as M
     monkeypatch.setenv("CHORDENTIAL_PUBLIC_DOMAIN", "https://chordential.com")
-    monkeypatch.setenv("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "tok")
+    monkeypatch.setenv("CHORDENTIAL_COPILOT_TOKEN", "tok")
     monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "recall")
     monkeypatch.setenv("CHORDENTIAL_RECALL_API_KEY", "k")
     monkeypatch.delenv("CHORDENTIAL_CALL_COPILOT", raising=False)
@@ -177,9 +210,9 @@ def test_the_stream_is_only_asked_for_when_it_can_arrive(monkeypatch):
     assert M.realtime_url() == ""
     monkeypatch.setenv("CHORDENTIAL_NOTETAKER_PROVIDER", "recall")
 
-    monkeypatch.delenv("CHORDENTIAL_RECALL_WEBHOOK_SECRET")
+    monkeypatch.delenv("CHORDENTIAL_COPILOT_TOKEN")
     assert M.realtime_url() == "", "no token — we would accept anyone's audio"
-    monkeypatch.setenv("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "tok")
+    monkeypatch.setenv("CHORDENTIAL_COPILOT_TOKEN", "tok")
 
     monkeypatch.setenv("CHORDENTIAL_PUBLIC_DOMAIN", "http://localhost:8099")
     assert M.realtime_url() == "", "Recall posts from the internet; a laptop cannot receive"
@@ -230,7 +263,7 @@ def live(tmp_path, monkeypatch):
                  "CHORDENTIAL_SEED_DEMO": "1",
                  "CHORDENTIAL_NOTETAKER_PROVIDER": "recall",
                  "CHORDENTIAL_RECALL_API_KEY": "k",
-                 "CHORDENTIAL_RECALL_WEBHOOK_SECRET": "tok",
+                 "CHORDENTIAL_COPILOT_TOKEN": "tok",
                  "CHORDENTIAL_PUBLIC_DOMAIN": "https://chordential.com"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

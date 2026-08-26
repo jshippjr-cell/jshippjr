@@ -477,6 +477,17 @@
 .ci-field-body{min-width:0}
 .ci-inline{display:flex;gap:6px;align-items:flex-start}
 .ci-inline input,.ci-inline textarea{flex:1;border:1px solid var(--line,#e7e1d8);border-radius:7px;padding:7px 9px;font:inherit;min-width:0}
+/* The value box: one line until you want the rest of it. `resize:vertical` is the no-JS
+   floor — with scripting off the box is still draggable open, so the text is never
+   unreachable, only folded. */
+.ci-val{resize:vertical;overflow:hidden;line-height:1.45;max-height:2.1em;
+  transition:max-height .12s ease}
+.ci-val.is-open,.ci-val:focus{max-height:40em;overflow:auto}
+.ci-more{flex:0 0 auto;align-self:flex-start;border:1px solid var(--line,#e7e1d8);
+  background:var(--surface,#fff);color:var(--muted,#7a6b67);border-radius:7px;
+  padding:6px 8px;cursor:pointer;font:inherit;line-height:1.2}
+.ci-more:hover{color:var(--ink,#241016);border-color:var(--ember,#b34a21)}
+.ci-more[aria-expanded="true"]{color:var(--ember,#b34a21)}
 .ci-empty input{border-style:dashed;background:transparent}
 .ci-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
 .ci-chip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2,#f2ece3);color:var(--muted,#7a756e)}
@@ -597,7 +608,18 @@
           <input type="hidden" name="facet" value="{{ it.facet }}">
           <input type="hidden" name="key" value="{{ it.key }}">
           <input type="hidden" name="kind" value="{{ it.kind }}">
-          <input type="text" name="value" value="{{ it.value }}" placeholder="{{ it.placeholder or 'not yet observed' }}">
+          {# A TEXTAREA, NOT A ONE-LINE INPUT. What the engine extracts is a sentence, not a
+             token — "Deposit due on contract signature, final invoice triggered by delivery
+             and acceptance, Aziz Bar to be copied on the written summary, Tom Vasquez…" —
+             and a single-line input can only ever show its first few words. The operator
+             was being asked to confirm a value they could not read: *"the text reads off
+             the screen"* (2026-08-26). Confirming what you cannot see is not review.
+
+             Collapsed to one line so a section of eleven lanes still scans, and opened by
+             the button beside it. Editing opens it too: nobody should have to expand a box
+             before they are allowed to fix what is in it. #}
+          <textarea class="ci-val" name="value" rows="1"
+                    placeholder="{{ it.placeholder or 'not yet observed' }}">{{ it.value }}</textarea>
           <button class="btn tiny" type="submit">Save</button>
         </form>
         <div class="ci-meta">
@@ -824,4 +846,51 @@
     </details>
   </div>
 </section>
+
+<script>
+/* THE VALUE BOXES OPEN. Campaign Intelligence stores a sentence per lane, and the row it
+   lives in has to stay one line tall or a section of eleven lanes is a page of its own. So
+   the box is clamped to one line and carries a button that opens it — but ONLY where there
+   is something folded away. A "show more" on a value that is already fully visible is
+   furniture, and eleven of them is a form that looks like it is hiding something.
+
+   The button is built here rather than in the template because whether a value overflows
+   is a fact about the rendered box, not about the data: the same sentence fits on a
+   desktop and does not on a phone. With scripting off the textarea is still
+   `resize:vertical`, so the text is folded, never unreachable. */
+(function () {
+  "use strict";
+  function overflowing(el) { return el.scrollHeight > el.clientHeight + 2; }
+
+  function fit(el) {
+    /* HEIGHT, not max-height. The box is `rows="1"`, so its intrinsic height is one line
+       and a larger max-height only raises a ceiling it never reaches — the first version
+       of this "opened" every value and left them all still clipped. Height is what grows
+       it; the CSS ceiling stops a runaway value from becoming its own page. */
+    if (!el.classList.contains("is-open")) { el.style.height = ""; return; }
+    el.style.height = "auto";                      /* measure, do not accumulate */
+    el.style.height = Math.min(el.scrollHeight + 2, 620) + "px";
+  }
+
+  document.querySelectorAll("textarea.ci-val").forEach(function (box) {
+    if (!overflowing(box)) return;
+    var btn = document.createElement("button");
+    btn.type = "button";                 /* never submits the row it sits in */
+    btn.className = "ci-more";
+    btn.setAttribute("aria-expanded", "false");
+    btn.title = "Read the whole value";
+    btn.textContent = "⌄";
+    btn.addEventListener("click", function () {
+      var open = box.classList.toggle("is-open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.textContent = open ? "⌃" : "⌄";
+      btn.title = open ? "Fold it back" : "Read the whole value";
+      fit(box);
+    });
+    box.parentNode.insertBefore(btn, box.nextSibling);
+    /* Typing in a collapsed box would scroll its own text out of sight. */
+    box.addEventListener("input", function () { if (box.classList.contains("is-open")) fit(box); });
+  });
+})();
+</script>
 {% endblock %}

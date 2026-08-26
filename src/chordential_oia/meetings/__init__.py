@@ -119,9 +119,16 @@ def realtime_url() -> str:
     into three call sites is a rule that will hold in two of them:
 
     * **A token.** Recall verifies a realtime webhook with a token on the URL. Without
-      ``CHORDENTIAL_RECALL_WEBHOOK_SECRET`` the endpoint would accept anything anyone
-      posted, so with no secret we do not ask for the stream at all. Refusing to listen
-      beats listening to strangers.
+      ``CHORDENTIAL_COPILOT_TOKEN`` the endpoint would accept anything anyone posted, so
+      with no token we do not ask for the stream at all. Refusing to listen beats
+      listening to strangers.
+
+      It is its OWN variable and deliberately not the lifecycle webhook's
+      ``CHORDENTIAL_RECALL_WEBHOOK_SECRET``. That one is an HMAC key Recall has to be told
+      about in its own workspace settings; setting it to a random string to switch this
+      panel on would start rejecting every lifecycle event and quietly stop transcripts
+      from being ingested. Any random string will do here — Recall never sees it as
+      anything but an opaque query parameter.
     * **A public HTTPS host.** The provider POSTs from the internet. A laptop, a preview
       tunnel, or a `localhost` default cannot receive it, and a bot pointed at an endpoint
       that refuses the connection is worse than one that never streamed — it retries.
@@ -138,7 +145,7 @@ def realtime_url() -> str:
     cp = get_capture_provider()
     if cp.name != "recall" or not hasattr(cp, "parse_realtime"):
         return ""
-    token = (os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "") or "").strip()
+    token = (os.environ.get("CHORDENTIAL_COPILOT_TOKEN", "") or "").strip()
     if not token:
         return ""
     base = (os.environ.get("CHORDENTIAL_PUBLIC_DOMAIN", "") or "").strip().rstrip("/")

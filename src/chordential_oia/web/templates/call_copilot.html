@@ -87,11 +87,15 @@
   {% elif not streaming %}
   <div class="cop-setup"><b>Nothing will stream to this panel yet.</b> The notetaker
     records and ingests as normal, but live transcript needs all three of:
-    <code>CHORDENTIAL_RECALL_WEBHOOK_SECRET</code> (the token that keeps this endpoint
-    from accepting anyone's audio), <code>CHORDENTIAL_PUBLIC_DOMAIN</code> on real
-    <code>https</code> (Recall posts from the internet, so a laptop cannot receive it), and
-    a bot armed <em>after</em> both were set — a bot already booked was configured without
-    the stream and will not start now.</div>
+    <code>CHORDENTIAL_COPILOT_TOKEN</code> — <em>any random string you invent</em>; Recall
+    never sees it as more than an opaque query parameter, and it keeps this endpoint from
+    accepting anyone's audio. (It is deliberately <em>not</em>
+    <code>CHORDENTIAL_RECALL_WEBHOOK_SECRET</code>, which is Recall's HMAC signing key —
+    setting that one to a random string would start rejecting every lifecycle event and
+    stop transcripts being ingested.) Then <code>CHORDENTIAL_PUBLIC_DOMAIN</code> on real
+    <code>https</code>, because Recall posts from the internet and a laptop cannot receive
+    it. And a bot armed <em>after</em> both were set — a bot already booked was configured
+    without the stream and will not start now.</div>
   {% endif %}
 
   <div id="cop-conflicts"></div>

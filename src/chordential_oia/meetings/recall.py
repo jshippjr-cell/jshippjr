@@ -81,6 +81,21 @@ class RecallCaptureProvider(CaptureProvider):
         self.language = (os.environ.get("CHORDENTIAL_RECALL_LANGUAGE", "")
                          or "auto").strip()
         self.webhook_secret = os.environ.get("CHORDENTIAL_RECALL_WEBHOOK_SECRET", "").strip()
+        # A SEPARATE SECRET FROM THE ONE ABOVE, and they must never be merged again.
+        #
+        # `webhook_secret` is the LIFECYCLE webhook's HMAC key: Recall computes a signature
+        # with it, so it only works once the same value is configured in Recall's own
+        # workspace settings. `parse_webhook` rejects anything that does not match it.
+        #
+        # `realtime_token` is a string WE invent and put in the callback URL. Recall never
+        # needs to know it exists; it just echoes it back.
+        #
+        # The copilot first asked for the stream using `webhook_secret`, which looked
+        # tidy and was a trap: setting that variable to a random string to switch the
+        # panel on would have started REJECTING every lifecycle event — no signature could
+        # match a key Recall was never told — and transcripts would have quietly stopped
+        # being ingested. Turning on a panel must not switch off the recording.
+        self.realtime_token = os.environ.get("CHORDENTIAL_COPILOT_TOKEN", "").strip()
         self.timeout = 20
 
     # ── seam contract ─────────────────────────────────────────────────────────
@@ -272,11 +287,14 @@ class RecallCaptureProvider(CaptureProvider):
                        token: str = "") -> Optional[dict]:
         """One streamed utterance, normalized — or ``None`` for anything we will not trust.
 
-        Recall's realtime webhook is verified by a token on the URL rather than a signed
-        body: its docs offer a workspace signature OR a query token, and only the token is
-        available without workspace-level configuration the operator would have to go and
-        do. Compared in constant time; a missing or wrong token is dropped silently, since
-        an endpoint that explains why it rejected you is an endpoint worth probing.
+        Verified by a token on the URL rather than a signed body: Recall's docs offer a
+        workspace signature OR a query token, and only the token works without workspace
+        configuration the operator would have to go and do by hand. It is
+        ``CHORDENTIAL_COPILOT_TOKEN`` — a string we invent, NOT the lifecycle webhook's
+        HMAC key (see `__init__` for what merging them would have cost). Compared in
+        constant time; unset means we never asked for a stream, so one is not accepted.
+        A wrong token is dropped silently, since an endpoint that explains why it rejected
+        you is an endpoint worth probing.
 
         Shape (docs.recall.ai, real-time event payloads), which is NOT the lifecycle
         webhook's shape and is the reason this is a separate parser::
@@ -290,10 +308,11 @@ class RecallCaptureProvider(CaptureProvider):
         The bot id is at ``data.bot.id`` — two levels deeper than the lifecycle event's,
         which is exactly the sort of difference that silently correlates nothing.
         """
-        want = self.webhook_secret
-        if want:
-            if not token or not hmac.compare_digest(str(token), str(want)):
-                return None
+        want = self.realtime_token
+        if not want:
+            return None          # we never asked for this stream; do not accept one
+        if not token or not hmac.compare_digest(str(token), str(want)):
+            return None
         try:
             payload = json.loads(body.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
