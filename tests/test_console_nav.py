@@ -74,7 +74,15 @@ def test_the_nav_has_no_duplicate_destinations(app_mod):
     # diet sets: it is not a saved search or a filter over a page already in the nav —
     # it is a destination that exists nowhere else, and it is where the client's own
     # experience gets read. Raise this again only for something that clears that bar.
-    assert len(links) <= 17, f"the nav is growing again ({len(links)} links)"
+    #
+    # Raised 17 → 18 (2026-08-26) for /pricing, against the same bar. Every pricing
+    # surface in the product hangs off ONE opportunity — the estimate, the proposal, the
+    # prep sheet's guide — so the model itself had no home, and the model is what has to
+    # be in the operator's head while a client is talking. It is not a filter over a page
+    # already here (there is no such page), and it is read BETWEEN deals rather than
+    # inside one, which is exactly what a permanent slot is for. Anything reachable from a
+    # deal you are already looking at still does not earn one.
+    assert len(links) <= 18, f"the nav is growing again ({len(links)} links)"
 
 
 def test_the_deal_list_still_does_everything_the_board_did(app_mod):
