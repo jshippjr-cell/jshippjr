@@ -63,7 +63,11 @@ TURNS = [
 (MAR,"They're careful about anything that reads as luxury — they're a working brand. And music has let them down before. They licensed something two years ago that turned up in a car ad three months later, and it was embarrassing.",""),
 (JON,"How does your side actually work — who moves paper, and how fast?",""),
 (MAR,"Our legal is slow. Assume three weeks for any contract. And procurement will want a purchase order before anything starts.",""),
-(JON,"Right — the boring bit. How long do you need the usage to run?",""),
+(JON,"Right — the boring bit. Where does the music actually run — broadcast, digital, social?",""),
+(MAR,"Broadcast and social. No cinema, and no out-of-home.","The fourth priced lever, and the one the sheet never used to ask. Organic social and all-media-including-cinema are nearly three times apart."),
+(JON,"Is that the whole plan, or is there a phase two?",""),
+(MAR,"There's talk of cinema at Christmas, but nothing booked.","Another UNCOMMITTED extension, like the UK one at turn 54. It must not be priced as agreed."),
+(JON,"Noted — I'll scope what's booked. How long do you need the usage to run?",""),
 (MAR,"Twelve months from first air, I think.",""),
 (JON,"Is that from delivery, or from first air?",""),
 (MAR,"From first air.",""),
@@ -159,7 +163,7 @@ a control. Scored against the script text itself, Phase 1 returns:
 
 > **{expected}**
 
-So on `/opportunity/<id>/prep` after the call, the headline should read **24 of 24
+So on `/opportunity/<id>/prep` after the call, the headline should read **25 of 25
 covered**. Anything less is a finding, and where it came from is worth separating:
 
 - **A line comes back `missed` that you know you asked.** The transcript is the first
@@ -369,7 +373,7 @@ as agreed territory, the quote is wrong in the client's favour and we eat it.</l
 <p>This script asks <b>every question on the sheet</b>, which makes the run a control with a
 known answer. Scored against the script text, Phase&nbsp;1 returns:</p>
 <div class="score"><p class="big">{expected}</p></div>
-<p>So the prep page should read <b>24 of 24 covered</b>. Less than that is a finding:</p>
+<p>So the prep page should read <b>25 of 25 covered</b>. Less than that is a finding:</p>
 <ul>
 <li><b>A line comes back missed that you know you asked.</b> Suspect the transcript first &mdash;
 read what the notetaker actually heard. Only if the words are plainly there is it a gap in the
@@ -379,7 +383,7 @@ the failure that matters, because it manufactures confidence. Note the sentence 
 evidence; that sentence is the fix.</li>
 </ul>
 <h3>The number actually worth reading</h3>
-<p>Not the headline &mdash; the <b>answered / raised</b> split. Ten of the twenty-four lines are
+<p>Not the headline &mdash; the <b>answered / raised</b> split. Ten of the twenty-five lines are
 Campaign Intelligence slots; the other fourteen are conversation and can only ever read
 <i>raised</i>. So watch the <b>&ldquo;Asked, but nothing stuck&rdquo;</b> line. Every slot on it
 was asked on this call and you have the script to prove it, which makes each one a clean

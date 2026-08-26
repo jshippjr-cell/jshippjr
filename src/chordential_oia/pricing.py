@@ -215,15 +215,41 @@ class LicenceTerms:
 
 # ── Reading the licence off what discovery actually captured ─────────────────────────
 
-_GLOBAL = re.compile(r"world ?wide|global|all territor|every ?where|internationa", re.I)
+_GLOBAL = re.compile(r"world ?wide|global|all territor|every ?where|internationa|"
+                     r"all market|multi[- ]?territor", re.I)
 _LOCAL = re.compile(r"\b(uk|us|usa|domestic|one (?:country|territory)|local|regional|"
                     r"single (?:country|market)|city|state)\b", re.I)
-_NATIONAL = re.compile(r"\bnational(?:ly|wide)?\b", re.I)
+# A CONTINENT IS A TERRITORY ANSWER. "North America to start" matched none of these and
+# fell through to an ASSUMED national licence — on a transcript where the client had just
+# answered the question. The named regions clients actually say are the answer; they are
+# read as national because that is what a multi-country region prices as against a
+# baseline built for one national campaign.
+_NATIONAL = re.compile(r"\bnational(?:ly|wide)?\b|north america|latin america|\bemea\b|"
+                       r"\bapac\b|\banz\b|europe(?!an union)|\bdach\b|nordics|"
+                       r"united states|canada|\bmena\b", re.I)
 
 _PERPETUAL = re.compile(r"perpetu|forever|in ?definite|buy ?out|unlimited time|"
                         r"no expir|permanent", re.I)
-_YEARS = re.compile(r"(\d+)\s*(?:-|\s)?\s*year", re.I)
-_MONTHS = re.compile(r"(\d+)\s*month", re.I)
+# WORDS ARE NUMBERS. A client says "twelve months from first air"; the transcript writes
+# it out; `(\d+)` sees nothing and the licence quietly reverts to an assumed three years.
+# Term is the second-largest lever on the sheet — one year is ×0.65 and perpetuity ×1.90 —
+# so a term that fails to parse is not a rounding error, it is the fee.
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "eighteen": 18,
+    "twenty": 20, "twentyfour": 24, "twenty-four": 24, "a": 1, "an": 1,
+}
+_NUM = r"(\d+|" + "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) + r")"
+_YEARS = re.compile(_NUM + r"[\s-]*year", re.I)
+_MONTHS = re.compile(_NUM + r"[\s-]*month", re.I)
+
+
+def _count(match) -> Optional[int]:
+    """The number a term match found, whether it was written in digits or in words."""
+    raw = (match.group(1) or "").strip().lower()
+    if raw.isdigit():
+        return int(raw)
+    return _NUMBER_WORDS.get(raw)
 
 _EXCL_FULL = re.compile(r"full(?:y)? exclusiv|total(?:ly)? exclusiv|exclusive to us|"
                         r"complete(?:ly)? exclusiv", re.I)
@@ -260,7 +286,8 @@ def licence_from_ci(fields: Optional[Dict[str, str]] = None) -> LicenceTerms:
     f = {k: str(v or "") for k, v in (fields or {}).items()}
     terms = LicenceTerms()
 
-    territory = _first_text(f, "territory", "usage_territory", "rights_territory")
+    territory = _first_text(f, "territory", "usage_territory", "rights_territory",
+                            "territories", "markets", "geography")
     if territory:
         if _GLOBAL.search(territory):
             terms.territory, terms.territory_stated = "global", True
@@ -269,22 +296,32 @@ def licence_from_ci(fields: Optional[Dict[str, str]] = None) -> LicenceTerms:
         elif _LOCAL.search(territory):
             terms.territory, terms.territory_stated = "local", True
 
-    term = _first_text(f, "license_term", "licence_term", "usage_term", "rights_term")
+    # "term" IS ON THIS LIST NOW, and it is the whole reason this function was reading
+    # nothing on real calls. The extraction engine's Rights & Licensing worker is
+    # instructed to emit exactly `usage_rights, territory, term, media, …` — and this
+    # looked for `license_term`, `licence_term`, `usage_term`, `rights_term`, never the
+    # bare `term` it was being handed. The lever arrived under a name nothing read, so
+    # every call priced at an assumed three years however clearly the client answered.
+    term = _first_text(f, "license_term", "licence_term", "term", "usage_term",
+                       "rights_term", "licence_period", "license_period", "usage_rights",
+                       "buyout", "media_term")
     if term:
         if _PERPETUAL.search(term):
             terms.term_years, terms.term_stated = None, True
         else:
             years = _YEARS.search(term)
             months = _MONTHS.search(term)
-            if years:
-                terms.term_years, terms.term_stated = max(1, int(years.group(1))), True
-            elif months:
+            n_years = _count(years) if years else None
+            n_months = _count(months) if months else None
+            if n_years:
+                terms.term_years, terms.term_stated = max(1, n_years), True
+            elif n_months:
                 # Rounded UP to whole years: a licence sold for eighteen months and
                 # priced as one year is four months given away.
-                n = int(months.group(1))
-                terms.term_years, terms.term_stated = max(1, -(-n // 12)), True
+                terms.term_years, terms.term_stated = max(1, -(-n_months // 12)), True
 
-    excl = _first_text(f, "exclusivity", "rights_exclusivity")
+    excl = _first_text(f, "exclusivity", "rights_exclusivity", "exclusive",
+                       "category_exclusivity")
     if excl:
         if _EXCL_NONE.search(excl):
             terms.exclusivity, terms.exclusivity_stated = "none", True
@@ -293,7 +330,8 @@ def licence_from_ci(fields: Optional[Dict[str, str]] = None) -> LicenceTerms:
         elif _EXCL_CATEGORY.search(excl):
             terms.exclusivity, terms.exclusivity_stated = "category", True
 
-    media = _first_text(f, "media", "usage_media", "channels", "rollout", "deliverables")
+    media = _first_text(f, "media", "usage_media", "channels", "rollout", "placements",
+                        "media_plan", "deliverables")
     if media:
         if _CINEMA.search(media):
             terms.media, terms.media_stated = "all_media_cinema", True

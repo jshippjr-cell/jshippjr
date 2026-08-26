@@ -53,6 +53,8 @@ Jon: How long do you need the usage to run?
 Priya: Two years from first air.
 Jon: When that term is up, do you expect to renew?
 Priya: Probably renew.
+Jon: Where does the music actually run - broadcast, digital, social?
+Priya: Broadcast and social, no cinema.
 Jon: Where does this run? US only, or worldwide?
 Priya: North America.
 Jon: Do you need any exclusivity, category or otherwise?
@@ -185,7 +187,7 @@ def test_a_missed_line_carries_the_question_to_ask_next_time():
 
 def test_the_headline_reads_like_the_plan_said_it_would():
     score = score_call(prep_sheet({}), BAIT)
-    assert score.text.startswith("0 of 24 covered; missed ")
+    assert score.text.startswith("0 of 25 covered; missed ")
     assert "licence term" in score.text
     assert score_call(prep_sheet({}), GOOD).text.endswith("everything came up")
 
@@ -202,7 +204,7 @@ def test_scoring_is_deterministic():
 def test_an_empty_transcript_is_all_missed_not_a_crash():
     for empty in ("", "   ", "\n\n"):
         score = score_call(prep_sheet({}), empty)
-        assert score.missed == score.total == 24
+        assert score.missed == score.total == 25
 
 
 # ── on the page ─────────────────────────────────────────────────────────────────────
@@ -271,7 +273,7 @@ def test_the_score_appears_on_the_same_sheet(prep):
     _file_a_call(db, opp_id, GOOD)
     page = c.get(f"/opportunity/{opp_id}/prep").text
     assert "How the call went" in page
-    assert "24 of 24 covered" in page
+    assert "25 of 25 covered" in page
     # Evidence is the matching SENTENCE, printed verbatim so the tick can be argued with.
     assert "US only, or worldwide?" in page
 
@@ -306,7 +308,7 @@ def test_the_newest_call_is_the_one_scored(prep):
     c, _app, db, opp_id = prep
     _file_a_call(db, opp_id, BAIT)
     _file_a_call(db, opp_id, GOOD)
-    assert "24 of 24 covered" in c.get(f"/opportunity/{opp_id}/prep").text
+    assert "25 of 25 covered" in c.get(f"/opportunity/{opp_id}/prep").text
 
 
 def test_scoring_never_re_reads_the_transcript_with_a_model(prep, monkeypatch):

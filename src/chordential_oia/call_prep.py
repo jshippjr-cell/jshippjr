@@ -157,6 +157,18 @@ _BANK = [
          "someone asks."),
     ]),
     ("The terms", "The ones that get skipped when a call runs long. Ask them anyway.", False, [
+        # MEDIA WAS NEVER ASKED, and it is priced. The sheet asked territory, term and
+        # exclusivity and skipped the fourth lever entirely — worth ×0.55 on organic
+        # social and ×1.55 on all-media-including-cinema, which on an ordinary job is
+        # several thousand dollars nobody was prompted to establish. It was reaching the
+        # quote only by accident, read out of whatever the deliverables happened to
+        # mention.
+        ("media", "Where it runs",
+         "Where does the music actually run — broadcast, digital, social, cinema?",
+         "Is that the whole plan, or is there a phase two?",
+         "The fourth priced lever and the one nobody asks. Organic social and all-media-"
+         "including-cinema are nearly three times apart, and a media plan that grows "
+         "after the quote is growth we agreed to for free."),
         ("license_term", "Licence term",
          "How long do you need the usage to run?",
          "Is that from delivery or from first air?",
@@ -236,8 +248,8 @@ def prep_sheet(ci_fields: Optional[Dict[str, str]] = None) -> List[PrepGroup]:
         for key, label, ask, follow_up, why in rows:
             group.lines.append(PrepLine(
                 key=key, label=label, ask=ask, follow_up=follow_up, why=why,
-                known=fields.get(key, "") if canonical else "",
-                canonical=canonical,
+                known=fields.get(key, "") if key in _CANON_SLOTS else "",
+                canonical=key in _CANON_SLOTS,
             ))
         out.append(group)
     return out
@@ -306,7 +318,15 @@ _CUES: Dict[str, tuple] = {
                     "brand shows up", "brand safety", "let them down", "brand police"),
     "agency_notes": ("your side", "your process", "moves paper", "legal team",
                      "how does your", "procurement"),
-    # The terms — the nine that keep recurring, which is the whole reason for the plan
+    # The terms — the ones that keep recurring, which is the whole reason for the plan.
+    # MEDIA is deliberately narrow: "broadcast" alone is how a client describes a
+    # DELIVERABLE ("a 30-second cut down for broadcast"), so ticking media off that word
+    # would mark the fourth priced lever covered on a call where nobody asked about it.
+    # These are phrasings that can only be about where the music RUNS.
+    "media": ("where does the music actually run", "where will it run", "where does it run",
+              "media plan", "broadcast and digital", "digital only", "social only",
+              "in cinema", "cinema as well", "run on tv", "paid and organic",
+              "phase two"),
     "license_term": ("licence term", "license term", "in perpetuity", "perpetuity",
                      "how long do you need", "usage to run", "term of the licence",
                      "term of the license", "buyout", "buy-out", "usage period",
@@ -376,8 +396,26 @@ class CallScore:
         return [ln for ln in self.lines if ln.state == _RAISED and ln.key in _CANON_SLOTS]
 
 
-_CANON_SLOTS = {key for _t, _b, canonical, rows in _BANK if canonical
-                for key, _l, _a, _f, _w in rows}
+# WHICH LINES FILL A CAMPAIGN INTELLIGENCE SLOT — declared per KEY, not per group.
+#
+# It used to be a flag on the group, which was true while the terms were conversation and
+# became false the moment four of them (media, territory, licence term, exclusivity) were
+# made real slots so a human could correct what the call got wrong. They sit in "The
+# terms" beside renewal, publishing, PRO and payment terms, which are still conversation —
+# so the group can no longer answer the question and the key has to.
+#
+# `tests/test_call_prep_sheet.py` pins this against `campaign_intelligence.CANONICAL_FIELDS`
+# so the two cannot drift: a slot added there and forgotten here would be a question whose
+# answer the sheet never reads back, and a key removed there would be a read-back of a
+# field that no longer exists.
+_CANON_SLOTS = {
+    "business_objective", "campaign_objective", "deliverables",
+    "emotional_arc", "reference_playlist",
+    "deadline", "budget_band",
+    "decision_makers", "brand_notes", "agency_notes",
+    # priced, and therefore correctable (pricing.licence_from_ci → build_quote)
+    "media", "territory", "license_term", "exclusivity",
+}
 
 
 def _segments(transcript: str) -> List[str]:

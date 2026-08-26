@@ -78,6 +78,28 @@ CANONICAL_FIELDS = [
      "The feeling / journey the music carries", None),
     ("direction", "reference_playlist", "fact", "Reference playlist",
      "Tracks / artists cited as touchstones", None),
+    # ── THE FOUR THAT SET THE LICENCE FEE ────────────────────────────────────────
+    # These are PRICED (`pricing.licence_from_ci` → `build_quote`), and until now they
+    # were not slots. The Rights & Licensing worker proposed them under names of its own
+    # and they landed in the "extra facts" tail — which meant two things, both bad.
+    #
+    # The engine's read went unread: the worker emits `term`, nothing looked for `term`,
+    # and every proposal priced an assumed three-year licence however plainly the client
+    # had answered. And the OPERATOR could not correct it: a value with no slot has no
+    # labelled, always-editable row, so fixing a misheard territory meant guessing the
+    # exact key in "Anything else that matters" and hoping pricing read that name.
+    #
+    # As slots they are visible when empty, editable when wrong, and a human edit
+    # overwrites the machine's by construction — so a correction moves the price, which
+    # is the whole point of being able to make one.
+    ("commercial", "media", "fact", "Usage · media",
+     "Where it runs — broadcast, digital, social, cinema", None),
+    ("commercial", "territory", "fact", "Usage · territory",
+     "One market, national, or worldwide", None),
+    ("commercial", "license_term", "fact", "Licence term",
+     "How long the usage runs — and from when", None),
+    ("commercial", "exclusivity", "fact", "Exclusivity",
+     "None, category-exclusive, or fully exclusive", None),
 ]
 # Engine-proposed keys are STEERED toward the canonical slots by a prompt guide, and a
 # model that ignores the guide is not a bug you fix by asking louder. On the live
@@ -112,6 +134,18 @@ _KEY_ALIASES = {
     "final_approver": "decision_makers",
     "objective": "business_objective", "brand": "brand_notes", "agency": "agency_notes",
     "mood": "emotional_arc", "emotional_direction": "emotional_arc",
+    # The Rights & Licensing worker's own vocabulary (extraction/workers.py names
+    # `usage_rights, territory, term, media, …`), snapped onto the priced slots. `term`
+    # is the one that mattered: a rights analyst saying "term" can only mean the licence
+    # term — payment terms are their own key — and it was the name the whole lever kept
+    # arriving under while nothing read it.
+    "term": "license_term", "usage_term": "license_term", "rights_term": "license_term",
+    "licence_term": "license_term", "licence_period": "license_term",
+    "license_period": "license_term", "media_term": "license_term",
+    "territories": "territory", "usage_territory": "territory",
+    "rights_territory": "territory", "geography": "territory",
+    "rights_exclusivity": "exclusivity", "category_exclusivity": "exclusivity",
+    "usage_media": "media", "channels": "media", "placements": "media",
 }
 
 
@@ -207,7 +241,14 @@ def canonical_slot(facet: str, key: str, kind: str = "fact"):
     if kind == "fact" and k in CANONICAL_FACET_FOR_KEY:
         return CANONICAL_FACET_FOR_KEY[k], k, kind
     return (facet or "").strip().lower(), k, kind
-CANONICAL_FACET_ORDER = ["engagement", "buyer", "direction"]
+# `commercial` joined these when the four priced licence levers became canonical slots.
+# This list decides which facets render their slots WHEN EMPTY; the loop below it only
+# shows a non-canonical facet that already holds a fact. Left off, the four would have
+# appeared once the engine happened to fill them and been invisible otherwise — and
+# "visible when empty" is the half that makes them correctable at all. An operator who
+# knows the territory is worldwide has nowhere to type it if the row only exists once
+# somebody else has typed something.
+CANONICAL_FACET_ORDER = ["engagement", "buyer", "direction", "commercial"]
 
 
 def is_open(status: str) -> bool:

@@ -183,116 +183,128 @@ They're careful about anything that reads as luxury — they're a working brand.
 Our legal is slow. Assume three weeks for any contract. And procurement will want a purchase
   order before anything starts.
 
-> `47 · JON` — Right — the boring bit. How long do you need the usage to run?
+> `47 · JON` — Right — the boring bit. Where does the music actually run — broadcast, digital, social?
 
 **48 · YOU**
 
-Twelve months from first air, I think.
+Broadcast and social. No cinema, and no out-of-home.
 
-> `49 · JON` — Is that from delivery, or from first air?
+> `49 · JON` — Is that the whole plan, or is there a phase two?
 
 **50 · YOU**
 
-From first air.
+There's talk of cinema at Christmas, but nothing booked.
 
-> `51 · JON` — When that term is up, do you expect to renew, or does it lapse?
+> `51 · JON` — Noted — I'll scope what's booked. How long do you need the usage to run?
 
 **52 · YOU**
 
-I'd expect we renew if it performs. Can we agree the renewal price now?
+Twelve months from first air, I think.
 
-> `53 · JON` — We can, and it is cheaper to. Where does this run — US only, or worldwide?
+> `53 · JON` — Is that from delivery, or from first air?
 
 **54 · YOU**
+
+From first air.
+
+> `55 · JON` — When that term is up, do you expect to renew, or does it lapse?
+
+**56 · YOU**
+
+I'd expect we renew if it performs. Can we agree the renewal price now?
+
+> `57 · JON` — We can, and it is cheaper to. Where does this run — US only, or worldwide?
+
+**58 · YOU**
 
 North America to start. There's a chance it extends to the UK in the spring, but that is not
   committed.
 
-> `55 · JON` — Do you need any exclusivity, category or otherwise?
+> `59 · JON` — Do you need any exclusivity, category or otherwise?
 
-**56 · YOU**
+**60 · YOU**
 
 Category exclusive for outdoor apparel, for the term. That one is non-negotiable after what
   happened.
 
-> `57 · JON` — Is there an expectation about who holds publishing?
-
-**58 · YOU**
-
-I genuinely don't know. I'd have to ask legal.
-
-> `59 · JON` — That's fine — I'll put a standard position in the summary and your legal can push back.
-> Will this need PRO registration, and do you have a cue sheet process?
-
-**60 · YOU**
-
-Yes, we file cue sheets. Our post house handles it.
-
-> `61 · JON` — What does your payment schedule usually look like?
+> `61 · JON` — Is there an expectation about who holds publishing?
 
 **62 · YOU**
 
-Net sixty from invoice.
+I genuinely don't know. I'd have to ask legal.
 
-> `63 · JON` — Is there a deposit, and what triggers the final invoice?
+> `63 · JON` — That's fine — I'll put a standard position in the summary and your legal can push back.
+> Will this need PRO registration, and do you have a cue sheet process?
 
 **64 · YOU**
 
-We can do a deposit on signature. Final on delivery and acceptance.
+Yes, we file cue sheets. Our post house handles it.
 
-> `65 · JON` — Any requirement about union or non-union players?
+> `65 · JON` — What does your payment schedule usually look like?
 
 **66 · YOU**
 
-No requirement. We've used live players before and liked it.
+Net sixty from invoice.
 
-> `67 · JON` — One more thing — you said three verticals earlier. Is that still right?
+> `67 · JON` — Is there a deposit, and what triggers the final invoice?
 
 **68 · YOU**
 
+We can do a deposit on signature. Final on delivery and acceptance.
+
+> `69 · JON` — Any requirement about union or non-union players?
+
+**70 · YOU**
+
+No requirement. We've used live players before and liked it.
+
+> `71 · JON` — One more thing — you said three verticals earlier. Is that still right?
+
+**72 · YOU**
+
 Actually, make it four. There's a fourth placement we just picked up.
 
-> `69 · JON` — Noted — four verticals. Let me play back what I've got, and stop me where I'm wrong.
+> `73 · JON` — Noted — four verticals. Let me play back what I've got, and stop me where I'm wrong.
 > Two-minute master; thirty and fifteen second cutdowns; four verticals; stems on the
 > master only. Live October third, final delivery September twelfth, picture lock August
 > twenty-second. Fifty-five to sixty-five all-in, hard ceiling. Twelve months from first
 > air, North America, category exclusive in outdoor apparel. Net sixty with a deposit on
 > signature. Tom Vasquez approves, Aziz day to day. Publishing still open.
 
-**70 · YOU**
+**74 · YOU**
 
 That's all right. One correction — the fifteen second cutdown might become a six. I'll
   confirm.
 
-> `71 · JON` — I'll scope both and we'll drop one. What haven't I asked about that I should have?
+> `75 · JON` — I'll scope both and we'll drop one. What haven't I asked about that I should have?
 
-**72 · YOU**
+**76 · YOU**
 
 Whether you need the stems by instrument or by group. Group is fine.
 
-> `73 · JON` — Good catch — that's a real difference. Has anything gone wrong on a project like this
+> `77 · JON` — Good catch — that's a real difference. Has anything gone wrong on a project like this
 > before?
 
-**74 · YOU**
+**78 · YOU**
 
 The car ad thing. And once we got a track that was beautiful and forty seconds too short to
   cut down.
 
-> `75 · JON` — You'll get a written summary today. Who else should be on it?
+> `79 · JON` — You'll get a written summary today. Who else should be on it?
 
-**76 · YOU**
+**80 · YOU**
 
 Copy Aziz. Not Tom yet.
 
-> `77 · JON` — And what's the best way to reach you if something needs a quick answer?
+> `81 · JON` — And what's the best way to reach you if something needs a quick answer?
 
-**78 · YOU**
+**82 · YOU**
 
 Email, or my mobile — it's in my signature.
 
-> `79 · JON` — Thanks Marisa. This was a good one.
+> `83 · JON` — Thanks Marisa. This was a good one.
 
-**80 · YOU**
+**84 · YOU**
 
 Thanks Jon.
 

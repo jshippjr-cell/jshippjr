@@ -204,83 +204,101 @@ How does your side actually work — who moves paper, and how fast?
 
 **47 · YOU**
 
-Right — the boring bit. How long do you need the usage to run?
+Right — the boring bit. Where does the music actually run — broadcast, digital, social?
 
-> `48 · MARISA` — Twelve months from first air, I think.
+> `48 · MARISA` — Broadcast and social. No cinema, and no out-of-home.
+
+⚠︎ *The fourth priced lever, and the one the sheet never used to ask. Organic social and
+all-media-including-cinema are nearly three times apart.*
 
 **49 · YOU**
 
-Is that from delivery, or from first air?
+Is that the whole plan, or is there a phase two?
 
-> `50 · MARISA` — From first air.
+> `50 · MARISA` — There's talk of cinema at Christmas, but nothing booked.
+
+⚠︎ *Another UNCOMMITTED extension, like the UK one at turn 54. It must not be priced as
+agreed.*
 
 **51 · YOU**
 
-When that term is up, do you expect to renew, or does it lapse?
+Noted — I'll scope what's booked. How long do you need the usage to run?
 
-> `52 · MARISA` — I'd expect we renew if it performs. Can we agree the renewal price now?
+> `52 · MARISA` — Twelve months from first air, I think.
 
 **53 · YOU**
 
+Is that from delivery, or from first air?
+
+> `54 · MARISA` — From first air.
+
+**55 · YOU**
+
+When that term is up, do you expect to renew, or does it lapse?
+
+> `56 · MARISA` — I'd expect we renew if it performs. Can we agree the renewal price now?
+
+**57 · YOU**
+
 We can, and it is cheaper to. Where does this run — US only, or worldwide?
 
-> `54 · MARISA` — North America to start. There's a chance it extends to the UK in the spring, but that is
+> `58 · MARISA` — North America to start. There's a chance it extends to the UK in the spring, but that is
 > not committed.
 
 ⚠︎ *An UNCOMMITTED extension is not a territory. It should read as a possibility, never
 priced as if agreed.*
 
-**55 · YOU**
+**59 · YOU**
 
 Do you need any exclusivity, category or otherwise?
 
-> `56 · MARISA` — Category exclusive for outdoor apparel, for the term. That one is non-negotiable after
+> `60 · MARISA` — Category exclusive for outdoor apparel, for the term. That one is non-negotiable after
 > what happened.
 
-**57 · YOU**
+**61 · YOU**
 
 Is there an expectation about who holds publishing?
 
-> `58 · MARISA` — I genuinely don't know. I'd have to ask legal.
+> `62 · MARISA` — I genuinely don't know. I'd have to ask legal.
 
 ⚠︎ *TRAP 4 — a question ASKED but not answered. It must land as an open question, never as a
 captured fact. This is the state Phase 1 calls 'raised'.*
 
-**59 · YOU**
+**63 · YOU**
 
 That's fine — I'll put a standard position in the summary and your legal can push back. Will
 this need PRO registration, and do you have a cue sheet process?
 
-> `60 · MARISA` — Yes, we file cue sheets. Our post house handles it.
-
-**61 · YOU**
-
-What does your payment schedule usually look like?
-
-> `62 · MARISA` — Net sixty from invoice.
-
-**63 · YOU**
-
-Is there a deposit, and what triggers the final invoice?
-
-> `64 · MARISA` — We can do a deposit on signature. Final on delivery and acceptance.
+> `64 · MARISA` — Yes, we file cue sheets. Our post house handles it.
 
 **65 · YOU**
 
-Any requirement about union or non-union players?
+What does your payment schedule usually look like?
 
-> `66 · MARISA` — No requirement. We've used live players before and liked it.
+> `66 · MARISA` — Net sixty from invoice.
 
 **67 · YOU**
 
+Is there a deposit, and what triggers the final invoice?
+
+> `68 · MARISA` — We can do a deposit on signature. Final on delivery and acceptance.
+
+**69 · YOU**
+
+Any requirement about union or non-union players?
+
+> `70 · MARISA` — No requirement. We've used live players before and liked it.
+
+**71 · YOU**
+
 One more thing — you said three verticals earlier. Is that still right?
 
-> `68 · MARISA` — Actually, make it four. There's a fourth placement we just picked up.
+> `72 · MARISA` — Actually, make it four. There's a fourth placement we just picked up.
 
 ⚠︎ *TRAP 1 lands here. Scope moved mid-call. If the summary still says three, the deal is
 under-scoped before it starts.*
 
-**69 · YOU**
+**73 · YOU**
 
 Noted — four verticals. Let me play back what I've got, and stop me where I'm wrong. Two-
 minute master; thirty and fifteen second cutdowns; four verticals; stems on the master only.
@@ -292,43 +310,43 @@ approves, Aziz day to day. Publishing still open.
 ⚠︎ *The read-back is the cheapest moment to catch a wrong number, and it is the line most
 often skipped when a call runs long.*
 
-> `70 · MARISA` — That's all right. One correction — the fifteen second cutdown might become a six. I'll
+> `74 · MARISA` — That's all right. One correction — the fifteen second cutdown might become a six. I'll
 > confirm.
 
 ⚠︎ *TRAP 5 — a correction arriving DURING the read-back, which is exactly what the read-back
 is for.*
 
-**71 · YOU**
+**75 · YOU**
 
 I'll scope both and we'll drop one. What haven't I asked about that I should have?
 
-> `72 · MARISA` — Whether you need the stems by instrument or by group. Group is fine.
+> `76 · MARISA` — Whether you need the stems by instrument or by group. Group is fine.
 
-**73 · YOU**
+**77 · YOU**
 
 Good catch — that's a real difference. Has anything gone wrong on a project like this
 before?
 
-> `74 · MARISA` — The car ad thing. And once we got a track that was beautiful and forty seconds too short
+> `78 · MARISA` — The car ad thing. And once we got a track that was beautiful and forty seconds too short
 > to cut down.
-
-**75 · YOU**
-
-You'll get a written summary today. Who else should be on it?
-
-> `76 · MARISA` — Copy Aziz. Not Tom yet.
-
-**77 · YOU**
-
-And what's the best way to reach you if something needs a quick answer?
-
-> `78 · MARISA` — Email, or my mobile — it's in my signature.
 
 **79 · YOU**
 
+You'll get a written summary today. Who else should be on it?
+
+> `80 · MARISA` — Copy Aziz. Not Tom yet.
+
+**81 · YOU**
+
+And what's the best way to reach you if something needs a quick answer?
+
+> `82 · MARISA` — Email, or my mobile — it's in my signature.
+
+**83 · YOU**
+
 Thanks Marisa. This was a good one.
 
-> `80 · MARISA` — Thanks Jon.
+> `84 · MARISA` — Thanks Jon.
 
 ---
 
@@ -359,9 +377,9 @@ Two more worth watching, which are not traps so much as things that are easy to 
 This script asks **every question on the sheet** — that is deliberate, and it makes the run
 a control. Scored against the script text itself, Phase 1 returns:
 
-> **24 of 24 covered — everything came up.**
+> **25 of 25 covered — everything came up.**
 
-So on `/opportunity/<id>/prep` after the call, the headline should read **24 of 24
+So on `/opportunity/<id>/prep` after the call, the headline should read **25 of 25
 covered**. Anything less is a finding, and where it came from is worth separating:
 
 - **A line comes back `missed` that you know you asked.** The transcript is the first
