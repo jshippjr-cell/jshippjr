@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Pricing · Chordential{% endblock %}
+{% block heading %}Pricing{% endblock %}
+{% block content %}
+<style>
+/* A REFERENCE, not a dashboard. Read sitting down, before a call or during one, by
+   somebody trying to hold the model in their head — so it is ordered the way the price is
+   actually built (what it costs to make → what the use is worth → what the market pays)
+   rather than by what is easiest to render. */
+.pr-lede{font-size:14.5px;line-height:1.6;color:var(--muted,#7a6b67);max-width:70ch;margin:0 0 6px}
+.pr-lede b{color:var(--ink,#241016)}
+.pr-prior{font-size:12.5px;color:#8a4b1d;background:#fff6ec;border-left:2px solid #d98b2b;
+  padding:7px 10px;border-radius:0 7px 7px 0;margin:0 0 20px;max-width:70ch}
+.pr-sec{margin:0 0 26px}
+.pr-sec > h3{font-size:12px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ember,#b34a21);margin:0 0 3px;font-weight:700}
+.pr-sec > p.pr-blurb{font-size:13.5px;line-height:1.55;color:var(--muted,#7a6b67);
+  margin:0 0 12px;max-width:70ch}
+.pr-sec > p.pr-blurb b{color:var(--ink,#241016)}
+
+/* The sandbox. The fastest way to understand a multiplicative model is to move one
+   factor and watch the number, so this is a real form that re-prices through the real
+   engine — no JavaScript, no second implementation of the arithmetic. */
+.pr-try{border:1px solid var(--line,#e7e1d8);border-left:3px solid var(--ember,#b34a21);
+  border-radius:9px;padding:14px 15px;background:var(--surface,#fff)}
+.pr-form{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin:0 0 14px}
+.pr-f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pr-f label{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted,#7a6b67)}
+.pr-f select,.pr-f input{border:1px solid var(--line,#e7e1d8);border-radius:7px;
+  padding:6px 8px;font:inherit;font-size:13.5px;background:var(--surface,#fff)}
+.pr-f input{width:9ch}
+.pr-out{display:flex;flex-wrap:wrap;gap:18px 26px;align-items:flex-start}
+.pr-lines{flex:1 1 22ch;min-width:0}
+.pr-line{display:flex;justify-content:space-between;gap:14px;align-items:baseline;
+  padding:6px 0;border-bottom:1px dashed var(--line,#eee7de);font-size:13.5px}
+.pr-line:last-child{border-bottom:0}
+.pr-line.is-total{font-weight:800;font-size:16px;border-bottom:0;
+  border-top:2px solid var(--ink,#241016);margin-top:2px;padding-top:8px}
+.pr-line .pr-why{color:var(--muted,#7a6b67);font-size:12px;font-weight:400}
+.pr-amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr-floor{font-size:12.5px;color:var(--muted,#7a6b67);margin:8px 0 0}
+.pr-floor b{color:var(--ink,#241016)}
+
+/* What each lever is worth on THIS job — the prep sheet's guide, on a job you chose. */
+.pr-levers{flex:1 1 30ch;min-width:0}
+.pr-lev{margin:0 0 10px}
+.pr-lev-h{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin:0 0 4px;
+  font-size:12.5px;font-weight:700}
+.pr-swing{color:var(--ember,#b34a21);font-weight:600}
+.pr-opts{display:flex;flex-wrap:wrap;gap:5px}
+.pr-opt{font-size:11.5px;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--line,#e7e1d8);color:var(--muted,#7a6b67);white-space:nowrap}
+.pr-opt b{color:var(--ink,#241016);margin-left:4px}
+.pr-opt.is-now{border-color:var(--ember,#b34a21);background:var(--surface-2,#faf3ee);
+  color:var(--ink,#241016)}
+
+/* The factor tables, printed as they are in the code. */
+.pr-tables{display:flex;flex-wrap:wrap;gap:14px}
+.pr-tbl{flex:1 1 15ch;min-width:0;border:1px solid var(--line,#e7e1d8);border-radius:9px;
+  padding:10px 12px;background:var(--surface,#fff)}
+.pr-tbl h4{font:700 10px/1.4 -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted,#7a6b67);margin:0 0 6px}
+.pr-tbl .pr-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;
+  font-size:13px;border-bottom:1px dashed var(--line,#f2ece4)}
+.pr-tbl .pr-row:last-child{border-bottom:0}
+.pr-tbl .pr-row.is-now{font-weight:700;color:var(--ember,#b34a21)}
+.pr-tbl .pr-x{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr-base{font-size:12px;color:var(--muted,#7a6b67);margin:10px 0 0;max-width:70ch}
+
+.pr-grid{display:flex;flex-wrap:wrap;gap:14px}
+.pr-card{flex:1 1 26ch;min-width:0;border:1px solid var(--line,#e7e1d8);border-radius:9px;
+  padding:12px 14px;background:var(--surface,#fff)}
+.pr-card h4{font-size:13.5px;margin:0 0 6px}
+.pr-card p{font-size:13px;line-height:1.5;color:var(--muted,#7a6b67);margin:0 0 6px}
+.pr-card p:last-child{margin:0}
+.pr-card b{color:var(--ink,#241016)}
+.pr-rate{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:2px 0}
+.pr-rate span:last-child{font-variant-numeric:tabular-nums}
+.pr-bench{width:100%;border-collapse:collapse;font-size:13px}
+.pr-bench td{padding:5px 10px 5px 0;border-bottom:1px dashed var(--line,#f2ece4);
+  vertical-align:top}
+.pr-bench tr:last-child td{border-bottom:0}
+.pr-bench td:last-child{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;
+  font-weight:700}
+.pr-bench td.pr-who{font-weight:700;white-space:nowrap}
+@media print{ .pr-try{break-inside:avoid} nav,header{display:none !important} }
+</style>
+
+<section class="card">
+  <p class="pr-lede">Two fees, always. <b>A creative fee</b> — what it costs to make the work,
+    at our target margin — and <b>a licence fee</b> for the right to use it, which is the
+    creative fee scaled by where it runs, for how long, over what territory, and how
+    exclusively. What the client says their budget is never sets either one; it produces a
+    verdict.</p>
+  <p class="pr-prior">{{ prior_note }} Read
+    <code>docs/market-pricing-research.md</code> before changing one.</p>
+
+  {# ── THE SANDBOX. A multiplicative model is learned by moving one factor and watching
+        the number, not by reading four tables. It re-prices through `build_quote` — the
+        same call the proposal makes — so nothing here can quote a figure the proposal
+        would not honour. Plain GET form: no JavaScript, and every state is a URL you can
+        keep. ── #}
+  <div class="pr-sec">
+    <h3>Try it</h3>
+    <p class="pr-blurb">Priced by the same engine the proposal uses. Change anything and
+      the whole number moves.</p>
+    <div class="pr-try">
+      <form class="pr-form" method="get" action="/pricing">
+        <div class="pr-f">
+          <label for="pr-cost">Cost to make</label>
+          <input id="pr-cost" type="number" name="cost" value="{{ cost }}" min="500"
+                 max="500000" step="500">
+        </div>
+        <div class="pr-f">
+          <label for="pr-media">Media</label>
+          <select id="pr-media" name="media">
+            {% for o in media %}<option value="{{ o.key }}" {{ 'selected' if o.current }}>{{ o.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pr-f">
+          <label for="pr-terr">Territory</label>
+          <select id="pr-terr" name="territory">
+            {% for o in territory %}<option value="{{ o.key }}" {{ 'selected' if o.current }}>{{ o.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pr-f">
+          <label for="pr-term">Term</label>
+          <select id="pr-term" name="term">
+            {% for o in terms %}<option value="{{ o.key }}" {{ 'selected' if o.current }}>{{ o.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pr-f">
+          <label for="pr-excl">Exclusivity</label>
+          <select id="pr-excl" name="exclusivity">
+            {% for o in exclusivity %}<option value="{{ o.key }}" {{ 'selected' if o.current }}>{{ o.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn tiny primary" type="submit">Price it</button>
+      </form>
+
+      <div class="pr-out">
+        <div class="pr-lines">
+          {% for label, detail, amount in rows %}
+          <div class="pr-line {{ 'is-total' if label == 'Total' }}">
+            <span>{{ label }}{% if detail %}<br><span class="pr-why">{{ detail }}</span>{% endif %}</span>
+            <span class="pr-amt">{{ amount }}</span>
+          </div>
+          {% endfor %}
+          <p class="pr-floor">Licence multiplier <b>×{{ '%.2f'|format(licence.factor) }}</b>
+            of the {{ (base_share * 100)|int }}% baseline share.
+            {# THE FLOOR IS THE NUMBER THAT ENDS A NEGOTIATION, so it is printed beside the
+               price rather than kept in the engine. It is built on the HIGH end of the
+               cost band, because a floor that only holds when the job goes well is not a
+               floor. #}
+            Walk-away floor <b>${{ '{:,}'.format(quote.floor) }}</b>
+            ({{ (min_margin * 100)|int }}% margin on the top of the cost band).</p>
+        </div>
+
+        <div class="pr-levers">
+          {% for r in guide.rows %}
+          <div class="pr-lev">
+            <div class="pr-lev-h">{{ r.question }}
+              <span class="pr-swing">±${{ '{:,}'.format(r.spread) }} on this job</span>
+            </div>
+            <div class="pr-opts">
+              {% for o in r.options %}
+              <span class="pr-opt {{ 'is-now' if o.current }}">{{ o.label }}<b>${{ '{:,}'.format(o.total) }}</b></span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── The tables themselves, printed from the dicts the engine multiplies. ── #}
+  <div class="pr-sec">
+    <h3>The four levers</h3>
+    <p class="pr-blurb">Multiplied together against a baseline job — <b>broadcast, national,
+      three years, non-exclusive</b>, where every factor is 1.0. The baseline is a normal
+      advertising licence rather than the cheapest possible one, so the common case needs no
+      adjustment and the adjustments read as what they are.</p>
+    <div class="pr-tables">
+      <div class="pr-tbl"><h4>Media</h4>
+        {% for o in media %}<div class="pr-row {{ 'is-now' if o.current }}"><span>{{ o.label }}</span><span class="pr-x">×{{ '%.2f'|format(o.factor) }}</span></div>{% endfor %}
+      </div>
+      <div class="pr-tbl"><h4>Territory</h4>
+        {% for o in territory %}<div class="pr-row {{ 'is-now' if o.current }}"><span>{{ o.label }}</span><span class="pr-x">×{{ '%.2f'|format(o.factor) }}</span></div>{% endfor %}
+      </div>
+      <div class="pr-tbl"><h4>Term</h4>
+        {% for o in terms %}<div class="pr-row {{ 'is-now' if o.current }}"><span>{{ o.label }}</span><span class="pr-x">×{{ '%.2f'|format(o.factor) }}</span></div>{% endfor %}
+      </div>
+      <div class="pr-tbl"><h4>Exclusivity</h4>
+        {% for o in exclusivity %}<div class="pr-row {{ 'is-now' if o.current }}"><span>{{ o.label }}</span><span class="pr-x">×{{ '%.2f'|format(o.factor) }}</span></div>{% endfor %}
+      </div>
+    </div>
+    <p class="pr-base">Four factors multiplied compound fast and the market does not, so the
+      product is capped at <b>×{{ '%.1f'|format(cap) }}</b>. Normalised to a common baseline,
+      the published sync card puts “perpetual, worldwide, all media” at about 2.5× a one-year
+      North American licence; uncapped these tables reach 7.6×. Each factor is individually
+      defensible and their product is not — a buyer refusing to pay is a fact no rate card
+      overrides. The cap sits above the market's top so bespoke work, where a buyout
+      transfers a real asset rather than renting a catalogue track, keeps headroom.</p>
+  </div>
+
+  <div class="pr-sec">
+    <h3>Where the creative fee comes from</h3>
+    <div class="pr-grid">
+      <div class="pr-card">
+        <h4>Cost, then margin</h4>
+        <p>The estimate costs the work from hours × rate, plus players and room. The creative
+          fee is that cost at a <b>{{ (target_margin * 100)|int }}% target margin</b>, quoted
+          in a band of <b>±{{ (band_spread * 100)|int }}%</b> because the estimate is
+          uncalibrated and says so.</p>
+        <p>The <b>floor</b> is separate and lower: {{ (min_margin * 100)|int }}% margin on the
+          <em>high</em> end of the cost band. The target is what we aim for; the floor is the
+          line that turns a negotiation into a walk.</p>
+      </div>
+      <div class="pr-card">
+        <h4>Hourly rates behind the estimate</h4>
+        {% for role, rate in role_rates %}
+        <div class="pr-rate"><span>{{ role }}</span><span>${{ rate|int }}/hr</span></div>
+        {% endfor %}
+      </div>
+      <div class="pr-card">
+        <h4>What the budget does</h4>
+        <p>Nothing to the price. A stated budget returns a <b>verdict</b> — below our floor,
+          in band, or above band — and that is all it is allowed to do.</p>
+        <p>A price that moves to meet a number the client happened to say is not a price, it
+          is an echo. Ask for the <b>music number by name</b>: a production budget or a media
+          spend quoted back at you is a number that walks into a proposal.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pr-sec">
+    <h3>What the market charges</h3>
+    <p class="pr-blurb">August 2026; full working in <code>docs/market-pricing-research.md</code>.
+      Swell is the closest comparator — a music house with a <em>published</em> rate card —
+      and its entry package is the number a buyer is most likely to have in their head.</p>
+    <div class="pr-card">
+      <table class="pr-bench">
+        {% for who, what, lo, hi in benchmarks %}
+        <tr>
+          <td class="pr-who">{{ who }}</td>
+          <td>{{ what }}</td>
+          <td>${{ '{:,}'.format(lo) }}{% if hi != lo %}–${{ '{:,}'.format(hi) }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -103,6 +103,11 @@
        thing on the screen; a saved search does not earn one. #}
     <div class="nav-section">Intelligence</div>
     <nav class="nav">
+      {# Pricing, in the nav rather than behind a deal. Every other pricing surface is
+         attached to one opportunity, which is right for pricing a job and useless for
+         learning the model — and the model is what has to be in your head while a client
+         is talking. #}
+      <a href="/pricing" class="{{ 'active' if nav=='pricing' }}"><span class="ico">$</span> Pricing</a>
       <a href="/simulator" class="{{ 'active' if nav=='simulator' }}"><span class="ico">🎙</span> Call simulator</a>
       {# The outbox (ADR-0086). Sits here rather than in a settings drawer because it is
          how the client's experience gets READ — the emails were the one surface nobody

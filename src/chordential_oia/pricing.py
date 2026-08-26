@@ -517,6 +517,32 @@ def derivation(quote: Quote) -> List[Tuple[str, str, str]]:
     ]
 
 
+def reference_estimate(cost: float, *, spread: float = BAND_SPREAD) -> Estimate:
+    """An Estimate carrying nothing but the cost of MAKING the work.
+
+    For the pricing reference page, which prices a job of a chosen size rather than a real
+    deal. :func:`build_quote` reads exactly two things off an estimate — ``estimated_cost``
+    and ``cost_high`` — and this exists so the page does not have to know that: a surface
+    that hand-built a stand-in Estimate would be encoding an internal fact about this
+    module, and would keep working while quietly diverging the day build_quote read a
+    third field.
+
+    Nothing else on it is meaningful and none of it is shown. In particular
+    ``suggested_price`` is left at zero rather than computed: it folds usage into the
+    creative number and `build_quote` deliberately ignores it (ADR-0065), so a plausible
+    figure there would be a number nobody should read.
+    """
+    from .models import MusicDiscipline
+    cost = max(0.0, float(cost or 0.0))
+    return Estimate(
+        discipline=MusicDiscipline.COMPOSITION, lines=[], multipliers=[],
+        base_cost=cost, multiplier_total=1.0, revision_uplift=0.0,
+        estimated_cost=cost, suggested_price=0.0, expected_margin_pct=0.0,
+        disclosed_budget=None, budget_delta_note="",
+        cost_low=cost * (1.0 - spread), cost_high=cost * (1.0 + spread),
+    )
+
+
 # ── The price guide, for the call ────────────────────────────────────────────────────
 
 def price_guide(estimate: Estimate, licence: Optional[LicenceTerms] = None) -> dict:

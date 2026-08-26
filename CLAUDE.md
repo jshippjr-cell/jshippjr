@@ -186,6 +186,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   `buyer_intel` (ADR-0057), as the queue count lives only in `queue.compute_queue`
   (ADR-0029) and the price only in `web.estimate.estimate_for` (ADR-0033). If two pages
   answer the same question, one of them is wrong on a day nobody is looking.
+- **The pricing model has a page** — `/pricing` (nav → Intelligence). Every other pricing
+  surface hangs off one opportunity, which prices a job but cannot teach the model. It READS
+  the factor tables, margins, cap and rates out of `pricing.py`/`estimation.py` and prices a
+  worked example through the real `build_quote`; it must never restate a number, or it
+  becomes a second authority that goes stale in silence.
 - **One quote authority, wired to the work** (ADR-0034 + ADR-0065): `capabilities.quote_for`
   returns the whole `Quote` (itemisation, floor, verdict); `quote_band` is its tuple view.
   Every buyer-facing surface renders it and **never adjusts it** — `public_price_band` used

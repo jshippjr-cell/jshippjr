@@ -855,6 +855,73 @@ def rehearsal_create():
 # --------------------------------------------------------------------------- #
 # The outbox (ADR-0086) — what the system sent, or would have sent.
 # --------------------------------------------------------------------------- #
+@router.get("/pricing", response_class=HTMLResponse)
+def pricing_reference(request: Request, cost: int = 9000, media: str = "broadcast",
+                      territory: str = "national", term: str = "3",
+                      exclusivity: str = "none"):
+    """WHAT WE CHARGE, AND WHY — the pricing model, readable without a deal in front of you.
+
+    Every other pricing surface in the product is attached to one opportunity: the estimate,
+    the proposal, the call prep sheet's guide. That is right for pricing a job and useless
+    for LEARNING the model, which is a thing the operator has to hold in their head on a
+    call while a client is talking. Reading it out of `pricing.py` was the only way to see
+    the whole shape of it, and source is not a reference.
+
+    Everything here is READ from the engine, never restated (ADR-0033/0065): the factor
+    tables are the dicts `build_quote` multiplies, the worked example is a real
+    `build_quote` call, and the levers are priced by the same `price_guide` the prep sheet
+    uses. A pricing page that quoted numbers of its own would be a second authority, and
+    the first day it drifted would be a day nobody noticed.
+    """
+    from ..pricing import (BASE_LICENCE_SHARE, EXCLUSIVITY_FACTORS, EXCLUSIVITY_LABELS,
+                           LICENCE_FACTOR_CAP, MARKET_BENCHMARKS, MEDIA_FACTORS,
+                           MEDIA_LABELS, MIN_MARGIN, PRIOR_NOTE, TERM_FACTORS,
+                           TERRITORY_FACTORS, TERRITORY_LABELS, LicenceTerms, build_quote,
+                           derivation, price_guide, reference_estimate)
+    from ..estimation import BAND_SPREAD, ROLE_RATES, TARGET_MARGIN
+
+    # The sandbox's settings, clamped to what the tables actually hold. A hand-typed URL
+    # must not be able to price a job at a factor that does not exist.
+    cost = max(500, min(int(cost or 0), 500_000))
+    media = media if media in MEDIA_FACTORS else "broadcast"
+    territory = territory if territory in TERRITORY_FACTORS else "national"
+    exclusivity = exclusivity if exclusivity in EXCLUSIVITY_FACTORS else "none"
+    term_years = None if str(term).lower() in ("none", "perpetual", "perpetuity") else 3
+    if str(term).isdigit() and int(term) in TERM_FACTORS:
+        term_years = int(term)
+
+    licence = LicenceTerms(media=media, territory=territory, term_years=term_years,
+                           exclusivity=exclusivity)
+    estimate = reference_estimate(cost)
+    quote = build_quote(estimate, licence)
+    guide = price_guide(estimate, licence)
+
+    def _factors(table, labels, current):
+        return [{"key": str(k), "label": labels.get(k, str(k)), "factor": v,
+                 "current": k == current}
+                for k, v in table.items()]
+
+    terms = [{"key": ("perpetual" if k is None else str(k)),
+              "label": ("in perpetuity" if k is None
+                        else f"{k} year" + ("" if k == 1 else "s")),
+              "factor": v, "current": k == term_years}
+             for k, v in TERM_FACTORS.items()]
+
+    return render(
+        request, "pricing.html", nav="pricing",
+        cost=cost, quote=quote, rows=derivation(quote), guide=guide,
+        licence=licence, prior_note=PRIOR_NOTE,
+        media=_factors(MEDIA_FACTORS, MEDIA_LABELS, media),
+        territory=_factors(TERRITORY_FACTORS, TERRITORY_LABELS, territory),
+        terms=terms,
+        exclusivity=_factors(EXCLUSIVITY_FACTORS, EXCLUSIVITY_LABELS, exclusivity),
+        cap=LICENCE_FACTOR_CAP, base_share=BASE_LICENCE_SHARE,
+        target_margin=TARGET_MARGIN, min_margin=MIN_MARGIN, band_spread=BAND_SPREAD,
+        role_rates=sorted(ROLE_RATES.items(), key=lambda kv: -kv[1]),
+        benchmarks=MARKET_BENCHMARKS,
+    )
+
+
 @router.get("/outbox", response_class=HTMLResponse)
 def outbox_page(request: Request, project: Optional[int] = None):
     """Every outbound message, newest first.
