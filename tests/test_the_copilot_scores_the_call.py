@@ -146,13 +146,18 @@ def test_a_value_on_file_outranks_a_cue_in_the_transcript():
 
 
 def test_a_conversation_question_can_never_be_answered():
-    """The opening, the terms and the wrap-up have no Campaign Intelligence slot to land
-    in, so they can only ever reach `raised`. Reporting one as `answered` would mean a
-    slot key collided with a topic slug."""
+    """The opening and the wrap-up have no Campaign Intelligence slot to land in, so they
+    can only ever reach `raised`. Reporting one as `answered` would mean a slot key
+    collided with a topic slug."""
     score = score_call(prep_sheet({}), GOOD,
-                       answered={"license_term": "2 years", "recap": "yes"})
-    assert _by_label(score, "Licence term").state == "raised"
+                       answered={"recap": "yes", "unasked": "nothing"})
     assert _by_label(score, "Read it back").state == "raised"
+    assert _by_label(score, "What I didn't ask").state == "raised"
+    # …while a PRICED term is a slot now, and does reach `answered`. The licence terms
+    # stopped being conversation the day a wrong one could be corrected and move the
+    # quote.
+    priced = score_call(prep_sheet({}), GOOD, answered={"license_term": "2 years"})
+    assert _by_label(priced, "Licence term").state == "answered"
 
 
 def test_raised_is_not_reported_as_a_failed_slot(prep):

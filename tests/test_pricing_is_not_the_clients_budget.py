@@ -195,12 +195,25 @@ def test_a_fully_stated_licence_claims_no_assumption():
 
 @pytest.mark.parametrize("text,years", [
     ("3 years from delivery", 3), ("perpetual", None), ("forever, ideally", None),
-    ("18 months", 2), ("one year", 3), ("a 5-year licence", 5),
+    ("18 months", 2), ("one year", 1), ("twelve months", 1), ("a 5-year licence", 5),
+    # …and a number that is not a term is still not a term.
+    ("banana years", 3), ("an extra year of revisions", 3),
 ])
 def test_the_term_is_read_from_what_they_actually_said(text, years):
     """"18 months" rounds UP: a licence sold for eighteen months and priced as one year
-    is four months given away. "one year" in words is NOT parsed — a digit is required,
-    so the default stands and is reported as assumed rather than guessed at confidently."""
+    is four months given away.
+
+    A REVERSAL, RECORDED. This test used to assert that "one year" reads as the default
+    three, on the reasoning that "a digit is required, so the default stands and is
+    reported as assumed rather than guessed at confidently". That defended the regex
+    rather than the decision: there is nothing less certain about "one year" than about
+    "1 year", and on a real transcript the words are the normal case — people say numbers
+    out loud and the recogniser writes them out. The effect was that the licence term, a
+    lever running ×0.65 to ×1.90, silently defaulted on most calls that answered it.
+
+    The caution behind the old rule was right, and it lives in the last two rows: the
+    number has to be a term. "banana years" once read as one year, because the group
+    matched the `a` inside the word."""
     licence = licence_from_ci({"license_term": text})
     assert licence.term_years == years
 

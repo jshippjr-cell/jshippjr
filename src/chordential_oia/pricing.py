@@ -239,7 +239,11 @@ _NUMBER_WORDS = {
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "eighteen": 18,
     "twenty": 20, "twentyfour": 24, "twenty-four": 24, "a": 1, "an": 1,
 }
-_NUM = r"(\d+|" + "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) + r")"
+# THE \b IS LOAD-BEARING. Without it the group's short alternatives match INSIDE other
+# words: "banana years" ends in an `a`, so it read as a one-year licence, and "an extra
+# year" the same. A term parser that finds a number in the middle of a word is worse than
+# one that finds none, because this one reports `stated=True`.
+_NUM = r"\b(\d+|" + "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) + r")"
 _YEARS = re.compile(_NUM + r"[\s-]*year", re.I)
 _MONTHS = re.compile(_NUM + r"[\s-]*month", re.I)
 

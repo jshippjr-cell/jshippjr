@@ -62,13 +62,25 @@ def test_the_terms_are_late_but_not_last():
 
 
 def test_conversation_moves_fill_no_intelligence_slot():
-    """The opening, the terms and the wrap-up are conversation, not fields. Marking them
-    canonical would have the sheet claim it captures things it does not."""
+    """The opening and the wrap-up are conversation, not fields. Marking them canonical
+    would have the sheet claim it captures things it does not.
+
+    "The terms" USED to be listed here too, and is now split down the middle. Four of its
+    questions — media, territory, licence term, exclusivity — are PRICED
+    (`pricing.licence_from_ci` → `build_quote`), and were made real slots so the operator
+    can correct what the call got wrong and have the quote follow. The other five are
+    still conversation: renewal, publishing, PRO registration, payment terms and musician
+    status change what we agree to, not what we charge, and inventing slots for them would
+    be the same overclaim in the other direction."""
     groups = {g.title: g for g in prep_sheet()}
-    for title in ("Open the call", "The terms", "Wrap up"):
+    for title in ("Open the call", "Wrap up"):
         assert all(not ln.canonical for ln in groups[title].lines), title
     for title in ("The work", "The sound", "The plan", "The people"):
         assert all(ln.canonical for ln in groups[title].lines), title
+    terms = {ln.key: ln.canonical for ln in groups["The terms"].lines}
+    assert {k for k, v in terms.items() if v} == {
+        "media", "territory", "license_term", "exclusivity"}, (
+        "the priced terms and the conversational ones have drifted apart")
 
 
 def test_the_call_opens_by_asking_permission_to_record():
