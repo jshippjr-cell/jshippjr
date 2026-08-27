@@ -75,7 +75,7 @@
       <a href="/incoming" class="{{ 'active' if nav=='incoming' }}"><span class="ico">📥</span> Incoming<span id="incoming-badge" style="display:{{ 'inline-block' if new_incoming else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle">{{ new_incoming or '' }}</span></a>
     </nav>
     <nav class="nav">
-      <a href="/dashboard" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Today</a>
+      <a href="/dashboard" class="{{ 'active' if nav=='dashboard' }}"><span class="ico">▦</span> Today<span id="alert-badge" style="display:{{ 'inline-block' if new_alerts else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle" title="Things that happened while you were away">{{ new_alerts or '' }}</span></a>
       <a href="/queue" class="{{ 'active' if nav=='queue' }}"><span class="ico">☰</span> Queue<span id="queue-badge" style="display:{{ 'inline-block' if new_submissions else 'none' }};background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle" title="Composer submissions waiting at the taste gate">{{ new_submissions or '' }}</span></a>
       <a href="/inbox" class="{{ 'active' if nav=='inbox' }}"><span class="ico">▤</span> Opportunities</a>
       <a href="/revenue" class="{{ 'active' if nav=='revenue' }}"><span class="ico">＄</span> Revenue</a>
@@ -153,6 +153,9 @@
     }).catch(function () {});
     fetch('/incoming/count').then(function (r) { return r.json(); }).then(function (d) {
       setBadge('incoming-badge', d && d.new);
+    }).catch(function () {});
+    fetch('/alerts/count').then(function (r) { return r.json(); }).then(function (d) {
+      setBadge('alert-badge', d && d.new);
     }).catch(function () {});
   }
   setInterval(refresh, 60000);

@@ -1398,6 +1398,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox(created_at)")
+    # HOW FAR THE OPERATOR HAS READ. Every operator push is already recorded in the outbox
+    # as a `push` row, so "what happened while I was away" needs nothing new to be written
+    # — only a mark for how much of it has been seen. One row, one integer.
+    #
+    # A watermark rather than a per-row `seen` flag: the question is never "did I read
+    # THAT one", it is "is there anything since I last looked", and a flag per row invites
+    # a UI that asks the operator to tick things off. Nothing here should need dismissing.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS alert_watermark (
+            id INTEGER PRIMARY KEY CHECK (id = 1), seen_id INTEGER DEFAULT 0, seen_at TEXT
+        )"""
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS queue_snooze (
             key TEXT PRIMARY KEY, until_at TEXT, snoozed_at TEXT, actor TEXT
@@ -5530,6 +5542,62 @@ def snooze_queue_card(conn, key: str, days: int, actor: str = "operator") -> Non
             "INSERT INTO queue_snooze (key, until_at, snoozed_at, actor) VALUES (?,?,?,?)",
             (key, until, now.isoformat(), actor))
     conn.commit()
+
+
+def unseen_alert_count(conn) -> int:
+    """Operator alerts that have arrived since the dashboard was last opened.
+
+    Drawn from the OUTBOX's push rows, deliberately. Every notification that reaches the
+    operator's phone is recorded there already (ADR-0086), so this badge is complete by
+    construction: a client paying a deposit, a client uploading their assets, a composer
+    submitting — anything that pushes is counted, and anything added later is counted
+    without anybody remembering to add it here.
+
+    The alternative was a hand-kept list of "interesting events", which is the same shape
+    as the delivery-side notification gap: eleven callers remembered and one did not, and
+    the one that did not was the one that mattered.
+    """
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM outbox WHERE channel = 'push' AND id > "
+            "COALESCE((SELECT seen_id FROM alert_watermark WHERE id = 1), 0)").fetchone()
+    except Exception:            # noqa: BLE001 — a badge that cannot count shows nothing
+        return 0
+    return int(row["n"] if row else 0)
+
+
+def recent_alerts(conn, limit: int = 30) -> list:
+    """The alerts themselves, newest first — what the badge is counting."""
+    try:
+        seen = conn.execute(
+            "SELECT COALESCE(seen_id, 0) AS s FROM alert_watermark WHERE id = 1").fetchone()
+        floor = int(seen["s"]) if seen else 0
+        rows = conn.execute(
+            "SELECT * FROM outbox WHERE channel = 'push' ORDER BY id DESC LIMIT ?",
+            (int(limit),)).fetchall()
+    except Exception:            # noqa: BLE001
+        return []
+    return [{"id": int(r["id"]), "at": r["created_at"] or "", "title": r["subject"] or "",
+             "body": r["body_text"] or "", "status": r["status"] or "",
+             "unseen": int(r["id"]) > floor} for r in rows]
+
+
+def mark_alerts_seen(conn) -> int:
+    """Move the watermark to the newest alert. Called when the operator opens the surface
+    that shows them — reading IS the acknowledgement, and a badge that needs a second
+    press to clear is a badge people stop trusting."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(id), 0) AS m FROM outbox WHERE channel = 'push'").fetchone()
+    newest = int(row["m"] if row else 0)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute("UPDATE alert_watermark SET seen_id = ?, seen_at = ? WHERE id = 1",
+                       (newest, now))
+    if not cur.rowcount:
+        conn.execute("INSERT INTO alert_watermark (id, seen_id, seen_at) VALUES (1,?,?)",
+                     (newest, now))
+    conn.commit()
+    return newest
 
 
 def dismiss_queue_card(conn, key: str, actor: str = "operator") -> None:

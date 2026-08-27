@@ -3,6 +3,37 @@
 {% block title %}Today{% endblock %}
 {% block heading %}Today{% endblock %}
 {% block content %}
+
+{# ── WHAT HAPPENED WHILE YOU WERE AWAY. Not the queue: the queue is what must be
+      DECIDED, and a client paying their deposit or uploading their assets needs nothing
+      from the operator at all. Those were reaching the phone and no screen — *"i got the
+      phone notification but i opened the dashboard and there is no red badge"*
+      (2026-08-27).
+
+      Drawn from the outbox's push rows, so it is complete by construction: anything that
+      notifies the operator appears here, including anything added later, without a second
+      list to remember to update. Opening this page marks them read — nothing here needs
+      dismissing, because nothing here is asking for a decision. ── #}
+{% if alerts %}
+<section class="card">
+  <div class="card-head"><h2>Since you were last here</h2></div>
+  <div class="stack">
+    {% for a in alerts %}
+    <div class="assigned-row" style="align-items:flex-start;gap:10px{% if a.unseen %};background:#fff6ec{% endif %}">
+      <div style="flex:1;min-width:0">
+        <div><strong>{{ a.title }}</strong>{% if a.unseen %} <span class="pill pv-review">new</span>{% endif %}</div>
+        <div class="muted small">{{ a.body }}</div>
+      </div>
+      <span class="muted small mono" style="white-space:nowrap">
+        {% if a.at %}<time data-utc-date="{{ a.at }}">{{ a.at[:10] }}</time>{% endif %}
+        {% if a.status and a.status != 'sent' %}· {{ a.status }}{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {# An outage of the background engines belongs at the top of the day, not on a page
    you visit when you already suspect something. Nothing polls for a meeting transcript
    while this is showing. #}

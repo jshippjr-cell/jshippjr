@@ -82,6 +82,12 @@ def render(request: Request, name: str, **kw):
             # publishes it, so "a take is waiting" has to be legible from every page —
             # an email and a card on the Queue were not enough to notice.
             context["new_submissions"] = db.pending_submission_count(conn)
+            # WHAT JUST HAPPENED, as opposed to what needs deciding. The queue answers
+            # "what must I decide"; a client paying a deposit or uploading their assets is
+            # neither — it needs nothing from the operator, and it was reaching the phone
+            # and no screen at all: *"i got the phone notification but i opened the
+            # dashboard and there is no red badge"* (2026-08-27).
+            context["new_alerts"] = db.unseen_alert_count(conn)
         finally:
             conn.close()
     return templates.TemplateResponse(request=request, name=name, context=context)

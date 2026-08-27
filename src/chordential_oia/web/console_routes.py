@@ -17,7 +17,7 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import (HTMLResponse, PlainTextResponse,
+from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
                                RedirectResponse)
 
 from .. import mailer
@@ -103,6 +103,11 @@ def _suggested_price(opp) -> float:
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     raw = db.connect()
+    # WHAT HAPPENED WHILE YOU WERE AWAY, read before anything else so the panel can show
+    # which lines are new. Opening this page IS the acknowledgement — a badge that needs a
+    # second press to clear is a badge people stop trusting — so the watermark moves at
+    # the end of the handler, after the rows are read.
+    alerts = db.recent_alerts(raw, limit=12)
     # Read-only render that composes several views of the same rows: `next_action` and
     # `compute_queue` each correctly re-read what this handler already read, and on the
     # seeded demo that cost 71 queries for four projects. The memo answers the repeats
@@ -288,8 +293,17 @@ def dashboard(request: Request):
             key=lambda e: e["at"], reverse=True)[:8]
     finally:
         conn.close()
+    # Reading is the acknowledgement. Moved AFTER the rows were read, so this render can
+    # still mark which of them are new — and `new_alerts` is forced to 0 for this page
+    # rather than left to the shell's own count, which would otherwise still be showing
+    # the number the operator just came here to clear.
+    mark = db.connect()
+    try:
+        db.mark_alerts_seen(mark)
+    finally:
+        mark.close()
     return render(
-        request, "dashboard.html", nav="dashboard",
+        request, "dashboard.html", nav="dashboard", alerts=alerts, new_alerts=0,
         engine_lease=scheduler_mod.lease_status(),
         pursue=pursue, tentative=tentative, won=won, totals=totals,
         review=review, spotlight=spotlight, followups=followups, metrics=metrics,
@@ -792,6 +806,17 @@ def _safe_next(nxt: str, fallback: str) -> str:
     URL would make these POST handlers an open redirect."""
     nxt = (nxt or "").strip()
     return nxt if nxt.startswith("/") and not nxt.startswith("//") else fallback
+
+
+@router.get("/alerts/count")
+def alerts_count():
+    """How many things have happened since the dashboard was last opened — the Today
+    badge. Cheap enough to poll on a minute's timer from every page."""
+    conn = db.connect()
+    try:
+        return JSONResponse({"new": db.unseen_alert_count(conn)})
+    finally:
+        conn.close()
 
 
 @router.get("/queue", response_class=HTMLResponse)
