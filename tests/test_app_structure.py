@@ -235,12 +235,13 @@ def test_the_router_carries_the_whole_group():
     ("agencies_routes.py", "/agencies", 26),
     ("talent_routes.py", None, 18),          # two prefixes: /talent + /payouts
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
-    ("opportunity_routes.py", "/opportunity", 68),   # +2: fetch a transcript, re-read a
+    ("opportunity_routes.py", "/opportunity", 69),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
                                                      # +2: add a deal by hand (form + post);
                                                      # +3: the Call Copilot's live panel —
                                                      # the page, the state it polls, and
-                                                     # the reset a rehearsal needs
+                                                     # the reset a rehearsal needs;
+                                                     # +1: pinning the fee to one number
     # +1: /project/{id}/review/address — marking a note addressed moved off the
     # creator portal's door, because the room serves three roles and only one of them
     # holds a creator token (see test_addressed_is_ours_not_theirs.py).
@@ -317,11 +318,12 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    # 302: +3 copilot routes on /opportunity, +2 on the realtime capture webhook (one
+    # 303: +3 copilot routes on /opportunity, +1 to quote firm, +2 on the realtime
+    # capture webhook (one
     # declaration each for the trailing-slash and bare forms — Recall's own docs require
     # the slash before the query string, and a bare POST must not 404), +1 for /pricing.
-    assert len(decls) == 302, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 302 — "
+    assert len(decls) == 303, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 303 — "
         f"a slice lost or gained a URL")
 
 
