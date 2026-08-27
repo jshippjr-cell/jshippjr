@@ -2148,6 +2148,37 @@ def doc_ci_field(opp_id: int, name: str = Form(""), value: str = Form(""),
     return _doc_redirect(opp_id)
 
 
+@router.post("/opportunity/{opp_id}/doc/firm-fee")
+def doc_firm_fee(opp_id: int, fee: str = Form(""), release: str = Form("")):
+    """Pin the indicative investment to ONE number — or let it back to the band.
+
+    A FIRM QUOTE IS A DECISION, NOT A CALCULATION. The band is ±17.5% and it is not
+    uncertainty about the client: discovery can close every licence lever and the width
+    does not move, because it describes what we do not know about OURSELVES — the estimate
+    is hours × rate priors that have never been checked against a finished job
+    (`estimation.BAND_SPREAD`: "wide on purpose (uncalibrated)"). No amount of asking the
+    client narrows it. Quoting firm is the operator absorbing that variance deliberately,
+    which is a thing only a person can choose to do (ADR-0033: the machine proposes).
+
+    Stored in the SAME ``commercial`` override blob the Commercial Review writes and
+    `quote_band` already honours as tier 1. A second place to pin a price would be a second
+    price, and the first day they disagreed would be a day nobody noticed."""
+    conn = db.connect()
+    try:
+        ov = dict(db.get_doc_overrides(conn, opp_id).get("commercial") or {})
+        if release.strip():
+            ov.pop("fee_low", None)
+            ov.pop("fee_high", None)
+        else:
+            amount = _parse_rate(fee)
+            if amount and amount > 0:
+                ov["fee_low"] = ov["fee_high"] = int(round(amount))
+        db.update_doc_override(conn, opp_id, "commercial", ov)
+    finally:
+        conn.close()
+    return _doc_redirect(opp_id)
+
+
 @router.post("/opportunity/{opp_id}/doc/chip")
 def doc_chip(
     opp_id: int, section: str = Form(""), action: str = Form(""),

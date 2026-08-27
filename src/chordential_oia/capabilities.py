@@ -113,6 +113,10 @@ class CapabilitiesDoc:
     # edit mode. What the client reads is the band and, where a lever was assumed rather
     # than stated, the "What this rests on" note — never the factor table.
     licence: Optional[object] = None
+    # True when a human PINNED this number rather than the engine banding it. The caption
+    # under the price has to change with it: a figure the operator committed to must not
+    # go out still calling itself a ballpark.
+    price_firm: bool = False
     show_terms: bool = False
     terms: List[str] = field(default_factory=list)
     show_docusign: bool = False
@@ -735,6 +739,7 @@ def build_capabilities_doc(
 
     price_low = price_high = None
     licence = None
+    price_firm = False
     if show_cost:
         # ADR-0034: the client brief and the Commercial Review are two documents the
         # SAME buyer reads. They quoted different bands — this one reached straight for
@@ -748,6 +753,7 @@ def build_capabilities_doc(
         # re-derived, so the rail cannot display a licence the price did not use.
         from .pricing import licence_from_ci as _licence_from_ci
         licence = _licence_from_ci(ci_fields)
+        price_firm = price_low is not None and price_low == price_high
 
     terms: List[str] = []
     assumptions: List[str] = []
@@ -855,6 +861,7 @@ def build_capabilities_doc(
         price_low=price_low,
         price_high=price_high,
         licence=licence,
+        price_firm=price_firm,
         show_terms=show_terms,
         terms=terms,
         # Plus anything the CONTRACT TERMS had to set aside — a scope item the call

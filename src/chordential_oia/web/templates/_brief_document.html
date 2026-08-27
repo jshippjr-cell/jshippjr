@@ -497,7 +497,8 @@
     <section class="block" id="investment">
       <h2 class="sec">Indicative investment</h2>
       {# A client who disclosed a single figure gets that figure, not "$12,000–$12,000". #}
-      <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %} to ${{ '{:,}'.format(doc.price_high) }}{% endif %} <small>ballpark, firmed up after a scoping call</small></div>
+      <div class="price">${{ '{:,}'.format(doc.price_low) }}{% if doc.price_high != doc.price_low %} to ${{ '{:,}'.format(doc.price_high) }}{% endif %}
+        <small>{{ 'fixed for the scope described above' if doc.price_firm else 'ballpark, firmed up after a scoping call' }}</small></div>
 
       {# ── THE FOUR LEVERS, where the number is read. Operator only.
 
@@ -538,6 +539,34 @@
         </div>
         <p class="muted small" style="margin:8px 0 0">These write Campaign Intelligence and
           re-price everything that reads it. The client sees the band, not this rail.</p>
+
+        {# ── QUOTE FIRM. The band is ±17.5% and answering every licence question does not
+              narrow it by a dollar — it is not uncertainty about the client, it is
+              uncertainty about us. The estimate is hours × rate priors nothing has ever
+              checked against a finished job, and until enough jobs close there is no
+              honest arithmetic that produces one number.
+
+              So this is not a calculation, it is a commitment: the operator taking the
+              variance rather than showing it. Only a person can decide that, which is why
+              it is a button and not a setting. Releasing it puts the band back. ── #}
+        <div class="firm-row">
+          {% if doc.price_firm %}
+          <form method="post" action="/opportunity/{{ row['id'] }}/doc/firm-fee">
+            <input type="hidden" name="release" value="1">
+            <span class="firm-on">Quoted firm at ${{ '{:,}'.format(doc.price_low) }}</span>
+            <button class="capdoc-clear" type="submit">Back to the band</button>
+          </form>
+          {% else %}
+          <form method="post" action="/opportunity/{{ row['id'] }}/doc/firm-fee">
+            <label class="capdoc-rail-label" for="firm-fee">Quote firm at</label>
+            <input id="firm-fee" class="capdoc-in" type="text" name="fee" inputmode="numeric"
+                   placeholder="{{ '{:,}'.format(((doc.price_low + doc.price_high) // 2)) }}"
+                   style="min-width:11ch">
+            <button class="capdoc-add" type="submit">Pin it</button>
+            <span class="muted small">You take the variance instead of showing it.</span>
+          </form>
+          {% endif %}
+        </div>
       </div>
       {% endif %}
     </section>

@@ -1116,3 +1116,6 @@ details.ci-intake[open]>summary{opacity:.55}
 .lever-assumed{display:inline-block;margin-left:6px;font-size:9.5px;letter-spacing:.06em;
   text-transform:uppercase;font-weight:700;color:#8a4b1d;background:#fff6ec;
   border:1px solid #e6c8b0;border-radius:99px;padding:0 6px}
+.firm-row{margin:10px 0 0;padding:10px 0 0;border-top:1px dashed #e6d8c8}
+.firm-row form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+.firm-on{font-weight:750;color:#1F1E1E}
