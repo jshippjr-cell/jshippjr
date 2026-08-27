@@ -101,6 +101,48 @@ def _workspace_signals(conn, opp, project):
 
 @router.get("/workspace/{token}", response_class=HTMLResponse)
 def client_workspace(request: Request, token: str):
+    """AFTER THE COUNTERSIGNATURE THIS IS THE ROOM — it redirects there.
+
+    The workspace duplicated the room at both ends: its listening room and brief were the
+    room's own sections, "what you bought" was the delivery surface a phase later, and the
+    only thing genuinely its own was the kickoff gate, which belongs with the people the
+    client is kicking off WITH: *"i dont want the client in the workspace anymore"*
+    (operator, 2026-08-27).
+
+    BEFORE the countersignature it still renders, and that is not a hedge. The Commercial
+    Review is a pre-award document nobody called redundant, and the room cannot show it,
+    because a room is a PROJECT and there is no project until the client approves. The
+    instruction was scoped to "after the countersign is sent" and reading it wider would
+    have left a client with no way to accept the offer that wins the deal.
+
+    It redirects rather than 404s because links are already out — demo ones today, and the
+    deal being tested. A link that dies is a client staring at "Not found" with no idea
+    whether the deal is real.
+    """
+    conn = db.connect()
+    try:
+        opp = db.opportunity_by_share_token(conn, token)
+        if opp is None:
+            proj = db.project_by_share_token(conn, token)
+            opp = db.get_opportunity(conn, proj["opp_id"]) if proj and proj["opp_id"] else None
+        if opp is None:
+            return HTMLResponse("Not found", status_code=404)
+        project = db.project_for_opp(conn, opp["id"])
+        # Self-heal, KEPT: an awarded deal with no stored proposal gets one, so the deposit
+        # reliably surfaces. It ran on this route, and dropping it while redirecting would
+        # have quietly stopped a class of deal from ever showing a Pay button.
+        if project is not None and db.proposal_for_project(conn, project["id"]) is None:
+            _ensure_proposal_from_review(
+                conn, opp, project["id"], db.current_commercial_review(conn, opp["id"]))
+        room_url = f"/room/{project['id']}?k={token}" if project is not None else ""
+    finally:
+        conn.close()
+    if room_url:
+        return RedirectResponse(room_url, status_code=303)
+    return _pre_award_workspace(request, token)
+
+
+def _pre_award_workspace(request: Request, token: str):
     """The Client Workspace: one durable, token-gated URL that never changes; its contents
     are the current lifecycle phase (ADR-0018). The token resolves the opportunity (its
     project inherits the same token), we compute the phase, and render the shell with the

@@ -10,7 +10,7 @@ import importlib
 import pytest
 
 from chordential_oia.models import BuyerType, MusicRequirement, Opportunity
-from chordential_oia.web import workspace as ws
+from chordential_oia.web import kickoff, workspace as ws
 # ADR-0044: reached where they live. `app.py` is the application object now and
 # imports none of these; using it as a namespace for the package is what kept 55
 # dead imports alive in it.
@@ -92,12 +92,23 @@ def test_approval_awards_project_and_enters_kickoff(tmp_path, monkeypatch):
         assert proj["share_token"] == token          # inherits the workspace token
         assert proj["kickoff_completed_at"] is None   # still in Kickoff
         conn.close()
-        # … and the SAME workspace url now shows the Production Readiness Workspace
-        page = c.get(f"/workspace/{token}")
-        assert "Production checklist" in page.text
-        assert "Meet your team" in page.text
-        assert "Creative direction approved" in page.text
-        assert "Commercial terms approved" in page.text
+        # … and the SAME url now lands the CLIENT in the room, because approving is what
+        # creates the project. The readiness view is still built — the operator reads it —
+        # but it is no longer what a client is shown.
+        #
+        # THAT CLOSED A LEAK: the kickoff document's "Meet your team" printed
+        # `talent_name` and `talent_email` on a client-facing page, which is exactly what
+        # `room.CAPS` refuses a buyer — "the roster is the business, and it walks out of
+        # the door with the name".
+        page = c.get(f"/workspace/{token}", follow_redirects=True)
+        assert "Before we start" in page.text, "the client landed with no kickoff ask"
+        assert "Meet your team" not in page.text, "the room handed over the roster"
+        conn2 = app_mod.db.connect()
+        readiness = kickoff.build_readiness(
+            conn2, app_mod.db, app_mod.db.get_opportunity(conn2, opp_id), proj,
+            app_mod.db.current_commercial_review(conn2, opp_id))
+        conn2.close()
+        assert readiness["checklist"], "the operator's readiness view stopped being built"
         # the deposit gates production — until it's in, Start Production is a no-op
         conn = app_mod.db.connect()
         proj = app_mod.db.project_for_opp(conn, opp_id)
@@ -108,8 +119,6 @@ def test_approval_awards_project_and_enters_kickoff(tmp_path, monkeypatch):
                      "VALUES (?,?,?,?)", (proj["id"], "Deposit", "paid", "x"))
         conn.commit(); conn.close()
         c.post(f"/opportunity/{opp_id}/start-production")
-        after = c.get(f"/workspace/{token}")
-        assert "Production" in after.text and "Production checklist" not in after.text
     conn = app_mod.db.connect()
     proj = app_mod.db.project_for_opp(conn, opp_id)
     assert proj["kickoff_completed_at"]              # gate stamped
@@ -139,12 +148,15 @@ def test_readiness_all_ready_when_no_client_actions(tmp_path, monkeypatch):
         app_mod.db.update_delivery(conn, proj["id"], "picture",
                                    {"n": 1, "orig": "cut.mp4", "at": "2026-01-01"})
         conn.close()
-        page = c.get(f"/workspace/{token}").text
-    # deposit in, nothing else outstanding → the reassuring message
-    assert "Everything is ready." in page
-    assert "nothing you need to manage" in page
-    # campaign summary is projected from CI + the approved review
-    assert "Holiday anthem" in page
+        # Both settled → the room asks the client for nothing. The all-clear IS the
+        # absence of the ask; a room whose content is the work needs no banner saying
+        # there is nothing else to do.
+        page = c.get(f"/workspace/{token}", follow_redirects=True).text
+    assert "Before we start" not in page, "it still asked for something already done"
+    assert "Pay deposit" not in page and "Send us the cut" not in page
+    # …and WHAT THEY BOUGHT still reaches them. It was on the workspace's campaign
+    # summary and would have been lost in the move; the room carries it now.
+    assert "Original, cleared worldwide" in page
     assert "November 10" in page                       # target delivery from CI
     assert "Original, cleared worldwide" in page      # rights from music requirement
 

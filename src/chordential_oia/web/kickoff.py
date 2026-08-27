@@ -170,9 +170,7 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         "delivery_date": timeline or "Confirmed at kickoff",
         "scope": (review.scope_summary if review else (ci_fields.get("campaign_objective") or "")),
         "budget": (ci_fields.get("budget_band") or ""),
-        "rights": ("Original, cleared worldwide, yours on final payment"
-                   if "original" in str(mr).lower()
-                   else "As licensed for this campaign"),
+        "rights": rights_line(mr),
     }
 
     return {
@@ -181,3 +179,57 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         "client_actions": client_actions, "all_ready": all_ready,
         "kickoff_done": kickoff_done,
     }
+
+def rights_line(music_requirement: str) -> str:
+    """What the buyer owns, in one line. ONE derivation of these words.
+
+    It was written inline in the campaign summary above and shown only on the client
+    workspace. When the client moved into the room it would have gone with it — a buyer who
+    can no longer see what they bought — so it is a function, read by both, rather than a
+    sentence retyped into a second template.
+    """
+    return ("Original, cleared worldwide, yours on final payment"
+            if "original" in str(music_requirement or "").lower()
+            else "As licensed for this campaign")
+
+
+def client_gate(conn, db, project_id: int, portal_url: str = "") -> Optional[dict]:
+    """What the CLIENT still has to do before production really starts — or ``None``.
+
+    THE KICKOFF GATE, MOVED INTO THE ROOM. It lived on the client workspace, which is no
+    longer where a client goes after the countersignature: *"the pay the deposit and upload
+    assets gate can live inside 'the room' hub where they will interact with the composer
+    and studio"* (operator, 2026-08-27).
+
+    Both asks come from `build_readiness` rather than being re-derived, so the room and the
+    operator's readiness view cannot reach different conclusions about what a client owes.
+    THE PICTURE IS NOT GATED ON THE DEPOSIT and must not become so here: sending the cut
+    early costs the client nothing and is the most useful thing they can do while a composer
+    is being assigned. Both stand at once or neither does.
+    """
+    proposal = db.proposal_for_project(conn, project_id)
+    if proposal is None:
+        return None
+    project = db.get_project(conn, project_id)
+    if project is None or not project["opp_id"]:
+        return None
+    opp = db.get_opportunity(conn, project["opp_id"])
+    if opp is None:
+        return None
+    ready = build_readiness(conn, db, opp, project,
+                            db.current_commercial_review(conn, opp["id"]),
+                            portal_url=portal_url)
+    actions = list(ready.get("client_actions") or [])
+    if not actions:
+        return None
+    invoices = db.list_invoices(conn, project_id)
+    invoice = next((i for i in invoices if (i["kind"] or "") == "Deposit"), None)
+    settled = invoice is not None and (invoice["status"] or "").lower() in ("paid", "settled")
+    amount = (invoice["amount"] if invoice is not None else proposal["deposit_amount"]) or 0
+    deposit = None
+    if amount and not settled:
+        # The PROJECT share token: `/pay` authorises on that one specifically, and handing
+        # it the opportunity's produces a Pay button that bounces.
+        deposit = {"amount": amount, "pid": int(project_id),
+                   "ptok": db.ensure_project_share_token(conn, int(project_id))}
+    return {"actions": actions, "deposit": deposit}

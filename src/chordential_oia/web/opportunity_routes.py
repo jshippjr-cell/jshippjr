@@ -44,7 +44,8 @@ from ..storage import get_object_store
 from ..strategic import assess_strategic_value
 from . import (
     actor, campaign_intake, campaign_intelligence, campaigns, commercial, copilot, db,
-    intake_lanes, meeting_scheduler, next_action, procurement, producer_learning, signals,
+    intake_lanes, meeting_scheduler, next_action, procurement, producer_learning, room,
+    signals,
 )
 from .estimate import estimate_for
 from .evaluate import evaluate
@@ -1828,7 +1829,9 @@ def opportunity_countersign(request: Request, opp_id: int, typed_name: str = For
         _row_mail = row["contact_email"] if "contact_email" in row.keys() else ""
         client_mail = (_row_mail or "").strip() or (client_sig["signer_email"] or "")
         need, client_name = row["need"], row["client"]
-        share_token = db.ensure_share_token(conn, opp_id)
+        # THE LINK THAT GOES OUT AT THE COUNTERSIGNATURE IS THE ROOM (`room.client_url`,
+        # which resolves to the room because `_ensure_project_for_opp` ran two lines up).
+        client_link = room.client_url(conn, db, opp_id, base=_public_base())
     finally:
         conn.close()
     if client_mail:
@@ -1836,12 +1839,13 @@ def opportunity_countersign(request: Request, opp_id: int, typed_name: str = For
             mailer.send_email(
                 client_mail, f"Countersigned — {client_name} · {need}",
                 f"We have countersigned the agreement for {need}. It is now signed by "
-                f"both parties.\n\nTwo things are waiting for you in your workspace: the "
+                f"both parties.\n\nTwo things are waiting for you in your room: the "
                 f"deposit, which starts production, and a place to send us the cut your "
-                f"music is written to, along with any references. The cut goes straight "
-                f"to your composer's session room — you can send it before the deposit, "
-                f"and the earlier it lands the more useful it is.\n\n"
-                f"{_public_base()}/workspace/{share_token}")
+                f"music is written to, along with any references. The room is where you "
+                f"and the studio work — the brief, each version as it lands, and the "
+                f"conversation about it, all in one place. You can send the cut before "
+                f"the deposit, and the earlier it lands the more useful it is.\n\n"
+                f"{client_link}")
         except Exception:  # noqa: BLE001
             pass
     return RedirectResponse(f"/opportunity/{opp_id}#agreement", status_code=303)

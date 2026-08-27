@@ -128,9 +128,18 @@ def test_change_request_feeds_round_ledger_and_lock_stamps(tmp_path, monkeypatch
 
 
 # --------------------------------------------------------------------------- #
-# The workspace production view — the court question answered in concierge voice.
+# The client's durable link, after award: it lands in THE ROOM.
 # --------------------------------------------------------------------------- #
-def test_workspace_production_speaks_the_court(tmp_path, monkeypatch):
+def test_the_clients_link_lands_in_the_room(tmp_path, monkeypatch):
+    """ADR-0068, plus the workspace retirement (operator, 2026-08-27): once a project
+    exists, the client's durable link is the room and nothing else.
+
+    The court is no longer ANNOUNCED to the client in a phase sentence — the workspace's
+    "A new version is waiting for you" had nowhere to live once the client moved in with
+    the people doing the work. The room expresses the same fact by what it CONTAINS: the
+    version that landed, and the creative journey behind it. That is the honest form of
+    it anyway; a sentence can say a version is waiting while the room is empty.
+    """
     app_mod = _app(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
@@ -139,11 +148,10 @@ def test_workspace_production_speaks_the_court(tmp_path, monkeypatch):
     conn.close()
     url = f"/workspace/{token}"
     with TestClient(app_mod.app) as c:
-        # composing → nothing needed from the client
-        page = c.get(url).text
-        assert "Nothing is needed from you" in page
-        assert "composing" in page.lower()
-        # a version lands in review → the client's move, with the listen CTA
+        r = c.get(url, follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == f"/room/{pid}?k={token}"
+        # a version lands in review → the room shows it
         conn = app_mod.db.connect()
         app_mod.db.update_delivery(conn, pid, "versions",
                                    [{"n": 1, "label": "v1 Concept", "url": "/x.mp3",
@@ -152,24 +160,22 @@ def test_workspace_production_speaks_the_court(tmp_path, monkeypatch):
         app_mod.db.update_delivery(conn, pid, "state", "In review")
         P.add_direction(conn, app_mod.db, pid, name="Warm / Human", thesis="the whistle motif")
         conn.close()
-        page2 = c.get(url).text
-        assert "A new version is waiting for you" in page2
-        assert "Listen &amp; share your thoughts" in page2
-        # The listening room is now THE room (ADR-0068): the client's durable link
-        # leads into the shared surface, not a second one.
-        assert f"/room/{pid}?k={token}" in page2
-        # the creative journey renders — direction + thesis + version
+        page2 = c.get(url).text                    # follow the redirect into the room
+        # the creative journey renders — direction + thesis + version — and the
+        # directions came WITH the client out of the workspace, they were not left behind
         assert "Warm / Human" in page2 and "the whistle motif" in page2
         assert "v1 Concept" in page2
+        # and so did the answer to "what did I actually buy"
+        assert "What you&#39;re buying" in page2 or "What you're buying" in page2
 
 
 # --------------------------------------------------------------------------- #
 # Operator-reported production fixes: publish→client court, approve-no-changes, Today.
 # --------------------------------------------------------------------------- #
-def test_publish_moves_ball_to_client_and_workspace_approve(tmp_path, monkeypatch):
-    """Publishing a fresh v1 (from 'In production') must flip the court to the CLIENT — the
-    workspace says 'a new version is waiting', not 'nothing needed'. And the client can approve
-    with no changes straight from the workspace."""
+def test_publish_moves_ball_to_client_and_client_can_approve(tmp_path, monkeypatch):
+    """Publishing a fresh v1 (from 'In production') must flip the court to the CLIENT, and
+    the client must be able to approve with no changes from where they actually are —
+    which, since the workspace was retired, is the room."""
     app_mod = _app(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
@@ -193,15 +199,16 @@ def test_publish_moves_ball_to_client_and_workspace_approve(tmp_path, monkeypatc
         conn.close()
         assert d["state"] == "In review"
         assert court["court"] == "client" and court["what"] == "version_ready"
-        # the workspace now says a version is waiting + offers approve-no-changes
-        page = c.get(f"/workspace/{token}").text
-        assert "A new version is waiting for you" in page
-        assert "approve with no changes" in page.lower()
-        assert "court.json" in page                       # the quiet live-refresh poll
-        # the court signature endpoint responds
+        # the room now carries the published version and the client's own approve door
+        page = c.get(f"/room/{pid}?k={token}").text
+        assert f'action="/project/{pid}/review/approve"' in page
+        # the court signature endpoint still answers on the durable token — it is what
+        # the room's quiet refresh polls, and it outlived the page it was written for
         assert c.get(f"/workspace/{token}/court.json").json()["sig"]
-        # client approves with no changes from the workspace
-        c.post(f"/workspace/{token}/approve-version", data={"approver_name": "Sarah Chen"})
+        # client approves with no changes
+        c.post(f"/project/{pid}/review/approve",
+               data={"k": token, "origin": "room",
+                     "author": "Sarah Chen", "email": "sarah@halcyon.com"})
     conn = app_mod.db.connect()
     d = app_mod.db.get_delivery(conn, pid)
     lock = production.creative_lock(d)

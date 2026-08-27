@@ -195,10 +195,23 @@ def test_the_capture_clears_the_kickoff_ask(paying):
         conn.close()
     assert (paid["status"] or "").lower() in ("paid", "settled")
 
-    after = client.get(f"/workspace/{token}").text
+    # The client's own link, followed as a client follows it — into the room.
+    after = client.get(f"/workspace/{token}", follow_redirects=True).text
     assert "Send your deposit" not in after, "it still asked for a deposit already paid"
     assert "Pay deposit" not in after, "it still offered to charge her again"
-    assert "Deposit received" in after or "Everything is ready" in after
+    # …and the payer's own return says so. `?paid=1` is how the payment return carries
+    # the receipt, and it has to be minted straight onto the ROOM url: a hand-written
+    # `/workspace/…?paid=1` redirects here with the query dropped, so the banner would
+    # have been silently lost on the one page-load it exists for.
+    from chordential_oia.web import room
+    conn = app_mod.db.connect()
+    try:
+        opp_id = app_mod.db.get_project(conn, pid)["opp_id"]
+        back = room.client_url(conn, app_mod.db, int(opp_id), flag="paid=1")
+    finally:
+        conn.close()
+    assert back.startswith(f"/room/{pid}?") and back.endswith("&paid=1")
+    assert "Deposit received" in client.get(back).text
 
 
 def test_paying_twice_is_refused_rather_than_charged_twice(paying):

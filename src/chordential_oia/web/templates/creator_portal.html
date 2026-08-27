@@ -651,6 +651,53 @@
 </style>
 </head>
 <body>
+{# ── THE KICKOFF GATE + the receipt. The client's own next step, in the room where they
+      work with the studio and the composer rather than on a separate page they visit once
+      (operator, 2026-08-27).
+
+      FIRST ON THE PAGE: until the deposit clears there is no production to look at, and a
+      client scrolling past their own next step is a deal that stalls for a reason nobody
+      can see. `client_gate` is None for every other role and the moment nothing is
+      outstanding, so this is not BUILT rather than hidden by an `{% if %}` somebody can
+      forget — ADR-0068's rule that the view subtracts and the template does not choose. ── #}
+{% if request.query_params.get('paid') %}
+<div style="max-width:760px;margin:18px auto 0;padding:0 18px">
+  <div style="padding:12px 16px;border-radius:12px;background:#e6f3ec;border:1px solid #bcdcc7;
+              color:#1d6b43;font-weight:600">Deposit received — thank you. Production starts.</div>
+</div>
+{% endif %}
+{% if client_gate %}
+<div style="max-width:760px;margin:18px auto 0;padding:0 18px">
+  <div style="border:1px solid #e7e1d8;border-left:3px solid #b34a21;border-radius:12px;
+              padding:16px 18px;background:#fff">
+    <div style="font-weight:750;font-size:15px">Before we start</div>
+    {% set _notice = pay_notice(request.query_params.get('pay')) %}
+    {% if _notice %}<p style="margin:6px 0 0;color:#b34a21;font-size:13px">{{ _notice }}</p>{% endif %}
+    {% for act in client_gate.actions %}
+    <div style="margin:12px 0 0;padding:12px 0 0;border-top:1px dashed #eee7de">
+      <div style="font-size:14px;color:#241016">{{ act.label }}</div>
+      {% if act.kind == 'deposit' and client_gate.deposit
+            and request.query_params.get('pay') != 'unavailable' %}
+      <form method="post" action="/project/{{ client_gate.deposit.pid }}/pay" style="margin:8px 0 0">
+        <input type="hidden" name="k" value="{{ client_gate.deposit.ptok }}">
+        <input type="hidden" name="kind" value="deposit">
+        <button type="submit" style="background:#b34a21;color:#fff;border:0;border-radius:10px;
+                padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer">Pay deposit
+          ${{ '%.2f'|format(client_gate.deposit.amount) }} &rarr;</button>
+      </form>
+      {% elif act.url %}
+      <a href="{{ act.url }}" style="display:inline-block;margin:8px 0 0;background:#b34a21;
+         color:#fff;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;
+         text-decoration:none">{{ act.cta or 'Open →' }}</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p style="margin:12px 0 0;color:#7a6b67;font-size:12.5px">The deposit starts production;
+      the balance is due on delivery. Your cut is not waiting on the money — send it
+      whenever you have it, and the earlier it lands the more useful it is.</p>
+  </div>
+</div>
+{% endif %}
 
 {% if not assignments %}
 <div class="room">
@@ -1292,6 +1339,22 @@
     {% if a.brief and a.brief.references and a.brief.references != a.brief.tone %}
     <h3>References &amp; direction</h3>
     <p class="brief-body">{{ a.brief.references }}</p>
+    {% endif %}
+    {# ── The creative conversation, and what the buyer owns. Both came back from the
+          client workspace when the client moved in here: the directions being explored are
+          a DIFFERENT store from the brief's references above, and the rights line is the
+          answer to "what did I actually buy", which a buyer should never have to ask us
+          twice. ── #}
+    {% if a.directions %}
+    <h3>Directions we're exploring</h3>
+    {% for d in a.directions %}
+    <p class="brief-body" style="margin:0 0 6px"><b>{{ d.name }}</b>{% if d.thesis %} — {{ d.thesis }}{% endif %}
+      {% if d.status and d.status != 'exploring' %}<span class="chip">{{ d.status }}</span>{% endif %}</p>
+    {% endfor %}
+    {% endif %}
+    {% if a.rights_line %}
+    <h3>What you're buying</h3>
+    <p class="brief-body">{{ a.rights_line }}</p>
     {% endif %}
     <div class="brief-meta">
       {% if a.role %}<span class="chip">Your role: {{ a.role }}</span>{% endif %}

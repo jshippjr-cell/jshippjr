@@ -126,7 +126,7 @@ def test_release_freezes_and_versions(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # Phase transitions + the inline workspace render.
 # --------------------------------------------------------------------------- #
-def test_workspace_shows_commercial_then_kickoff(tmp_path, monkeypatch):
+def test_the_client_reads_the_review_then_lands_in_the_room(tmp_path, monkeypatch):
     app_mod = _app(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     conn = app_mod.db.connect(); app_mod.db.init_db(conn)
@@ -150,8 +150,13 @@ def test_workspace_shows_commercial_then_kickoff(tmp_path, monkeypatch):
                    "approver_email": "sarah@halcyon.com", "scope_ok": "1",
                    "pricing_ok": "1", "terms_ok": "1"}, follow_redirects=False)
         assert r.status_code == 303
-        after = c.get(url)
-        assert "Kickoff" in after.text
+        # Approving is what CREATES the project, so the same url now lands the client in
+        # the room, where the kickoff gate moved. The phase did not change; the surface
+        # carrying it did.
+        after = c.get(url, follow_redirects=False)
+        assert after.status_code == 303 and "/room/" in after.headers["location"]
+        room_page = c.get(url, follow_redirects=True).text
+        assert "Before we start" in room_page, "landed in the room with no kickoff ask"
     conn = app_mod.db.connect()
     rev = app_mod.db.current_commercial_review(conn, opp_id)
     ap = app_mod.db.approval_for_opp(conn, opp_id)

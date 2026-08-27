@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 
 from .. import agreements, contributor_release, delivery, signing
 from ..talent import profile_completeness
-from . import db, room
+from . import db, kickoff, room
 from .creator_routes import _room_for_project
 from .shell import admin_authed, render
 
@@ -66,6 +66,17 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
                               media_token=_mt, media_kind=_mk)
         if view is None:
             return HTMLResponse("Not found", status_code=404)
+        # THE KICKOFF GATE, for the buyer only. It came here with the client workspace,
+        # which no longer receives them after the countersignature — and the deposit is the
+        # one thing a client must be able to do before production exists, so it cannot live
+        # on a page nobody visits. `see_invoice` is already the client's capability for
+        # "their balance and the button that clears it"; this is that, one phase earlier.
+        client_gate = None
+        if role == room.CLIENT and room.can(role, "see_invoice"):
+            _ptok = db.ensure_project_share_token(conn, project_id)
+            client_gate = kickoff.client_gate(
+                conn, db, project_id,
+                portal_url=f"/project/{project_id}/delivery-portal?k={_ptok}")
         # The hats, for a creator who is in the room as one.
         if role == room.TALENT:
             trow = db.get_talent_by_portal_token(conn, t)
@@ -112,6 +123,10 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
                                                                    ("r" if r else "k")),
         t=viewer, completeness=(profile_completeness(viewer) if viewer else 100),
         assignments=[view], all_rooms=[view], focused=project_id,
+        # Top-level as well: the gate is drawn ABOVE the room, before the per-project loop
+        # that binds `a`, because a client's own next step must not be something they have
+        # to scroll to find.
+        client_gate=client_gate,
         contributors=contributors, contributor_roles=contributor_release.ROLES,
         agr_signed=agr_signed, agr_counter=agr_counter,
         # …and NAMED, so a mixer's banner does not offer them a writer's agreement.

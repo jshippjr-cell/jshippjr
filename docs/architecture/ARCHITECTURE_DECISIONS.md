@@ -1664,6 +1664,58 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0093 — After the countersignature the client lives in the room
+**Status:** Accepted (2026-08-27, operator directive) · Extends ADR-0018 / ADR-0068 /
+ADR-0076 · Source: `workspace_routes.client_workspace`, `room.client_url`,
+`kickoff.client_gate`, `kickoff.rights_line`, `creator_routes._room_fields`,
+`tests/test_the_client_has_something_to_do.py`, `tests/test_production_spine.py`
+
+**Decision.** Once a project exists, the client's durable link **is the room**.
+`/workspace/{token}` 303s there, every post-award link is minted by `room.client_url`
+rather than written by hand, and the kickoff gate — the deposit and the request for the
+client's cut — is rendered in the room. The workspace survives **only before the
+countersignature**, where it carries the Commercial Review.
+
+**Why.** *"i dont want the client in the workspace anymore… the pay the deposit and upload
+assets gate can live inside 'the room' hub where they will interact with the composer and
+studio"* (operator). The workspace had become a second rendering of the room at both ends:
+its listening room and its brief were the room's own sections, and "what you bought" was
+the delivery surface one phase later. Under ADR-0068 that is the failure this codebase
+keeps paying for — two surfaces answering one question, one of them wrong on a day nobody
+is looking.
+
+It also **closed a leak**. The kickoff document's "Meet your team" printed `talent_name`
+and `talent_email` on a client-facing page. `room.CAPS` denies a buyer `see_who` on the
+stated ground that *the roster is the business, and it walks out of the door with the
+name*. The workspace was handing over exactly that, one route away from the model that
+forbids it — which is what happens when a client-facing surface is built outside the
+capability gate rather than inside it.
+
+**Consequences.** The workspace is **scoped, not deleted**, and the scope is the
+operator's own sentence — *"after the countersign is sent"*. A room is a **project**, and
+there is no project until the client approves; deleting the workspace outright would have
+left a client with no way to accept the offer that wins the deal. It redirects rather than
+404s because links are already out, and a dead link is a client staring at "Not found"
+with no idea whether their deal is real.
+
+**Two things came back with the client**, and both would have been dropped in silence:
+`directions` (the named creative directions and the thesis behind each — a *different*
+store from the brief's references, so re-pointing at the brief would have looked like a
+fix and been a substitution) and the **rights line**, derived once in `kickoff.rights_line`
+and read by both surfaces rather than retyped into a second template.
+
+**A flag must be minted onto the room URL, never onto the workspace URL.** The redirect
+drops the query string, so `/workspace/…?paid=1` renders the room with no receipt — the
+banner silently missing on the single page-load it exists for. That is why the five
+hand-written mints (countersign mail, receipt, assignment update, payment return, the
+null-provider bounce) became one function.
+
+**The phase sentence did not move.** The workspace announced the court to the client — "A
+new version is waiting for you", "Nothing is needed from you". The room states the same
+fact by what it CONTAINS: the version that landed, the direction it came from, and the
+absence of an ask. That is the honest form; a sentence can say a version is waiting while
+the room is empty.
+
 ### ADR-0092 — The gate that deletes asks for a reason, and the server is what asks
 **Status:** Accepted (2026-08-24, operator directive) · Extends ADR-0072 / ADR-0075 ·
 Source: `project_routes.delivery_publish_asset`, the `askWhy` panel in

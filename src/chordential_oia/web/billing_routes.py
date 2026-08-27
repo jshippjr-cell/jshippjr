@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..payments import get_payment_provider
-from . import db
+from . import db, room
 from .billing import _apply_invoice_payment, _client_portal_url, _send_invoice_pay_link
 from .talent_routes import _parse_rate
 
@@ -157,7 +157,11 @@ def pay_return(request: Request, invoice: int = 0, session_id: str = ""):
             if inv["kind"] == "Final":
                 dest = _client_portal_url(pid, db.ensure_project_share_token(conn, pid) or "", "paid=1")
             elif prow is not None and prow["opp_id"]:
-                dest = f"/workspace/{db.ensure_share_token(conn, prow['opp_id'])}?paid=1"
+                # The deposit's payer goes back to the ROOM, with the receipt flag intact.
+                # Sending them to `/workspace/…?paid=1` would have worked and looked like
+                # it worked — the redirect into the room drops the query string, so the
+                # "thank you, your deposit is in" banner would never have rendered.
+                dest = room.client_url(conn, db, int(prow["opp_id"]), flag="paid=1")
     finally:
         conn.close()
     return RedirectResponse(dest, status_code=303)

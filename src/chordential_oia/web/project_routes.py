@@ -426,7 +426,10 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
             opp = db.get_opportunity(conn2, project["opp_id"])
             contact_email = (opp["contact_email"] if opp is not None
                              and "contact_email" in opp.keys() else "") or ""
-            token = db.ensure_share_token(conn2, project["opp_id"]) if opp is not None else ""
+            # Post-award by definition (there is a project, we just staffed it), so the
+            # client's link is the room — where the creator we are announcing works.
+            client_link = (room.client_url(conn2, db, project["opp_id"], base=_public_base())
+                           if opp is not None else "")
         finally:
             conn2.close()
         if contact_email:
@@ -435,7 +438,7 @@ def project_assign(project_id: int, role: str = Form(...), talent_id: int = Form
                 role=role, creator_name=name, need=project["need"],
                 contact_name=(opp["contact_name"] if opp is not None
                               and "contact_name" in opp.keys() else "") or "",
-                workspace_url=f"{base}/workspace/{token}" if token else "",
+                workspace_url=client_link,
             )
             try:
                 mailer.send_email(contact_email, upd["subject"], upd["body"],
@@ -3703,7 +3706,11 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""),
         if kind == "Deposit":
             prow0 = db.get_project(conn, project_id)
             if prow0 is not None and prow0["opp_id"]:
-                return f"/workspace/{db.ensure_share_token(conn, prow0['opp_id'])}?{flag}"
+                # `room.client_url`, not a hand-written `/workspace/…?{flag}`: that path
+                # now redirects into the room and the redirect drops the query, so the
+                # "payments aren't switched on" notice this bounce exists to show would
+                # have vanished on the way.
+                return room.client_url(conn, db, int(prow0["opp_id"]), flag=flag)
         return _client_portal_url(project_id, k, flag)
     try:
         ok, _rev = _access_ok(conn, project_id, k, r)

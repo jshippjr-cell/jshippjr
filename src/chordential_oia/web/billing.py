@@ -18,7 +18,7 @@ from ..estimation import RoleLine
 from ..invoicing import build_invoice
 from ..payments import get_payment_provider
 from ..proposals import Proposal
-from . import db, signals
+from . import db, room, signals
 from .shell import public_base as _public_base
 
 
@@ -259,7 +259,7 @@ def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
     tail = ("Your deposit is in and we're getting production underway. You'll hear from us "
             "at your first creative milestone."
             if label.lower().startswith("dep") else
-            "Your balance is settled and your final files are unlocked in your workspace.")
+            "Your balance is settled and your final files are unlocked in your room.")
     body = (
         f"{greeting}\n\n"
         f"Thank you. We've received your {label.lower()} payment. This is your receipt.\n\n"
@@ -268,7 +268,7 @@ def _payment_receipt_email(kind: str, amount: float, client: str, need: str,
         f"  Project:  {need or 'your campaign'}\n"
         + (f"  Date:     {date}\n" if date else "")
         + f"\n{tail}\n\n"
-        + (f"Everything for your campaign lives in your workspace:\n{workspace_url}\n\n"
+        + (f"Everything for your campaign lives in your room:\n{workspace_url}\n\n"
            if workspace_url else "")
         + "Jon, Chordential"
     )
@@ -296,12 +296,13 @@ def _notify_payment_settled(conn, inv, pid: int) -> None:
                          and "contact_email" in opp.keys() else "") or ""
         if contact_email and mailer.mail_configured():
             base = _public_base()
-            token = db.ensure_share_token(conn, opp["id"]) if opp is not None else ""
+            # The receipt is post-award by definition — an invoice needs a project — so
+            # its link is the room (`room.client_url`).
+            link = room.client_url(conn, db, opp["id"], base=base) if opp is not None else ""
             contact_name = (opp["contact_name"] if opp is not None
                             and "contact_name" in opp.keys() else "") or ""
             receipt = _payment_receipt_email(
-                kind, amount, client, need, contact_name,
-                f"{base}/workspace/{token}" if token else "", inv["paid_at"] or "")
+                kind, amount, client, need, contact_name, link, inv["paid_at"] or "")
             mailer.send_email(contact_email, receipt["subject"], receipt["body"],
                               html=mailer.branded_html(base, receipt["body"]))
     except Exception:  # noqa: BLE001 — notifications are best-effort

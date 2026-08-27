@@ -227,6 +227,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
   is the authority and an unknown role gets nothing. A gate-exempt route must make its
   own stricter check: `_session_role` reads "no token" as *operator*.
+- **After the countersignature the client lives in the room** (ADR-0093): once a project
+  exists, `/workspace/{token}` **303s to `/room/{pid}?k=…`** and the kickoff gate (deposit
+  + "send us your cut") renders there via `kickoff.client_gate`. Mint every post-award
+  client link with **`room.client_url(conn, db, opp_id, base=…, flag=…)`** — a hand-written
+  `/workspace/…?paid=1` loses its query to the redirect, so the receipt banner vanishes.
+  The workspace survives **only before the countersignature**, because a room is a project
+  and the Commercial Review is what creates one.
 - **A note is not work until it is priced** (ADR-0069): every client note is classified
   `conform` / `revision` / `out_of_scope` before a creator sees it — `room.priced_notes_only`
   is the ONE rule, read by the room and the composer's portal. A change request arrives

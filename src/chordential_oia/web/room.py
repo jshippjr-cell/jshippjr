@@ -121,6 +121,33 @@ def can(role: str, capability: str) -> bool:
     return capability in caps_for(role)
 
 
+def client_url(conn, db, opp_id: int, base: str = "", flag: str = "") -> str:
+    """The client's ONE destination for this deal — absolute when ``base`` is given.
+
+    THE ROOM once a project exists; the workspace only before one does. *"any new links
+    sent out after a countersign should send them to 'the room'"* (operator, 2026-08-27).
+
+    ONE derivation, because there were five places minting this URL by hand and they are
+    the places a link reaches a real buyer: the countersignature, the receipt, the "your
+    composer is on board" note, the payment return. `/workspace/{token}` redirects here
+    anyway, so a stale one is not broken — but a redirect is a repair the client watches
+    happen, and the next hand-written one would have been written before anybody
+    remembered the redirect existed.
+
+    Returns "" when there is no token at all, so a caller can decide between a linkless
+    email and no email — never a dead href.
+    """
+    token = db.ensure_share_token(conn, opp_id)
+    if not token:
+        return ""
+    project = db.project_for_opp(conn, opp_id)
+    path = (f"/room/{project['id']}?k={token}" if project is not None
+            else f"/workspace/{token}")
+    if flag:
+        path += ("&" if "?" in path else "?") + flag
+    return (base.rstrip("/") + path) if base else path
+
+
 def priced_notes_only(feedback: dict) -> dict:
     """The composer's list, with everything a human has not yet priced removed.
 

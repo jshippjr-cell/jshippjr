@@ -176,7 +176,7 @@ def compose_client_assignment_update(
         f"{greeting}\n\n"
         f"Good news: {creator} is on board as the {role} for {brief}. Your team is "
         f"coming together and the work is moving.\n\n"
-        f"Your workspace has everything: the brief, new versions as they land, and "
+        f"Your room has everything: the brief, new versions as they land, and "
         f"where to weigh in" + (f":\n{workspace_url}" if workspace_url else ".") + "\n\n"
         f"{from_name}, Chordential"
     )

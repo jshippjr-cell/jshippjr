@@ -64,8 +64,11 @@ Client **commitment drives state** (approval of the Commercial Review is the pri
 award trigger; operator buttons are fallbacks). Building foundation-first:
 - **P0 (done):** durable workspace token (project inherits the opp token), the phase
   engine (`web/workspace.py`), `/workspace/{token}` shell, and the **Campaign Brief folded
-  inline** via the stage-partial pattern (`_brief_document.html` + static `brief.css`). The
-  workspace is the canonical client link (emailed link → `/workspace/{token}`).
+  inline** via the stage-partial pattern (`_brief_document.html` + static `brief.css`).
+  **Scoped to PRE-AWARD on 2026-08-27 (ADR-0093):** once a project exists the canonical
+  client link is **the room** — `/workspace/{token}` 303s there, and every post-award link
+  is minted by `room.client_url`. The workspace still carries the phases before the
+  countersignature, where the Commercial Review lives and there is no project to be a room.
 - **P1 (done):** the **Commercial Review** (`web/commercial.py`) — the formal agreement,
   projected entirely from CI + estimation/proposals, **frozen at operator release**
   (`commercial_reviews`), rendered inline in the workspace as the brief's continuation, with
@@ -86,7 +89,10 @@ award trigger; operator buttons are fallbacks). Building foundation-first:
   phase now answers the court question in concierge voice + shows the creative journey; the
   delivery portal remains the listening room. Operator: Directions card + lock on the
   delivery console. Business model: `docs/production-lifecycle-model.md` (agreed, both
-  passes).
+  passes). **The client's half of the PRODUCTION phase moved into the room (ADR-0093):**
+  the kickoff gate (deposit + "send us your cut") renders there via `kickoff.client_gate`,
+  the `directions` and the rights line travel with it, and the phase sentence was dropped
+  — the room states the court by what it contains, not by announcing it.
 - **P2, P3, P5 (planned):** producer-voiced Terms engine (basic shipped in P1) →
   commitment/audit enrichment + DocuSign seam → adaptive procurement + delivery unification.
   See `docs/client-workspace-principles.md`; ADR-0018 for decisions.

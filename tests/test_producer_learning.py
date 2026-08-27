@@ -154,7 +154,7 @@ def test_observed_facts_bucket_and_render(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # Discovery Summary email — rendered FROM Campaign Intelligence, introduces the Workspace.
 # --------------------------------------------------------------------------- #
-def test_discovery_summary_renders_from_ci_and_introduces_workspace(tmp_path, monkeypatch):
+def test_discovery_summary_renders_from_ci_and_introduces_the_room(tmp_path, monkeypatch):
     from chordential_oia import outreach
     from chordential_oia.models import Opportunity, BuyerType, MusicRequirement
     opp = Opportunity(

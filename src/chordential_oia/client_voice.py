@@ -122,6 +122,10 @@ def summary_prose(ci_fields: Dict[str, str], *, met: bool = True,
                 if open_question_count else "")
         out.append(f"We've also written down {listed}, and it's all in your workspace{tail}.")
     elif lede or closing:
+        # WORKSPACE, not room, and the distinction is load-bearing: this prose ships with
+        # the Discovery Summary, BEFORE the countersignature, and there is no room yet — a
+        # room is a project and there is no project until the client approves. Post-award
+        # copy says room (`billing`, `recruiting`); this is the other side of that line.
         out.append("The full record is in your workspace.")
     if closing:
         out.append("If a line reads wrong, one reply fixes it.")

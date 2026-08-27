@@ -154,11 +154,20 @@ def test_a_countersigned_deal_is_commercially_approved(studio):
         "for anything")
 
 
-# ── 3. the workspace asks for both, and both are actionable ─────────────────────────
-def test_the_workspace_asks_for_the_deposit_and_the_picture(studio):
+# ── 3. THE ROOM asks for both, and both are actionable ──────────────────────────────
+#
+# These asked the WORKSPACE, which no longer receives a client after the countersignature
+# (2026-08-27). The assertions are unchanged: what a client is asked for did not change,
+# only where they are standing when asked.
+def _client_room(c, token):
+    """Follow the client's own link the way a client does."""
+    return c.get(f"/workspace/{token}", follow_redirects=True).text
+
+
+def test_the_room_asks_for_the_deposit_and_the_picture(studio):
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
-    page = c.get(f"/workspace/{token}").text
+    page = _client_room(c, token)
     assert "Everything is ready" not in page, (
         "it said everything was ready with an unpaid deposit and no footage")
     assert "Pay deposit" in page
@@ -172,10 +181,9 @@ def test_the_ask_carries_a_door(studio):
     import re
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
-    page = c.get(f"/workspace/{token}").text
-    m = re.search(r'ko-cta" href="([^"]+)"', page)
+    page = _client_room(c, token)
+    m = re.search(r'href="([^"]*delivery-portal[^"]*)"', page)
     assert m, "the picture request rendered with no link to the Drop"
-    assert "/delivery-portal" in m.group(1)
 
 
 def test_the_client_walks_it_without_ever_logging_in(studio):
@@ -187,7 +195,9 @@ def test_the_client_walks_it_without_ever_logging_in(studio):
     from fastapi.testclient import TestClient
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
-    portal = re.search(r'ko-cta" href="([^"]+)"', c.get(f"/workspace/{token}").text).group(1)
+    m0 = re.search(r'href="([^"]*delivery-portal[^"]*)"', _client_room(c, token))
+    assert m0, "the room did not offer the Drop"
+    portal = m0.group(1)
     pid = int(portal.split("/project/")[1].split("/")[0])
     ktok = portal.split("k=")[1].split("#")[0]
 
@@ -211,7 +221,8 @@ def test_the_client_walks_it_without_ever_logging_in(studio):
         "the cut never reached the composer's room")
     after = c.get(f"/workspace/{token}").text
     assert "Send us the cut" not in after, "it kept asking for a picture it already had"
-    assert "Your picture received" in after
+    # The ROOM confirms by showing the cut rather than printing a receipt — the client's
+    # own footage is on the poster the moment it lands.
 
 
 def test_the_picture_is_not_gated_on_the_deposit(studio):
@@ -219,7 +230,7 @@ def test_the_picture_is_not_gated_on_the_deposit(studio):
     can do while the composer is being assigned."""
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
-    page = c.get(f"/workspace/{token}").text
+    page = _client_room(c, token)
     assert "Send your deposit" in page and "Send us the cut" in page, (
         "both asks must stand at once — the picture must not wait on the money")
 
@@ -236,4 +247,41 @@ def test_the_countersign_mail_names_both(studio, monkeypatch):
     assert client_mail, "the client was never told it was countersigned"
     body = client_mail[0][2]
     assert "deposit" in body and "cut" in body
-    assert "/workspace/" in body, "no door back to the place both things happen"
+    # *"any new links sent out after a countersign should send them to 'the room'"*
+    # (operator, 2026-08-27). `/workspace/…` would redirect here, but the link is the
+    # promise — it should not need repairing by a 303 the client watches happen.
+    assert "/room/" in body, "no door back to the place both things happen"
+    assert "/workspace/" not in body
+
+
+def test_client_url_is_the_room_after_award_and_carries_its_flag(studio):
+    """ONE derivation of "where does the client live" (`room.client_url`).
+
+    Before a project exists there is no room to send anyone to — a room IS a project —
+    so the workspace is the honest answer and the Commercial Review lives there. After
+    award it is the room, and the flag has to survive: the receipt banner and the
+    "payments aren't switched on" notice both ride a query string, and the workspace
+    redirect drops one, so a hand-written `/workspace/…?paid=1` would have looked
+    correct and shown the client nothing.
+    """
+    from chordential_oia.web import room
+    c, app_mod = studio
+    db = app_mod.db
+    opp_id, token, _agr = _signable_deal(app_mod)
+    conn = db.connect()
+    try:
+        assert db.project_for_opp(conn, opp_id) is None
+        assert room.client_url(conn, db, opp_id) == f"/workspace/{token}"
+    finally:
+        conn.close()
+    _close(c, app_mod)                                   # sign + countersign → project
+    conn = db.connect()
+    try:
+        pid = db.project_for_opp(conn, opp_id)["id"]
+        assert room.client_url(conn, db, opp_id) == f"/room/{pid}?k={token}"
+        assert room.client_url(conn, db, opp_id, flag="paid=1") == \
+            f"/room/{pid}?k={token}&paid=1"
+        assert room.client_url(conn, db, opp_id, base="https://chordential.com/") == \
+            f"https://chordential.com/room/{pid}?k={token}"
+    finally:
+        conn.close()

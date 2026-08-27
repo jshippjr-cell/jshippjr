@@ -32,7 +32,7 @@ from ..delivery import (
 )
 from .. import agreements, composer_agreement, contributor_release, signing
 from ..talent import InviteStatus, profile_completeness
-from . import db, production, room
+from . import db, kickoff, production, room
 from .billing import _ensure_final_invoice_issued, final_invoice_block
 from .opportunity_ops import _ensure_proposal_for_project
 from .delivery_ops import (
@@ -188,6 +188,18 @@ def _call_intel(conn, prow) -> dict:
                 "open_questions": list(view.get("open_questions") or [])[:4]}
     except Exception:  # noqa: BLE001 — the room must open even if intelligence hiccups
         return {"facts": [], "open_questions": []}
+
+
+def _music_requirement(conn, prow) -> str:
+    """The deal's music requirement, for the rights line. A project does not carry it; the
+    opportunity does, and a project without one has no claim to make."""
+    opp_id = prow["opp_id"] if "opp_id" in prow.keys() else None
+    if not opp_id:
+        return ""
+    opp = db.get_opportunity(conn, int(opp_id))
+    if opp is None or "music_requirement" not in opp.keys():
+        return ""
+    return opp["music_requirement"] or ""
 
 
 def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
@@ -407,6 +419,22 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         "cues": db.get_cues(conn, project_id),
         # Phase 4 §13 — the private Capture shelf (composer + studio only).
         "captures": db.get_captures(conn, project_id),
+        # ── THE TWO THINGS THAT CAME BACK FROM THE WORKSPACE ────────────────────────
+        # Both were post-award client-facing content living only on the workspace, and
+        # moving the client into the room would have dropped them silently — the one way
+        # this migration could have cost something nobody noticed.
+        #
+        # `directions` is the creative conversation: the named directions being explored
+        # and the thesis behind each. It is NOT the brief's tone/references — a different
+        # store with different content, so re-pointing a template at the brief would have
+        # looked like a fix and been a substitution.
+        #
+        # `rights_line` is what the buyer actually bought. Derived, not stored, and
+        # `kickoff` already derives it — read from there rather than restated, because two
+        # renderings of what a client owns is the disagreement this codebase keeps paying
+        # for.
+        "directions": production.directions(delivery),
+        "rights_line": kickoff.rights_line(_music_requirement(conn, prow)),
     }
 
 

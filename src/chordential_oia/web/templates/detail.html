@@ -68,7 +68,7 @@
     </details>
   </div>
   <div class="opp-hero-side">
-    {% if row['share_token'] %}<a class="btn" href="/workspace/{{ row['share_token'] }}" title="The client's one durable link — what they see right now">🌐 Client workspace</a>{% endif %}
+    {% if row['share_token'] %}<a class="btn" href="/workspace/{{ row['share_token'] }}" title="The client's one durable link — what they see right now. After the countersignature it lands in the room (ADR-0093).">🌐 Client view</a>{% endif %}
     <a class="btn" href="/opportunity/{{ row['id'] }}/capabilities">📄 Campaign Brief</a>
     <details class="acts-more">
       <summary class="btn ghost">⋯ Actions</summary>
