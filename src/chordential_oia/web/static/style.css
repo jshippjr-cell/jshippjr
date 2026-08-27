@@ -1119,3 +1119,17 @@ details.ci-intake[open]>summary{opacity:.55}
 .firm-row{margin:10px 0 0;padding:10px 0 0;border-top:1px dashed #e6d8c8}
 .firm-row form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
 .firm-on{font-weight:750;color:#1F1E1E}
+
+/* THE DRAWN SIGNATURE, SIZED — and here rather than in the document partial.
+   This rule used to sit inside the signature PAD's stylesheet, which the brief emits under
+   `{% if doc.show_agreement and sign_url %}`. `sign_url` goes empty the moment a signature
+   is VALID, so the one state where the rule is needed — a signed document displaying the
+   mark — is the exact state where it stopped being rendered, and the canvas PNG came out
+   at its natural 900px and ran off the page. Reported on a phone, where the overflow is
+   total. Both pages that render the document already load this stylesheet; the pad's does
+   not survive signing, so this cannot live there.
+
+   `height:auto` matters as much as the width: a mark drawn on a small phone canvas has a
+   different aspect ratio, and constraining one axis alone lets the other run. */
+.sig-mark{display:block;max-width:260px;max-height:110px;width:auto;height:auto;
+  margin:0 0 6px;background:#fff;object-fit:contain}

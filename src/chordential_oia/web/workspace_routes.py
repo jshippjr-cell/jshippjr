@@ -17,11 +17,12 @@ behave identically after a move, which is what the equivalence run checks.
 from __future__ import annotations
 
 import os
+import re
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import mailer, signing
+from .. import mailer, pdf as pdf_writer, signing
 from ..capabilities import (
     attach_agreement, build_capabilities_doc, default_toggles,
     quote_band as capabilities_quote_band,
@@ -394,6 +395,32 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
         # inline copy simply never appears (reported on the composer side first).
         _png = signing.drawn_mark_png(getattr(sig, "drawn_mark", "") or "")
         _files = [("signature.png", "image/png", _png)] if _png else []
+        # ── AND THE AGREEMENT AS A FILE. The signed copy travelled as a wall of text in
+        # the body, which is a record you cannot file, forward to your legal team, or open
+        # in a year: *"you send a text copy. I want you to send a PDF attachment"*
+        # (operator, 2026-08-27).
+        #
+        # Built from `signable_text()` — the exact string the SHA-256 covers — so the
+        # attachment and the digest printed on it describe the same document. Rendering the
+        # HTML instead would produce a file whose digest nobody could reproduce, which is
+        # the failure ADR-0065 exists to prevent.
+        #
+        # `chordential_oia.pdf` is stdlib, deliberately: the optional `pdf` extra and the
+        # Playwright renderer are both best-effort, and an attachment that appears on one
+        # deployment and not another is one nobody notices is missing until a client asks
+        # where their contract is. The body keeps the text too — belt and braces cost
+        # nothing, and some clients read in a preview pane that never opens attachments.
+        try:
+            _pdf = pdf_writer.signed_copy_pdf(
+                document, title="Discovery Summary & Proposal - signed copy",
+                signer=sig.typed_name, signed_at=str(sig.signed_at),
+                digest=sig.digest, consent=sig.consent_text,
+                email=sig.signer_email or "",
+                campaign=f"{opp['client']} - {opp['need']}")
+            _files.append((f"{_filename_slug(opp['client'])}-signed-agreement.pdf",
+                           "application/pdf", _pdf))
+        except Exception:  # noqa: BLE001 — an attachment must never cost the signature
+            pass
         signed_block = (
             f"\n\n{'=' * 58}\nSIGNED COPY — the exact text this signature covers\n"
             f"{'=' * 58}\n{document}\n{'=' * 58}\n"
@@ -438,6 +465,13 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
     finally:
         conn.close()
     return RedirectResponse(f"/workspace/{token}#agreement", status_code=303)
+
+
+def _filename_slug(text: str) -> str:
+    """A client name as a safe attachment filename. Mail clients and filesystems disagree
+    about almost everything except ASCII, dashes and a short name."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (text or "agreement").lower()).strip("-")
+    return (slug or "agreement")[:40]
 
 
 @router.get("/workspace/{token}/court.json")
