@@ -130,6 +130,32 @@ def _notify_assigned_creators(project_id: int, project, *, subject: str,
             pass
 
 
+def notify_operator(title: str, body: str, url: str) -> None:
+    """Push the operator, on every channel that is configured. ONE place.
+
+    Both channels or neither: Web Push reaches a desktop that has the console open, ntfy
+    reaches a phone that does not, and which one the operator is near is not something the
+    caller can know. Best-effort by construction — a notification that raises would cost
+    the action it was announcing, which is the wrong way round.
+
+    Split out of `_notify_operator_review` when it turned out that eleven delivery events
+    pushed here — a composer submitting a take, a reviewer leaving a comment — and the
+    client SIGNING THE PROPOSAL did not. The one event that closes a deal was the one that
+    went out by email alone (operator, 2026-08-27: "when the client signs the discovery
+    summary I don't get a notification"). It was never a missing channel; it was a caller
+    that reached for the delivery-console helper and found the URL was wrong for it, so
+    reached for nothing.
+    """
+    try:
+        webpush.send_web_push(title, body=body, url=url)
+    except Exception:  # noqa: BLE001 — push is best-effort, never block the action
+        pass
+    try:
+        signals.send_push(title, body=body, click_url=url)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _notify_operator_review(project_id: int, project, title: str, body: str) -> None:
     """Push the operator (Jon) when the agency comments / requests changes /
     approves — the coordination signal that 'one link, no email' would otherwise
@@ -144,15 +170,7 @@ def _notify_operator_review(project_id: int, project, title: str, body: str) -> 
     ``review_comments.email``. Requires a transactional send channel (deferred
     outbound email infra) — not wired yet, so left unimplemented rather than faked.
     """
-    url = _delivery_console_url(project_id)
-    try:
-        webpush.send_web_push(title, body=body, url=url)
-    except Exception:  # noqa: BLE001 — push is best-effort, never block the action
-        pass
-    try:
-        signals.send_push(title, body=body, click_url=url)
-    except Exception:  # noqa: BLE001
-        pass
+    notify_operator(title, body, _delivery_console_url(project_id))
 
 
 def delivery_held_by(delivery: dict, project) -> str:

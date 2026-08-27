@@ -38,6 +38,22 @@
 </div>
 {% endif %}
 
+{# ── DISMISSED. Its own line, and its own count, because "not now" and "not mine" are
+      different statements and a queue that pooled them could not be read: fourteen cards
+      showed as snoozed on a list reading two pending, because snooze was the only button
+      that made a card go away. Reversible and counted — a list that hides things without
+      saying how many is the failure the Dismiss button exists to fix. ── #}
+{% if dismissed %}
+<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <span class="muted small">{{ dismissed }} dismissed — off this list for good. They are
+    not cancelled; whatever they pointed at is untouched.</span>
+  <form method="post" action="/queue/undismiss" style="display:inline">
+    <input type="hidden" name="next" value="/queue">
+    <button class="btn tiny ghost" type="submit">Bring them back</button>
+  </form>
+</div>
+{% endif %}
+
 {% if groups %}
 {% for g in groups %}
 <section class="card">
@@ -57,6 +73,13 @@
         <input type="hidden" name="next" value="/queue">
         <button class="btn tiny ghost" type="submit"
                 title="Hide for 7 days. It comes back if it still needs doing.">Snooze</button>
+      </form>
+      <form method="post" action="/queue/dismiss" style="display:inline"
+            onsubmit="return confirm('Dismiss “{{ c.title|e }}”?\n\nIt leaves this list for good. Nothing it points at is changed or cancelled — you can bring dismissed cards back from the top of the queue.');">
+        <input type="hidden" name="key" value="{{ c.key }}">
+        <input type="hidden" name="next" value="/queue">
+        <button class="btn tiny ghost" type="submit"
+                title="Off this list for good. Nothing it points at is changed.">Dismiss</button>
       </form>
       {% endif %}
     </div>

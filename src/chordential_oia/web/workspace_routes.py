@@ -29,8 +29,8 @@ from ..capabilities import (
 )
 from ..proposals import build_proposal
 from . import (
-    campaign_intelligence, campaigns, commercial, db, kickoff, meeting_scheduler,
-    production, workspace,
+    campaign_intelligence, campaigns, commercial, db, delivery_ops, kickoff,
+    meeting_scheduler, production, signals, workspace,
 )
 from .delivery_ops import _approve_version_core
 from .estimate import estimate_for
@@ -256,6 +256,16 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
                                     source="workspace")
                 except Exception:  # noqa: BLE001
                     pass
+            # A client saying the summary is WRONG is the most urgent thing in this file:
+            # every hour it sits unread is an hour they think we misheard them and are
+            # proceeding anyway. It emailed and did not push.
+            signals.fire_and_forget(
+                delivery_ops.notify_operator,
+                f"Needs a fix · {opp['client']}",
+                f"{confirmed_by.strip() or 'The client'} says the Discovery Summary for "
+                f"{opp['need']} needs correcting."
+                + (f" “{note[:120]}”" if note else ""),
+                f"{_public_base()}/opportunity/{opp['id']}/capabilities?edit=1")
             op_mail = meeting_scheduler._operator_email()
             if op_mail:
                 try:
@@ -283,6 +293,12 @@ def workspace_confirm_scope(request: Request, token: str, confirmed_by: str = Fo
                                     source="workspace")
                 except Exception:  # noqa: BLE001
                     pass
+            signals.fire_and_forget(
+                delivery_ops.notify_operator,
+                f"Scope confirmed · {opp['client']}",
+                f"{confirmed_by.strip() or 'The client'} confirmed the Discovery Summary "
+                f"for {opp['need']} reads right.",
+                f"{_public_base()}/opportunity/{opp['id']}#agreement")
             op_mail = meeting_scheduler._operator_email()
             if op_mail:
                 try:
@@ -430,6 +446,18 @@ def workspace_sign_proposal(request: Request, token: str, typed_name: str = Form
             f"Consent given: {sig.consent_text}\n"
             f"Document digest (SHA-256): {sig.digest}\n"
             + ("\nThe drawn signature is attached as signature.png.\n" if _png else ""))
+        # ── THE PUSH. Eleven delivery events reach the operator's phone — a composer
+        # submitting a take, a reviewer leaving a comment — and the client SIGNING did not.
+        # The one client action that closes a deal went out by email alone, which needs
+        # SMTP configured, needs the operator to be reading mail, and arrives among
+        # everything else. Fired BEFORE the emails: the notification is the thing the
+        # operator is waiting for, and it must not queue behind two SMTP round-trips.
+        signals.fire_and_forget(
+            delivery_ops.notify_operator,
+            f"Signed · {opp['client']}",
+            f"{sig.typed_name} signed the Discovery Summary & Proposal for "
+            f"{opp['need']}." + (f" Fee: {agr.fee_line}." if agr.fee_line else ""),
+            f"{_public_base()}/opportunity/{opp_id}#agreement")
         op_mail = meeting_scheduler._operator_email()
         if op_mail:
             try:
@@ -553,6 +581,15 @@ def workspace_approve(request: Request, token: str, approver_name: str = Form(""
                 scope_ok=bool(scope_ok), pricing_ok=bool(pricing_ok), terms_ok=bool(terms_ok),
                 timeline_ok=bool(timeline_ok))
             # Email is the notification layer (ADR-0020): tell the operator the award landed.
+            # Approving the Review closes the deal as surely as signing does. It emailed
+            # and did not push, like the signature next door — the same gap, and it would
+            # have been found the same way a week later.
+            signals.fire_and_forget(
+                delivery_ops.notify_operator,
+                f"Approved · {opp['client']}",
+                f"{approver_name.strip() or 'The client'} approved the proposal for "
+                f"{opp['need']}.",
+                f"{_public_base()}/opportunity/{opp['id']}#agreement")
             op_mail = meeting_scheduler._operator_email()
             if op_mail:
                 try:

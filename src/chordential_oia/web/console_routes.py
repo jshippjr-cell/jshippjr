@@ -822,6 +822,37 @@ def queue_snooze(key: str = Form(...), days: int = Form(7), next: str = Form("/q
     return RedirectResponse(_safe_next(next, "/queue"), status_code=303)
 
 
+@router.post("/queue/dismiss")
+def queue_dismiss(key: str = Form(...), next: str = Form("/queue")):
+    """Take one card off the list for good.
+
+    Snooze says "not now" and the card comes back; this says "not mine" and it does not.
+    The list had only the first, so it was being used as the second — fourteen cards
+    "snoozed" on a queue reading two pending (operator, 2026-08-27).
+
+    It touches nothing the card pointed at. A REVIEW-tier opportunity dismissed here is
+    still REVIEW-tier; it has just stopped being asked about. And it stays counted and
+    reversible on the queue, because a list that hides things without saying how many is
+    the failure this button is meant to fix, not a smaller version of it."""
+    conn = db.connect()
+    try:
+        db.dismiss_queue_card(conn, key)
+    finally:
+        conn.close()
+    return RedirectResponse(_safe_next(next, "/queue"), status_code=303)
+
+
+@router.post("/queue/undismiss")
+def queue_undismiss(next: str = Form("/queue")):
+    """Bring every dismissed card back."""
+    conn = db.connect()
+    try:
+        db.clear_queue_dismissals(conn)
+    finally:
+        conn.close()
+    return RedirectResponse(_safe_next(next, "/queue"), status_code=303)
+
+
 @router.post("/queue/unsnooze")
 def queue_unsnooze(next: str = Form("/queue")):
     """Bring every snoozed card back at once."""

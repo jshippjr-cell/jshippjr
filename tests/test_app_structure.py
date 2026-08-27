@@ -318,12 +318,13 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
         decls += re.findall(r'^@' + dec + r'\.([a-z]+)\("([^"]*)"', src, re.M)
     dupes = sorted({d for d in decls if decls.count(d) > 1})
     assert dupes == [], f"declared more than once: {dupes}"
-    # 303: +3 copilot routes on /opportunity, +1 to quote firm, +2 on the realtime
+    # 305: +3 copilot routes on /opportunity, +1 to quote firm, +2 to take a queue card
+    # off the list (dismiss one, bring them all back), +2 on the realtime
     # capture webhook (one
     # declaration each for the trailing-slash and bare forms — Recall's own docs require
     # the slash before the query string, and a bare POST must not 404), +1 for /pricing.
-    assert len(decls) == 303, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 303 — "
+    assert len(decls) == 305, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 305 — "
         f"a slice lost or gained a URL")
 
 

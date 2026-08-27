@@ -299,6 +299,12 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
     cards.sort(key=lambda c: (c["urgency"], c["age_key"]))
     # Snoozed cards are withheld, not dropped: the row expires and the decision comes
     # back. `include_snoozed` is how the surface offers to show what it is hiding.
+    # Dismissals are hidden ALWAYS — including when the operator asks to see snoozed
+    # cards, because those are two different questions ("what did I defer?" vs "what did I
+    # decide was not mine?"). Each has its own line on the queue and its own way back.
+    dismissed = db.dismissed_queue_keys(conn)
+    if dismissed:
+        cards = [c for c in cards if c["key"] not in dismissed]
     if not include_snoozed:
         hidden = db.snoozed_queue_keys(conn)
         if hidden:
@@ -316,5 +322,7 @@ def queue_view(conn, db, *, include_snoozed: bool = False) -> dict:
             groups.append({"label": label, "cards": rows})
     # How many are being withheld right now — named on the surface, never silent.
     snoozed = 0 if include_snoozed else len(db.snoozed_queue_keys(conn))
+    dismissed = len(db.dismissed_queue_keys(conn))
     return {"groups": groups, "total": len(cards), "today": date.today().isoformat(),
-            "snoozed": snoozed, "showing_snoozed": include_snoozed}
+            "snoozed": snoozed, "showing_snoozed": include_snoozed,
+            "dismissed": dismissed}

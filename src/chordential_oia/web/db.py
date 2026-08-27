@@ -1403,6 +1403,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY, until_at TEXT, snoozed_at TEXT, actor TEXT
         )"""
     )
+    # A DISMISSAL IS NOT A LONG SNOOZE. Snoozing says "not now" and the card comes back;
+    # dismissing says "this is not a decision I need to make" and it does not. Its own
+    # table so the two counts stay separable — a queue reporting "14 snoozed" when thirteen
+    # of them were really dismissed cannot be read, and snooze was being used as a delete
+    # because it was the only button that made a card go away.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS queue_dismissed (
+            key TEXT PRIMARY KEY, dismissed_at TEXT, actor TEXT
+        )"""
+    )
     # One scheduler across every instance (see `acquire_lease`). The blue-green cutover
     # deliberately runs two of them for a few minutes; without this, both run the engines.
     conn.execute(
@@ -5520,6 +5530,48 @@ def snooze_queue_card(conn, key: str, days: int, actor: str = "operator") -> Non
             "INSERT INTO queue_snooze (key, until_at, snoozed_at, actor) VALUES (?,?,?,?)",
             (key, until, now.isoformat(), actor))
     conn.commit()
+
+
+def dismiss_queue_card(conn, key: str, actor: str = "operator") -> None:
+    """Take one Disposition Queue card off the list for good.
+
+    Cards are COMPUTED — there is no row to delete — so a dismissal is a statement about
+    the decision, not about a record: "this is not a decision I need to make." It does not
+    expire, which is the whole difference from a snooze, and it does not touch whatever the
+    card was pointing at. A REVIEW-tier opportunity dismissed here is still a REVIEW-tier
+    opportunity; it just stops being asked about.
+
+    Every dismissal stays visible and reversible on the queue itself. That is not a
+    courtesy — it is what keeps the list honest. A queue that hides things without saying
+    how many is a queue that reads "2 pending" while nine decisions sit somewhere nobody
+    can find them."""
+    key = (key or "").strip()
+    if not key:
+        return
+    from datetime import datetime, timezone
+    conn.execute(
+        "INSERT OR REPLACE INTO queue_dismissed (key, dismissed_at, actor) VALUES (?,?,?)",
+        (key, datetime.now(timezone.utc).isoformat(), actor))
+    conn.commit()
+
+
+def dismissed_queue_keys(conn) -> set:
+    try:
+        rows = conn.execute("SELECT key FROM queue_dismissed").fetchall()
+    except Exception:            # noqa: BLE001 — a queue that cannot read its dismissals
+        return set()             # shows everything, which is the safe direction
+    return {r["key"] for r in rows}
+
+
+def restore_queue_card(conn, key: str) -> None:
+    conn.execute("DELETE FROM queue_dismissed WHERE key = ?", ((key or "").strip(),))
+    conn.commit()
+
+
+def clear_queue_dismissals(conn) -> int:
+    cur = conn.execute("DELETE FROM queue_dismissed")
+    conn.commit()
+    return int(cur.rowcount or 0)
 
 
 def snoozed_queue_keys(conn) -> set:
