@@ -120,8 +120,13 @@ def test_ingest_writes_facts_stores_the_capture_and_raises_gaps(tmp_path):
     # partial notes: budget + deadline present, deliverables + decision-maker missing
     summary = intake.ingest(conn, camp, intake.OBJECTIVE,
                             "Budget is $18,000 to $24,000. Need it by November.")
-    assert summary["understood"] if False else summary["understanding_pct"] == 50  # 2 of 4
-    assert summary["added"] == 2 and len(summary["questions"]) == 2
+    # 2 of 8. The denominator was 4 — the budget, the dates, the deliverables and the
+    # approver, every one of them OUR side of the table — until the four fields a COMPOSER
+    # is handed joined it (see `campaign_intake.REQUIRED`). The score fell on every deal at
+    # once and nothing got worse: those deals were always missing the creative half, and
+    # the number was flattering them.
+    assert summary["understanding_pct"] == 25
+    assert summary["added"] == 2 and len(summary["questions"]) == 6
     # the facts landed on CI, sourced to the capture, awaiting review (machine proposes)
     fields = {(r["facet"], r["key"], r["kind"]): r
               for r in dbm.list_ci_fields(conn, summary["ci_id"])}
@@ -140,7 +145,7 @@ def test_answering_a_gap_becomes_a_confirmed_fact_and_raises_understanding(tmp_p
     dbm, conn, camp = _campaign(tmp_path)
     summary = intake.ingest(conn, camp, intake.OBJECTIVE, "Budget is $20k. By December.")
     ci_id = summary["ci_id"]
-    assert intake.understanding_pct(conn, ci_id) == 50
+    assert intake.understanding_pct(conn, ci_id) == 25          # 2 of 8
     # answer the deliverables gap → a confirmed fact, question closed, score rises
     q = [r for r in dbm.list_ci_fields(conn, ci_id) if r["key"] == "ask_deliverables"][0]
     intake.answer_gap(conn, q, ":60 anthem + :30 cutdown + stems")
@@ -148,7 +153,7 @@ def test_answering_a_gap_becomes_a_confirmed_fact_and_raises_understanding(tmp_p
     ans = fields[("engagement", "deliverables", "fact")]
     assert ans["status"] == "confirmed" and "operator" in ans["sources"]
     assert fields[("engagement", "ask_deliverables", "open_question")]["status"] == "answered"
-    assert intake.understanding_pct(conn, ci_id) == 75
+    assert intake.understanding_pct(conn, ci_id) == 38          # 3 of 8
 
 
 def test_debrief_contributions_are_interpretation_never_fact(tmp_path):
@@ -189,15 +194,26 @@ def test_capture_route_populates_intelligence_and_answers_a_gap(tmp_path, monkey
         r = c.post(f"/campaign/{cid}/capture", follow_redirects=False,
                    data={"stance": "objective",
                          "text": "Budget is $18,000 to $24,000. Need it by November."})
-        assert "understood=50" in r.headers["location"] and "asked=2" in r.headers["location"]
+        assert "understood=25" in r.headers["location"] and "asked=6" in r.headers["location"]
         # the summary banner renders on the redirect target (with the query params)
-        home = c.get(f"/campaign/{cid}?understood=50&added=2&asked=2").text
-        assert "Understood <b>50%</b>" in home
+        home = c.get(f"/campaign/{cid}?understood=25&added=2&asked=6").text
+        assert "Understood <b>25%</b>" in home
         assert "What deliverables are needed" in home        # a gap question surfaced
-        # answer it inline → becomes a fact
-        import re
-        fid = re.search(r'/intelligence/answer".*?name="field_id" value="(\d+)"',
-                        home, re.S).group(1)
+        # answer it inline → becomes a fact.
+        #
+        # BY KEY, not by position. This used to take the FIRST field_id on the page and
+        # assume it was the deliverables gap, which held while there were two gaps and
+        # broke the day there were six: it answered whichever question happened to render
+        # first and then looked for a deliverables fact that was never written. The page
+        # carrying the question is asserted above; which id belongs to it is not a fact
+        # about the markup.
+        conn = app_mod.db.connect()
+        try:
+            gap_row = app_mod.db.ci_for_campaign(conn, cid)
+            fid = [r["id"] for r in app_mod.db.list_ci_fields(conn, gap_row["id"])
+                   if r["key"] == "ask_deliverables"][0]
+        finally:
+            conn.close()
         c.post(f"/campaign/{cid}/intelligence/answer",
                data={"field_id": fid, "answer": ":60 anthem + stems"})
         conn = app_mod.db.connect()
