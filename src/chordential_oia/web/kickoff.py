@@ -23,7 +23,12 @@ def _operator_producer() -> dict:
              or os.environ.get("CHORDENTIAL_SMTP_FROM", "")).strip()
     name = (os.environ.get("CHORDENTIAL_OPERATOR_NAME", "").strip()
             or "Your producer at Chordential")
-    return {"role": "Producer", "name": name, "email": email, "assigned": True}
+    # `house` — this one is OURS, and the only team member a buyer may be named.
+    # Every other card is the roster (`room.CAPS` denies a client `see_who`), so the
+    # subtraction needs to tell "the producer they email" apart from "the freelancer
+    # whose name walks out of the door".
+    return {"role": "Producer", "name": name, "email": email, "assigned": True,
+            "house": True}
 
 
 def _deposit_state(invoices, owed: int = 0) -> str:
@@ -38,28 +43,35 @@ def _deposit_state(invoices, owed: int = 0) -> str:
     return "awaiting" if owed else "none"
 
 
-def _procurement_line(conn, db, opp) -> dict:
+def _procurement_line(conn, db, opp, discover: bool = True) -> dict:
     """The procurement checklist line — REAL state from Procurement Intelligence (ADR-0022),
     not a placeholder. Discovers requirements on read, then reports honestly: nothing surfaced
     → 'Nothing required'; some done → progress; all done → done; a portal → the onboarding
     prompt. The checklist adapts to what THIS client actually asked for."""
     try:
-        procurement.discover_from_ci(conn, opp["id"])
+        # `discover` WRITES (it materialises requirements from CI). The room reports this
+        # line on every render, for every role, and a reporter must not discover — so the
+        # room reads what is on file and the operator's Kickoff page is what finds it.
+        if discover:
+            procurement.discover_from_ci(conn, opp["id"])
         r = procurement.readiness(conn, opp["id"])
     except Exception:  # noqa: BLE001 — the checklist must render even if procurement hiccups
-        return {"label": "Procurement complete", "state": "na", "na_note": "Nothing required"}
+        return {"label": "Procurement complete", "state": "na",
+                "na_note": "Nothing required", "lens": "commercial"}
     if r["total"] == 0:
-        return {"label": "Procurement complete", "state": "na", "na_note": "Nothing required"}
+        return {"label": "Procurement complete", "state": "na",
+                "na_note": "Nothing required", "lens": "commercial"}
     if r["all_done"]:
-        return {"label": "Procurement complete", "state": "done"}
+        return {"label": "Procurement complete", "state": "done", "lens": "commercial"}
     note = f"{r['complete']}/{r['total']} ready"
     if r["has_portal"]:
         note += " · portal onboarding"
-    return {"label": "Procurement", "state": "pending", "na_note": note}
+    return {"label": "Procurement", "state": "pending", "na_note": note,
+            "lens": "commercial"}
 
 
 def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] = None,
-                    portal_url: str = "") -> dict:
+                    portal_url: str = "", discover: bool = True) -> dict:
     """Assemble the Production Readiness view. Pure reads; no new state written here.
 
     ``portal_url`` is the client's own token-gated delivery portal, passed in rather than
@@ -110,10 +122,15 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
     checklist = [
         {"label": "Creative direction approved", "state": "done"},
         {"label": "Commercial terms approved", "state": "done"},
+        # `lens: commercial` — the buyer's money and the buyer's onboarding. The studio
+        # and the buyer see these; a creator never does. Tagged on the ROW rather than
+        # matched by label in the subtraction, because a label is copy and copy gets
+        # rewritten, and the day it does the row would silently start reaching creators.
         {"label": "Deposit received",
          "state": {"received": "done", "awaiting": "pending", "none": "na"}[deposit],
-         "na_note": "No deposit required" if deposit == "none" else ""},
-        _procurement_line(conn, db, opp),
+         "na_note": "No deposit required" if deposit == "none" else "",
+         "lens": "commercial"},
+        _procurement_line(conn, db, opp, discover=discover),
         {"label": "Your picture received",
          "state": "done" if has_picture else "pending"},
         {"label": "Team assigned", "state": "done" if team_assigned else "pending"},
@@ -193,7 +210,28 @@ def rights_line(music_requirement: str) -> str:
             else "As licensed for this campaign")
 
 
-def client_gate(conn, db, project_id: int, portal_url: str = "") -> Optional[dict]:
+def readiness_for_project(conn, db, project_id: int, portal_url: str = "",
+                          discover: bool = True) -> Optional[dict]:
+    """`build_readiness` for a project, resolved from the project id alone.
+
+    The resolution — project → opportunity → current review — was written inside
+    `client_gate` and is now needed by the room's checklist too. One copy, because two
+    readiness views built from different rows is exactly the disagreement ADR-0029 keeps
+    being written about.
+    """
+    project = db.get_project(conn, project_id)
+    if project is None or not project["opp_id"]:
+        return None
+    opp = db.get_opportunity(conn, project["opp_id"])
+    if opp is None:
+        return None
+    return build_readiness(conn, db, opp, project,
+                           db.current_commercial_review(conn, opp["id"]),
+                           portal_url=portal_url, discover=discover)
+
+
+def client_gate(conn, db, project_id: int, portal_url: str = "",
+                ready: Optional[dict] = None) -> Optional[dict]:
     """What the CLIENT still has to do before production really starts — or ``None``.
 
     THE KICKOFF GATE, MOVED INTO THE ROOM. It lived on the client workspace, which is no
@@ -203,6 +241,8 @@ def client_gate(conn, db, project_id: int, portal_url: str = "") -> Optional[dic
 
     Both asks come from `build_readiness` rather than being re-derived, so the room and the
     operator's readiness view cannot reach different conclusions about what a client owes.
+    ``ready`` lets a caller that has already built it — the room, which renders the whole
+    checklist — hand it over instead of paying for a second one that must agree.
     THE PICTURE IS NOT GATED ON THE DEPOSIT and must not become so here: sending the cut
     early costs the client nothing and is the most useful thing they can do while a composer
     is being assigned. Both stand at once or neither does.
@@ -210,15 +250,10 @@ def client_gate(conn, db, project_id: int, portal_url: str = "") -> Optional[dic
     proposal = db.proposal_for_project(conn, project_id)
     if proposal is None:
         return None
-    project = db.get_project(conn, project_id)
-    if project is None or not project["opp_id"]:
+    if ready is None:
+        ready = readiness_for_project(conn, db, project_id, portal_url=portal_url)
+    if ready is None:
         return None
-    opp = db.get_opportunity(conn, project["opp_id"])
-    if opp is None:
-        return None
-    ready = build_readiness(conn, db, opp, project,
-                            db.current_commercial_review(conn, opp["id"]),
-                            portal_url=portal_url)
     actions = list(ready.get("client_actions") or [])
     if not actions:
         return None

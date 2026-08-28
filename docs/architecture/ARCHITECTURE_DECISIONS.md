@@ -1664,6 +1664,47 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0094 — The readiness checklist is a layer of the room, cut to the role
+**Status:** Accepted (2026-08-28, operator directive) · Extends ADR-0068 / ADR-0093 ·
+Source: `room.readiness_view`, `kickoff.readiness_for_project`, the `checklist` sheet in
+`creator_portal.html`, `tests/test_the_checklist_is_a_layer_of_the_room.py`
+
+**Decision.** The Production Readiness page becomes the room's **`C` layer**, beside `B`
+brief, `N` notes and `V` takes. `kickoff.readiness_for_project` is the ONE derivation;
+`room.readiness_view` **subtracts** it per role, exactly as `room_view` subtracts
+everything else.
+
+**Why.** *"Can we incorporate this into 'the room' within the 'C' key for checklist?"*
+(operator). Every line on that page — what was agreed, what is outstanding, who is on it,
+how we work, what lands next — describes the engagement the room already **is**. A second
+address for it is a second thing to keep in step, which is the disagreement ADR-0029 keeps
+being written about. It also finishes ADR-0093: the client's last reason to be anywhere
+else was this page.
+
+**What the move had to subtract**, and this is the whole substance of it. The page was
+built for one reader; the room has three.
+
+- **The roster.** "Meet your team" printed `talent_name` and `talent_email`. `CAPS` denies
+  a buyer `see_who` on the stated ground that *the roster is the business, and it walks
+  out of the door with the name* — so shipping the page in unchanged would have handed
+  over the thing the capability model exists to protect. The buyer still sees that a
+  composer, mixer and editor exist and whether each is assigned; never who. Their producer
+  survives by name, marked `house`, because that one is ours and is who they write to.
+- **The commercial rows.** The deposit, procurement and the budget line are the buyer's
+  money and the buyer's onboarding. Studio and buyer see them; a creator never does —
+  least of all the budget, which is what the client said they would spend on the person
+  reading it.
+
+**Consequences.** The commercial rows are selected by a **`lens` tag on the row**, not by
+matching its label: a label is copy, copy gets rewritten, and the day it did the row would
+have started reaching creators silently. The room passes `discover=False` — procurement
+discovery WRITES, and a reporter must not discover, so the room reads what is on file and
+the operator's Kickoff page is what finds it. And `/creator/{token}` — which calls
+`_room_fields` directly, going **around** `room_view` — applies the same subtraction
+explicitly: that route is how the roster and the budget would have reached a composer, not
+through the room but past it, and it is the second place any new room field has to be
+considered.
+
 ### ADR-0093 — After the countersignature the client lives in the room
 **Status:** Accepted (2026-08-27, operator directive) · Extends ADR-0018 / ADR-0068 /
 ADR-0076 · Source: `workspace_routes.client_workspace`, `room.client_url`,

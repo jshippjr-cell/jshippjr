@@ -231,6 +231,12 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
   is the authority and an unknown role gets nothing. A gate-exempt route must make its
   own stricter check: `_session_role` reads "no token" as *operator*.
+- **The room's layers are `B` brief, `N` notes, `V` takes, `C` checklist** (ADR-0094):
+  the readiness view is ONE derivation (`kickoff.readiness_for_project`) subtracted by
+  `room.readiness_view` — no roster for the buyer, no commercial rows or budget for a
+  creator. Commercial rows are picked by a `lens` tag on the row, never by matching the
+  label. `/creator/{token}` bypasses `room_view`, so **every new room field has to be
+  subtracted there too**.
 - **After the countersignature the client lives in the room** (ADR-0093): once a project
   exists, `/workspace/{token}` **303s to `/room/{pid}?k=…`** and the kickoff gate (deposit
   + "send us your cut") renders there via `kickoff.client_gate`. Mint every post-award

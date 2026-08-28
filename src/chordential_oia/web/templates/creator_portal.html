@@ -411,6 +411,24 @@
   .sheet-head h2{font-family:var(--serif);font-weight:500;font-size:21px}
   .sheet-head .esc{margin-left:auto;font:600 10px var(--mono);color:var(--dim2);border:1px solid var(--hair);
     border-radius:5px;padding:4px 8px;cursor:pointer}
+  /* ── the checklist layer (C) ── the readiness page, folded into the room ── */
+  .ck-clear{font-family:var(--serif);font-size:15px;line-height:1.55;color:var(--dim);
+    border:1px solid var(--hair);border-left:3px solid var(--olive,#5c7a52);border-radius:10px;
+    padding:12px 14px;margin:0 0 18px}
+  .ck-table{margin-bottom:6px}
+  .ck-list{list-style:none;margin:0 0 6px;padding:0}
+  .ck-row{display:flex;gap:10px;align-items:baseline;padding:6px 0;font-size:13px}
+  .ck-mark{width:14px;flex:0 0 auto;text-align:center;color:var(--dim2)}
+  .ck-row.st-done .ck-mark{color:var(--olive,#5c7a52);font-weight:700}
+  .ck-row.st-na{opacity:.55}
+  .ck-row.st-pending .ck-label{color:var(--dim)}
+  .ck-note{font:10.5px var(--mono);color:var(--dim2)}
+  .ck-team{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+  .ck-card{border:1px solid var(--hair);border-radius:10px;padding:10px 13px;min-width:150px;
+    display:flex;flex-direction:column;gap:3px}
+  .ck-card.unassigned{opacity:.6}
+  .ck-role{font:700 9.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2)}
+  .ck-mail{font-size:11px;color:var(--dim2)}
   .sheet h3{font:700 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--dim2);margin:20px 0 8px}
 
   /* brief sheet */
@@ -949,13 +967,17 @@
        composer wonder whether a hit is late or their monitoring is. #}
     <span class="sync-read sr-sync" title="Music against picture, measured every frame. Under ±40ms is a lock.">sync ±0ms</span>
     {% endif %}
-    <span class="t-keys">space · ↵ from the top · ←/→ · B brief · N notes · V takes</span>
+    <span class="t-keys">space · ↵ from the top · ←/→ · B brief · N notes · V takes{% if a.readiness %} · C checklist{% endif %}</span>
     <span class="spacer"></span>
     <div class="layer-keys">
       <button class="lk sr-open" data-sheet="brief"><b>B</b>Brief</button>
       <button class="lk sr-open" data-sheet="notes"><b>N</b>Notes
         {% if open_ct %}<span class="n-open">· {{ open_ct }}</span>{% endif %}</button>
       <button class="lk sr-open" data-sheet="takes"><b>V</b>Takes</button>
+      {# Only when there IS a readiness to read. A project with no opportunity behind it
+         has nothing to report, and a key that opens an empty sheet teaches people the
+         keys are unreliable. #}
+      {% if a.readiness %}<button class="lk sr-open" data-sheet="checklist"><b>C</b>Checklist</button>{% endif %}
     </div>
     {# Only a hand that may upload. The client is in the same room and must not be
        offered the composer's controls (ADR-0068 — the caps are the authority). #}
@@ -1792,6 +1814,102 @@
     </form>
     {% endif %}
   </div>
+
+  {# ── LAYER: the CHECKLIST (`C`) ────────────────────────────────────────────────
+        "Can we incorporate this into 'the room' within the 'C' key for checklist?"
+        (operator, 2026-08-28) — of the Production Readiness page.
+
+        It was a page of its own, and everything on it describes the engagement the room
+        already IS: what was agreed, what is still outstanding, who is on it, how we work
+        and what lands next. A second address for that is a second thing to keep in step.
+
+        `a.readiness` arrives ALREADY CUT for whoever is looking (`room.readiness_view`):
+        no commercial rows and no budget for a creator, no roster for the buyer. There is
+        deliberately no `{% raw %}{% if role %}{% endraw %}` anywhere below — a template that forgets one
+        should leak nothing, which only holds while the template does no choosing. ── #}
+  {% if a.readiness %}
+  {% set rd = a.readiness %}
+  <div class="sheet sr-sheet" data-sheet="checklist" role="dialog" aria-modal="true"
+       aria-label="Production checklist" tabindex="-1">
+    <div class="sheet-head"><h2>Where this stands</h2><button class="esc sr-close">ESC</button></div>
+
+    {% if rd.all_ready %}
+    <p class="ck-clear"><b>Everything is ready.</b> {{ 'Your production team has everything it
+      needs to begin. There is nothing you need to manage.' if voice == 'client'
+      else 'Nothing is outstanding on this engagement.' }}</p>
+    {% endif %}
+
+    <h3>Campaign summary</h3>
+    <div class="ck-table">
+      {% if rd.summary.campaign %}<div class="spec-row"><span class="k">CAMPAIGN</span><span>{{ rd.summary.campaign }}</span></div>{% endif %}
+      {% if rd.summary.producer %}<div class="spec-row"><span class="k">PRODUCER</span><span>{{ rd.summary.producer }}</span></div>{% endif %}
+      {% if rd.summary.delivery_date %}<div class="spec-row"><span class="k">DELIVERY</span><span>{{ rd.summary.delivery_date }}</span></div>{% endif %}
+      {% if rd.summary.scope %}<div class="spec-row"><span class="k">SCOPE</span><span>{{ rd.summary.scope }}</span></div>{% endif %}
+      {% if rd.summary.budget %}<div class="spec-row"><span class="k">BUDGET</span><span>{{ rd.summary.budget }}</span></div>{% endif %}
+      {% if rd.summary.rights %}<div class="spec-row"><span class="k">RIGHTS</span><span>{{ rd.summary.rights }}</span></div>{% endif %}
+    </div>
+
+    {% if rd.checklist %}
+    <h3>Production checklist</h3>
+    <ul class="ck-list">
+      {% for row in rd.checklist %}
+      <li class="ck-row st-{{ row.state }}">
+        <span class="ck-mark">{{ '✓' if row.state == 'done' else '·' }}</span>
+        <span class="ck-label">{{ row.label }}</span>
+        {% if row.na_note %}<span class="ck-note">{{ row.na_note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if rd.client_actions %}
+    <h3>{{ 'Still needed from you' if voice == 'client' else 'Still needed from the client' }}</h3>
+    <ul class="ck-list">
+      {% for act in rd.client_actions %}
+      <li class="ck-row st-pending"><span class="ck-mark">·</span>
+        <span class="ck-label">{{ act.label }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if rd.team %}
+    <h3>{{ 'Your team' if voice == 'client' else 'The team' }}</h3>
+    <div class="ck-team">
+      {% for m in rd.team %}
+      <div class="ck-card{{ ' unassigned' if not m.assigned }}">
+        <span class="ck-role">{{ m.role }}</span>
+        <b>{{ m.name }}</b>
+        {% if m.email %}<span class="ck-mail">{{ m.email }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if rd.communication %}
+    <h3>How we work together</h3>
+    <div class="ck-table">
+      <div class="spec-row"><span class="k">CONTACT</span><span>{{ rd.communication.primary_contact }}</span></div>
+      <div class="spec-row"><span class="k">CADENCE</span><span>{{ rd.communication.review_cadence }}</span></div>
+      <div class="spec-row"><span class="k">TURNAROUND</span><span>{{ rd.communication.turnaround }}</span></div>
+      <div class="spec-row"><span class="k">REVISIONS</span><span>{{ rd.communication.revision_policy }}</span></div>
+    </div>
+    {% endif %}
+
+    {% if rd.upcoming %}
+    <h3>Upcoming milestones</h3>
+    <div class="ck-table">
+      {% for m in rd.upcoming %}
+      <div class="spec-row"><span class="k">{{ m.stage|upper }}</span><span>{{ m.when }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="fineprint">This is a reading of the engagement, not a second copy of it —
+      every line is computed from what has actually happened. Nothing here decides
+      anything; a human presses every button.</p>
+  </div>
+  {% endif %}
+
 
   <script type="application/json" class="sr-notes-data">
     [{% if a.feedback and (a.feedback.notes or a.feedback.archive) %}{% for n in (a.feedback.notes + (a.feedback.archive|default([]))) %}
@@ -3180,6 +3298,7 @@
     else if (e.key === "b" || e.key === "B") r.toggleSheet("brief");
     else if (e.key === "n" || e.key === "N") r.toggleSheet("notes");
     else if (e.key === "v" || e.key === "V") r.toggleSheet("takes");
+    else if (e.key === "c" || e.key === "C") r.toggleSheet("checklist");
   });
 
   /* Clicking AWAY from an open sheet closes it. The veil already did this while the
@@ -3603,6 +3722,7 @@
       out.push({ k:"Layer", lbl:"Open the Brief", run:function(){ api.openSheet("brief"); } });
       out.push({ k:"Layer", lbl:"Open Notes", run:function(){ api.openSheet("notes"); } });
       out.push({ k:"Layer", lbl:"Open Takes", run:function(){ api.openSheet("takes"); } });
+      out.push({ k:"Layer", lbl:"Open the Checklist", run:function(){ api.openSheet("checklist"); } });
       out.push({ k:"Play", lbl:"Play / pause", run:function(){ api.toggle(); } });
       out.push({ k:"Take", lbl:"Download the cut for your DAW", run:function(){ api.download(); } });
       out.push({ k:"View", lbl:"Mini mode · reference strip", run:function(){ if (window.__toggleMini) window.__toggleMini(); } });

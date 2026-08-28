@@ -435,6 +435,12 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
         # for.
         "directions": production.directions(delivery),
         "rights_line": kickoff.rights_line(_music_requirement(conn, prow)),
+        # ── THE CHECKLIST LAYER (`C`) ──────────────────────────────────────────────
+        # Built WHOLE here and cut to the role by `room.readiness_view`, which is where
+        # every other subtraction in this room happens. `discover=False` because this
+        # runs on every render for every role and procurement discovery WRITES: the
+        # room is a reporter, and the operator's Kickoff page is what discovers.
+        "readiness": kickoff.readiness_for_project(conn, db, project_id, discover=False),
     }
 
 
@@ -465,6 +471,11 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         # The composer's own portal is a TALENT view, so it obeys the same rule the room
         # does: a note is not work until a human has priced it (ADR-0069).
         entry["feedback"] = room.priced_notes_only(entry["feedback"])
+        # …and the same subtraction the room applies, for the same reason: this portal
+        # does not go through `room_view`, so a field added there would arrive here
+        # UNCUT. That is how the roster and the client's budget would have reached a
+        # composer — not through the room, but around it.
+        entry["readiness"] = room.readiness_view(entry.get("readiness"), room.TALENT)
         seen[a["project_id"]] = entry
         out.append(entry)
     # Needs-me-first (composer review P1): rooms owing the composer work come

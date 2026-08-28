@@ -74,9 +74,18 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         client_gate = None
         if role == room.CLIENT and room.can(role, "see_invoice"):
             _ptok = db.ensure_project_share_token(conn, project_id)
-            client_gate = kickoff.client_gate(
-                conn, db, project_id,
-                portal_url=f"/project/{project_id}/delivery-portal?k={_ptok}")
+            _portal = f"/project/{project_id}/delivery-portal?k={_ptok}"
+            # The gate and the `C` checklist are two readings of ONE readiness. Built
+            # once here — with `discover` on, because a client's own view of what they
+            # still owe must not report "Nothing required" merely because nobody has
+            # opened the operator's Kickoff page yet — and the ROOM's copy (built
+            # `discover=False` by `_room_fields`) is replaced with it, so the two cannot
+            # disagree about a client's outstanding actions on the same screen.
+            ready = kickoff.readiness_for_project(conn, db, project_id, portal_url=_portal)
+            if ready is not None:
+                view["readiness"] = room.readiness_view(ready, role)
+            client_gate = kickoff.client_gate(conn, db, project_id,
+                                              portal_url=_portal, ready=ready)
         # The hats, for a creator who is in the room as one.
         if role == room.TALENT:
             trow = db.get_talent_by_portal_token(conn, t)

@@ -235,6 +235,53 @@ def route_media(value, project_id: int, token: str, kind: str = "k"):
     return value
 
 
+def readiness_view(ready: Optional[dict], role: str) -> Optional[dict]:
+    """The Production Readiness checklist, shaped for whoever is in the room.
+
+    THE CHECKLIST CAME INTO THE ROOM behind the `C` key (operator, 2026-08-28). It was a
+    page of its own — campaign summary, production checklist, "Meet your team", how we
+    work, milestones — and everything on it is *about* the engagement the room already
+    is, so it belongs on a layer of the room rather than at a second address.
+
+    Subtracted here, not in the template, on the same terms as everything else in this
+    module. Two things are taken away:
+
+    **The commercial rows.** The deposit and the procurement checklist are the buyer's
+    money and the buyer's onboarding. The studio sees them because it runs them; the
+    buyer sees them because they are theirs. A creator has no business with either, and
+    the budget line — what the client said they would spend — is the last thing that
+    should reach the person being paid out of it. Selected by the row's own ``lens`` tag
+    rather than by matching its label, because a label is copy.
+
+    **The roster.** "Meet your team" printed `talent_name` and `talent_email`, which is
+    precisely what `CAPS` denies a buyer: *the roster is the business, and it walks out
+    of the door with the name*. A client still sees that a composer, a mixer and an
+    editor exist and whether each is assigned — which is the reassurance the section was
+    for — but never who they are. The producer survives with their name because they are
+    ours and they are who the client writes to; that is what ``house`` marks.
+    """
+    if not ready:
+        return None
+    allowed = caps_for(role)
+    if not allowed:                       # unknown role → nothing, like everywhere else
+        return None
+    commercial = ("see_money" in allowed) or ("see_invoice" in allowed)
+    out = dict(ready)
+    if not commercial:
+        out["checklist"] = [r for r in (ready.get("checklist") or [])
+                            if r.get("lens") != "commercial"]
+        summary = dict(ready.get("summary") or {})
+        summary.pop("budget", None)
+        out["summary"] = summary
+    if "see_who" not in allowed:
+        out["team"] = [
+            m if m.get("house") else
+            dict(m, name=("Assigned" if m.get("assigned") else "Being assigned"), email="")
+            for m in (ready.get("team") or [])
+        ]
+    return out
+
+
 def room_view(conn, db, project_id: int, role: str, *,
               talent_id: Optional[int] = None, build,
               media_token: str = "", media_kind: str = "k") -> Optional[dict]:
@@ -317,6 +364,8 @@ def room_view(conn, db, project_id: int, role: str, *,
         # before one does, because the next person adding a "delivered by" line to the
         # Takes sheet will find the name already sitting in the dict.
         room["versions"] = [dict(v, from_creator="") for v in (room.get("versions") or [])]
+    # The checklist layer (`C`). Built whole by `_room_fields`, cut to the role here.
+    room["readiness"] = readiness_view(room.get("readiness"), role)
     if media_token:
         # Last, and deliberately: subtract first, then route what survived. Routing
         # before the subtraction would mint a working client URL for a take the client
