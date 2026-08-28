@@ -74,12 +74,16 @@
         <button class="btn tiny ghost" type="submit"
                 title="Hide for 7 days. It comes back if it still needs doing.">Snooze</button>
       </form>
-      <form method="post" action="/queue/dismiss" style="display:inline"
-            onsubmit="return confirm('Dismiss “{{ c.title|e }}”?\n\nIt leaves this list for good. Nothing it points at is changed or cancelled — you can bring dismissed cards back from the top of the queue.');">
+      {# NO `confirm()`. A modal is the guard you reach for when an action cannot be
+         undone — and this one can: the dismissed line above counts every card and brings
+         them back, and nothing the card points at is touched either way. Asking "are you
+         sure?" on a reversible, harmless press just makes clearing a 28-card queue cost
+         56 clicks (operator, 2026-08-28). ── #}
+      <form method="post" action="/queue/dismiss" style="display:inline">
         <input type="hidden" name="key" value="{{ c.key }}">
         <input type="hidden" name="next" value="/queue">
         <button class="btn tiny ghost" type="submit"
-                title="Off this list for good. Nothing it points at is changed.">Dismiss</button>
+                title="Off this list for good. Nothing it points at is changed, and you can bring it back from the top of the queue.">Dismiss</button>
       </form>
       {% endif %}
     </div>

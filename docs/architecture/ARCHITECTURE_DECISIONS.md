@@ -3764,6 +3764,22 @@ database before the real cutover. Two things this ADR does **not** do: it does n
 perform the cutover (no Render credentials here), and it does not remove the disk — the
 uploads migration (ADR-0043) is still an unrun ops step and remains the gating item.
 
+**Amended 2026-08-28 (ADR-0045a) — SQLite-only syntax is banned at the source.** A fourth
+defect of the same family surfaced in production, months after the cutover: `INSERT OR
+REPLACE` in `dismiss_queue_card` and `INSERT OR IGNORE` in `ensure_project_payouts`. Both
+are SQLite-only, so `/queue/dismiss` answered **500 on every press** and creating a
+project's payouts raised — while the entire suite stayed green, because the suite runs on
+SQLite. The translator was not extended to cover them and must not be: a faithful
+rewrite depends on **which unique key you meant to conflict on**, which a regex cannot
+know, so a shim rule here would guess. Instead the syntax is **banned at the source** by a
+static tripwire (`tests/test_taking_a_card_off_the_queue.py`, scanning string literals via
+the AST so the prose explaining the rule cannot trip it), and the portable
+`ON CONFLICT(<key>) DO UPDATE SET … excluded.… / DO NOTHING` — already used by eleven
+other statements in `db.py` — is the only sanctioned upsert. The live half is
+`test_the_upserts_run_on_real_postgres`. The lesson generalises past this family: **a
+green suite on SQLite is not evidence about production**, so anything the translator does
+not explicitly handle needs either a live test or a tripwire, and preferably both.
+
 
 
 

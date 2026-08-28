@@ -15,6 +15,14 @@ being decommissioned:
    and has no `id`, so it raised `UndefinedColumn` — *after* several tables had already
    been written, on production data.
 
+A fourth arrived on 2026-08-28, the same way and long after the cutover:
+
+4. **`INSERT OR REPLACE` / `INSERT OR IGNORE` are SQLite-only.** Not in the shim's list
+   and not addable to it — the faithful translation depends on which unique key you meant
+   to conflict on. So `/queue/dismiss` answered 500 on every press, and creating a
+   project's payouts raised, while the whole SQLite suite stayed green. Banned at the
+   source now (see `tests/test_taking_a_card_off_the_queue.py`) and exercised live below.
+
 ADR-0045. The translator tests below are pure functions and run everywhere. The live
 tests need a server and skip without one:
 
@@ -442,3 +450,53 @@ def test_the_mirror_reports_failure_instead_of_raising_on_real_postgres(monkeypa
         assert conn.execute("SELECT 1 AS n").fetchone()["n"] == 1
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Defect 4 (2026-08-28): SQLite-only INSERT syntax, found in production
+# --------------------------------------------------------------------------- #
+@live
+def test_the_upserts_run_on_real_postgres(monkeypatch):
+    """`INSERT OR REPLACE` / `INSERT OR IGNORE` are SQLite-only, and `_pg_translate`
+    does not rewrite them — a faithful translation has to know WHICH unique key you
+    meant to conflict on, which a regex cannot.
+
+    Both statements therefore raised on Postgres, which is production, while the whole
+    SQLite suite stayed green. The operator found the first one by pressing Dismiss and
+    getting an Internal Server Error; the second was in the money path — creating a
+    project's payouts — and had never been pressed on Postgres at all.
+
+    A static tripwire bans the syntax at the source
+    (`tests/test_taking_a_card_off_the_queue.py`). This is the other half: the portable
+    replacements actually behaving, on a real server, including the second press that is
+    the whole reason the conflict clause is there.
+    """
+    import importlib
+    dsn = _fresh_db()
+    monkeypatch.setenv("CHORDENTIAL_DB", dsn)
+    from chordential_oia.web import db as db_mod
+    importlib.reload(db_mod)
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+
+    # 1. the press that answered 500
+    db_mod.dismiss_queue_card(conn, "opp:review:42")
+    db_mod.dismiss_queue_card(conn, "opp:review:42")     # the upsert, not a PK violation
+    assert db_mod.dismissed_queue_keys(conn) == {"opp:review:42"}
+    db_mod.restore_queue_card(conn, "opp:review:42")
+    assert db_mod.dismissed_queue_keys(conn) == set()
+
+    # 2. the same trap, in the money path
+    tid = conn.execute("INSERT INTO talent (name, email, created_at) VALUES (?,?,?)",
+                       ("Maya Okafor", "maya@example.com", "2026-08-28")).lastrowid
+    pid = conn.execute(
+        "INSERT INTO projects (need, client, status, created_at) VALUES (?,?,?,?)",
+        ("Score", "Pike and Rowan", "Active", "2026-08-28")).lastrowid
+    conn.execute(
+        "INSERT INTO assignments (project_id, talent_id, role, created_at) VALUES (?,?,?,?)",
+        (pid, tid, "Composer", "2026-08-28"))
+    conn.commit()
+    assert db_mod.ensure_project_payouts(conn, pid) == 1
+    assert db_mod.ensure_project_payouts(conn, pid) == 0, (
+        "the conflict clause did not suppress the duplicate the UNIQUE key forbids")
+    conn.close()

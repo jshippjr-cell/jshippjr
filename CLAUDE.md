@@ -37,7 +37,11 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   a `postgresql://` `CHORDENTIAL_DB` switches it, connections are **pooled** (ADR-0048),
   and `tests/test_postgres_dialect.py` / `test_db_pool.py` verify the Postgres path against
   a real server when `CHORDENTIAL_TEST_PG` is set (they SKIP without it, and skipping is
-  not passing). `seed.py` seeds demo data; `public.py` is the public front-of-house site.
+  not passing). **Never write SQLite-only SQL here** (ADR-0045a): `INSERT OR REPLACE` /
+  `INSERT OR IGNORE` are not translated and 500 in prod while the suite stays green — use
+  `ON CONFLICT(<unique key>) DO UPDATE SET … excluded.… / DO NOTHING`, which both engines
+  take. A static tripwire in `tests/test_taking_a_card_off_the_queue.py` fails the build on
+  the syntax. `seed.py` seeds demo data; `public.py` is the public front-of-house site.
 - **`app.py` has been taken apart** (ADR-0044) — it was 9,133 lines and 251 routes; it is
   now **655 lines and 15 routes**, and holds only the application object (lifespan,
   middleware, the admin gate, PWA + Web Push, `/uploads`). Below it sit

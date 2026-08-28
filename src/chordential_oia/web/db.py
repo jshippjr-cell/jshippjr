@@ -4567,10 +4567,14 @@ def ensure_project_payouts(conn: sqlite3.Connection, project_id: int) -> int:
         is_writer = (a["talent_id"], (a["role"] or "").strip().lower()) in writer_keys
         if rate is None and is_writer and policy_each > 0:
             amount, unit = policy_each, "project"
+        # `ON CONFLICT … DO NOTHING` against the table's own UNIQUE key, not
+        # `INSERT OR IGNORE` — same SQLite-only trap as `dismiss_queue_card`, and this
+        # one is the money path: on Postgres, creating a project's payouts raised.
         cur = conn.execute(
-            """INSERT OR IGNORE INTO talent_payouts
+            """INSERT INTO talent_payouts
                (project_id, talent_id, role, rate, rate_unit, qty, amount, status, created_at)
-               VALUES (?,?,?,?,?,?,?,'Owed',?)""",
+               VALUES (?,?,?,?,?,?,?,'Owed',?)
+               ON CONFLICT(project_id, talent_id, role) DO NOTHING""",
             (project_id, a["talent_id"], a["role"],
              float(rate) if rate is not None else None, unit, 1.0, amount,
              datetime.now(timezone.utc).isoformat()),
@@ -5617,8 +5621,13 @@ def dismiss_queue_card(conn, key: str, actor: str = "operator") -> None:
     if not key:
         return
     from datetime import datetime, timezone
+    # `ON CONFLICT`, NOT `INSERT OR REPLACE`. The latter is SQLite-only syntax and
+    # Postgres rejects it outright — which is production, so every Dismiss press
+    # answered 500 while the whole suite stayed green on SQLite (operator, 2026-08-28).
     conn.execute(
-        "INSERT OR REPLACE INTO queue_dismissed (key, dismissed_at, actor) VALUES (?,?,?)",
+        "INSERT INTO queue_dismissed (key, dismissed_at, actor) VALUES (?,?,?) "
+        "ON CONFLICT(key) DO UPDATE SET dismissed_at = excluded.dismissed_at, "
+        "actor = excluded.actor",
         (key, datetime.now(timezone.utc).isoformat(), actor))
     conn.commit()
 
