@@ -189,11 +189,9 @@
     border:1px solid var(--hair);border-radius:999px;padding:4px 9px;white-space:nowrap;
     font-variant-numeric:tabular-nums}
   .sync-read.off{color:var(--orange);border-color:rgba(240,119,44,.5)}
-  /* What this playback is good for, said before anyone signs anything off. */
-  .monitor-note{border:1px solid var(--hair);border-left:2px solid rgba(139,160,174,.5);
-    border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0 0;
-    font:13px/1.55 var(--sans);color:rgba(237,230,220,.62);background:rgba(139,160,174,.05)}
-  .monitor-note b{color:rgba(237,230,220,.9);font-weight:700}
+  /* What this playback is good for — AT the sign-off, not standing over the room. */
+  .monitor-note{margin:8px 0 0;font:12px/1.5 var(--sans);color:rgba(237,230,220,.55)}
+  .monitor-note b{color:rgba(237,230,220,.8);font-weight:700}
   /* The take is not scored to the picture on screen. */
   .conform-warn{border:1px solid rgba(240,119,44,.45);border-radius:10px;
     padding:10px 14px;margin:10px 0 0;font:13px/1.55 var(--sans);
@@ -991,21 +989,12 @@
       and check in here; upload your take from the studio at your desk.{% endif %}</p>
   </div>
 
-  {# ── What this playback is, and is NOT. ──────────────────────────────────────
-     The audio engineer's review would not sign off on a room that presents browser
-     playback as a monitoring environment: whatever device you are on sets the level,
-     laptop speakers and phones reproduce neither the low end nor the stereo image,
-     and the browser's own volume is somewhere in the chain. Someone can approve a mix
-     here believing they judged it. The room is honest about what it is good for —
-     timing, structure, intent, whether the music is right — and says out loud that the
-     mix itself has to be heard somewhere else. The honesty rule applies to our own
-     surfaces first. ── #}
-  <div class="monitor-note" role="note">
-    <b>What you're hearing</b> — this is a browser stream on whatever device you're on.
-    It's true for <b>timing, structure and intent</b>. It is not a mix room: level, low
-    end and stereo width can't be judged here. Sign off on the music from this room;
-    judge the mix on monitors or good headphones.
-  </div>
+  {# THE MONITORING NOTE USED TO STAND HERE — permanently, for every role, above the
+     work (ADR-0070a). It was a review-panel finding rather than a reported fault, and
+     the shape was wrong for the concern: a banner that is always on screen is furniture
+     by the fortieth visit, so it would have been invisible at the one moment it exists
+     for. It also told a mixer what a mixer does for a living. It now sits AT the two
+     sign-offs below, which is where someone actually asserts the mix is right. #}
 
   {# The cut a take was written against, when it isn't the cut on screen. Everything
      below still plays — the room never hides the work — but nobody should read a late
@@ -1146,6 +1135,13 @@
       <button type="submit" class="v-btn v-approve"
               onclick="return confirm('Approve {{ (a.version_state or 'this version')|e }} as the selected master?\n\nWe produce the remaining deliverables from it and you sign off each one. This does not spend a revision round.');">✓ Approve {{ a.version_state or 'this version' }}</button>
     </form>
+    {# HERE, and only here. This is the press that says the music is right, and it is the
+       one moment the room's own playback is worth a caveat. Said once, beside the
+       decision it qualifies — and gone once the master is locked, because a caveat about
+       a choice already made is just noise. #}
+    <p class="monitor-note"><b>Before you approve</b> — this is a browser stream, true for
+      timing, structure and intent. Level, low end and stereo width can't be judged here;
+      judge those on monitors or good headphones.</p>
     {% endif %}
     <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no">
       <input type="hidden" name="origin" value="room">
@@ -1189,6 +1185,10 @@
   <p class="fineprint so-count" style="margin:0 0 8px">{{ a.signoff_rollup.approved }} of
     {{ a.signoff_rollup.total }} approved. Your files unlock when every one is signed off
     and the balance is settled.</p>
+  {# The second sign-off, and the one where it matters more: these are the MIXES. #}
+  <p class="monitor-note" style="margin:0 0 10px"><b>Before you sign these off</b> — the room
+    plays a browser stream. It is true for timing, structure and intent; level, low end and
+    stereo width need monitors or good headphones.</p>
   {% for d in a.signoff %}
   <div class="deliv-row so-row">
     <span class="what"><b>{{ d.asset }}</b>{% if d.spec %} <span class="spec">· {{ d.spec }}</span>{% endif %}</span>

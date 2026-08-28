@@ -116,15 +116,55 @@ def test_the_room_says_how_far_out_it_is(markup):
 
 
 # ── 2. monitoring honesty ───────────────────────────────────────────────────────────
+#
+# AMENDED 2026-08-28 (ADR-0070a), on the operator's question — *"why is this
+# necessary?"* — of the standing banner. The FINDING stands; the shape was wrong.
+#
+# It sat above the work, permanently, for every role: the client, the studio, and the
+# mixer whose profession it was explaining. A banner that is always on screen is
+# furniture by the fortieth visit, which means it would have been invisible at the one
+# moment it exists for — and it was the first thing a buyer read in a room they had just
+# paid to enter. So it moved to the two presses that actually assert the mix is right.
+#
+# These tests now hold the harder line: the words must be there, AND they must be at the
+# decision, AND they must not be back above the room.
+def _notes(markup):
+    return re.findall(r'class="monitor-note"[^>]*>(.*?)</p>', markup, re.S)
+
+
 def test_the_room_states_what_its_playback_is_good_for(markup):
-    assert "monitor-note" in markup, "no monitoring-honesty note in the room"
-    note = markup[markup.index('class="monitor-note"'):]
-    note = re.sub(r"\s+", " ", note[:note.index("</div>")]).lower()
-    for claim in ("level", "low end", "stereo width"):
-        assert claim in note, f"the note does not say {claim!r} cannot be judged here"
-    assert "timing" in note, (
-        "the note only says what playback is bad for; it must also say what it IS "
-        "good for, or it reads as an apology for the room")
+    notes = _notes(markup)
+    assert notes, "no monitoring-honesty note anywhere in the room"
+    for raw in notes:
+        note = re.sub(r"\s+", " ", raw).lower()
+        for claim in ("level", "low end", "stereo width"):
+            assert claim in note, f"a note does not say {claim!r} cannot be judged here"
+        assert "timing" in note, (
+            "the note only says what playback is bad for; it must also say what it IS "
+            "good for, or it reads as an apology for the room")
+
+
+def test_the_note_is_at_the_sign_off_and_not_standing_over_the_room():
+    """Where it is, is the whole amendment.
+
+    Both presses that assert the music is right carry it — the master approval and the
+    deliverable sign-off, which are the mixes — and neither is reachable by a role that
+    cannot make that call, because both blocks are already gated on `client_verdict` and
+    `sign_off_asset`. Nothing carries it outside those blocks.
+    """
+    markup = ROOM.read_text()
+    approve = markup.index('action="/project/{{ a.project_id }}/review/approve"')
+    signoff = markup.index("Sign off your deliverables")
+    at = [m.start() for m in re.finditer(r'class="monitor-note"', markup)]
+    assert len(at) == 2, f"expected the note at both sign-offs, found {len(at)}"
+    # one inside the master verdict block, one at the deliverables heading
+    assert any(approve < i < approve + 2500 for i in at), (
+        "the master approval does not carry it")
+    assert any(signoff < i < signoff + 2500 for i in at), (
+        "the deliverable sign-off does not carry it")
+    # …and it is not back above the room, where it was furniture
+    assert '<div class="monitor-note"' not in markup, (
+        "the standing banner is back — a note nobody reads is not honesty")
 
 
 # ── 3. a take is bound to the cut it was written against ────────────────────────────

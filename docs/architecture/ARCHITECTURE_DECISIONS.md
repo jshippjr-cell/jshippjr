@@ -2750,6 +2750,29 @@ measurement wanted the frame rate.
 (4) **The room states what its playback is.** Timing, structure and intent: yes. Level,
 low end and stereo width: not judgeable in a browser on an unknown device.
 
+**Amended 2026-08-28 (ADR-0070a) — the note goes AT the sign-off, not over the room.**
+The operator asked of the standing banner: *"why is this necessary?"* The finding stands;
+the shape was wrong, in three ways worth writing down because they generalise.
+
+It was **always on screen, for every role** — the client, the studio, and the mixer whose
+profession it was explaining. It was **the first thing a buyer read** in a room they had
+just paid to enter: a paragraph about what our own playback cannot do, before they had
+done anything. And a permanent banner is **furniture by the fortieth visit**, so it would
+have been invisible at the single moment it exists for.
+
+It now sits at the two presses that actually assert the mix is right — the master approval
+and the deliverable sign-off (which are the mixes) — and nowhere else. Those blocks are
+already gated on `client_verdict` and `sign_off_asset`, so the note reaches exactly the
+hand making that call and no one else; it also disappears once the master is locked,
+because a caveat about a decision already taken is noise. `tests/…_panel_would_not_sign_off`
+now asserts the words, their PLACE, and that the standing banner has not come back.
+
+**The general rule.** A disclaimer that is always visible is not honesty — it is
+decoration that makes us feel covered. Honesty is the caveat arriving at the moment of
+the decision it qualifies, in front of the person taking it. A finding from a review is a
+statement about a RISK; where to put the remedy is still a design decision, and "banner at
+the top" is the answer that satisfies the reviewer rather than the reader.
+
 **Why.** The exec team's condition on putting this page in front of a real client was
 blunt: the room named the freelancers — presence roster, note authors, every event in the
 live feed — and the roster IS the business. A buyer who can read it can hire around us.
