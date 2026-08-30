@@ -1133,3 +1133,9 @@ details.ci-intake[open]>summary{opacity:.55}
    different aspect ratio, and constraining one axis alone lets the other run. */
 .sig-mark{display:block;max-width:260px;max-height:110px;width:auto;height:auto;
   margin:0 0 6px;background:#fff;object-fit:contain}
+
+/* The alert list is a list of DOORS (2026-08-30). Underlined on hover only, because a
+   dozen permanently-underlined rows reads as a link farm rather than a digest. */
+.alert-go{color:inherit;text-decoration:none}
+.alert-go:hover{color:var(--orange,#f0772c);text-decoration:underline}
+.alert-go strong{font-weight:700}

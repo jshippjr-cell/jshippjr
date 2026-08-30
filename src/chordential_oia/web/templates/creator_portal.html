@@ -286,6 +286,27 @@
   .v-ask-why{flex:1 1 100%;margin:0;font:12.5px/1.5 var(--sans);color:rgba(237,230,220,.66);
     max-width:60ch}
   .v-ask-why b{color:rgba(237,230,220,.92)}
+  .v-asked{margin:0;font:13px/1.6 var(--sans);color:var(--dim);max-width:60ch;
+    border-left:2px solid var(--orange);padding-left:12px}
+  .v-asked b{color:var(--text,#EDE6DC)}
+  .nc-edit{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .nc-edit input{flex:1;min-width:180px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:7px 10px;
+    color:var(--text,#EDE6DC);font:13px var(--sans);outline:none}
+  .nc-edit input:focus{border-color:var(--orange)}
+  /* Notes waiting on a decision — the studio's copy, in the room where it works. */
+  .unpriced-box{border:1px solid rgba(240,119,44,.4);border-radius:12px;padding:14px 16px;
+    margin:14px 0 0;background:rgba(240,119,44,.07)}
+  .up-head{font:700 13px var(--sans);color:var(--orange)}
+  .up-why{margin:4px 0 10px;font:12.5px/1.5 var(--sans);color:var(--dim)}
+  .up-row{border-top:1px solid rgba(255,255,255,.1);padding:9px 0}
+  .up-note{font:13.5px/1.5 var(--sans)}
+  .up-acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .up-acts form{margin:0}
+  .up-acts .v-btn{padding:6px 11px;font-size:12px}
+  .up-waiting{margin:14px 0 0;padding:10px 13px;border:1px solid var(--hair);border-radius:10px;
+    font:12.5px/1.55 var(--sans);color:var(--dim);background:rgba(255,255,255,.03)}
+  .up-waiting b{color:var(--text,#EDE6DC)}
   .nb-hint{margin:6px 0 0;font:11.5px/1.5 var(--sans);color:rgba(237,230,220,.5)}
   .nb-hint b{color:rgba(237,230,220,.72);font-weight:700}
   .nb-notyou{background:none;border:0;color:rgba(237,230,220,.45);font:11.5px var(--sans);
@@ -645,15 +666,6 @@
   .roomnav a:hover{color:var(--text);border-color:var(--hair2)}
 
   .companion-note{display:none}
-  /* Capture — the private shelf (Phase 4 §13) */
-  .shelf{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;margin:0 0 16px;background:var(--panel)}
-  .shelf-form{display:flex;gap:8px;margin:8px 0}
-  .shelf-form input{flex:1;background:var(--panel3,var(--panel));border:1px solid var(--hair);
-    border-radius:7px;padding:9px 11px;color:var(--text);font:inherit;font-size:13px}
-  .shelf-form input::placeholder{color:var(--dim2)}
-  .shelf-item{padding:7px 0;border-top:1px solid var(--hair);font-size:13px;color:var(--text)}
-  .shelf-item:first-child{border-top:0}
-  .shelf-item .mono{margin-right:8px;color:var(--dim2)}
 
   /* ── Tablet grammar (Phase 4 §12, 768–1199px): the couch listen ──
      same room, touch density — taller lanes, bigger tap targets, full-height
@@ -1056,6 +1068,43 @@
     land where they were written. The studio states the offset before this becomes work.
   </div>
 
+  {# ── NOTES WAITING ON A DECISION (ADR-0069) ───────────────────────────────────
+        The studio sees them AND prices them here, because here is where the operator
+        works: *"you keep referencing the delivery console, but im testing things in the
+        room."* Same three verbs and the same route as the console — one authority, two
+        reporters. Everyone else gets the COUNT and no words: an unpriced note is not
+        work yet, but a composer being shown nothing concluded the client had said
+        nothing, which is how three notes sat unread for a week. ── #}
+  {% if a.unpriced %}
+  <div class="unpriced-box">
+    <div class="up-head">{{ a.unpriced|length }} client note{{ 's' if a.unpriced|length != 1 }}
+      waiting on you</div>
+    <p class="up-why">The composer cannot see these until each one is priced. A conform is
+      free, a revision spends one of the client's rounds, out of scope is quoted separately.</p>
+    {% for n in a.unpriced %}
+    <div class="up-row">
+      <div class="up-note">{% if n.t_seconds is not none %}<b class="mono">{{ '%d:%02d'|format((n.t_seconds/60)|int,(n.t_seconds%60)|int) }}</b> {% endif %}<b>{{ n.author }}</b> · {{ n.body }}</div>
+      <div class="up-acts">
+        {% for how, label, hint in [
+            ('conform','Conform · free','The picture moved; re-syncing to it never costs a round'),
+            ('revision','Revision · costs a round','Real new direction, inside what was sold'),
+            ('out_of_scope','Out of scope · quote it','Beyond the brief — quoted separately, never free work')] %}
+        <form method="post" action="/project/{{ a.project_id }}/note/{{ n.id }}/disposition">
+          <input type="hidden" name="how" value="{{ how }}">
+          <input type="hidden" name="return_to" value="/room/{{ a.project_id }}#p{{ a.project_id }}">
+          <button class="v-btn" type="submit" title="{{ hint }}">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif a.unpriced_n and voice != 'client' %}
+  <p class="up-waiting"><b>{{ a.unpriced_n }} client note{{ 's' if a.unpriced_n != 1 }}</b>
+    {{ 'are' if a.unpriced_n != 1 else 'is' }} with the studio being reviewed — they reach
+    you here the moment they are cleared. Nothing to do yet.</p>
+  {% endif %}
+
   {# ── The note bar. THE point of the room, and the client had no way to leave one:
         they could hear the take and see who else was here, and then had to go somewhere
         else to say anything. Reported live. Timecoded to wherever the head is, so a note
@@ -1221,6 +1270,25 @@
        (operator, 2026-08-28). So it says what it does, it stands beside Approve as the
        other half of one decision, and its box appears only once you have chosen it —
        an open text field next to Approve reads like somewhere to leave a note. #}
+    {# ── ONE ROUND PER VERSION ──────────────────────────────────────────────────
+          *"the client also has the ability to request a new version multiple times
+          without the composer response and it spends their rounds… lets put a gate
+          between versions"* (operator, 2026-08-30). A round buys A VERSION; asking twice
+          before the first has been written buys one and charges for two, which is the
+          client paying for our latency. When the court is already ours, the ask is not
+          offered — it is not hidden behind a disabled button either, because a control
+          you can see and cannot press teaches nothing. The server refuses it too
+          (`review_changes`), since a form can be re-posted and a double-click is exactly
+          how this got pressed twice. NOTES STILL WORK: that is the whole point of saying
+          so here — the next version is not written yet, so anything said now goes into
+          it for free. ── #}
+    {% if a.ask_outstanding and voice == 'client' %}
+    <div class="v-ask">
+      <p class="v-asked"><b>We're already writing your next version.</b> Your round is
+        spent and the composer has it. Anything you add as a note between now and then
+        goes into that same version — it costs nothing and it is not too late.</p>
+    </div>
+    {% else %}
     <div class="v-ask">
       <button type="button" class="v-btn v-ask-open">↺ Ask for a new version{%
         if a.feedback and a.feedback.revisions_included %} · uses a round{% endif %}</button>
@@ -1241,6 +1309,7 @@
         <button type="button" class="v-btn v-ask-cancel">Cancel</button>
       </form>
     </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -1622,6 +1691,17 @@
         {% if 'ask_studio' in (caps|default(['ask_studio'])) %}
         <button type="button" class="nc-addr sr-ask" data-note="{{ n.id }}">Ask the studio</button>
         {% endif %}
+        {# YOUR OWN WORDS, CHANGEABLE. *"There should be a way for us to delete a note in
+           'the room' if someone left the note and wants to either change it or delete
+           it"* (operator, 2026-08-30). A note is typed at speed while listening, so the
+           typo and the half-sentence are the normal case, and the only remedy was a
+           second note correcting the first — which the composer then has to reconcile
+           against it. `n.mine` is the SERVER's answer to whose note this is; the buttons
+           are absent otherwise, and the routes refuse it besides. #}
+        {% if n.mine %}
+        <button type="button" class="nc-addr sr-edit" data-note="{{ n.id }}">Edit</button>
+        <button type="button" class="nc-addr sr-del" data-note="{{ n.id }}">Delete</button>
+        {% endif %}
       </div>
       {# The FORM goes with its button. Left ungated it rendered `/creator//…` in the
          studio's room and the client's — the same empty-token defect, one element
@@ -1649,33 +1729,14 @@
   <div class="sheet sr-sheet" data-sheet="takes" role="dialog" aria-modal="true" aria-label="{{ takes_title }}" tabindex="-1">
     <div class="sheet-head"><h2>{{ takes_title }}</h2><button class="esc sr-close">ESC</button></div>
 
-    <!-- Capture (Phase 4 §13): the composer's own private shelf — jot a motif/idea;
-         never the client's (spec: "never visible to the client"). -->
-    {# The shelf ITSELF, not just its form. The client was shown the heading — "Capture ·
-       yours alone, never the client's" — on their own screen: an empty notebook labelled
-       with a promise that they are not allowed to read it. Reported live, 2026-08-19.
-       Gate the block on being able to hold one (`see_captures`). #}
-    {% if 'see_captures' in (caps|default(['see_captures'])) %}
-    <div class="shelf" data-project="{{ a.project_id }}">
-      <h3 style="margin-top:0">Capture <span class="fineprint">· yours alone, never the client's</span></h3>
-      {# WRITING to the shelf is the composer's — the studio may read it (`see_captures`,
-         so a jotted motif is not lost when the composer is asleep) and has no business
-         adding to someone else's notebook. It also posted `/creator/{{ '{token}' }}/…`, which
-         in the studio's room is an empty token: the same broken door as Mark addressed,
-         one sheet over. #}
-      {% if 'capture' in (caps|default(['capture'])) %}
-      <form class="shelf-form" method="post" action="/creator/{{ token }}/project/{{ a.project_id }}/capture">
-        <input type="text" name="text" maxlength="600" placeholder="Hum a motif at 2am? Jot it here: timestamped, just for you and the studio." autocomplete="off">
-        <button class="btn tiny" type="submit">Keep</button>
-      </form>
-      {% endif %}
-      <div class="shelf-list">
-        {% for cap in a.captures %}
-        <div class="shelf-item"><span class="fineprint mono">{{ cap.at[:16]|replace('T',' ') }}</span> {{ cap.text }}</div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
+    {# THE CAPTURE SHELF WAS HERE, and it is gone (2026-08-30). A private notebook for
+       a composer to jot a motif into: *"composer's arent going to jot down things in
+       this platform.. remove it"* (operator). It was spec'd, not asked for, and a
+       composer at 2am reaches for the DAW or their phone — not a text box on a review
+       page. A feature nobody uses is not free: it took the top of the Takes sheet, above
+       the takes, and it made `capture`/`see_captures` a capability three roles had to be
+       reasoned about. The route and the store stay for now (nothing is deleted from
+       anyone's data); nothing renders them. #}
 
     {% if a.pending %}
     <div class="take-row sr-take-row" data-src="{{ a.pending.url or '' }}" data-version=""
@@ -3004,30 +3065,8 @@
         if (f){ f.hidden = !f.hidden; if (!f.hidden) f.querySelector("input").focus(); }
       });
     });
-    // Capture (Phase 4 §13): jot to the private shelf in place — no reload.
-    var shelfForm = root.querySelector(".shelf-form");
-    if (shelfForm) shelfForm.addEventListener("submit", function(e){
-      e.preventDefault();
-      var input = shelfForm.querySelector("input"), text = (input.value || "").trim();
-      if (!text) return;
-      var btn = shelfForm.querySelector("button"); btn.disabled = true;
-      fetch(formURL(shelfForm), { method:"POST", headers:{ "X-Requested-With":"fetch" }, body:new FormData(shelfForm) })
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-          if (d && d.ok){
-            var list = root.querySelector(".shelf-list");
-            var item = document.createElement("div");
-            item.className = "shelf-item";
-            item.innerHTML = "<span class='fineprint mono'></span> <span></span>";
-            item.querySelector(".mono").textContent = (d.at || "").slice(0,16).replace("T"," ");
-            item.querySelector("span:last-child").textContent = d.text;
-            if (list) list.insertBefore(item, list.firstChild);
-            input.value = ""; toast("Kept on your shelf.");
-          } else { toast("Couldn't save. Try again."); }
-        })
-        .catch(function(){ toast("Couldn't save. Check your connection."); })
-        .finally(function(){ btn.disabled = false; });
-    });
+    // The Capture shelf is gone (2026-08-30) — see the note in the Takes sheet. Its
+    // route still answers; nothing in the room posts to it any more.
     // Ask-the-studio replies thread in place (Phase 4 — composer flow): no full
     // reload, so the playhead + open Notes sheet survive a punch-list of replies.
     root.querySelectorAll(".ask-form").forEach(function(f){
@@ -3139,25 +3178,53 @@
         if (!window.XMLHttpRequest) return;          // fail-soft: normal POST
         e.preventDefault();
         var btn = f.querySelector(".btn"), bar = f.querySelector(".progress");
+        /* THE LABEL HAS TO STAY TRUE, and it did not: *"uploading a different version and
+           the button is stuck at uploading even though the upload went through"*
+           (operator, 2026-08-30). It was not stuck — `progress` measures BYTES SENT, so
+           it reaches 100% the moment the last byte leaves, and everything after that is
+           the server writing a 300MB master to disk and mirroring it. The button went on
+           saying "Uploading…" through all of it, with a full bar underneath, which is the
+           picture of a hang. It says what is actually happening now.
+
+           The original label is CAPTURED rather than typed back in on failure: there are
+           two of these forms with different words on them, and the hard-coded "Submit for
+           review" relabelled the other one every time an upload failed. */
+        var was = btn.textContent, done = false;
+        function restore(msg){
+          if (done) return;
+          done = true;
+          btn.disabled = false; btn.textContent = was; bar.classList.remove("on");
+          if (msg) toast(msg);
+        }
         btn.disabled = true; btn.textContent = "Uploading…"; bar.classList.add("on");
         var xhr = new XMLHttpRequest();
         xhr.open("POST", formURL(f));
+        xhr.timeout = 20 * 60 * 1000;      // a long master on a slow line, not forever
         xhr.upload.addEventListener("progress", function(ev){
-          if (ev.lengthComputable) bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + "%";
+          if (!ev.lengthComputable) return;
+          bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + "%";
+          if (ev.loaded >= ev.total) btn.textContent = "Saving…";
         });
+        // Belt and braces: the send is finished even if `progress` never reported it.
+        xhr.upload.addEventListener("load", function(){ btn.textContent = "Saving…"; });
         xhr.addEventListener("load", function(){
           if (xhr.status < 400){
+            done = true;
             bar.firstElementChild.style.width = "100%";
+            btn.textContent = "Saved — reloading…";
             var pid = root.id.replace("p", "");
             location.href = location.pathname + "?submitted=" + pid + "#" + root.id;
           } else {
-            btn.disabled = false; btn.textContent = "Submit for review"; bar.classList.remove("on");
-            toast("Upload failed. Please try again.");
+            restore("Upload failed. Please try again.");
           }
         });
         xhr.addEventListener("error", function(){
-          btn.disabled = false; btn.textContent = "Submit for review"; bar.classList.remove("on");
-          toast("Upload failed. Check your connection and try again.");
+          restore("Upload failed. Check your connection and try again.");
+        });
+        xhr.addEventListener("abort", function(){ restore("Upload cancelled."); });
+        xhr.addEventListener("timeout", function(){
+          restore("That took too long to save. The file may still have landed — reload "
+                  + "before sending it again.");
         });
         xhr.send(new FormData(f));
       });
@@ -3532,6 +3599,80 @@
     else r0.audio.addEventListener("loadedmetadata", go, { once: true });
     setTimeout(go, 4000);   // fail-soft if metadata never fires
   })();
+
+  /* EDIT AND DELETE, ON YOUR OWN NOTE. Both post in the background and repaint in
+     place: a reload would stop the music under someone fixing a typo about it, which is
+     the reason the note bar posts this way too. The server is the authority on whether
+     either is allowed — these buttons only exist on a note the server already said is
+     yours — so a refusal is SHOWN rather than swallowed, and the delete refusal carries
+     the server's own sentence, because "no" without a reason is where people start
+     inventing one. */
+  document.querySelectorAll(".sr-room").forEach(function(rm){
+    var pid = rm.dataset.project;
+    function cred(){
+      var bar = rm.querySelector(".sr-notebar");
+      function v(sel){ var el = bar && bar.querySelector(sel); return (el && el.value) || ""; }
+      var fd = new FormData();
+      fd.append("k", v("[name=k]")); fd.append("r", v("[name=r]"));
+      fd.append("t_tok", v("[name=creator_token]"));
+      return fd;
+    }
+    /* The room's own toast (`#toast`), not a second notifier. A refusal here carries a
+       whole sentence from the server, so it holds longer than the 2.8s default. */
+    function say(msg){
+      var t = document.getElementById("toast");
+      if (!t) return;
+      t.textContent = msg; t.classList.add("show");
+      setTimeout(function(){ t.classList.remove("show"); }, 6000);
+    }
+    rm.addEventListener("click", function(e){
+      var ed = e.target.closest(".sr-edit"), del = e.target.closest(".sr-del");
+      if (!ed && !del) return;
+      e.preventDefault(); e.stopPropagation();
+      var id = (ed || del).dataset.note;
+      var card = rm.querySelector('.sr-note[data-note="' + id + '"]');
+      if (!card) return;
+      var bodyEl = card.querySelector(".nc-body");
+      if (ed){
+        if (card.querySelector(".nc-edit")) return;          // already open
+        var was = bodyEl.textContent;
+        var box = document.createElement("div");
+        box.className = "nc-edit";
+        box.innerHTML = '<input type="text" maxlength="4000"><button type="button" class="btn tiny nc-save">Save</button>'
+                      + '<button type="button" class="btn tiny nc-cancel">Cancel</button>';
+        var input = box.querySelector("input");
+        input.value = was;
+        input.addEventListener("keydown", function(ev){ ev.stopPropagation(); });
+        bodyEl.hidden = true;
+        bodyEl.parentNode.insertBefore(box, bodyEl.nextSibling);
+        input.focus(); input.select();
+        box.querySelector(".nc-cancel").addEventListener("click", function(){
+          box.remove(); bodyEl.hidden = false;
+        });
+        box.querySelector(".nc-save").addEventListener("click", function(){
+          var text = (input.value || "").trim();
+          if (!text) return;
+          var fd = cred(); fd.append("body", text);
+          fetch("/project/" + pid + "/review/note/" + id + "/edit",
+                { method: "POST", body: fd, credentials: "same-origin" })
+            .then(function(r){ if (!r.ok) throw new Error("refused"); return r.json(); })
+            .then(function(){
+              bodyEl.textContent = text; box.remove(); bodyEl.hidden = false;
+            })
+            .catch(function(){ say("That note could not be changed from here."); });
+        });
+        return;
+      }
+      if (!confirm("Delete this note? It is removed for everyone in the room.")) return;
+      fetch("/project/" + pid + "/review/note/" + id + "/delete",
+            { method: "POST", body: cred(), credentials: "same-origin" })
+        .then(function(r){
+          return r.json().then(function(j){ if (!r.ok) throw new Error(j.why || "refused"); });
+        })
+        .then(function(){ card.remove(); })
+        .catch(function(err){ say(String(err.message || err)); });
+    });
+  });
 
   /* THE ASK REVEALS ITS BOX. An open text field standing next to Approve reads like
      somewhere to leave a note — which is exactly the confusion this rename is fixing —

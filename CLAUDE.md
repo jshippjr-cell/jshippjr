@@ -234,6 +234,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
   is the authority and an unknown role gets nothing. A gate-exempt route must make its
   own stricter check: `_session_role` reads "no token" as *operator*.
+- **A note is the author's; a round buys a version** (ADR-0096): the side that WROTE a
+  note may move, edit or delete it and nobody else may (`_note_is_mine` decides,
+  `room.stamp_mine` reports) — except one that spent a round, which stays as the record.
+  A second change request while the studio owes a version is refused server-side.
+  **An unpriced note is not silence:** ADR-0069 still hides it from the composer, but they
+  are told it exists, the studio prices it IN THE ROOM, and the queue names it. The queue
+  holds decisions only — a CI conflict, never a proposed fact.
 - **The buyer's side of the room is learnable** (ADR-0095): identity is RESOLVED from
   the deal's contact (`room_routes._deal_contact`), never demanded; the note box pauses
   the transport on focus; a note's mark is draggable by **the side that wrote it**

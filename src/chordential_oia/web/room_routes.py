@@ -24,31 +24,6 @@ from .shell import admin_authed, render
 router = APIRouter(tags=["room"])
 
 
-def _deal_contact(conn, project_id: int, name: str = "", mail: str = ""):
-    """The buyer of record on this project — the person the room's link was sent to.
-
-    Evidence, not a guess: this is the contact on the opportunity that became the
-    project, the address the countersignature email went to, and under ADR-0050 the
-    thing that makes a buyer a buyer at all. Whatever the caller already resolved
-    (a cookie from a previous visit) wins, because a colleague who corrected their name
-    once must not be renamed back to the account contact on every load.
-    """
-    if name and mail:
-        return name, mail
-    try:
-        prow = db.get_project(conn, project_id)
-        if prow is None or not prow["opp_id"]:
-            return name, mail
-        opp = db.get_opportunity(conn, int(prow["opp_id"]))
-        if opp is None:
-            return name, mail
-        keys = opp.keys()
-        return (name or ((opp["contact_name"] if "contact_name" in keys else "") or "")),\
-               (mail or ((opp["contact_email"] if "contact_email" in keys else "") or ""))
-    except Exception:  # noqa: BLE001 — never fail the room over a courtesy prefill
-        return name, mail
-
-
 @router.get("/room/{project_id}", response_class=HTMLResponse)
 def one_room(request: Request, project_id: int, k: str = "", r: str = "",
              t: str = ""):
@@ -157,17 +132,21 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
     # down, and the correction stays available for the case the account contact is not
     # the person typing: a colleague on a forwarded link presses "Not you?" once and the
     # same cookie that always remembered it remembers them.
-    from .project_routes import _reviewer_identity
-    _kn, _km = _reviewer_identity(request)
-    if role == room.CLIENT and not (_kn and _km):
-        conn2 = db.connect()
-        try:
-            _kn, _km = _deal_contact(conn2, project_id, _kn, _km)
-        finally:
-            conn2.close()
-    # Only when we genuinely have nobody — no cookie, no contact on the deal — is the
-    # question asked, because a note attributed to no one is worse than one more box.
-    needs_identity = (role == room.CLIENT and not (_kn and _km))
+    # `_client_identity` is the SAME resolver the note and change-request routes use, so
+    # the bar cannot show one name and the note record another. It was `_deal_contact`
+    # here and only the contact field there — which answered nothing for a deal entered
+    # without one, so the boxes came back and the operator reported them a second time
+    # (2026-08-30). The chain now ends at the signature and then the organisation.
+    from .project_routes import _client_identity
+    conn2 = db.connect()
+    try:
+        _kn, _km = _client_identity(conn2, project_id, request)
+    finally:
+        conn2.close()
+    # A NAME is what the note needs; the address is a courtesy. Asking survives only for
+    # the case where we have neither — no cookie, no contact, no signature, no client
+    # name — which is a project that barely exists.
+    needs_identity = (role == room.CLIENT and not _kn)
     return render(
         request, "creator_portal.html", nav="",
         needs_identity=needs_identity, known_name=_kn, known_email=_km,

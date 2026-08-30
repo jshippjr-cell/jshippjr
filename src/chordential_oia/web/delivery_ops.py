@@ -72,6 +72,19 @@ def _delivery_console_url(project_id: int) -> str:
     return f"/project/{project_id}/delivery"
 
 
+def _operator_room_url(project_id: int) -> str:
+    """WHERE THE OPERATOR ACTUALLY GOES when something happens on a project.
+
+    Every operator alert used to point at the delivery console, and the console is not
+    where this operator works — they have said so twice (*"you keep referencing the
+    delivery console, but im testing things in the room"*), and the room now carries the
+    listening, the notes, the pricing and the checklist. An alert's whole job is to be a
+    shortcut to the thing that needs attention; a shortcut to the wrong page is a second
+    navigation, which is what "nothing is clickable" felt like from the outside.
+    """
+    return f"/room/{project_id}#p{project_id}"
+
+
 def _notify_assigned_creators(project_id: int, project, *, subject: str,
                               body_text: str, exclude_email: str = "",
                               only_craft: str = "") -> None:
@@ -170,7 +183,7 @@ def _notify_operator_review(project_id: int, project, title: str, body: str) -> 
     ``review_comments.email``. Requires a transactional send channel (deferred
     outbound email infra) — not wired yet, so left unimplemented rather than faked.
     """
-    notify_operator(title, body, _delivery_console_url(project_id))
+    notify_operator(title, body, _operator_room_url(project_id))
 
 
 def delivery_held_by(delivery: dict, project) -> str:

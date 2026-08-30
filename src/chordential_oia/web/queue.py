@@ -22,7 +22,7 @@ Ranking is a deterministic urgency ladder — revenue- and client-touching first
   8  a reel awaits your verdict (talent review queue)
   9  the supply-side floor has a gap (ADR-0024: approved creator, no
      agreement/rate — not assignable until fixed)
-  10 intelligence housekeeping  (CI conflicts, then proposed fields)
+  10 intelligence conflicts     (CI conflicts only — a proposed field is not a decision)
 
 Age breaks ties within a rung (oldest first). No LLM anywhere.
 """
@@ -46,7 +46,7 @@ RUNGS = (
     "Worth a look (REVIEW-tier)",
     "Reels awaiting your verdict",
     "Supply-side floor gaps",
-    "Intelligence housekeeping",
+    "Intelligence conflicts",
 )
 
 
@@ -152,6 +152,32 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
             f"/opportunity/{r['opportunity_id']}#agreement",
             age_key=r["signed_at"] or "",
             evidence=f"signed {(r['signed_at'] or '')[:10]}"))
+
+    # 3 — client notes nobody has priced yet, which are notes the COMPOSER CANNOT SEE.
+    #
+    # ADR-0069 is right that an unpriced note must not become work — but the consequence
+    # was invisible from both ends. The composer's room subtracts them, so a client who
+    # left three notes appears to have said nothing; and the prompt to classify them
+    # lived only on the delivery console, which is not where the operator works:
+    # *"you keep referencing the delivery console, but im testing things in the room."*
+    # Reported from the other side on 2026-08-30: *"the client's notes dont show up on
+    # the composer's side of the room."* They were never lost — they were waiting on a
+    # decision nothing asked for. This is the ask.
+    for prow in db.list_projects(conn):
+        if (prow["status"] or "").lower() in ("delivered", "complete", "archived"):
+            continue
+        pending = db.undispositioned_notes(conn, prow["id"])
+        if not pending:
+            continue
+        cards.append(_card(
+            3, "price_notes",
+            f"Price {len(pending)} client note{'s' if len(pending) != 1 else ''} — "
+            f"{prow['client']}",
+            "Until each is called a conform, a revision or out of scope, the composer "
+            "cannot see them.",
+            f"/room/{prow['id']}#p{prow['id']}",
+            age_key=(pending[0]["created_at"] or ""),
+            evidence=f"{prow['need']}"))
 
     # 4 — follow-ups due on/before today.
     for r in db.followups_due(conn, limit=25):
@@ -279,22 +305,34 @@ def compute_queue(conn, db, *, include_snoozed: bool = False) -> List[dict]:
                 f"Approved but missing {missing}. Fix before their next match.",
                 f"/talent/{row['id']}#access", age_key=row["created_at"] or ""))
 
-    # 9 — CI housekeeping: conflicts first (machine disagreed with a human-owned
-    #     field), then proposed fields awaiting confirmation.
+    # 9 — CI CONFLICTS ONLY. A conflict is a real decision: the machine read something
+    #     that disagrees with a value a human owns, and ADR-0013 forbids it overwriting
+    #     that silently — so a person must choose, and until they do the deal carries two
+    #     answers to one question.
+    #
+    #     PROPOSED FACTS ARE NOT DECISIONS AND NO LONGER APPEAR. *"This list is
+    #     ridiculous, i dont need proposed facts to confirm to show up on my to do"*
+    #     (operator, 2026-08-30) — twenty-two of them, from one campaign, each naming the
+    #     same campaign and differing only by a dotted key nobody reads in a list. That is
+    #     the extractor working correctly, and it buried five real supply-side blocks
+    #     under itself. This surface promises "every decision waiting on you"; a promise
+    #     that broad only survives if everything on it is one, because the first list a
+    #     person learns to scroll past is the last list they read. Proposed fields still
+    #     live on the deal's own Campaign Intelligence page, in context, next to the
+    #     evidence — which is where you can actually judge one.
     for r in conn.execute(
             """SELECT f.id, f.ci_id, f.facet, f.key, f.status, f.updated_at,
                       ci.title AS ci_title, ci.opp_id AS opp_id
                FROM campaign_intelligence_field f
                JOIN campaign_intelligence ci ON ci.id = f.ci_id
-               WHERE f.status IN ('conflicted', 'needs_review')
-               ORDER BY CASE f.status WHEN 'conflicted' THEN 0 ELSE 1 END,
-                        f.updated_at ASC LIMIT 25""").fetchall():
-        verb = ("Conflict to resolve" if r["status"] == "conflicted"
-                else "Proposed fact to confirm")
+               WHERE f.status = 'conflicted'
+               ORDER BY f.updated_at ASC LIMIT 25""").fetchall():
         url = f"/opportunity/{r['opp_id']}" if r["opp_id"] else "/dashboard"
         cards.append(_card(
-            10, "ci", f"{verb} — {r['ci_title'] or 'campaign'}",
-            f"{r['facet']}.{r['key']}", url, age_key=r["updated_at"] or ""))
+            10, "ci", f"Conflict to resolve — {r['ci_title'] or 'campaign'}",
+            f"{r['facet']}.{r['key']} — the machine read something your value disagrees "
+            f"with, and it will not overwrite you.",
+            url, age_key=r["updated_at"] or ""))
 
     cards.sort(key=lambda c: (c["urgency"], c["age_key"]))
     # Snoozed cards are withheld, not dropped: the row expires and the decision comes

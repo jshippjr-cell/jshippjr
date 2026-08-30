@@ -91,23 +91,35 @@ def test_no_t_end_is_a_plain_point_note(ctx):
     assert row["t_end"] is None
 
 
-def test_capture_shelf_is_private_to_composer(ctx):
-    """Phase 4 §13: a captured idea shows in the composer room + persists, but is
-    NEVER rendered on the client portal (the private-shelf promise)."""
+def test_the_capture_shelf_is_gone_from_the_room(ctx):
+    """RETIRED 2026-08-30: *"composer's arent going to jot down things in this
+    platform.. remove it"* (operator).
+
+    It was spec'd (Phase 4 §13) rather than asked for, and a composer at 2am reaches for
+    their DAW or their phone, not a text box on a review page. It sat at the TOP of the
+    Takes sheet, above the takes, and it made `capture`/`see_captures` a capability three
+    roles had to be reasoned about for a feature nobody used.
+
+    The route and the store are LEFT STANDING — nothing anyone typed is deleted, and a
+    dead POST harms no one — but the room renders neither. This test is what it became:
+    the promise it used to guard was "never the client's", and the strongest form of that
+    promise is that it is nobody's.
+    """
     client, db_mod, _ = ctx
     pid, tok, share = _setup(db_mod)
     secret = "SECRETMOTIF_rising_fifth"
     r = client.post(f"/creator/{tok}/project/{pid}/capture",
                     data={"text": secret},
                     headers={"X-Requested-With": "fetch"}, follow_redirects=False)
-    assert r.status_code == 200 and r.json()["ok"] is True
-    assert secret in client.get(f"/creator/{tok}").text
-    assert secret not in client.get(f"/project/{pid}/delivery-portal?k={share}").text
-    # persisted on the shelf
+    assert r.status_code == 200 and r.json()["ok"] is True   # the door still answers
     conn = db_mod.connect()
     caps = db_mod.get_captures(conn, pid)
     conn.close()
-    assert len(caps) == 1 and caps[0]["text"] == secret
+    assert len(caps) == 1, "the store was dropped along with the surface"
+    # …and it renders for nobody, the client included.
+    assert secret not in client.get(f"/creator/{tok}").text
+    assert secret not in client.get(f"/project/{pid}/delivery-portal?k={share}").text
+    assert "Hum a motif at 2am" not in client.get(f"/creator/{tok}").text
 
 
 def test_empty_capture_is_ignored(ctx):

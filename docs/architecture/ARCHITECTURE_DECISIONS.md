@@ -1664,6 +1664,64 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0096 — A note is the author's, a round buys a version, and a list is only decisions
+**Status:** Accepted (2026-08-30, operator directive) · Extends ADR-0013 / ADR-0069 /
+ADR-0086 / ADR-0095 · Source: `project_routes._deal_identity` / `_note_is_mine` /
+`review_note_edit` / `review_note_delete`, `db.edit_review_comment` /
+`delete_review_comment`, the round gate in `review_changes`, `room.stamp_mine`,
+`queue.compute_queue`, `tests/test_six_from_the_room.py`
+
+**Decision.** Eight changes from one live session. The four that are principles:
+
+1. **A note belongs to whoever wrote it** — they may change its words or take it back,
+   and nobody else may. One refusal: a note that spent a revision round cannot be
+   deleted, because it is the record of what the round was for.
+2. **A round buys a version.** A second change request, while the studio still owes the
+   first, is refused — server-side and in the room — and spends nothing.
+3. **An unpriced note is not silence.** ADR-0069 still keeps it out of the composer's
+   hands, but they are told it EXISTS, the studio prices it in the room, and the queue
+   names it.
+4. **An alert is a shortcut or it is noise**, and a to-do list holds decisions only.
+
+**Why.** Every one of these is the same failure in a different place: a rule that was
+right, implemented as silence.
+
+**The composer could not see the client's notes**, and both sides were behaving as
+designed. ADR-0069 says an unpriced note is not work, so the composer's copy subtracts it;
+the only prompt to price one lived on the delivery console, which is not where this
+operator works (*"you keep referencing the delivery console, but im testing things in the
+room"*). So the client looked ignored, the composer looked idle, and three notes sat one
+classification away from being visible with nothing anywhere saying so. The rule survives
+untouched — what changed is that both ends are now TOLD.
+
+**The client could spend two rounds for one version.** Asking again before the first is
+written does not buy two; it buys one and charges for two, which is the buyer paying for
+our latency. `court_state` already knew whose move it was.
+
+**The queue had twenty-two "Proposed fact to confirm" cards** from one campaign, burying
+five real supply-side blocks. A conflict is a decision — ADR-0013 forbids the machine
+overwriting a human's value, so a person must choose. A proposed field is the extractor
+working correctly. A surface promising *"every decision waiting on you"* only survives if
+everything on it is one: the first list a person learns to scroll past is the last list
+they read.
+
+**Consequences.** Identity is resolved by a CHAIN that ends somewhere — deal contact,
+then the client's own signature, then the organisation — and `_client_signatures`
+excludes ours: the first version took the newest signature on the deal, which is the
+countersignature, and prefilled the buyer's note bar with the operator's name. A NAME is
+required for a note; an email is not, and requiring both silently dropped notes. Whose
+note it is is answered once (`_note_is_mine`) and reported once (`room.stamp_mine`), so
+the button and the door cannot disagree. And the outbox now keeps the click URL every
+push already carried — nothing new computed, a value that existed being discarded.
+
+*Also retired:* the Capture shelf (*"composer's arent going to jot down things in this
+platform"*) — spec'd, never asked for, and it held the top of the Takes sheet above the
+takes. The route and the store stay; nothing renders them.
+
+*Process note.* The room's note-move door was the SECOND route in two days to be written
+without its `publicpaths` exemption, and the symptom is invisible: the admin gate answers
+the client **200 with a login page**. Adding a token-gated route means adding it there.
+
 ### ADR-0095 — The buyer's half of the room is learnable without being taught
 **Status:** Accepted (2026-08-28, operator directive) · Extends ADR-0068 / ADR-0071 /
 ADR-0094 · Source: `room_routes._deal_contact`, `db.move_review_comment`,

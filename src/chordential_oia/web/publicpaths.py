@@ -105,7 +105,14 @@ _REVIEW_ACTION_RE = re.compile(
 # here. The route does its own, stricter check — `_session_role` resolves the credential,
 # `room.CAPS` decides whether that role may comment at all, and a note may only be moved
 # by the side that wrote it.
-_REVIEW_NOTE_MOVE_RE = re.compile(r"^/project/\d+/review/note/\d+/move/?$")
+# A note's own three mutations, from the room: move its mark, change its words, take it
+# away. Named exactly — `/species` is the sibling this must never catch, an operator
+# classification that decides whether a round was spent and stays behind the gate.
+# Each route does its own, stricter check: `_session_role` resolves the credential,
+# `room.CAPS` decides whether the role may comment at all, and `_note_is_mine` refuses
+# anything the caller's side did not write.
+_REVIEW_NOTE_MOVE_RE = re.compile(
+    r"^/project/\d+/review/note/\d+/(?:move|edit|delete)/?$")
 # Payment-gated deliverable download — opened from the token-gated portal; the route
 # itself validates the share/reviewer token AND the paid-in-full gate.
 _DELIVERY_DL_RE = re.compile(r"^/project/\d+/dl/[^/]+/?$")

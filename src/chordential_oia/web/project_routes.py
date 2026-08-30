@@ -68,7 +68,7 @@ from .evaluate import evaluate
 from .opportunity_ops import _ensure_proposal_for_project, _load, _quote_band_for
 from .shell import (
     admin_authed as _admin_authed, public_base as _public_base, render,
-    signed_in_user as _signed_in_user,
+    safe_local as _safe_local, signed_in_user as _signed_in_user,
 )
 from .uploads import (
     _AUDIO_EXTS, _persist_upload, _read_capped,
@@ -1938,6 +1938,110 @@ def _reviewer_identity(request: Request, author: str = "", email: str = ""):
     return name, mail
 
 
+def _deal_identity(conn, project_id: int):
+    """Who the buyer on this project IS, from evidence already on file.
+
+    THE ONE PLACE THAT ANSWERS THIS. The room asked a client for their name and email in
+    two required boxes standing in front of the only thing the room is for, and the first
+    fix — read `opportunities.contact_*` — was right and not deep enough: a deal entered
+    without a contact still had nothing, so the boxes came back and the operator reported
+    them a second time. So the fallbacks are a CHAIN, in descending order of how directly
+    each names a person, and it ends somewhere that always answers:
+
+    1. **The contact the link was sent to.** ADR-0050: a buyer is an email.
+    2. **Whoever signed the agreement.** Often stronger than (1) — a person who typed
+       their name under a consent sentence is not a CRM field — and it is exactly the
+       person holding this link, because signing is what produced the project.
+    3. **The organisation.** Not a person, and it does not pretend to be: a note signed
+       "Pike and Rowan" says *the client side said this*, which is TRUE, whereas an empty
+       required box says only that we made them type something. Anyone can type anything
+       into that box; the token they are holding is the stronger claim either way.
+
+    Returns ``(name, email)``; the email may be blank, and the callers here accept that
+    rather than refuse the note (see `review_comment`).
+    """
+    try:
+        prow = db.get_project(conn, project_id)
+        if prow is None:
+            return "", ""
+        opp = db.get_opportunity(conn, int(prow["opp_id"])) if prow["opp_id"] else None
+        if opp is not None:
+            keys = opp.keys()
+            nm = ((opp["contact_name"] if "contact_name" in keys else "") or "").strip()
+            ml = ((opp["contact_email"] if "contact_email" in keys else "") or "").strip()
+            if nm and ml:
+                return nm, ml
+        # …the signature. Whatever the client put their name to, whichever subject it
+        # hangs off — the agreement is signed on the OPPORTUNITY before a project exists
+        # (ADR-0065), and on the project afterwards.
+        for row in _client_signatures(conn, project_id, prow):
+            snm = (row["signer_name"] or row["typed_name"] or "").strip()
+            sml = (row["signer_email"] or "").strip()
+            if snm:
+                return snm, (sml or ml if opp is not None else sml)
+        if opp is not None and (nm or ml):
+            return nm or (prow["client"] or ""), ml
+        return (prow["client"] or "").strip(), ""
+    except Exception:  # noqa: BLE001 — never fail a note over who signed it
+        return "", ""
+
+
+def _client_signatures(conn, project_id: int, prow):
+    """Signatures the **client side** put on this engagement, newest first.
+
+    OURS ARE EXCLUDED, and this is not a detail: the first version of this returned every
+    signature on the deal, so the newest was Jon's COUNTERSIGNATURE and the room happily
+    prefilled the buyer's note bar with *"the operator (shared passphrase)"* — our own
+    name, about to be signed to the client's words. Caught in the walkthrough.
+
+    Two filters, because either alone leaks. A ``_countersign`` doc kind is ours by
+    definition; and an ``actor`` means an authenticated internal identity signed it,
+    which a client on a share link never has. A composer's agreement is excluded by the
+    same pair — they are not the buyer either.
+    """
+    rows = []
+    try:
+        rows += list(conn.execute(
+            "SELECT * FROM signature WHERE project_id = ? AND voided_at IS NULL "
+            "ORDER BY signed_at DESC", (project_id,)).fetchall())
+        if prow is not None and prow["opp_id"]:
+            rows += list(conn.execute(
+                "SELECT * FROM signature WHERE opportunity_id = ? AND voided_at IS NULL "
+                "ORDER BY signed_at DESC", (int(prow["opp_id"]),)).fetchall())
+    except Exception:  # noqa: BLE001
+        return []
+    keep = []
+    for r in rows:
+        if (r["doc_kind"] or "") not in _THE_BUYER_SIGNS:
+            continue
+        if (r["actor"] if "actor" in r.keys() else "") or "":
+            continue
+        keep.append(r)
+    return keep
+
+
+#: What the BUYER signs, named positively rather than by excluding the creator's
+#: documents. A deny-list would have to be extended every time a new creator agreement is
+#: added, and the failure mode of forgetting is the wrong name on the buyer's notes; an
+#: allow-list fails the safe way — a document nobody listed is simply not evidence of who
+#: the buyer is. It also keeps this module from naming a creator's agreement at all,
+#: which ADR-0082's tripwire rightly forbids: which document governs a creator is
+#: `agreements.kind_for`'s question, never a hard-coded one — and the first draft of this
+#: list tripped that wire by writing the answer down.
+_THE_BUYER_SIGNS = frozenset({
+    signing.DOC_PROPOSAL, signing.DOC_DELIVERY_ACCEPTANCE,
+})
+
+
+def _client_identity(conn, project_id: int, request: Request, author: str = "",
+                     email: str = ""):
+    """`_reviewer_identity`, then the deal. Never empty when the deal has a client."""
+    name, mail = _reviewer_identity(request, author, email)
+    if name:
+        return name, mail
+    return _deal_identity(conn, project_id)
+
+
 def _set_reviewer_cookie(resp, name: str, email: str) -> None:
     """Remember the reviewer's identity so they set it once, not per action."""
     if not (name and email):
@@ -2124,9 +2228,14 @@ def review_comment(
             if reviewer is not None:
                 name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
             else:
-                name, mail = _reviewer_identity(request, author, email)
-        # Identity is required so events attribute to a real person, not free text.
-        if body.strip() and name and mail:
+                name, mail = _client_identity(conn, project_id, request, author, email)
+        # A NAME IS REQUIRED; AN EMAIL IS NOT. The pair was required together so events
+        # attributed to a real person rather than free text — but the note was then
+        # DROPPED when either was missing, silently, on a page whose whole purpose is
+        # saying something. Nothing downstream needs the address (it is stored for
+        # attribution and read back into a sentence), and `_client_identity` always has
+        # a name where there is a deal, so the note lands.
+        if body.strip() and name:
             # A reply nests under its parent (no timecode); a top-level note carries
             # the live playhead's timecode.
             parent = None
@@ -2762,6 +2871,138 @@ def delivery_build(project_id: int):
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
+def _ask_outstanding(conn, project_id: int, delivery: dict) -> bool:
+    """Has the client already asked for a new version of the take on the table?
+
+    ONE ROUND PER VERSION, and the version is what makes it precise. The first attempt at
+    this gate asked whether the court was the STUDIO's — which it also is on a project
+    with nothing published yet, so it refused the client's very first request and cost
+    six existing tests. Whose court it is answers "are we busy"; the question here is
+    narrower and is the one the operator actually described: *"we're in v0 and the client
+    request for v1 and v2 before the composer has had a chance to upload v1."*
+
+    So: a change request already recorded AGAINST THE CURRENT VERSION TAG, **and the
+    delivery still sitting in the state that ask produced**. Publishing the next version
+    advances the tag, and the client may ask again — which is right, because by then they
+    have something new to ask about.
+
+    The state half is not belt-and-braces; it is the post-lock case, and it cost a test to
+    learn. A client can approve a master and then come back wanting something else: that
+    is a REAL second round on the same take, deliberately stamped `after_lock` so a scope
+    conversation has a record to stand on (ADR-0019). Nothing is owed at that moment — the
+    previous ask was answered and approved — so nothing should be gated. The gate exists
+    for the ask nobody has answered yet, not for every second ask.
+    """
+    if (delivery or {}).get("state") != state_on_changes_requested(delivery or {}):
+        return False
+    tag = _current_version_tag(delivery)
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM review_comments WHERE project_id = ? "
+        "AND kind = 'change_request' AND COALESCE(version,'') = ? "
+        # BLANK IS THE CLIENT, and `IFNULL` alone did not say so: the column DEFAULTS to
+        # '' rather than NULL, so every change request read as somebody else's and the
+        # gate counted none of them. It let a second round through while reporting that
+        # it had closed — caught by its own test.
+        "AND COALESCE(NULLIF(author_role, ''), 'client') = 'client'",
+        (project_id, tag or "")).fetchone()
+    return bool(row and int(row["n"] or 0))
+
+
+def _note_is_mine(conn, project_id: int, comment_id: int, role: str):
+    """The note, if this role's side wrote it. ``None`` otherwise.
+
+    ONE RULE for every mutation of a note — move it, change its words, take it away.
+    Whose note it is is the only question all three share, and it was already answered
+    once for `move`; a second copy would be the place the three quietly disagree.
+
+    `author_role` is the record of which side spoke, stamped at the write. A row from
+    before that column existed carries "" and is read as the CLIENT's, because that is
+    who wrote nearly all of them and guessing the other way hands our side an edit over
+    the buyer's own words.
+    """
+    row = db.get_review_comment(conn, int(comment_id))
+    if row is None or row["project_id"] != project_id:
+        return None
+    wrote = (row["author_role"] if "author_role" in row.keys() else "") or room.CLIENT
+    mine = (wrote == room.CLIENT) if role == room.CLIENT else (wrote != room.CLIENT)
+    return row if mine else None
+
+
+@router.post("/project/{project_id}/review/note/{comment_id}/edit")
+def review_note_edit(request: Request, project_id: int, comment_id: int,
+                     body: str = Form(""), k: str = Form(""), r: str = Form(""),
+                     t_tok: str = Form("")):
+    """Change what a note says — the author's own, and only theirs.
+
+    *"There should be a way for us to delete a note in 'the room' if someone left the
+    note and wants to either change it or delete it"* (operator, 2026-08-30). A note is
+    typed once, at speed, while listening; the typo and the half-finished sentence are
+    the normal case, and the only remedy was a second note correcting the first, which
+    the composer then has to reconcile against it.
+
+    EDITING IS ALWAYS ALLOWED, including after the studio has priced the note as work.
+    Deleting is not (see below), and the distinction is the point: a note that became a
+    revision is the record of why a round was spent, and that record must keep saying
+    something — but what it says can still be made accurate.
+    """
+    conn = db.connect()
+    try:
+        role, _who = _session_role(conn, project_id, k, r, t_tok, request)
+        if role is None or not room.can(role, "comment"):
+            return JSONResponse({"ok": False}, status_code=404)
+        row = _note_is_mine(conn, project_id, comment_id, role)
+        if row is None:
+            return JSONResponse({"ok": False, "why": "not yours"}, status_code=403)
+        text = (body or "").strip()
+        if not text:
+            return JSONResponse({"ok": False, "why": "empty"}, status_code=400)
+        if not db.edit_review_comment(conn, project_id, int(comment_id), text):
+            return JSONResponse({"ok": False}, status_code=400)
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True, "body": text[:4000]})
+
+
+@router.post("/project/{project_id}/review/note/{comment_id}/delete")
+def review_note_delete(request: Request, project_id: int, comment_id: int,
+                       k: str = Form(""), r: str = Form(""), t_tok: str = Form("")):
+    """Take a note away — the author's own, and only theirs.
+
+    ONE REFUSAL, and it is not tidiness. A note the studio has already priced as a
+    **revision** is the reason a round was spent: delete it and the counter still reads
+    "2 of 3 used" with nothing on the page saying what the two were. That is a bill with
+    the line items torn out, and the person it hurts is the client, who now cannot check
+    it. They are told so, and pointed at the edit that IS available.
+    Everything else goes, replies included — a reply is an answer, and left behind when
+    its question is gone it reads as a remark about the take, which nobody wrote.
+    """
+    conn = db.connect()
+    try:
+        role, _who = _session_role(conn, project_id, k, r, t_tok, request)
+        if role is None or not room.can(role, "comment"):
+            return JSONResponse({"ok": False}, status_code=404)
+        row = _note_is_mine(conn, project_id, comment_id, role)
+        if row is None:
+            return JSONResponse({"ok": False, "why": "not yours"}, status_code=403)
+        disp = (row["disposition"] if "disposition" in row.keys() else "") or ""
+        if (row["kind"] or "") == "change_request" or disp == "revision":
+            return JSONResponse(
+                {"ok": False,
+                 "why": "This one spent a revision round, so it stays as the record of "
+                        "what the round was for. You can still edit the wording."},
+                status_code=409)
+        # The room's history keeps the fact, never the words: what a person withdrew is
+        # theirs, that they withdrew something is the engagement's.
+        db.add_project_event(conn, project_id, "comment", actor_role=role,
+                             actor_name=(row["author"] or ""),
+                             body="withdrew a note")
+        if not db.delete_review_comment(conn, project_id, int(comment_id)):
+            return JSONResponse({"ok": False}, status_code=400)
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True})
+
+
 @router.post("/project/{project_id}/review/note/{comment_id}/move")
 def review_note_move(request: Request, project_id: int, comment_id: int,
                      t: str = Form(""), t_end: str = Form(""),
@@ -2903,7 +3144,7 @@ def project_conform(request: Request, project_id: int, offset: str = Form("0"),
 
 @router.post("/project/{project_id}/note/{comment_id}/disposition")
 def review_note_disposition(request: Request, project_id: int, comment_id: int,
-                            how: str = Form("")):
+                            how: str = Form(""), return_to: str = Form("")):
     """Price one client note before it becomes work (ADR-0069).
 
     conform      the picture moved; re-syncing to it is free and never costs a round.
@@ -2940,7 +3181,11 @@ def review_note_disposition(request: Request, project_id: int, comment_id: int,
             db.update_delivery(conn, project_id, "revisions_used", max(0, used - 1))
     finally:
         conn.close()
-    return RedirectResponse(f"/project/{project_id}/delivery#versions", status_code=303)
+    # Back where it was pressed. The console was the only surface that had these, and it
+    # is not where the operator works — the room has them now, and being ejected to the
+    # console after each one is the same relocation ADR-0095's verdict buttons fixed.
+    return RedirectResponse(
+        _safe_local(return_to, f"/project/{project_id}/delivery#versions"), status_code=303)
 
 
 @router.post("/project/{project_id}/delivery/asset/restore")
@@ -3409,20 +3654,43 @@ def review_changes(
         if reviewer is not None:
             name, mail = (reviewer.get("name") or ""), (reviewer.get("email") or "")
         else:
-            name, mail = _reviewer_identity(request, author, email)
-        if not (name and mail):
+            name, mail = _client_identity(conn, project_id, request, author, email)
+        if not name:
             return _review_redirect(project_id, k, name=name, email=mail, r=r,
                                     origin=origin)
         delivery = db.get_delivery(conn, project_id)
         project = db.get_project(conn, project_id)
+        # ── ONE ROUND PER VERSION. ────────────────────────────────────────────────
+        # *"the client also has the ability to request a new version multiple times
+        # without the composer response and it spends their rounds… lets put a gate
+        # between versions so the client doesnt accidently spend 2 rounds"* (operator,
+        # 2026-08-30).
+        #
+        # A round buys A VERSION. Asking twice before the first one has been written does
+        # not buy two — it buys one, and charges for two, which is the client paying for
+        # our latency. The court already knows: if it is the STUDIO's, we owe them work
+        # and a second request is an addition to the brief, not a new round. So it is
+        # refused, and refused HERE rather than only in the template, because a form can
+        # be re-posted and a double-click is exactly how this gets pressed twice.
+        #
+        # `from_client` is what makes it a round at all — the studio's own change request
+        # is direction and never charged, so it is never gated either.
+        if bool(k or r) and _ask_outstanding(conn, project_id, delivery):
+            return _review_redirect(project_id, k, name=name, email=mail, r=r,
+                                    origin=origin, flag="already-asked")
         # `body` is the room's field name, `note` the portal's — whichever carries
         # words wins. Reading only `note` burned a revision round and recorded
         # nothing the client said.
         note_text = (note or "").strip() or (body or "").strip() or "Requested changes."
+        from_client = bool(k or r)
         _cid = db.add_review_comment(
             conn, project_id, version=_current_version_tag(delivery),
             author=name, email=mail, body=note_text, kind="change_request",
             verified=reviewer is not None,
+            # WHICH SIDE ASKED — recorded, not inferred. It was left blank here while
+            # every other write stamps it, so the round gate had to guess and the
+            # composer's subtraction had one more row to be unsure about.
+            author_role=("client" if from_client else "operator"),
         )
         # A change request arrives ALREADY PRICED as a revision (ADR-0069): pressing this
         # button is the client spending a round, and the round is spent right here. The
@@ -3433,7 +3701,6 @@ def review_changes(
         # not a revision request — it happens before the buyer has heard anything, and
         # charging it to their budget would be spending their money on our own second
         # thoughts. Recorded as a priced note; the counter does not move.
-        from_client = bool(k or r)
         db.set_comment_disposition(conn, project_id, _cid,
                                    "revision" if from_client else "conform")
         if from_client:

@@ -18,10 +18,19 @@
 <section class="card">
   <div class="card-head"><h2>Since you were last here</h2></div>
   <div class="stack">
+    {# EVERY ROW IS A DOOR. *"all it does is tell me something happened but nothing is
+       clickable to take me to the area where the new thing took place… the concept behind
+       this is for you to alert me and give me a clickable shortcut to the thing that needs
+       my attention"* (operator, 2026-08-30). The URL was always there — the phone push
+       carries it and opens it — and the outbox was discarding it at the record. It is
+       kept now, so this list is a list of PLACES, not a diary.
+
+       A row with no URL still renders, plainly: rows written before the column existed
+       have none, and an alert you cannot follow is still an alert you should see. #}
     {% for a in alerts %}
     <div class="assigned-row" style="align-items:flex-start;gap:10px{% if a.unseen %};background:#fff6ec{% endif %}">
       <div style="flex:1;min-width:0">
-        <div><strong>{{ a.title }}</strong>{% if a.unseen %} <span class="pill pv-review">new</span>{% endif %}</div>
+        <div>{% if a.url %}<a href="{{ a.url }}" class="alert-go"><strong>{{ a.title }}</strong> →</a>{% else %}<strong>{{ a.title }}</strong>{% endif %}{% if a.unseen %} <span class="pill pv-review">new</span>{% endif %}</div>
         <div class="muted small">{{ a.body }}</div>
       </div>
       <span class="muted small mono" style="white-space:nowrap">

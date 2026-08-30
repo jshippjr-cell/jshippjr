@@ -1322,8 +1322,10 @@ def test_review_action_pushes_the_operator(client, monkeypatch):
                 data={"k": token, "author": "Marcus", "email": "marcus@agency.com",
                       "note": "Punch up the drums"})
     assert calls, "operator push was not invoked on a review action"
-    # The push is linked to the project's delivery console.
-    assert any(f"/project/{pid}/delivery" in str(c) for c in calls)
+    # …and it links to THE ROOM (ADR-0096). It pointed at the delivery console, which is
+    # not where this operator works — said twice — and an alert whose whole job is to be a
+    # shortcut to the thing needing attention has to land on the thing.
+    assert any(f"/room/{pid}" in str(c) for c in calls)
 
 
 # --------------------------------------------------------------------------- #

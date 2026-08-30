@@ -1398,6 +1398,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox(created_at)")
+    # WHERE THE ALERT POINTS. Every operator push already carried a click URL — the phone
+    # opens it — and the outbox threw it away, so the dashboard's "since you were last
+    # here" list could name a thing and not take you to it: *"all it does is tell me
+    # something happened but nothing is clickable… the concept behind this is for you to
+    # alert me and give me a clickable shortcut to the thing that needs my attention"*
+    # (operator, 2026-08-30). Nothing new is computed; a value that already existed at
+    # every call site is now kept.
+    ob_cols = {r["name"] for r in conn.execute("PRAGMA table_info(outbox)")}
+    if "url" not in ob_cols:
+        conn.execute("ALTER TABLE outbox ADD COLUMN url TEXT")
     # HOW FAR THE OPERATOR HAS READ. Every operator push is already recorded in the outbox
     # as a `push` row, so "what happened while I was away" needs nothing new to be written
     # — only a mark for how much of it has been seen. One row, one integer.
@@ -5583,6 +5593,10 @@ def recent_alerts(conn, limit: int = 30) -> list:
         return []
     return [{"id": int(r["id"]), "at": r["created_at"] or "", "title": r["subject"] or "",
              "body": r["body_text"] or "", "status": r["status"] or "",
+             # The shortcut. An alert that names a thing and cannot take you to it is a
+             # notification, not a tool — and the URL was already there, on its way to
+             # the phone, being discarded at the record.
+             "url": (r["url"] if "url" in r.keys() else "") or "",
              "unseen": int(r["id"]) > floor} for r in rows]
 
 
@@ -6453,15 +6467,15 @@ OUTBOX_STATUS = {
 def record_outbound(conn, *, channel: str, recipient: str, subject: str,
                     body_text: str = "", body_html: str = "", status: str = "",
                     attachments: int = 0, project_id=None,
-                    rehearsal: int = 0) -> int:
+                    rehearsal: int = 0, url: str = "") -> int:
     """Record one outbound message. Never raises — see `mailer._record`."""
     cur = conn.execute(
         "INSERT INTO outbox (created_at, channel, recipient, subject, body_text, "
-        "body_html, status, attachments, project_id, rehearsal) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "body_html, status, attachments, project_id, rehearsal, url) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (_now(), channel or "email", recipient or "", subject or "", body_text or "",
          body_html or "", status or "", int(attachments or 0), project_id,
-         1 if rehearsal else 0))
+         1 if rehearsal else 0, (url or "").strip()))
     conn.commit()
     return int(cur.lastrowid or 0)
 
@@ -7747,6 +7761,47 @@ def get_review_comment(
     return conn.execute(
         "SELECT * FROM review_comments WHERE id = ?", (comment_id,)
     ).fetchone()
+
+
+def edit_review_comment(conn: sqlite3.Connection, project_id: int, comment_id: int,
+                        body: str) -> bool:
+    """Change what a note SAYS. Scoped to the project, like every mutation here.
+
+    Editing rather than deleting-and-retyping is the point: the note keeps its id, its
+    mark, its replies and its place in the conversation, so a client fixing a typo does
+    not detach the composer's answer from the thing it answered."""
+    text = (body or "").strip()
+    if not text:
+        return False
+    cur = conn.execute(
+        "UPDATE review_comments SET body = ? WHERE id = ? AND project_id = ?",
+        (text[:4000], comment_id, project_id))
+    conn.commit()
+    return bool(cur.rowcount)
+
+
+def delete_review_comment(conn: sqlite3.Connection, project_id: int,
+                          comment_id: int) -> bool:
+    """Remove a note, and any replies hanging off it.
+
+    The replies go WITH it. A reply is an answer to something; left behind when its
+    question is gone it reads as a remark about the take, which is not what anybody
+    wrote. Scoped to the project so a token for one campaign cannot reach another's.
+
+    Whether a note MAY be deleted is not decided here — that is a question about who is
+    asking and whether the note has already become work, and it lives in the route.
+    """
+    row = conn.execute(
+        "SELECT id FROM review_comments WHERE id = ? AND project_id = ?",
+        (comment_id, project_id)).fetchone()
+    if row is None:
+        return False
+    conn.execute("DELETE FROM review_comments WHERE parent_id = ? AND project_id = ?",
+                 (comment_id, project_id))
+    conn.execute("DELETE FROM review_comments WHERE id = ? AND project_id = ?",
+                 (comment_id, project_id))
+    conn.commit()
+    return True
 
 
 def move_review_comment(

@@ -66,12 +66,12 @@ def _on_email(*, to: str = "", subject: str = "", text: str = "",
 
 
 def record_alert(*, title: str, body: str = "", status: str = "",
-                 channel: str = "push") -> None:
+                 channel: str = "push", url: str = "") -> None:
     """The alert side. A phone push has no recipient address — the topic or the
     subscription IS the address — so the channel carries that and `recipient` stays
     blank rather than inventing one."""
     _write(channel=channel, recipient="", subject=title, body_text=body or "",
-           body_html="", status=status, attachments=0)
+           body_html="", status=status, attachments=0, url=url or "")
 
 
 def install() -> None:

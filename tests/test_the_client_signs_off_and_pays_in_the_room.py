@@ -134,7 +134,10 @@ def test_the_row_is_updated_rather_than_the_page_reloaded():
 
 # ── 2. the client's Takes window is theirs ──────────────────────────────────────────
 @pytest.mark.parametrize("line", [
-    "yours alone, never the client's",     # the composer's private shelf, labelled
+    # The private shelf that used to head this list is GONE (ADR-0096) — retired on the
+    # operator's word that *"composer's arent going to jot down things in this
+    # platform"*. It is asserted absent for EVERYONE in `test_range_notes.py`, which is
+    # a stronger form of the promise it used to make here.
     "Now deliver the remaining assets",    # the loading dock
     "A lane takes as many files",          # how to upload into it
 ])
@@ -146,7 +149,6 @@ def test_the_client_is_not_shown_the_loading_dock(stage, line):
 def test_the_composer_keeps_all_of_it(stage):
     c, _db, pid, ttok, _k, _a = stage
     words = _words(c.get(f"/room/{pid}?t={ttok}").text)
-    assert "yours alone, never the client's" in words
     assert "Now deliver the remaining assets" in words
 
 

@@ -148,6 +148,29 @@ def client_url(conn, db, opp_id: int, base: str = "", flag: str = "") -> str:
     return (base.rstrip("/") + path) if base else path
 
 
+def stamp_mine(feedback: dict, role: str) -> dict:
+    """Mark the notes this role's side WROTE, so the room can offer edit and delete.
+
+    The same rule `project_routes._note_is_mine` enforces at the door, applied to the
+    view — one answer to "is this yours", so the button and the route cannot disagree
+    about it. Absent (never `False`) on someone else's note, because a template that
+    forgets the check should then render nothing rather than everything.
+
+    A blank `author_role` is a row written before that column existed, and is read as the
+    CLIENT's: that is who wrote nearly all of them, and guessing the other way would hand
+    our side an edit over the buyer's own words.
+    """
+    fb = dict(feedback or {})
+    for key in ("notes", "archive"):
+        out = []
+        for n in (fb.get(key) or []):
+            wrote = (n.get("author_role") or "") or CLIENT
+            mine = (wrote == CLIENT) if role == CLIENT else (wrote != CLIENT)
+            out.append(dict(n, mine=bool(mine)))
+        fb[key] = out
+    return fb
+
+
 def priced_notes_only(feedback: dict) -> dict:
     """The composer's list, with everything a human has not yet priced removed.
 
@@ -366,6 +389,19 @@ def room_view(conn, db, project_id: int, role: str, *,
         room["versions"] = [dict(v, from_creator="") for v in (room.get("versions") or [])]
     # The checklist layer (`C`). Built whole by `_room_fields`, cut to the role here.
     room["readiness"] = readiness_view(room.get("readiness"), role)
+    # ── UNPRICED NOTES: the studio gets the words, everyone else gets the COUNT. ──
+    # ADR-0069 holds — a note is not work until a human has priced it, so the composer
+    # still cannot read or act on these. But "cannot act on" was implemented as "does not
+    # exist", and the composer's room then said the client had left nothing at all while
+    # three notes sat waiting on a classification nothing had asked for. A count is not
+    # work; it is the difference between "they said nothing" and "they said three things
+    # and the studio has them".
+    # …and which notes are this viewer's own to change (`n.mine`). Last, so it sees the
+    # notes as they will actually be rendered.
+    room["feedback"] = stamp_mine(room.get("feedback") or {}, role)
+    unpriced = list(room.get("unpriced") or [])
+    room["unpriced_n"] = len(unpriced)
+    room["unpriced"] = unpriced if "see_money" in allowed else []
     if media_token:
         # Last, and deliberately: subtract first, then route what survived. Routing
         # before the subtraction would mint a working client URL for a take the client

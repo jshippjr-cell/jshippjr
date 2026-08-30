@@ -302,11 +302,16 @@ def fire_and_forget(fn: Callable, *args, **kwargs) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-def _record_alert(title: str, body: str, status: str, channel: str = "push") -> None:
-    """Report an alert to the outbox (ADR-0086), never failing the alert."""
+def _record_alert(title: str, body: str, status: str, channel: str = "push",
+                  url: str = "") -> None:
+    """Report an alert to the outbox (ADR-0086), never failing the alert.
+
+    ``url`` is the SAME click target the phone gets — kept rather than discarded, so the
+    dashboard's list of what happened can be a list of places to go."""
     try:
         from . import outbox
-        outbox.record_alert(title=title, body=body, status=status, channel=channel)
+        outbox.record_alert(title=title, body=body, status=status, channel=channel,
+                            url=url)
     except Exception:      # noqa: BLE001 — an audit trail may never break its subject
         pass
 
@@ -322,7 +327,7 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
     global _LAST_PUSH_ERROR
     topic = os.environ.get("CHORDENTIAL_NTFY_TOPIC", "").strip()
     if not topic:
-        _record_alert(title, body, "unset")
+        _record_alert(title, body, "unset", url=click_url)
         return "unset"
     url = topic if topic.startswith("http") else f"https://ntfy.sh/{topic}"
     try:
@@ -337,11 +342,11 @@ def send_push(title: str, body: str = "", click_url: str = "") -> str:
         )
         urllib.request.urlopen(req, timeout=8)  # noqa: S310
         _LAST_PUSH_ERROR = ""
-        _record_alert(title, body, "sent")
+        _record_alert(title, body, "sent", url=click_url)
         return "sent"
     except Exception as e:                       # noqa: BLE001 — best-effort push
         _LAST_PUSH_ERROR = f"{type(e).__name__}: {e}"[:200]
-        _record_alert(title, body, "error")
+        _record_alert(title, body, "error", url=click_url)
         return "error"
 
 

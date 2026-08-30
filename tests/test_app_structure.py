@@ -253,7 +253,7 @@ def test_the_router_carries_the_whole_group():
     # when the deal was signed, paid or delivered (see test_deleting_a_demo_project.py).
     # +1: /project/{id}/delivery/asset/remove — take a deliverable file off a lane, for
     # the rows whose bytes the ephemeral disk ate (see test_a_lane_full_of_dead_links.py).
-    ("project_routes.py", "/project", 72),
+    ("project_routes.py", "/project", 74),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -327,8 +327,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     # +2 on the realtime capture webhook (one
     # declaration each for the trailing-slash and bare forms — Recall's own docs require
     # the slash before the query string, and a bare POST must not 404), +1 for /pricing.
-    assert len(decls) == 307, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 307 — "
+    assert len(decls) == 309, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 309 — "
         f"a slice lost or gained a URL")
 
 

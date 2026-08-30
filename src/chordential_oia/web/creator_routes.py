@@ -190,6 +190,19 @@ def _call_intel(conn, prow) -> dict:
         return {"facts": [], "open_questions": []}
 
 
+def _ask_outstanding_for(conn, project_id: int, delivery: dict) -> bool:
+    """`project_routes._ask_outstanding`, reached without importing the routes.
+
+    The routes import THIS module (`_room_for_project`), so the dependency runs one way
+    and the import is local to the call.
+    """
+    try:
+        from .project_routes import _ask_outstanding
+        return _ask_outstanding(conn, project_id, delivery)
+    except Exception:  # noqa: BLE001 — never fail the room over a button's state
+        return False
+
+
 def _music_requirement(conn, prow) -> str:
     """The deal's music requirement, for the rights line. A project does not carry it; the
     opportunity does, and a project without one has no claim to make."""
@@ -353,6 +366,22 @@ def _room_fields(conn, project_id: int, prow, *, role: str = "") -> dict:
                          label=version_label(len(versions_list(delivery)) + 1))
                     if delivery.get("pending_version") else None),
         "feedback": _creator_feedback(conn, project_id, delivery),
+        # ── NOTES NOBODY HAS PRICED YET (ADR-0069) ─────────────────────────────────
+        # Carried WHOLE; `room.readiness_view`'s neighbour `room_view` cuts it to the
+        # role. The studio needs the words (it is deciding what each one is); the
+        # composer needs only to know the client spoke, because ADR-0069 says an unpriced
+        # note is not yet work. What neither of them could survive is what they had —
+        # silence: the composer's Notes sheet read empty and the client looked like they
+        # had said nothing (operator, 2026-08-30).
+        "unpriced": [dict(n) for n in db.undispositioned_notes(conn, project_id)],
+        # WHOSE MOVE IT IS. `production.court_state` is the one derivation (ADR-0019) and
+        # the room now needs it for the round gate: while the ball is ours, the client
+        # asking again buys nothing and charges for it.
+        "court": production.court_state(prow, delivery),
+        # …and whether the client has ALREADY asked for a new version of this take. The
+        # room reads the same question the route refuses on, so the button and the door
+        # cannot disagree about whether a round is available.
+        "ask_outstanding": _ask_outstanding_for(conn, project_id, delivery),
         "creative_lock": locked,
         # THE APPROVED MASTER, as a file. A mixer or a music editor is invited at exactly
         # this moment and has to work from it — and the room, which knows which version is
@@ -476,6 +505,11 @@ def _creator_assignment_view(conn, talent_id: int) -> list:
         # UNCUT. That is how the roster and the client's budget would have reached a
         # composer — not through the room, but around it.
         entry["readiness"] = room.readiness_view(entry.get("readiness"), room.TALENT)
+        # …and the unpriced notes, same reason: this route bypasses `room_view`, so a
+        # composer would have been handed the buyer's unclassified words in full.
+        entry["unpriced_n"] = len(entry.get("unpriced") or [])
+        entry["unpriced"] = []
+        entry["feedback"] = room.stamp_mine(entry["feedback"], room.TALENT)
         seen[a["project_id"]] = entry
         out.append(entry)
     # Needs-me-first (composer review P1): rooms owing the composer work come
@@ -1000,7 +1034,9 @@ async def creator_submit_version(
     await run_in_threadpool(
         _notify_operator_review,
         project_id, None, f"New work submitted · {campaign}",
-        f"{who} submitted a new version. Review and publish it in the delivery console.")
+        # …and the copy names where the link goes. It said "the delivery console" while
+        # the link now opens the room, which is a sentence arguing with its own button.
+        f"{who} submitted a new version. Listen and publish it in the room.")
     return RedirectResponse(f"/creator/{token}?submitted={project_id}#p{project_id}",
                             status_code=303)
 
