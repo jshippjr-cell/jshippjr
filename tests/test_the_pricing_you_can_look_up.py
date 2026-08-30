@@ -30,6 +30,7 @@ def page(tmp_path, monkeypatch):
         importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
     from fastapi.testclient import TestClient
     from chordential_oia.web import app as app_mod
+    from chordential_oia.web import publicpaths as _gate
     from chordential_oia.web.shell import ADMIN_COOKIE, admin_cookie_value
     with TestClient(app_mod.app):
         pass
@@ -140,7 +141,8 @@ def test_the_client_never_sees_it(page):
     """Rate cards, floors and margins. This is the single most internal page in the
     product and it sits behind the admin gate like everything else in the console."""
     from chordential_oia.web import app as app_mod
-    assert not app_mod._is_public_path("/pricing")
+    from chordential_oia.web import publicpaths as _gate
+    assert not _gate.is_public("/pricing")
     bare = type(page)(app_mod.app)
     assert bare.get("/pricing", follow_redirects=False).status_code in (302, 303, 401, 403)
 

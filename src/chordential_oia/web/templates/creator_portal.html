@@ -45,6 +45,35 @@
   /* ── Arrival (Phase 4, §Act 1): house-lights-up, once per engagement ── */
   /* a scrim, not a wall — the dressed room (picture + drawing spine) shows through,
      darkest behind the text for legibility (§Act 1: serif line over the picture) */
+  /* The client's tour — a card, not a spotlight. A highlight-the-element walkthrough
+     has to know where every control is on every breakpoint, and it is wrong the first
+     time one moves; this says the same things and cannot go stale. */
+  .sr-tour{position:fixed;inset:0;z-index:99;display:flex;align-items:center;
+    justify-content:center;padding:20px;background:rgba(13,12,11,.82)}
+  .sr-tour[hidden]{display:none}
+  .tour-card{width:min(94vw,540px);background:var(--panel2,#191512);border:1px solid var(--hair2);
+    border-radius:16px;padding:26px 26px 18px;box-shadow:0 30px 90px rgba(0,0,0,.6)}
+  .tour-kick{font:700 9.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim2);margin-bottom:14px}
+  .tour-step h3{font-family:var(--serif);font-weight:500;font-size:20px;margin:0 0 10px}
+  .tour-step p{font:13.5px/1.65 var(--sans);color:var(--dim);margin:0 0 10px;max-width:52ch}
+  .tour-step p b{color:var(--text,#EDE6DC);font-weight:700}
+  .tour-step[hidden]{display:none}
+  .tour-next{color:rgba(237,230,220,.5)!important;font-size:12.5px!important}
+  .tour-foot{display:flex;align-items:center;gap:8px;margin-top:18px;padding-top:14px;
+    border-top:1px solid rgba(255,255,255,.09)}
+  .tour-dots{display:flex;gap:5px}
+  .tour-dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2);display:block}
+  .tour-dots i.on{background:var(--orange)}
+  .tour-btn{border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 15px;
+    font:700 13px var(--sans);cursor:pointer;background:transparent;color:inherit}
+  .tour-btn[hidden]{display:none}
+  .tour-go{background:var(--orange);border-color:var(--orange);color:#fff}
+  .tour-skip{background:none;border:0;color:var(--dim2);font:12px var(--sans);cursor:pointer;
+    text-decoration:underline}
+  .tour-open{background:none;border:0;color:var(--dim2);font:10.5px var(--mono);cursor:pointer;
+    text-decoration:underline;padding:0 2px}
+  .tour-open:hover{color:var(--orange)}
   .sr-arrival{position:fixed;inset:0;z-index:100;
     background:radial-gradient(circle at 50% 54%, rgba(9,8,7,.86) 0%, rgba(9,8,7,.7) 42%, rgba(9,8,7,.52) 100%);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
@@ -246,6 +275,25 @@
     white-space:nowrap}
   .v-approve{background:var(--orange);border-color:var(--orange);color:#fff}
   .v-done{font:600 12.5px var(--sans);color:#79b47a;flex:1 1 100%}
+  /* The other half of the decision, beside Approve and weighted the same — the operator
+     asked for it orange and next to it, and it is: this is not a lesser action, it is
+     the second thing a buyer can honestly say about a take. Outlined rather than filled
+     so the two are peers without both shouting. */
+  .v-ask{display:flex;flex-direction:column;gap:8px}
+  .v-ask-open{border-color:var(--orange);color:var(--orange);background:var(--orange-soft,rgba(240,119,44,.10))}
+  .v-ask .v-no[hidden]{display:none}
+  .v-ask .v-no{flex-wrap:wrap;width:100%}
+  .v-ask-why{flex:1 1 100%;margin:0;font:12.5px/1.5 var(--sans);color:rgba(237,230,220,.66);
+    max-width:60ch}
+  .v-ask-why b{color:rgba(237,230,220,.92)}
+  .nb-hint{margin:6px 0 0;font:11.5px/1.5 var(--sans);color:rgba(237,230,220,.5)}
+  .nb-hint b{color:rgba(237,230,220,.72);font-weight:700}
+  .nb-notyou{background:none;border:0;color:rgba(237,230,220,.45);font:11.5px var(--sans);
+    cursor:pointer;text-decoration:underline;padding:0 2px}
+  .nb-notyou:hover{color:var(--orange)}
+  /* A pin you can pick up (operator, 2026-08-28). */
+  .pin{cursor:grab}
+  .pin.dragging{cursor:grabbing;transform:translate(-50%,-50%) scale(1.35);z-index:6}
   .commits{margin:14px 0 0;padding:12px 14px;border:1px solid rgba(255,255,255,.14);
     border-radius:12px;background:rgba(255,255,255,.03)}
   .commits-h{font:700 9.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;
@@ -780,7 +828,8 @@
 {% set disp_state = 'Delivered' if closed else ('In review' if (a.pending and not a.versions) else
                     ('Writing' if a.delivery_state == 'Not started' else a.delivery_state)) %}
 {% set open_ct = a.feedback.open_count if (a.feedback and a.feedback.notes) else 0 %}
-<div class="room sr-room" id="p{{ a.project_id }}" {% if closed %}data-closed="1"{% endif %}
+<div class="room sr-room" id="p{{ a.project_id }}" data-project="{{ a.project_id }}"
+     {% if closed %}data-closed="1"{% endif %}
      data-fps="{{ a.picture.fps if a.picture and a.picture.fps else '' }}"
      data-tc0="{{ a.picture.tc_start if a.picture and a.picture.tc_start else '' }}"
      data-cut="{{ a.picture.n if a.picture and a.picture.n else '' }}"
@@ -976,6 +1025,8 @@
          has nothing to report, and a key that opens an empty sheet teaches people the
          keys are unreliable. #}
       {% if a.readiness %}<button class="lk sr-open" data-sheet="checklist"><b>C</b>Checklist</button>{% endif %}
+      {# The way BACK into the tour. One you cannot re-open is one you have to remember. #}
+      {% if voice == 'client' %}<button type="button" class="tour-open" id="tour-open">How this works</button>{% endif %}
     </div>
     {# Only a hand that may upload. The client is in the same room and must not be
        offered the composer's controls (ADR-0068 — the caps are the authority). #}
@@ -1017,15 +1068,20 @@
     <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
     <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
     <input type="hidden" name="creator_token" value="{{ room_token_kind|default('t') == 't' and room_token or '' }}">
-    {# A creator and the studio are already known — a talent row, and the studio. A
-       client on a bare share link is not, and the note route requires a real email, so
-       without this their note posted 303 and recorded NOTHING. Asked once, remembered on
-       the device by the same cookie the portal has always used. #}
+    {# WHO IS SPEAKING — known, not asked. A creator and the studio are a talent row and
+       the studio. A client used to be asked, in two REQUIRED boxes standing in front of
+       the one thing the room is for; but their link went to a named contact on a signed
+       deal, so we already hold the answer (`_deal_contact`). It is carried hidden and
+       correctable: "Not you?" opens the pair for the colleague on a forwarded link, and
+       the cookie remembers them. Only a deal with no contact at all still asks. #}
     {% if needs_identity %}
     <input type="text" name="author" class="nb-who" placeholder="Your name" required
            value="{{ known_name|default('') }}">
     <input type="email" name="email" class="nb-who" placeholder="you@agency.com" required
            value="{{ known_email|default('') }}">
+    {% elif voice == 'client' %}
+    <input type="hidden" name="author" class="nb-name-in" value="{{ known_name|default('') }}">
+    <input type="hidden" name="email" class="nb-mail-in" value="{{ known_email|default('') }}">
     {% else %}
     <input type="hidden" name="author" value="{{ room_who|default('') }}">
     {% endif %}
@@ -1045,7 +1101,20 @@
            placeholder="Say it at this moment…" required>
     <button type="submit" class="nb-send"><span class="nb-lead">Note at</span>
       <span class="nb-tc">0:00</span></button>
+    {% if voice == 'client' and not needs_identity and known_name %}
+    {# The correction, not the interrogation. It sits AFTER the note box because it is
+       almost never needed: the account contact is the person on this link. #}
+    <button type="button" class="nb-notyou" title="Sign your notes as someone else">Not
+      {{ known_name }}?</button>
+    {% endif %}
   </form>
+  {# HOW THE MARKS WORK, said where the marks are made. The Range button and the drag
+     across the waveform both existed and NOTHING said so — *"nothing tells the client
+     that they can scrub and highlight a range to leave a range comment"* (operator,
+     2026-08-28). One line, under the bar that does it. #}
+  <p class="nb-hint">A note lands where the playhead is — <b>drag its pin</b> afterwards to
+    put it exactly on the moment. For a passage, press <b>Range</b> (or drag across the
+    waveform) to highlight from here to here, then write.</p>
   {% endif %}
 
   {# ── THE TASTE GATE. The studio's own verdict, in the room where the studio listens.
@@ -1101,8 +1170,9 @@
       <li>{% if a.feedback and a.feedback.revisions_included %}
           Approving does <b>not</b> spend a round — {{ a.feedback.round_phrase or 'your rounds' }}
           {% if a.feedback.revisions_included %}({{ a.feedback.revisions_included - (a.feedback.revisions_used or 0) }} left){% endif %}.
-          <b>Request changes</b> spends one.
-          {% else %}Requesting changes starts a revision round.{% endif %}</li>
+          <b>Ask for a new version</b> spends one — leaving notes never does.
+          {% else %}Asking for a new version starts a revision round; leaving notes does
+          not.{% endif %}</li>
       {% if a.license %}
       <li>You are licensing: <b>{{ a.license.media }}</b> · {{ a.license.territory }} ·
         {{ a.license.term }} · {{ a.license.exclusivity }}.</li>
@@ -1143,16 +1213,34 @@
       timing, structure and intent. Level, low end and stereo width can't be judged here;
       judge those on monitors or good headphones.</p>
     {% endif %}
-    <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no">
-      <input type="hidden" name="origin" value="room">
-      <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
-      <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
-      <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
-      <input type="hidden" name="email" value="{{ known_email|default('') }}">
-      <input type="text" name="body" placeholder="What needs to change?" required>
-      <button type="submit" class="v-btn"
-              title="Starts a revision round">Request changes{% if a.feedback and a.feedback.revisions_included %} · uses a round{% endif %}</button>
-    </form>
+    {# "REQUEST CHANGES" WAS THE WRONG NAME FOR IT, and the box being permanently open
+       was the wrong shape. The client read leaving notes and "requesting changes" as the
+       same act — which is a fair reading of those words, and an expensive mistake: notes
+       are the conversation about this take and cost nothing, this button sends the
+       composer away to write a NEW VERSION and spends one of a finite number of rounds
+       (operator, 2026-08-28). So it says what it does, it stands beside Approve as the
+       other half of one decision, and its box appears only once you have chosen it —
+       an open text field next to Approve reads like somewhere to leave a note. #}
+    <div class="v-ask">
+      <button type="button" class="v-btn v-ask-open">↺ Ask for a new version{%
+        if a.feedback and a.feedback.revisions_included %} · uses a round{% endif %}</button>
+      <form method="post" action="/project/{{ a.project_id }}/review/changes" class="v-no" hidden>
+        <input type="hidden" name="origin" value="room">
+        <input type="hidden" name="k" value="{{ room_token_kind|default('t') == 'k' and room_token or '' }}">
+        <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
+        <input type="hidden" name="author" value="{{ known_name|default(room_who|default('')) }}">
+        <input type="hidden" name="email" value="{{ known_email|default('') }}">
+        <p class="v-ask-why">This is not the same as leaving a note. Your notes are already
+          with us and cost nothing. This sends the composer back to write <b>a different
+          version</b>{% if a.feedback and a.feedback.revisions_included %} and spends one of
+          your {{ a.feedback.revisions_included }} rounds{% if a.feedback.revisions_used %}
+          ({{ a.feedback.revisions_included - a.feedback.revisions_used }} left){% endif %}{% endif %}.</p>
+        <input type="text" name="body" placeholder="What should be different about the new version?" required>
+        <button type="submit" class="v-btn v-approve"
+                title="Sends the composer back for a new version">Send this request</button>
+        <button type="button" class="v-btn v-ask-cancel">Cancel</button>
+      </form>
+    </div>
   </div>
   {% endif %}
 
@@ -1165,7 +1253,7 @@
      The studio published four deliverables and the client's room said nothing about
      them: `deliverables` is the lane view and is subtracted from the buyer entirely,
      so there was no other half. Reported live, 2026-08-19. This is it — each published
-     asset with Approve / Request changes, and, once they are all signed off, the
+     asset with Approve / Send this back, and, once they are all signed off, the
      balance and the download. Same routes the delivery portal posts to; one
      derivation of the list (`delivery_ops.scoped_signoff`). ── #}
   {# NOTHING HERE IS BACKED UP. In the ROOM, because this is where the work is done and
@@ -1250,7 +1338,7 @@
       <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve{%
         if waiting|length > 1 %} all {{ waiting|length }}{% endif %}</button>
       <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
-      <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
+      <button type="submit" name="action" value="changes" class="btn tiny ghost">Send this back</button>
     </form>
     {% elif d.asset_key and (d.approval and d.approval.status) != 'Approved' %}
     <form method="post" action="/project/{{ a.project_id }}/review/asset" class="so-form">
@@ -1262,7 +1350,7 @@
       <input type="hidden" name="origin" value="room">
       <button type="submit" name="action" value="approve" class="btn tiny">✓ Approve</button>
       <input type="text" name="note" placeholder="or say what needs to change…" class="so-note">
-      <button type="submit" name="action" value="changes" class="btn tiny ghost">Request changes</button>
+      <button type="submit" name="action" value="changes" class="btn tiny ghost">Send this back</button>
     </form>
     {% endif %}
     {% elif unsigned and d.files %}
@@ -2034,6 +2122,77 @@
   <button class="sr-skip" type="button" id="sr-skip">Skip intro</button>
 </div>
 
+{# ── THE CLIENT'S TOUR ──────────────────────────────────────────────────────────
+      *"to mitigate client confusion we need to incorporate a quick platform tutorial
+      for the client as to what specific buttons and functions do and what to expect"*
+      (operator, 2026-08-28).
+
+      CLIENT ONLY. A composer and the studio live here; explaining the play button to
+      them is the same mistake the monitoring banner made (ADR-0070a). It runs once per
+      project, after the house lights lift, and stays reachable from "How this works" —
+      a tour you cannot re-open is a tour you have to remember, which is the opposite of
+      what it is for.
+
+      It teaches the two things the room was actually misread on: that a note is free and
+      is the conversation, and that asking for a new version is a different, costed act.
+      Everything else is the shortest true description of a control. ── #}
+{% if (room_role|default('talent')) == 'client' and assignments %}
+<div class="sr-tour" id="sr-tour" role="dialog" aria-modal="true"
+     aria-label="How this room works" hidden>
+  <div class="tour-card">
+    <div class="tour-kick">How this room works</div>
+    <div class="tour-step" data-step="0">
+      <h3>Press play.</h3>
+      <p>Your music is on the player above; if you have sent us your cut, it plays against
+        the picture. <b>Space</b> starts and stops it, <b>←</b> and <b>→</b> nudge two
+        seconds, and <b>↵</b> goes back to the top.</p>
+    </div>
+    <div class="tour-step" data-step="1" hidden>
+      <h3>Say it at the moment you hear it.</h3>
+      <p>Type in the bar under the player. The music <b>pauses the moment you click in</b>,
+        so what you are writing about stays where it is. Your note is pinned to that
+        second — and if the mark landed slightly off, <b>drag its pin</b> along the strip
+        to put it exactly where you meant.</p>
+    </div>
+    <div class="tour-step" data-step="2" hidden>
+      <h3>For a passage, mark a range.</h3>
+      <p>Press <b>Range</b> to open a stretch and press again to close it — or just
+        <b>drag across the waveform</b> from where it starts to where it ends. The
+        highlight stays put while you write about it.</p>
+    </div>
+    <div class="tour-step" data-step="3" hidden>
+      <h3>Notes are free, and they are the conversation.</h3>
+      <p>Everyone in the room reads them and we work from them. Leaving notes costs you
+        nothing and does <b>not</b> spend a revision round — so say as much as you like,
+        as precisely as you like.</p>
+    </div>
+    <div class="tour-step" data-step="4" hidden>
+      <h3>Two buttons decide the take, and they are not the same.</h3>
+      <p><b>Approve</b> makes this the master we build everything else from. It does not
+        spend a round, and it can be undone — just ask us.</p>
+      <p><b>Ask for a new version</b> is the other one. It sends the composer back to
+        write <b>a different version</b>, and it spends one of your rounds. If what you
+        want is a change to this take, a note is the thing.</p>
+    </div>
+    <div class="tour-step" data-step="5" hidden>
+      <h3>Everything else is a layer.</h3>
+      <p><b>B</b> the brief, <b>N</b> your notes, <b>V</b> every take so far, and
+        <b>C</b> where the whole project stands — what is agreed, what is outstanding and
+        what lands next. Click them, or press the letter.</p>
+      <p class="tour-next">We will email you the moment there is something new to hear.
+        You never have to check.</p>
+    </div>
+    <div class="tour-foot">
+      <span class="tour-dots" id="tour-dots"></span>
+      <span class="spacer"></span>
+      <button type="button" class="tour-btn" id="tour-back" hidden>Back</button>
+      <button type="button" class="tour-btn tour-go" id="tour-next">Next</button>
+      <button type="button" class="tour-skip" id="tour-skip">Skip</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# Command bar (Phase 4 §item 11): ⌘K fuzzy-jump to cues, notes, layers, actions. #}
 <div class="sr-cmd" id="sr-cmd" role="dialog" aria-modal="true" aria-label="Command bar">
   <div class="sr-cmd-box">
@@ -2313,6 +2472,16 @@
       return String(h).padStart(2,"0") + ":" + String(m2).padStart(2,"0") + ":" +
              String(s2).padStart(2,"0") + ":" + String(f).padStart(2,"0");
     }
+    /* THE CREDENTIAL THIS ROOM WAS OPENED WITH. Read off the note bar, which already
+       carries all three as hidden fields — rather than re-templated here, so there is one
+       statement in the page of which token this viewer holds. Anything that posts from
+       inside the room needs it: `/uploads` and every review door are token-gated, and the
+       studio's own room holds none of the three (its admin session is the credential). */
+    var roomTok = (function(){
+      var bar0 = root.querySelector(".sr-notebar");
+      function v(sel){ var el = bar0 && bar0.querySelector(sel); return (el && el.value) || ""; }
+      return { k: v("[name=k]"), r: v("[name=r]"), t: v("[name=creator_token]") };
+    })();
     function renderPins(){
       noteLane.querySelectorAll(".pin,.pin-beyond").forEach(function(p){ p.remove(); });
       var D = mDur();
@@ -2367,6 +2536,7 @@
         pin.title = pin.getAttribute("aria-label");
         pin.addEventListener("click", function(e){
           e.stopPropagation();
+          if (pin.dataset.moved){ delete pin.dataset.moved; return; }   // that was a drag
           seek(n.t); openSheet("notes");
           var card = root.querySelector('.sr-note[data-note="' + n.id + '"]');
           if (card){
@@ -2374,6 +2544,72 @@
             card.classList.add("hot"); card.scrollIntoView({ block:"nearest" });
           }
         });
+        /* ── PICK THE PIN UP AND PUT IT WHERE YOU MEANT ────────────────────────────
+           *"the client needs the ability to move the comment marker to the exact spot
+           they need it. right now the comment is not moveable"* (operator, 2026-08-28).
+
+           A note is a claim about a MOMENT, and the moment was whatever the playhead
+           was on when Send was pressed — which is never the thing itself: you hear it,
+           you reach for the box, and the mark is already a beat late. The only remedy
+           was a second note saying "actually, a little earlier", which the composer then
+           has to reconcile against the first.
+
+           A RANGE MOVES WHOLE. Dragging the pin of a span shifts both ends by the same
+           amount, because a passage is one claim and stretching it from one end would be
+           a different one. The server is the authority on whether the move is allowed
+           (your own side's notes only); this is the hand.
+
+           The transport stops on pick-up for the same reason it stops for the note box:
+           you are placing a mark by ear, and the picture must hold still while you do. */
+        (function(){
+          var down = null;
+          pin.addEventListener("mousedown", function(e){
+            if (e.button !== 0 || !mDur() || (n.id + "").indexOf("local-") === 0) return;
+            e.preventDefault(); e.stopPropagation();
+            down = { x: e.clientX, t0: n.t, moved: false };
+            pause();
+            pin.classList.add("dragging");
+          });
+          function at(e){
+            var rct = noteLane.getBoundingClientRect(), D = mDur() || 0;
+            return Math.max(0, Math.min(D, (e.clientX - rct.left) / (rct.width || 1) * D));
+          }
+          document.addEventListener("mousemove", function(e){
+            if (!down) return;
+            if (Math.abs(e.clientX - down.x) > 3) down.moved = true;
+            if (!down.moved) return;
+            var t = at(e);
+            pin.style.left = Math.min(100, Math.max(0, t / mDur() * 100)) + "%";
+            pin.title = "Move to " + tcFmt(t);
+          });
+          document.addEventListener("mouseup", function(e){
+            if (!down) return;
+            var was = down; down = null;
+            pin.classList.remove("dragging");
+            if (!was.moved) return;
+            pin.dataset.moved = "1";           // the click that ends a drag is not a click
+            var t = at(e), D = mDur() || 0;
+            var span = (n.t_end != null && n.t_end > n.t) ? (n.t_end - n.t) : null;
+            var end = span === null ? null : Math.min(D, t + span);
+            var fd = new FormData();
+            fd.append("t", String(Math.round(t * 100) / 100));
+            if (end !== null) fd.append("t_end", String(Math.round(end * 100) / 100));
+            fd.append("k", roomTok.k); fd.append("r", roomTok.r);
+            fd.append("t_tok", roomTok.t);
+            fetch("/project/" + root.dataset.project + "/review/note/" + n.id + "/move",
+                  { method: "POST", body: fd, credentials: "same-origin" })
+              .then(function(resp){
+                if (!resp.ok) throw new Error("move refused");
+                n.t = t; if (end !== null) n.t_end = end;
+                renderPins();
+                whisper("Note moved to " + tcFmt(t) + ".");
+              })
+              .catch(function(){
+                renderPins();       // snap back: the server did not agree
+                toast("That note can't be moved from here.");
+              });
+          });
+        })();
         noteLane.appendChild(pin);
       });
     }
@@ -2633,6 +2869,13 @@
       }
       if (!hasAudio){ toast("No take loaded yet. Upload your music and it plays here."); return; }
       audio.paused ? audio.play() : audio.pause();
+    }
+    /* Stop, as an instruction rather than a flip. `toggle()` would START the transport if
+       it happened to be parked, and the two callers here — reaching for the note box,
+       picking up a pin — mean "hold still", never "begin". */
+    function pause(){
+      if (hasPicture) video.pause();
+      if (hasAudio) audio.pause();
     }
     function seek(t){
       if (hasPicture){
@@ -3093,6 +3336,32 @@
       });
       /* Typing must not steal the transport keys, and space in a note is a space. */
       body.addEventListener("keydown", function(e){ e.stopPropagation(); });
+      /* REACHING FOR THE BOX STOPS THE MUSIC. *"when they click to make a comment it
+         needs to stop the playback, so they don't lose their placement"* (operator,
+         2026-08-28). It kept playing while you typed, so the moment you were writing
+         about slid away underneath you and the mark went with it — you looked up eight
+         bars late and the note was about the wrong bar. Pausing costs nothing (space
+         starts it again) and it holds the very thing the note is a claim about. */
+      body.addEventListener("focus", function(){
+        if (!mPaused()) { pause(); whisper("Paused so your note stays on this moment."); }
+      });
+      /* WHO IS SIGNING. The pair is prefilled from the deal and hidden; this opens it
+         for the colleague on a forwarded link, and the server's cookie remembers them. */
+      var notYou = bar.querySelector(".nb-notyou");
+      if (notYou) notYou.addEventListener("click", function(){
+        var nameIn = bar.querySelector(".nb-name-in"),
+            mailIn = bar.querySelector(".nb-mail-in");
+        if (!nameIn || !mailIn) return;
+        [nameIn, mailIn].forEach(function(el, i){
+          el.type = i ? "email" : "text";
+          el.className = "nb-who";
+          el.placeholder = i ? "you@agency.com" : "Your name";
+          el.required = true;
+          el.value = "";
+        });
+        notYou.remove();
+        nameIn.focus();
+      });
       setInterval(function(){ paint(); paintBand(); }, 200);
       paint();
       /* Post WITHOUT leaving. A normal submit reloaded the room, which stopped the
@@ -3263,6 +3532,31 @@
     else r0.audio.addEventListener("loadedmetadata", go, { once: true });
     setTimeout(go, 4000);   // fail-soft if metadata never fires
   })();
+
+  /* THE ASK REVEALS ITS BOX. An open text field standing next to Approve reads like
+     somewhere to leave a note — which is exactly the confusion this rename is fixing —
+     so the field appears only once the client has said that is what they want, with the
+     sentence explaining what it costs them. Escape and Cancel put it away. */
+  document.querySelectorAll(".v-ask").forEach(function(wrap){
+    var open = wrap.querySelector(".v-ask-open"),
+        form = wrap.querySelector(".v-no"),
+        cancel = wrap.querySelector(".v-ask-cancel"),
+        field = form && form.querySelector("input[type=text]");
+    if (!open || !form) return;
+    function show(on){
+      form.hidden = !on;
+      open.hidden = on;
+      if (on && field) field.focus();
+    }
+    open.addEventListener("click", function(){ show(true); });
+    if (cancel) cancel.addEventListener("click", function(){ show(false); });
+    if (field){
+      field.addEventListener("keydown", function(e){
+        e.stopPropagation();                       // typing is not the transport
+        if (e.key === "Escape"){ e.preventDefault(); show(false); open.focus(); }
+      });
+    }
+  });
 
   addEventListener("keydown", function(e){
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -3694,6 +3988,65 @@
       if (arr.classList.contains("lifting")) { document.removeEventListener("keydown", onk, true); return; }
       begin(); document.removeEventListener("keydown", onk, true);
     }, true);
+  })();
+
+  /* ── The client's tour: once per project, after the house lights, always re-openable.
+        It waits for arrival rather than racing it — two overlays at once is neither. */
+  (function(){
+    var tour = document.getElementById("sr-tour");
+    var opener = document.getElementById("tour-open");
+    if (!tour) return;
+    var steps = Array.prototype.slice.call(tour.querySelectorAll(".tour-step")),
+        dots = document.getElementById("tour-dots"),
+        back = document.getElementById("tour-back"),
+        next = document.getElementById("tour-next"),
+        skip = document.getElementById("tour-skip");
+    var room = document.querySelector(".sr-room");
+    var key = "chordos_tour_" + (room ? room.id : "x");
+    var at = 0;
+    steps.forEach(function(){
+      var d = document.createElement("i"); dots.appendChild(d);
+    });
+    function paint(){
+      steps.forEach(function(el, i){ el.hidden = (i !== at); });
+      Array.prototype.forEach.call(dots.children, function(d, i){
+        d.classList.toggle("on", i === at);
+      });
+      back.hidden = (at === 0);
+      next.textContent = (at === steps.length - 1) ? "Got it" : "Next";
+      skip.hidden = (at === steps.length - 1);
+    }
+    function open(){ tour.hidden = false; at = 0; paint(); next.focus(); }
+    function close(){
+      tour.hidden = true;
+      try { window.localStorage.setItem(key, "1"); } catch(e){}
+    }
+    back.addEventListener("click", function(){ if (at > 0){ at--; paint(); } });
+    next.addEventListener("click", function(){
+      if (at < steps.length - 1){ at++; paint(); } else close();
+    });
+    skip.addEventListener("click", close);
+    if (opener) opener.addEventListener("click", open);
+    tour.addEventListener("keydown", function(e){
+      e.stopPropagation();                       // never the transport keys
+      if (e.key === "Escape"){ e.preventDefault(); close(); }
+    });
+    var seen;
+    try { seen = window.localStorage.getItem(key); } catch(e){ seen = "1"; }
+    var force = /[?&]tour=1/.test(window.location.search);
+    if (seen && !force) return;
+    /* AFTER the house lights. Arrival removes itself when it lifts, so waiting for it to
+       leave the document is the honest signal — a fixed delay would collide on a slow
+       machine and look like two dialogs fighting. */
+    var arrival = document.getElementById("sr-arrival");
+    if (!arrival){ open(); return; }
+    var waited = 0;
+    var t = setInterval(function(){
+      waited += 200;
+      if (!document.getElementById("sr-arrival") || waited > 20000){
+        clearInterval(t); open();
+      }
+    }, 200);
   })();
 
   // ── Command bar (Phase 4 §item 11): ⌘K fuzzy jump ──

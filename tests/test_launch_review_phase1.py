@@ -95,7 +95,9 @@ def test_every_front_of_house_route_is_reachable_with_the_gate_on():
     from pathlib import Path
     from chordential_oia.web import app as app_mod
 
-    src = Path(app_mod.__file__).read_text()
+    # The gate moved out of app.py into `publicpaths.py` (2026-08-28); the audit
+    # follows the set rather than the file it used to sit in.
+    src = (Path(app_mod.__file__).parent / "publicpaths.py").read_text()
     block = src.split("_PUBLIC_PATHS = frozenset({")[1].split("})")[0]
     allowed = set(re.findall(r'"([^"]+)"', block))
 

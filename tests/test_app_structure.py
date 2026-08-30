@@ -216,11 +216,15 @@ def test_app_py_is_getting_smaller_not_larger():
     exemption silently 303s a real client to the internal login, which has now happened
     twice in production.
 
-    If this needs raising again, extract the gate (`_is_public_path` and its regexes)
-    into its own module instead. That is a real shrink; another +10 is not.
+    That extraction happened (2026-08-28): `_is_public_path`, `_PUBLIC_PATHS` and every
+    exemption regex now live in `publicpaths.py`, taking app.py 763 -> 600. The ratchet
+    tightened with it rather than keeping the old headroom, because headroom left after a
+    shrink is just the next slow re-growth with permission. The instruction still stands
+    in the same form: when this next binds, MOVE something out — the gate's comments are
+    load-bearing and are not the thing to cut.
     """
     n = len((WEB / "app.py").read_text(encoding="utf-8").splitlines())
-    assert n < 760, (
+    assert n < 620, (
         f"app.py is {n} lines — it was 9,133 before the first slice and should only "
         f"shrink from here")
 
@@ -249,7 +253,7 @@ def test_the_router_carries_the_whole_group():
     # when the deal was signed, paid or delivered (see test_deleting_a_demo_project.py).
     # +1: /project/{id}/delivery/asset/remove — take a deliverable file off a lane, for
     # the rows whose bytes the ephemeral disk ate (see test_a_lane_full_of_dead_links.py).
-    ("project_routes.py", "/project", 71),
+    ("project_routes.py", "/project", 72),
     ("creator_routes.py", "/creator", 11),
     # A session player has no portal, no assignments and no reason to come back — not
     # a creator, so not in that router. The group tripwire is what said so.
@@ -323,8 +327,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     # +2 on the realtime capture webhook (one
     # declaration each for the trailing-slash and bare forms — Recall's own docs require
     # the slash before the query string, and a bare POST must not 404), +1 for /pricing.
-    assert len(decls) == 306, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 306 — "
+    assert len(decls) == 307, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 307 — "
         f"a slice lost or gained a URL")
 
 

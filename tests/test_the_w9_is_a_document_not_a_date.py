@@ -33,6 +33,7 @@ def roster(tmp_path, monkeypatch):
     monkeypatch.delenv("CHORDENTIAL_SEED_DEMO", raising=False)
     importlib.reload(importlib.import_module("chordential_oia.web.db"))
     from chordential_oia.web import app as app_mod
+    from chordential_oia.web import publicpaths as _gate
     importlib.reload(app_mod)
     from chordential_oia.web import db
     from chordential_oia.web.shell import ADMIN_COOKIE, admin_cookie_value
@@ -135,8 +136,8 @@ def test_the_w9_is_not_a_public_url(roster):
     """It carries a taxpayer ID. ``/uploads/{name}`` is behind the admin gate — client
     media reaches a buyer through the token-scoped ``/project/{id}/dl/`` instead — and
     this is the assertion that keeps it there."""
-    from chordential_oia.web import app as app_mod
-    assert not app_mod._is_public_path("/uploads/w9-1-abc.pdf")
+    from chordential_oia.web import publicpaths as _gate
+    assert not _gate.is_public("/uploads/w9-1-abc.pdf")
 
 
 # ── and the funnel moves ────────────────────────────────────────────────────────────

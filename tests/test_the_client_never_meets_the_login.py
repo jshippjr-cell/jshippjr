@@ -31,6 +31,7 @@ def gated(tmp_path, monkeypatch):
         importlib.reload(importlib.import_module(f"chordential_oia.web.{m}"))
     from fastapi.testclient import TestClient
     from chordential_oia.web import app as app_mod
+    from chordential_oia.web import publicpaths as _gate
     with TestClient(app_mod.app) as c:
         yield c, app_mod
 
@@ -62,6 +63,7 @@ def test_every_workspace_route_is_exempt_from_the_admin_gate():
     from pathlib import Path
 
     from chordential_oia.web import app as app_mod, workspace_routes
+    from chordential_oia.web import publicpaths as _gate
 
     src = Path(workspace_routes.__file__).read_text(encoding="utf-8")
     declared = re.findall(r'^@router\.[a-z]+\("(/workspace/[^"]*)"', src, re.M)
@@ -71,7 +73,7 @@ def test_every_workspace_route_is_exempt_from_the_admin_gate():
     for path in declared:
         # Substitute a realistic token for the path parameter.
         concrete = path.replace("{token}", "Ab3xY9zQ_-01")
-        if not app_mod._is_public_path(concrete):
+        if not _gate.is_public(concrete):
             missing.append(path)
     assert missing == [], (
         f"these client routes sit behind the admin gate and will bounce a client to "

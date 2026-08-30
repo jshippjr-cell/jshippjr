@@ -211,8 +211,9 @@ def test_the_preview_cannot_script_or_phone_home(console):
 def test_the_outbox_is_behind_the_admin_gate(console):
     """It holds every client's address and the full text of what we told them."""
     from fastapi.testclient import TestClient
+    from chordential_oia.web import publicpaths as _gate
     _c, app_mod, _db = console
-    assert not app_mod._is_public_path("/outbox")
+    assert not _gate.is_public("/outbox")
     with TestClient(app_mod.app) as anon:
         assert anon.get("/outbox", follow_redirects=False).status_code == 303
 

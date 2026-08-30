@@ -140,7 +140,8 @@ def test_review_action_exemption_lists_every_review_route(tmp_path, monkeypatch)
         if m:
             registered.add(m.group(1))
     assert registered, "no review routes found — test wiring is stale"
-    exempted = set(app_mod._REVIEW_ACTIONS)
+    from chordential_oia.web import publicpaths
+    exempted = set(publicpaths._REVIEW_ACTIONS)
     missing = registered - exempted
     assert not missing, f"review routes not exempted from the admin gate: {missing}"
 
@@ -154,6 +155,7 @@ def test_every_creator_portal_post_bypasses_the_gate(tmp_path, monkeypatch):
     app_mod = _build(tmp_path, monkeypatch, gated=True)
     import re
     from conftest import registered_routes
+    from chordential_oia.web import publicpaths
     missing = []
     for path, methods in registered_routes(app_mod.app):
         if not path.startswith("/creator/") or "POST" not in methods:
@@ -163,6 +165,6 @@ def test_every_creator_portal_post_bypasses_the_gate(tmp_path, monkeypatch):
         # then failed the regex for a route that was in fact exempt. Digits satisfy both
         # the token charset and the numeric ids, so one value covers every parameter.
         concrete = re.sub(r"\{[^}]+\}", "12345", path)
-        if not app_mod._CREATOR_PORTAL_RE.match(concrete):
+        if not publicpaths._CREATOR_PORTAL_RE.match(concrete):
             missing.append(path)
     assert not missing, f"creator POST routes not gate-exempt: {missing}"

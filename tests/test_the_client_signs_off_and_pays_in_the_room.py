@@ -183,7 +183,11 @@ def test_an_approved_version_is_not_still_a_button(stage):
     page = c.get(f"/room/{pid}?k={ktok}").text
     assert "✓ Approve v1 FINAL" not in page, "a one-tap button for something already done"
     assert "You approved v1 FINAL" in page
-    assert "Request changes" in page, (
+    # The way back survives the rename (ADR-0095): "Request changes" read as the same
+    # act as leaving a note, so it says what it actually does. What must NOT change is
+    # that it is still here — approval is reversible on purpose, and taking the way back
+    # is worse than the stale button.
+    assert "Ask for a new version" in page, (
         "approval is reversible on purpose; taking the way back is worse than the "
         "stale button")
 

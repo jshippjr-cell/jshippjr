@@ -94,7 +94,10 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   **`scripts/run_tests_batched.sh`** instead (~7 files per batch, `-n0`, ~25 min). It
   prints every `FAILED`/`ERROR` line and exits non-zero; do NOT hand-roll a batch loop
   that summarises with `tail -3`, which is how four red tests reached a commit under a
-  "0 failed" report. **1,577 tests**, must stay green before commit.
+  "0 failed" report. **Run it unpiped, or with `set -o pipefail`** — `… | tail -45`
+  reports *tail's* exit status, so a red suite comes back as exit 0 and only the printed
+  `=== N FAILING:` block gives it away (2026-08-28). **1,577 tests**, must stay green
+  before commit.
 - Run locally: `uvicorn chordential_oia.web.app:app --reload` (or `--port 8099`).
 - Quick import check: `python -c "import chordential_oia.web.app"`.
 - Rebuild the front door's world (after any edit to `scripts/score_scene/`):
@@ -231,6 +234,13 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   by never putting the pending take in it — never by a template `{% if %}`. `room.CAPS`
   is the authority and an unknown role gets nothing. A gate-exempt route must make its
   own stricter check: `_session_role` reads "no token" as *operator*.
+- **The buyer's side of the room is learnable** (ADR-0095): identity is RESOLVED from
+  the deal's contact (`room_routes._deal_contact`), never demanded; the note box pauses
+  the transport on focus; a note's mark is draggable by **the side that wrote it**
+  (`db.move_review_comment`); and the second verdict is **"Ask for a new version"** —
+  never "request changes", which read as leaving a note. **A new token-gated review door
+  must be added to `app._REVIEW_ACTIONS` or its own exemption regex**, or the admin gate
+  answers the client 200 with a login page, which looks exactly like success.
 - **The room's layers are `B` brief, `N` notes, `V` takes, `C` checklist** (ADR-0094):
   the readiness view is ONE derivation (`kickoff.readiness_for_project`) subtracted by
   `room.readiness_view` — no roster for the buyer, no commercial rows or budget for a

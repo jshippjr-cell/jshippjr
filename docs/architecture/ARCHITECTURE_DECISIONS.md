@@ -1664,6 +1664,60 @@ One process note worth keeping: the scripted import insertion put a line **insid
 parenthesised import** in `test_delivery.py`, which is why the sweep ends with an AST parse
 of every file it touched rather than a grep. A mechanical edit needs a mechanical check.
 
+### ADR-0095 — The buyer's half of the room is learnable without being taught
+**Status:** Accepted (2026-08-28, operator directive) · Extends ADR-0068 / ADR-0071 /
+ADR-0094 · Source: `room_routes._deal_contact`, `db.move_review_comment`,
+`project_routes.review_note_move`, `app._REVIEW_NOTE_MOVE_RE`, the note bar / verdict /
+`sr-tour` blocks in `creator_portal.html`, `tests/test_the_client_meets_the_room.py`
+
+**Decision.** Seven changes to the client's side of the room, from one live session:
+identity is **resolved, not asked**; the transport **pauses when the note box takes
+focus**; the note bar **says** that a mark can be dragged and a passage marked; a note's
+mark is **movable by the side that wrote it**; and "Request changes" becomes **"Ask for a
+new version"**, standing beside Approve, revealing its box only when chosen. A
+client-only tour carries the rest.
+
+**Why — one theme.** Every one of these was a control that was correct and *unlearnable*.
+The room was built by people who already knew how it worked.
+
+The expensive one is the wording. *"the client was confused by the wording 'request
+changes' they thought submitting notes was the same thing"* — which is a fair reading of
+those words and a costly mistake in both directions: notes are the conversation about
+this take and cost nothing, while that button sends the composer away to write a NEW
+VERSION and spends one of a finite number of rounds. A buyer who cannot tell them apart
+either says nothing, for fear of spending a round, or spends rounds saying things a note
+would have carried. The name now states the act, and the panel under it says in one
+sentence what it costs.
+
+**Consequences worth keeping.**
+
+**Identity was never a real question.** Two required boxes stood in front of the one
+thing the room exists for, and the answer was already on file: this link went to a named
+contact on a signed deal, and under ADR-0050 that email is what makes a buyer a buyer.
+It is used, and it stays CORRECTABLE — the share link is forwardable, so a colleague
+presses "Not you?" once and the existing cookie remembers them. Asking survives only for
+a deal with no contact at all, because a note attributed to nobody is worse than one more
+box.
+
+**A mark is a claim about a moment, and it was whatever the playhead happened to be on.**
+Nobody hits that: you hear the thing, you reach for the box, and the mark is a beat late.
+Two remedies, both needed — focus pauses the transport, and the pin can be picked up
+afterwards. **Only the side that wrote a note may move it**: moving someone else's mark
+changes what they said, which is the same species of edit as rewriting their words. A
+range moves **whole**, because a passage is one claim.
+
+**The gate exemption is the trap this route walked into.** `/review/note/<id>/move` did
+not match `_REVIEW_ACTION_RE`, so the admin gate redirected the client to the operator's
+login — which answers **200 with a login page** and therefore looks exactly like success.
+The same drift is recorded in that matcher's own comment from the last time it happened.
+The new pattern is named exactly and is deliberately NOT a wildcard over
+`/review/note/<id>/*`: the sibling `/species` is an operator classification that must
+stay gated.
+
+**A tutorial is client-only, and re-openable.** Explaining the play button to the
+composer is ADR-0070a's mistake again. And a tour you cannot re-open is one you have to
+remember, which is the opposite of what it is for.
+
 ### ADR-0094 — The readiness checklist is a layer of the room, cut to the role
 **Status:** Accepted (2026-08-28, operator directive) · Extends ADR-0068 / ADR-0093 ·
 Source: `room.readiness_view`, `kickoff.readiness_for_project`, the `checklist` sheet in

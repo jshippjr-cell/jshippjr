@@ -375,9 +375,10 @@ def test_the_client_can_never_see_the_panel(live):
     """The plan's fourth failure. The client never knows this exists — and its UNRESOLVED
     state in particular must never become another client artifact."""
     from chordential_oia.web import app as app_mod
+    from chordential_oia.web import publicpaths as _gate
     c, _db, opp, _mid = live
     for path in (f"/opportunity/{opp}/copilot", f"/opportunity/{opp}/copilot.json"):
-        assert not app_mod._is_public_path(path), f"{path} is exempt from the admin gate"
+        assert not _gate.is_public(path), f"{path} is exempt from the admin gate"
     bare = type(c)(app_mod.app)
     assert bare.get(f"/opportunity/{opp}/copilot.json",
                     follow_redirects=False).status_code in (302, 303, 401, 403)

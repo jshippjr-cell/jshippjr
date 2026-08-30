@@ -24,6 +24,31 @@ from .shell import admin_authed, render
 router = APIRouter(tags=["room"])
 
 
+def _deal_contact(conn, project_id: int, name: str = "", mail: str = ""):
+    """The buyer of record on this project — the person the room's link was sent to.
+
+    Evidence, not a guess: this is the contact on the opportunity that became the
+    project, the address the countersignature email went to, and under ADR-0050 the
+    thing that makes a buyer a buyer at all. Whatever the caller already resolved
+    (a cookie from a previous visit) wins, because a colleague who corrected their name
+    once must not be renamed back to the account contact on every load.
+    """
+    if name and mail:
+        return name, mail
+    try:
+        prow = db.get_project(conn, project_id)
+        if prow is None or not prow["opp_id"]:
+            return name, mail
+        opp = db.get_opportunity(conn, int(prow["opp_id"]))
+        if opp is None:
+            return name, mail
+        keys = opp.keys()
+        return (name or ((opp["contact_name"] if "contact_name" in keys else "") or "")),\
+               (mail or ((opp["contact_email"] if "contact_email" in keys else "") or ""))
+    except Exception:  # noqa: BLE001 — never fail the room over a courtesy prefill
+        return name, mail
+
+
 @router.get("/room/{project_id}", response_class=HTMLResponse)
 def one_room(request: Request, project_id: int, k: str = "", r: str = "",
              t: str = ""):
@@ -119,10 +144,29 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         ]} if "see_contributors" in view["caps"] else {project_id: []}
     finally:
         conn.close()
-    # The note route needs a real name+email. A creator and the studio have one; a client
-    # on a share link may not, so the bar asks — once — and the cookie remembers.
+    # WE ALREADY KNOW WHO THE BUYER IS — so we stopped asking.
+    #
+    # The note route needs a real name+email, and the bar used to demand both from a
+    # client before they could say anything at all: two required boxes in front of the
+    # one thing the room exists for. *"remove the requirement to input their name and
+    # email in order to make a comment"* (operator, 2026-08-28).
+    #
+    # It was never a real question. This link went to a named contact on a signed deal,
+    # and `opportunities.contact_name` / `contact_email` is who it went to — evidence we
+    # hold, not a guess (ADR-0050: a buyer is an email). So it is used, the boxes come
+    # down, and the correction stays available for the case the account contact is not
+    # the person typing: a colleague on a forwarded link presses "Not you?" once and the
+    # same cookie that always remembered it remembers them.
     from .project_routes import _reviewer_identity
     _kn, _km = _reviewer_identity(request)
+    if role == room.CLIENT and not (_kn and _km):
+        conn2 = db.connect()
+        try:
+            _kn, _km = _deal_contact(conn2, project_id, _kn, _km)
+        finally:
+            conn2.close()
+    # Only when we genuinely have nobody — no cookie, no contact on the deal — is the
+    # question asked, because a note attributed to no one is worse than one more box.
     needs_identity = (role == room.CLIENT and not (_kn and _km))
     return render(
         request, "creator_portal.html", nav="",

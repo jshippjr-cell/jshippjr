@@ -7749,6 +7749,42 @@ def get_review_comment(
     ).fetchone()
 
 
+def move_review_comment(
+    conn: sqlite3.Connection, project_id: int, comment_id: int, t_seconds,
+    t_end=None,
+) -> bool:
+    """Move a note's mark to a different moment — or a different stretch.
+
+    A note is a claim about a MOMENT, and until now the moment was whatever the playhead
+    happened to be on when the send button was pressed. Nobody hits that exactly: you
+    hear the thing, you reach for the box, and the mark is already a second and a half
+    late. The composer then works to a timecode the client did not mean.
+
+    Scoped to the project, like every other note mutation here, so a token for one
+    campaign cannot reach another's. A REPLY is refused: it hangs off its parent and
+    carries no timecode of its own, so there is nothing to move. Returns whether a row
+    actually moved.
+    """
+    row = conn.execute(
+        "SELECT parent_id FROM review_comments WHERE id = ? AND project_id = ?",
+        (comment_id, project_id),
+    ).fetchone()
+    if row is None or row["parent_id"] is not None:
+        return False
+    t = _num_or_none(t_seconds)
+    if t is None or t < 0:
+        return False
+    te = _num_or_none(t_end)
+    if te is not None and te <= t:
+        te = None                                # a span must end after it starts
+    conn.execute(
+        "UPDATE review_comments SET t_seconds = ?, t_end = ? WHERE id = ? AND project_id = ?",
+        (t, te, comment_id, project_id),
+    )
+    conn.commit()
+    return True
+
+
 def toggle_comment_resolved(
     conn: sqlite3.Connection, project_id: int, comment_id: int
 ) -> Optional[int]:

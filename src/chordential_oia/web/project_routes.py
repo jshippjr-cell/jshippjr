@@ -2762,6 +2762,58 @@ def delivery_build(project_id: int):
     return RedirectResponse(f"/project/{project_id}/delivery#delivery", status_code=303)
 
 
+@router.post("/project/{project_id}/review/note/{comment_id}/move")
+def review_note_move(request: Request, project_id: int, comment_id: int,
+                     t: str = Form(""), t_end: str = Form(""),
+                     k: str = Form(""), r: str = Form(""), t_tok: str = Form("")):
+    """Drag a note's mark to where it actually belongs.
+
+    A note is a claim about a MOMENT, and the moment used to be wherever the playhead
+    was when Send was pressed — which is never where the thing is. You hear it, you
+    reach for the box, and the mark is a beat and a half late; the composer then works
+    to a timecode the client did not mean, and the only remedy was to write a second
+    note saying "actually a bit earlier" (operator, 2026-08-28).
+
+    YOU MAY MOVE WHAT YOUR OWN SIDE WROTE, and nothing else. Moving someone else's mark
+    changes what they said — the client's note is their evidence about their own picture,
+    and the studio quietly nudging it is the same species of edit as rewriting the words.
+    `author_role` is the record of which side spoke (it is stamped at the write for
+    exactly this kind of question); a row from before that column existed carries "",
+    and is treated as the client's, because that is who wrote nearly all of them and
+    guessing the other way would hand our side an edit it should not have.
+
+    Answers JSON: the room moves the pin without reloading, which is the whole point —
+    a reload would stop the music under the person adjusting a mark by ear.
+    """
+    conn = db.connect()
+    try:
+        role, _who = _session_role(conn, project_id, k, r, t_tok, request)
+        if role is None or not room.can(role, "comment"):
+            return JSONResponse({"ok": False}, status_code=404)
+        row = db.get_review_comment(conn, int(comment_id))
+        if row is None or row["project_id"] != project_id:
+            return JSONResponse({"ok": False}, status_code=404)
+        wrote = (row["author_role"] if "author_role" in row.keys() else "") or room.CLIENT
+        mine = (wrote == room.CLIENT) if role == room.CLIENT else (wrote != room.CLIENT)
+        if not mine:
+            return JSONResponse({"ok": False, "why": "not yours to move"}, status_code=403)
+        try:
+            start = float(t)
+        except (TypeError, ValueError):
+            return JSONResponse({"ok": False}, status_code=400)
+        end = None
+        if str(t_end).strip():
+            try:
+                end = float(t_end)
+            except (TypeError, ValueError):
+                end = None
+        if not db.move_review_comment(conn, project_id, int(comment_id), start, end):
+            return JSONResponse({"ok": False}, status_code=400)
+    finally:
+        conn.close()
+    return JSONResponse({"ok": True, "t": start, "t_end": end})
+
+
 @router.post("/project/{project_id}/review/note/{comment_id}/species")
 def review_note_species(project_id: int, comment_id: int):
     """Operator door: classify a note as conform (picture-caused, free) or
