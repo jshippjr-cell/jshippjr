@@ -213,7 +213,12 @@ def test_the_room_shows_only_the_selected_takes_notes():
     assert "fb-empty-take" in fn, (
         "a take with no notes shows an empty pane and no explanation of why")
     load = src[src.index("function loadTake(chip){"):]
-    assert "showVersion(chip.dataset.version" in load[:400], (
+    load = load[:load.index("function decodePeaks")]
+    # Bounded by the FUNCTION rather than by a character count. The old `[:400]` window
+    # was a proxy for "inside loadTake", and a comment explaining why the resume waits for
+    # `loadedmetadata` pushed the call past it. What matters is that loading a take brings
+    # its notes — not where in the body the line happens to sit.
+    assert "showVersion(chip.dataset.version" in load, (
         "loading a take does not bring its notes")
 
 

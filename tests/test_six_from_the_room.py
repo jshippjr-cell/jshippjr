@@ -447,3 +447,76 @@ def test_a_round_after_the_master_is_locked_is_a_real_one(stage):
             "a genuine post-lock round was refused as a double-spend")
     finally:
         conn.close()
+
+
+# ── 9. four more from the walkthrough (2026-08-30, second pass) ─────────────────────
+def test_switching_takes_keeps_the_music_playing(stage):
+    """*"When the client clicks back to version one, presses play, and then clicks back to
+    version two, the music does not play back."*
+
+    Assigning `audio.src` stops the element dead and nothing restarted it — so A/B-ing one
+    take against another, which is the entire reason both chips are on the bar, went
+    silent on the second press. The resume waits for `loadedmetadata` because `dur` still
+    holds the PREVIOUS take's length until then, and the sync guard reads a playhead past
+    a stale `dur` as "off the end of this take" and pauses.
+    """
+    _jon, client, _app, _db, pid, token, _ptok = stage
+    page = client.get(f"/room/{pid}?k={token}").text
+    fn = page[page.index("function loadTake(chip){"):]
+    fn = fn[:fn.index("function decodePeaks")]
+    assert "var wasPlaying" in fn, "nothing remembers that it was playing"
+    assert "loadedmetadata" in fn, (
+        "it resumes before the new take reports its duration, so the stale one pauses it")
+    assert "audio.play()" in fn
+
+
+def test_the_client_is_never_offered_the_boxes_again(stage):
+    """The "Not <name>?" affordance re-opened the two fields the whole change existed to
+    remove — the ask, one click further away."""
+    _jon, client, _app, _db, pid, token, _ptok = stage
+    page = client.get(f"/room/{pid}?k={token}").text
+    assert "nb-notyou" not in page and "notYou" not in page
+    assert 'placeholder="Your name" required' not in page
+
+
+def test_the_producer_card_names_someone(stage):
+    """*"under producer, it says your producer at chordential"* — the shape of a name with
+    no name in it, on the one card the client is meant to write to. It read an environment
+    variable nothing sets in production; it now falls through to the instance's OWNER
+    account (ADR-0054 — evidence, not one more variable) and then to the studio itself.
+    "Chordential" is not a placeholder: it is who the buyer contracted with."""
+    from chordential_oia.web import kickoff
+    _jon, _client, _app, db, pid, _token, _ptok = stage
+    conn = db.connect()
+    try:
+        conn.execute("INSERT INTO user_account (email, name, password_hash, role, "
+                     "created_at) VALUES (?,?,?,?,?)",
+                     ("jon@chordential.com", "Jon Shipp", "x", "owner", "2026-08-30"))
+        conn.commit()
+        ready = kickoff.readiness_for_project(conn, db, pid, discover=False)
+    finally:
+        conn.close()
+    assert ready["team"][0]["name"] == "Jon Shipp"
+    assert ready["summary"]["producer"] == "Jon Shipp"
+
+
+def test_the_producer_falls_back_to_the_studio_not_a_placeholder(stage):
+    from chordential_oia.web import kickoff
+    _jon, _client, _app, db, pid, _token, _ptok = stage
+    conn = db.connect()
+    try:
+        ready = kickoff.readiness_for_project(conn, db, pid, discover=False)
+    finally:
+        conn.close()
+    assert ready["team"][0]["name"] == "Chordential"
+    assert "Your producer" not in ready["team"][0]["name"]
+
+
+def test_the_sheet_closer_is_a_button_not_a_key_that_does_nothing(stage):
+    """It always CLOSED the sheet on click; the word on it named a key that does not,
+    because Escape was deliberately unbound for sheets (a layer dismissed by three
+    different gestures felt like it fell shut on its own). The label was the lie."""
+    _jon, client, _app, _db, pid, token, _ptok = stage
+    page = client.get(f"/room/{pid}?k={token}").text
+    assert ">ESC<" not in page, "it still promises a key that does nothing"
+    assert 'class="esc sr-close" aria-label="Close">✕' in page

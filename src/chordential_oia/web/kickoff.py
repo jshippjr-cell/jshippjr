@@ -18,11 +18,41 @@ from typing import Optional
 from . import commercial, procurement
 
 
-def _operator_producer() -> dict:
+def _owner_name(conn) -> str:
+    """The named owner of this instance (ADR-0054), or "".
+
+    Evidence, not configuration: the first account is created as an OWNER with a real
+    name, so the studio already knows who runs it. Reading that beats asking the operator
+    to set one more environment variable to stop their own product calling them
+    "Your producer".
+    """
+    try:
+        row = conn.execute(
+            "SELECT name FROM user_account WHERE role = 'owner' AND COALESCE(name,'') <> ''"
+            " ORDER BY id ASC LIMIT 1").fetchone()
+        return ((row["name"] if row is not None else "") or "").strip()
+    except Exception:  # noqa: BLE001 — an instance with no accounts is unaffected
+        return ""
+
+
+def _operator_producer(conn=None) -> dict:
+    """The producer card the buyer sees. A NAME, or the studio — never a placeholder.
+
+    *"under producer, it says your producer at chordential. It needs to list the actual
+    producer, which is me, or you can just put chordential"* (operator, 2026-08-30). It
+    read one environment variable that nothing sets in production and fell back to "Your
+    producer at Chordential", which is the shape of a name with no name in it — on the
+    one card the client is meant to write to.
+
+    In order of how directly each names a person: the configured operator, the instance's
+    owner account, then the studio itself. "Chordential" is not a placeholder — it is who
+    the buyer contracted with, and it is true.
+    """
     email = (os.environ.get("CHORDENTIAL_OPERATOR_EMAIL", "")
              or os.environ.get("CHORDENTIAL_SMTP_FROM", "")).strip()
     name = (os.environ.get("CHORDENTIAL_OPERATOR_NAME", "").strip()
-            or "Your producer at Chordential")
+            or (_owner_name(conn) if conn is not None else "")
+            or "Chordential")
     # `house` — this one is OURS, and the only team member a buyer may be named.
     # Every other card is the roster (`room.CAPS` denies a client `see_who`), so the
     # subtraction needs to tell "the producer they email" apart from "the freelancer
@@ -96,7 +126,7 @@ def build_readiness(conn, db, opp, project, review_row, ci_view: Optional[dict] 
         roles = list(_json.loads(project["roles"] or "[]")) if project else []
     except Exception:  # noqa: BLE001
         roles = []
-    team = [_operator_producer()]
+    team = [_operator_producer(conn)]
     for role in roles:
         a = assigned_by_role.get(role)
         team.append({"role": role,

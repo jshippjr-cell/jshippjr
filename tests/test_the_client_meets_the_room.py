@@ -122,13 +122,22 @@ def test_a_note_records_without_the_client_typing_an_identity(room):
     assert notes[-1]["author_role"] == "client", "the side that spoke was not recorded"
 
 
-def test_a_colleague_on_a_forwarded_link_can_still_correct_it(room):
-    """Prefilled is not the same as fixed. The share link is forwardable, so the name has
-    to stay correctable — otherwise every note from the agency's producer is signed by
-    whoever the account contact happens to be."""
+def test_the_correction_affordance_was_removed(room):
+    """REVERSED 2026-08-30, on sight: *"there's a small button on the right hand side…
+    when you click it, it opens a text box to enter the email in their name. Take that
+    away"* (operator).
+
+    The reasoning it was added on — a forwarded link means the account contact may not be
+    the person typing — was sound and the remedy was not. It re-opened the two fields this
+    whole change existed to remove, so the ask was still on the page, one click further
+    away, and the room carried both the answer and the question. Identity now comes from
+    the deal and the signature; when it is wrong the studio fixes the contact on the deal,
+    which is where a name belongs.
+    """
     _jon, client, _app, _db, pid, token = room
     page = _page(client, pid, token)
-    assert "nb-notyou" in page and "Marisa del Rio?" in page
+    assert "nb-notyou" not in page and "notYou" not in page
+    assert 'placeholder="Your name" required' not in page, "…and it did not come back"
 
 
 # ── 2. the transport holds still while you write ────────────────────────────────────

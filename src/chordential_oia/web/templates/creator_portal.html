@@ -309,9 +309,6 @@
   .up-waiting b{color:var(--text,#EDE6DC)}
   .nb-hint{margin:6px 0 0;font:11.5px/1.5 var(--sans);color:rgba(237,230,220,.5)}
   .nb-hint b{color:rgba(237,230,220,.72);font-weight:700}
-  .nb-notyou{background:none;border:0;color:rgba(237,230,220,.45);font:11.5px var(--sans);
-    cursor:pointer;text-decoration:underline;padding:0 2px}
-  .nb-notyou:hover{color:var(--orange)}
   /* A pin you can pick up (operator, 2026-08-28). */
   .pin{cursor:grab}
   .pin.dragging{cursor:grabbing;transform:translate(-50%,-50%) scale(1.35);z-index:6}
@@ -476,8 +473,14 @@
   @media (prefers-reduced-motion:reduce){.sheet{transition:none}.veil{transition:none}}
   .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
   .sheet-head h2{font-family:var(--serif);font-weight:500;font-size:21px}
-  .sheet-head .esc{margin-left:auto;font:600 10px var(--mono);color:var(--dim2);border:1px solid var(--hair);
-    border-radius:5px;padding:4px 8px;cursor:pointer}
+  /* It closes the sheet, and it always did — the word on it named a key that does NOT,
+     because Escape was deliberately unbound for sheets (a layer dismissed by three
+     different gestures felt like it fell shut on its own). The label was the lie:
+     *"there's escape, but hitting the key escape does nothing. Either change the upper
+     right hand corner to an x or make a escape do something"* (operator, 2026-08-30). */
+  .sheet-head .esc{margin-left:auto;font:600 13px var(--sans);line-height:1;color:var(--dim2);
+    border:1px solid var(--hair);border-radius:6px;padding:5px 9px;cursor:pointer}
+  .sheet-head .esc:hover{color:var(--orange);border-color:var(--orange)}
   /* ── the checklist layer (C) ── the readiness page, folded into the room ── */
   .ck-clear{font-family:var(--serif);font-size:15px;line-height:1.55;color:var(--dim);
     border:1px solid var(--hair);border-left:3px solid var(--olive,#5c7a52);border-radius:10px;
@@ -1150,12 +1153,13 @@
            placeholder="Say it at this moment…" required>
     <button type="submit" class="nb-send"><span class="nb-lead">Note at</span>
       <span class="nb-tc">0:00</span></button>
-    {% if voice == 'client' and not needs_identity and known_name %}
-    {# The correction, not the interrogation. It sits AFTER the note box because it is
-       almost never needed: the account contact is the person on this link. #}
-    <button type="button" class="nb-notyou" title="Sign your notes as someone else">Not
-      {{ known_name }}?</button>
-    {% endif %}
+    {# "Not <name>?" USED TO SIT HERE. It was the correction path for a colleague on a
+       forwarded link — and it re-opened the two boxes the whole change existed to remove,
+       so the ask was still on the page, one click further away: *"there's a small button
+       on the right hand side… when you click it, it opens a text box to enter the email
+       in their name. Take that away"* (operator, 2026-08-30). The identity is resolved
+       from the deal and the signature (`_client_identity`); if it is ever wrong, the
+       studio fixes the contact on the deal, which is where a name belongs anyway. #}
   </form>
   {# HOW THE MARKS WORK, said where the marks are made. The Range button and the drag
      across the waveform both existed and NOTHING said so — *"nothing tells the client
@@ -1505,7 +1509,7 @@
 
   <!-- ── LAYER: Brief (the REAL brief — objective, references, tone) ── -->
   <div class="sheet sr-sheet" data-sheet="brief" role="dialog" aria-modal="true" aria-label="The brief" tabindex="-1">
-    <div class="sheet-head"><h2>The brief</h2><button class="esc sr-close">ESC</button></div>
+    <div class="sheet-head"><h2>The brief</h2><button class="esc sr-close" aria-label="Close">✕</button></div>
     {% if a.brief and a.brief.objective %}
     <p class="brief-lede">{{ a.brief.objective }}</p>
     {% else %}
@@ -1622,7 +1626,7 @@
      words, and to everyone they are the conversation about a take. #}
   {% set notes_title = 'Notes on this take' if voice == 'client' else 'Client feedback' %}
   <div class="sheet sr-sheet" data-sheet="notes" role="dialog" aria-modal="true" aria-label="{{ notes_title }}" tabindex="-1">
-    <div class="sheet-head"><h2>{{ notes_title }}</h2><button class="esc sr-close">ESC</button></div>
+    <div class="sheet-head"><h2>{{ notes_title }}</h2><button class="esc sr-close" aria-label="Close">✕</button></div>
     {% if a.conform_pending %}
     <div class="conform"><b>A newer cut ({{ a.conform_pending.n }}) has landed and is not
       conformed yet.</b> This room is still playing cut {{ a.picture.n if a.picture else 1 }} —
@@ -1727,7 +1731,7 @@
   <!-- ── LAYER: Takes + upload ── -->
   {% set takes_title = 'The takes' if voice == 'client' else 'Your takes' %}
   <div class="sheet sr-sheet" data-sheet="takes" role="dialog" aria-modal="true" aria-label="{{ takes_title }}" tabindex="-1">
-    <div class="sheet-head"><h2>{{ takes_title }}</h2><button class="esc sr-close">ESC</button></div>
+    <div class="sheet-head"><h2>{{ takes_title }}</h2><button class="esc sr-close" aria-label="Close">✕</button></div>
 
     {# THE CAPTURE SHELF WAS HERE, and it is gone (2026-08-30). A private notebook for
        a composer to jot a motif into: *"composer's arent going to jot down things in
@@ -1980,7 +1984,7 @@
   {% set rd = a.readiness %}
   <div class="sheet sr-sheet" data-sheet="checklist" role="dialog" aria-modal="true"
        aria-label="Production checklist" tabindex="-1">
-    <div class="sheet-head"><h2>Where this stands</h2><button class="esc sr-close">ESC</button></div>
+    <div class="sheet-head"><h2>Where this stands</h2><button class="esc sr-close" aria-label="Close">✕</button></div>
 
     {% if rd.all_ready %}
     <p class="ck-clear"><b>Everything is ready.</b> {{ 'Your production team has everything it
@@ -2414,6 +2418,9 @@
       renderPins();
     }
     function loadTake(chip){
+      /* WAS IT PLAYING, AND WHERE. Read BEFORE anything is touched, because assigning
+         `audio.src` below stops the element dead and takes the answer with it. */
+      var wasPlaying = hasAudio && !mPaused(), at = mTime() || 0;
       chips.forEach(function(c){ c.classList.remove("on"); });
       peaks = null;
       paintConform(chip);
@@ -2428,6 +2435,32 @@
       audio.src = src;
       peaks = peakCache[src] || null;
       drawWave();
+      /* ── KEEP PLAYING ACROSS A SWITCH ─────────────────────────────────────────
+         *"When the client clicks back to version one, presses play, and then clicks back
+         to version two, the music does not play back"* (operator, 2026-08-30).
+
+         Setting `audio.src` stops the element, and nothing started it again — so A/B-ing
+         one take against another, which is the entire reason both chips are on the bar,
+         went silent on the second press.
+
+         RESUMED ON `loadedmetadata`, not immediately, and that is the part that bites:
+         `dur` still holds the PREVIOUS take's length until the new source reports its
+         own, and `syncAudio`'s first guard reads a playhead past a stale `dur` as "we are
+         off the end of this take" and pauses. Waiting for the new duration is what makes
+         the resume stick rather than flicker and die. */
+      if (wasPlaying){
+        audio.addEventListener("loadedmetadata", function once(){
+          audio.removeEventListener("loadedmetadata", once);
+          dur = audio.duration || 0;
+          if (hasPicture){
+            syncAudio(true);                       // land on the frame, then follow it
+            if (!video.paused && audio.paused) audio.play();
+          } else {
+            audio.currentTime = Math.min(at, dur || at);   // same moment, other take
+            audio.play();
+          }
+        });
+      }
       if (hasPicture) syncAudio(true);   // a new take starts ON the frame
     }
 
@@ -3411,23 +3444,6 @@
          starts it again) and it holds the very thing the note is a claim about. */
       body.addEventListener("focus", function(){
         if (!mPaused()) { pause(); whisper("Paused so your note stays on this moment."); }
-      });
-      /* WHO IS SIGNING. The pair is prefilled from the deal and hidden; this opens it
-         for the colleague on a forwarded link, and the server's cookie remembers them. */
-      var notYou = bar.querySelector(".nb-notyou");
-      if (notYou) notYou.addEventListener("click", function(){
-        var nameIn = bar.querySelector(".nb-name-in"),
-            mailIn = bar.querySelector(".nb-mail-in");
-        if (!nameIn || !mailIn) return;
-        [nameIn, mailIn].forEach(function(el, i){
-          el.type = i ? "email" : "text";
-          el.className = "nb-who";
-          el.placeholder = i ? "you@agency.com" : "Your name";
-          el.required = true;
-          el.value = "";
-        });
-        notYou.remove();
-        nameIn.focus();
       });
       setInterval(function(){ paint(); paintBand(); }, 200);
       paint();
