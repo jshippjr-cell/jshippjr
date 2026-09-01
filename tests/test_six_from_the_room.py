@@ -520,3 +520,49 @@ def test_the_sheet_closer_is_a_button_not_a_key_that_does_nothing(stage):
     page = client.get(f"/room/{pid}?k={token}").text
     assert ">ESC<" not in page, "it still promises a key that does nothing"
     assert 'class="esc sr-close" aria-label="Close">✕' in page
+
+
+def test_after_the_master_is_approved_the_button_names_the_next_job(stage):
+    """*"v2 was approved by the client, but the composer, music editor, mixer doesnt get
+    pushed to the phase where they get to upload their assets per lane… the button still
+    reads upload take"* (operator, 2026-08-30).
+
+    The lanes were THERE — they open with the master lock, inside the Takes sheet, below
+    the takes ladder. Nothing on the main view said so, and the one control that invited
+    an upload invited the wrong one: another TAKE, when the take had just been chosen. So
+    it looked like the phase never arrived.
+
+    Two halves, and the second is what makes it true: the label follows the phase, and the
+    press lands on the lanes. Opening the sheet at the top shows a list of finished takes
+    to someone who was just asked for stems.
+    """
+    import re
+    from fastapi.testclient import TestClient
+    from chordential_oia.web import production
+    jon, client, app_mod, db, pid, token, ptok = stage
+    creator = TestClient(app_mod.app)
+
+    def cta(page):
+        return re.findall(r'class="upload-cta sr-upload-cta[^"]*">([^<]*)<', page)
+
+    before = creator.get(f"/creator/{ptok}").text
+    assert cta(before) and "take" in cta(before)[0].lower()
+    assert "Now deliver the remaining assets" not in before, "the lanes opened too early"
+
+    client.post(f"/project/{pid}/review/approve",
+                data={"k": token, "origin": "room", "author": "Marisa del Rio",
+                      "email": "marisa@pikerowan.com"}, follow_redirects=False)
+    conn = db.connect()
+    try:
+        assert production.creative_lock(db.get_delivery(conn, pid)), "the master did not lock"
+    finally:
+        conn.close()
+
+    after = creator.get(f"/creator/{ptok}").text
+    assert cta(after), "the creator lost their upload control entirely"
+    assert "take" not in cta(after)[0].lower(), (
+        f"it still asks for another take after the master was chosen: {cta(after)[0]!r}")
+    assert "Deliver your assets" in cta(after)[0]
+    assert "Now deliver the remaining assets" in after, "the lanes did not open"
+    assert "to-lanes" in after and "sr-lanes-head" in after, (
+        "the press still lands at the top of the sheet, on the takes")

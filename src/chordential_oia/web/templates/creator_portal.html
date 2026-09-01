@@ -1045,8 +1045,21 @@
     </div>
     {# Only a hand that may upload. The client is in the same room and must not be
        offered the composer's controls (ADR-0068 — the caps are the authority). #}
+    {# THE BUTTON NAMES THE JOB IN FRONT OF YOU, and after the master is chosen that job
+       is not another take: *"v2 was approved by the client, but the composer, music
+       editor, mixer doesnt get pushed to the phase where they get to upload their assets
+       per lane… the button still reads upload take"* (operator, 2026-08-30).
+
+       The lanes were THERE — they open with the master lock, inside the Takes sheet,
+       below the takes ladder. Nothing on the main view said so, and the one control that
+       invited an upload invited the wrong one. So the label changes with the phase and
+       the press lands you on the lanes rather than at the top of the sheet. #}
     {% if 'upload_take' in (caps|default(['upload_take'])) %}
-    <button class="upload-cta sr-upload-cta">⇪ {{ 'Upload your first take' if (not a.versions and not a.pending) else 'Upload a new take' }}</button>
+    {% set lanes_left = (a.deliverables|rejectattr('uploaded')|list|length) if a.deliverables else 0 %}
+    <button class="upload-cta sr-upload-cta{{ ' to-lanes' if a.creative_lock }}">⇪ {%
+      if a.creative_lock %}Deliver your assets{% if lanes_left %} · {{ lanes_left }} to go{% endif %}{%
+      elif not a.versions and not a.pending %}Upload your first take{%
+      else %}Upload a new take{% endif %}</button>
     {% endif %}
     {# Mobile Companion (§13): the phone is for Listen/Know, not delivering work —
        uploading a take happens at the desk. Shown only on the phone breakpoint. #}
@@ -1777,7 +1790,7 @@
        They were being shown "Now deliver the remaining assets" and how a lane takes
        files (reported live, 2026-08-19). #}
     {% if a.creative_lock and 'see_deliverable_specs' in (caps|default(['see_deliverable_specs'])) %}
-    <h3>✓ Master approved. Now deliver the remaining assets</h3>
+    <h3 class="sr-lanes-head">✓ Master approved. Now deliver the remaining assets</h3>
     {# THE FILE THE REST OF THE WORK IS MADE FROM. A mixer or an editor is invited at
        exactly this moment — to mix the approved master, or cut the mix to :30 and :15 —
        and the room, which knows which version is approved, gave them no way to get it.
@@ -3190,7 +3203,19 @@
     });
     root.querySelectorAll(".sr-close").forEach(function(b){ b.addEventListener("click", closeAllSheets); });
     var uploadCta = root.querySelector(".sr-upload-cta");
-    if (uploadCta) uploadCta.addEventListener("click", function(e){ e.stopPropagation(); openSheet("takes"); });
+    if (uploadCta) uploadCta.addEventListener("click", function(e){
+      e.stopPropagation();
+      openSheet("takes");
+      /* …and once the master is locked, land ON the lanes. They sit below the takes
+         ladder in this sheet, so opening at the top shows a list of finished takes to
+         someone who was just asked for stems — which is how "the lanes never appeared"
+         looks from the inside. */
+      if (!uploadCta.classList.contains("to-lanes")) return;
+      var head = root.querySelector(".sr-lanes-head");
+      if (head) setTimeout(function(){
+        head.scrollIntoView({ block: "start", behavior: "smooth" });
+      }, 260);                                  // after the sheet has slid up
+    });
 
     // whisper: present on arrival, resting after — the room quiets down
     if (whisperEl) setTimeout(function(){ whisperEl.classList.add("rested"); }, 7000);
