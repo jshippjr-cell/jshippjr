@@ -256,7 +256,13 @@ def test_the_pay_button_appears_once_everything_is_signed_off(stage):
         conn.close()
         payoff = re.search(r'class="payoff">(.*?)</div>',
                            c.get(f"/room/{pid}?k={ktok}").text, re.S).group(1)
-        assert "Pay $4200.00 to unlock your files" in payoff, payoff
+        # The button names the ACT and the line beside it names the number (operator,
+        # 2026-08-30: *"the client button asking them to pay final invoice lists the
+        # dollar amount on the button itself. make it read pay final invoice"*). Both are
+        # still asserted here — a buyer must be able to see what they are about to be
+        # charged before they press, and this block is where that figure lives.
+        assert "Pay final invoice" in payoff, payoff
+        assert "$4200.00" in payoff, "the amount left the screen entirely"
         assert "/pay" in payoff
     finally:
         cr.scoped_signoff = real

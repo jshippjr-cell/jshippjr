@@ -277,7 +277,9 @@
         <input type="hidden" name="k" value="{{ share_token }}">
         <input type="hidden" name="r" value="{{ reviewer_token }}">
         <input type="hidden" name="kind" value="final">
-        <button type="submit" class="dl-all" style="border:0;cursor:pointer">Pay{% if invoice_balance and invoice_balance.outstanding %} ${{ '%.2f'|format(invoice_balance.outstanding) }}{% endif %} to unlock your files →</button>
+        {# The amount is in the paragraph above ("an invoice balance of $X is due"), so
+           the button names the act and nothing is lost. #}
+        <button type="submit" class="dl-all" style="border:0;cursor:pointer">Pay final invoice →</button>
       </form>
       {% endif %}
     </div>

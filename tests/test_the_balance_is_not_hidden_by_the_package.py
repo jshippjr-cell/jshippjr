@@ -113,7 +113,8 @@ def test_a_stale_package_no_longer_swallows_the_balance(room):
     block = _payoff(c, pid, tok)
     assert f"/project/{pid}/pay" in block, (
         "the client owes money and has no way to pay it — the package note took the page")
-    assert "Pay $4200.00" in block
+    assert "Pay final invoice" in block
+    assert "$4200.00" in block, "the balance vanished from the page"
     # …and the FILES half is still answered beside it. Since ADR-0087's amendment this
     # package is RECOVERABLE (its bytes are on the server), so the files half is the
     # download link rather than a warning — the rebuild runs inside that route. What this
@@ -270,4 +271,5 @@ def test_an_override_does_not_pretend_the_balance_is_gone(room):
     c.post(f"/project/{pid}/delivery/unlock", data={"unlock": "1"})
     block = _payoff(c, pid, tok)
     assert "Download everything" in block
-    assert "Pay $4200.00" in block
+    assert "Pay final invoice" in block
+    assert "$4200.00" in block, "the balance vanished from the page"

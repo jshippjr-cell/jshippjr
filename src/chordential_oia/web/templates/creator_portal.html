@@ -1472,9 +1472,16 @@
       <input type="hidden" name="r" value="{{ room_token_kind|default('t') == 'r' and room_token or '' }}">
       <input type="hidden" name="kind" value="final">
       <input type="hidden" name="origin" value="room">
-      <button type="submit" class="btn">Pay ${{ '%.2f'|format(a.invoice_balance.outstanding) }} to unlock your files →</button>
+      {# THE BUTTON NAMES THE ACT; THE LINE NAMES THE NUMBER (operator, 2026-08-30).
+         The amount does not leave the page — a buyer must be able to see what they are
+         about to be charged before they press — it just stops being the label. This
+         branch was the only place the figure appeared once the button rendered, so
+         stripping it from the button alone would have taken it off the screen. #}
+      <button type="submit" class="btn">Pay final invoice →</button>
     </form>
-    <span class="fineprint">Everything is signed off. Streaming stays open either way.</span>
+    <span class="fineprint">Everything is signed off. Your remaining balance is
+      <b>${{ '%.2f'|format(a.invoice_balance.outstanding) }}</b>; streaming stays open
+      either way.</span>
     {% elif a.invoice_block %}
     {# TRUE, rather than reassuring. "Your package is being assembled" was said to a
        client whose package WAS assembled and whose download was locked behind a balance
