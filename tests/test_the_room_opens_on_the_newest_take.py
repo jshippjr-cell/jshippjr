@@ -108,13 +108,22 @@ def test_approving_from_the_room_stays_in_the_room(studio):
     assert r.headers["location"].startswith(f"/room/{pid}?k={ktok}")
 
 
-def test_the_delivery_portal_still_returns_to_itself(studio):
-    """`origin` is additive. The portal's own forms do not send it and must not move."""
+def test_a_buyer_lands_in_the_room_even_without_origin(studio):
+    """SUPERSEDED 2026-08-30: this used to assert that a press WITHOUT `origin=room` came
+    back to the delivery portal — `origin` being additive, and the portal's own forms not
+    sending it.
+
+    That promise expired with the surface. *"all the old workspace and portal should go
+    away keep the client in the room"* (operator). A `?k=` credential IS a buyer, and the
+    buyer lives in the room (ADR-0093); a press from an older surface, or from a form that
+    predates `origin`, was quietly moving them back out of it. `origin` still matters for
+    the CREATOR (`?t=`) and the REVIEWER (`?r=`), whose surfaces are their own.
+    """
     c, _db, pid, _t, ktok, _a = studio
     r = c.post(f"/project/{pid}/review/changes",
                data={"k": ktok, "author": "M", "email": "m@a.com", "body": "x"},
                follow_redirects=False)
-    assert "/delivery-portal" in r.headers["location"]
+    assert r.headers["location"].startswith(f"/room/{pid}?k={ktok}"), r.headers["location"]
 
 
 def test_the_rooms_verdict_forms_declare_their_origin(studio):

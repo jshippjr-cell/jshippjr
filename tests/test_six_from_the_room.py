@@ -566,3 +566,68 @@ def test_after_the_master_is_approved_the_button_names_the_next_job(stage):
     assert "Now deliver the remaining assets" in after, "the lanes did not open"
     assert "to-lanes" in after and "sr-lanes-head" in after, (
         "the press still lands at the top of the sheet, on the takes")
+
+
+# ── 10. the last client links leave the portal (2026-08-30) ─────────────────────────
+def test_every_money_link_the_client_receives_opens_the_room():
+    """*"the client is sent an email to pay the final invoice and the link in that email
+    goes to the old project delivery portal… it needs to go to the room… keep the client
+    in the room"* (operator).
+
+    ADR-0093 moved the buyer into the room at the countersignature and ADR-0096 pointed
+    the operator's alerts there. These were the stragglers, and they were all on the money
+    path — the one place a wrong destination costs a payment: the pay-link email, the
+    Stripe return, the payment bounce, and the "a new version is ready" note.
+
+    Asserted at the SOURCE rather than by walking each flow, because the failure this
+    guards is a new call site being written against the old builder — which is exactly how
+    these four survived two passes of moving the client.
+    """
+    import pathlib
+    import re
+    web = pathlib.Path(__file__).resolve().parent.parent / "src" / "chordential_oia" / "web"
+    offenders = []
+    for name in ("billing.py", "billing_routes.py", "project_routes.py"):
+        for i, line in enumerate((web / name).read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue                     # the notes explaining the move
+            if "delivery-portal" not in line:
+                continue
+            # `?r=` is the REVIEWER's credential on a different job — the clearance
+            # signature and the delegate invite, which the room does not host.
+            if "?r=" in line or "{project_id}/delivery-portal" in line and "@router" in line:
+                continue
+            if re.search(r'delivery-portal\?k=|_client_portal_url', line):
+                offenders.append(f"{name}:{i}: {line.strip()[:90]}")
+    assert not offenders, (
+        "a buyer is still being handed the old portal: " + "; ".join(offenders))
+
+
+def test_the_pay_link_email_carries_a_room_url(stage):
+    from chordential_oia import mailer
+    from chordential_oia.web import billing
+    _jon, _client, _app, db, pid, _token, _ptok = stage
+    sent = []
+    real_cfg, real_send = mailer.mail_configured, mailer.send_email
+    mailer.mail_configured = lambda: True
+    mailer.send_email = lambda to, subject, body, **kw: sent.append(body)
+    try:
+        conn = db.connect()
+        try:
+            # The fixture blanks the deal's contact on purpose (that is what the identity
+            # chain is tested against); a pay link needs an address to go to.
+            prow = db.get_project(conn, pid)
+            conn.execute("UPDATE opportunities SET contact_email=?, contact_name=? WHERE id=?",
+                         ("marisa@pikerowan.com", "Marisa del Rio", prow["opp_id"]))
+            iid = conn.execute(
+                "INSERT INTO invoices (project_id, kind, amount, status, created_at) "
+                "VALUES (?,?,?,?,?)", (pid, "Final", 4200.0, "Draft", "2026-08-30")).lastrowid
+            conn.commit()
+            billing._send_invoice_pay_link(conn, iid)
+        finally:
+            conn.close()
+    finally:
+        mailer.mail_configured, mailer.send_email = real_cfg, real_send
+    assert sent, "no pay link went out"
+    assert f"/room/{pid}" in sent[-1]
+    assert "/delivery-portal" not in sent[-1]

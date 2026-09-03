@@ -1,0 +1,164 @@
+{# THE CLIENT'S DROP — the cut their music is written to, and any references.
+   ONE copy, two surfaces (2026-08-30). It was built into the delivery portal, and when
+   the buyer moved into the room (ADR-0093) the room could only LINK to it — so the last
+   thing a client still had to leave the room for was the single most useful thing they
+   can do. Copying it would have been the third rendering of one idea, which is what
+   ADR-0068 exists to stop; so it is a partial, and both surfaces include it.
+
+   Parameterised by `drop_*` so neither caller has to own the other's variable names:
+     drop_pid      the project id
+     drop_k        the client's share token   ("" when the caller holds a reviewer link)
+     drop_r        the reviewer token         ("" otherwise)
+     drop_author   a name to sign the upload with, if the caller knows one
+     drop_picture  the current cut, or falsey
+   The element ids inside are fixed, and that is safe: only one of these renders per page.
+   #}
+  <div class="card" id="picture">
+    <h2>Your picture</h2>
+    {% if drop_picture %}
+    <p class="honest" style="margin-top:4px">Cut <b>{{ drop_picture['n'] }}</b> is in the composer's room
+      ({{ drop_picture['orig'] }}{% if drop_picture['at'] %} · {{ drop_picture['at'][:10] }}{% endif %}).
+      Uploading a new cut replaces it; the composer's room shows the change the moment it lands.</p>
+    {% else %}
+    <p class="honest" style="margin-top:4px">Drop the cut the music is written to. It lands directly in the
+      composer's session room, timecode and all. MP4, MOV, M4V, or WebM · up to 512&nbsp;MB.</p>
+    {% endif %}
+    {# ONE form, one send. The cut and the references used to have a submit button each,
+       and each one navigated — so choosing a cut and then adding a reference threw the
+       cut away before it was ever sent. Reported live. Everything is STAGED here and
+       handed over together. #}
+    <form method="post" action="/project/{{ drop_pid }}/review/assets" id="cut-form"
+          enctype="multipart/form-data" style="margin-top:10px">
+      <input type="hidden" name="k" value="{{ drop_k }}">
+      <input type="hidden" name="r" value="{{ drop_r }}">
+      <input type="hidden" name="author" class="ident-name" value="{{ drop_author }}">
+      {# A cut without its frame rate and start timecode is a file, not a cut: every
+         timecode the composer reads back is then a guess. Optional and honest — left
+         blank, the room says "seconds from head" instead of inventing frames. #}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+        <label style="flex:1;min-width:130px;font-size:11px;color:#8a8579">Frame rate
+          <select name="fps" style="width:100%;font-size:12px;padding:6px 8px">
+            <option value="">Not stated</option>
+            <option value="23.976">23.976</option><option value="24">24</option>
+            <option value="25">25</option><option value="29.97">29.97</option>
+            <option value="30">30</option>
+          </select></label>
+        <label style="flex:1;min-width:130px;font-size:11px;color:#8a8579">Start timecode
+          <input type="text" name="tc_start" placeholder="01:00:00:00"
+                 pattern="\d{1,2}:\d{2}:\d{2}([:;]\d{1,3})?"
+                 style="width:100%;font-size:12px;padding:6px 8px"></label>
+      </div>
+      <label id="cut-drop" style="display:block;border:2px dashed rgba(228,103,31,.45);border-radius:12px;
+             padding:26px 18px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s">
+        <span id="cut-drop-line" style="font-weight:600">⇪ Drop your cut here, or click to choose the file</span>
+        <span style="display:block;font-size:11px;color:#8a8579;margin-top:4px">MP4 · MOV · M4V · WebM · up to 512 MB · real progress, no spinning tab</span>
+        <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm"
+               style="position:absolute;width:1px;height:1px;opacity:0">
+      </label>
+
+      <div id="refs" style="margin-top:12px"></div>
+      <template id="ref-row">
+        <div class="ref-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <input type="text" name="ref_label" placeholder="Reference name (e.g. 'the Bonobo track, 1:10 to 1:40')"
+                 style="flex:1;min-width:180px;font-size:12px;padding:7px 9px">
+          <input type="file" name="ref_file" style="font-size:12px">
+          <button type="button" class="ref-drop" title="Remove this reference"
+                  style="border:0;background:none;cursor:pointer;font-size:16px;color:#8a8579">×</button>
+        </div>
+      </template>
+      <button type="button" id="ref-add" class="dl-all"
+              style="border:0;cursor:pointer;margin-top:10px;background:transparent;color:#8a4b1d;padding:0;font-size:12px;text-decoration:underline">
+        + Add a reference</button>
+
+      <div id="cut-progress" style="height:4px;border-radius:2px;background:#eee5d8;overflow:hidden;margin-top:10px;display:none">
+        <i style="display:block;height:100%;width:0;background:#E4671F;transition:width .2s linear"></i></div>
+      <button type="submit" class="dl-all" id="cut-send" style="border:0;cursor:pointer;margin-top:10px">
+        Send to the composer</button>
+      <p class="honest" id="cut-staged" style="margin-top:6px;font-size:11px">Nothing staged yet — add your cut, references, or both.</p>
+    </form>
+    <p class="honest" style="margin-top:6px;font-size:11px">References guide tone and feel; the score you receive
+      will be original work.</p>
+  </div>
+  <script>
+  /* The Drop + the staging tray. One form, one send: the cut and any references are
+     gathered here and handed over together, because two submit buttons on one card meant
+     the first one to fire threw away whatever the other was holding. XHR keeps the real
+     byte progress (a cut is hundreds of MB). Progressive: with JS off the form still
+     posts, and the server takes whatever arrived. */
+  (function(){
+    var form = document.getElementById('cut-form'); if (!form) return;
+    var drop = document.getElementById('cut-drop'), line = document.getElementById('cut-drop-line'),
+        bar = document.getElementById('cut-progress'), send = document.getElementById('cut-send'),
+        refs = document.getElementById('refs'), addBtn = document.getElementById('ref-add'),
+        tpl = document.getElementById('ref-row'), staged = document.getElementById('cut-staged'),
+        input = form.querySelector('input[name=file]');
+
+    function summarise(){
+      var bits = [];
+      if (input.files.length) bits.push('the cut (' + input.files[0].name + ')');
+      var n = 0;
+      refs.querySelectorAll('input[name=ref_file]').forEach(function(f){
+        if (f.files && f.files.length) n++;
+      });
+      if (n) bits.push(n + ' reference' + (n === 1 ? '' : 's'));
+      staged.textContent = bits.length
+        ? 'Staged: ' + bits.join(' and ') + ' — nothing has been sent yet.'
+        : 'Nothing staged yet — add your cut, references, or both.';
+      send.disabled = !bits.length;
+      send.style.opacity = bits.length ? '' : '.5';
+    }
+
+    input.addEventListener('change', function(){
+      if (input.files.length) line.textContent = '🎬 ' + input.files[0].name + ' · staged';
+      summarise();
+    });
+    ['dragover','dragenter'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.style.borderColor = '#E4671F'; });
+    });
+    ['dragleave','drop'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.style.borderColor = ''; });
+    });
+    drop.addEventListener('drop', function(e){
+      var fs = e.dataTransfer && e.dataTransfer.files;
+      if (fs && fs.length){ try { input.files = fs; } catch(err){}
+        input.dispatchEvent(new Event('change')); }
+    });
+
+    addBtn.addEventListener('click', function(){
+      var row = tpl.content.cloneNode(true);
+      refs.appendChild(row);
+      var added = refs.lastElementChild;
+      added.querySelector('input[name=ref_file]').addEventListener('change', summarise);
+      added.querySelector('.ref-drop').addEventListener('click', function(){
+        added.remove(); summarise();
+      });
+      summarise();
+    });
+
+    form.addEventListener('submit', function(e){
+      var any = input.files.length > 0;
+      refs.querySelectorAll('input[name=ref_file]').forEach(function(f){
+        if (f.files && f.files.length) any = true;
+      });
+      if (!any){ e.preventDefault(); return; }       /* nothing to send */
+      if (!window.XMLHttpRequest) return;
+      e.preventDefault();
+      send.disabled = true; send.textContent = 'Sending…'; bar.style.display = 'block';
+      var xhr = new XMLHttpRequest();
+      /* getAttribute, not the property: a <button name="action"> shadows `form.action`
+         and the upload posts to `[object HTMLButtonElement]` (see ADR-0089). */
+      xhr.open('POST', form.getAttribute('action') || location.pathname);
+      xhr.upload.addEventListener('progress', function(ev){
+        if (ev.lengthComputable) bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + '%';
+      });
+      xhr.addEventListener('load', function(){
+        if (xhr.status < 400){ bar.firstElementChild.style.width = '100%'; location.reload(); }
+        else { send.disabled = false; send.textContent = 'Try again'; }
+      });
+      xhr.addEventListener('error', function(){ send.disabled = false; send.textContent = 'Connection lost. Try again'; });
+      xhr.send(new FormData(form));
+    });
+
+    summarise();
+  })();
+  </script>

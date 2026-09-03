@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..payments import get_payment_provider
 from . import db, room
-from .billing import _apply_invoice_payment, _client_portal_url, _send_invoice_pay_link
+from .billing import _apply_invoice_payment, _client_room_url, _send_invoice_pay_link
 from .talent_routes import _parse_rate
 
 router = APIRouter(tags=["billing"])
@@ -155,7 +155,10 @@ def pay_return(request: Request, invoice: int = 0, session_id: str = ""):
             pid = inv["project_id"]
             prow = db.get_project(conn, pid)
             if inv["kind"] == "Final":
-                dest = _client_portal_url(pid, db.ensure_project_share_token(conn, pid) or "", "paid=1")
+                # …and the FINAL payer lands in the room too, with the receipt flag. The
+                # portal was the last place a paying buyer was still sent (ADR-0093).
+                dest = _client_room_url(pid, db.ensure_project_share_token(conn, pid) or "",
+                                        "paid=1")
             elif prow is not None and prow["opp_id"]:
                 # The deposit's payer goes back to the ROOM, with the receipt flag intact.
                 # Sending them to `/workspace/…?paid=1` would have worked and looked like

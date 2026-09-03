@@ -63,7 +63,12 @@ def test_send_pay_link_emails_the_client_with_a_portal_link(tmp_path, monkeypatc
     assert r.status_code == 303 and "pay=sent" in r.headers["location"]
     assert sent["to"] == "client@hoagies.com"
     assert "Final due" in sent["subject"] and "Sonic logo" in sent["subject"]
-    assert "/delivery-portal" in sent["text"] and "k=" in sent["text"]  # token-gated pay link
+    # THE ROOM (ADR-0093, completed 2026-08-30): *"the client is sent an email to pay the
+    # final invoice and the link in that email goes to the old project delivery portal…
+    # it needs to go to the room."* Still token-gated — the credential did not change,
+    # only where it opens.
+    assert "/room/" in sent["text"] and "k=" in sent["text"]
+    assert "/delivery-portal" not in sent["text"]
     # issuing it also flipped the invoice off Draft so it's actually payable
     conn = app_mod.db.connect()
     assert app_mod.db.get_invoice(conn, invid)["status"] == "Issued"; conn.close()

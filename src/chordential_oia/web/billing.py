@@ -201,11 +201,30 @@ def pay_notice(flag: str) -> str:
     return PAY_NOTICES.get((flag or "").strip().lower(), "")
 
 
-def _client_portal_url(project_id: int, k: str, extra: str = "") -> str:
+# `_client_portal_url` USED TO LIVE HERE and has no callers left (2026-08-30). Every
+# buyer-facing money link — the pay-link email, the Stripe return, the payment bounce —
+# now mints `_client_room_url`. What still reaches the portal are the REVIEWER paths
+# (`?r=`): the clearance signature and the delegate invite, which are a different
+# credential doing a different job, and they build their own URLs where they are used.
+
+
+def _client_room_url(project_id: int, k: str, extra: str = "") -> str:
+    """Where the buyer goes, on the project's own share token.
+
+    *"the client is sent an email to pay the final invoice and the link in that email goes
+    to the old project delivery portal… it needs to go to the room… keep the client in the
+    room"* (operator, 2026-08-30). ADR-0093 moved the client into the room at the
+    countersignature and ADR-0096 pointed the operator's alerts there; these are the last
+    links that still carried a buyer somewhere else — the pay-link email, the Stripe
+    return, the "new version is ready" note and the payment bounce.
+
+    `room.client_url` mints from an OPPORTUNITY token; this takes the PROJECT share token,
+    which is what the money paths already hold. Both open the same door.
+    """
     q = f"?k={k}" if k else ""
     if extra:
         q = (q + "&" if q else "?") + extra
-    return f"/project/{project_id}/delivery-portal{q}"
+    return f"/room/{project_id}{q}#p{project_id}"
 
 
 def _send_invoice_pay_link(conn, invoice_id: int) -> str:
@@ -232,7 +251,7 @@ def _send_invoice_pay_link(conn, invoice_id: int) -> str:
         return "no_mail"
     base = _public_base()
     token = db.ensure_project_share_token(conn, pid)
-    pay_url = f"{base}{_client_portal_url(pid, token)}"
+    pay_url = f"{base}{_client_room_url(pid, token)}"
     contact_name = (opp["contact_name"] if opp is not None
                     and "contact_name" in opp.keys() else "") or ""
     msg = _payment_request_email(inv["kind"], inv["amount"] or 0,

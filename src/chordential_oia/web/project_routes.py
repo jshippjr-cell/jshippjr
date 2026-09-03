@@ -52,7 +52,7 @@ from ..proposals import build_proposal
 from ..storage import get_object_store
 from . import actor, campaigns, db, production, room, signals
 from .billing import (
-    _client_portal_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
+    _client_room_url, _ensure_final_invoice_issued, _invoice_from_proposal_row,
     _proposal_from_row, _heal_proposal, _send_invoice_pay_link, final_invoice_block,
 )
 from .delivery_ops import (
@@ -2161,7 +2161,13 @@ def _review_redirect(project_id: int, k: str, *, name: str = "", email: str = ""
     elif (r or "").strip():
         url = f"/project/{project_id}/delivery-portal?r={r}{extra}#review"
     elif (k or "").strip():
-        url = f"/project/{project_id}/delivery-portal?k={k}{extra}#review"
+        # A BUYER, on the share token — so the room, even without `origin=room`. This was
+        # the last redirect that could still put a client on the old portal: a press from
+        # an older surface, or a form that predates `origin`, and they were quietly moved
+        # back out of the room they now live in (ADR-0093). A verified REVIEWER (`?r=`
+        # above) keeps the portal, because the clearance signature and the delegate invite
+        # are theirs and the room does not host them.
+        url = f"/room/{project_id}?k={k}{extra}#p{project_id}"
     else:
         url = f"/room/{project_id}{extra}#p{project_id}"      # the studio, on its session
     resp = RedirectResponse(url, status_code=303)
@@ -3589,7 +3595,10 @@ def delivery_publish(project_id: int, action: str = Form("publish"),
         signals.fire_and_forget(
             _notify_reviewers_new_version, project_id, campaign, label, reviewers)
         if client_email:
-            portal_url = f"{_public_base()}/project/{project_id}/delivery-portal?k={client_token}"
+            # THE ROOM, not the portal. This is the note a buyer gets when a take lands,
+            # and it was still walking them out to the old surface — where the version
+            # they came to hear is a different page about the same take (ADR-0093).
+            portal_url = f"{_public_base()}{_client_room_url(project_id, client_token)}"
             signals.fire_and_forget(
                 _notify_client_new_version, client_email, client_name, campaign, label,
                 client_token, portal_url)
@@ -4030,7 +4039,7 @@ def client_pay(project_id: int, k: str = Form(""), r: str = Form(""),
                 # "payments aren't switched on" notice this bounce exists to show would
                 # have vanished on the way.
                 return room.client_url(conn, db, int(prow0["opp_id"]), flag=flag)
-        return _client_portal_url(project_id, k, flag)
+        return _client_room_url(project_id, k, flag)
     try:
         ok, _rev = _access_ok(conn, project_id, k, r)
         if not ok:

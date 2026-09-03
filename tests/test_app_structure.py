@@ -385,7 +385,7 @@ MOVED_HELPERS = {
     # shell.py exports the public spelling; app.py imports it as `_admin_authed`.
     "admin_authed": "shell",
     "_apply_invoice_payment": "billing",
-    "_client_portal_url": "billing",
+    "_client_room_url": "billing",
     "_ensure_final_invoice_issued": "billing",
     "_invoice_from_proposal_row": "billing",
     "_proposal_from_row": "billing",

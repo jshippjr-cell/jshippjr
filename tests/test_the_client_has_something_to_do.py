@@ -177,13 +177,21 @@ def test_the_room_asks_for_the_deposit_and_the_picture(studio):
 
 def test_the_ask_carries_a_door(studio):
     """A list item saying 'send us the cut' with no way to send it is the same failure
-    as not asking."""
-    import re
+    as not asking — and from 2026-08-30 the door is not a LINK, it is the Drop itself.
+
+    *"all the old workspace and portal should go away keep the client in the room"*
+    (operator). This was the last thing a buyer had to leave the room for, and it is the
+    most useful thing they can do while a composer is being assigned.
+    """
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
     page = _client_room(c, token)
-    m = re.search(r'href="([^"]*delivery-portal[^"]*)"', page)
-    assert m, "the picture request rendered with no link to the Drop"
+    assert 'id="cut-form"' in page, "the picture request rendered with no way to send one"
+    assert "Drop your cut here" in page
+    assert "/delivery-portal" not in page, "it still walks the buyer out of the room"
+    # …and the fps/timecode fields came WITH it, because it is the same partial the
+    # delivery portal renders rather than a thinner rebuild.
+    assert 'name="fps"' in page and 'name="tc_start"' in page
 
 
 def test_the_client_walks_it_without_ever_logging_in(studio):
@@ -195,19 +203,25 @@ def test_the_client_walks_it_without_ever_logging_in(studio):
     from fastapi.testclient import TestClient
     c, app_mod = studio
     _opp_id, token, _agr = _close(c, app_mod)
-    m0 = re.search(r'href="([^"]*delivery-portal[^"]*)"', _client_room(c, token))
-    assert m0, "the room did not offer the Drop"
-    portal = m0.group(1)
-    pid = int(portal.split("/project/")[1].split("/")[0])
-    ktok = portal.split("k=")[1].split("#")[0]
+    conn = app_mod.db.connect()
+    try:
+        opp = app_mod.db.opportunity_by_share_token(conn, token)
+        pid = app_mod.db.project_for_opp(conn, opp["id"])["id"]
+    finally:
+        conn.close()
+    room_url = f"/room/{pid}?k={token}"
 
     with TestClient(app_mod.app) as buyer:
-        page = buyer.get(portal)
+        page = buyer.get(room_url)
         assert page.status_code == 200
         assert "Password or passphrase" not in page.text
+        # The Drop is IN the room now — no second surface to walk out to.
         assert "Drop your cut here" in page.text
+        m = re.search(r'action="([^"]*review/assets)"', page.text)
+        assert m, "the Drop rendered with no form action"
+        assert f"/project/{pid}/" in m.group(1)
         r = buyer.post(f"/project/{pid}/review/picture",
-                       data={"k": ktok, "author": "Marta Reyes"},
+                       data={"k": token, "author": "Marta Reyes"},
                        files={"file": ("cut.mp4", b"\x00\x00\x00\x18ftypmp42" + b"0" * 400,
                                        "video/mp4")}, follow_redirects=False)
         assert r.status_code == 303

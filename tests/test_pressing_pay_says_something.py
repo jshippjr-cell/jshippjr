@@ -129,7 +129,7 @@ def test_a_payment_pressed_in_the_room_comes_back_to_the_room(portal):
     assert r.headers["location"].startswith(f"/room/{pid}?k={ktok}"), r.headers["location"]
 
 
-def test_the_portals_own_button_still_returns_to_the_portal(portal):
+def test_the_pay_bounce_lands_in_the_room_with_its_notice(portal):
     c, db, pid, ktok = portal
     conn = db.connect()
     iid = db.insert_invoice(conn, pid, None, Invoice(client="L", need="S",
@@ -138,4 +138,8 @@ def test_the_portals_own_button_still_returns_to_the_portal(portal):
     conn.close()
     r = c.post(f"/project/{pid}/pay", data={"k": ktok, "kind": "final"},
                follow_redirects=False)
-    assert "/delivery-portal" in r.headers["location"]
+    # …and it lands in the ROOM, wherever it was pressed from. The buyer lives there now
+    # (ADR-0093), so a bounce returning them to the old portal would undo the move on the
+    # one press that most needs to keep its context — the money.
+    assert "/room/" in r.headers["location"]
+    assert "pay=" in r.headers["location"], "the bounce lost its notice"
