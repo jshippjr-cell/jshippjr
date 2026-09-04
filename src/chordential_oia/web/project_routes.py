@@ -1581,6 +1581,7 @@ def delivery_sign(
     consent: str = Form(""),
     r: str = Form(""),
     k: str = Form(""),
+    origin: str = Form(""),
 ):
     """The client signs the Clearance Certificate (ADR-0059).
 
@@ -1646,6 +1647,13 @@ def delivery_sign(
         db.record_signature(conn, sig)
     finally:
         conn.close()
+    # BACK WHERE IT WAS SIGNED. The certificate lives in the room now (2026-08-30) as
+    # well as on the portal, and returning a reviewer to the portal after they signed in
+    # the room is the same relocation the verdict buttons fixed under ADR-0095: a
+    # different page about the same document, with none of what they were just doing.
+    if (origin or "").strip() == "room":
+        return RedirectResponse(
+            f"/room/{project_id}?r={r}&signed=1#certificate", status_code=303)
     back = f"/project/{project_id}/delivery-portal?r={r}" + (f"&k={k}" if k else "")
     return RedirectResponse(back + "&signed=1#certificate", status_code=303)
 

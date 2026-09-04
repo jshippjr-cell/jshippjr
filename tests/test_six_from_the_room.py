@@ -631,3 +631,108 @@ def test_the_pay_link_email_carries_a_room_url(stage):
     assert sent, "no pay link went out"
     assert f"/room/{pid}" in sent[-1]
     assert "/delivery-portal" not in sent[-1]
+
+
+# ── 11. the clearance certificate follows the buyer into the room ───────────────────
+@pytest.fixture()
+def certified(tmp_path, monkeypatch):
+    """A delivered project with a CONFIRMED licence — the state in which the certificate
+    is signable at all (an unconfirmed grant is a draft, and signing a draft would bind
+    the client to terms nobody has settled)."""
+    import importlib as _il
+    monkeypatch.setenv("CHORDENTIAL_DB", str(tmp_path / "c.db"))
+    monkeypatch.setenv("CHORDENTIAL_UPLOAD_DIR", str(tmp_path / "up"))
+    monkeypatch.setenv("CHORDENTIAL_ADMIN_TOKEN", "letmein")
+    monkeypatch.delenv("CHORDENTIAL_SEED_DEMO", raising=False)
+    _il.reload(_il.import_module("chordential_oia.web.db"))
+    from fastapi.testclient import TestClient
+    from chordential_oia.models import MusicDiscipline
+    from chordential_oia.talent import Talent
+    from chordential_oia.web import app as app_mod
+    _il.reload(app_mod)
+    from chordential_oia.web import db, production
+    c = TestClient(app_mod.app)
+    conn = db.connect()
+    db.init_db(conn)
+    pid = db.insert_project(conn, None, "Pike and Rowan", "Film music", 1000, 2000,
+                            ["Composer"])
+    tid = db.insert_talent(conn, Talent(name="Ada Cheng", email="ada@x.com",
+                                        disciplines=[MusicDiscipline.COMPOSITION]))
+    db.add_assignment(conn, pid, "Composer", tid)
+    ktok = db.rotate_share_token(conn, project_id=pid)
+    db.update_delivery(conn, pid, "versions",
+                       [{"n": 1, "label": "v1 FINAL", "url": "/uploads/v1.wav"}])
+    production.set_creative_lock(conn, db, pid, version_n=1, by="Marta Ruiz")
+    db.update_delivery(conn, pid, "license", {"type": "Buyout", "media": "All media"})
+    db.update_delivery(conn, pid, "license_confirmed",
+                       {"by": "Jon Shipp", "date": "2026-08-30"})
+    rv = db.add_delivery_reviewer(conn, pid, name="Marisa del Rio",
+                                  email="marisa@pikerowan.com", role="Business affairs")
+    conn.close()
+    return c, db, pid, ktok, rv["token"]
+
+
+def test_the_certificate_is_in_the_room(certified):
+    """*"move the reviewer clearance signature into the room too"* (operator,
+    2026-08-30) — the last of the buyer's business still living on the old portal."""
+    c, _db, pid, ktok, _rtok = certified
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    assert "Cleared &amp; original" in page, "the certificate never reached the room"
+    assert "Grant of rights" in page
+
+
+def test_a_share_link_reads_the_certificate_and_cannot_sign_it(certified):
+    """The rule the portal already drew, unchanged by the move: a `?r=` token identifies
+    a named person from the roster; a forwardable share link does not, and a signature
+    whose signer is whatever name the browser typed proves nothing (ADR-0059)."""
+    c, _db, pid, ktok, _rtok = certified
+    page = c.get(f"/room/{pid}?k={ktok}").text
+    assert "delivery/sign" not in page, "a bare share link was offered the pen"
+    assert "needs your personal reviewer link" in page, "…and was not told why"
+
+
+def test_a_named_reviewer_signs_it_from_the_room(certified):
+    from chordential_oia import signing
+    c, db, pid, _ktok, rtok = certified
+    page = c.get(f"/room/{pid}?r={rtok}").text
+    assert f"/project/{pid}/delivery/sign" in page, "the reviewer was offered no pen"
+    assert 'name="origin" value="room"' in page[page.index("delivery/sign"):], (
+        "the form does not say it came from the room, so signing ejects them to the portal")
+    r = c.post(f"/project/{pid}/delivery/sign",
+               data={"r": rtok, "typed_name": "Marisa del Rio", "consent": "1",
+                     "origin": "room"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].startswith(f"/room/{pid}?r={rtok}"), r.headers["location"]
+    conn = db.connect()
+    try:
+        sig = db.latest_signature(conn, pid, signing.DOC_CLEARANCE)
+    finally:
+        conn.close()
+    assert sig is not None and sig["typed_name"] == "Marisa del Rio"
+    assert "Signed as" in c.get(f"/room/{pid}?r={rtok}").text
+
+
+def test_one_derivation_behind_both_surfaces(certified):
+    """The room and the portal must never disagree about whether a signature still
+    describes its document — which is the ONE question this certificate exists to settle.
+    Both read `delivery_ops.clearance_view`, and the text is rebuilt and re-verified on
+    every call rather than cached (ADR-0059)."""
+    from chordential_oia.web import delivery_ops
+    c, db, pid, _ktok, rtok = certified
+    c.post(f"/project/{pid}/delivery/sign",
+           data={"r": rtok, "typed_name": "Marisa del Rio", "consent": "1"},
+           follow_redirects=False)
+    conn = db.connect()
+    try:
+        before = delivery_ops.clearance_view(conn, pid)
+        assert before["state"] == "valid"
+        # change a term after signing — both surfaces must now say SUPERSEDED
+        db.update_delivery(conn, pid, "license", {"type": "Licence", "media": "Digital only"})
+        after = delivery_ops.clearance_view(conn, pid)
+    finally:
+        conn.close()
+    assert after["state"] == "superseded", (
+        "a term changed after signing and the signature still reads as covering it")
+    for page in (c.get(f"/room/{pid}?r={rtok}").text,
+                 c.get(f"/project/{pid}/delivery-portal?r={rtok}").text):
+        assert "Signature no longer matches" in page

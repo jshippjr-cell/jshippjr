@@ -72,6 +72,43 @@ def _delivery_console_url(project_id: int) -> str:
     return f"/project/{project_id}/delivery"
 
 
+def clearance_view(conn, project_id: int) -> Optional[dict]:
+    """The Clearance Certificate, its signature, and whether the two still agree.
+
+    ONE DERIVATION (ADR-0029), because there are two surfaces now. The delivery portal
+    built this inline, and when the certificate followed the buyer into the room
+    (*"move the reviewer clearance signature into the room too"* — operator, 2026-08-30)
+    a second copy would have been a second answer to the one question this document
+    exists to settle: does the signature still describe what it signed?
+
+    The text is REBUILT from live data on every call and re-verified against the stored
+    digest, so a term changed after signing reads as SUPERSEDED rather than as a signature
+    that appears to cover it (ADR-0059). That is the whole point of the design, and it is
+    why this is recomputed rather than cached or passed around as rendered HTML.
+    """
+    from datetime import date as _date
+    from .. import signing as _signing
+    from ..delivery import build_clearance_certificate, license_confirmation
+    row = db.get_project(conn, project_id)
+    if row is None:
+        return None
+    delivery = db.get_delivery(conn, project_id)
+    cur = current_version(delivery)
+    cert = build_clearance_certificate(
+        row, db.list_assignments(conn, project_id), delivery.get("license") or {},
+        signatory=delivery.get("signatory"),
+        license_confirmed=license_confirmation(delivery),
+        certified_version=(cur.get("label") if cur else "") or "",
+        certified_date=_date.today().isoformat(),
+    )
+    sig = db.latest_signature(conn, project_id, _signing.DOC_CLEARANCE)
+    sig = dict(sig) if sig is not None else None
+    state = _signing.verify((sig or {}).get("digest", ""),
+                            cert.signable_text() if sig else None)
+    return {"cert": cert, "signature": sig, "state": state,
+            "note": _signing.verdict_note(state, sig)}
+
+
 def _operator_room_url(project_id: int) -> str:
     """WHERE THE OPERATOR ACTUALLY GOES when something happens on a project.
 

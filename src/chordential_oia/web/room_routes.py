@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 
 from .. import agreements, contributor_release, delivery, signing
 from ..talent import profile_completeness
-from . import db, kickoff, room
+from . import db, delivery_ops, kickoff, room
 from .creator_routes import _room_for_project
 from .shell import admin_authed, render
 
@@ -72,6 +72,7 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         # on a page nobody visits. `see_invoice` is already the client's capability for
         # "their balance and the button that clears it"; this is that, one phase earlier.
         client_gate = None
+        clearance, cert_reviewer = None, {}
         if role == room.CLIENT and room.can(role, "see_invoice"):
             _ptok = db.ensure_project_share_token(conn, project_id)
             _portal = f"/project/{project_id}/delivery-portal?k={_ptok}"
@@ -86,6 +87,23 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
                 view["readiness"] = room.readiness_view(ready, role)
             client_gate = kickoff.client_gate(conn, db, project_id,
                                               portal_url=_portal, ready=ready)
+            # ── THE CLEARANCE CERTIFICATE, in the room ────────────────────────────
+            # *"move the reviewer clearance signature into the room too"* (operator,
+            # 2026-08-30) — the last of the buyer's business still living on the old
+            # portal. ONE derivation (`clearance_view`), so the room and the portal can
+            # never disagree about whether a signature still describes its document.
+            #
+            # SIGNING STAYS THE NARROWER ACT, and this only decides what is OFFERED:
+            # a named reviewer (`?r=`) may sign, a bare share link may read. The route
+            # refuses anything else on its own regardless (ADR-0059) — this is not the
+            # check, it is the copy that matches it.
+            clearance = delivery_ops.clearance_view(conn, project_id)
+            # `resolve_reviewer` is the SAME resolver the portal uses (ADR-0060): an
+            # expired or revoked link resolves to nobody, so a stale invite reads the
+            # certificate and cannot sign it.
+            from .project_routes import resolve_reviewer
+            _rv, _ = resolve_reviewer(db.get_delivery(conn, project_id), r)
+            cert_reviewer = _rv or {}
         # The hats, for a creator who is in the room as one.
         if role == room.TALENT:
             trow = db.get_talent_by_portal_token(conn, t)
@@ -159,6 +177,9 @@ def one_room(request: Request, project_id: int, k: str = "", r: str = "",
         # that binds `a`, because a client's own next step must not be something they have
         # to scroll to find.
         client_gate=client_gate,
+        # The certificate, and who may sign it. `cl_verified` gates the FORM only; the
+        # route makes its own, stricter check on every press (ADR-0059).
+        clearance=clearance, cert_reviewer=cert_reviewer,
         contributors=contributors, contributor_roles=contributor_release.ROLES,
         agr_signed=agr_signed, agr_counter=agr_counter,
         # …and NAMED, so a mixer's banner does not offer them a writer's agreement.

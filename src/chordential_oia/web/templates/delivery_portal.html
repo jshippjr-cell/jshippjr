@@ -715,105 +715,13 @@
   </div>
   {% endif %}
 
-  <!-- CLEARANCE SUMMARY -->
-  <div class="card">
-    <h2>Cleared &amp; original</h2>
-    <p class="sub">Music your legal team can defend.</p>
-    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
-      <div style="flex:1 1 320px">
-        <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Grant of rights{% if cert.license_draft %} · Draft, pending confirmation{% endif %}</p>
-        {% if cert.license_draft %}
-        <p class="legend" style="margin:0 0 8px">Standard template terms, not yet confirmed as the deal grant.</p>
-        {% endif %}
-        <ul class="clean">
-          <li><b>Type:</b> {{ cert.license.type }}</li>
-          {# Publishing and Media are the two terms this grant used to leave unstated —
-             which is how a buyout claim and a retained publisher share coexisted. The
-             client's own page is the first place they should be legible. #}
-          {% if cert.license.publishing %}<li><b>Publishing:</b> {{ cert.license.publishing }}</li>{% endif %}
-          {% if cert.license.media %}<li><b>Media:</b> {{ cert.license.media }}</li>{% endif %}
-          <li><b>Territory:</b> {{ cert.license.territory }}</li>
-          <li><b>Term:</b> {{ cert.license.term }}</li>
-          <li><b>Exclusivity:</b> {{ cert.license.exclusivity }}</li>
-          <li><b>Content-ID:</b> {{ cert.content_id }}</li>
-        </ul>
-        {% if cert.license_confirmed %}<p class="legend" style="margin-top:6px">Confirmed by {{ cert.license_confirmed.by }}{% if cert.license_confirmed.date %} · {{ cert.license_confirmed.date }}{% endif %}.</p>{% endif %}
-        <p class="legend" style="margin-top:8px">{{ cert.clearance_line }}</p>
-        <p class="legend" style="margin-top:6px">Original work: no third-party masters or samples, so no third-party Content-ID claims; the recording is registrable with Content ID by the rights-holder.</p>
-      </div>
-      <div style="flex:0 0 auto;text-align:center">
-        {# The seal is the product's whole promise, so it may never outrun the paperwork:
-           it appears once the grant is confirmed AND a version is certified. Stamping
-           CLEARED over terms the page itself labels "Draft, pending confirmation" is the
-           one contradiction a client's business-affairs reviewer is certain to catch. #}
-        {% if not cert.license_draft and cert.certified_version %}
-        <div class="seal"><span>Chordential</span><b>CLEARED</b><span>original work</span></div>
-        {% else %}
-        <div class="seal seal-pending"><span>Chordential</span><b>IN CLEARANCE</b><span>seal on confirmation</span></div>
-        {% endif %}
-      </div>
-    </div>
-    {% if cert.contributors %}
-    {# Roles, not names. The talent writes under Chordential — naming the composer on a
-       browsable pre-payment page hands over the roster and breaks the anonymity the
-       creators were signed under. Named chain of title belongs in the rights certificate
-       inside the paid package, where it is legally required and access is controlled. #}
-    <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Created by</p>
-    <ul class="clean">
-      <li>Chordential studio · {{ cert.contributors | map(attribute='role') | unique | join(', ') }}</li>
-    </ul>
-    {% endif %}
-    <!-- IP3 — signatory block: warranty attaches to a named signer, version + date.
-         Shown only once there is a certified version to attach it to; a warranty
-         naming a signer against nothing is a signature on a blank page. -->
-    {% if cert.certified_version %}
-    <p style="margin:18px 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Certified by</p>
-    <ul class="clean">
-      <li><b>{{ cert.signatory.entity }}</b>{% if cert.signatory.signer %} · {{ cert.signatory.signer }}{% if cert.signatory.title %}, {{ cert.signatory.title }}{% endif %}{% endif %}</li>
-      <li>Certifies {{ cert.certified_version }}{% if cert.certified_date %} · {{ cert.certified_date }}{% endif %}</li>
-    </ul>
-    {% endif %}
-
-    {# ADR-0059 — the client's signature, bound to this exact document. The old
-       sign-off was a typed name in a list: it survived the licence being changed
-       afterwards, because it never referred to it. #}
-    <div id="certificate" style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(0,0,0,.12)">
-      {% if cert_signature and cert_signature_state == 'valid' %}
-      <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signed</p>
-      <p class="sub" style="margin:0"><span class="tick">✓</span> {{ cert_signature_note }}</p>
-      <p class="legend" style="margin-top:6px">Signed as “{{ cert_signature.typed_name }}”{% if cert_signature.signer_email %} · {{ cert_signature.signer_email }}{% endif %} · document fingerprint <code>{{ cert_signature.digest[:16] }}</code></p>
-
-      {% elif cert_signature and cert_signature_state == 'superseded' %}
-      <p style="margin:0 0 6px;font-weight:700;color:#8a3324;font-size:12px;text-transform:uppercase;letter-spacing:.08em">Signature no longer matches</p>
-      <p class="sub" style="margin:0">{{ cert_signature_note }}</p>
-      <p class="legend" style="margin-top:6px">Nothing you signed has been taken away. This notice exists so a changed term can never pass as one you agreed to. Ask your Chordential contact to reissue the certificate, then sign the current version.</p>
-
-      {% elif verified %}
-      <p style="margin:0 0 6px;font-weight:700;color:var(--wine);font-size:12px;text-transform:uppercase;letter-spacing:.08em">Sign this certificate</p>
-      {% if cert.license_draft %}
-      <p class="legend" style="margin:0">The grant above is still marked <b>draft</b>. Signing opens once Chordential confirms the terms; signing a draft would bind you to something not yet settled.</p>
-      {% else %}
-      <form method="post" action="/project/{{ project.id }}/delivery/sign" style="margin:0">
-        <input type="hidden" name="r" value="{{ reviewer_token }}">
-        <input type="hidden" name="k" value="{{ share_token }}">
-        <label class="legend" style="display:block;margin:0 0 6px">Type your full name to sign</label>
-        <input type="text" name="typed_name" required placeholder="{{ reviewer.name }}"
-               style="width:100%;max-width:340px;padding:8px 10px;font-size:15px">
-        {# Unticked on purpose: a pre-ticked consent box is not consent. #}
-        <label class="legend" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 12px;max-width:520px">
-          <input type="checkbox" name="consent" value="1" required style="margin-top:3px">
-          <span>I agree to sign this document electronically. I have read it, I intend my typed name to be my signature, and I understand this electronic signature is legally binding to the same extent as a handwritten one.</span>
-        </label>
-        <button type="submit" class="btn">Sign the certificate</button>
-        <p class="legend" style="margin-top:8px">Signing records your name, the time, and a fingerprint of this exact document. If any term changes afterwards, both of us are told the signature no longer matches.</p>
-      </form>
-      {% endif %}
-
-      {% else %}
-      <p class="legend" style="margin:0">This link can view the certificate but not sign it. Signing needs your personal reviewer link. Ask your Chordential contact to send it.</p>
-      {% endif %}
-    </div>
-  </div>
+  <!-- CLEARANCE SUMMARY — one partial, shared with the room (2026-08-30). -->
+  {% set cl_pid = project.id %}
+  {% set cl_k = share_token %}
+  {% set cl_r = reviewer_token %}
+  {% set cl_verified = verified %}
+  {% set cl_name = reviewer.name if reviewer else '' %}
+  {% include "_clearance_card.html" %}
 
   {# ADR-0060 — delegated access. Without this the client forwards their personal
      link, so the real access model was "whoever has the URL" while the records said

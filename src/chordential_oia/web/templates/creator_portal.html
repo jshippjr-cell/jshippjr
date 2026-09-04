@@ -1138,6 +1138,26 @@
     you here the moment they are cleared. Nothing to do yet.</p>
   {% endif %}
 
+  {# ── CLEARED & ORIGINAL — the certificate, and the signature bound to it.
+        The last of the buyer's business that still lived on the delivery portal
+        (operator, 2026-08-30). Same partial the portal renders, from one derivation, so
+        the two surfaces cannot disagree about whether a signature still describes its
+        document. `cl_verified` offers the FORM to a named reviewer only — a bare share
+        link reads it — and `/delivery/sign` refuses anything else on its own regardless. ── #}
+  {% if clearance %}
+  {% set cert = clearance.cert %}
+  {% set cert_signature = clearance.signature %}
+  {% set cert_signature_state = clearance.state %}
+  {% set cert_signature_note = clearance.note %}
+  {% set cl_pid = a.project_id %}
+  {% set cl_k = room_token_kind|default('t') == 'k' and room_token or '' %}
+  {% set cl_r = room_token_kind|default('t') == 'r' and room_token or '' %}
+  {% set cl_verified = (room_token_kind|default('t') == 'r') and cert_reviewer %}
+  {% set cl_name = cert_reviewer.name|default('') %}
+  {% set cl_origin = 'room' %}
+  {% include "_clearance_card.html" %}
+  {% endif %}
+
   {# ── The note bar. THE point of the room, and the client had no way to leave one:
         they could hear the take and see who else was here, and then had to go somewhere
         else to say anything. Reported live. Timecoded to wherever the head is, so a note

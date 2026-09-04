@@ -106,9 +106,16 @@ def test_the_client_portal_shows_the_whole_grant():
     from pathlib import Path
     from chordential_oia.web import app as app_mod
 
-    portal = (Path(app_mod.__file__).parent / "templates"
-              / "delivery_portal.html").read_text()
+    # The certificate moved into a PARTIAL (2026-08-30) so the room and the portal render
+    # ONE copy — *"move the reviewer clearance signature into the room too"* (operator).
+    # The guard is unchanged in substance: every term of the grant is on the page a buyer
+    # reads. It is now on both of them, which is what the partial is for.
+    tpl = Path(app_mod.__file__).parent / "templates"
+    card = (tpl / "_clearance_card.html").read_text()
     for term in ("cert.license.type", "cert.license.publishing", "cert.license.media",
                  "cert.license.territory", "cert.license.term",
                  "cert.license.exclusivity"):
-        assert term in portal, f"the client portal does not show {term}"
+        assert term in card, f"the certificate does not show {term}"
+    for surface in ("delivery_portal.html", "creator_portal.html"):
+        assert "_clearance_card.html" in (tpl / surface).read_text(), (
+            f"{surface} stopped rendering the grant")
