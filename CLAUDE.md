@@ -333,6 +333,11 @@ verification against Stripe — known, live, unfixed.
   `CONSTITUTION.md` (what ChordOS is + enduring principles), `ARCHITECTURE_DECISIONS.md`
   (binding technical decisions + rationale), `PROJECT_STATE.md` (what's built/deferred
   now). Start at `docs/architecture/README.md`.
+- **`docs/sales-playbook.md`** — the **sales operating philosophy** (CRO, v1): the buying
+  journey, qualification and when we say no, the discovery-call thinking, the proposal
+  philosophy, the objection framework, sales assets, the client's emotional experience, and
+  the referral system. It contains no emails, scripts, proposals or prices — those live in
+  the OS. Read it before changing a client-facing sales surface.
 - **`docs/` (the rest)** holds the decision/plan **archive**: `company-strategy.md`,
   `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
