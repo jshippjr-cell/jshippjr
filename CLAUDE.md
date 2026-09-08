@@ -337,6 +337,9 @@ verification against Stripe — known, live, unfixed.
   `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
   `product-efficiency-audit.md`. Reconcile re-sequencing into `product-roadmap.md`.
+  Marketing execution lives in `editorial-operating-system.md` (cadence, franchises,
+  calendar, templates, workflow, repurposing, standards) — it inherits the CMO
+  charter + positioning brief and never restates strategy.
 
 Layering: Constitution (why, changes rarely) → ADRs (decisions) → PROJECT_STATE (state,
 changes often) → this file (tactics) → `docs/` archive (history). Higher, slower layers
