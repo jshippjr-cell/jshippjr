@@ -333,6 +333,10 @@ verification against Stripe — known, live, unfixed.
   `CONSTITUTION.md` (what ChordOS is + enduring principles), `ARCHITECTURE_DECISIONS.md`
   (binding technical decisions + rationale), `PROJECT_STATE.md` (what's built/deferred
   now). Start at `docs/architecture/README.md`.
+- **`docs/messaging-bible.md`** — the **language system** every published sentence
+  traces to (message codes, vocabulary, voice, audience frameworks, narrative order).
+  Read it before writing any client-, creator- or investor-facing copy; it does not
+  contain copy, and the brand record it is built on is listed at its top.
 - **`docs/` (the rest)** holds the decision/plan **archive**: `company-strategy.md`,
   `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
