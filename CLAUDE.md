@@ -334,7 +334,9 @@ verification against Stripe — known, live, unfixed.
   (binding technical decisions + rationale), `PROJECT_STATE.md` (what's built/deferred
   now). Start at `docs/architecture/README.md`.
 - **`docs/` (the rest)** holds the decision/plan **archive**: `company-strategy.md`,
-  `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
+  `product-roadmap.md`, `market-research.md`, the marketing council's work
+  (`cmo-charter.md`, `cmo-positioning-brief.md`, `content-strategy.md`), the
+  `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
   `product-efficiency-audit.md`. Reconcile re-sequencing into `product-roadmap.md`.
 
