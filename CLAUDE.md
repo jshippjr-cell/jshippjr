@@ -333,6 +333,10 @@ verification against Stripe — known, live, unfixed.
   `CONSTITUTION.md` (what ChordOS is + enduring principles), `ARCHITECTURE_DECISIONS.md`
   (binding technical decisions + rationale), `PROJECT_STATE.md` (what's built/deferred
   now). Start at `docs/architecture/README.md`.
+- **`docs/brand/BRAND_FOUNDATION.md`** — **who Chordential is** (the studio the market
+  hires, as distinct from ChordOS, the system it runs on). Read it before any client-facing,
+  marketing, sales, design, or hiring decision; it holds the pillars, the refusals, the
+  banned vocabulary, and the tests every artefact must pass.
 - **`docs/` (the rest)** holds the decision/plan **archive**: `company-strategy.md`,
   `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
