@@ -337,6 +337,11 @@ verification against Stripe — known, live, unfixed.
   `product-roadmap.md`, `market-research.md`, the `*-council.md` deliberations, the
   `delivery-os-*` plans + reviews + user manual, `efficiency-report.md`, and
   `product-efficiency-audit.md`. Reconcile re-sequencing into `product-roadmap.md`.
+- **`docs/cpo-product-review.md`** — the whole-product review from the CPO seat
+  (2026-09-08): the seams between surfaces, the customer journey stage by stage, what to
+  remove, the intelligence gaps (clearance, relationship, renewal, actuals), and four
+  sequenced roadmaps. Advisory — it changes no ratified strategy document, and where a
+  recommendation touches one it says so.
 
 Layering: Constitution (why, changes rarely) → ADRs (decisions) → PROJECT_STATE (state,
 changes often) → this file (tactics) → `docs/` archive (history). Higher, slower layers
