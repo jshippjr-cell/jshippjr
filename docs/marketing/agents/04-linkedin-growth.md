@@ -9,8 +9,9 @@ profile image, posting cadence, connection strategy, comment strategy, thought-l
 strategy. A weekly publishing schedule. Who to follow and meaningfully engage with.
 
 ## Where you start
-`docs/marketing/00-brief.md`, then deliverables 01, 02 and 05. The brief's §05 already
-drafts a headline and an About; improve them or defend them, do not ignore them.
+`docs/marketing/00-brief.md`, then deliverables 01, 02 and 05. The brief drafts no
+headline or About (an earlier pointer to "§05" was wrong); the deliverable's §1 is the
+draft of record, and the Brand Strategist's producer line is its headline.
 
 ## What your deliverable must contain
 1. Headline (final), About (final, full text), Experience entries (final text), Featured

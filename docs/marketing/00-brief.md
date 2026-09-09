@@ -240,6 +240,12 @@ hand-sold conversations. Not a substitute for them.
 The roadmap's earlier "X twice a week" and "TikTok Q3 test" are withdrawn under the
 founder-hours rule (Growth Engine; CEO Decision 8).
 
+The "No" row governs **pages and posting**, not groups: a community that happens to be
+hosted on Facebook is a community (§9, Community & Outreach §2), and the contribution
+doctrine applies there as anywhere. A cut of a LinkedIn post to YouTube or Instagram is
+the **same post again**, not a fourth (Social Media Manager §1); "three a week" counts
+what is written.
+
 ---
 
 ## 11. What we measure
@@ -287,6 +293,24 @@ earned-channel pitch gets no reply after three tries → move on.
    treated the four in §8 as pre-conditions, not features.
 4. Whether the customer promise's noun widens from "agencies" to include production
    companies and brands (Bible §9.4).
+5. **The demo audio** (§8.1). The four recordings are machine-made; the front door plays
+   them with no disclosure at all (SEO & Website §5), and every seat has written around
+   them. Replace them with human-made music, or take the players down until it exists.
+   Whichever, SEO & Website recommends striking §8.1's "or disclose it" so §8 is as
+   absolute as §7.
+6. **The Clearance Read inside the sequence** (Brand Strategist §8; Outbound §2 agrees).
+   The brief puts it at touch three of five. The Strategist would let it stand alone with
+   no follow-up unless they write back. Outbound has built the sequence so that a Read
+   request ends it and one no-ask touch follows; ruling for the Strategist deletes that
+   one touch and nothing else changes.
+7. **Connection acceptance rate** (Analytics objection). On a list of thirty one
+   acceptance moves it three points; Analytics would publish the count and hold the rate
+   until the sixty-name list exists. The sheet carries both meanwhile.
+
+Decisions taken by the CEO seat from the deliverables, without the founder: the Facebook
+and cross-platform readings in §10; LinkedIn Growth's word ceiling waived for the twelve
+posts it was told to write in full; "a renewal price fixed now" (Sales Playbook) struck
+as not a shipped capability.
 
 ---
 
