@@ -1,0 +1,294 @@
+# Chordential — the marketing brief (canon)
+
+*Ratified by the CEO seat, 2026-09-09, on behalf of the founder. Every marketing session
+reads this first. Where any other marketing document differs from this one, this one
+wins; where this one is wrong, say so under "Objection to the brief" in your deliverable
+and carry on under it as written. Amendments are the founder's.*
+
+This brief absorbs nine prior seats' work — the Brand Foundation, the Messaging Bible,
+the Content Strategy, the Editorial Operating System, the Growth Engine, the Relationship
+Strategy, the Sales Playbook, the CEO Integration Review and the CPO Product Review —
+and records which of their decisions stand, which were merged, and which are open. The
+originals stay in `docs/` as the archive. Nobody re-derives them.
+
+---
+
+## 0. The rulings that bind everything below
+
+These come from the CEO Integration Review (`docs/ceo-integration-review.md`, 2026-09-08)
+and the Brand Foundation. They are not marketing preferences; they are company decisions.
+
+1. **Chordential is a music house.** ChordOS is the internal operating system and is
+   **not sold, pitched, or named on a client surface** until the studio has delivered ten
+   engagements and collected $250,000. Marketing speaks only for the music house. "Music
+   Opportunity Intelligence" as a positioning is retired.
+2. **"Finished" leads; the certificate is enumerated inside it.** Clearance is not the
+   headline. It is the second pillar and the thing our search content answers, because it
+   is what a producer types at 11pm — but the brand leads with *the music arrives finished*.
+3. **"Procurement-grade" is internal only.** Never client-facing, in any channel, to any
+   seat. (The Bible allowed it to business affairs; the Foundation and the CEO review did
+   not. The stricter rule stands.)
+4. **Banned outright:** *"the music is the easy part."* Also banned as claims: *guaranteed,
+   litigation-proof, bulletproof, indemnified* — until counsel has reviewed what the
+   certificate actually backs (CEO Decision 6; CPO Gap 1). *Trusted by, award-winning,
+   world-class* — until true.
+5. **The demand engine is stood down for sixty days in favour of thirty named people.**
+   One founding engagement, sold by hand, Southeast first, ten conversations a week.
+   Everything in this brief runs at founder-only capacity and exists to make those thirty
+   conversations land. A week where build hours exceed selling hours is a failed week.
+6. **The build is frozen for ninety days**, with two exceptions: a defect a real client
+   reports during a real engagement, and the round-exhaustion gate. Marketing may not
+   commission new product surfaces. It may fix the front door's honesty faults (§8),
+   because those are not features.
+7. **Revenue is zero as of 2026-09-08.** No paying engagement exists. Every claim, sample
+   and number is written from that fact.
+
+---
+
+## 1. Positioning
+
+**Category:** a music house. **Position inside it:** the one that finishes.
+
+> For agency producers and heads of production who commission original music for
+> campaigns with several approvers and real rights exposure, Chordential is the music
+> house that delivers original music finished — composed by people, approved in one room
+> the client can see into, cleared under a certificate the studio signs, and packaged
+> completely, on the date agreed. Unlike the incumbent music house, whose process lives in
+> email and whose paper is deal-by-deal, and unlike libraries, freelancers and machine-made
+> music, which deliver a file and leave the finishing to the buyer, Chordential runs its
+> studio to leave nothing undone and to show the client every step — because it would
+> rather prove than be trusted.
+
+*(Brand Foundation §3.5, adopted verbatim. It is the best single paragraph any seat wrote.)*
+
+**Against whom, never by name:** the incumbent music house (opaque process, deal-by-deal
+paper); libraries (a file, not a finish; no chain of title for paid spend); machine-made
+music (fast, cheap, and — per the US Copyright Office, Jan 2025, and the federal appeals
+court, Mar 2025 — not copyrightable, so not cleanly licensable, insurable or defensible).
+
+**What makes it defensible** (CEO review §7, the moat): relationships that compound per
+engagement; operational excellence that *is* what finished means; trust receipts —
+signatures bound to text, certificates the studio signs; composer terms a competitor
+cannot match without repricing their book; and the refusals (§7) that can only be copied
+by giving something up. **Software is not the moat.** It is the infrastructure for it.
+
+---
+
+## 2. The line, and the lines
+
+**Spine (every channel):** *Original music for campaigns — composed, cleared, delivered.*
+
+**Core message (the Bible's #1, ranked by every seat):**
+*Original music, composed, cleared, delivered, handed over the way procurement wants it.*
+
+**The promise (Brand Foundation §3.4, for the About page and the room's first screen):**
+*The music will be yours, it will be good, and it will arrive finished. At any moment you
+will be able to see where it stands, and nothing that is not yet true will be presented
+as if it were.*
+
+**For business affairs specifically:** *Music your legal team can defend.* — the product's
+own hook; it names the buyer's fear, not our craft. Use it to that seat, in that context.
+It is not the site headline (Ruling 2).
+
+**The customer promise — OPEN, the founder's call.** The Constitution reads:
+*"Chordential removes the work of managing music so agencies can stay focused on managing
+the campaign."* The Brand Foundation (§3.12) proposes:
+*"Chordential delivers original music finished, and lets the client see it happening, so
+the music is the one part of the campaign nobody has to worry about."*
+Until the founder ratifies the amendment, **the existing line stands.** The CEO seat's
+recommendation: ratify the amendment; the original promises to take the work, which reads
+as taking the role.
+
+---
+
+## 3. The three pillars, each with a proof you can click
+
+| Pillar | Promise | Proof surface | Objection it answers |
+|---|---|---|---|
+| **Original** | Written for this campaign by a named human composer. | The brief in the room; the composer's name on the cue sheet; the composer agreement in force. | "Why not a library / why not a generator?" |
+| **Cleared** | A grant of rights business affairs can read, sign and rely on. | The Clearance Certificate: media, territory, term, exclusivity, publishing stated; contributor releases; a signature bound to the document that says *"no longer matches"* if a term changes. | "Can we defend this on paid spend, cross-channel?" |
+| **Delivered** | What you approved is what you receive, and the package says so. | Published versions only; one round buys one version; the manifest names every file; the cue sheet is in the box. | "What actually happens after approval?" |
+
+**The eight messages that lead** (Messaging Bible codes, kept):
+CM *composed, cleared, delivered, handed over the way procurement wants it* · SM1 *The
+certainty is what you are buying* · SM2 *Written for this campaign, by a person whose name
+is on the cue sheet* · PM1 *Only human-authored music can be owned* · SM3 *One room.
+Every note stays with the music* · SM5 *The number comes with its reasons* · SM4 *Bounded
+rounds, not a revision spiral* · OM4 *Everything arrives together.*
+
+---
+
+## 4. Who we are talking to
+
+In order. The first is the seat that decides; everything else refers or approves.
+
+1. **Agency producers and heads of production** — they write the brief, pick who demos,
+   and answer the creative director, business affairs and finance at once.
+2. **Executive producers at production companies** — the same buyer in a different
+   building; asked "who do you use for music?" weekly.
+3. **Business affairs / legal / procurement** — the underserved seat that already cares
+   about what we uniquely offer. Never the headline audience; always the one we write the
+   certificate for.
+4. **Music supervisors** (choose original vs licensed; liable for clearance), **creative
+   directors** (is it right?), **editors and post** (the most reliable referral in the
+   industry), **brand-side content leads** (secondary; the agency owns the creative).
+
+Excluded on purpose: music fans, hobbyists, anyone whose presence is presence taken from
+the list above. **The first sixty days are thirty named people from tiers 1–3,
+Southeast first** (Ruling 5). The "hundred" and the "40/25/15" schemes in the prior
+documents are year-one targets, not the beachhead.
+
+---
+
+## 5. Voice
+
+*Confident, not arrogant* — never rank ourselves against a named peer. *Precise where it
+protects the buyer, plain elsewhere.* *Warm, not corporate.* *Elegant, not clever* — no
+puns. *Educational, not promotional* — we never pitch inside content. *Present tense;
+past-participle promises* (composed, cleared, delivered). *Honest over certain* — "not yet
+observed" is a complete sentence. The founder writes in the first person, as the person
+doing the work, and admits what changed.
+
+---
+
+## 6. Vocabulary
+
+**Use:** the room · a note · a round · a version · a direction · creative lock · the brief ·
+the Discovery Summary · the Clearance Certificate · grant of rights · media / territory /
+term / exclusivity / publishing · cue sheet · chain of title · on file · stems · cutdowns ·
+the package · the manifest · creative fee / licence fee · composer (by name to the studio,
+by role to the client) · finished · made by people.
+
+**Never:** platform · dashboard · portal · workspace · OS · software · tool · app ·
+AI-powered · intelligent · automated · seamless · end-to-end · hassle-free · one-stop ·
+full-service · we handle everything · vendor · talent / resources / freelancers ·
+world-class · award-winning · trusted by · guaranteed · litigation-proof · bulletproof ·
+cheap / affordable · AI-free / no-AI / human-made **as a badge** (state it plainly, once,
+in the right place; never wave it) · royalty-free / stock / library **as our offer** ·
+full buyout · work-made-for-hire · procurement-grade · *the music is the easy part.*
+
+---
+
+## 7. The refusals
+
+- **No machine-made music, anywhere, including as a demo.** It would be the one thing that
+  contradicts the whole position.
+- **No fabricated proof.** No client names, logos, testimonials, "trusted by", or numbers
+  until real. Demo work is labelled as demo, on invented brands (AURORA, Vance Athletic,
+  HALVARD). Real organisations, shows and events are named only when we are confident they
+  exist; anything unconfirmed is marked **(verify)**.
+- **No claim off the register.** *If you have to check whether we can say it, we cannot
+  say it yet* (Sales Playbook). No insurance, SLA, archiving or indemnity claims.
+- **No engagement bait, no paid growth, no fourth post a week, no pitch inside a community
+  before ten genuinely useful contributions, never a link to ourselves in a comment.**
+- **The budget never sets the price**, and a price is never padded to be negotiated down.
+- **No free spec work.** The Clearance Read (§9) is the one give that costs an hour and
+  is not spec.
+- **Nothing that is not yet true is presented as if it were.** Including by omission.
+
+---
+
+## 8. The front door has to be honest before we point anyone at it
+
+The CPO review found faults on the public site that the honesty rule forbids. They are
+**pre-conditions for m01**, not features, and the build freeze does not cover them:
+
+1. Placeholder audio on the front door is machine-generated and undisclosed. Replace it
+   with human-made music or disclose it, on the highest-traffic page first.
+2. Demo records are indistinguishable from real ones. Label them (Constitution §4.3).
+3. The certificate's clearance line is asserted, not computed, and its indemnity language
+   overstates what is backed. Marketing may not describe the certificate as guaranteed or
+   indemnified until counsel has reviewed it and the line is computed from evidence.
+4. Internal chrome ("Procurement OS", the buyer graph, the crawler) leaks onto
+   client-facing pages. Not presentable.
+
+---
+
+## 9. What marketing does for the thirty
+
+Everything below is the demand engine at founder-only capacity, in service of thirty
+hand-sold conversations. Not a substitute for them.
+
+- **The Clearance Read** — the one offer that is always appropriate: send us any music
+  licence on a live campaign, we return one page on what it covers and where it doesn't
+  (paid spend, cross-channel, term, territory). One hour, no pitch. It is touch three of
+  the five-touch sequence (`roadmap.md` §13) and the most predictive number on the
+  dashboard.
+- **The gives, before any ask** (Growth Engine: *no ask until we have given three times*):
+  the licence-terms glossary; the delivery checklist a producer can hold *any* vendor to;
+  the cue-sheet template; plain clearance answers within the hour; a composer introduction.
+- **Three posts a week on the founder's LinkedIn** — Monday *How Agencies Actually Buy
+  Music*, Wednesday *What Actually Happens After Approval?* (a screen recording from the
+  room), Friday *Producer's Notebook*. Six series total; the prior seats' twelve and ten
+  were merged to these because a series a reader cannot predict is not a series.
+- **Two communities, twice a week**, chosen from the Community seat's verified table.
+  Ten contributions before any link.
+
+---
+
+## 10. Channel verdicts (reconciled)
+
+| Channel | Verdict | Why |
+|---|---|---|
+| **LinkedIn** (the founder's profile, not the company page) | **Primary** | The economic buyers live here. Three posts a week, daily comments, fifteen connections a week from public credits. |
+| **Owned site + list** | **Yes** | The home. Rented channels distribute; they never hold the only copy. Newsletter from Q2, monthly. |
+| **Guest writing, podcast guesting, regional speaking** | **Yes** | Trade-press credibility; one pitch a quarter, one talk given until it is good. |
+| **YouTube** | **Archive only** | The Wednesday recording is posted there so search finds it in a year. No separate production. |
+| **Instagram** | **Minimal** | A legitimacy check: the artefacts as stills, the Wednesday cut as a Reel. |
+| **X, TikTok, Threads, Facebook, Medium, Substack, podcast hosting** | **No, year one** | Reach that does not produce a qualified conversation with a tier 1–3 buyer at a cost in founder hours that survives a delivery week. |
+
+The roadmap's earlier "X twice a week" and "TikTok Q3 test" are withdrawn under the
+founder-hours rule (Growth Engine; CEO Decision 8).
+
+---
+
+## 11. What we measure
+
+Trust, not reach. **Volume is never a metric** (Constitution).
+
+**Lagging:** discovery calls, with source · signed Discovery Summaries · unsolicited
+inbound from a producer we did not contact first · referrals from partners and editors ·
+win/loss captured without exception.
+
+**Leading:** **Clearance Reads requested** · **replies from target roles** · saves and
+shares on the artefacts · organic search to the pillar pages · connection acceptance rate
+from the named list · founder hours per week (≤ 8 on marketing; over two weeks running,
+cut LinkedIn posting first).
+
+**Stop conditions:** no leading signal from a series or channel in eight weeks → stop it.
+A room reads our participation as promotion, even once → leave it for a quarter. An
+earned-channel pitch gets no reply after three tries → move on.
+
+---
+
+## 12. Rulings on the conflicts between the prior seats
+
+| Conflict | Ruling |
+|---|---|
+| 7 content pillars (Content Strategy) vs 6 learning tracks (Editorial OS) | Neither taxonomy is public. The **three brand pillars** (§3) organise everything; series map to them. |
+| 12 series vs 10 franchises | **Six** (§9). Names kept where both seats used them (Behind the Brief, Campaign Breakdown, Producer's Notebook, Music Myths). |
+| Site-first vs LinkedIn-first | Both, in their roles: the **site is the home**, **LinkedIn is the primary distribution**. |
+| Editorial OS's 3-tier cadence ladder | **Tier 0 only** (founder alone) for the first ninety days. Promotion criteria kept for later. |
+| Founder letter monthly vs quarterly | **Weekly, short** (Producer's Notebook), plus our own numbers published **quarterly**. |
+| "Procurement-grade" to business affairs | **Banned client-facing** (Ruling 3). |
+| The "hundred" vs "40/25/15" relationship targets | **Thirty named people, sixty days** (Ruling 5) is the only current target. The rest are year-one aspirations. |
+| Certificate "guaranteed / indemnification" vs "never litigation-proof" | **Neither claim until counsel reviews** (Ruling 4). |
+| "Revenue is zero" vs "every delivered job" | **Zero paying engagements** as of 2026-09-08. Delivered demo jobs are not engagements. |
+| Growth Engine's "first three client-approved case studies" in year one | A goal, not a claim. Nothing is written as if it happened. |
+
+---
+
+## 13. Open decisions for the founder
+
+1. Ratify or reject the customer-promise amendment (§2, Brand Foundation §3.12).
+2. Counsel review of the certificate's indemnity and "guaranteed" language (Ruling 4) —
+   a budget item before composer number one.
+3. Whether the CPO's eleven honesty fixes count as freeze exceptions. The CEO seat has
+   treated the four in §8 as pre-conditions, not features.
+4. Whether the customer promise's noun widens from "agencies" to include production
+   companies and brands (Bible §9.4).
+
+---
+
+*Layering: this brief → `roadmap.md` → the eight charters in `agents/` → the deliverables.
+Higher wins. The archive in `docs/` is history, not instruction.*

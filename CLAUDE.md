@@ -77,6 +77,17 @@ deep research in `docs/market-research.md`; the enduring **why** lives in
   second copy of the layout; three of them existed once and 20% of the cube hung out of
   its own walls for weeks because of it.
 
+## ⚑ Marketing and outreach work reads `docs/marketing/00-brief.md` first
+Every session doing brand, content, social, LinkedIn, community, outreach, SEO or
+analytics work reads **`docs/marketing/00-brief.md`** before anything else — it is the
+canon, ratified against the CEO Integration Review and the Brand Foundation, and it
+records the rulings (Chordential is a music house; ChordOS is never named to a client
+until ten engagements and $250K; "finished" leads; "procurement-grade" is internal only;
+thirty named people before any demand engine). Then `docs/marketing/roadmap.md`, then the
+role's own charter in `docs/marketing/agents/`. Deliverables go to
+`docs/marketing/deliverables/<role>.md` and nowhere else. The prior seats' documents in
+`docs/` are the archive; nobody re-derives them.
+
 ## Governing rules (the product's spine — honor in code + UX)
 - **"The machine proposes, Jon disposes."** Engines analyze + recommend; a human presses
   the decision buttons (qualify, assign, approve, release). Never auto-decide.
