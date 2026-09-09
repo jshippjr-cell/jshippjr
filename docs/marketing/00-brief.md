@@ -33,8 +33,9 @@ and the Brand Foundation. They are not marketing preferences; they are company d
    certificate actually backs (CEO Decision 6; CPO Gap 1). *Trusted by, award-winning,
    world-class* — until true.
 5. **The demand engine is stood down for sixty days in favour of thirty named people.**
-   One founding engagement, sold by hand, Southeast first, ten conversations a week.
-   Everything in this brief runs at founder-only capacity and exists to make those thirty
+   One founding engagement, sold by hand, Southeast first, ten conversations a week —
+   counted as replies in their own words, calls, coffees and Reads delivered; five new
+   sequences open a week (Outbound §4). Everything in this brief runs at founder-only capacity and exists to make those thirty
    conversations land. A week where build hours exceed selling hours is a failed week.
 6. **The build is frozen for ninety days**, with two exceptions: a defect a real client
    reports during a real engagement, and the round-exhaustion gate. Marketing may not
@@ -167,6 +168,18 @@ cheap / affordable · AI-free / no-AI / human-made **as a badge** (state it plai
 in the right place; never wave it) · royalty-free / stock / library **as our offer** ·
 full buyout · work-made-for-hire · procurement-grade · *the music is the easy part.*
 
+**Never, added by the Brand Strategist (§4) and absorbed here so seats cite the brief:**
+*the music department you don't have to build* · workflow · clearance-certified as an
+adjective on the studio · partner / creative partner · department, team of, offices,
+studios (plural), *our team* · certified alone, cleared alone (always *cleared under the
+certificate*) · on time, fast turnaround, and **"in the box on the date"** as a headline or
+signature (review C18: it is *on time* in five words from a studio with zero deliveries;
+the spine is the headline) · AI as a subject outside the one sentence that explains why
+human authorship is a legal fact. **Use:** *the room* for every client surface · *a
+demonstration*, never sample or case study · the founder by name · *a Clearance Read* ·
+*not yet*. A figure or band anywhere but the proposal is **pending the founder's ruling
+(§13.10)**; until then, table and verdict, no figure.
+
 ---
 
 ## 7. The refusals
@@ -193,8 +206,10 @@ full buyout · work-made-for-hire · procurement-grade · *the music is the easy
 The CPO review found faults on the public site that the honesty rule forbids. They are
 **pre-conditions for m01**, not features, and the build freeze does not cover them:
 
-1. Placeholder audio on the front door is machine-generated and undisclosed. Replace it
-   with human-made music or disclose it, on the highest-traffic page first.
+1. Placeholder audio on the front door is machine-generated. Replace it with human-made
+   music or take the players down, on the highest-traffic page first. (An earlier "or
+   disclose it" was struck in the review round: §7's refusal is absolute, and the front
+   door met neither reading — it played the audio with no notice at all.)
 2. Demo records are indistinguishable from real ones. Label them (Constitution §4.3).
 3. The certificate's clearance line is asserted, not computed, and its indemnity language
    overstates what is backed. Marketing may not describe the certificate as guaranteed or
@@ -213,7 +228,9 @@ hand-sold conversations. Not a substitute for them.
   licence on a live campaign, we return one page on what it covers and where it doesn't
   (paid spend, cross-channel, term, territory). One hour, no pitch. It is touch three of
   the five-touch sequence (`roadmap.md` §13) and the most predictive number on the
-  dashboard.
+  dashboard. Requested by reply, or by the one address on the pillar pages; no form.
+  Logged the day it is asked as a `read-requested` row (Outbound §3–4); the Friday sheet
+  copies it out. Once a month in the feed; one offer per page.
 - **The gives, before any ask** (Growth Engine: *no ask until we have given three times*):
   the licence-terms glossary; the delivery checklist a producer can hold *any* vendor to;
   the cue-sheet template; plain clearance answers within the hour; a composer introduction.
@@ -221,8 +238,11 @@ hand-sold conversations. Not a substitute for them.
   Music*, Wednesday *What Actually Happens After Approval?* (a screen recording from the
   room), Friday *Producer's Notebook*. Six series total; the prior seats' twelve and ten
   were merged to these because a series a reader cannot predict is not a series.
-- **Two communities, twice a week**, chosen from the Community seat's verified table.
-  Ten contributions before any link.
+- **Two communities, one sitting in each a week**, chosen from the Community seat's
+  table, each row verified the week it is first used. Ten contributions before any
+  resource is offered; offered as text in the thread, never by message; never a link to
+  ourselves at any count (Community & Outreach §3 is the authority; on LinkedIn the
+  rule is LinkedIn Growth §4).
 
 ---
 
@@ -230,7 +250,7 @@ hand-sold conversations. Not a substitute for them.
 
 | Channel | Verdict | Why |
 |---|---|---|
-| **LinkedIn** (the founder's profile, not the company page) | **Primary** | The economic buyers live here. Three posts a week, daily comments, fifteen connections a week from public credits. |
+| **LinkedIn** (the founder's profile, not the company page) | **Primary** | The economic buyers live here. Three posts a week, daily comments, fifteen connection requests a week from public credits: five open a sequence (Outbound §2), ten go to referral seats with nothing asked. |
 | **Owned site + list** | **Yes** | The home. Rented channels distribute; they never hold the only copy. Newsletter from Q2, monthly. |
 | **Guest writing, podcast guesting, regional speaking** | **Yes** | Trade-press credibility; one pitch a quarter, one talk given until it is good. |
 | **YouTube** | **Archive only** | The Wednesday recording is posted there so search finds it in a year. No separate production. |
@@ -259,7 +279,9 @@ win/loss captured without exception.
 **Leading:** **Clearance Reads requested** · **replies from target roles** · saves and
 shares on the artefacts · organic search to the pillar pages · connection acceptance rate
 from the named list · founder hours per week (≤ 8 on marketing; over two weeks running,
-cut LinkedIn posting first).
+cut LinkedIn posting first). **The eight** are posts, comments, communities and site copy;
+selling touches and Reads are selling hours, recorded separately and required to exceed
+build hours (Analytics §1; Ruling 5).
 
 **Stop conditions:** no leading signal from a series or channel in eight weeks → stop it.
 A room reads our participation as promotion, even once → leave it for a quarter. An
@@ -288,7 +310,9 @@ earned-channel pitch gets no reply after three tries → move on.
 
 1. Ratify or reject the customer-promise amendment (§2, Brand Foundation §3.12).
 2. Counsel review of the certificate's indemnity and "guaranteed" language (Ruling 4) —
-   a budget item before composer number one.
+   a budget item before composer number one — **and a named reviewer for every published
+   legal claim.** Until one is named, Music Myths and the pillars' legal statements are
+   held; each Myth states what a licence's own text says and stops (review W6).
 3. Whether the CPO's eleven honesty fixes count as freeze exceptions. The CEO seat has
    treated the four in §8 as pre-conditions, not features.
 4. Whether the customer promise's noun widens from "agencies" to include production
@@ -296,8 +320,12 @@ earned-channel pitch gets no reply after three tries → move on.
 5. **The demo audio** (§8.1). The four recordings are machine-made; the front door plays
    them with no disclosure at all (SEO & Website §5), and every seat has written around
    them. Replace them with human-made music, or take the players down until it exists.
-   Whichever, SEO & Website recommends striking §8.1's "or disclose it" so §8 is as
-   absolute as §7.
+   (§8.1's "or disclose it" is struck.) **A third option the seats did not offer** (review
+   §6.1): commission one human-made cue on AURORA now — a spend, not a build — which
+   unblocks the front door, the Wednesday recordings, Instagram and the LinkedIn Featured
+   together. Note that "take the players down" resolves nothing for the seats that wrote
+   *until (a) resolves*: Wednesday stays written, not muted, for as long as no human-made
+   demonstration exists (review W1).
 6. **The Clearance Read inside the sequence** (Brand Strategist §8; Outbound §2 agrees).
    The brief puts it at touch three of five. The Strategist would let it stand alone with
    no follow-up unless they write back. Outbound has built the sequence so that a Read
@@ -306,6 +334,24 @@ earned-channel pitch gets no reply after three tries → move on.
 7. **Connection acceptance rate** (Analytics objection). On a list of thirty one
    acceptance moves it three points; Analytics would publish the count and hold the rate
    until the sixty-name list exists. The sheet carries both meanwhile.
+
+From the review round (`reviews/00-consolidated-review.md` §6), in the order each blocks
+the most:
+
+8. **The roster today** — how many creators have signed, in which crafts. Blocks the About
+   page's "a roster I chose", the Brand Strategist's narrative, `/capabilities` (a craft is
+   listed only when a signed creator does it — sound design is not offered today), and
+   whether §13.5's third option is possible.
+9. **Whose hours are build hours.** If the CEO seat's session does the site work, Ruling 5
+   holds in weeks 1–4; if the founder does, the honesty fixes fail it (review C5).
+10. **Is a band ever public?** `/commission` renders price bands today; Content, LinkedIn
+    and SEO say a band is never public. Blocks Behind the Brief (week 4), touch four, the
+    pricing pillar and the `/commission` rewrite. Until ruled: table and verdict, no figure.
+11. **Five sequences a week** (Outbound §4) ratified against the roadmap's ten — the CEO
+    seat has already amended §0.5 to five; the founder can put it back.
+12. **Did the Producer's Notebook 3 walk-through happen** (a reviewer reading "Request
+    changes" as the place to leave a note)? If not, the post says *I read it that way
+    myself*.
 
 Decisions taken by the CEO seat from the deliverables, without the founder: the Facebook
 and cross-platform readings in §10; LinkedIn Growth's word ceiling waived for the twelve

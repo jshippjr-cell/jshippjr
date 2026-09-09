@@ -44,9 +44,9 @@ never-say list are in the brief.
 ## 03 · The 90-day cue sheet
 | Cue | Weeks | Job | Exit condition |
 |---|---|---|---|
-| m01 Foundation | 1–2 | One line everywhere; front door rewritten; **front-door honesty fixes** (placeholder-audio disclosure, demo data labelled); analytics stood up; LinkedIn profile built | a stranger can repeat what we do and for whom |
-| m02 Proof surfaces | 3–4 | Certificate walkthrough (AURORA), the room in 90s, the manifest opened on camera, the licence-terms glossary | three linkable artefacts |
-| m03 LinkedIn live | 5–8 | Three posts/week, daily comments, 15 connections/week from the named list | 12 posts up; 3 replies from target roles |
+| m01 Foundation | 1–2 | One line everywhere; front door rewritten; **front-door honesty fixes** (players down or human-made music — never a disclosure; demo data labelled); analytics stood up; LinkedIn profile built | a stranger can repeat what we do and for whom |
+| m02 Proof surfaces | 3–4 | The licence-terms glossary (D1), the written room walkthrough (Content §3.3), *The room in 90 seconds* (recording 2). The certificate walkthrough waits for brief §8.3 (week 11). | three linkable artefacts, named the same way in Analytics §1 |
+| m03 LinkedIn live | 1–8 | Posts from **week 1** (Content §6, LinkedIn §6), daily comments, 15 connection requests/week: five open a sequence, ten to referral seats | 12 posts up; 3 replies from target roles |
 | m04 **The thirty** | 1–10 | The thirty named people, Southeast first; ten conversations a week; the five-touch sequence; the Clearance Read as the offer | 30 sequences started, 5 Reads delivered, 3 discovery calls, **one founding engagement** |
 | m05 First breakdown | 9–12 | A real job end to end with permission, or a self-commissioned invented-brand film stated as such | published; sent as touch four |
 | m06 Measure, cut, re-cue | 12–13 | Stop anything with no leading signal in 8 weeks; write the next cue sheet | the next sheet has fewer cues |
@@ -55,27 +55,31 @@ m04 is not a cue among six; it is the sixty-day ruling, and the others exist to 
 conversations land.
 
 ## 04 · Content — six series, three posts a week
-How Agencies Actually Buy Music (weekly) · What Actually Happens After Approval? (weekly)
-· Producer's Notebook (weekly, founder) · Music Myths (fortnightly) · Why This Commercial
-Works (fortnightly, Q2) · Behind the Brief / Campaign Breakdown (monthly, from the first
+How Agencies Actually Buy Music (alternate Mondays with Music Myths) · What Actually
+Happens After Approval? (weekly) · Producer's Notebook (weekly, founder) · Music Myths
+(alternate Mondays) · Why This Commercial Works (Q2 at the earliest; cut from year one in
+the review round, W7) · Behind the Brief / Campaign Breakdown (monthly, from the first
 delivered job). Quarterly themes: Q1 clearance answered (not led with) · Q2 the process ·
 Q3 the business of music for advertising · Q4 our own numbers, published.
 
 ## 05–06 · LinkedIn and the weekly session log
-Headline, About, Featured, cadence, connection and comment doctrine: brief §5. Mon buy /
+Headline, About, Featured, cadence, connection and comment doctrine: LinkedIn Growth §1–4
+(the brief holds no draft). Mon buy /
 Wed after-approval / Fri notebook; Tue and Thu comments only; monthly long-form.
 
 ## 07–12 · Community, free opportunities, partners, speaking, podcasts, relationships
 Be the person in the room who knows how clearance works. Ten contributions before any
-link. Two communities, twice a week. Partners are whoever hands music to a producer:
+link. Two communities, one sitting in each a week. Partners are whoever hands music to a producer:
 production companies, editorial, mix studios, freelance supervisors, localisation. One
 talk, given until it is good. Relationships are built from public credits, never from
-memory — six archetypes, sixty names by the end of m03.
+memory — forty in sequence (Outbound §1) plus the referral seats (LinkedIn Growth §5,
+slots 35–60); the "sixty names" and six archetypes are retired.
 
 ## 13 · Outreach — five touches, six weeks
 Day 0 connect (their thing, not ours) · day 7 value, no ask · day 17 the Clearance Read ·
-day 30 the breakdown · day 42 the small ask, then stop; a no is a no for six months. Ten
-new sequences a week, Tue–Thu mornings.
+day 30 the breakdown · day 42 the small ask, then stop; a spoken no is a no for six
+months, silence is not a no (Outbound §2, §4). Five new sequences a week, Tue–Thu
+mornings.
 
 ## 14 · SEO — own the questions a producer types
 Six pillars in order: licence terms explained · what business affairs checks · original
