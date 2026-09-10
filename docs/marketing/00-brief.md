@@ -195,6 +195,17 @@ demonstration*, never sample or case study · the founder by name · *a Clearanc
 - **No engagement bait, no paid growth, no fourth post a week, no pitch inside a community
   before ten genuinely useful contributions, never a link to ourselves in a comment.**
 - **The budget never sets the price**, and a price is never padded to be negotiated down.
+- **Never about money in public** (the founder, 2026-09-10, from the hiring side of live
+  production: *producers don't like talking about budget; they shop around and keep it
+  to themselves until they find the value*). No post, page, comment or touch discusses
+  budgets, fees, pricing, "the music number", or what we do with a client's figure. The
+  price appears in one place: the proposal, after a call. This retires the Content
+  Strategist's pricing explainer as public content, the *How Agencies Actually Buy
+  Music* series as written (its Monday slot becomes **What to ask for on a music job**:
+  the paper, the package, the approvals — never the money), Producer's Notebook 2
+  ("What I got wrong about pricing"), and the pricing pillar's public figures. The
+  About's line about a note being read before it is worked stays; it is about process,
+  not price.
 - **No free spec work.** The Clearance Read (§9) is the one give that costs an hour and
   is not spec.
 - **Nothing that is not yet true is presented as if it were.** Including by omission.
