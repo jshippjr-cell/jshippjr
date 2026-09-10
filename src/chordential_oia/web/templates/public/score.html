@@ -480,6 +480,7 @@ model is not showing. The words below still say everything the picture does.</p>
   <p class="pl-brief" id="plBrief"></p>
   <audio id="plAudio" controls preload="none"></audio>
   <p class="pl-cost" id="plCost"></p>
+  <p class="pl-cost">{{ placeholder_audio_notice }}</p>
 </div>
 
 <script id="scoretracks" type="application/json">{{ listening|tojson }}</script>
@@ -585,6 +586,7 @@ model is not showing. The words below still say everything the picture does.</p>
                placeholder="what you heard" aria-label="Your note">
         <button type="submit" class="rev-btn">Leave it</button>
       </form>
+      <p class="pl-cost">{{ placeholder_audio_notice }}</p>
       <ul class="rev-list" id="revList"></ul>
       <p class="rev-none" id="revNone">No notes on this version yet. Scrub the take
         and drop the first one.</p>

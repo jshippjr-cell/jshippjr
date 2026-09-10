@@ -147,11 +147,11 @@ def test_the_disclosure_is_one_string_on_every_surface_that_plays(client):
     """One derivation, many reporters. Three pages play these files; a disclosure
     maintained separately on each is one edit away from only being on two."""
     from chordential_oia.web.showcase import PLACEHOLDER_AUDIO_NOTICE
-    # `/` is the score page now; it reaches its recordings by pressing a lit note
-    # and carries no row of players to sit a disclosure beside. /samples is retired —
-    # the front door's lit notes replaced it — so two surfaces remain that lay out
-    # players in the page.
-    for path in ("/commission", "/showreel"):
+    # `/` is the score page; it reaches its recordings by pressing a lit note, and
+    # the notice sits inside the player that opens and under the review beat's take
+    # (2026-09-10 — the review round found the front door was the one surface
+    # playing these files with no notice at all). /samples is retired.
+    for path in ("/", "/commission", "/showreel"):
         body = client.get(path).text
         assert PLACEHOLDER_AUDIO_NOTICE in body, f"{path} plays audio undisclosed"
 

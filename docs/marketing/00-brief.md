@@ -317,7 +317,11 @@ earned-channel pitch gets no reply after three tries → move on.
    treated the four in §8 as pre-conditions, not features.
 4. Whether the customer promise's noun widens from "agencies" to include production
    companies and brands (Bible §9.4).
-5. **The demo audio** (§8.1). The four recordings are machine-made; the front door plays
+5. **The demo audio — RULED 2026-09-10: replace with real music.** The founder
+   commissions one human-made cue on AURORA; the players stay up until it arrives, and
+   in the meantime the front door prints the same one-sentence placeholder notice the
+   other pages carry (interim only — the notice is not the fix). The prior text of the
+   question, for the record: the four recordings are machine-made; the front door plays
    them with no disclosure at all (SEO & Website §5), and every seat has written around
    them. Replace them with human-made music, or take the players down until it exists.
    (§8.1's "or disclose it" is struck.) **A third option the seats did not offer** (review
@@ -338,10 +342,10 @@ earned-channel pitch gets no reply after three tries → move on.
 From the review round (`reviews/00-consolidated-review.md` §6), in the order each blocks
 the most:
 
-8. **The roster today** — how many creators have signed, in which crafts. Blocks the About
-   page's "a roster I chose", the Brand Strategist's narrative, `/capabilities` (a craft is
-   listed only when a signed creator does it — sound design is not offered today), and
-   whether §13.5's third option is possible.
+8. **The roster today — RULED 2026-09-10: none signed yet.** Every surface says the
+   founder is *building a roster one signed agreement at a time*; never "a roster I
+   chose". `/capabilities` lists no craft until a signed creator does it. The About and
+   the Brand Strategist's narrative are corrected.
 9. **Whose hours are build hours.** If the CEO seat's session does the site work, Ruling 5
    holds in weeks 1–4; if the founder does, the honesty fixes fail it (review C5).
 10. **Is a band ever public?** `/commission` renders price bands today; Content, LinkedIn

@@ -33,7 +33,7 @@ Ruling 1's category. The spine opens the About.
 >
 > If you hold a music licence on a live campaign and are not sure what it covers — paid spend, cross-channel, term, territory — send it. I return one page on what it covers and where it doesn't. An hour of my time, no pitch. I call it a Clearance Read.
 >
-> Chordential is one founder and a roster I chose. I read every brief and I am on every call.
+> Chordential is one founder, building a roster one signed agreement at a time. I read every brief and I am on every call.
 
 Searched against brief §6 and Brand Strategist §4: no *team, partner, software, platform,
 portal, workspace, certified, on time, AI*. "On the date agreed" is a standard the room

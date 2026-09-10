@@ -101,7 +101,8 @@ finish cannot.
 
 ## 6. The narrative, for a producer to repeat to a creative director
 
-> They are a small music house, one founder and a roster he chose. The music is written
+> They are a small music house, one founder, building a roster one signed agreement at a
+> time. The music is written
 > for our campaign by a composer whose name goes on the cue sheet; nothing generated,
 > nothing pulled from a library. The whole job runs in one room at one link: you play the
 > take, leave a note at the exact second, and the note stays with that version. Rounds are
