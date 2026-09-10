@@ -173,10 +173,11 @@ FIELD_NOTES = [
 
 ABOUT = (
     "Chordential is a music house that delivers original music finished: composed "
-    "by people, cleared under a certificate we sign, packaged completely. The founder, "
-    "Jon Shipp, writes and produces the music himself and is on every call. We run the "
-    "process so it stays contained: clear direction, bounded rounds, and a package "
-    "that says what is in it."
+    "by people, cleared under a certificate we sign, packaged completely. The music on "
+    "a commission is written by the composer whose name goes on the cue sheet. The "
+    "founder, Jon Shipp, reads every brief and is on every call, and runs the process "
+    "so it stays contained: clear direction, bounded rounds, and a package that says "
+    "what is in it."
 )
 
 CLOSE = {
@@ -298,12 +299,13 @@ DEMOS: List[CapabilityDemo] = [
     CapabilityDemo(
         "I Dream of Dancing With My Seductress in Hell",
         "Original composition",
-        "Hear the writing before you send a brief.",
-        "Written before the studio existed, not to a brief. It is here so you can "
-        "hear the writing; a commission starts from yours.",
+        "Something real, while the roster is built.",
+        "The founder's own, written years ago, not to a brief. It is here because a "
+        "music house should not put machine-made music on its own site, and this is "
+        "what we have while the roster is built.",
         "Composed and produced in house, and finished the way a delivery is: a mix, "
         "not a sketch.",
-        "The writing itself — which is what a commission buys.",
+        "That the music here is made by a person. Nothing more is claimed for it.",
         audio_url="/static/public/demo-i-dream-of-dancing.mp3",
     ),
 ]
