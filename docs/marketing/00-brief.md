@@ -317,11 +317,15 @@ earned-channel pitch gets no reply after three tries → move on.
    treated the four in §8 as pre-conditions, not features.
 4. Whether the customer promise's noun widens from "agencies" to include production
    companies and brands (Bible §9.4).
-5. **The demo audio — RULED 2026-09-10: replace with real music.** The founder
-   commissions one human-made cue on AURORA; the players stay up until it arrives, and
-   in the meantime the front door prints the same one-sentence placeholder notice the
-   other pages carry (interim only — the notice is not the fix). The prior text of the
-   question, for the record: the four recordings are machine-made; the front door plays
+5. **The demo audio — RULED and DONE 2026-09-10.** The founder's own music replaced
+   the placeholders the same day: *I Dream of Dancing With My Seductress in Hell*, written
+   before the studio existed and owned outright, is the one recording on the site; the
+   four placeholders, their excerpts, the ten unreferenced files and the notice are
+   deleted, and a test now fails the build if a served recording's own tag says it was
+   generated. No composer credit on the player (the founder called it cheesy, and §6
+   agrees); authorship is stated once, on the About. Every seat that wrote "until (a)
+   resolves" can proceed: the room has real music. The prior text of the question, for
+   the record: the four recordings were machine-made; the front door played
    them with no disclosure at all (SEO & Website §5), and every seat has written around
    them. Replace them with human-made music, or take the players down until it exists.
    (§8.1's "or disclose it" is struck.) **A third option the seats did not offer** (review
