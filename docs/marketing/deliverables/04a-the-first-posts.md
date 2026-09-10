@@ -8,8 +8,10 @@ the marketing folder: it is the first thing a producer sees after a connection r
 
 **The founder's own facts, in his words (2026-09-10).** He is not a working composer. He
 has ideas daily, used to compose, stopped, says he lacks the discipline to finish them,
-and has a folder full of unfinished things. His motive is to own the place where people
-who did commit their lives to composing get paid. He chose advertising because that is
+and has a folder full of unfinished things. His motive is to own the place where the
+people he admires get their work out — he says he could have been good at composing
+and lacked the discipline, and what he values in them is the tenacity and focus he
+didn't have. Not their sacrifice: their staying power. He chose advertising because that is
 where the budget to pay them still is. He tried to buy a recording studio in 2025, asked
 for financials, was refused, offered to operate it for a year at rent so both sides could
 see real numbers, was refused again, and walked. His long aim is a 2,500 to 3,000 square
@@ -26,23 +28,29 @@ The digital business exists to earn that room.
 
 ### About
 
-> I run Chordential, a music house. We make original music for campaigns, and we finish it.
+> I run Chordential, a music house in Miami. We make original music for campaigns.
 >
-> We write it for your campaign. A composer's name goes on the cue sheet. Nothing generated, nothing pulled from a library.
+> I'm not a composer. Melodies and rhythms arrive most days and I have a folder full of things I never finished — I don't have the discipline to flush them out, and I stopped pretending I would. I still like making music. I can't help it.
+>
+> Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it, and I think I could have been good at this if I'd had it. So I'd rather own the place where those people get their work out and get paid properly for it. I started with advertising because that's where the budget to do that is still left.
+>
+> So here is what we do for you.
+>
+> We write the music for your campaign. A composer's name goes on the cue sheet — nothing generated, nothing pulled from a library.
 >
 > We clear it so your business affairs team can sign without a cover note: media, territory, term, exclusivity and publishing, on a certificate we sign, with releases on file for everyone who worked on it.
 >
-> We hand over what you approved, in one package: masters, cutdowns, stems, cue sheet, certificate, and a manifest naming every file. On the date we agreed.
+> We hand over what you approved, in one package — masters, cutdowns, stems, cue sheet, certificate, and a manifest naming every file. On the date we agreed.
 >
-> The job runs in one room at one link. You play the take, leave a note at the exact second, and the note stays with that version. A round is numbered and buys one version. Every note is read and classified before anyone works on it, so nothing turns into a change order by accident.
+> The whole job runs in one room at one link. You play the take, mark the second you mean, and the note stays on that version. A round is numbered and buys one version. Every note gets read before a composer touches it, so nothing turns into a change order by accident.
 >
-> Two things I'll say plainly. Chordential has no paying client yet. This is written on the day I start selling and I'd rather tell you than let you find out. And no machine-made music, anywhere, including demonstrations — only a person's work can be owned, and the certificate rests on that.
+> Two things you'd find out anyway, so: Chordential has no paying client yet — I'm writing this the day I start selling. And no machine-made music, anywhere, including the demonstrations on my own site.
 >
-> What I post here. Mondays: something I learned building this. Wednesdays: one thing the room does. Fridays: what changed, and what still isn't true.
+> What I post here. Mondays, something I learned building this. Wednesdays, one thing the room does. Fridays, what changed and what still isn't true.
 >
-> If you're carrying a music licence on a live campaign and you're not sure what it covers, send it to me. I'll read it and send back one page: what it covers, and where it doesn't. An hour of my time. Not a pitch.
+> If you're carrying a music licence on a live campaign and you're not sure what it covers, send it over. I'll read it and send back one page: what it covers, and where it doesn't. Costs me an hour. It isn't a pitch.
 >
-> Chordential is one founder, building a roster one signed agreement at a time. I read every brief and I'm on every call.
+> I'm one person, building a roster one signed agreement at a time. I read every brief and I'm on every call. I'm also AV director at Encore, which is where I learned what a real load-in does to a schedule.
 
 ### Experience — Chordential (a second current position; Encore stays)
 
@@ -64,7 +72,7 @@ Three a week, never a fourth. No links while the front door is being fixed. No i
 >
 > Melodies and rhythms arrive most days. They come fast and they leave faster, and I have never had the discipline to chase one all the way down. I used to compose. I stopped.
 >
-> Some people don't stop. They gave up other lives to keep going, and they can sit with an idea for six weeks and come out the other side holding something finished.
+> Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it. I think I could have been good at this if I'd had it.
 >
 > I can't do that. So I'm building the place that pays the people who can.
 >

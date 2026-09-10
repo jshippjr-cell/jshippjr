@@ -204,11 +204,26 @@ demonstration*, never sample or case study · the founder by name · *a Clearanc
 - **No engagement bait, no paid growth, no fourth post a week, no pitch inside a community
   before ten genuinely useful contributions, never a link to ourselves in a comment.**
 - **The budget never sets the price**, and a price is never padded to be negotiated down.
-- **Never about money in public** (the founder, 2026-09-10, from the hiring side of live
+- **Never about money to a BUYER** (the founder, 2026-09-10, from the hiring side of live
   production: *producers don't like talking about budget; they shop around and keep it
   to themselves until they find the value*). No post, page, comment or touch discusses
   budgets, fees, pricing, "the music number", or what we do with a client's figure. The
-  price appears in one place: the proposal, after a call. This retires the Content
+  price appears in one place: the proposal, after a call.
+- **The rule is LIFTED for a CREATOR** (the founder, same day, amending: *relax it, but
+  make it tactful and professional and hard for competitors to mimic or copy*). What a
+  composer is paid, what they keep, and when it arrives are **published in full** on the
+  creator-facing surfaces — because to that reader the terms *are* the offer, and a house
+  that will not say them before you apply is the house they have already been burned by.
+  **Why publishing is a moat and not a leak:** a competitor can copy the sentences in an
+  afternoon and cannot copy the economics without repricing their whole book. Paying a
+  writer inside 120 days *whether or not the client has paid* is a cash commitment. A
+  closed deduction list forecloses the margin most houses take quietly. Half the
+  publisher's share, held *for* a writer who has no entity, is revenue given away. Naming
+  those in public is a challenge, not a disclosure.
+  **How it is written:** as terms, never as generosity — a number and a clause, no
+  adjectives. Never comparative: we do not say "unlike other houses", because the terms
+  do that work and a sneer invites a rebuttal we cannot yet win. Never a client's price
+  on the same surface. Nothing published that the agreement does not actually say. This retires the Content
   Strategist's pricing explainer as public content, the *How Agencies Actually Buy
   Music* series as written (its Monday slot becomes **What to ask for on a music job**:
   the paper, the package, the approvals — never the money), Producer's Notebook 2
