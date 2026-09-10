@@ -6,10 +6,11 @@ client, no case study, no testimonial. Every episode below is writable today fro
 room, the certificate, the package, the pricing model and Jon Shipp's calls, on invented
 brands (AURORA, Vance Athletic, HALVARD) labelled as demonstrations.*
 
-Two open decisions constrain this; nothing depends on either: (a) the placeholder
-recordings are machine-made, so nothing references, embeds or links them, and every room
-recording is captured **muted, with a caption saying so**, until human-made demonstration
-music exists; (b) the customer promise is never a headline.
+Two decisions constrain this; nothing depends on either: (a) the placeholder recordings
+are machine-made, so nothing references, embeds or links them, and the Wednesday episode
+stays **written** until human-made demonstration music exists — the ruling of 2026-09-10
+(brief §13.5, review W1) commissions one cue on AURORA, and the recordings are made when
+it arrives, never muted; (b) the customer promise is never a headline.
 
 ---
 
@@ -33,8 +34,9 @@ question a producer asks their next music house.
    that prevents a late direction change.
 
 ### 1.2 What Actually Happens After Approval? — Wednesday, weekly
-Screen recording from the room, ≤90 seconds, AURORA marked *demonstration*, muted until
-(a) resolves; archived to YouTube, a Reel on Instagram. Pillar: Delivered. **Saved for:**
+Screen recording from the room, ≤90 seconds, AURORA marked *demonstration*; written, not
+recorded, until the commissioned cue arrives (brief §13.5); archived to YouTube, a Reel on
+Instagram. Pillar: Delivered. **Saved for:**
 the second approver who never sat on a call.
 
 1. **You pressed Approve. Here is what it locked.** The "What approving commits" list:
@@ -150,7 +152,8 @@ time, insurance or archiving.
 | Your downside is unbounded. / What's your Friday-night story? | Agreed: read the paper first — a demonstration certificate and cue sheet — and start small. We are small; Jon is the contact; every note, version and rights fact is in the room at one link. |
 
 ### 3.3 The room walkthrough — *One session in the room*
-A written page now; a narrated recording under three minutes when (a) resolves. AURORA,
+A written page now; a narrated recording under three minutes once the commissioned cue
+arrives (brief §13.5). AURORA,
 labelled; no roster names. Eight beats, each a control that exists:
 
 1. **One link.** The doorline: wordmark, the badge *Client*, the campaign, the round
@@ -223,8 +226,11 @@ Downward only; spread over four to six weeks; the ledger tracks the family.
 
 Three posts a week, no more; Tuesday and Thursday comments only. **Weeks 1–2 (m01):** the
 front door is not yet honest (brief §8) and demo records are unlabelled, so no post links
-to the site and Wednesday's episodes are *written*; recordings begin week 3. Moments are
-verified when scheduled. Founder hours ≤8 a week; over two weeks running, Monday goes first.
+to the site. **Every Wednesday is *written*** until the commissioned AURORA cue arrives
+(brief §13.5, review W1); "Rec n" below keeps each episode's number for Social's cascade,
+and it is recorded in that order once the cue is in — a silent recording is never posted.
+Moments are verified when scheduled. Founder hours ≤8 a week; over two weeks running,
+Monday goes first.
 
 | Wk | Dates | Monday | Wednesday · After Approval | Friday |
 |---|---|---|---|---|
@@ -271,5 +277,5 @@ Two weeks banked ahead; week 13 stops anything with no leading signal in eight w
 
 ### Objection to the brief
 
-None. One dependency, not an objection: Wednesday's recordings run muted until decision
-(a) lands; whichever way it resolves, nothing here changes except whether they have sound.
+None. One dependency, not an objection: Wednesday stays written until the commissioned
+cue arrives (brief §13.5); the ruling has landed, and nothing else here changes.
