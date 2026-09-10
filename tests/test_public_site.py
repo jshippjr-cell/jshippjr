@@ -63,11 +63,12 @@ def test_home_work_is_truthful_capability_demonstrations(client):
     for past_claim in ("Recent work", "See all work", "How we solved it",
                        "Every engagement"):
         assert past_claim not in r.text
-    # The recordings are AI-generated placeholders (showcase.PLACEHOLDER_AUDIO_NOTICE).
-    # The human-authorship promise is true of what we deliver and was false of what
-    # this page plays; it may not sit over placeholder audio.
+    # The recordings were AI-generated placeholders until 2026-09-10, disclosed by a
+    # notice beside every player. The founder's own music replaced them, so the
+    # notice is gone — and so is the badge-shaped promise that used to sit over
+    # them: authorship is stated once, plainly, on the About (brief §6), never waved.
+    assert "AI-generated placeholders" not in r.text
     assert "never AI-generated audio" not in r.text
-    assert "AI-generated placeholders" in r.text
 
 
 def test_the_front_door_claims_no_client_work(client):

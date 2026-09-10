@@ -111,10 +111,6 @@ a{color:var(--amber)}
    job is to get music playing — not to be another mechanism. */
 .reel{list-style:none;margin:38px 0 0;padding:0;display:grid;gap:14px;
   grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-/* The placeholder disclosure sits with the players, at reading weight. Fine
-   print would be the dishonest version of telling the truth. */
-.placeholder-note{border-left:2px solid var(--ember);padding-left:14px;
-  font-size:14.5px;line-height:1.55;color:var(--sand);max-width:46ch}
 .tk{border:1px solid var(--line);border-radius:12px;padding:16px 18px;
   background:rgba(22,10,14,.55)}
 .tkh{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
@@ -624,20 +620,18 @@ footer{padding:70px 24px 90px;border-top:1px solid var(--line);position:relative
   {# 1b · THE WORK (ADR-0040). The front door of a music company has to let you hear
      music, and these are the same records /samples renders — one source, one story.
 
-     They are AI-generated PLACEHOLDERS until real sessions are recorded, and every
-     file says so in its own ID3 artist tag. The hero used to promise "never
-     AI-generated audio" two lines above them; that promise is true of what we
-     DELIVER and was false of what this page PLAYS, and a visitor cannot tell those
-     apart. The promise moved to the commission claim; the players disclose
-     themselves. See showcase.PLACEHOLDER_AUDIO_NOTICE. #}
+     Until 2026-09-10 they were AI-generated placeholders, disclosed by a notice
+     printed here; the founder's own music replaced them and the notice came out
+     with them. The hero still does not promise "never AI-generated audio" over the
+     players — authorship is stated once, on the About, never waved (brief §6). #}
   {% if demos %}
   <section id="work"><div class="inner">
     <div class="col">
       <p class="eb rv">Listen</p>
       <h2 class="rv">{{ demos_intro.home_title or "Hear how we'd score your brief." }}</h2>
-      <p class="lede rv">These are demonstrations; each one answers a campaign brief we set
-      ourselves, not a client's commission.</p>
-      <p class="lede rv placeholder-note">{{ placeholder_audio_notice }}</p>
+      <p class="lede rv">This is a demonstration of our own writing, not a client's
+      commission. Music delivered on a commission is written and recorded by people;
+      that is what the clearance and the chain of title rest on.</p>
     </div>
     <ul class="reel rv">
       {% for d in demos %}

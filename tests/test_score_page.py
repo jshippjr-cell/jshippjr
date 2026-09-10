@@ -244,16 +244,20 @@ def test_it_never_claims_the_note_is_bound_to_a_recording(client):
 # The listening beat
 # --------------------------------------------------------------------------- #
 
-def test_the_page_offers_four_distinct_recordings(client):
+def test_the_page_offers_distinct_real_recordings(client):
     """ADR-0040: the front door of a music company has to let you hear music, and
     this page becomes the front door. The tracks ride in a JSON payload the lit
     notes read from — there is no player until a note is pressed, because a page
-    that wants to make noise reads as a page that will make noise unasked."""
+    that wants to make noise reads as a page that will make noise unasked.
+
+    It used to demand four. Four was the number of AI-generated placeholders; one
+    real recording (2026-09-10) beats four machine-made ones, and the renderer
+    lights one note per entry, so the count is whatever the showcase holds."""
     import json
     html = client.get("/score").text
     payload = html.split('id="scoretracks"', 1)[1].split(">", 1)[1].split("</script>")[0]
     tracks = json.loads(payload)
-    assert len(tracks) >= 4, f"only {len(tracks)} tracks"
+    assert tracks, "the front door offers no recordings"
     urls = [t["url"] for t in tracks]
     assert len(set(urls)) == len(urls), "two notes point at the same recording"
     for u in urls:

@@ -1059,6 +1059,35 @@ and the tests asserting it come out **together**, and the human-authorship promi
 returns to the hero — where it will then be true of both what we deliver and what the
 page plays. Not one of those steps without the others.
 
+**Amendment (2026-09-10) — real music landed; the placeholders and their notice came
+out together.** The founder ruled to replace the machine-made recordings with his own
+music, and sent one: *I Dream of Dancing With My Seductress in Hell*, a 2:56 stereo mix
+out of Pro Tools, written before the studio existed and owned outright. It is the one
+entry in `showcase.DEMOS`; the four wired placeholders, their four excerpts and the ten
+unreferenced `exp-*` files are deleted, and `PLACEHOLDER_AUDIO_NOTICE`, its three
+renders and the three tests that asserted it are gone with them, as the paragraph above
+required. The front door lights one note per entry, so a fourth recording is a file
+swap plus `scripts/build_demo_excerpts.py`, exactly as before.
+
+Two things differ from what the paragraph above promised. **The tripwire inverted
+rather than vanished:** `test_no_served_recording_is_machine_made` reads every served
+recording's own `TPE1` tag and fails the build if it says *Generated* — the brief's
+refusal (§7, *no machine-made music anywhere, including as a demonstration*) now has a
+test, not just a rule. **The authorship promise did not return to the hero.** The
+marketing brief (`docs/marketing/00-brief.md` §6) rules that human authorship is stated
+once, plainly, in the right place, and never waved as a badge; the founder, asked, called
+a composer credit on the players *cheesy*. So the sentence lives on the About — *the
+founder writes and produces the music himself* — and the players carry a title and the
+fact that it is a demonstration of our own writing, not a client's commission. The copy
+on the record does not describe the music, because it was written by someone who has
+not heard it, and a description in that position is the kind of claim the honesty rule
+forbids.
+
+Still machine-made and still in the tree: `demo-anthem.mp3` (48 KB), the take that
+`seed.py` attaches to the DEMO dataset's project. It plays nowhere public and only when
+`CHORDENTIAL_SEED_DEMO=1`; it is noted here so the exception is a decision and not an
+oversight.
+
 **Amendment (2026-08-12) — the front door moved, the guarantees moved with it.** `/`
 now serves the **score page**: 728 pieces of engraved notation converging into the
 cube as the visitor reads, the recordings reached by pressing a lit piece of the

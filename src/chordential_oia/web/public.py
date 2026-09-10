@@ -26,7 +26,7 @@ from .estimate import estimate_for
 from .filters import displayurl, money, pct, slug
 from ..capabilities import quote_band
 from ..intake import extract_budget
-from .showcase import get_showcase, listening_rows, PLACEHOLDER_AUDIO_NOTICE
+from .showcase import get_showcase, listening_rows
 from . import landing
 from ..estimation import PUBLIC_BANDS, PUBLIC_LENGTHS, PUBLIC_USAGE
 
@@ -59,7 +59,6 @@ def _asset_version() -> str:
 ASSET_VERSION = _asset_version()
 templates.env.globals["asset_v"] = ASSET_VERSION
 # One string, every surface that plays a demo (see showcase.py).
-templates.env.globals["placeholder_audio_notice"] = PLACEHOLDER_AUDIO_NOTICE
 
 router = APIRouter(tags=["public"])
 
@@ -146,8 +145,8 @@ def public_home(request: Request):
     piece of the score and the delivery package written by the engine itself.
 
     ADR-0040 still holds — the front door plays music — and the guarantees behind it
-    moved with the page rather than being relaxed: four distinct recordings served
-    from our own origin, no track hardcoded in the template, and the same records
+    moved with the page rather than being relaxed: distinct real recordings served
+    from our own origin, one lit note each, no track hardcoded in the template, and the same records
     /samples renders. `tests/test_hear_the_work.py` asserts all of it against `/`,
     and the Commission's own guarantees followed it to /commission.
 
