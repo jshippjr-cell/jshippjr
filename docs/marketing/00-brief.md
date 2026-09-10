@@ -361,6 +361,13 @@ the most:
     changes" as the place to leave a note)? If not, the post says *I read it that way
     myself*.
 
+**Facts from the founder, 2026-09-10:** based in **Miami**; Chordential started
+**November 2025**; he is an **AV director at Encore** (event production, no conflict
+with the agency seats we sell to, and the credibility of live deadlines); **about twenty
+hours a week** for Chordential outside that job. The eight-hour marketing ceiling
+stands inside the twenty; the rest is selling, Reads and the music. The Community seat's
+"Miami is home" assumption is confirmed.
+
 Decisions taken by the CEO seat from the deliverables, without the founder: the Facebook
 and cross-platform readings in §10; LinkedIn Growth's word ceiling waived for the twelve
 posts it was told to write in full; "a renewal price fixed now" (Sales Playbook) struck
