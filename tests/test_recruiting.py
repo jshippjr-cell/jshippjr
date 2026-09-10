@@ -43,7 +43,13 @@ def test_invite_is_honest_never_promises_salary():
         t, apply_url="https://x/apply", artists_url="https://x/a")["body"].lower()
     assert "salary" not in body
     assert "steady income" not in body
-    assert "we're early" in body  # under-promises volume
+    # 2026-09-10: "we're early" was the old hedge, and a composer reading it still came
+    # away believing briefs existed — `for_artists.html` said "we bring you scoped, paid
+    # work" in the present tense with zero engagements sold. The supply side was failing
+    # the honesty rule the way brief §8 records the front door failing it. The invite now
+    # says the true thing outright, so this pins the stronger claim, not the hedge.
+    assert "no engagement has been sold" in body
+    assert "not going to imply" in body
 
 
 def test_skip_blocks():
@@ -148,8 +154,13 @@ def test_compose_review_decision_accepted_includes_role_and_rate():
     t = Talent(name="Mara Velez", disciplines=[MusicDiscipline.COMPOSITION],
                rate=1200, rate_unit="project")
     dec = recruiting.compose_review_decision(t, accepted=True, artists_url="https://x/a")
-    assert "You're in" in dec["body"] or "you're in" in dec["body"].lower()
-    assert "composition" in dec["body"].lower()
+    # The acceptance still has to ACCEPT — an applicant must not have to infer it — but
+    # "You're in" carried an implication of work waiting that we cannot honour yet
+    # (2026-09-10). It offers the roster place plainly and says what has not been sold.
+    body_l = dec["body"].lower()
+    assert "on the roster" in body_l
+    assert "no engagement has been sold" in body_l
+    assert "composition" in body_l
     assert "$1,200/project" in dec["body"]
     assert "roster" in dec["subject"].lower()
 

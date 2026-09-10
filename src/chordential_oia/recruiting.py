@@ -55,11 +55,12 @@ def invite_blocks(
                   "original music for campaigns, cleared under a certificate we sign.")},
         {"key": "why", "text": _why_them(t)},
         {"key": "offer",
-         "text": ("What I can honestly offer: real, paid briefs (never spec), clean "
-                  "rights and prompt payment, and first-look when a brief fits your "
-                  "craft. I won't pretend we have a flood of work; we're early, but "
-                  "you'd be chosen, not bidding against a marketplace, and we treat "
-                  "creators with respect and pay fast.")},
+         "text": ("Where we actually are: no engagement has been sold yet, so there is "
+                  "no brief waiting for you and I am not going to imply there is. What "
+                  "I am offering is a place on the roster and the first call when a "
+                  "brief fits your craft. When one does, the terms are written down "
+                  "before you start, never spec, and you would be chosen rather than "
+                  "bidding against a marketplace.")},
         {"key": "cta",
          "text": (f"If that resonates, here's how we work with artists: {artists_url}\n"
                   f"And you can send your reel whenever you like: {apply_url}")},
@@ -108,10 +109,11 @@ def compose_review_decision(
             rate_line = f"\n\nFor reference, our standing rate for this work is {_money(t.rate)}{unit}. We'll confirm specifics on any brief before it starts."
         body = (
             f"Hi {name},\n\n"
-            f"Good news: I reviewed your reel and you're in. You're on the roster "
-            f"for {crafts}, first-look on real, paid briefs when one fits your "
-            f"craft (never spec, never a promise of volume; we're early, and "
-            f"honest about that).{rate_line}\n\n"
+            f"I read your reel and I would like you on the roster for {crafts}, "
+            f"which means the first call when a brief fits your craft. To be "
+            f"straight with you: no engagement has been sold yet, so I am not "
+            f"promising you volume or a date. Never spec, and the terms are "
+            f"written down before anything starts.{rate_line}\n\n"
             f"Here's how we work with artists, if you haven't already seen it: "
             f"{artists_url}\n\n"
             f"{from_name}, Chordential"
