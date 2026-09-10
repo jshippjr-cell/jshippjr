@@ -33,18 +33,23 @@ def client():
 def test_the_score_page_renders(client):
     r = client.get("/score")
     assert r.status_code == 200
-    assert "every part in the air" in r.text.lower()
+    # The <title> is the spine, not a caption of the picture (2026-09-10, brief §2).
+    assert "original music for campaigns — composed, cleared, delivered" in r.text.lower()
 
 
 def test_it_carries_the_copy_not_just_the_picture(client):
-    """The words say everything the picture does — that is the no-WebGL2 promise."""
+    """The words say everything the picture does — that is the no-WebGL2 promise.
+
+    2026-09-10, brief §2 + §6: the hero is the spine and "The music arrives finished";
+    the one CTA string everywhere is "Start a brief".
+    """
     body = client.get("/score").text
     for line in (
-        "Every note",
-        "We compose original music for commercials and brand campaigns",
+        "Original music for campaigns",
+        "The music arrives finished.",
         "Every campaign begins with understanding.",
         "Everything arrives together.",
-        "Start with a brief",
+        "Start a brief",
     ):
         assert line in body, line
 
@@ -97,14 +102,19 @@ def test_the_hero_says_what_the_company_does(client):
     The page used to open on "Every note finds its place." alone, which is true
     to it and silent on what is actually being sold. A visitor who reads only
     the first screen should come away knowing both halves: the music is
-    composed, and everything around it is organised.
+    composed, and everything around it arrives finished.
+
+    2026-09-10, brief §2 + §6: the H1 is now the spine itself — the pun was silent on
+    the offer — and "one complete production workflow" was software vocabulary; the
+    lede says "in one package" instead.
     """
     body = client.get("/score").text
-    assert "Every note" in body and "finds its" in body
-    assert "We compose original music for commercials and brand campaigns" in body
-    for half in ("cue sheet", "rights document", "deliverable"):
+    assert "Original music for campaigns" in body and "delivered" in body
+    assert "The music arrives finished." in body
+    for half in ("cue sheet", "rights document", "in one package"):
         assert half in body, half
-    assert "one complete production workflow" in body
+    for banned in ("workflow", "portal", "partner", "procurement-grade"):
+        assert banned not in body.lower(), f"{banned!r} is back on the front door"
     assert body.count("<h1") == 1, "the page has more than one first-level heading"
 
 

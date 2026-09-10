@@ -71,15 +71,14 @@ class CapabilityDemo:
     audio_url: str = ""
 
 
-# Hero — copy ratified from the brief. The background is a placeholder for a
+# Hero — the spine (docs/marketing/00-brief.md §2). "Music that moves campaigns
+# forward — and gets approved" was an outcome claim from a house with no
+# deliveries (2026-09-10, brief §6). The background is a placeholder for a
 # looping behind-the-scenes video (asset TBD); no still image behind the text.
 HERO = {
-    "eyebrow": "Original composition for agencies",
-    "title": "Music that moves campaigns forward — and gets approved.",
-    "lede": (
-        "Original composition for agencies who need clarity, control, and "
-        "confidence in delivery."
-    ),
+    "eyebrow": "Chordential · a music house",
+    "title": "Original music for campaigns — composed, cleared, delivered.",
+    "lede": "The music arrives finished.",
     "primary_cta": {"label": "Hear the work", "href": "/#hear"},
     "secondary_cta": {"label": "Start a conversation", "href": "/start"},
     # Hero motion source. "loop" = the animated WebP (always animates on mobile,
@@ -139,15 +138,19 @@ DELIVERY_ITEMS = [
     "Rights clarity", "Stems breakdown", "Campaign rollout versions",
 ]
 
-# Featured work — SAMPLE until real campaigns exist (honest). Each card carries a
-# media player slot; drop in media_url when the audio/video asset is ready.
+# Featured work — DEMONSTRATIONS on invented brands until real campaigns exist
+# (honest). Each card carries a media player slot; drop in media_url when the
+# audio/video asset is ready. The ``outcome`` field says what the demonstration
+# SHOWS, never how an engagement ended: "Approved without reopening the creative
+# conversation" narrated a sign-off that never happened (2026-09-10, brief §7).
 CASES: List[Case] = [
     Case(
         "National retail brand — campaign anthem",
         "A :60 anthem for a national relaunch, plus cutdowns.",
         "Five stakeholders, two rounds of legal, a moving deadline.",
         "Direction locked up front; three controlled variations; one approval pass.",
-        "Approved without reopening the creative conversation.",
+        "A demonstration of the format: one direction locked before a note is "
+        "written, bounded rounds, and the cutdowns derived from the locked version.",
         media_kind="video",
     ),
     Case(
@@ -155,7 +158,8 @@ CASES: List[Case] = [
         "A short sonic logo and its variations across touchpoints.",
         "Needed to feel trustworthy and pass brand + compliance review.",
         "A single mnemonic with bounded variants; rights cleared on delivery.",
-        "Signed off by brand and compliance without friction.",
+        "A demonstration of the format: a mnemonic with its bounded variants, and "
+        "the grant of rights stated on the certificate that ships with it.",
         media_kind="audio",
     ),
 ]
@@ -177,7 +181,10 @@ ABOUT = (
 
 CLOSE = {
     "headline": "See how your next campaign could sound.",
-    "sub": "Tell us about the project — we’ll come back with an approach and a price range.",
+    # No "price range" promised here: the price is on a proposal, after a call
+    # (2026-09-10, brief §6 — a figure anywhere but the proposal is not ours to offer).
+    "sub": "Tell us about the project — Jon reads every brief himself and replies "
+           "with questions, a direction and a time to talk.",
     "cta": {"label": "Start a conversation", "href": "/start"},
 }
 

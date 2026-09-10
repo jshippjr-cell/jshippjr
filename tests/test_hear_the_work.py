@@ -283,4 +283,6 @@ def test_the_commission_is_still_reachable(client):
     the cutover still point at it."""
     r = client.get("/commission")
     assert r.status_code == 200
-    assert "The music department" in r.text
+    # 2026-09-10, brief §6: the H1 is "The music arrives finished." — the old
+    # "music department" line was retired as a scale overclaim.
+    assert "The music arrives" in r.text

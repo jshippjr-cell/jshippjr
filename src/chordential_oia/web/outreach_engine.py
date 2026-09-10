@@ -34,8 +34,11 @@ from . import db
 LLM = Callable[[Dict, str], Optional[Dict]]
 
 ANGLES = ("relationship", "creative", "business")
-_VALUE = ("Chordential is a procurement-grade music studio: clearance-certified, "
-          "human-composed original music (never AI-generated).")
+# The spine, then the two facts (docs/marketing/00-brief.md §2, §6 — 2026-09-10).
+# "procurement-grade" and "clearance-certified" are banned client-facing, and AI is
+# never a subject in outbound copy: human authorship is stated, not waved.
+_VALUE = ("Chordential makes original music for campaigns — composed, cleared, "
+          "delivered: composed by a named person; cleared under a certificate we sign.")
 
 
 def _days_since(iso: str) -> int:
@@ -206,9 +209,11 @@ def _default_llm(brief: Dict, angle: str) -> Optional[Dict]:  # pragma: no cover
         client = anthropic.Anthropic()
         model = os.environ.get("CHORDENTIAL_OUTREACH_MODEL") or "claude-haiku-4-5-20251001"
         prompt = (
-            "You are drafting an outreach email as Jon, founder of Chordential (a "
-            "procurement-grade music studio selling clearance-certified, human-composed "
-            "original music, never AI-generated). Write as Jon would personally write "
+            "You are drafting an outreach email as Jon, founder of Chordential (a music "
+            "house: original music for campaigns — composed, cleared, delivered; composed "
+            "by a named person, cleared under a certificate we sign). Never say "
+            "'procurement-grade', 'clearance-certified', 'partner' or 'workflow', and do "
+            "not mention AI. Write as Jon would personally write "
             "it today: warm, concise, specific, no hype. Use ONLY these facts:\n"
             + json.dumps(brief, indent=2) +
             f"\nAngle: {angle}. Open with the reason-to-reach-out. End with the CTA. "
@@ -240,7 +245,7 @@ def _template_draft(brief: Dict, angle: str) -> Dict:
     opening = _opening(brief)
     if angle == "relationship":
         subject = "Quick hello from Chordential"
-        mid = ("I'd love to open a line between our teams; I think there's a natural "
+        mid = ("I'd love to open a line between us; I think there's a natural "
                "fit between your work and what we do.")
     elif angle == "creative":
         subject = f"Original scoring for {agency}'s work"
@@ -250,7 +255,7 @@ def _template_draft(brief: Dict, angle: str) -> Dict:
     else:  # business
         subject = f"A cleaner way to source original music"
         mid = (f"As {agency} takes on more production, music clearance and sourcing get "
-               f"painful fast. {_VALUE} One partner, fully cleared, no surprises.")
+               f"painful fast. {_VALUE} One counterparty, one certificate, nothing to chase.")
     body = (f"{opening}\n\n{mid}\n\n{_VALUE}\n\n"
             f"Would you be open to {cta}?\n\nBest,\nJon\nChordential")
     return {"angle": angle, "subject": subject, "body": body, "generated_by": "template"}

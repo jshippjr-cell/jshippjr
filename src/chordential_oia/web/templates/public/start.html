@@ -1,14 +1,18 @@
 {% extends "public_base.html" %}
-{% block title %}Start a project{% endblock %}
+{% block title %}Start a brief{% endblock %}
 
 {% block content %}
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="hero-eyebrow">Start a project</p>
-    <h1 class="page-title">Tell us what you’re making.</h1>
+    {# 2026-09-10, brief §6 / 07 §5: this page promised "a price range", and the
+       handler deliberately withholds the band — the price is on a proposal, after
+       a call. The copy now promises what actually happens. #}
+    <p class="hero-eyebrow">The brief</p>
+    <h1 class="page-title">Tell us about the campaign.</h1>
     <p class="page-lede">
-      A few details is all we need to come back with an approach and a price
-      range. No commitment. This just opens the conversation.
+      A few lines is enough — what it is for, where it will run, when it is due.
+      Jon reads every brief himself and replies with questions, a direction and a
+      time to talk. Nothing here commits you.
     </p>
   </div>
 </section>
@@ -84,13 +88,12 @@
                  placeholder="e.g. $25,000 to $40,000">
         </div>
       </div>
-      <p class="field-hint">A range is enough. It's what makes the price we come back
-      with <em>yours</em> rather than a generic estimate, and it's never a commitment.</p>
+      <p class="field-hint">A range makes the number <em>yours</em>. It never sets the price.</p>
       <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Send it over</button>
-        <a class="btn btn-ghost" href="/book">Prefer a callback</a>
+        <button class="btn btn-primary" type="submit">Send the brief</button>
+        <a class="btn btn-ghost" href="/book">Prefer a call</a>
       </div>
-      <p class="form-note">We review every submission personally and reply with next steps.</p>
+      <p class="form-note">Read by the founder, not sorted by a machine.</p>
     </form>
   </div>
 </section>

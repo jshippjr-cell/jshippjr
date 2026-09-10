@@ -92,8 +92,13 @@ def test_three_distinct_drafts_from_brief(tmp_path):
         assert d["generated_by"] == "template"
         assert d["body"].startswith("Hi Sarah,")        # personalized to the contact
         assert "I saw" in d["body"]                      # opens with the reason
-        assert "clearance-certified" in d["body"]        # the honest value prop
-        assert "AI-generated" in d["body"]               # the honest disclaimer
+        # The honest value prop is the spine plus two facts (2026-09-10, brief §2/§6):
+        # "clearance-certified" is banned as an adjective on the studio, and AI is
+        # never a subject in outbound copy — authorship is stated, not waved.
+        assert "cleared under a certificate we sign" in d["body"]
+        assert "composed by a named person" in d["body"]
+        assert "clearance-certified" not in d["body"]
+        assert "AI-generated" not in d["body"]
 
 
 def test_llm_seam_used_when_provided(tmp_path):

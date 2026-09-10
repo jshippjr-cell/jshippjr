@@ -278,7 +278,7 @@ class SelectiveGZip:
         return await self.gzip(scope, receive, send)
 
 
-app = FastAPI(title="Chordential — Procurement OS", lifespan=lifespan)
+app = FastAPI(title="Chordential", lifespan=lifespan)
 # Nothing was encoded before this: the vendored three.js build (~594 KB) and the
 # largest templates (~107 KB) went out raw over whatever connection the visitor had.
 # Text compresses ~4x here; media does not, and must not (see SelectiveGZip).
@@ -400,7 +400,7 @@ def root_head():
 # app icon that opens the dashboard standalone; new gigs arrive via Web Push.
 # --------------------------------------------------------------------------- #
 _MANIFEST = {
-    "name": "Chordential — Procurement OS",
+    "name": "Chordential",
     "short_name": "Chordential",
     "description": "Find, qualify, and win commercial music work.",
     "start_url": "/dashboard",

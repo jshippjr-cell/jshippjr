@@ -36,7 +36,8 @@ def test_get_root_renders_public_home(client):
     # /dashboard.
     r = client.get("/")
     assert r.status_code == 200
-    assert "every part in the air" in r.text.lower()
+    # The title is the spine (2026-09-10, brief §2), not "Every part in the air".
+    assert "original music for campaigns — composed, cleared, delivered" in r.text.lower()
 
 
 def test_dashboard_renders_at_dashboard(client):

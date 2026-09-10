@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Chordential{% endblock %} · Procurement OS</title>
+  {# "Procurement OS" was the title suffix on every internal page — and the login page a
+     client lands on when a review link's exemption is missing (2026-09-10, brief §8.4).
+     Chordential alone; the suffix is skipped when the page's own title is the name. #}
+  <title>{% block title %}Chordential{% endblock %}{% if not (self.title()|trim).endswith('Chordential') %} · Chordential{% endif %}</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
   <script src="/static/ui.js?v={{ static_v }}" defer></script>
   <script src="/static/live.js?v={{ static_v }}" defer></script>
@@ -65,7 +68,7 @@
       <label for="side-toggle" class="m-burger sidebar-burger" aria-label="Menu">☰</label>
     </div>
     <div class="side-nav-wrap">
-    <div class="brand-tag">Procurement OS</div>
+    <div class="brand-tag">Chordential</div>
     {# INCOMING FIRST. It was under a "Front-of-House" heading below the whole
        Procurement block — and it is the one thing that arrives on its own and goes
        stale if nobody looks (operator, 2026-08-20). What comes IN sits above what

@@ -349,14 +349,14 @@ def _gen_vendor_profile(profile) -> tuple:
             f"Primary contact: {profile.get('primary_contact') or '[PRIMARY CONTACT]'}\n"
             f"Finance/AP contact: {profile.get('finance_contact') or '—'}\n"
             f"NAICS: {profile.get('naics') or '—'}   UEI/SAM: {profile.get('uei_sam') or '—'}   DUNS: {profile.get('duns') or '—'}\n\n"
-            f"Capabilities: {profile.get('capabilities') or 'Original, clearance-certified campaign music — composition through delivery.'}\n")
+            f"Capabilities: {profile.get('capabilities') or 'Original music for campaigns — composed, cleared, delivered: composed by a named person; cleared under a certificate we sign.'}\n")
     return text, miss
 
 
 def _gen_company_overview(profile) -> tuple:
     miss = _missing(profile, ["legal_name"])
     text = (f"COMPANY OVERVIEW — {_hdr(profile)}\n\n"
-            f"{profile.get('capabilities') or 'Chordential is a procurement-grade music studio producing original, clearance-certified campaign music — from composition through cleared, delivery-ready masters.'}\n\n"
+            f"{profile.get('capabilities') or 'Chordential makes original music for campaigns — composed, cleared, delivered: composed by a named person; cleared under a certificate we sign.'}\n\n"
             f"Website: {profile.get('website') or '—'}\n"
             f"Primary contact: {profile.get('primary_contact') or '[PRIMARY CONTACT]'}\n")
     return text, miss

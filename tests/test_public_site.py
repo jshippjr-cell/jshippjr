@@ -36,7 +36,9 @@ def test_public_home_is_the_score(client):
     assert "/start" in r.text
     # the Commission is the reference for what the score page rebuilds; links
     # handed out before the cutover still have to land somewhere real
-    assert "The music department" in client.get("/commission").text
+    # 2026-09-10, brief §6: "The music department you don't have to build" was retired
+    # as a scale overclaim; the Commission's H1 is now "The music arrives finished."
+    assert "The music arrives" in client.get("/commission").text
     for retired in ("/world", "/experience"):
         assert client.get(retired).status_code == 404, f"{retired} is back"
 
@@ -94,7 +96,10 @@ def test_internal_dashboard_unaffected_by_public_mount(client):
     # The internal app still works and still shows its own shell.
     r = client.get("/dashboard")
     assert r.status_code == 200
-    assert "Procurement OS" in r.text
+    # "Procurement OS" left the internal chrome on 2026-09-10 (brief §8.4): the login
+    # page a client can land on carried it. The shell is recognised by its sidebar.
+    assert 'class="sidebar"' in r.text
+    assert "Procurement OS" not in r.text
 
 
 def test_the_retired_brochure_pages_are_gone(client):

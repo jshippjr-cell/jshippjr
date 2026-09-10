@@ -52,7 +52,7 @@ def invite_blocks(
         {"key": "greeting", "text": f"Hi {_first_name(t.name)},"},
         {"key": "who",
          "text": (f"I'm {from_name}, founder of Chordential, a small studio making "
-                  "original, clearance-certified music for ad campaigns.")},
+                  "original music for campaigns, cleared under a certificate we sign.")},
         {"key": "why", "text": _why_them(t)},
         {"key": "offer",
          "text": ("What I can honestly offer: real, paid briefs (never spec), clean "

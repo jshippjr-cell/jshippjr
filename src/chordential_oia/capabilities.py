@@ -25,11 +25,11 @@ from .models import MusicDiscipline, Opportunity, QualificationResult
 from .proposals import build_proposal
 from .web import showcase
 
+# 2026-09-10, docs/marketing/00-brief.md §6: "procurement-grade" and "partner" are
+# banned on anything a client reads, and this is the client capabilities document.
 VALUE_PROP = (
-    "Chordential is a procurement-grade music partner. We turn a brief into "
-    "broadcast-ready original music with a vetted craft team, a fixed scope, and "
-    "dependable delivery, so brands and agencies get distinctive sound without "
-    "the risk of an open-ended creative process."
+    "Chordential is a music house that delivers original music finished: composed "
+    "by people, cleared under a certificate we sign, packaged completely."
 )
 
 
@@ -358,7 +358,9 @@ _RIGHTS_SUMMARY = [
     "Term: perpetuity",
     "Media: all campaign media (broadcast, digital, social, OOH, in-store)",
     "Composition publishing retained by Chordential; we file the cue sheet",
-    "100% original & cleared: no samples, no third-party masters, nothing to clear but ours",
+    # "100%" is a guarantee by another spelling (brief §6, 2026-09-10). Static copy only:
+    # the certificate's own clearance line is computed in delivery.py, not restated here.
+    "Original work, cleared as granted; releases on file for every named contributor",
 ]
 
 
@@ -454,7 +456,7 @@ SUPPORT_CHIPS = [
      "templates": None},
     # Assurance — "why it's safe to hire us" (universal)
     {"id": "ass-cleared", "family": "assurance", "label": "Original & cleared",
-     "sentence": "100% original and cleared: no samples, no third-party masters, no PRO surprises.",
+     "sentence": "Original work, cleared as granted; releases on file for every named contributor.",
      "templates": None},
     {"id": "ass-buyout", "family": "assurance", "label": "Yours in perpetuity",
      "sentence": "You own the recording and the right to use it forever, worldwide, "

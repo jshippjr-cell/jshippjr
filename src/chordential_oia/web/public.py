@@ -228,10 +228,12 @@ def public_stills(request: Request):
             "title": t.title, "label": t.discipline_label,
             "href": f"/showreel?t={i}", "kind": "Track",
         })
+    # 2026-09-10, brief §6: "a demonstration, never sample or case study" — there is no
+    # client work, and a "Case study" label on an invented brand read as fabricated proof.
     for c in show.cases:
         cards.append({
-            "title": c.title, "label": "Case study",
-            "href": _RETIRED, "kind": "Case",
+            "title": c.title, "label": "Demonstration · invented brand",
+            "href": _RETIRED, "kind": "Demonstration",
         })
     for i, c in enumerate(cards):
         c["gradient"] = _GALLERY_GRADIENTS[i % len(_GALLERY_GRADIENTS)]

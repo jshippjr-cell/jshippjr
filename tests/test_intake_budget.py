@@ -89,9 +89,12 @@ def test_the_budget_is_optional(app_mod):
 
 
 def test_the_form_says_why_it_asks(app_mod):
+    """The hint moved with the copy on 2026-09-10 (brief §6, 07 §5): the range makes
+    the number the client's, and it never sets the price — the budget is only a check."""
     with TestClient(app_mod.app) as c:
         html = c.get("/start").text
-    assert "never a commitment" in html
+    assert "It never sets the price" in html
+    assert "price range" not in html, "the page promises a band the handler withholds"
 
 
 def test_a_validation_error_does_not_eat_the_budget(app_mod):

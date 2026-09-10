@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ opp['client'] }} · Chordential Workspace</title>
+  <title>{{ opp['client'] }} · Chordential</title>
   <link rel="icon" href="/static/public/wordmark-dark.png">
   {% if doc or review or k %}
   {# Brief / commercial review / kickoff fold in inline (ADR-0018): their styles travel with them. #}
@@ -147,7 +147,7 @@
     </div>
   </div>
   {% endif %}
-  <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  <div class="ws-foot">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
 
   {% elif preparing %}
   {# ADR-0020: confirmed — the proposal is being prepared; nothing needed from the client. #}
@@ -162,7 +162,7 @@
         scope, timeline, investment and terms. You'll get one email when it's ready,
         right here at this same link. Nothing is needed from you until then.</p>
     </div>
-    <div class="ws-foot" style="padding:22px 0 0">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+    <div class="ws-foot" style="padding:22px 0 0">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
   </div>
 
   {% elif review %}
@@ -171,7 +171,7 @@
     {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
   </div>
   {% include "_commercial_document.html" %}
-  <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  <div class="ws-foot">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
 
   {% elif k %}
   {# ── Kickoff: the Production Readiness Workspace — the concierge handoff (same URL). ── #}
@@ -179,7 +179,7 @@
     {% for step in rail %}<span class="ws-chip {{ step.state }}">{{ step.label }}</span>{% endfor %}
   </div>
   {% include "_kickoff_document.html" %}
-  <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+  <div class="ws-foot">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
 
   {% elif prod %}
   {# ── Production: the court question first, then the creative journey (ADR-0019). ── #}
@@ -234,13 +234,13 @@
       {% endif %}
     </div>
     {% endif %}
-    <div class="ws-foot" style="padding:22px 0 0">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+    <div class="ws-foot" style="padding:22px 0 0">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
   </div>
 
   {% else %}
   {# ── Non-brief phases: the lifecycle rail + the active stage card. ── #}
   <div class="ws-wrap">
-    <div class="ws-kicker">Your campaign workspace</div>
+    <div class="ws-kicker">Your room</div>
     <h1>{{ opp['client'] }}</h1>
     <div class="ws-sub">{{ opp['need'] }}</div>
 
@@ -264,7 +264,7 @@
       </a>
       {% endif %}
     </div>
-    <div class="ws-foot">One workspace for your campaign — it grows as we go. This link is yours; keep it.</div>
+    <div class="ws-foot">Your room for this campaign — it grows as we go. This link is yours; keep it.</div>
   </div>
   {% endif %}
 
