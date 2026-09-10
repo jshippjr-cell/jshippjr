@@ -160,6 +160,15 @@ term / exclusivity / publishing · cue sheet · chain of title · on file · ste
 the package · the manifest · creative fee / licence fee · composer (by name to the studio,
 by role to the client) · finished · made by people.
 
+**Never define a word to the reader** (the founder, 2026-09-10). *"Composed means written
+for this campaign…"* was on his own About page until he struck it: a producer knows what
+composed means, and being told puts the writer above the reader. These three words are not
+ours to define — they describe **what we do for this client**. Write them that way: *we
+write it for your campaign · we clear it so your business affairs team can sign without a
+cover note · we hand over what you approved, in one package*. Active, first person plural,
+addressed to *you*. The same rule kills every *"X means Y"*, *"what that really means is"*
+and *"in other words"* on a client surface.
+
 **Never:** platform · dashboard · portal · workspace · OS · software · tool · app ·
 AI-powered · intelligent · automated · seamless · end-to-end · hassle-free · one-stop ·
 full-service · we handle everything · vendor · talent / resources / freelancers ·
