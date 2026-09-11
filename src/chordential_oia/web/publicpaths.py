@@ -52,6 +52,20 @@ _FIRST_TOUCH_RE = re.compile(r"^/opportunity/\d+/first-touch/?$")
 # bad one). Without ?k it stays the admin edit view behind the login gate — so the token,
 # not the path alone, is what opens it publicly (no admin-view leak).
 _CAPABILITIES_RE = re.compile(r"^/opportunity/\d+/capabilities/?$")
+# Creator capture (ADR-0097): /capture/creator is opened from a phone share-sheet or a
+# bookmarklet on someone else's site, neither of which carries the admin session
+# cookie. The route checks `?k=` against CHORDENTIAL_CAPTURE_TOKEN itself and answers
+# 404 without it — and 404s outright when that variable is unset, so an instance that
+# has not opted in has no write door here at all. Exempt on that promise alone.
+# NOTE the /creator suffix. `/capture` alone is console_routes' gig-capture page,
+# an OPERATOR surface, and an earlier version of this regex matched it — which is the
+# "too-broad" failure this module's own header warns about, caught by
+# test_app_structure before it shipped.
+_CAPTURE_RE = re.compile(r"^/capture/creator/?$")
+
+
+def _is_capture_path(path: str) -> bool:
+    return bool(_CAPTURE_RE.match(path))
 
 
 def _is_first_touch_path(path: str) -> bool:
@@ -192,6 +206,11 @@ def is_public(path: str) -> bool:
         # The client delivery portal is opened by the buyer — same token-gated
         # exemption as first-touch (the per-project share token IS the access control).
         or _is_delivery_portal_path(path)
+        # One-tap creator capture, opened from a phone share-sheet or a bookmarklet
+        # running on someone else's site — neither carries the admin cookie. The
+        # route checks the ?k= token itself and 404s without it (ADR-0097). /capture
+        # without the suffix is the operator's gig page and stays gated.
+        or _is_capture_path(path)
         or path in ("/healthz", "/favicon.ico")
         # PWA install assets — fetched by the browser/OS (sometimes without the
         # admin cookie), and non-sensitive, so they bypass the gate.

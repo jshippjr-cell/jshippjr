@@ -4002,3 +4002,57 @@ future contributor must honor.
 **Why.** <the reasoning that must survive>
 **Consequences.** <what future contributors must do / not do>
 ```
+
+---
+
+## ADR-0097 — A creator is captured where you found them, and reached from their own page
+
+**2026-09-11. Status: accepted.**
+
+**The problem is a rule that is right and expensive.** The composer track says a name
+enters the roster only with a public source beside it — *ten rows, each with a link*. That
+rule survives a laptop and dies on a phone: the moment you find someone good you are three
+threads deep in a forum, and keeping the rule honestly costs six fields of typing. So it
+does not get kept, and a week later there is a name in a notebook with nothing under it.
+
+**`/capture/creator` makes the link arrive by construction.** A bookmarklet (desktop) or a
+share-sheet shortcut (phone) hands it the page's URL, title and selection; the form is
+already filled in; one tap writes a `talent` row with `source_url` set. It is the
+supply-side twin of `console_routes`' `/capture`, which has done the same for a GIG since
+the inbound lanes were built — the pattern is not new, only the side of the business.
+
+**A prefilled form, not a fire-and-forget POST.** A bookmarklet running on reddit.com
+cannot POST to chordential.com without CORS or a GET that writes, and a GET that writes is
+a link a crawler can fire. A form works identically on iOS Safari and a desktop, needs no
+cross-origin permission, and buys the one thing a scrape cannot: a human glance before the
+row exists. Two seconds, and the row is right.
+
+**Null by default, like the mail and payment seams.** `CHORDENTIAL_CAPTURE_TOKEN` unset
+means the route 404s for everyone — no door, rather than a door with a weak lock. Set, the
+token in `?k=` is the access control and is checked in the route, because a share sheet
+carries no session cookie.
+
+**The near miss, recorded because it is the exact failure `publicpaths.py` warns about.**
+The first exemption regex was `^/capture/?$`, which matched the EXISTING operator gig page
+and would have published it to anyone who guessed the URL. `test_app_structure`'s
+duplicate-route check caught the collision before the gate check would have had to;
+the route moved to `/capture/creator` and the regex gained the suffix. *Name each path
+exactly, never wildcard a family* is the module's own instruction, and this is what
+ignoring it looks like.
+
+**Reaching them: one draft, three doors, and only one of them sends.**
+`recruiting.compose_invite` stays the single author of what the studio says — three doors
+that each wrote their own pitch is three pitches inside a month. Email sends through the
+mailer seam. **Reddit and LinkedIn deliberately do not.** Reddit has an API that would let
+the studio message strangers with no human in the loop, and unsolicited automated messages
+are the fastest way to lose the account — which is how the composer track reaches its rooms
+at all. LinkedIn has no messaging API and automating it restricts accounts. So those two
+OPEN the message, addressed and written, and a person presses send: the same seconds
+without the risk, and the message is his. Two new `talent` columns, `handle` and
+`linkedin_url`, hold where it can be sent; both come from a URL the operator was looking
+at, and neither is inferred.
+
+**Consequence.** Adding a fourth channel means adding a door that opens a composed
+message, never one that sends on the studio's behalf; if a channel ever sends without a
+human, it must be because its terms invite it and a real person decided so, not because
+an API existed.

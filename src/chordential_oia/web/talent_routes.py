@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from .. import agreements, composer_agreement, mailer, recruiting, signing
 from ..models import MusicDiscipline
 from ..talent import Talent, normalize_url, profile_completeness
-from . import actor, db
+from . import actor, capture, db
 from .shell import public_base as _public_base, render, safe_local as _safe_local
 from .uploads import _persist_upload, _read_capped
 
@@ -100,6 +100,83 @@ def talent_roster(
 
 
 _ADD_SOURCES = {"manual", "sourced", "referral"}
+
+
+# --------------------------------------------------------------------------- #
+# Capture (ADR-0097) — a creator, from wherever you found them, in one tap. The
+# supply-side twin of console_routes' `/capture`, which does the same for a GIG and
+# is the pattern this follows. That one is admin-gated because it is opened from a
+# signed-in desktop; this one is token-gated because it is opened from a phone's
+# share sheet, which carries no cookie. Hence the separate path: exempting `/capture`
+# itself would have handed the gig page to anyone who guessed the URL.
+# `/capture/creator` is exempt from the admin gate in publicpaths.py: a phone share-sheet
+# carries no session cookie, so the ?k= token is the access control and IS checked
+# here. Unset CHORDENTIAL_CAPTURE_TOKEN => 404, never an open write door.
+# --------------------------------------------------------------------------- #
+@router.get("/capture/creator", response_class=HTMLResponse)
+def capture_form(request: Request, k: str = "", url: str = "", title: str = "",
+                 note: str = ""):
+    if not capture.token_ok(k):
+        return HTMLResponse("Not found", status_code=404)
+    src = capture.source_for(url)
+    return render(
+        request, "capture.html", active="",
+        k=k, url=url, title=(title or "").strip(), note=(note or "").strip(),
+        source=src, sources=capture.SOURCES,
+        handle=capture.handle_for(url, src),
+        disciplines=FORM_DISCIPLINES,
+    )
+
+
+@router.post("/capture/creator")
+def capture_save(
+    k: str = Form(""),
+    url: str = Form(""),
+    name: str = Form(""),
+    handle: str = Form(""),
+    source: str = Form("web"),
+    discipline: List[str] = Form(default=[]),
+    note: str = Form(""),
+    email: str = Form(""),
+):
+    """Write the row. The URL is required and the name is not: a Reddit thread often
+    gives a username and nothing else, and a row whose name is a handle with a live
+    link under it is worth more than no row at all."""
+    if not capture.token_ok(k):
+        return HTMLResponse("Not found", status_code=404)
+    link = normalize_url(url) or (url or "").strip()
+    if not link:
+        return RedirectResponse(f"/capture/creator?k={quote(k)}&err=url", status_code=303)
+    src = source if source in capture.SOURCES else capture.source_for(link)
+    hdl = (handle or "").strip()
+    label = (name or "").strip() or hdl or "Unnamed — from " + src
+    discs = [MusicDiscipline(d) for d in discipline if d in
+             {x.value for x in FORM_DISCIPLINES}]
+    conn = db.connect()
+    try:
+        tid = db.insert_talent(conn, Talent(
+            name=label, email=(email or "").strip() or None, disciplines=discs,
+            notes=(note or "").strip(), source=src, source_url=link,
+        ))
+        db.set_talent_contact(conn, tid, handle=hdl)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{tid}?captured=1", status_code=303)
+
+
+@router.get("/talent/capture-setup", response_class=HTMLResponse)
+def capture_setup(request: Request):
+    """How to put the one-tap capture on a phone and a laptop. Admin-gated like the
+    rest of /talent — it shows the token."""
+    tok = capture.capture_token()
+    base = _public_base()
+    return render(
+        request, "capture_setup.html", active="talent",
+        enabled=bool(tok), token=tok,
+        bookmarklet=capture.bookmarklet(base, tok) if tok else "",
+        capture_url=capture.capture_url(base, tok) if tok else "",
+        base=base,
+    )
 
 
 @router.get("/talent/new", response_class=HTMLResponse)
@@ -174,6 +251,8 @@ def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str =
             return HTMLResponse("Talent not found", status_code=404)
         t = db.talent_from_row(row)
         portal_token = row["portal_token"] if "portal_token" in row.keys() else None
+        handle = (row["handle"] if "handle" in row.keys() else "") or ""
+        linkedin_url = (row["linkedin_url"] if "linkedin_url" in row.keys() else "") or ""
         w9_at = row["w9_received_at"] if "w9_received_at" in row.keys() else None
         agreement_at = (row["agreement_executed_at"]
                         if "agreement_executed_at" in row.keys() else None)
@@ -225,6 +304,13 @@ def talent_detail(request: Request, talent_id: int, invite: str = "", agr: str =
         composer_sig_valid=(sig_state == signing.VALID),
         invite=invite, mail_configured=mailer.mail_configured(),
         invite_result=invite_result, agr_result=agr,
+        # Where this message can actually be sent (ADR-0097). One draft, three doors:
+        # the email one SENDS, the other two OPEN the message written and addressed
+        # for Jon to send himself. `recruiting.compose_invite` is the single author of
+        # what it says, so the three cannot drift into three different pitches.
+        handle=handle, linkedin_url=linkedin_url,
+        reddit_dm_url=(capture.reddit_compose_url(handle, invite["subject"], invite["body"])
+                       if handle and (t.source or "") == "reddit" else ""),
     )
 
 
@@ -254,6 +340,24 @@ def talent_edit(
     finally:
         conn.close()
     return RedirectResponse(f"/talent/{talent_id}", status_code=303)
+
+
+@router.post("/talent/{talent_id}/contact")
+def talent_set_contact(talent_id: int, handle: str = Form(""),
+                       linkedin_url: str = Form("")):
+    """Where an outreach message can be sent (ADR-0097). Its own door rather than a
+    field on the big edit form, because these two arrive at a different moment — a
+    capture has the handle and nothing else, and the profile link turns up later, if
+    at all."""
+    conn = db.connect()
+    try:
+        if db.get_talent(conn, talent_id) is None:
+            return RedirectResponse("/talent", status_code=303)
+        db.set_talent_contact(conn, talent_id,
+                              handle=handle, linkedin_url=normalize_url(linkedin_url) or "")
+    finally:
+        conn.close()
+    return RedirectResponse(f"/talent/{talent_id}#reach", status_code=303)
 
 
 @router.post("/talent/{talent_id}/delete")

@@ -226,6 +226,66 @@
       </div>
     </form>
 
+    {# Where this message can be sent (ADR-0097). One draft from
+       recruiting.compose_invite, three doors. Only the email one SENDS: LinkedIn has no
+       messaging API at all, and Reddit's would let us message strangers without a human,
+       which is how an account stops being welcome in the rooms the roster depends on. So
+       those two OPEN the message, written and addressed, and Jon presses send. #}
+    <div class="edit-block" style="margin-top:14px" id="reach">
+      <p class="muted small" style="margin:0 0 10px"><b>Reach them</b> — the same draft
+        either way; only email leaves without you.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        {% if t.email and mail_configured %}
+        <form method="post" action="/talent/{{ t.id }}/invite/send">
+          <button class="btn primary" type="submit">✉ Email {{ t.email }}</button></form>
+        {% endif %}
+        {% if reddit_dm_url %}
+        <a class="btn" href="{{ reddit_dm_url }}" target="_blank" rel="noopener">
+          Open Reddit message to u/{{ handle }}</a>
+        {% endif %}
+        {% if linkedin_url and invite %}
+        <button class="btn" type="button" id="li-copy"
+          data-msg="{{ invite.body }}" data-url="{{ linkedin_url }}">
+          Copy message &amp; open LinkedIn</button>
+        {% endif %}
+      </div>
+      <form method="post" action="/talent/{{ t.id }}/contact" class="row"
+            style="gap:8px;margin-top:12px;flex-wrap:wrap">
+        <input type="text" name="handle" value="{{ handle }}" placeholder="username in that room"
+               style="flex:1 1 11rem" autocapitalize="none" spellcheck="false">
+        <input type="text" name="linkedin_url" value="{{ linkedin_url }}"
+               placeholder="linkedin.com/in/…" style="flex:2 1 16rem"
+               autocapitalize="none" spellcheck="false">
+        <button class="btn" type="submit">Save</button>
+      </form>
+      {% if t.source_url %}
+      <p class="muted small" style="margin:10px 0 0">Found at
+        <a href="{{ t.source_url }}" target="_blank" rel="noopener">{{ t.source_url }}</a></p>
+      {% endif %}
+      {% if linkedin_url and invite %}
+      {# LinkedIn cannot be prefilled by a link — there is no compose URL and no API.
+         So: copy, then open. Two seconds, and the message is still the one draft. #}
+      <script>
+      (function(){
+        var b=document.getElementById("li-copy");
+        if(!b) return;
+        b.addEventListener("click",function(){
+          var msg=b.getAttribute("data-msg")||"", url=b.getAttribute("data-url")||"";
+          function go(){ b.textContent="Copied — opening LinkedIn"; window.open(url,"_blank","noopener"); }
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            navigator.clipboard.writeText(msg).then(go,go);
+          } else {
+            var ta=document.createElement("textarea"); ta.value=msg;
+            document.body.appendChild(ta); ta.select();
+            try{document.execCommand("copy");}catch(e){}
+            document.body.removeChild(ta); go();
+          }
+        });
+      })();
+      </script>
+      {% endif %}
+    </div>
+
     {% if invite %}
     <details class="edit-block" style="margin-top:14px" id="invite">
       <summary class="btn">✉ Recruiting invite <span class="muted">— personalized draft</span></summary>

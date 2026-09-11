@@ -237,7 +237,7 @@ def test_the_router_carries_the_whole_group():
 
 @pytest.mark.parametrize("module,prefix,count", [
     ("agencies_routes.py", "/agencies", 26),
-    ("talent_routes.py", None, 18),          # two prefixes: /talent + /payouts
+    ("talent_routes.py", None, 22),          # /talent + /payouts + /capture/creator
     ("discovery_routes.py", None, 25),       # four: /signals /discovery /sources /leads
     ("opportunity_routes.py", "/opportunity", 69),   # +2: fetch a transcript, re-read a
                                                      # capture; +1: the call prep sheet;
@@ -327,8 +327,8 @@ def test_no_route_was_lost_or_duplicated_by_any_slice():
     # +2 on the realtime capture webhook (one
     # declaration each for the trailing-slash and bare forms — Recall's own docs require
     # the slash before the query string, and a bare POST must not 404), +1 for /pricing.
-    assert len(decls) == 309, (
-        f"{len(decls)} route declarations across app.py + the routers, expected 309 — "
+    assert len(decls) == 313, (
+        f"{len(decls)} route declarations across app.py + the routers, expected 313 — "
         f"a slice lost or gained a URL")
 
 

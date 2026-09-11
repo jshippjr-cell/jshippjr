@@ -153,7 +153,9 @@ CREATE TABLE IF NOT EXISTS talent (
     source_url TEXT,
     rate REAL,                   -- founder-set pay rate (NULL = no rate set)
     rate_unit TEXT DEFAULT 'hourly',  -- 'hourly' | 'day' | 'project'
-    publisher TEXT               -- their publishing entity (ADR-0061); blank = house holds their share
+    publisher TEXT,              -- their publishing entity (ADR-0061); blank = house holds their share
+    handle TEXT,                 -- username on the room they were found in (ADR-0097)
+    linkedin_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -443,6 +445,13 @@ _TALENT_COLUMNS = {
     # Per-creator unguessable token that gates the composer portal (/creator/<token>)
     # — a qualified creator's only credential, mirroring projects.share_token. No
     # password: the token IS the access control (validated in the route).
+    # Where they were captured from, in the platform's own terms (ADR-0097). `handle`
+    # is the username on the room they were found in — a Reddit or VI-Control name is
+    # often the ONLY identifier that exists, and an outreach message addressed to it is
+    # the only one that can be sent; `linkedin_url` is the profile, when there is one.
+    # Neither is invented: both come from a URL the operator was actually looking at.
+    "handle": "TEXT",
+    "linkedin_url": "TEXT",
     "portal_token": "TEXT",
     # W-9 status for the payout ledger: collected before a first payout can be
     # marked Paid. Stored as an ISO date (when received) — null = not on file.
@@ -4746,6 +4755,22 @@ def insert_talent(conn: sqlite3.Connection, t: Talent) -> int:
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def set_talent_contact(conn: sqlite3.Connection, talent_id: int,
+                       handle: Optional[str] = None,
+                       linkedin_url: Optional[str] = None) -> None:
+    """Record where an outreach message can actually be sent (ADR-0097).
+
+    Separate from `update_talent` because a capture writes these before anyone has
+    decided the creator is worth a full row, and because both are blank far more often
+    than not: a Reddit thread gives a username and nothing else.
+    """
+    conn.execute(
+        "UPDATE talent SET handle = ?, linkedin_url = ? WHERE id = ?",
+        ((handle or "").strip() or None, (linkedin_url or "").strip() or None, talent_id),
+    )
+    conn.commit()
 
 
 def talent_exists(

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}One-tap capture{% endblock %}
+{% block heading %}<a class="crumb" href="/talent">Talent</a> / One-tap capture{% endblock %}
+{% block content %}
+
+<section class="card" style="max-width:720px">
+  <div class="card-head"><h2>Capture a creator from wherever you found them</h2></div>
+
+  {% if not enabled %}
+  <p class="muted">
+    Capture is off. It turns on when <code>CHORDENTIAL_CAPTURE_TOKEN</code> is set in the
+    environment — any long random string. Until then <code>/capture</code> answers 404 to
+    everyone, which is the point: an instance that has not opted in has no write door
+    standing open on the public internet.
+  </p>
+  {% else %}
+
+  <p class="muted small" style="margin:-6px 0 18px">
+    Both of these open the same prefilled form with the page's link already in it. You
+    glance at it, add a name or a craft if you know one, and save. The link is captured by
+    construction rather than by remembering — which is the rule the roster runs on.
+  </p>
+
+  <h3 style="margin:18px 0 6px;font-size:1rem">On a computer</h3>
+  <p class="muted small" style="margin:0 0 8px">
+    Drag this to your bookmarks bar, or make a new bookmark and paste it as the address.
+    Then press it on any page where you have found someone.
+  </p>
+  <p><a class="btn" href="{{ bookmarklet }}">＋ Capture to Chordential</a></p>
+  <details style="margin-top:10px">
+    <summary class="muted small" style="cursor:pointer">Or copy the address by hand</summary>
+    <textarea readonly rows="4" style="width:100%;font-family:ui-monospace,Menlo,monospace;
+      font-size:.72rem;margin-top:8px" onclick="this.select()">{{ bookmarklet }}</textarea>
+  </details>
+
+  <h3 style="margin:26px 0 6px;font-size:1rem">On a phone</h3>
+  <p class="muted small" style="margin:0 0 8px">
+    Make a Shortcut so capture appears in the share sheet, under the button you already
+    press to share a link.
+  </p>
+  <ol class="muted small" style="margin:0;padding-left:20px;line-height:1.7">
+    <li>Open <b>Shortcuts</b> → <b>+</b> → <b>Info</b> (ⓘ) → turn on <b>Show in Share Sheet</b>,
+      and set <b>Accepted types</b> to URLs only.</li>
+    <li>Add the action <b>Text</b> and paste this, exactly:
+      <textarea readonly rows="2" style="width:100%;font-family:ui-monospace,Menlo,monospace;
+        font-size:.72rem;margin:6px 0" onclick="this.select()">{{ capture_url }}&url=</textarea></li>
+    <li>Add <b>URL Encode</b> with <b>Shortcut Input</b> as its input.</li>
+    <li>Add <b>Combine Text</b> with the Text and the encoded input, separator <b>None</b>.</li>
+    <li>Add <b>Open URLs</b>. Name it <b>Capture to Chordential</b> and save.</li>
+  </ol>
+  <p class="muted small" style="margin-top:10px">
+    On Android the same thing is a bookmark with the bookmarklet above, or any
+    share-to-URL app pointed at <code>{{ capture_url }}&url=</code>.
+  </p>
+
+  <h3 style="margin:26px 0 6px;font-size:1rem">What it does not do</h3>
+  <p class="muted small" style="margin:0">
+    It never sends anything. Capture writes a prospect and stops. Reaching out is a
+    separate press on that creator's own page, and on Reddit and LinkedIn it opens the
+    message written and addressed for you to send yourself — automating those would risk
+    the account, and the rooms are worth more than the keystrokes.
+  </p>
+  {% endif %}
+</section>
+
+{% endblock %}
