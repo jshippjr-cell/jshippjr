@@ -160,6 +160,16 @@ term / exclusivity / publishing · cue sheet · chain of title · on file · ste
 the package · the manifest · creative fee / licence fee · composer (by name to the studio,
 by role to the client) · finished · made by people.
 
+**Never lift ourselves by lowering an adjacent craft** (the founder, 2026-09-11, striking
+*"advertising is one of the few places left that will pay a composer properly"*): *"feels
+like a jab to other disciplines and i dont like it."* Right, and it is §5's rule about
+never ranking ourselves against a peer, applied to whole fields — film, games, television
+and theatre are where our composers come from and where they also work. Say why we chose
+advertising in terms of **ourselves**: it is the work the founder already understands —
+briefs, deadlines, several approvers — and campaigns need original music all year round.
+The comparative version was also arguably untrue at the top of those other fields, which
+is the second reason to drop it.
+
 **Never volunteer a weakness** (the founder, 2026-09-11, striking four lines from his own
 About): *"I never wanna advertise weakness. Everyone has a beginning. No one has to
 broadcast the fact that they're starting and that they don't have clients."* This
