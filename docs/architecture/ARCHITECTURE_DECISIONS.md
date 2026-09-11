@@ -4040,6 +4040,15 @@ the route moved to `/capture/creator` and the regex gained the suffix. *Name eac
 exactly, never wildcard a family* is the module's own instruction, and this is what
 ignoring it looks like.
 
+**And the second collision, which the same carelessness caused twice.** The new template
+was written to `capture.html` — the gig page's own file — silently replacing it, so
+`/capture` rendered the creator form. The full sweep caught it; the targeted suites did
+not, because neither one walks the other side's route. The creator form is
+`capture_creator.html` now. Both misses share a cause: *capture* was treated as a free
+name when the codebase had already spent it, and nothing was checked before writing.
+A write tool saying "updated" rather than "created" is the signal that was there and
+was not read.
+
 **Reaching them: one draft, three doors, and only one of them sends.**
 `recruiting.compose_invite` stays the single author of what the studio says — three doors
 that each wrote their own pitch is three pitches inside a month. Email sends through the
