@@ -218,14 +218,16 @@ anything"** — checkable, because the document exists and states the share.
 >
 > **Why I'm doing it.** I have musical ideas most days and stopped finishing them years
 > ago, so I know what I am and what I'm not. What I'm good at is running things to a
-> deadline in front of a room full of people, and I'd rather own the place where people who
-> did commit their lives to this get paid properly than pretend to be one of them. The
+> deadline in front of a room full of people, so rather than pretend to be one of them, I'd
+> rather help the people who did commit their lives to this get their work made and get
+> paid properly for it. The
 > longer aim is a room — 2,500 to 3,000 square feet, built for chamber orchestra, where the
 > composer conducts the session from wherever they are. The digital side earns that room.
 >
-> **What I built while there's no client.** Two standing agreements in plain language,
-> reviewed once by an entertainment lawyer whose findings I acted on. Ask and I'll send you
-> whichever one would govern you, whole, unsigned.
+> **What I built while there's no client.** Two standing agreements, written in plain
+> language rather than in the usual fog. Ask and I'll send you whichever one would govern
+> you, whole and unsigned, to read at your own pace — and have your own person look at it
+> before you ever sign. I'd think less of you if you didn't.
 >
 > **What I won't do.** No AI-generated music anywhere, including as a demo. No spec. No
 > exclusivity over your time. No promise of volume.
