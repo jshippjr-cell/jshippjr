@@ -160,6 +160,40 @@ term / exclusivity / publishing · cue sheet · chain of title · on file · ste
 the package · the manifest · creative fee / licence fee · composer (by name to the studio,
 by role to the client) · finished · made by people.
 
+**Never volunteer a weakness** (the founder, 2026-09-11, striking four lines from his own
+About): *"I never wanna advertise weakness. Everyone has a beginning. No one has to
+broadcast the fact that they're starting and that they don't have clients."* This
+**overrides the prior practice**, not the honesty rule, and the difference is the whole
+point. Volunteering *"no paying client yet"* is optional and is now off every surface.
+Claiming a client we do not have is a lie and remains impossible. What still holds: no
+invented case study, no testimonial, no logo wall, and **every demonstration labelled a
+demonstration on the surface that plays it** — that label is not an admission, it is what
+stops a demo from reading as client work. When a producer asks on a call who we have
+worked with, he answers straight; that belongs in his mouth, not on a page.
+
+Struck with it, on his ruling and for his reasons: the standalone *no machine-made music*
+paragraph (the rule is absolute and unchanged — §7 — but stating it as a badge is what §6
+already forbids; it survives only where it defines the offer, as *nothing generated,
+nothing pulled from a library*); the posting cadence (*"no one cares"*); *"one person,
+building a roster one signed agreement at a time"*; and *"I read every brief and I'm on
+every call"* (*"that's expected… I don't need to broadcast that"*).
+
+**The Clearance Read is withdrawn** (the founder, same day): *"I don't really know what
+I'm doing. I'm not gonna position myself or pitch that I'm an expert at that."* This is
+the honesty rule applied to himself and it stands. **It was load-bearing** and everything
+resting on it moves: it was touch three of the five-touch sequence (Outbound §2, §3), the
+leading metric on the dashboard (Analytics §1), the one give named in §9, and the offer
+closing the About and the Friday post. **The replacement is the delivery checklist** — what
+to ask any music vendor for before calling a job done — which he can give because it comes
+from his own system and from years of receiving other people's deliverables, and which is
+not advice about anyone's legal position. Outbound and Analytics are stale until rewritten
+against this.
+
+**The room is not modest** (the founder, same day): *"it doesn't portray that it's like a
+virtual hub where creatives come to interact and create."* Describe it populated — the
+client, the founder and the composer working in the same place — not as a link. The word
+*hub* itself stays out for the same reason as *platform*.
+
 **Never write the founder as an owner** (the founder, 2026-09-11, striking his own About):
 *"I feel like I'm bragging about my goal is to own a place."* He owns it; that is not the
 thing to say. He describes the service, not the position: *help their work get made and

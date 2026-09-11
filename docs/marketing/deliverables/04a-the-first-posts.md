@@ -34,7 +34,7 @@ The digital business exists to earn that room.
 >
 > Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it, and I think I could have been good at this if I'd had it. What I can do is help their work get made and get out into the world. That's what Chordential is for. I started with advertising because it's one of the few places left that will pay a composer properly for original work.
 >
-> So here is what we do for you.
+> So here's what we do for you.
 >
 > We write the music for your campaign. A composer's name goes on the cue sheet — nothing generated, nothing pulled from a library.
 >
@@ -42,15 +42,9 @@ The digital business exists to earn that room.
 >
 > We hand over what you approved, in one package — masters, cutdowns, stems, cue sheet, certificate, and a manifest naming every file. On the date we agreed.
 >
-> The whole job runs in one room at one link. You play the take, mark the second you mean, and the note stays on that version. A round is numbered and buys one version. Every note gets read before a composer touches it, so nothing turns into a change order by accident.
+> And you're in the room the whole time, with us. You, me and the composer, working in the same place. You play the take and mark the exact second you mean; the composer sees it where they're working, on the right version, in context. Nothing gets relayed second-hand, nothing gets buried in a thread, and nobody has to ask which version anyone meant. Rounds are numbered, so everyone always knows where they stand.
 >
-> Two things you'd find out anyway, so: Chordential has no paying client yet — I'm writing this the day I start selling. And no machine-made music, anywhere, including the demonstrations on my own site.
->
-> What I post here. Mondays, something I learned building this. Wednesdays, one thing the room does. Fridays, what changed and what still isn't true.
->
-> If you're carrying a music licence on a live campaign and you're not sure what it covers, send it over. I'll read it and send back one page: what it covers, and where it doesn't. Costs me an hour. It isn't a pitch.
->
-> I'm one person, building a roster one signed agreement at a time. I read every brief and I'm on every call. I'm also AV director at Encore, which is where I learned what a real load-in does to a schedule.
+> If you commission music, I'd like to hear how you do it — who writes the brief, who clears it, where it usually goes wrong. I learn more from producers than from anyone.
 
 ### Experience — Chordential (a second current position; Encore stays)
 
@@ -104,7 +98,7 @@ Three a week, never a fourth. No links while the front door is being fixed. No i
 >
 > What I'm doing about the second list: talking to thirty producers in the Southeast, by hand, one at a time, and finding the composers I want to hire. If you're a producer or a head of production, I'd rather ask you how you buy music than tell you how I sell it.
 >
-> One thing I can do today. If you're carrying a music licence on a live campaign and you're not certain what it covers, send it to me. I'll read it and send back one page: what it covers, and where it doesn't. An hour of my time. Not a pitch.
+> One thing I can do today. I've spent years on the receiving end of other people's deliverables, so I wrote down what a music delivery should actually contain before anyone calls it done — the versions, the stems, the cue sheet, the rights, a manifest so nobody asks whether that was all of it. It works on any vendor, not just me. Ask and I'll send it over.
 
 ### Monday 21 Sep — the studio I did not buy
 
