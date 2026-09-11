@@ -1,0 +1,105 @@
+{# One-tap creator capture (ADR-0097).
+
+   Standalone, not base.html: this opens on a phone in the middle of scrolling a
+   forum, and the admin chrome — nav, topbar, the whole dashboard — is a second of
+   loading and a screen of things that are not this. It also renders on someone
+   else's Wi-Fi, so it carries no external asset at all.
+
+   Prefilled by the bookmarklet or the share-sheet shortcut. The only required field
+   is the URL, and it is already filled in; everything else is worth typing only when
+   the operator actually knows it. A row whose name is a Reddit handle with a live
+   link under it beats a row that never got made. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Capture · Chordential</title>
+<style>
+:root{--paper:#F4F3EF;--ink:#1B1A17;--muted:#6F6A5E;--line:#D9D5CB;--well:#ECEAE3;
+  --ember:#BF4F27;--ember-ink:#fff;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--paper:#151412;--ink:#EDEAE2;--muted:#A39D90;
+  --line:#33302A;--well:#1E1C19;--ember:#E0673B;--ember-ink:#151412}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
+  font-size:17px;line-height:1.5;padding:22px 18px 60px}
+main{max-width:32rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 2px;font-weight:600}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 14px}
+label{display:block;margin-top:16px}
+label b{display:block;font-size:.82rem;font-weight:600;margin-bottom:5px}
+label i{font-style:normal;color:var(--muted);font-weight:400}
+input[type=text],input[type=email],input[type=url],textarea,select{
+  width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);
+  border-radius:7px;background:var(--well);color:var(--ink);-webkit-appearance:none}
+textarea{min-height:76px;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--ember);outline-offset:1px;border-color:transparent}
+.src{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.src label{margin:0}
+.src input{position:absolute;opacity:0;pointer-events:none}
+.src span{display:inline-block;padding:7px 12px;border:1px solid var(--line);border-radius:999px;
+  font-size:.85rem;cursor:pointer;background:var(--well)}
+.src input:checked+span{background:var(--ember);color:var(--ember-ink);border-color:var(--ember)}
+.src input:focus-visible+span{outline:2px solid var(--ink);outline-offset:2px}
+.crafts{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.crafts label{margin:0;display:inline-flex;align-items:center;gap:7px;padding:7px 12px;
+  border:1px solid var(--line);border-radius:999px;font-size:.85rem;background:var(--well)}
+.crafts input{width:17px;height:17px;accent-color:var(--ember);margin:0}
+button{margin-top:24px;width:100%;font:inherit;font-weight:600;font-size:17px;
+  padding:15px;border:0;border-radius:8px;background:var(--ember);color:var(--ember-ink);cursor:pointer}
+.link{font-family:var(--mono);font-size:.72rem;color:var(--muted);word-break:break-all;
+  border-left:2px solid var(--line);padding-left:10px;margin-top:6px}
+.note{color:var(--muted);font-size:.88rem;margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Chordential · capture</p>
+  <h1>{{ title or "A creator" }}</h1>
+  <p class="link">{{ url }}</p>
+
+  <form method="post" action="/capture/creator">
+    <input type="hidden" name="k" value="{{ k }}">
+    <input type="hidden" name="url" value="{{ url }}">
+
+    <label><b>Name <i>— or leave it, the handle will do</i></b>
+      <input type="text" name="name" autocomplete="off" autocapitalize="words"></label>
+
+    <label><b>Handle <i>— their username in that room</i></b>
+      <input type="text" name="handle" value="{{ handle }}" autocomplete="off"
+             autocapitalize="none" spellcheck="false"></label>
+
+    <label><b>Where</b></label>
+    <div class="src">
+      {% for s in sources %}
+      <label><input type="radio" name="source" value="{{ s }}"
+        {% if s == source %}checked{% endif %}><span>{{ s }}</span></label>
+      {% endfor %}
+    </div>
+
+    <label><b>What they do <i>— if you can tell yet</i></b></label>
+    <div class="crafts">
+      {% for d in disciplines %}
+      <label><input type="checkbox" name="discipline" value="{{ d.value }}">{{ d.label }}</label>
+      {% endfor %}
+    </div>
+
+    <label><b>Email <i>— if it is on the page</i></b>
+      <input type="email" name="email" autocomplete="off" autocapitalize="none"
+             spellcheck="false"></label>
+
+    <label><b>What you noticed</b>
+      <textarea name="note" placeholder="The thing that made you stop.">{{ note }}</textarea></label>
+
+    <button type="submit">Save to the roster</button>
+  </form>
+
+  <p class="note">This writes a prospect with the link above attached. Nothing is sent to
+    anyone, and nobody is contacted until you do it yourself from their page.</p>
+</main>
+</body>
+</html>

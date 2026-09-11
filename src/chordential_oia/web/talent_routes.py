@@ -120,7 +120,7 @@ def capture_form(request: Request, k: str = "", url: str = "", title: str = "",
         return HTMLResponse("Not found", status_code=404)
     src = capture.source_for(url)
     return render(
-        request, "capture.html", active="",
+        request, "capture_creator.html", active="",
         k=k, url=url, title=(title or "").strip(), note=(note or "").strip(),
         source=src, sources=capture.SOURCES,
         handle=capture.handle_for(url, src),
