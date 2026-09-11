@@ -160,6 +160,22 @@ term / exclusivity / publishing · cue sheet · chain of title · on file · ste
 the package · the manifest · creative fee / licence fee · composer (by name to the studio,
 by role to the client) · finished · made by people.
 
+**Never write the founder as an owner** (the founder, 2026-09-11, striking his own About):
+*"I feel like I'm bragging about my goal is to own a place."* He owns it; that is not the
+thing to say. He describes the service, not the position: *help their work get made and
+get out into the world*, never *own the place where they get paid*. Related, and his
+sharper catch: *"I started with advertising because that's where the budget is left"*
+**reads as money for him.** The fix is not to hide the money but to say whose it is —
+*one of the few places left that will pay a composer properly for original work*. Same
+fact, and it belongs to them. He is honest that he is also doing this for money; that
+belongs in a conversation, not on a page that is about the people who write.
+
+Note for any seat tempted by his own phrasing: he says *"platform"* and *"middleman"* in
+conversation. Neither survives into copy. **Platform** is on the never-list below — a
+producer hiring music does not want to hire software. **Middleman** sits between two
+parties and takes a cut; **producer** makes something happen that would not otherwise.
+Same seat, opposite reputation, and his is the second.
+
 **Never define a word to the reader** (the founder, 2026-09-10). *"Composed means written
 for this campaign…"* was on his own About page until he struck it: a producer knows what
 composed means, and being told puts the writer above the reader. These three words are not

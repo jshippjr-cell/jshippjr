@@ -8,11 +8,11 @@ the marketing folder: it is the first thing a producer sees after a connection r
 
 **The founder's own facts, in his words (2026-09-10).** He is not a working composer. He
 has ideas daily, used to compose, stopped, says he lacks the discipline to finish them,
-and has a folder full of unfinished things. His motive is to own the place where the
-people he admires get their work out — he says he could have been good at composing
+and has a folder full of unfinished things. His motive is to help the people he admires
+get their work made and out into the world — he says he could have been good at composing
 and lacked the discipline, and what he values in them is the tenacity and focus he
 didn't have. Not their sacrifice: their staying power. He chose advertising because that is
-where the budget to pay them still is. He tried to buy a recording studio in 2025, asked
+it is one of the few places left that will pay a composer properly for original work. He tried to buy a recording studio in 2025, asked
 for financials, was refused, offered to operate it for a year at rent so both sides could
 see real numbers, was refused again, and walked. His long aim is a 2,500 to 3,000 square
 foot room built for chamber orchestra where a composer dials in and conducts remotely.
@@ -32,7 +32,7 @@ The digital business exists to earn that room.
 >
 > I'm not a composer. Melodies and rhythms arrive most days and I have a folder full of things I never finished — I don't have the discipline to flush them out, and I stopped pretending I would. I still like making music. I can't help it.
 >
-> Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it, and I think I could have been good at this if I'd had it. So I'd rather own the place where those people get their work out and get paid properly for it. I started with advertising because that's where the budget to do that is still left.
+> Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it, and I think I could have been good at this if I'd had it. What I can do is help their work get made and get out into the world. That's what Chordential is for. I started with advertising because it's one of the few places left that will pay a composer properly for original work.
 >
 > So here is what we do for you.
 >
@@ -74,11 +74,11 @@ Three a week, never a fourth. No links while the front door is being fixed. No i
 >
 > Some people have what I don't. The tenacity to stay with one idea until it's finished, and the focus to keep getting better at one thing for years while everything else waits. I admire it. I think I could have been good at this if I'd had it.
 >
-> I can't do that. So I'm building the place that pays the people who can.
+> I can't do that. What I can do is help the people who can get their work made, and get them paid properly for it.
 >
 > That's Chordential. Original music for campaigns, written by a composer whose name goes on the cue sheet, delivered finished with the paper that lets you actually use it.
 >
-> I started with advertising because that's where the budget to pay a composer properly still exists.
+> I started with advertising because it's one of the few places left that will pay a composer properly for original work.
 
 ### Wednesday 16 Sep — one thing the room does
 
