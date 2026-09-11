@@ -160,6 +160,15 @@ term / exclusivity / publishing · cue sheet · chain of title · on file · ste
 the package · the manifest · creative fee / licence fee · composer (by name to the studio,
 by role to the client) · finished · made by people.
 
+**Never flatter the reader** (the founder, 2026-09-11, striking *"I learn more from
+producers than from anyone"*): *"thats false i learn from everyone."* The producer
+reviewer had independently flagged the same line — *"flattery and I can hear it"* — which
+is how reliably a buyer detects it. The rule is wider than the sentence: no claim that
+ranks the reader above other people to win them, no *you know better than anyone*, no
+*you deserve*. An ask stands on its own. The About now simply ends on the question, and
+the outbound sequence says he would rather understand the job before trying to sell into
+it, which is true of him rather than flattering to them.
+
 **Never lift ourselves by lowering an adjacent craft** (the founder, 2026-09-11, striking
 *"advertising is one of the few places left that will pay a composer properly"*): *"feels
 like a jab to other disciplines and i dont like it."* Right, and it is §5's rule about

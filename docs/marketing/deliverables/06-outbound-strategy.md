@@ -147,7 +147,7 @@ only when brief §8 is done. Never a recording, never a player.
 >
 > Last one from me. I'd like twenty minutes to hear how music gets bought on your jobs —
 > who writes the brief, who clears it, where it goes wrong. Not a pitch. I'm building a
-> small music house in {city} and I learn more from producers than from anyone. I'll send
+> small music house in {city} and I'll send
 > you what I heard, in writing, the same day, so you can correct it.
 >
 > {slots}

@@ -44,7 +44,7 @@ The digital business exists to earn that room.
 >
 > And you're in the room the whole time, with us. You, me and the composer, working in the same place. You play the take and mark the exact second you mean; the composer sees it where they're working, on the right version, in context. Nothing gets relayed second-hand, nothing gets buried in a thread, and nobody has to ask which version anyone meant. Rounds are numbered, so everyone always knows where they stand.
 >
-> If you commission music, I'd like to hear how you do it — who writes the brief, who clears it, where it usually goes wrong. I learn more from producers than from anyone.
+> If you commission music, I'd like to hear how you do it — who writes the brief, who clears it, where it usually goes wrong.
 
 ### Experience — Chordential (a second current position; Encore stays)
 
