@@ -1,4 +1,43 @@
-# The First Commission — one composer, one piece, the whole product run once
+# The First Piece — one composer, one piece, no money
+
+> **SUPERSEDED IN PART, 2026-09-11, by the founder.** He read the plan below and rejected
+> four things in it. Each rejection is recorded here because the reasoning outlives the
+> document; the plan he actually works from is the artifact
+> `https://claude.ai/code/artifact/54c00526-a345-40db-a14e-235dd8469c37`.
+>
+> 1. **There is no $3,700.** *"We need to come up with a plan where a composer can partner
+>    with me upfront as I launch this because I have no money."* The commission becomes a
+>    **trade**: he cuts the picture and writes the brief — cutting picture is his actual
+>    profession and is the thing a composer building a reel cannot get on their own — and
+>    the composer writes the music. Nobody invoices anybody and **the composer keeps the
+>    copyright**, licensing it to Chordential for the site. That last term is what
+>    separates it from spec. Only cost is stock footage, about $300.
+>    **The standing risk, named and not resolved:** it is unpaid work from a house whose
+>    position is that it pays people. Three rules hold the line — offer it only to someone
+>    building a reel, never call it an opportunity or a favour, and never ask for a change
+>    outside the agreed rounds. Any money he finds is paid and called a fee; paid and small
+>    beats free and generous.
+> 2. **He is the client.** *"I don't think there's a reason to let them know that there is
+>    no client. I am their client."* Correct, and the old letter's "there is no client,
+>    there has never been one" is struck. Chordential commissions it and Chordential pays
+>    for it, which is the whole truth and needs no apology.
+> 3. **"What I'm not offering: a job after this one, a client, volume"** — struck as
+>    *"rude, and it prohibits me from developing future relationship."* The anti-overclaim
+>    instinct was right and the execution slammed a door on the relationship the whole
+>    exercise exists to start. The replacement promises nothing and closes nothing: first
+>    on the roster, first call when a paid brief exists, and no pretence about when.
+> 4. **The by-the-second grid is cut to the arc and one picture event.** He asked how a
+>    composer scores to timings with no picture; the answer is that the picture is cut
+>    first, which this document buried. And over-specifying insults a good writer: they
+>    find things in the picture nobody else saw.
+>
+> Also struck from anything he reads: §5's gap list and its talk of client signatures,
+> deposits, kickoff and pay models. *"Why do we have to have signatures and kick off and
+> deposits, pay models? What is all of that?"* — it is the product's internal plumbing,
+> written for the CEO seat and noise to the founder. It stays below for the engineer and
+> never appears in a founder-facing document again.
+
+---
 
 *Wave 5, 2026-09-10. Reads under `docs/marketing/00-brief.md`; the brief wins. Every screen, route
 and clause named here is read out of the code. The build is frozen: a step the product cannot take
