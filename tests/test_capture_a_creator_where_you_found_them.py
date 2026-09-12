@@ -208,3 +208,32 @@ def test_a_handle_is_only_taken_where_the_url_states_one(app_mod):
     assert capture.handle_for("https://www.reddit.com/u/mira") == "mira"
     assert capture.handle_for("https://www.reddit.com/r/composer/comments/x/y/") == ""
     assert capture.handle_for("https://example.test/anyone") == ""
+
+
+def test_the_bookmarklet_cannot_be_pressed_on_the_setup_page(app_mod):
+    """It is a thing to DRAG, and it looks exactly like a thing to press.
+
+    The founder pressed it (2026-09-11) and captured the setup page he was standing
+    on. The gig-capture page had already solved this with `onclick="return false;"`
+    and a "drag me" label; this one had not copied it.
+    """
+    from chordential_oia.web.shell import ADMIN_COOKIE, admin_cookie_value
+    jon = TestClient(app_mod.app)
+    jon.cookies.set(ADMIN_COOKIE, admin_cookie_value("passphrase"))
+    page = jon.get("/talent/capture-setup").text
+    assert 'onclick="return false;"' in page, "clicking the bookmarklet still fires it"
+    assert "drag me to the bookmarks bar" in page
+
+
+def test_capturing_our_own_site_says_so(app_mod, monkeypatch):
+    """Belt to the braces above: whatever the button does, a capture of our own domain
+    has no creator in it, and the form should say that rather than take the row
+    silently."""
+    c = TestClient(app_mod.app)
+    from chordential_oia.web.shell import public_base
+    own = public_base().rstrip("/") + "/talent/capture-setup"
+    page = c.get(f"/capture/creator?k={TOKEN}&url={own}").text
+    assert "nobody here to capture" in page
+    assert "Save anyway" in page, "the escape hatch is still there, just not the default"
+    other = c.get(f"/capture/creator?k={TOKEN}&url=https://www.reddit.com/user/mira/").text
+    assert "nobody here to capture" not in other

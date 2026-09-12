@@ -23,10 +23,18 @@
 
   <h3 style="margin:18px 0 6px;font-size:1rem">On a computer</h3>
   <p class="muted small" style="margin:0 0 8px">
-    Drag this to your bookmarks bar, or make a new bookmark and paste it as the address.
-    Then press it on any page where you have found someone.
+    <b>Drag</b> this to your bookmarks bar — do not click it here. Then press it while you
+    are on the page where you found someone, and the form opens with their link in it.
   </p>
-  <p><a class="btn" href="{{ bookmarklet }}">＋ Capture to Chordential</a></p>
+  <p>
+    <a class="btn primary" href="{{ bookmarklet }}" onclick="return false;"
+       draggable="true">＋ Capture to Chordential</a>
+    <span class="muted small" style="margin-left:8px">← drag me to the bookmarks bar</span>
+  </p>
+  <p class="muted small" style="margin:6px 0 0">
+    Clicking it here does nothing on purpose — it only works from the page you are
+    capturing, and pressing it on this page would just save this page.
+  </p>
   <details style="margin-top:10px">
     <summary class="muted small" style="cursor:pointer">Or copy the address by hand</summary>
     <textarea readonly rows="4" style="width:100%;font-family:ui-monospace,Menlo,monospace;

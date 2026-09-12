@@ -119,8 +119,11 @@ def capture_form(request: Request, k: str = "", url: str = "", title: str = "",
     if not capture.token_ok(k):
         return HTMLResponse("Not found", status_code=404)
     src = capture.source_for(url)
+    # Capturing our own site is always a slip — usually the setup page, from pressing
+    # the bookmarklet instead of dragging it. Say so rather than writing the row.
+    own = bool(url) and url.startswith(_public_base().rstrip("/"))
     return render(
-        request, "capture_creator.html", active="",
+        request, "capture_creator.html", active="", own_site=own,
         k=k, url=url, title=(title or "").strip(), note=(note or "").strip(),
         source=src, sources=capture.SOURCES,
         handle=capture.handle_for(url, src),
