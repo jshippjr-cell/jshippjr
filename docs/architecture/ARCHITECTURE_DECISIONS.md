@@ -4061,6 +4061,28 @@ without the risk, and the message is his. Two new `talent` columns, `handle` and
 `linkedin_url`, hold where it can be sent; both come from a URL the operator was looking
 at, and neither is inferred.
 
+**Amendment (2026-09-12) — it has to read the page, not its address.** The first
+bookmarklet sent `location.href`, `document.title` and the selection. On a forum thread
+that is the THREAD's title and nothing else, while the member's name sits two elements
+away in the markup — so the capture saved one paste and cost a bookmark. The founder's
+verdict was *"kinda useless"*, and the screenshots were a VI-Control thread beside the
+member profile it should have read.
+
+It now pulls the person out of the page: XenForo's `.memberHeader-name`, else the author
+of the post the selection sits inside, else the first post's author; a Reddit username
+from the URL or the first `/user/` link; the first `mailto:`; and up to five links to
+SoundCloud, Bandcamp, Spotify, Apple Music, YouTube, Vimeo or Linktree, offered on the
+form as pickable chips. **The reel link earns its place because `talent.matchable` waits
+on it** — the row is unusable until a reel is on file and approved, and the link is
+almost always already on the page.
+
+Everything it finds is a PROPOSAL on a form a human looks at, which is what makes
+guessing safe here: a wrong guess costs a glance, and not guessing costs the capture.
+**The phone path cannot do any of this** — iOS will not let a share-sheet shortcut read
+the page — so the setup page now says so rather than implying the two are equivalent:
+on a phone you capture the link so as not to lose someone, and finish the row later.
+
+
 **Consequence.** Adding a fourth channel means adding a door that opens a composed
 message, never one that sends on the studio's behalf; if a channel ever sends without a
 human, it must be because its terms invite it and a real person decided so, not because

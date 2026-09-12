@@ -117,19 +117,68 @@ def reddit_compose_url(handle: str, subject: str, body: str) -> str:
 
 
 def bookmarklet(base: str, token: str) -> str:
-    """The one-line bookmark that opens a prefilled capture form from any page.
+    """The bookmark that READS the page, not just its address.
 
-    Sends the page URL, its title and the current selection. Kept to one statement and
-    no dependencies because it has to survive being pasted into a phone's bookmark
-    field, where a newline ends it.
+    The first version sent `location.href`, `document.title` and the selection, which
+    on a forum thread means the thread's title and nothing else — while the member's
+    name sits in the markup two elements away. The founder's verdict on that was
+    "kinda useless" (2026-09-11) and it was correct: saving one paste is not worth a
+    bookmark.
+
+    So this pulls the person out of the page. In order of confidence:
+
+    * **XenForo** (VI-Control and most music forums): `.memberHeader-name` on a member
+      profile, else the author of the post the selection is inside, else the first post's
+      author. The name a forum renders is the name to write down.
+    * **Reddit**: the username from the URL on a profile, else the first `/user/` link
+      on the page, which on a comment permalink is its author.
+    * Anything else: `og:title`, and only when the page looks like a profile.
+    * **An email**, from the first `mailto:` on the page.
+    * **Reel candidates** — links to SoundCloud, Bandcamp, Spotify, Apple Music, YouTube,
+      Vimeo and Linktree. `talent.matchable` needs an approved reel, so the link to the
+      work is the field that decides whether the row is ever usable, and it is almost
+      always already on the page as a signature or a profile field.
+
+    Everything it finds is a PROPOSAL on a form the operator looks at. Nothing here is
+    written without a human seeing it, which is why guessing is safe: a wrong guess costs
+    a glance, and the alternative costs the capture.
     """
     target = f"{base.rstrip('/')}/capture/creator?k={quote(token)}"
-    return (
-        "javascript:(function(){var s='';try{s=String(window.getSelection()||'')}"
-        "catch(e){};window.open('" + target + "&url='+encodeURIComponent(location.href)"
-        "+'&title='+encodeURIComponent(document.title||'')"
-        "+'&note='+encodeURIComponent(s.slice(0,600)),'_blank');})()"
+    js = (
+        "javascript:(function(){"
+        "var d=document,L=location.href,T=function(e){return e?(e.textContent||'').trim():''};"
+        "var n='',em='',R=[];"
+        # XenForo: member profile header, then the post the selection sits in
+        "var h=d.querySelector('.memberHeader-name .username,.memberHeader-name,h1.memberHeader-name');"
+        "if(h)n=T(h);"
+        "var sel='';try{sel=String(window.getSelection()||'')}catch(e){}"
+        "if(!n){var a=null;try{var r=window.getSelection();"
+        "if(r&&r.rangeCount){var p=r.getRangeAt(0).startContainer;"
+        "p=p.nodeType===1?p:p.parentNode;"
+        "while(p&&p!==d.body){if(p.querySelector&&p.querySelector('.message-name .username,.message-name'))"
+        "{a=p.querySelector('.message-name .username,.message-name');break}p=p.parentNode}}}catch(e){}"
+        "if(a)n=T(a);}"
+        "if(!n){var f=d.querySelector('.message-name .username,.message-name');if(f)n=T(f);}"
+        # Reddit
+        "if(!n){var m=L.match(/\\/(?:user|u)\\/([A-Za-z0-9_\\-]{2,30})/);if(m)n=m[1];}"
+        "if(!n){var ru=d.querySelector('a[href*=\"/user/\"]');"
+        "if(ru){var m2=ru.getAttribute('href').match(/\\/user\\/([A-Za-z0-9_\\-]{2,30})/);if(m2)n=m2[1];}}"
+        # an email, if the page states one
+        "var ml=d.querySelector('a[href^=\"mailto:\"]');"
+        "if(ml)em=ml.getAttribute('href').slice(7).split('?')[0];"
+        # where the work lives
+        "var as=d.querySelectorAll('a[href]');"
+        "for(var i=0;i<as.length&&R.length<5;i++){var u=as[i].href||'';"
+        "if(/soundcloud\\.com|bandcamp\\.com|open\\.spotify\\.com|music\\.apple\\.com"
+        "|youtube\\.com\\/(?:c|channel|user|@)|vimeo\\.com|linktr\\.ee/i.test(u)"
+        "&&R.indexOf(u)<0)R.push(u);}"
+        "var E=encodeURIComponent;"
+        "window.open('" + target + "'"
+        "+'&url='+E(L)+'&title='+E(d.title||'')+'&name='+E(n)"
+        "+'&email='+E(em)+'&note='+E(sel.slice(0,600))"
+        "+'&reels='+E(R.join('|')),'_blank');})()"
     )
+    return js
 
 
 def capture_url(base: str, token: str) -> str:

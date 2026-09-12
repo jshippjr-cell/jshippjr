@@ -54,6 +54,13 @@ button{margin-top:24px;width:100%;font:inherit;font-weight:600;font-size:17px;
 .link{font-family:var(--mono);font-size:.72rem;color:var(--muted);word-break:break-all;
   border-left:2px solid var(--line);padding-left:10px;margin-top:6px}
 .note{color:var(--muted);font-size:.88rem;margin-top:18px}
+.reels{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.pick{width:100%;margin:0;font:inherit;font-size:.82rem;font-weight:400;padding:9px 12px;
+  border:1px solid var(--line);border-radius:7px;background:var(--well);color:var(--ink);
+  text-align:left;word-break:break-all;cursor:pointer}
+.pick:focus-visible{outline:2px solid var(--ember);outline-offset:1px}
+.pick.on{border-color:var(--ember);background:var(--ember);color:var(--ember-ink)}
+.hint{color:var(--muted);font-size:.8rem;margin-top:6px}
 .own{border-left:3px solid var(--ember);padding:2px 0 2px 13px;margin-top:16px;font-size:.95rem}
 </style>
 </head>
@@ -73,8 +80,9 @@ button{margin-top:24px;width:100%;font:inherit;font-weight:600;font-size:17px;
     <input type="hidden" name="k" value="{{ k }}">
     <input type="hidden" name="url" value="{{ url }}">
 
-    <label><b>Name <i>— or leave it, the handle will do</i></b>
-      <input type="text" name="name" autocomplete="off" autocapitalize="words"></label>
+    <label><b>Name <i>— read off the page; correct it if it is wrong</i></b>
+      <input type="text" name="name" value="{{ person }}" autocomplete="off"
+             autocapitalize="words"></label>
 
     <label><b>Handle <i>— their username in that room</i></b>
       <input type="text" name="handle" value="{{ handle }}" autocomplete="off"
@@ -95,9 +103,22 @@ button{margin-top:24px;width:100%;font:inherit;font-weight:600;font-size:17px;
       {% endfor %}
     </div>
 
-    <label><b>Email <i>— if it is on the page</i></b>
-      <input type="email" name="email" autocomplete="off" autocapitalize="none"
-             spellcheck="false"></label>
+    <label><b>Email <i>— if the page states one</i></b>
+      <input type="email" name="email" value="{{ email }}" autocomplete="off"
+             autocapitalize="none" spellcheck="false"></label>
+
+    <label><b>Their work <i>— the link that decides whether this row is usable</i></b>
+      <input type="url" id="reel" name="demo_reel_url" autocomplete="off"
+             autocapitalize="none" spellcheck="false"
+             placeholder="soundcloud.com/… , a site, anywhere you can hear it"></label>
+    {% if reels %}
+    <div class="reels">
+      {% for r in reels %}
+      <button type="button" class="pick" data-url="{{ r }}">{{ r|truncate(46, true, "…") }}</button>
+      {% endfor %}
+    </div>
+    <p class="hint">Found on the page — tap one to use it.</p>
+    {% endif %}
 
     <label><b>What you noticed</b>
       <textarea name="note" placeholder="The thing that made you stop.">{{ note }}</textarea></label>
@@ -108,5 +129,18 @@ button{margin-top:24px;width:100%;font:inherit;font-weight:600;font-size:17px;
   <p class="note">This writes a prospect with the link above attached. Nothing is sent to
     anyone, and nobody is contacted until you do it yourself from their page.</p>
 </main>
+<script>
+(function(){
+  var reel=document.getElementById("reel");
+  if(!reel) return;
+  document.querySelectorAll(".pick").forEach(function(b){
+    b.addEventListener("click",function(){
+      reel.value=b.getAttribute("data-url")||"";
+      document.querySelectorAll(".pick").forEach(function(o){o.classList.remove("on")});
+      b.classList.add("on");
+    });
+  });
+})();
+</script>
 </body>
 </html>

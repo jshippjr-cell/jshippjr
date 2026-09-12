@@ -237,3 +237,54 @@ def test_capturing_our_own_site_says_so(app_mod, monkeypatch):
     assert "Save anyway" in page, "the escape hatch is still there, just not the default"
     other = c.get(f"/capture/creator?k={TOKEN}&url=https://www.reddit.com/user/mira/").text
     assert "nobody here to capture" not in other
+
+
+def test_the_bookmarklet_reads_the_page_not_just_its_address(app_mod):
+    """The first version sent the URL, the title and the selection — which on a forum
+    thread is the THREAD's title and nothing else, while the member's name sits two
+    elements away in the markup. The founder's verdict was "kinda useless" and it was
+    right: saving one paste does not earn a bookmark.
+    """
+    from chordential_oia.web import capture
+    js = capture.bookmarklet("https://chordential.test", TOKEN)
+    assert "\n" not in js, "a newline ends a bookmarklet pasted into a bookmark field"
+    # the three things it has to find on the page
+    assert "memberHeader-name" in js and "message-name" in js, "no forum member name"
+    assert "mailto:" in js, "no email"
+    assert "soundcloud" in js and "bandcamp" in js, "no link to the work"
+    # and it must hand them over
+    for param in ("&name=", "&email=", "&reels=", "&url="):
+        assert param in js, f"{param} never reaches the form"
+
+
+def test_what_the_page_gave_up_arrives_in_the_form(app_mod):
+    c = TestClient(app_mod.app)
+    page = c.get(
+        f"/capture/creator?k={TOKEN}"
+        "&url=https://vi-control.net/community/threads/a-thread.172115/"
+        "&title=Indie+Film+Music+Contest+Summer+2026"
+        "&name=Remnant&email=r%40x.test"
+        "&reels=https%3A%2F%2Fsoundcloud.com%2Fremnant%7Chttps%3A%2F%2Fvimeo.com%2Fremnant"
+    ).text
+    assert 'value="Remnant"' in page, "the member name was on the page and not carried"
+    assert 'value="r@x.test"' in page
+    assert page.count('class="pick"') == 2, "the links to their work are not offered"
+    assert "soundcloud.com/remnant" in page
+
+
+def test_the_link_to_the_work_is_saved_because_it_gates_everything(app_mod):
+    """`talent.matchable` needs an approved reel, so the reel link decides whether the
+    row is ever usable — and it is almost always already on the page."""
+    from chordential_oia.web import db
+    c = TestClient(app_mod.app)
+    c.post("/capture/creator", data={
+        "k": TOKEN, "url": "https://vi-control.net/community/threads/a.172115/",
+        "name": "Remnant", "handle": "Remnant", "source": "vi-control",
+        "demo_reel_url": "https://soundcloud.com/remnant"}, follow_redirects=False)
+    conn = db.connect()
+    try:
+        row = conn.execute("SELECT name, demo_reel_url FROM talent ORDER BY id DESC LIMIT 1").fetchone()
+    finally:
+        conn.close()
+    assert row["name"] == "Remnant"
+    assert row["demo_reel_url"] == "https://soundcloud.com/remnant"

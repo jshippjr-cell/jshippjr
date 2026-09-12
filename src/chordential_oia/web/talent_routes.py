@@ -115,7 +115,7 @@ _ADD_SOURCES = {"manual", "sourced", "referral"}
 # --------------------------------------------------------------------------- #
 @router.get("/capture/creator", response_class=HTMLResponse)
 def capture_form(request: Request, k: str = "", url: str = "", title: str = "",
-                 note: str = ""):
+                 note: str = "", name: str = "", email: str = "", reels: str = ""):
     if not capture.token_ok(k):
         return HTMLResponse("Not found", status_code=404)
     src = capture.source_for(url)
@@ -126,7 +126,13 @@ def capture_form(request: Request, k: str = "", url: str = "", title: str = "",
         request, "capture_creator.html", active="", own_site=own,
         k=k, url=url, title=(title or "").strip(), note=(note or "").strip(),
         source=src, sources=capture.SOURCES,
-        handle=capture.handle_for(url, src),
+        # What the bookmarklet read off the page. The handle falls back to the URL for
+        # the share-sheet path, which cannot run JavaScript and so arrives with a link
+        # and nothing else.
+        person=(name or "").strip(),
+        handle=(name or "").strip() or capture.handle_for(url, src),
+        email=(email or "").strip(),
+        reels=[r for r in (reels or "").split("|") if r.strip()][:5],
         disciplines=FORM_DISCIPLINES,
     )
 
@@ -141,6 +147,7 @@ def capture_save(
     discipline: List[str] = Form(default=[]),
     note: str = Form(""),
     email: str = Form(""),
+    demo_reel_url: str = Form(""),
 ):
     """Write the row. The URL is required and the name is not: a Reddit thread often
     gives a username and nothing else, and a row whose name is a handle with a live
@@ -160,6 +167,9 @@ def capture_save(
         tid = db.insert_talent(conn, Talent(
             name=label, email=(email or "").strip() or None, disciplines=discs,
             notes=(note or "").strip(), source=src, source_url=link,
+            # The link to the work is what `talent.matchable` waits on, so it is worth a
+            # field on a form this short — and it is usually already on the page.
+            demo_reel_url=normalize_url(demo_reel_url) or None,
         ))
         db.set_talent_contact(conn, tid, handle=hdl)
     finally:
