@@ -4087,3 +4087,50 @@ on a phone you capture the link so as not to lose someone, and finish the row la
 message, never one that sends on the studio's behalf; if a channel ever sends without a
 human, it must be because its terms invite it and a real person decided so, not because
 an API existed.
+
+---
+
+## ADR-0098 — The live door records what became of every arrival
+
+**2026-09-21. Status: accepted.**
+
+**An empty copilot panel has six causes and had one symptom.** The chain is: the copilot
+switched on → a stream URL we would hand a bot → a bot armed with that URL → Recall
+posting → the post parsing → the bot id matching a meeting we originated → a line stored.
+Every one of those can fail, and all of them look identical from the panel: nothing ticks.
+
+**`ingest_line` already knew which one it was and threw the answer away.** It returns
+`provider-not-active`, `ignored`, `unmatched` or `stored` — into a 200 body, to Recall,
+which discards it. Nothing was written down, so a call that produced nothing left no
+trace of where it stopped.
+
+**This studio has already paid for a silent link in this exact chain.** `recall.py`
+records it: the transcript provider was `meeting_captions`, which Zoom will not let a
+non-host enable, so "the bot joined every call, recorded it, finished cleanly, and
+produced nothing. Nothing in our system was wrong and nothing surfaced it: no error, no
+failed state, just a discovery call whose notes never arrived." The fix then and the fix
+now are the same: **record the outcome rather than infer it from an absence.**
+
+**`live_ingest_log`** takes one row per arrival — provider, outcome, bot id, meeting, a
+short note — pruned to a tail of 400. The write is best-effort and swallows every
+exception, because it runs inside a webhook while somebody is holding a conversation and
+a diagnostic that can break what it diagnoses is worse than none. Pruning happens on a
+cadence, not per row: a DELETE per utterance is work done during a call for no benefit.
+
+**`copilot.live_health` turns the tail into one sentence**, and the ordering is the
+decision. **Evidence before configuration:** if lines are on file for this call it
+worked, whatever the settings say now — a call is diagnosed after the fact at least as
+often as during, and by then the configuration may have moved. Failing that, the
+**furthest-upstream** break is named, because fixing a later link while an earlier one is
+broken proves nothing. *Nothing arrived at all* and *forty arrived and none matched* are
+different sentences pointing at different fixes: re-arm the bot, versus the bot id on the
+stream is not the one stored against this meeting.
+
+**The panel draws it on page load, never on the poll**, and leaves it open until a line
+has been stored — the person who needs it is the one staring at a panel that has not
+ticked. The poll stays what it was, because detection already happens on it and this is
+for the setup and the post-mortem, not the conversation.
+
+**Consequence.** Phase 2 was built and tested against recorded transcripts and has never
+carried a live voice. This is what makes the first real call diagnosable rather than a
+binary that either works or leaves nothing to look at.

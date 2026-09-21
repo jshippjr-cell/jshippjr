@@ -930,11 +930,15 @@ def call_copilot_panel(request: Request, opp_id: int):
         if row is None:
             return HTMLResponse("Opportunity not found", status_code=404)
         meeting = db.meeting_for_opp(conn, opp_id)
+        # What actually happened at the live door (ADR-0098). Read on the page draw,
+        # not on the poll: it is for the person setting this up or working out why a
+        # call produced nothing, and it must not run every four seconds mid-call.
+        health = copilot.live_health(conn, meeting)
     finally:
         conn.close()
     return render(request, "call_copilot.html", nav="inbox", row=row, meeting=meeting,
                   enabled=copilot.enabled(), streaming=bool(M.realtime_url()),
-                  ceiling=copilot.call_ceiling_usd())
+                  ceiling=copilot.call_ceiling_usd(), health=health)
 
 
 @router.get("/opportunity/{opp_id}/copilot.json")

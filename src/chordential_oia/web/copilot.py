@@ -24,6 +24,8 @@ survive a refresh, because recomputing it means paying for it twice.
 """
 from __future__ import annotations
 
+import hmac
+
 import json
 import logging
 import os
@@ -77,19 +79,39 @@ def ingest_line(conn, provider_key: str, headers, body: bytes, token: str) -> di
     from .. import meetings as M
     cp = M.get_capture_provider()
     if cp.name != provider_key or not hasattr(cp, "parse_realtime"):
+        db.log_live_ingest(conn, provider=provider_key, outcome="provider-not-active",
+                           note=f"active provider is {cp.name}")
         return {"ok": True, "ignored": "provider-not-active"}
     line = cp.parse_realtime(headers, body, token=token)
     if not line:
+        # Two very different failures land here and the operator needs them apart: a
+        # rejected token means something is posting to a door that refused it; an
+        # unreadable body means the provider sent a shape this parser does not know.
+        # `parse_realtime` returns None for both and says nothing about which, on
+        # purpose — an endpoint that explains why it rejected you is worth probing — so
+        # the same comparison it makes is repeated here, for the log only.
+        want = (os.environ.get("CHORDENTIAL_COPILOT_TOKEN", "") or "").strip()
+        rejected = (not want) or not hmac.compare_digest(token or "", want)
+        db.log_live_ingest(
+            conn, provider=provider_key,
+            outcome="rejected-token" if rejected else "unreadable-body",
+            note=("no CHORDENTIAL_COPILOT_TOKEN set" if not want else "")
+                 if rejected else f"{len(body or b'')} bytes")
         return {"ok": True, "ignored": True}
-    meeting = db.meeting_by_external(conn, line.get("bot_id") or "")
+    bot = line.get("bot_id") or ""
+    meeting = db.meeting_by_external(conn, bot)
     if meeting is None:
+        db.log_live_ingest(conn, provider=provider_key, outcome="unmatched", bot_id=bot,
+                           note="no meeting stored against this bot id")
         return {"ok": True, "unmatched": True}
-    db.add_live_line(conn, bot_id=line.get("bot_id") or "",
+    db.add_live_line(conn, bot_id=bot,
                      meeting_id=int(meeting["id"]),
                      opp_id=int(meeting["opp_id"] or 0),
                      at_s=float(line.get("at_s") or 0.0),
                      speaker=line.get("speaker") or "",
                      text=line.get("text") or "")
+    db.log_live_ingest(conn, provider=provider_key, outcome="stored", bot_id=bot,
+                       meeting_id=int(meeting["id"]))
     return {"ok": True, "stored": True}
 
 
@@ -309,6 +331,80 @@ def _parse_values(raw: Optional[str], allowed: set) -> Dict[str, str]:
         if key in allowed and isinstance(value, str) and value.strip():
             out[str(key)] = value.strip()[:300]
     return out
+
+
+def live_health(conn, meeting=None) -> dict:
+    """Which link in the chain is broken, in the words of what actually happened.
+
+    The chain is: copilot on → a stream URL we would hand a bot → a bot armed with it →
+    Recall posting → the post parsing → the bot id matching a meeting we originated →
+    a line stored. Six places to stop, one symptom: an empty panel.
+
+    This reports the state of each rather than the symptom, because the studio has
+    already paid once for a silent link in exactly this chain (see `recall.py` on
+    `meeting_captions`): the bot joined, recorded, finished cleanly and produced nothing,
+    and nothing anywhere said so.
+    """
+    from .. import meetings as M            # lazy, as ingest_line does — avoids a cycle
+    stream = M.realtime_url()
+    summary = db.live_ingest_summary(conn)
+    stored_here = 0
+    bot = ""
+    if meeting is not None:
+        keys = meeting.keys()
+        bot = (meeting["external_id"] if "external_id" in keys else "") or ""
+        try:
+            stored_here = int(conn.execute(
+                "SELECT COUNT(*) c FROM live_transcript WHERE meeting_id = ?",
+                (int(meeting["id"]),)).fetchone()["c"])
+        except Exception:  # noqa: BLE001
+            stored_here = 0
+    by = summary.get("by_outcome", {})
+
+    # The one sentence worth reading. Ordered by which failure is furthest upstream,
+    # because fixing a later link while an earlier one is broken proves nothing.
+    # EVIDENCE BEFORE CONFIGURATION. If lines are on file for this call, it worked —
+    # whatever the settings say now. A call is diagnosed after it happened at least as
+    # often as during, and by then the configuration may have moved.
+    if stored_here:
+        verdict = f"Working — {stored_here} lines stored for this call."
+    elif not enabled():
+        verdict = "The copilot is switched off, so nothing will arrive."
+    elif not stream:
+        verdict = ("No stream was ever requested — a bot armed now would not be told "
+                   "where to post. Check the three settings above.")
+    elif not bot:
+        verdict = ("No bot has been armed for this meeting yet, so there is nothing "
+                   "to stream from.")
+    elif summary.get("total", 0) == 0:
+        verdict = ("Nothing has arrived at the live door at all. Either the bot was "
+                   "armed before the stream URL existed, or Recall cannot reach this "
+                   "host. Re-arm the bot and check the URL opens from outside.")
+    elif by.get("rejected-token"):
+        verdict = ("Arrivals are being refused on the token. The bot is posting to a "
+                   "URL whose token does not match CHORDENTIAL_COPILOT_TOKEN — usually "
+                   "a bot armed before the variable was last changed.")
+    elif by.get("unmatched") and not stored_here:
+        verdict = ("Lines are arriving but none matches a meeting we originated. The "
+                   "bot id on the stream is not the one stored against this meeting.")
+    elif by.get("unreadable-body"):
+        verdict = ("Lines are arriving and cannot be read. The payload shape is not the "
+                   "one this parser knows.")
+    else:
+        verdict = ("Lines are arriving and being stored, but none for this meeting yet. "
+                   "If the call has started, say something and wait a few seconds.")
+
+    return {
+        "enabled": enabled(),
+        "stream_url": stream,
+        "bot_id": bot,
+        "arrivals": summary.get("total", 0),
+        "by_outcome": by,
+        "last_arrival_at": summary.get("last_at", ""),
+        "stored_here": stored_here,
+        "verdict": verdict,
+        "tail": [dict(r) for r in db.live_ingest_tail(conn, 8)],
+    }
 
 
 def reset(conn, meeting_id: int) -> None:

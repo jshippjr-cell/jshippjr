@@ -84,6 +84,15 @@ copilot must still leave the operator better off than no copilot.
 > Phase 1 **shipped** (`call_prep.score_call`, scored onto the same page). Phase 2
 > **shipped** (`call_copilot.py` + `web/copilot.py` + `/opportunity/{id}/copilot`).
 > Phase 3 is next.
+>
+> **Amended 2026-09-21.** Shipped is not the same as proven, and the difference matters
+> here more than usual. Phases 0–2 are built and hold under 89 tests — **against recorded
+> transcripts**. Phase 2 has never carried a live voice: no Recall configuration exists in
+> `render.yaml`, so the stream has never been asked for in production. Before Phase 3
+> builds resolution on top of that pipeline, **the pipeline carries one real call.**
+> ADR-0098 is what makes that call diagnosable instead of a binary — the live door now
+> records what became of every arrival, and the panel says which link in the chain broke
+> rather than showing the same empty list for all six causes.
 
 ### Phase 0 — The prep sheet *(no live anything; ~half a day)*
 Before the call, render the checklist as a static page from the opportunity: which of the

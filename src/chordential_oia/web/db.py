@@ -1684,6 +1684,29 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_live_transcript_bot "
                  "ON live_transcript (bot_id, id)")
 
+    # EVERY ARRIVAL AT THE LIVE DOOR, AND WHAT BECAME OF IT (ADR-0098).
+    #
+    # `copilot.ingest_line` already diagnoses itself — provider-not-active, ignored,
+    # unmatched, stored — and then hands that diagnosis to Recall in a 200 body, which
+    # Recall discards. So a call that produced nothing left no trace of WHERE it stopped:
+    # whether anything posted at all, whether it parsed, whether the bot id matched. That
+    # is the same silent failure the transcript provider already cost this studio once
+    # ("the bot joined every call, recorded it, finished cleanly, and produced nothing"),
+    # and the fix then was the same as the fix now: record the outcome rather than infer
+    # it from an absence.
+    #
+    # Written on the hot path, so it is one INSERT of small fixed-size values, and pruned
+    # on a cadence rather than every row.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS live_ingest_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT, outcome TEXT, bot_id TEXT, meeting_id INTEGER DEFAULT 0,
+            note TEXT, created_at TEXT
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_ingest_log_at "
+                 "ON live_ingest_log (id)")
+
     # ADR-0016: clients REQUEST, the operator SCHEDULES. Migrate existing meetings rows.
     mtg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(meetings)")}
     for name, decl in {"meeting_type": "TEXT DEFAULT 'zoom'", "request_id": "INTEGER",
@@ -7104,6 +7127,61 @@ def list_meetings(conn: sqlite3.Connection, opp_id: int) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM meetings WHERE opp_id = ? ORDER BY created_at DESC, id DESC",
         (opp_id,)).fetchall()
+
+
+#: Keep the last of these and no more — it is a diagnostic tail, not a record.
+LIVE_INGEST_LOG_KEEP = 400
+
+
+def log_live_ingest(conn: sqlite3.Connection, *, provider: str, outcome: str,
+                    bot_id: str = "", meeting_id: int = 0, note: str = "") -> None:
+    """Record what happened to one arrival at the live door (ADR-0098).
+
+    Best-effort and never raises: this runs inside a webhook during somebody's call, and
+    a diagnostic that can break the thing it is diagnosing is worse than no diagnostic.
+    """
+    try:
+        conn.execute(
+            "INSERT INTO live_ingest_log (provider, outcome, bot_id, meeting_id, note,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            ((provider or "")[:40], (outcome or "")[:40], (bot_id or "")[:120],
+             int(meeting_id or 0), (note or "")[:200], _now()),
+        )
+        # Prune on a cadence, not every row: a DELETE per utterance is work done during
+        # a conversation for no benefit.
+        if (conn.execute("SELECT COUNT(*) c FROM live_ingest_log").fetchone()["c"]
+                > LIVE_INGEST_LOG_KEEP * 2):
+            conn.execute(
+                "DELETE FROM live_ingest_log WHERE id < "
+                "(SELECT MIN(id) FROM (SELECT id FROM live_ingest_log "
+                " ORDER BY id DESC LIMIT ?) t)", (LIVE_INGEST_LOG_KEEP,))
+        conn.commit()
+    except Exception:  # noqa: BLE001 — never break a live call to write a log line
+        pass
+
+
+def live_ingest_tail(conn: sqlite3.Connection, limit: int = 12) -> list:
+    """The most recent arrivals, newest first."""
+    return conn.execute(
+        "SELECT * FROM live_ingest_log ORDER BY id DESC LIMIT ?", (int(limit),)
+    ).fetchall()
+
+
+def live_ingest_summary(conn: sqlite3.Connection) -> dict:
+    """How many arrivals of each outcome, and when the last one was.
+
+    This is what turns "nothing appeared" into a sentence: *forty arrived and every one
+    was unmatched* points at bot-id correlation; *none arrived* points at the bot never
+    being armed with the URL, or at the URL not being reachable.
+    """
+    rows = conn.execute(
+        "SELECT outcome, COUNT(*) c, MAX(created_at) last_at FROM live_ingest_log"
+        " GROUP BY outcome"
+    ).fetchall()
+    by = {r["outcome"]: {"count": int(r["c"]), "last_at": r["last_at"]} for r in rows}
+    total = sum(v["count"] for v in by.values())
+    last = max((v["last_at"] or "") for v in by.values()) if by else ""
+    return {"total": total, "by_outcome": by, "last_at": last}
 
 
 def add_live_line(conn: sqlite3.Connection, *, bot_id: str, meeting_id: int,

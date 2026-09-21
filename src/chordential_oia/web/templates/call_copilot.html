@@ -65,6 +65,17 @@
 .cop-setup{border:1px solid var(--line,#e7e1d8);border-radius:9px;padding:12px 14px;
   margin:0 0 16px;font-size:13.5px;line-height:1.5}
 .cop-setup b{color:var(--ink,#241016)}
+.cop-health{border:1px solid var(--line,#e6ded7);border-radius:8px;padding:10px 14px;
+  margin:0 0 14px;font-size:13px;background:var(--surface,#fffdfb)}
+.cop-health summary{cursor:pointer;line-height:1.5}
+.cop-health table{width:100%;border-collapse:collapse;margin-top:10px}
+.cop-health td{padding:4px 0;border-bottom:1px solid var(--line,#efe8e2);
+  color:var(--muted,#7a6b67)}
+.cop-health td:first-child{width:52%}
+.cop-health td:last-child{color:var(--ink,#241c18);text-align:right;
+  font-variant-numeric:tabular-nums}
+.cop-tail{margin:0;padding-left:18px;color:var(--muted,#7a6b67);line-height:1.6}
+.cop-tail li{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
 .cop-setup code{font-size:12px;background:var(--surface-2,#faf3ee);padding:1px 5px;
   border-radius:4px}
 </style>
@@ -96,6 +107,41 @@
     <code>https</code>, because Recall posts from the internet and a laptop cannot receive
     it. And a bot armed <em>after</em> both were set — a bot already booked was configured
     without the stream and will not start now.</div>
+  {% endif %}
+
+  {# ── WHY NOTHING IS ARRIVING (ADR-0098) ──────────────────────────────────────
+     Drawn once with the page, never on the poll. The chain from a switched-on
+     copilot to a stored line has six places to stop and one symptom, so the panel
+     reports the state of each rather than the symptom. This studio has already paid
+     once for a silent link in this exact chain: the bot joined every call, recorded
+     it, finished cleanly and produced nothing, and nothing anywhere said so. ── #}
+  {% if health %}
+  <details class="cop-health" {% if not health.stored_here %}open{% endif %}>
+    <summary><b>The stream</b> — {{ health.verdict }}</summary>
+    <table>
+      <tr><td>Copilot</td><td>{{ "on" if health.enabled else "switched off" }}</td></tr>
+      <tr><td>Stream asked for</td>
+          <td>{% if health.stream_url %}yes{% else %}<b>no</b> — a bot armed now would
+          not be told where to post{% endif %}</td></tr>
+      <tr><td>Bot for this call</td>
+          <td>{{ health.bot_id or "none armed yet" }}</td></tr>
+      <tr><td>Arrivals at the door</td>
+          <td>{{ health.arrivals }}{% if health.last_arrival_at %},
+          last {{ health.last_arrival_at[:19]|replace("T"," ") }}{% endif %}</td></tr>
+      {% for outcome, d in health.by_outcome.items() %}
+      <tr><td>&nbsp;&nbsp;{{ outcome }}</td><td>{{ d.count }}</td></tr>
+      {% endfor %}
+      <tr><td>Lines stored for this call</td><td>{{ health.stored_here }}</td></tr>
+    </table>
+    {% if health.tail %}
+    <p class="cop-ev" style="margin:10px 0 4px">Most recent arrivals</p>
+    <ul class="cop-tail">
+      {% for t in health.tail %}
+      <li>{{ (t.created_at or "")[11:19] }} · {{ t.outcome }}{% if t.note %} — {{ t.note }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </details>
   {% endif %}
 
   <div id="cop-conflicts"></div>
