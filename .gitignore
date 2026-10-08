@@ -31,14 +31,27 @@ capabilities_clips/
 # Founder-uploaded relevant-work audio samples (local disk; not durable on Render)
 src/chordential_oia/web/uploads/
 
-# Third-party agent skills installed via `npx skills add` (kept on local disk,
-# not part of the product repo). Those tools run locally, not in CI/prod.
+# Third-party agent tooling installed via `npx skills add` — kept on local disk.
 .agents/
-.claude/skills/
 skills-lock.json
+
+# `.claude/skills/` IS COMMITTED, and the rule that used to ignore it was wrong
+# for how this repo is actually worked on (2026-10-08). It read: "kept on local
+# disk, not part of the product repo." That assumed a laptop. The work happens in
+# cloud containers that are rebuilt from the repository every session, so a skill
+# on local disk is a skill that is gone next time — and the thirty-three already
+# here survive only because they were committed BEFORE that line was added, which
+# a gitignore cannot undo. The rule was therefore already false about two thirds
+# of the directory it named, and silently dropped anything added after it.
 
 # Blender output from scripts/blender_score_cube.py — regenerate in ~20s with
 #   blender --background --python scripts/blender_score_cube.py
 scripts/score_scene/cube.blend
 scripts/score_scene/cube.blend1
 scripts/score_scene/cube.png
+
+# Marketing-kit media: upstream ships ~18 MB of rendered example frames and an
+# explainer video. No skill reads them — they are a showcase for that project's
+# own README — so they were not copied in, and this keeps them out if they ever
+# are (2026-10-08).
+.claude/marketing-kit/media/
