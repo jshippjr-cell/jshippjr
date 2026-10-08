@@ -88,6 +88,30 @@ role's own charter in `docs/marketing/agents/`. Deliverables go to
 `docs/marketing/deliverables/<role>.md` and nowhere else. The prior seats' documents in
 `docs/` are the archive; nobody re-derives them.
 
+**The twelve installed marketing skills do not override the brief — the brief
+overrides them.** `ad-copy-generator`, `content-calendar`, `content-repurposer`,
+`community-post-generator`, `competitor-research`, `email-outreach`, `email-sequence`,
+`full-pipeline`, `publish-pipeline`, `seo-brief`, `short-form-video` and
+`visual-brief-generator` are generic tooling installed from outside the company
+(`marcosmodly/marketing-skill`, MIT, 2026-10-08) and know nothing about this one.
+Invoking one is not a licence to skip §0's rulings. The enforcement is in two places
+and both have to hold: every one of them reads
+`.claude/marketing-kit/references/brand-voice.md` before producing anything, and that
+file is now written from the brief and says the brief wins; and
+`tests/test_the_brief_outranks_the_skills.py` fails the build if it stops saying so.
+
+Four of the brief's rules are the ones a generic skill breaks first, because they are
+rules about **restraint** and no marketing tool ships with them: never define a word to
+the reader · never volunteer a weakness · never flatter the reader · never lift
+ourselves by lowering an adjacent craft. Two more it cannot guess: **no money to a
+buyer, ever, on any public surface** (lifted for a creator, where the terms *are* the
+offer), and **no machine-made music anywhere, including as a demonstration** — so a
+skill offering to generate a soundtrack is declined, with the reason said out loud.
+
+And the founder has stood social posting down (2026-09-11): three drafts failed and
+*"it's obvious I can't trust you to auto generate social media posts."* A skill that
+writes posts for him is being used against a ruling. He talks; the machine shapes.
+
 ## Governing rules (the product's spine — honor in code + UX)
 - **"The machine proposes, Jon disposes."** Engines analyze + recommend; a human presses
   the decision buttons (qualify, assign, approve, release). Never auto-decide.
